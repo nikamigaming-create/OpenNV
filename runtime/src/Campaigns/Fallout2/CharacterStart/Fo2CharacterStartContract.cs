@@ -207,9 +207,7 @@ internal sealed record Fo2CharacterSelection(
         if (Mode == PremadeMode && !SameProfile(Profile, Source.Profile) ||
             Mode == ModifyMode &&
                 (!Profile.TaggedSkills.SequenceEqual(Source.Profile.TaggedSkills) ||
-                 !Profile.Traits.SequenceEqual(Source.Profile.Traits)) ||
-            Mode == CreateMode &&
-                (Profile.TaggedSkills.Count != 0 || Profile.Traits.Count != 0))
+                 !Profile.Traits.SequenceEqual(Source.Profile.Traits)))
             throw new InvalidOperationException(
                 "Fallout 2 custom character changed an unsupported source rule.");
     }
@@ -234,13 +232,13 @@ internal sealed class Fo2CharacterStartCatalog
     internal const string FemaleEquippedWalkLogicalPath = "art\\critters\\hfprimgb.frm";
     internal const string FemalePrototypeLogicalPath = "proto\\critters\\00000002.pro";
     internal const string FemalePrototypePid = "01000002";
-    private static readonly string[] SkillNames =
+    internal static readonly string[] SkillNames =
     [
         "Small Guns", "Big Guns", "Energy Weapons", "Unarmed", "Melee Weapons",
         "Throwing", "First Aid", "Doctor", "Sneak", "Lockpick", "Steal", "Traps",
         "Science", "Repair", "Speech", "Barter", "Gambling", "Outdoorsman",
     ];
-    private static readonly string[] TraitNames =
+    internal static readonly string[] TraitNames =
     [
         "Fast Metabolism", "Bruiser", "Small Frame", "One Hander", "Finesse",
         "Kamikaze", "Heavy Handed", "Fast Shot", "Bloody Mess", "Jinxed",

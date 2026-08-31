@@ -92,17 +92,13 @@ foreach ($sex in @('Male', 'Female')) {
     $write = Get-Content -LiteralPath $writePath -Raw | ConvertFrom-Json
     $restore = Get-Content -LiteralPath $restorePath -Raw | ConvertFrom-Json
     $saved = Get-Content -LiteralPath $save -Raw | ConvertFrom-Json
-    $expectedMode = if ($sex -eq 'Male') {
-        'modified-owned-premade'
-    } else {
-        'custom-created-from-owned-rules'
-    }
+    $expectedMode = 'custom-created-from-owned-rules'
     if ($write.schema -ne 'opennv-fo2-custom-character-write-proof/v1' -or
         $write.status -ne "pass-$expectedMode-map3-atomic-save" -or
         $restore.schema -ne 'opennv-fo2-custom-character-restore-proof/v1' -or
         $restore.status -ne "pass-$expectedMode-map3-cold-restore" -or
-        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v13' -or
-        $null -eq $saved.appearance.BodyProportions -or
+        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v14' -or
+        $null -eq $saved.character.appearance.BodyProportions -or
         $saved.character.Mode -ne $expectedMode -or
         $saved.character.Sex -ne $sex -or
         ($saved.character.special | Measure-Object -Sum).Sum -ne 40 -or
@@ -110,6 +106,14 @@ foreach ($sex in @('Male', 'Female')) {
         $saved.world.elevation -ne 0 -or
         $saved.world.arrivalTile -ne 28707 -or
         -not $write.cancelPathPreservedState -or
+        -not $write.viewer.reflectronFaceControlPassed -or
+        -not $write.viewer.reflectronBodyControlPassed -or
+        -not $write.viewer.sourceSectionControlsPassed -or
+        -not $write.viewer.sourceSectionControls.sex -or
+        -not $write.viewer.sourceSectionControls.race -or
+        -not $write.viewer.sourceSectionControls.face -or
+        -not $write.viewer.sourceSectionControls.hair -or
+        -not $write.viewer.publicRulesControlPassed -or
         -not $restore.restore.coldProcess -or
         -not $restore.restore.exactInitialPosition -or
         -not $restore.restore.exactInitialTile -or
@@ -120,11 +124,19 @@ foreach ($sex in @('Male', 'Female')) {
         $write.save.sha256 -ne $restore.save.sha256) {
         throw "Fallout 2 $sex custom-character proof failed its bounded contract."
     }
-    if (($sex -eq 'Male' -and $write.tagsAndTraits -ne 'source-unchanged') -or
-        ($sex -eq 'Female' -and
-            ($write.tagsAndTraits -ne 'unselected' -or
-             $saved.character.taggedSkills.Count -ne 0 -or
-             $saved.character.traits.Count -ne 0))) {
+    $expectedTags = if ($sex -eq 'Male') {
+        @('Small Guns', 'Melee Weapons', 'Speech')
+    } else {
+        @('Sneak', 'First Aid', 'Speech')
+    }
+    $expectedTraits = if ($sex -eq 'Male') {
+        @('Fast Shot')
+    } else {
+        @('Gifted', 'Good Natured')
+    }
+    if ($write.tagsAndTraits -ne 'player-selected-source-rules' -or
+        (@($saved.character.taggedSkills) -join ',') -ne ($expectedTags -join ',') -or
+        (@($saved.character.traits) -join ',') -ne ($expectedTraits -join ',')) {
         throw "Fallout 2 $sex custom-character tag/trait policy drifted."
     }
     $expectedBody = if ($sex -eq 'Male') {
@@ -140,7 +152,7 @@ foreach ($sex in @('Male', 'Female')) {
     }
     foreach ($role in $expectedBody.Keys) {
         $expected = [double]$expectedBody[$role]
-        $savedValue = [double]$saved.appearance.BodyProportions.$role
+        $savedValue = [double]$saved.character.appearance.BodyProportions.$role
         $writeValue = [double]$write.selected.appearance.BodyProportions.$role
         $restoreValue = [double]$restore.selected.appearance.BodyProportions.$role
         if ([Math]::Abs($savedValue - $expected) -gt 0.0001 -or
@@ -166,7 +178,7 @@ foreach ($sex in @('Male', 'Female')) {
     foreach ($field in $expectedAppearance.Keys) {
         $expected = $expectedAppearance[$field]
         foreach ($actual in @(
-                $saved.appearance.$field,
+                $saved.character.appearance.$field,
                 $write.selected.appearance.$field,
                 $restore.selected.appearance.$field,
                 $write.presentation.appearance.$field,

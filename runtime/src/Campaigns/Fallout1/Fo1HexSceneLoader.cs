@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -319,14 +320,33 @@ internal static class Fo1HexSceneLoader
                 playerSource.GetProperty("sharedHumanoidDonor"),
                 classicHumanoidDonor);
             var donors = new[] { "male", "female" }.Select(sex =>
-                PlayerPresentationFromClassicDonor(classicHumanoidDonor, sex))
+                    PlayerPresentationFromClassicDonor(
+                        classicHumanoidDonor,
+                        sex,
+                        sex.Equals("female", StringComparison.OrdinalIgnoreCase)
+                            ? "Female"
+                            : "Male",
+                        null))
+                .Concat(
+                    classicHumanoidDonor.HasPremadeAnalogs
+                        ? new[]
+                        {
+                            PlayerPresentationFromClassicDonor(
+                                classicHumanoidDonor, "male", "max-stone", "max-stone"),
+                            PlayerPresentationFromClassicDonor(
+                                classicHumanoidDonor, "female", "natalia", "natalia"),
+                            PlayerPresentationFromClassicDonor(
+                                classicHumanoidDonor, "male", "albert", "albert"),
+                        }
+                        : [])
                 .ToArray();
             playerDonors = donors.ToDictionary(
-                donor => donor.SourceActorFemale ? "Female" : "Male",
+                donor => donor.DonorKey,
                 StringComparer.OrdinalIgnoreCase);
             foreach (var donor in donors)
                 session.RegisterOwnedPlayerDonor(donor);
-            playerPresentationSource = donors.Single(donor => !donor.SourceActorFemale);
+            playerPresentationSource = donors.Single(donor =>
+                donor.DonorKey.Equals("Male", StringComparison.OrdinalIgnoreCase));
             playerActor = session.AttachOwnedPlayer(playerPresentationSource.Value);
             if (!playerPresentation.TryGetProperty("thirdPersonWeapon", out var playerWeaponPresentation) ||
                 playerWeaponPresentation.ValueKind != JsonValueKind.Object)
@@ -1164,6 +1184,7 @@ internal static class Fo1HexSceneLoader
         Fo1RuntimeProfile RuntimeProfile);
 
     internal readonly record struct PlayerPresentationSource(
+        string DonorKey,
         string Role,
         string DisplayName,
         string Model,
@@ -1175,30 +1196,41 @@ internal static class Fo1HexSceneLoader
         float UnitsToMeters,
         int Surfaces,
         int Textures,
-        int Animations);
+        int Animations,
+        CharacterBodyProportions? BodyProfile);
 
     private static PlayerPresentationSource PlayerPresentationFromClassicDonor(
         Fo2HumanoidDonorContract donor,
-        string sex)
+        string sex,
+        string donorKey,
+        string? characterId)
     {
-        var variant = donor.ForSex(sex);
+        var variant = characterId is null
+            ? donor.ForSex(sex)
+            : donor.ForClassicCharacter("fallout1", characterId, sex);
         var unitsToMeters = RuntimeConfiguration.Load().World.GameUnitsToMeters;
         if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0.0f)
             throw new InvalidOperationException(
                 "Classic humanoid donor has no valid shared Gamebryo unit conversion.");
         return new PlayerPresentationSource(
-            "classic-fnv-player-full-body-donor",
-            $"FNV Player full-body {variant.Sex} donor",
+            donorKey,
+            characterId is null
+                ? "classic-fnv-player-full-body-donor"
+                : "classic-fnv-premade-full-body-analog",
+            characterId is null
+                ? $"FNV Player full-body {variant.Sex} donor"
+                : $"FNV selected full-body analog for {characterId}",
             variant.ModelPath,
             variant.SidecarPath,
             variant.ModelSha256,
             variant.SidecarSha256,
-            donor.SourceActorFormId,
+            variant.SourceActorFormId,
             variant.Sex.Equals("female", StringComparison.Ordinal),
             unitsToMeters,
             variant.Surfaces,
             variant.Textures,
-            variant.Animations);
+            variant.Animations,
+            variant.BodyProfile);
     }
 
     private static void VerifyClassicHumanoidDonorJoin(
@@ -1206,8 +1238,8 @@ internal static class Fo1HexSceneLoader
         Fo2HumanoidDonorContract donor)
     {
         if (RequiredString(source, "schema") != "opennv-fo1-classic-humanoid-donor-join/v1" ||
-            Path.GetFullPath(RequiredString(source, "previewSet")) != donor.ManifestPath ||
-            RequiredString(source, "previewSetSha256") != donor.ManifestSha256 ||
+            Path.GetFullPath(RequiredString(source, "previewSet")) != donor.BaseManifestPath ||
+            RequiredString(source, "previewSetSha256") != donor.BaseManifestSha256 ||
             RequiredString(source, "playerFormId") != donor.SourceActorFormId)
             throw new InvalidOperationException(
                 "Fallout 1 shared classic humanoid donor manifest join drifted.");

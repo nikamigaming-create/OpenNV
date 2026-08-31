@@ -50,12 +50,14 @@ class Fo1ContinueResumeTest(unittest.TestCase):
             reveal.index("loaded.Session.ProcessMode = Node.ProcessModeEnum.Inherit;"),
         )
 
-    def test_identity_and_weapon_policy_fail_closed_without_save_migration(self) -> None:
+    def test_identity_migrates_explicitly_and_weapon_policy_fails_closed(self) -> None:
         session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
         self.assertIn(
-            '"Fallout 1 character save has no complete player presentation identity."',
+            '"Legacy Fallout 1 character save has no presentation identity."',
             session,
         )
+        self.assertIn("ParseSavedCharacterIdentity", session)
+        self.assertIn("ParseLegacyCharacterIdentity", session)
         self.assertNotIn("FromLegacyProfile", session)
         self.assertIn("!binding.WeaponAttachmentsBound", session)
         self.assertIn("binding.WeaponVisualsSuppressed", session)

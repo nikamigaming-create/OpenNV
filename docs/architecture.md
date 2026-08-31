@@ -9,18 +9,30 @@ four core game cards. Each card uses the same visible FPS/Hex/VR selector, with
 unfinished routes disabled; TTW-FO3 and TTW-FNV are editions under their
 corresponding game cards rather than additional cards. Fallout 1 has a bounded
 Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
-simulator-only and launcher-disabled. Its selected premade/custom identity,
-sex, donor/procedural presentation authority, and weapon-visual suppression
-policy persist through cold restore into the actual gameplay actor. GCD/FRM
-data remains identity/gameplay authority. Max and Albert may use a verified
-owned FNV full-body donor as presentation only; Natalia/custom procedural
-geometry is explicitly first-party and non-parity. That integration still
-requires a fresh producer/native acceptance. Fallout 2 admits the owned Map 126 and Map 3
+simulator-only and launcher-disabled. One version-3 character record now owns
+the selected premade/custom identity, rules, appearance, and exact owned
+GCD/BIO/portrait provenance; gameplay and its presentation binding derive from
+that record through cold restore. Version-1/2 character saves migrate only
+through their explicit legacy presentation identity. Max Stone, Natalia, and
+Albert are immutable completed profiles whose exact source portraits remain
+available beside an inspectable 3D view. GCD/FRM data remains identity/gameplay
+authority. Max and Albert may use a verified owned FNV full-body donor as
+presentation only; Natalia/custom procedural geometry is explicitly
+first-party and non-parity. Unique bespoke 3D likenesses and a fresh
+producer/native acceptance still remain. Fallout 2 admits the owned Map 126 and Map 3
 MAP/PRO/FRM source graphs and renders Arroyo Caves in Godot's 3D hex space. Its
-bounded character-start surface selects Narg, Mingan, or Chitsa from owned
-GCD/BIO/panel data or uses the same source surface to Modify/Create name, sex,
-age, and exact SPECIAL allocation. Modify preserves source tags/traits; Create
-leaves them unselected. Take applies sex-correct HMWARR/HFPRIM state and hands
+bounded character-start surface selects immutable Narg, Mingan, or Chitsa from
+owned GCD/BIO/panel data or uses the public Create surface to edit name, sex,
+age, exact SPECIAL allocation, exactly three tagged skills, up to two traits,
+face, and body. The physical Reflectron exposes FACE, BODY, and classic
+projection controls over the same in-memory character. Its owned top-row
+SEX/RACE/FACE/HAIR meshes are live section controls rather than indicator-only
+decoration: FO2 maps them to identity/sex, the supported human
+race/complexion, facial details, and hair details. The lower BODY control shows
+the authoritative live 3D character and proportion controls; lower FACE shows
+the custom actor-derived stylized portrait. Locked premades retain their exact
+owned source panels instead of regenerating them. Take applies
+sex-correct HMWARR/HFPRIM state and hands
 it to the grounded Map 3 tile 28707 player. Each exact premade panel remains
 available while its Live 3D toggle uses the same true 3D gameplay-actor path: a
 verified owned FNV full-body donor when admitted. Missing or incompatible donor
@@ -31,9 +43,9 @@ opaque FRM emitter pixels/centroid joined to source MAP light placement; the
 admitted emitter is a static frame, not a transported flame animation or smoke
 system. The Elder movie's natural end and Skip converge on the same terminal
 source frame/fade, black handoff, prepared live camera, reveal, and control
-release. Its live presentation is still human-review/unaccepted. Its atomic version-12
-save cold-restores character source/custom state, appearance-source identity,
-current transform/mode, and
+release. Its live presentation is still human-review/unaccepted. Its atomic
+version-14 save embeds appearance/body state inside the one character object
+and cold-restores character source/custom state, current transform/mode, and
 the bounded Temple confrontation state.
 Ordinary grounded movement follows the exact owned exit path into ARTEMPLE Map
 126 tile 16486; the non-source opaque wall proxy is gone while its collision and
@@ -43,7 +55,7 @@ Spear to visible inventory state. A separate exact tagged-Speech Cameron route
 keeps Klint alive and reaches live ARVILLAG input/save. The branches are
 alternatives and do not invent a dead-guardian village shortcut; their canonical
 asset-free evidence is the [Fallout 2 branch ledger](evidence/fo2-first-slice-branch-ledger.md).
-Target AI/turns, general INT execution, retail combat parity, tag/trait editing, campaign-wide persistence, remaining
+Target AI/turns, general INT execution, retail combat parity, campaign-wide persistence, remaining
 exits, FPS/OpenXR, and parity remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
@@ -589,7 +601,7 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
-| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; Live 3D full-body donor/procedural preview; exact Elder terminal-frame/fade convergence for normal end and Skip; current bounded appearance/Map 3/Temple save with legacy reads and cold restore | Classic-body visual parity, general appearance synthesis, tag/trait editing, scripts, campaign-wide progression, FPS/OpenXR, or full-campaign readiness |
+| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; immutable premades; public custom name/sex/age/exact-SPECIAL/tagged-skill/trait selection; physical Reflectron FACE/BODY/classic-projection controls; Live 3D full-body donor/procedural preview; exact Elder terminal-frame/fade convergence for normal end and Skip; one-record bounded appearance/Map 3/Temple save with legacy reads and cold restore | Classic-body visual parity, bespoke premade likenesses, complete hair/iris/outfit binding, scripts, campaign-wide progression, FPS/OpenXR, or full-campaign readiness |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs` | Fail-closed true 3D full-body presentation selection from the admitted sex/body/outfit/socket-matched owned FNV donor over authoritative GCD/FRM identity | Procedural/FRM-player/silhouette/standee fallbacks, classic visual authority, retail parity, or new gameplay identity |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 gameplay actor with the selected non-parity full-body presentation, validated transform/facing restore, and persistence-boundary publication | General animation/script/AI coverage, campaign-wide persistence, full campaign, or parity |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesMoldedPresentation.cs` | Full wall relief plus exact owned opaque FRM torch-emitter pixels/centroid joined to source MAP light placement | Source flame animation, smoke, guessed billboard proxies, or visual parity |
@@ -637,28 +649,34 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 ## Current truth and deliberate gaps
 
 The bounded Fallout 2 launcher Hex route renders the owned picker and combat,
-stealth, and diplomat panels. Take selects a premade; Modify and Create expose
-name, sex, age 16–35, and seven SPECIAL values bounded 1–10 and totaling 40.
-Modify retains the source GCD's tags/traits unchanged, while Create records both
-as unselected. Confirm applies the matching male or female PRO-linked idle and
+stealth, and diplomat panels. Take selects an immutable premade; the public
+Create route exposes name, sex, age 16–35, seven SPECIAL values bounded 1–10
+and totaling 40, exactly three tagged skills, and up to two traits. Its physical
+Reflectron top row opens sex/identity, supported-human complexion, facial-detail,
+and hair-detail sections. Lower BODY opens the live 3D actor and proportion
+controls; lower FACE shows the stylized portrait projection of that same custom
+actor. The unlabelled green control remains a projection-mode shortcut. Locked
+premades show their exact source panel rather than a regenerated portrait.
+Confirm applies the matching male or female PRO-linked idle and
 AB walk FRMs at Map 3,
 elevation 0, tile 28707. The exact three owned premade panels remain distinct
 and toggle between the original panel and the true 3D humanoid path used by the
 gameplay actor. That path requires an admitted owned FNV full-body donor and
 fails closed without one; no procedural, FRM-player, silhouette, or standee
 fallback is admitted. The donor is neither classic identity nor a parity claim.
-The atomic version-12 save binds the source basis, explicit appearance/portrait
-state, and custom state plus Map 3/Temple elevation/tile/facing, transform, runtime modes,
-and bounded confrontation state; it also reads earlier bounded save schemas.
-Separate male and female
-process pairs prove two movement directions, idle resumption, and exact cold
-restore. Inside Temple, the strict source-bound Villager/Spear adapter exposes
+The atomic version-14 save embeds the explicit appearance/body/portrait state
+inside the character object and binds that character plus Map 3/Temple
+elevation/tile/facing, transform, runtime modes, and bounded confrontation
+state; version 13 and earlier bounded schemas remain explicit legacy reads.
+Separate male and female public-Create process pairs prove creator state and
+exact cold restore. Inside Temple, the strict source-bound Villager/Spear adapter exposes
 player HP/AP, adjacent deterministic melee, defeat, loot, and cold restore. The
 alternative tagged-Speech Cameron branch reaches live ARVILLAG and cold-restores
 its first input-driven hex action. Those mutually exclusive checkpoints are
 tracked in the [canonical branch ledger](evidence/fo2-first-slice-branch-ledger.md).
-Target AI/turns, general INT execution, retail combat parity, tag/trait editing, other
-animations, campaign-wide persistence, Temple scripts, complete
+Target AI/turns, general INT execution, retail combat parity, bespoke premade
+3D likenesses, complete hair/iris/outfit binding, accepted skin seams in Arroyo,
+other animations, campaign-wide persistence, Temple scripts, complete
 campaign, FPS/OpenXR, and parity remain absent.
 The Elder movie's natural end and Skip both apply the exact terminal source
 frame/fade and converge through black, the same prepared live camera, reveal,

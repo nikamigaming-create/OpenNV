@@ -30,6 +30,7 @@ public partial class RuntimeCoordinator : Node3D
             "gameplay-proof",
             "gameplay-reload-proof",
             "new-game",
+            "opening-character-video",
             "opening-proof",
             "open-proof-door",
             "pipboy-visual-proof",
@@ -149,6 +150,10 @@ public partial class RuntimeCoordinator : Node3D
                         "menu new-game route, or mode resume without either, plus --report, " +
                         "--save-path, --opening-proof-name, and --opening-proof-timeout-seconds.");
             }
+            if (_options.ContainsKey("opening-character-video") &&
+                (!_options.ContainsKey("new-game") || !_options.ContainsKey("save-path")))
+                throw new ArgumentException(
+                    "--opening-character-video requires --new-game and an isolated --save-path.");
             if (_options.TryGetValue("opening-menu-proof", out var openingMenuAction))
             {
                 var sharedMenuProofInvalid =
@@ -229,6 +234,14 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
                 throw new ArgumentException(
                     "--fo3-birth-presentation requires --fo3-profile.");
+            if (_options.ContainsKey("fo3-character-video") &&
+                (!hasFo3Profile || !_options.ContainsKey("fo3-birth-presentation") ||
+                    !_options.ContainsKey("save-path") ||
+                    _options.ContainsKey("fo3-appearance-proof") ||
+                    _options.ContainsKey("fo3-cg01-proof")))
+                throw new ArgumentException(
+                    "--fo3-character-video requires --fo3-profile, --fo3-birth-presentation, " +
+                    "and an isolated --save-path; it cannot combine with acceptance modes.");
             if (_options.ContainsKey("fo3-retail-cg00-stage10-contract") && !hasFo3Profile)
                 throw new ArgumentException(
                     "--fo3-retail-cg00-stage10-contract requires --fo3-profile.");
@@ -296,7 +309,8 @@ public partial class RuntimeCoordinator : Node3D
                     "--fo1-campaign-presentation, --fo2-temple-cache, --fo3-profile, or " +
                     "--ttw-fo3-opening-profile.");
             var startsFo1NewGame = _options.ContainsKey("fo1-new-game") ||
-                _options.ContainsKey("fo1-new-game-demo");
+                _options.ContainsKey("fo1-new-game-demo") ||
+                _options.ContainsKey("fo1-character-video");
             if (startsFo1NewGame && !hasFo1HexScene)
                 throw new ArgumentException("Fallout new game requires --fo1-hex-scene.");
             if (startsFo1NewGame &&
@@ -311,6 +325,11 @@ public partial class RuntimeCoordinator : Node3D
                     "--fo1-start-presentation requires Fallout new game and must be hex-tactical or first-person.");
             if (_options.ContainsKey("fo1-new-game-demo") && !_options.ContainsKey("demo-report"))
                 throw new ArgumentException("Fallout new-game demo requires --demo-report.");
+            if (_options.TryGetValue("fo1-character-video", out var fo1VideoCharacter) &&
+                fo1VideoCharacter is not "max-stone" and not "natalia" and not "albert" and
+                    not "custom-male" and not "custom-female")
+                throw new ArgumentException(
+                    "--fo1-character-video requires max-stone, natalia, albert, custom-male, or custom-female.");
             if (_options.ContainsKey("fo1-native-first-beat-proof") &&
                 !_options.ContainsKey("fo1-new-game-demo"))
                 throw new ArgumentException(
@@ -930,7 +949,13 @@ public partial class RuntimeCoordinator : Node3D
             cg01CapturePath,
             retailCg00Stage10Contract,
             ttwCg00Stage10PresentationContract,
-            ttwCg00Stage10SurfaceContract);
+            ttwCg00Stage10SurfaceContract,
+            options.TryGetValue(
+                    "character-reflectron-opening-manifest",
+                    out var fo3ReflectronManifest)
+                ? OpeningManifest.Load(fo3ReflectronManifest, _configuration)
+                : null,
+            options.ContainsKey("fo3-character-video"));
         AddChild(opening);
         if (options.ContainsKey("quit-after-load") &&
             !options.ContainsKey("fo3-appearance-proof") &&
@@ -1066,6 +1091,14 @@ public partial class RuntimeCoordinator : Node3D
                 scenePath,
                 openingProof,
                 options);
+            return;
+        }
+        if (options.ContainsKey("opening-character-video"))
+        {
+            if (openingFlow is null)
+                throw new InvalidOperationException(
+                    "Opening character video did not create an active New Vegas opening flow.");
+            _ = RunOpeningCharacterVideo(openingFlow, loaded);
             return;
         }
         if (options.TryGetValue("route-travel-proof", out var routeTravelMode))
@@ -1249,6 +1282,34 @@ public partial class RuntimeCoordinator : Node3D
         catch (Exception exception)
         {
             GD.PushError($"OPENNV_OPENING_ACCEPTANCE_FAIL {exception}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private async Task RunOpeningCharacterVideo(
+        OpeningQuestRuntime opening,
+        CellSceneLoader.LoadedCell loaded)
+    {
+        try
+        {
+            var state = await opening.RunAcceptance(
+                "creator",
+                "COURIER",
+                600.0,
+                captureRoot: null,
+                appearancePresentationHoldFrames: 90);
+            if (state.Completed || !File.Exists(loaded.Session.SavePath))
+                throw new InvalidOperationException(
+                    "New Vegas character video did not return from its authored creator boundary.");
+            for (var frame = 0; frame < 45; frame++)
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            GD.Print(
+                $"OPENNV_FNV_CHARACTER_VIDEO_COMPLETE name={opening.PlayerName} stage={opening.Stage}");
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FNV_CHARACTER_VIDEO_FAIL {exception}");
             GetTree().Quit(1);
         }
     }
@@ -2261,12 +2322,22 @@ public partial class RuntimeCoordinator : Node3D
             _ = Fo1NewGameFlow.RunDestinationReturnExitColdRestoreProof(this, loaded, RequireOption(options, "report"));
             return;
         }
-        if (options.ContainsKey("fo1-new-game") || options.ContainsKey("fo1-new-game-demo"))
+        if (options.ContainsKey("fo1-new-game") || options.ContainsKey("fo1-new-game-demo") ||
+            options.ContainsKey("fo1-character-video"))
         {
             var characterStart = Fo1CharacterStartContract.Load(
                 RequireOption(options, "fo1-character-start"),
                 RequireOption(options, "fo1-character-start-sha256"));
-            if (options.ContainsKey("fo1-new-game-demo"))
+            if (options.TryGetValue("fo1-character-video", out var videoCharacter))
+                _ = Fo1NewGameFlow.RunCharacterVideo(
+                    this,
+                    loaded,
+                    characterStart,
+                    videoCharacter,
+                    OpeningManifest.Load(
+                        RequireOption(options, "character-reflectron-opening-manifest"),
+                        _configuration));
+            else if (options.ContainsKey("fo1-new-game-demo"))
                 _ = Fo1NewGameFlow.RunDemo(
                     this,
                     loaded,

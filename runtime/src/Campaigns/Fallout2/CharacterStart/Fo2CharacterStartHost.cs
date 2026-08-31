@@ -43,6 +43,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     {
         try
         {
+            var runtimeConfiguration = RuntimeConfiguration.Load();
+            GetWindow().Size = new Vector2I(
+                runtimeConfiguration.Capture.ExpectedWidthPixels,
+                runtimeConfiguration.Capture.ExpectedHeightPixels);
             var options = Fo2ArroyoCavesProofOptions.Parse(OS.GetCmdlineUserArgs());
             _openingProofRoot = options.TryGetValue(
                 "fo2-opening-handoff-proof",
@@ -79,7 +83,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 out var reflectronOpeningManifest)
                 ? OpeningManifest.Load(
                     reflectronOpeningManifest,
-                    RuntimeConfiguration.Load())
+                    runtimeConfiguration)
                 : null;
             _trialRoute = options.TryGetValue("fo2-trial-route", out var trialRoutePath)
                 ? Fo2ArroyoTrialRouteContract.Load(trialRoutePath, _arroyo, _transition)
@@ -122,7 +126,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 $"OPENNV_FO2_CHARACTER_START_READY premades=3 restored={RestoredFromSave} " +
                 "controls=Left/Right+Enter+V mouse=Take/Portrait/Create/Back/PortraitToggle " +
                 "exit=Escape+save");
-            if (options.TryGetValue("fo2-character-start-proof", out var proofRoot))
+            if (options.TryGetValue("fo2-character-video", out var videoCharacter))
+                _ = Fo2CharacterGenerationVideo.Run(this, videoCharacter);
+            else if (options.TryGetValue("fo2-character-start-proof", out var proofRoot))
                 _ = Fo2CharacterStartProof.Run(this, proofRoot);
             else if (options.TryGetValue("fo2-character-save-write-proof", out var writeRoot))
                 _ = Fo2CharacterStartPersistenceProof.RunWrite(this, writeRoot);

@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.SceneGraph;
 
 namespace OpenNV.Runtime.Presentation.CharacterCreation;
 
@@ -35,7 +36,13 @@ internal sealed record CharacterBodyProportions(
     internal void Validate(string authority)
     {
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(authority) ||
-            Values.Any(value => !float.IsFinite(value) || value is < Minimum or > Maximum))
+            !IsAdmitted(Height) ||
+            !IsAdmitted(Chest) ||
+            !IsAdmitted(Shoulders) ||
+            !IsAdmitted(Waist) ||
+            !IsAdmitted(Arms) ||
+            !IsAdmitted(Thighs) ||
+            !IsAdmitted(Calves))
             throw new InvalidOperationException(
                 $"Character body proportions are outside the admitted range: {authority}.");
     }
@@ -68,12 +75,25 @@ internal sealed record CharacterBodyProportions(
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
     };
 
-    internal IReadOnlyList<float> Values =>
-        [Height, Chest, Shoulders, Waist, Arms, Thighs, Calves];
+    private static bool IsAdmitted(float value) =>
+        float.IsFinite(value) && value is >= Minimum and <= Maximum;
 }
 
 internal static class CharacterBodyRig
 {
+    private const string AuthoredScaleMetadata = "opennv_body_rig_authored_scale";
+    private const float MinimumParentScale = 0.0001f;
+    private static readonly string[] ClavicleBones =
+        ["Bip01 L Clavicle", "Bip01 R Clavicle"];
+    private static readonly string[] UpperArmBones =
+        ["Bip01 L UpperArm", "Bip01 R UpperArm"];
+    private static readonly string[] ForearmBones =
+        ["Bip01 L Forearm", "Bip01 R Forearm"];
+    private static readonly string[] ThighBones =
+        ["Bip01 L Thigh", "Bip01 R Thigh"];
+    private static readonly string[] CalfBones =
+        ["Bip01 L Calf", "Bip01 R Calf"];
+
     internal static void Apply(
         Node3D actorRoot,
         Skeleton3D skeleton,
@@ -82,7 +102,19 @@ internal static class CharacterBodyRig
         string authority)
     {
         proportions.Validate(authority);
-        actorRoot.Scale = new Vector3(1.0f, proportions.Height, 1.0f);
+        var authoredScale = actorRoot.HasMeta(AuthoredScaleMetadata)
+            ? actorRoot.GetMeta(AuthoredScaleMetadata).AsVector3()
+            : actorRoot.Scale;
+        if (!Mathf.IsEqualApprox(authoredScale.X, authoredScale.Y) ||
+            !Mathf.IsEqualApprox(authoredScale.X, authoredScale.Z) ||
+            authoredScale.X <= 0.0f)
+            throw new InvalidOperationException(
+                $"Character body rig requires one positive authored unit scale: {authority}.");
+        actorRoot.SetMeta(AuthoredScaleMetadata, authoredScale);
+        actorRoot.Scale = new Vector3(
+            authoredScale.X,
+            authoredScale.Y * proportions.Height,
+            authoredScale.Z);
         // Bone scales are local and inherit through the Bip01 hierarchy. Treat
         // creator values as absolute silhouette targets, then express each one
         // as a ratio to its parent target. Applying the same chest multiplier
@@ -108,27 +140,27 @@ internal static class CharacterBodyRig
             authority);
         ScaleBones(
             skeleton,
-            ["Bip01 L Clavicle", "Bip01 R Clavicle"],
+            ClavicleBones,
             Ratio(proportions.Shoulders, upperChest),
             authority);
         ScaleBones(
             skeleton,
-            ["Bip01 L UpperArm", "Bip01 R UpperArm"],
+            UpperArmBones,
             Ratio(proportions.Arms, proportions.Shoulders),
             authority);
         ScaleBones(
             skeleton,
-            ["Bip01 L Forearm", "Bip01 R Forearm"],
+            ForearmBones,
             1.0f,
             authority);
         ScaleBones(
             skeleton,
-            ["Bip01 L Thigh", "Bip01 R Thigh"],
+            ThighBones,
             Ratio(proportions.Thighs, proportions.Waist),
             authority);
         ScaleBones(
             skeleton,
-            ["Bip01 L Calf", "Bip01 R Calf"],
+            CalfBones,
             Ratio(proportions.Calves, proportions.Thighs),
             authority);
         metadataOwner.SetMeta("body_proportion_profile", proportions.Id);
@@ -145,7 +177,7 @@ internal static class CharacterBodyRig
 
     internal static Skeleton3D ResolveSkeleton(Node root, string authority)
     {
-        var matches = Descendants<Skeleton3D>(root)
+        var matches = NodeTraversal.Descendants<Skeleton3D>(root)
             .Where(value => value.FindBone("Bip01 Pelvis") >= 0)
             .ToArray();
         if (matches.Length != 1)
@@ -175,21 +207,16 @@ internal static class CharacterBodyRig
         Skeleton3D skeleton,
         string name,
         float radialScale,
-        string authority) =>
-        ScaleBones(skeleton, [name], radialScale, authority);
+        string authority)
+    {
+        var index = skeleton.FindBone(name);
+        if (index < 0)
+            throw new InvalidOperationException(
+                $"Character body rig bone is absent: {authority}/{name}.");
+        skeleton.SetBonePoseScale(index, new Vector3(radialScale, 1.0f, radialScale));
+    }
 
     private static float Ratio(float absoluteScale, float parentScale) =>
-        absoluteScale / MathF.Max(parentScale, 0.0001f);
+        absoluteScale / MathF.Max(parentScale, MinimumParentScale);
 
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 }

@@ -25,6 +25,7 @@ internal sealed record Fo2ArroyoFloorGeometryProfile(
     float SurfaceMeters,
     float ReliefMeters,
     float ReliefFrequency,
+    int SubdivisionsPerAxis,
     float BoundaryClosureHeightMeters,
     float BoundaryClosureOverhangMeters);
 
@@ -67,6 +68,8 @@ internal sealed record Fo2ArroyoMaterialProfile(
     float NormalStrength,
     float SourceDetailWorldScale,
     float SourceDetailMix,
+    float MacroDetailWorldScale,
+    float MacroDetailMix,
     Fo2ArroyoRockMaterialProfile Wall,
     Fo2ArroyoRockMaterialProfile Floor);
 
@@ -127,6 +130,14 @@ internal sealed record Fo2ArroyoAtmosphereProfile(
     float FogDensity,
     float FogAerialPerspective,
     float FogSkyAffect,
+    float VolumetricFogDensity,
+    Color VolumetricFogAlbedo,
+    Color VolumetricFogEmission,
+    float VolumetricFogEmissionEnergy,
+    float VolumetricFogLengthMeters,
+    float VolumetricFogDetailSpread,
+    float VolumetricFogAmbientInject,
+    float VolumetricFogSkyAffect,
     Fo2ArroyoDirectionalLightProfile DirectionalLight,
     Fo2ArroyoSourceMapLightProfile SourceMapLights);
 
@@ -277,6 +288,7 @@ internal sealed record Fo2ArroyoCaves3DProfile(
                 Finite(floor, "surfaceMeters"),
                 NonNegative(floor, "reliefMeters"),
                 Positive(floor, "reliefFrequency"),
+                PositiveInt(floor, "subdivisionsPerAxis"),
                 Positive(floor, "boundaryClosureHeightMeters"),
                 NonNegative(floor, "boundaryClosureOverhangMeters")),
             new Fo2ArroyoWallGeometryProfile(
@@ -302,6 +314,8 @@ internal sealed record Fo2ArroyoCaves3DProfile(
                 NonNegative(materials, "normalStrength"),
                 Positive(materials, "sourceDetailWorldScale"),
                 Fraction(materials, "sourceDetailMix"),
+                Positive(materials, "macroDetailWorldScale"),
+                Fraction(materials, "macroDetailMix"),
                 ReadRockMaterial(materials.GetProperty("wall")),
                 ReadRockMaterial(materials.GetProperty("floor"))),
             new Fo2ArroyoSourcePropProfile(
@@ -342,6 +356,14 @@ internal sealed record Fo2ArroyoCaves3DProfile(
                 Positive(atmosphere, "fogDensity"),
                 Fraction(atmosphere, "fogAerialPerspective"),
                 Unit(atmosphere, "fogSkyAffect"),
+                Positive(atmosphere, "volumetricFogDensity"),
+                ReadColor(atmosphere.GetProperty("volumetricFogAlbedo")),
+                ReadColor(atmosphere.GetProperty("volumetricFogEmission")),
+                NonNegative(atmosphere, "volumetricFogEmissionEnergy"),
+                Positive(atmosphere, "volumetricFogLengthMeters"),
+                Positive(atmosphere, "volumetricFogDetailSpread"),
+                Unit(atmosphere, "volumetricFogAmbientInject"),
+                Unit(atmosphere, "volumetricFogSkyAffect"),
                 ReadDirectionalLight(atmosphere.GetProperty("directionalLight")),
                 ReadSourceMapLights(atmosphere.GetProperty("sourceMapLights"))),
             new Fo2ArroyoStaticCaptureProfile(
@@ -390,6 +412,7 @@ internal sealed record Fo2ArroyoCaves3DProfile(
             profile.HiddenSourceMarkerLogicalPaths.Count == 0 ||
             profile.TorchLogicalPaths.Count == 0 ||
             profile.Promotion.PresentationBlockers.Count == 0 ||
+            profile.FloorGeometry.SubdivisionsPerAxis is < 2 or > 8 ||
             profile.WallGeometry.GroundSinkMeters >= profile.WallGeometry.HeightMeters ||
             profile.WallGeometry.Roles.CaveShellMinimumConnectedTiles <= 1 ||
             profile.WallGeometry.Roles.ExpectedCaveShellComponents <= 0 ||

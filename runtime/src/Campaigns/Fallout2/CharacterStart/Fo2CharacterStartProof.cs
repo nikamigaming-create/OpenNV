@@ -23,14 +23,36 @@ internal static class Fo2CharacterStartProof
                 throw new InvalidOperationException(
                     $"Refusing to overwrite Fallout 2 character-start proof: {output}");
             Directory.CreateDirectory(output);
-            host.Picker.TogglePortraitMode();
-            await WaitForDraws(host, DrawFrames);
-            var initial = Capture(host, output, "character-start-narg.png");
+            var rosterFrames = new List<FrameEvidence>();
+            FrameEvidence? initial = null;
+            FrameEvidence? selectedFrame = null;
+            for (var index = 0; index < host.CharacterStart.Characters.Count; index++)
+            {
+                host.Picker.Select(index);
+                var character = host.Picker.Selected;
+                await WaitForDraws(host, DrawFrames);
+                rosterFrames.Add(Capture(
+                    host,
+                    output,
+                    $"character-start-{character.Id}-portrait.png"));
+                host.Picker.TogglePortraitMode();
+                await WaitForDraws(host, DrawFrames);
+                var analog = Capture(
+                    host,
+                    output,
+                    $"character-start-{character.Id}-3d.png");
+                rosterFrames.Add(analog);
+                if (index == 0)
+                    initial = analog;
+                if (index == host.CharacterStart.Characters.Count - 1)
+                    selectedFrame = analog;
+                host.Picker.TogglePortraitMode();
+            }
 
             host.Picker.Select(2);
+            host.Picker.TogglePortraitMode();
             var selected = host.Picker.Selected;
             await WaitForDraws(host, DrawFrames);
-            var selectedFrame = Capture(host, output, "character-start-chitsa.png");
             host.Picker.ChooseCurrent();
             var runtime = host.Runtime ?? throw new InvalidOperationException(
                 "Fallout 2 character selection did not hand off to Arroyo.");
@@ -59,6 +81,7 @@ internal static class Fo2CharacterStartProof
                 runtime.Player.Presentation.Texture is not null &&
                 runtime.Player.CurrentTile == 28707 &&
                 runtime.Player.IsOnFloor() &&
+                initial is not null && selectedFrame is not null &&
                 initial.Sha256 != selectedFrame.Sha256 &&
                 selectedFrame.Sha256 != world.Sha256;
             var report = new
@@ -125,7 +148,7 @@ internal static class Fo2CharacterStartProof
                     visibleCharacter = runtime.Player.Presentation.Visible,
                     exactMapArrivalPreserved = runtime.Player.ArrivalTile == 28707,
                 },
-                frames = new[] { initial, selectedFrame, world },
+                frames = rosterFrames.Append(world).ToArray(),
                 promotion = new
                 {
                     transported = true,

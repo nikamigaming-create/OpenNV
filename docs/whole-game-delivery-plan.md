@@ -163,6 +163,13 @@ manifest records its exact source revision.
 
 Priority: **P0 — next implementation owner**.
 
+### Immediate execution order: character starts and opening actors
+
+Plow through the shared actor skin fix, New Vegas Doc sequence, Fallout 3 birth
+room, Fallout 1 previews, Fallout 2 cave presentation, ordinary end-to-end
+routes, and the rebuilt movie in the exact order recorded in the
+[character-start execution plan](evidence/character-start-runtime-recovery-plan.md).
+
 Objective: prove one ordinary, uninterrupted campaign route without changing
 pipelines: launch at the real front end, choose New Game, complete the accepted
 Doc flow, expose the player's real post-opening inventory in the retail

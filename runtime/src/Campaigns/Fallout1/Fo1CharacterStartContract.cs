@@ -523,8 +523,6 @@ internal sealed record Fo1CharacterStartContract(
                     .Select(value => value.GetString()!).ToArray(),
                 profileRow.GetProperty("traits").EnumerateArray()
                     .Select(value => value.GetString()!).ToArray());
-            profile.Validate();
-
             var gcdPath = VerifiedGltfLoader.ResolvePath(row.GetProperty("gcd").GetString()!);
             var gcdSha256 = row.GetProperty("gcdSha256").GetString()!;
             VerifiedGltfLoader.VerifyHash(gcdPath, gcdSha256);
@@ -546,6 +544,16 @@ internal sealed record Fo1CharacterStartContract(
                 row.GetProperty("sourcePortraitFrmSha256").GetString()!);
             if (portrait.Width != Fo1CharacterStartContractNumericContracts.SourcePresentationInt212 || portrait.Height != Fo1CharacterStartContractNumericContracts.SourcePresentationInt187)
                 throw new InvalidOperationException("Fallout premade portrait dimensions drifted.");
+            profile = profile with
+            {
+                Identity = Fo1CharacterIdentity.Premade(
+                    row.GetProperty("id").GetString()!,
+                    row.GetProperty("role").GetString()!,
+                    gcdSha256,
+                    bioSha256,
+                    portrait.SourceFrmSha256),
+            };
+            profile.Validate();
             premades.Add(new Fo1PremadeCharacter(
                 row.GetProperty("id").GetString()!,
                 row.GetProperty("role").GetString()!,

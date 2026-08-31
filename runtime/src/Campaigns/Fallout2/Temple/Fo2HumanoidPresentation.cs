@@ -2,12 +2,16 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
+using OpenNV.Runtime.Presentation.Actors;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2HumanoidDonorVariant(
     string Sex,
+    string SourceActorFormId,
+    string? Campaign,
+    string? CharacterId,
     string ModelPath,
     string SidecarPath,
     string ModelSha256,
@@ -18,7 +22,9 @@ internal sealed record Fo2HumanoidDonorVariant(
     IReadOnlyList<string> BodyRoles,
     string OutfitFormId,
     string RigidAttachmentNode,
-    string EquipmentSocketNode);
+    string EquipmentSocketNode,
+    CharacterBodyProportions? BodyProfile,
+    Fo2HumanoidAppearance? DefaultAppearance);
 
 /// <summary>Shared consumer for the FNV full-body player-preview artifact.
 /// Its sex-keyed modular body/outfit sources and authored rigid socket are
@@ -26,14 +32,30 @@ internal sealed record Fo2HumanoidDonorVariant(
 internal sealed record Fo2HumanoidDonorContract(
     string ManifestPath,
     string ManifestSha256,
+    string BaseManifestPath,
+    string BaseManifestSha256,
     string SourceActorFormId,
-    IReadOnlyDictionary<string, Fo2HumanoidDonorVariant> Variants)
+    IReadOnlyDictionary<string, Fo2HumanoidDonorVariant> Variants,
+    IReadOnlyDictionary<string, Fo2HumanoidDonorVariant> CharacterVariants)
 {
-    private const string PreviewSetSchema = "opennv-owned-player-facegen-preview-set/v3";
-    private const string PreviewSetStatus =
+    private const string PreviewSetSchemaV3 = "opennv-owned-player-facegen-preview-set/v3";
+    private const string PreviewSetSchemaV4 = "opennv-owned-player-facegen-preview-set/v4";
+    private const string PreviewSetStatusV3 =
         "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-all-native-geometry-controls-runtime-bound";
+    private const string PreviewSetStatusV4 =
+        "compiled-default-custom-and-six-classic-premade-full-body-analogs-runtime-bound";
     private const string EquipmentSocketNode = "Bip01 R Hand";
     private static readonly string[] RequiredBodyRoles = ["body", "left-hand", "right-hand"];
+    private static readonly string[] AnalogBodyRoles = ["outfit-0", "left-hand", "right-hand"];
+    private static readonly string[] RequiredAnalogKeys =
+    [
+        "fallout1:max-stone",
+        "fallout1:natalia",
+        "fallout1:albert",
+        "fallout2:combat",
+        "fallout2:stealth",
+        "fallout2:diplomat",
+    ];
 
     internal static Fo2HumanoidDonorContract? FromOptions(
         IReadOnlyDictionary<string, string> options) =>
@@ -53,8 +75,15 @@ internal sealed record Fo2HumanoidDonorContract(
         var bytes = File.ReadAllBytes(path);
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
-        if (Required(root, "schema") != PreviewSetSchema ||
-            Required(root, "status") != PreviewSetStatus ||
+        var schema = Required(root, "schema");
+        var expectedStatus = schema switch
+        {
+            PreviewSetSchemaV3 => PreviewSetStatusV3,
+            PreviewSetSchemaV4 => PreviewSetStatusV4,
+            _ => "",
+        };
+        if (string.IsNullOrEmpty(expectedStatus) ||
+            Required(root, "status") != expectedStatus ||
             !root.GetProperty("fullBody").GetBoolean() ||
             !root.GetProperty("bodyComponentRoles").EnumerateArray()
                 .Select(value => Required(value)).SequenceEqual(RequiredBodyRoles, StringComparer.Ordinal))
@@ -64,6 +93,7 @@ internal sealed record Fo2HumanoidDonorContract(
         if (outfit.Length != 8 || !outfit.All(Uri.IsHexDigit))
             throw new InvalidOperationException(
                 "Classic humanoid donor has no hash-bound outfit FormID.");
+        var sourceActorFormId = RequiredFormId(root, "playerFormId");
         var bodySources = root.GetProperty("bodyComponentSourcesBySex")
             .EnumerateObject().ToDictionary(
                 value => value.Name,
@@ -90,20 +120,7 @@ internal sealed record Fo2HumanoidDonorContract(
             using var model = JsonDocument.Parse(File.ReadAllBytes(modelPath));
             var sidecarRoot = sidecar.RootElement;
             var socket = Required(sidecarRoot.GetProperty("skeleton"), "rigidAttachmentNode");
-            var modelRoot = model.RootElement;
-            var nodes = modelRoot.GetProperty("nodes").EnumerateArray().ToArray();
-            var equipmentNodeIndices = nodes
-                .Select((node, index) => (Node: node, Index: index))
-                .Where(value => value.Node.TryGetProperty("name", out var name) &&
-                    name.GetString() == EquipmentSocketNode)
-                .Select(value => value.Index)
-                .ToArray();
-            if (equipmentNodeIndices.Length != 1 ||
-                !modelRoot.GetProperty("skins").EnumerateArray().Any(skin =>
-                    skin.GetProperty("joints").EnumerateArray().Any(joint =>
-                        joint.GetInt32() == equipmentNodeIndices[0])))
-                throw new InvalidOperationException(
-                    $"Classic humanoid donor model has no unique skinned {EquipmentSocketNode}.");
+            VerifyEquipmentSocket(model.RootElement, "classic humanoid donor");
             var surfaces = sidecarRoot.GetProperty("surfaces").EnumerateArray().ToArray();
             var expectedSurfaces = modules.Sum(module => module.GetProperty("retainedSurfaceCount").GetInt32());
             if (sidecarRoot.GetProperty("schema").GetString() != "opennv-actor-gltf/v4" ||
@@ -115,18 +132,46 @@ internal sealed record Fo2HumanoidDonorContract(
                 throw new InvalidOperationException(
                     $"Classic humanoid donor sidecar differs from its modular contract for {sex}.");
             return new Fo2HumanoidDonorVariant(
-                sex, modelPath, sidecarPath, modelSha256, sidecarSha256,
+                sex, sourceActorFormId, null, null,
+                modelPath, sidecarPath, modelSha256, sidecarSha256,
                 surfaces.Length, sidecarRoot.GetProperty("textures").GetArrayLength(),
                 sidecarRoot.GetProperty("animations").GetArrayLength(), RequiredBodyRoles,
-                outfit, socket, EquipmentSocketNode);
+                outfit, socket, EquipmentSocketNode, null, null);
         }).ToDictionary(value => value.Sex, StringComparer.Ordinal);
         if (!variants.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(["male", "female"]))
             throw new InvalidOperationException("Classic humanoid donor sex variants are incomplete.");
+        var characterVariants = schema == PreviewSetSchemaV4
+            ? root.GetProperty("premadeAnalogs").EnumerateArray()
+                .Select(LoadAnalogVariant)
+                .ToDictionary(
+                    value => VariantKey(value.Campaign!, value.CharacterId!),
+                    StringComparer.Ordinal)
+            : new Dictionary<string, Fo2HumanoidDonorVariant>(StringComparer.Ordinal);
+        if (schema == PreviewSetSchemaV4 &&
+            !characterVariants.Keys.ToHashSet(StringComparer.Ordinal)
+                .SetEquals(RequiredAnalogKeys))
+            throw new InvalidOperationException(
+                "Classic humanoid donor premade analog bindings are incomplete.");
+        var baseManifestPath = path;
+        var baseManifestSha256 = Sha256(bytes);
+        if (schema == PreviewSetSchemaV4)
+        {
+            var basePreview = root.GetProperty("basePreviewSet");
+            baseManifestPath = Path.GetFullPath(Required(basePreview, "path"));
+            baseManifestSha256 = RequiredHash(basePreview, "sha256");
+            VerifyFile(
+                baseManifestPath,
+                baseManifestSha256,
+                "classic humanoid base preview set");
+        }
         return new Fo2HumanoidDonorContract(
             path,
             Sha256(bytes),
-            Required(root, "playerFormId"),
-            variants);
+            baseManifestPath,
+            baseManifestSha256,
+            sourceActorFormId,
+            variants,
+            characterVariants);
     }
 
     internal Fo2HumanoidDonorVariant ForSex(string sex) =>
@@ -134,6 +179,153 @@ internal sealed record Fo2HumanoidDonorContract(
             ? variant
             : throw new InvalidOperationException(
                 $"Classic humanoid donor has no source-bound variant for {sex}.");
+
+    internal Fo2HumanoidDonorVariant ForIdentity(Fo2HumanoidIdentity identity) =>
+        ForClassicCharacter(identity.Campaign, identity.CharacterId, identity.Sex);
+
+    internal Fo2HumanoidDonorVariant ForClassicCharacter(
+        string campaign,
+        string characterId,
+        string sex)
+    {
+        var key = VariantKey(campaign, characterId);
+        if (CharacterVariants.TryGetValue(key, out var variant))
+        {
+            if (!variant.Sex.Equals(sex, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Classic humanoid analog sex differs from {key}.");
+            return variant;
+        }
+        if (CharacterVariants.Count > 0 &&
+            RequiredAnalogKeys.Contains(key, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Classic humanoid donor has no exact premade analog for {key}.");
+        return ForSex(sex);
+    }
+
+    internal bool HasPremadeAnalogs => CharacterVariants.Count == RequiredAnalogKeys.Length;
+
+    private static Fo2HumanoidDonorVariant LoadAnalogVariant(JsonElement row)
+    {
+        var campaign = Required(row, "campaign").ToLowerInvariant();
+        var characterId = Required(row, "characterId").ToLowerInvariant();
+        var sex = Required(row, "sex").ToLowerInvariant();
+        if (campaign is not "fallout1" and not "fallout2" ||
+            sex is not "male" and not "female")
+            throw new InvalidOperationException(
+                "Classic humanoid premade analog identity is invalid.");
+        var sourceActorFormId = RequiredFormId(row, "sourceActorFormId");
+        var outfitFormId = RequiredFormId(row, "outfitFormId");
+        var bodyRoles = row.GetProperty("bodyRoles").EnumerateArray()
+            .Select(Required).ToArray();
+        if (!bodyRoles.SequenceEqual(AnalogBodyRoles, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Classic humanoid premade analog body roles differ for {campaign}:{characterId}.");
+        var outputs = row.GetProperty("outputs");
+        var modelPath = Path.GetFullPath(Required(outputs, "gltf"));
+        var sidecarPath = Path.GetFullPath(Required(outputs, "sidecar"));
+        var modelSha256 = RequiredHash(outputs, "gltfSha256");
+        var sidecarSha256 = RequiredHash(outputs, "sidecarSha256");
+        VerifyFile(modelPath, modelSha256, "classic premade analog model");
+        VerifyFile(sidecarPath, sidecarSha256, "classic premade analog sidecar");
+        using var sidecar = JsonDocument.Parse(File.ReadAllBytes(sidecarPath));
+        using var model = JsonDocument.Parse(File.ReadAllBytes(modelPath));
+        var sidecarRoot = sidecar.RootElement;
+        var surfaces = sidecarRoot.GetProperty("surfaces").EnumerateArray().ToArray();
+        var textures = sidecarRoot.GetProperty("textures").GetArrayLength();
+        var animations = sidecarRoot.GetProperty("animations").EnumerateArray().ToArray();
+        var coverage = row.GetProperty("coverage");
+        if (Required(sidecarRoot, "schema") != "opennv-actor-gltf/v4" ||
+            Required(sidecarRoot, "status") != "skinned-animated" ||
+            RequiredFormId(sidecarRoot, "actorFormId") != sourceActorFormId ||
+            coverage.GetProperty("surfaces").GetInt32() != surfaces.Length ||
+            coverage.GetProperty("textures").GetInt32() != textures ||
+            coverage.GetProperty("animations").GetInt32() != animations.Length ||
+            bodyRoles.Any(role => surfaces.Count(surface =>
+                Required(surface, "role") == role) < 1) ||
+            !animations.Any(animation => Required(animation, "logicalPath").Contains(
+                "idle", StringComparison.OrdinalIgnoreCase)) ||
+            !animations.Any(animation => Required(animation, "logicalPath").Contains(
+                "forward", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                $"Classic humanoid premade analog coverage differs for {campaign}:{characterId}.");
+        VerifyEquipmentSocket(model.RootElement, $"classic premade analog {campaign}:{characterId}");
+        var skeleton = sidecarRoot.GetProperty("skeleton");
+        var rigidAttachmentNode = Required(row, "rigidAttachmentNode");
+        if (rigidAttachmentNode != Required(skeleton, "rigidAttachmentNode") ||
+            Required(row, "equipmentSocketNode") != EquipmentSocketNode)
+            throw new InvalidOperationException(
+                $"Classic humanoid premade analog skeleton differs for {campaign}:{characterId}.");
+        var body = row.GetProperty("bodyProfile");
+        var bodyProfile = new CharacterBodyProportions(
+            Required(body, "id"),
+            body.GetProperty("height").GetSingle(),
+            body.GetProperty("chest").GetSingle(),
+            body.GetProperty("shoulders").GetSingle(),
+            body.GetProperty("waist").GetSingle(),
+            body.GetProperty("arms").GetSingle(),
+            body.GetProperty("thighs").GetSingle(),
+            body.GetProperty("calves").GetSingle());
+        bodyProfile.Validate($"classic-premade-analog-{campaign}-{characterId}");
+        var appearance = row.TryGetProperty("appearance", out var appearanceRow)
+            ? new Fo2HumanoidAppearance(
+                Required(appearanceRow, "faceShapeId"),
+                Required(appearanceRow, "hairStyleId"),
+                Required(appearanceRow, "skinToneId"),
+                Required(appearanceRow, "hairColorId"),
+                Required(appearanceRow, "eyeColorId"),
+                Required(appearanceRow, "browStyleId"),
+                Required(appearanceRow, "noseStyleId"),
+                Required(appearanceRow, "mouthStyleId"))
+            : null;
+        return new Fo2HumanoidDonorVariant(
+            sex,
+            sourceActorFormId,
+            campaign,
+            characterId,
+            modelPath,
+            sidecarPath,
+            modelSha256,
+            sidecarSha256,
+            surfaces.Length,
+            textures,
+            animations.Length,
+            bodyRoles,
+            outfitFormId,
+            rigidAttachmentNode,
+            EquipmentSocketNode,
+            bodyProfile,
+            appearance);
+    }
+
+    private static void VerifyEquipmentSocket(JsonElement modelRoot, string label)
+    {
+        var nodes = modelRoot.GetProperty("nodes").EnumerateArray().ToArray();
+        var equipmentNodeIndices = nodes
+            .Select((node, index) => (Node: node, Index: index))
+            .Where(value => value.Node.TryGetProperty("name", out var name) &&
+                name.GetString() == EquipmentSocketNode)
+            .Select(value => value.Index)
+            .ToArray();
+        if (equipmentNodeIndices.Length != 1 ||
+            !modelRoot.GetProperty("skins").EnumerateArray().Any(skin =>
+                skin.GetProperty("joints").EnumerateArray().Any(joint =>
+                    joint.GetInt32() == equipmentNodeIndices[0])))
+            throw new InvalidOperationException(
+                $"{label} model has no unique skinned {EquipmentSocketNode}.");
+    }
+
+    private static string VariantKey(string campaign, string characterId) =>
+        $"{campaign.Trim().ToLowerInvariant()}:{characterId.Trim().ToLowerInvariant()}";
+
+    private static string RequiredFormId(JsonElement source, string property)
+    {
+        var value = Required(source, property).ToLowerInvariant();
+        return value.Length == 8 && value.All(Uri.IsHexDigit)
+            ? value
+            : throw new InvalidOperationException(
+                $"Owned humanoid donor FormID is invalid: {property}");
+    }
 
     private static string Required(JsonElement source, string property)
     {
@@ -182,6 +374,7 @@ internal sealed record Fo2HumanoidDonorContract(
 }
 
 internal sealed record Fo2HumanoidIdentity(
+    string Campaign,
     string CharacterId,
     string Name,
     string Role,
@@ -193,6 +386,7 @@ internal sealed record Fo2HumanoidIdentity(
     Fo2HumanoidAppearance? Appearance)
 {
     internal static Fo2HumanoidIdentity FromPremade(Fo2PremadeCharacter character) => new(
+        "fallout2",
         character.Id,
         character.Profile.Name,
         character.Role,
@@ -209,6 +403,7 @@ internal sealed record Fo2HumanoidIdentity(
     {
         if (selection is null)
             return new Fo2HumanoidIdentity(
+                "fallout2",
                 "source-default",
                 "Chosen One",
                 "Source default",
@@ -219,6 +414,7 @@ internal sealed record Fo2HumanoidIdentity(
                 source.SourceSha256,
                 null);
         return new Fo2HumanoidIdentity(
+            "fallout2",
             selection.Id,
             selection.Profile.Name,
             selection.Role,
@@ -334,6 +530,23 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         ? ActorModelSlice.PosedWorldBounds(donor)
         : throw new InvalidOperationException(
             "Fallout 2 humanoid presentation bounds are unavailable.");
+    internal Vector3 PortraitHeadWorldPosition
+    {
+        get
+        {
+            var skeleton = _locomotionSkeleton ?? throw new InvalidOperationException(
+                "Fallout 2 humanoid portrait skeleton is unavailable.");
+            var head = skeleton.FindBone("Bip01 Head");
+            if (head < 0)
+                throw new InvalidOperationException(
+                    "Fallout 2 humanoid portrait donor has no Bip01 Head bone.");
+            var headWorld = skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(head);
+            if (!headWorld.Origin.IsFinite())
+                throw new InvalidOperationException(
+                    "Fallout 2 humanoid portrait head transform is invalid.");
+            return headWorld.Origin;
+        }
+    }
 
     internal void SetProportions(CharacterBodyProportions proportions)
     {
@@ -396,6 +609,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             identity.Sex, StringComparison.OrdinalIgnoreCase) == true;
         _donorRoot.Visible = useDonor;
         SetMeta("presentation_mode", useDonor ? OwnedDonorMode : UnavailableMode);
+        SetMeta("campaign", identity.Campaign);
         SetMeta("character_id", identity.CharacterId);
         SetMeta("character_name", identity.Name);
         SetMeta("character_sex", identity.Sex);
@@ -512,12 +726,15 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
     {
         try
         {
-            _variant = _contract.ForSex(_identity.Sex);
+            _variant = _contract.ForIdentity(_identity);
+            _proportions = _variant.BodyProfile ?? _proportions;
+            _proportions.Validate("fallout2-visible-humanoid-donor-binding");
+            _appearance = _identity.Appearance ?? _variant.DefaultAppearance;
             var loaded = ActorModelSlice.Load(
                 _variant.ModelPath,
                 _variant.SidecarPath,
                 _donorRoot);
-            if (loaded.FormId != _contract.SourceActorFormId ||
+            if (loaded.FormId != _variant.SourceActorFormId ||
                 loaded.AuthoredSurfaces != _variant.Surfaces ||
                 loaded.AuthoredTextures != _variant.Textures ||
                 loaded.Animations != _variant.Animations ||
@@ -541,7 +758,9 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             SetMeta("donor_manifest_sha256", _contract.ManifestSha256);
             SetMeta("donor_model_sha256", _variant.ModelSha256);
             SetMeta("donor_sidecar_sha256", _variant.SidecarSha256);
-            SetMeta("donor_source_actor_form_id", _contract.SourceActorFormId);
+            SetMeta("donor_source_actor_form_id", _variant.SourceActorFormId);
+            SetMeta("donor_campaign", _variant.Campaign ?? "custom");
+            SetMeta("donor_character_id", _variant.CharacterId ?? "custom");
             SetMeta("donor_outfit_form_id", _variant.OutfitFormId);
             SetMeta("donor_rigid_attachment_node", _variant.RigidAttachmentNode);
             SetMeta("donor_equipment_socket_node", _variant.EquipmentSocketNode);
@@ -605,8 +824,10 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         if (!headTone.IsFinite())
             throw new InvalidOperationException(
                 "Fallout 2 humanoid live FaceGen head tone is invalid.");
-        var headSkinColor = AverageFaceGenEncodedSkinColor(headToneMaterials[0]);
-        var neckSkinColor = AverageFaceGenEncodedNeckColor(headToneMaterials[0]);
+        var headSkinColor = ActorComplexionMath.AverageFaceGenEncodedSkinColor(
+            headToneMaterials[0]);
+        var neckSkinColor = ActorComplexionMath.AverageFaceGenEncodedNeckColor(
+            headToneMaterials[0]);
         headToneMaterials[0].SetShaderParameter("use_neck_complexion_target", true);
         headToneMaterials[0].SetShaderParameter(
             "neck_complexion_target",
@@ -631,6 +852,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToHashSet(StringComparer.Ordinal);
         var joined = 0;
+        var joinedRoles = new HashSet<string>(StringComparer.Ordinal);
         foreach (var surface in donor.Surfaces.Where(surface =>
                      skinNodes.Contains(surface.RuntimeNodeName)))
         {
@@ -648,9 +870,9 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                     throw new InvalidOperationException(
                         "Fallout 2 humanoid source-declared skin surface lacks its runtime transfer.");
                 material.SetShaderParameter("use_skin_transfer", true);
-                var sourceSkinColor = AverageEncodedSkinColor(
+                var sourceSkinColor = ActorComplexionMath.AverageEncodedSkinColor(
                     material,
-                    centralTorso: surface.Role == "body");
+                    centralTorso: surface.Role == _variant.BodyRoles[0]);
                 var skinMatch = new Vector3(
                     Math.Clamp(headSkinColor.X / MathF.Max(sourceSkinColor.X, 0.0001f), 0.15f, 4.0f),
                     Math.Clamp(headSkinColor.Y / MathF.Max(sourceSkinColor.Y, 0.0001f), 0.15f, 4.0f),
@@ -665,15 +887,24 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                     "skin_complexion_source_mean",
                     (sourceSkinColor.X + sourceSkinColor.Y + sourceSkinColor.Z) / 3.0f);
                 joined++;
+                joinedRoles.Add(surface.Role);
             }
         }
-        if (joined < 3)
+        var expectedSkinRoles = donor.Surfaces
+            .Where(surface => skinNodes.Contains(surface.RuntimeNodeName) &&
+                _variant.BodyRoles.Contains(surface.Role, StringComparer.Ordinal))
+            .Select(surface => surface.Role)
+            .ToHashSet(StringComparer.Ordinal);
+        if (!expectedSkinRoles.Contains("left-hand") ||
+            !expectedSkinRoles.Contains("right-hand") ||
+            !expectedSkinRoles.IsSubsetOf(joinedRoles))
             throw new InvalidOperationException(
-                "Fallout 2 humanoid donor has no complete torso-and-hand skin join.");
+                "Fallout 2 humanoid donor has no complete visible-skin join.");
         SetMeta(
             "skin_join_mode",
             "owned-shaderskin-detail-with-facegen-neck-and-cheek-complexion-v9");
         SetMeta("skin_join_materials", joined);
+        SetMeta("skin_join_roles", string.Join(",", joinedRoles.Order(StringComparer.Ordinal)));
         SetMeta("skin_join_head_tone", headTone);
         SetMeta("skin_join_target_color", headSkinColor);
         SetMeta("skin_join_neck_source_color", neckSkinColor);
@@ -684,6 +915,9 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
     {
         if (_donor is not { } donor || _appearance is not { } appearance)
             return;
+        if (_variant is null)
+            throw new InvalidOperationException(
+                "Fallout 2 humanoid appearance has no selected donor variant.");
         var catalog = Fo2ProceduralAppearanceCatalog.Load();
         var controls = catalog.NativeFaceGenControls(
             appearance.FaceShapeId,
@@ -716,17 +950,18 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         if (headMaterials.Length != 1)
             throw new InvalidOperationException(
                 "Fallout 2 custom 3D appearance requires one FaceGen complexion surface.");
-        var headSource = AverageFaceGenEncodedSkinColor(headMaterials[0]);
+        var headSource = ActorComplexionMath.AverageFaceGenEncodedSkinColor(
+            headMaterials[0]);
         headMaterials[0].SetShaderParameter("use_complexion_target", true);
         headMaterials[0].SetShaderParameter("complexion_target", skinTarget);
         headMaterials[0].SetShaderParameter(
             "complexion_source_mean",
-            Mean(headSource));
+            ActorComplexionMath.Mean(headSource));
         headMaterials[0].SetShaderParameter("use_neck_complexion_target", false);
 
         var joinedSkinMaterials = 0;
         foreach (var surface in donor.Surfaces.Where(surface =>
-                     surface.Role is "body" or "left-hand" or "right-hand"))
+                     _variant.BodyRoles.Contains(surface.Role, StringComparer.Ordinal)))
         {
             foreach (var material in SurfaceMaterials(surface).Where(material =>
                          material.Shader?.Code.Contains(
@@ -734,13 +969,15 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                              StringComparison.Ordinal) == true &&
                          material.GetShaderParameter("use_skin_transfer").AsBool()))
             {
-                var source = AverageEncodedSkinColor(
+                var source = ActorComplexionMath.AverageEncodedSkinColor(
                     material,
-                    centralTorso: surface.Role == "body");
+                    centralTorso: surface.Role == _variant.BodyRoles[0]);
                 material.SetShaderParameter("skin_complexion_multiplier", Vector3.One);
                 material.SetShaderParameter("use_skin_complexion_target", true);
                 material.SetShaderParameter("skin_complexion_target", skinTarget);
-                material.SetShaderParameter("skin_complexion_source_mean", Mean(source));
+                material.SetShaderParameter(
+                    "skin_complexion_source_mean",
+                    ActorComplexionMath.Mean(source));
                 joinedSkinMaterials++;
             }
         }
@@ -815,143 +1052,6 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             surface.Mesh.Mesh?.GetSurfaceCount() ?? 0)
         .Select(surface.Mesh.GetSurfaceOverrideMaterial)
         .OfType<ShaderMaterial>();
-
-    private static float Mean(Vector3 color) =>
-        (color.X + color.Y + color.Z) / 3.0f;
-
-    private static Vector3 AverageFaceGenEncodedSkinColor(ShaderMaterial material)
-    {
-        // The canonical humanoid head UV keeps the two exposed cheeks away
-        // from eyes, lips, hair, and the lower-neck seam.  Average both owned
-        // islands so body, hands, and the neck inherit the visible complexion.
-        var leftCheek = AverageFaceGenEncodedColor(
-            material,
-            0.12f,
-            0.42f,
-            0.40f,
-            0.68f);
-        var rightCheek = AverageFaceGenEncodedColor(
-            material,
-            0.58f,
-            0.88f,
-            0.40f,
-            0.68f);
-        return (leftCheek + rightCheek) * 0.5f;
-    }
-
-    private static Vector3 AverageFaceGenEncodedNeckColor(ShaderMaterial material)
-    {
-        return AverageFaceGenEncodedColor(
-            material,
-            0.18f,
-            0.82f,
-            0.78f,
-            0.98f);
-    }
-
-    private static Vector3 AverageFaceGenEncodedColor(
-        ShaderMaterial material,
-        float minimumU,
-        float maximumU,
-        float minimumV,
-        float maximumV)
-    {
-        var baseImage = RequiredTextureImage(material, "base_map");
-        var detailImage = RequiredTextureImage(material, "facegen_map0");
-        var neutral = material.GetShaderParameter("signed_detail_neutral").AsSingle();
-        var detailScale = material.GetShaderParameter("signed_detail_scale").AsSingle();
-        var tone = material.GetShaderParameter("tone_multiplier").AsVector3();
-        Vector3 Sample(int x, int y, Color baseColor)
-        {
-            var detailX = Math.Min(
-                detailImage.GetWidth() - 1,
-                x * detailImage.GetWidth() / baseImage.GetWidth());
-            var detailY = Math.Min(
-                detailImage.GetHeight() - 1,
-                y * detailImage.GetHeight() / baseImage.GetHeight());
-            var detail = detailImage.GetPixel(detailX, detailY);
-            return new Vector3(
-                Math.Clamp(
-                    (baseColor.R + detailScale * (detail.R - neutral)) * tone.X,
-                    0.0f,
-                    1.0f),
-                Math.Clamp(
-                    (baseColor.G + detailScale * (detail.G - neutral)) * tone.Y,
-                    0.0f,
-                    1.0f),
-                Math.Clamp(
-                    (baseColor.B + detailScale * (detail.B - neutral)) * tone.Z,
-                    0.0f,
-                    1.0f));
-        }
-        return AverageTextureColor(
-            baseImage,
-            Sample,
-            minimumU,
-            maximumU,
-            minimumV,
-            maximumV);
-    }
-
-    private static Vector3 AverageEncodedSkinColor(
-        ShaderMaterial material,
-        bool centralTorso)
-    {
-        var image = RequiredTextureImage(material, "base_map");
-        return AverageTextureColor(image, (_, _, color) => new Vector3(
-            color.R,
-            color.G,
-            color.B),
-            centralTorso ? 0.25f : 0.0f,
-            centralTorso ? 0.75f : 1.0f,
-            centralTorso ? 0.25f : 0.0f,
-            centralTorso ? 0.72f : 1.0f);
-    }
-
-    private static Vector3 AverageTextureColor(
-        Image image,
-        Func<int, int, Color, Vector3> convert,
-        float minimumU,
-        float maximumU,
-        float minimumV,
-        float maximumV)
-    {
-        var stepX = Math.Max(1, image.GetWidth() / 96);
-        var stepY = Math.Max(1, image.GetHeight() / 96);
-        var startX = Math.Clamp((int)(image.GetWidth() * minimumU), 0, image.GetWidth() - 1);
-        var endX = Math.Clamp((int)(image.GetWidth() * maximumU), startX + 1, image.GetWidth());
-        var startY = Math.Clamp((int)(image.GetHeight() * minimumV), 0, image.GetHeight() - 1);
-        var endY = Math.Clamp((int)(image.GetHeight() * maximumV), startY + 1, image.GetHeight());
-        var total = Vector3.Zero;
-        var samples = 0;
-        for (var y = startY; y < endY; y += stepY)
-        {
-            for (var x = startX; x < endX; x += stepX)
-            {
-                var color = image.GetPixel(x, y);
-                if (color.A < 0.5f)
-                    continue;
-                total += convert(x, y, color);
-                samples++;
-            }
-        }
-        if (samples == 0)
-            throw new InvalidOperationException(
-                "Fallout 2 humanoid skin texture has no opaque samples.");
-        return total / samples;
-    }
-
-    private static Image RequiredTextureImage(ShaderMaterial material, string parameter)
-    {
-        if (material.GetShaderParameter(parameter).AsGodotObject() is not Texture2D texture)
-            throw new InvalidOperationException(
-                $"Fallout 2 humanoid skin material has no {parameter} texture.");
-        var image = texture.GetImage();
-        if (image.IsEmpty())
-            throw new InvalidOperationException(
-                $"Fallout 2 humanoid skin material {parameter} texture is empty.");
-        return image;
-    }
 
     private void ApplyBodyProportions()
     {

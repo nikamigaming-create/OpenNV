@@ -150,6 +150,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private CharacterBodyProportions _bodyProportions =
         CharacterBodyProportions.Neutral("fnv-custom-live-v1");
     private string _appearancePreviewMode = "3d";
+    private bool _appearancePreviewFaceFraming = true;
     private bool _visualCaptureActive;
     private bool _docSpatialAcceptancePassed;
 
@@ -160,7 +161,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         string mode,
         string playerName,
         double timeoutSeconds,
-        string? captureRoot = null)
+        string? captureRoot = null,
+        int appearancePresentationHoldFrames = 0)
     {
         var stopAtCheckpoint = mode.Equals("checkpoint", StringComparison.OrdinalIgnoreCase);
         var stopAfterCreator = mode.Equals("creator", StringComparison.OrdinalIgnoreCase);
@@ -186,6 +188,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         var requireDocSpatialAcceptance = (stopAtCheckpoint || stopAfterCreator) &&
             _stage < OpeningVisualCaptureSession.DocSpatialAcceptanceDeadlineStage;
         var latestDocSpatialTelemetry = "not-yet-observed";
+        var appearancePresentationSignature = string.Empty;
+        var appearancePresentationFramesRemaining = 0;
         var visualCapture = OpeningVisualCaptureSession.Create(
             this,
             captureRoot,
@@ -305,7 +309,31 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 if (_activeModal is not null)
                 {
                     SetAcceptanceMovement(null, ref movementHeld);
-                    AdvanceAcceptanceModal(playerName);
+                    if (_raceSexMenuHost is not null &&
+                        appearancePresentationHoldFrames > 0)
+                    {
+                        var signature =
+                            $"{_acceptanceAppearancePhase}:" +
+                            $"{_raceSexMenuHost.ActiveList}:" +
+                            $"{_appearancePreviewMode}:" +
+                            $"{_appearancePreviewFaceFraming}";
+                        if (!signature.Equals(
+                                appearancePresentationSignature,
+                                StringComparison.Ordinal))
+                        {
+                            appearancePresentationSignature = signature;
+                            appearancePresentationFramesRemaining =
+                                appearancePresentationHoldFrames;
+                        }
+                        if (appearancePresentationFramesRemaining > 0)
+                        {
+                            appearancePresentationFramesRemaining--;
+                            continue;
+                        }
+                    }
+                    AdvanceAcceptanceModal(
+                        playerName,
+                        showcaseCreatorControls: appearancePresentationHoldFrames > 0);
                     continue;
                 }
 
@@ -396,7 +424,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         }
     }
 
-    private void AdvanceAcceptanceModal(string playerName)
+    private void AdvanceAcceptanceModal(
+        string playerName,
+        bool showcaseCreatorControls)
     {
         if (_activeModal is null || _dialogueVoice.Playing)
             return;
@@ -528,11 +558,37 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             if (_acceptanceAppearancePhase <= AcceptanceAppearancePhase.SelectParts)
             {
                 _raceSexShowFace();
-                _acceptanceAppearancePhase = AcceptanceAppearancePhase.Complete;
+                _acceptanceAppearancePhase = showcaseCreatorControls
+                    ? AcceptanceAppearancePhase.ShowcaseFaceNormal
+                    : AcceptanceAppearancePhase.Complete;
                 GD.Print(
                     $"OPENNV_OPENING_ACCEPTANCE_APPEARANCE_INPUT sex={_sexIndex} " +
                     $"race={_raceFormId} hair={_hairFormId} eyes={_eyesFormId} " +
                     "transport=owned-racesex-active-list");
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ShowcaseFaceNormal)
+            {
+                _raceSexRenderedDeviceHost!.ActivateCreatorModeControl("BODY");
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.ShowcaseBodyNormal;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ShowcaseBodyNormal)
+            {
+                _raceSexRenderedDeviceHost!.ActivateCreatorModeControl("PROJECTION");
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.ShowcaseBodyGreen;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ShowcaseBodyGreen)
+            {
+                _raceSexRenderedDeviceHost!.ActivateCreatorModeControl("FACE");
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.ShowcaseFaceGreen;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ShowcaseFaceGreen)
+            {
+                _raceSexRenderedDeviceHost!.ActivateCreatorModeControl("PROJECTION");
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.Complete;
                 return;
             }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.Complete)
@@ -2451,6 +2507,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         OpeningPlayerFaceGenPreviewHost? previewHost = null;
         OpeningPlayerFaceGenPreview? selectedPreviewState = null;
 
+        void RefreshPreview() => previewHost?.SetPreviewState(
+            _bodyProportions,
+            _appearancePreviewFaceFraming,
+            greenProjection: _appearancePreviewMode == "2d");
+
         void UpdateControlValue(
             OpeningNativeFaceGenGeometryControl control,
             float value)
@@ -2468,8 +2529,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             var morphWeight = uiValue * previewPolicy.MorphWeightScale;
             _faceGeometryControlValues[control.SettingEntity] = uiValue;
             previewHost?.Apply(control.SettingEntity, uiValue);
-            if (previewHost is not null && _appearancePreviewMode == "2d")
-                previewHost.ShowTwoDimensional(_bodyProportions);
+            RefreshPreview();
             GD.Print(
                 $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={control.SettingEntity} " +
                 $"axisSha256={control.AxisSha256} uiValue={uiValue:R} " +
@@ -2519,10 +2579,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 previewHost.Apply(
                     control.SettingEntity,
                     _faceGeometryControlValues[control.SettingEntity]);
-            if (_appearancePreviewMode == "2d")
-                previewHost.ShowTwoDimensional(_bodyProportions);
-            else
-                previewHost.ShowThreeDimensional(_bodyProportions);
+            RefreshPreview();
             _appearancePreviewHost = previewHost;
             GD.Print(
                 $"OPENNV_NEW_GAME_FACEGEN_PREVIEW_READY " +
@@ -2677,99 +2734,131 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 showHair,
                 showFace);
         };
-        showFace = () => _raceSexMenuHost!.ShowSliders(
-            "faceGeometry",
-            previewControls.Select(control =>
-            {
-                var selectedControl = control;
-                return new OpeningRaceSexSliderEntry(
-                    control.SettingEntity,
-                    control.SourceLabel,
-                    _faceGeometryControlValues[control.SettingEntity],
-                    previewPolicy.Minimum,
-                    previewPolicy.Maximum,
-                    previewPolicy.Step,
-                    previewPolicy.Jump,
-                    value => value.ToString(
-                        "+0;-0;0",
-                        System.Globalization.CultureInfo.InvariantCulture),
-                    value =>
-                    {
-                        UpdateControlValue(selectedControl, value);
-                        showFace();
-                    });
-            }).ToArray(),
-            showEyes,
-            Accept);
-        showBody = () => _raceSexMenuHost!.ShowSliders(
-            "body",
-            new[]
-            {
-                (Key: "height", Label: "Height"),
-                (Key: "chest", Label: "Chest"),
-                (Key: "shoulders", Label: "Shoulders"),
-                (Key: "waist", Label: "Waist"),
-                (Key: "arms", Label: "Arms"),
-                (Key: "thighs", Label: "Thighs"),
-                (Key: "calves", Label: "Calves"),
-            }.Select(row =>
-            {
-                var selected = row;
-                return new OpeningRaceSexSliderEntry(
-                    selected.Key,
-                    selected.Label,
-                    _bodyProportions.Value(selected.Key),
-                    CharacterBodyProportions.Minimum,
-                    CharacterBodyProportions.Maximum,
-                    CharacterBodyProportions.Step,
-                    CharacterBodyProportions.Jump,
-                    value => $"{Mathf.RoundToInt(value * 100.0f)}%",
-                    value =>
-                    {
-                        _bodyProportions = _bodyProportions.With(selected.Key, value);
-                        if (_appearancePreviewMode == "2d")
-                            previewHost?.ShowTwoDimensional(_bodyProportions);
-                        else
-                            previewHost?.ShowThreeDimensional(_bodyProportions);
-                        showBody();
-                    });
-            }).ToArray(),
-            showFace,
-            Accept);
+        showFace = () =>
+        {
+            _appearancePreviewFaceFraming = true;
+            RefreshPreview();
+            _raceSexMenuHost!.ShowSliders(
+                "faceGeometry",
+                previewControls.Select(control =>
+                {
+                    var selectedControl = control;
+                    return new OpeningRaceSexSliderEntry(
+                        control.SettingEntity,
+                        control.SourceLabel,
+                        _faceGeometryControlValues[control.SettingEntity],
+                        previewPolicy.Minimum,
+                        previewPolicy.Maximum,
+                        previewPolicy.Step,
+                        previewPolicy.Jump,
+                        value => value.ToString(
+                            "+0;-0;0",
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        value =>
+                        {
+                            UpdateControlValue(selectedControl, value);
+                            showFace();
+                        });
+                }).ToArray(),
+                showEyes,
+                Accept);
+        };
+        showBody = () =>
+        {
+            _appearancePreviewFaceFraming = false;
+            RefreshPreview();
+            _raceSexMenuHost!.ShowSliders(
+                "body",
+                new[]
+                {
+                    (Key: "height", Label: "Height"),
+                    (Key: "chest", Label: "Chest"),
+                    (Key: "shoulders", Label: "Shoulders"),
+                    (Key: "waist", Label: "Waist"),
+                    (Key: "arms", Label: "Arms"),
+                    (Key: "thighs", Label: "Thighs"),
+                    (Key: "calves", Label: "Calves"),
+                }.Select(row =>
+                {
+                    var selected = row;
+                    return new OpeningRaceSexSliderEntry(
+                        selected.Key,
+                        selected.Label,
+                        _bodyProportions.Value(selected.Key),
+                        CharacterBodyProportions.Minimum,
+                        CharacterBodyProportions.Maximum,
+                        CharacterBodyProportions.Step,
+                        CharacterBodyProportions.Jump,
+                        value => $"{Mathf.RoundToInt(value * 100.0f)}%",
+                        value =>
+                        {
+                            _bodyProportions = _bodyProportions.With(selected.Key, value);
+                            RefreshPreview();
+                            showBody();
+                        });
+                }).ToArray(),
+                showFace,
+                Accept);
+        };
         _raceSexShowSex = showSex;
         _raceSexShowFace = showFace;
         _raceSexShowBody = showBody;
         _raceSexRenderedDeviceHost.ConfigureCharacterControls(
             source.Font,
+            showSex,
+            showRace,
             () =>
             {
-                if (_raceSexMenuHost.ActiveList == "body")
-                    showFace();
-                else
-                    showBody();
+                _appearancePreviewFaceFraming = true;
+                RefreshPreview();
+                showFace();
                 _raceSexRenderedDeviceHost.SetCreatorModeState(
-                    _appearancePreviewMode.ToUpperInvariant(),
-                    _raceSexMenuHost.ActiveList == "body",
-                    projectionEnabled: _appearancePreviewMode == "2d");
+                    "FACE",
+                    bodyEnabled: false,
+                    projectionEnabled: _appearancePreviewMode == "2d",
+                    faceEnabled: true);
+            },
+            showHair,
+            () =>
+            {
+                _appearancePreviewFaceFraming = true;
+                RefreshPreview();
+                showFace();
+                _raceSexRenderedDeviceHost.SetCreatorModeState(
+                    "FACE",
+                    bodyEnabled: false,
+                    projectionEnabled: _appearancePreviewMode == "2d",
+                    faceEnabled: true);
+            },
+            () =>
+            {
+                _appearancePreviewFaceFraming = false;
+                RefreshPreview();
+                showBody();
+                _raceSexRenderedDeviceHost.SetCreatorModeState(
+                    "BODY",
+                    bodyEnabled: true,
+                    projectionEnabled: _appearancePreviewMode == "2d",
+                    faceEnabled: false);
             },
             () =>
             {
                 _appearancePreviewMode = _appearancePreviewMode == "3d"
                     ? "2d"
                     : "3d";
-                if (_appearancePreviewMode == "2d")
-                    previewHost?.ShowTwoDimensional(_bodyProportions);
-                else
-                    previewHost?.ShowThreeDimensional(_bodyProportions);
+                RefreshPreview();
                 _raceSexRenderedDeviceHost.SetCreatorModeState(
-                    _appearancePreviewMode.ToUpperInvariant(),
-                    _raceSexMenuHost.ActiveList == "body",
-                    projectionEnabled: _appearancePreviewMode == "2d");
+                    _appearancePreviewFaceFraming ? "FACE" : "BODY",
+                    !_appearancePreviewFaceFraming,
+                    projectionEnabled: _appearancePreviewMode == "2d",
+                    faceEnabled: _appearancePreviewFaceFraming);
             });
         RenderPreview(CurrentSex());
         _raceSexRenderedDeviceHost.SetCreatorModeState(
-            _appearancePreviewMode.ToUpperInvariant(),
-            bodyEnabled: false);
+            "FACE",
+            bodyEnabled: false,
+            projectionEnabled: _appearancePreviewMode == "2d",
+            faceEnabled: true);
         showSex();
         GD.Print(
             "OPENNV_NEW_GAME_APPEARANCE_LAYOUT_STATIC_PASS " +
@@ -4120,6 +4209,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         RestoreGeometryEdit,
         SelectSex,
         SelectParts,
+        ShowcaseFaceNormal,
+        ShowcaseBodyNormal,
+        ShowcaseBodyGreen,
+        ShowcaseFaceGreen,
         Complete,
     }
 }

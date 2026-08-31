@@ -31,7 +31,6 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private static readonly string[] SpecialNames = ["ST", "PE", "EN", "CH", "IN", "AG", "LK"];
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Fo2PremadeCharacter _source;
-    private readonly bool _modify;
     private readonly Control _canvas;
     private readonly Control _controlRoot;
     private readonly OpeningRaceSexRenderedDeviceHost _reflectron;
@@ -41,10 +40,16 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private readonly Fo2HumanoidDonorContract _humanoidDonor;
     private readonly Fo2PremadeHumanoidPreview _livePreview;
     private readonly IReadOnlyList<Control> _appearanceControls;
+    private readonly IReadOnlyList<Control> _faceControls;
+    private readonly IReadOnlyList<Control> _hairControls;
+    private readonly IReadOnlyList<Control> _raceControls;
     private readonly IReadOnlyList<Control> _statsControls;
     private readonly Button _previewToggle;
     private readonly Button _bodyToggle;
     private readonly Control _bodyPanel;
+    private readonly Control _rulesPanel;
+    private readonly Label[] _tagSkillValues = new Label[3];
+    private readonly Label[] _traitValues = new Label[2];
     private readonly Label _faceShape;
     private readonly Label _hairStyle;
     private readonly Label _skinTone;
@@ -57,9 +62,11 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private readonly Label _age;
     private readonly Label[] _specialValues = new Label[7];
     private readonly Label _allocation;
-    private readonly Label _policy;
+    private readonly Button _rules;
     private readonly Button _confirm;
     private readonly int[] _special;
+    private readonly List<string> _taggedSkills;
+    private readonly List<string> _traits;
     private int _ageValue;
     private int _faceShapeIndex;
     private int _hairStyleIndex;
@@ -72,23 +79,24 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private CharacterBodyProportions _bodyProportions;
     private string _sexValue;
     private bool _classicProjectionEnabled;
+    private bool _facePreviewEnabled;
 
     internal Fo2CustomCharacterEditor(
         Fo2CharacterStartCatalog catalog,
         Fo2PremadeCharacter source,
-        bool modify,
         Fo2HumanoidDonorContract humanoidDonor,
         OpeningManifest characterReflectron)
     {
         _catalog = catalog;
         _source = source;
-        _modify = modify;
         _humanoidDonor = humanoidDonor;
         _ = _humanoidDonor.ForSex(source.Profile.Sex);
         _ageValue = source.Profile.Age;
         _sexValue = source.Profile.Sex;
         _bodyProportions = Fo2CharacterBodyProfile.ForSex(_sexValue);
         _special = source.Profile.Special.ToArray();
+        _taggedSkills = Fo2CharacterStartCatalog.SkillNames.Take(3).ToList();
+        _traits = [];
         var appearance = Fo2ProceduralAppearanceCatalog.Load();
         _faceShapeIndex = Fo2ProceduralPortrait.ShapeIndex(appearance.DefaultFaceShapeId);
         _hairStyleIndex = Fo2ProceduralPortrait.HairStyleIndex(appearance.DefaultHairStyleId);
@@ -98,9 +106,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _browStyleIndex = Fo2ProceduralPortrait.BrowStyleIndex(appearance.DefaultBrowStyleId);
         _noseStyleIndex = Fo2ProceduralPortrait.NoseStyleIndex(appearance.DefaultNoseStyleId);
         _mouthStyleIndex = Fo2ProceduralPortrait.MouthStyleIndex(appearance.DefaultMouthStyleId);
-        Name = modify
-            ? "FALLOUT_2_MODIFY_OWNED_CHARACTER"
-            : "FALLOUT_2_CREATE_CUSTOM_CHARACTER";
+        Name = "FALLOUT_2_CREATE_CUSTOM_CHARACTER";
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
         AddChild(new ColorRect
@@ -172,7 +178,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _livePreview = new Fo2PremadeHumanoidPreview(
             source,
             catalog,
-            humanoidDonor)
+            humanoidDonor,
+            useCustomDonor: true)
         {
             Size = faceRoot.Size,
             Visible = false,
@@ -398,9 +405,24 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         if (_appearanceControls.Count != 24)
             throw new InvalidOperationException(
                 "Fallout 2 appearance editor requires exactly eight three-part controls.");
+        _faceControls =
+        [
+            .. _appearanceControls.Take(3),
+            .. _appearanceControls.Skip(12),
+        ];
+        _hairControls =
+        [
+            .. _appearanceControls.Skip(3).Take(3),
+            .. _appearanceControls.Skip(9).Take(3),
+        ];
+        _raceControls = _appearanceControls.Skip(6).Take(3).ToArray();
+        if (_faceControls.Count != 15 || _hairControls.Count != 6 ||
+            _raceControls.Count != 3)
+            throw new InvalidOperationException(
+                "Fallout 2 Reflectron source sections do not cover every appearance control.");
         var statsControlStart = _controlRoot.GetChildCount();
         AddText(
-            modify ? "MODIFY CHOSEN ONE" : "CREATE CHOSEN ONE",
+            "CREATE CHOSEN ONE",
             10.0f,
             8.0f,
             280.0f,
@@ -413,7 +435,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             Position = new Vector2(60.0f, 39.0f),
             Size = new Vector2(230.0f, 28.0f),
             MaxLength = 11,
-            Text = modify ? source.Profile.Name : "",
+            Text = "",
             PlaceholderText = "1-11 characters",
             CaretBlink = true,
         };
@@ -444,8 +466,15 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             AddButton("+", x + 76.0f, y, 24.0f, 23.0f, () => AdjustSpecial(captured, 1), 12);
         }
         _allocation = AddText("", 155.0f, 246.0f, 135.0f, 22.0f, 10);
-        _policy = AddText("", 10.0f, 276.0f, 280.0f, 32.0f, 8);
-        _policy.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _rules = AddButton(
+            "",
+            10.0f,
+            276.0f,
+            280.0f,
+            32.0f,
+            ShowRulesEditor,
+            9);
+        _rules.TooltipText = "Choose exactly three tagged skills and up to two traits";
         _statsControls = _controlRoot.GetChildren()
             .Skip(statsControlStart)
             .OfType<Control>()
@@ -457,18 +486,26 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             .TooltipText = "Cancel custom character editing";
         _bodyPanel = BuildBodyPanel();
         _controlRoot.AddChild(_bodyPanel);
+        _rulesPanel = BuildRulesPanel();
+        _controlRoot.AddChild(_rulesPanel);
         SetAppearanceControlsVisible(false);
         _reflectron.ConfigureCharacterControls(
             characterReflectron.Font,
+            ShowSexEditor,
+            ShowRaceEditor,
+            ShowFaceEditor,
+            ShowHairEditor,
+            ShowClassicPortrait,
             ToggleBodyEditor,
             ToggleClassicProjection);
-        SetLivePreviewVisible(true);
+        ApplyPreviewState();
+        _reflectron.SetActiveList("sex");
+        SetMeta("custom_editor_panel", "identity-and-special");
         Refresh();
     }
 
     internal event Action<Fo2CharacterSelection>? Confirmed;
     internal event Action? Cancelled;
-    internal bool IsModify => _modify;
     internal string CharacterName => _name.Text.Trim();
     internal string Sex => _sexValue;
     internal int Age => _ageValue;
@@ -482,14 +519,24 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal string MouthStyleId => Fo2ProceduralPortrait.MouthStyles[_mouthStyleIndex];
     internal bool Live3DVisible => _livePreview.Visible && !_classicProjectionEnabled;
     internal bool ClassicProjectionVisible => _classicProjectionEnabled;
+    internal bool FacePreviewVisible => _facePreviewEnabled;
+    internal string ProjectionStyle => _livePreview.ProjectionStyle;
     internal bool BodyControlsVisible => _bodyPanel.Visible;
-    internal bool AppearanceControlsVisible => _appearanceControls.All(row => row.Visible);
+    internal bool AppearanceControlsVisible => _appearanceControls.Any(row => row.Visible);
+    internal bool RulesControlsVisible => _rulesPanel.Visible;
+    internal string ActiveEditorPanel => GetMeta("custom_editor_panel").AsString();
     internal Fo2PremadeHumanoidPreview LivePreview => _livePreview;
     internal CharacterBodyProportions BodyProportions => _bodyProportions;
     internal IReadOnlyList<int> Special => _special;
+    internal IReadOnlyList<string> TaggedSkills => _taggedSkills;
+    internal IReadOnlyList<string> Traits => _traits;
     internal int AllocatedSpecial => _special.Sum();
     internal bool CanConfirm =>
-        CharacterName.Length is >= 1 and <= 11 && AllocatedSpecial == 40;
+        CharacterName.Length is >= 1 and <= 11 && AllocatedSpecial == 40 &&
+        _taggedSkills.Count == 3 &&
+        _taggedSkills.Distinct(StringComparer.Ordinal).Count() == 3 &&
+        _traits.Count <= 2 &&
+        _traits.Distinct(StringComparer.Ordinal).Count() == _traits.Count;
 
     public override void _Ready()
     {
@@ -596,12 +643,27 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     }
 
     internal void TogglePreviewMode() =>
-        SetLivePreviewVisible(_classicProjectionEnabled);
+        SelectPreviewView(!_facePreviewEnabled);
 
-    internal void ToggleClassicProjection() =>
-        SetLivePreviewVisible(_classicProjectionEnabled);
+    internal void ToggleClassicProjection()
+    {
+        _classicProjectionEnabled = !_classicProjectionEnabled;
+        ApplyPreviewState();
+    }
 
     internal void ToggleBodyControls() => ToggleBodyEditor();
+
+    internal void ActivateReflectronFaceControl() =>
+        _reflectron.ActivateCreatorModeControl("FACE");
+
+    internal void ActivateReflectronBodyControl() =>
+        _reflectron.ActivateCreatorModeControl("BODY");
+
+    internal void ActivateReflectronSourceControl(string label) =>
+        _reflectron.ActivateSourceSectionControl(label);
+
+    internal void ActivateRulesControl() =>
+        _rules.EmitSignal(BaseButton.SignalName.Pressed);
 
     internal void SetBodyProportion(string role, float value)
     {
@@ -620,6 +682,34 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal void SetAge(int value)
     {
         _ageValue = Math.Clamp(value, 16, 35);
+        Refresh();
+    }
+
+    internal void SetTaggedSkills(IReadOnlyList<string> values)
+    {
+        if (values.Count != 3 || values.Distinct(StringComparer.Ordinal).Count() != 3 ||
+            values.Any(value => !Fo2CharacterStartCatalog.SkillNames.Contains(
+                value,
+                StringComparer.Ordinal)))
+            throw new ArgumentException(
+                "Fallout 2 custom tags require exactly three distinct source skills.",
+                nameof(values));
+        _taggedSkills.Clear();
+        _taggedSkills.AddRange(values);
+        Refresh();
+    }
+
+    internal void SetTraits(IReadOnlyList<string> values)
+    {
+        if (values.Count > 2 || values.Distinct(StringComparer.Ordinal).Count() != values.Count ||
+            values.Any(value => !Fo2CharacterStartCatalog.TraitNames.Contains(
+                value,
+                StringComparer.Ordinal)))
+            throw new ArgumentException(
+                "Fallout 2 custom traits require up to two distinct source traits.",
+                nameof(values));
+        _traits.Clear();
+        _traits.AddRange(values);
         Refresh();
     }
 
@@ -642,10 +732,10 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             _ageValue,
             _sexValue,
             _special.ToArray(),
-            _modify ? _source.Profile.TaggedSkills.ToArray() : Array.Empty<string>(),
-            _modify ? _source.Profile.Traits.ToArray() : Array.Empty<string>());
+            _taggedSkills.ToArray(),
+            _traits.ToArray());
         var provisional = new Fo2CharacterSelection(
-            _modify ? Fo2CharacterSelection.ModifyMode : Fo2CharacterSelection.CreateMode,
+            Fo2CharacterSelection.CreateMode,
             _source,
             profile);
         var selection = provisional with
@@ -786,9 +876,9 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _allocation.AddThemeColorOverride(
             "font_color",
             AllocatedSpecial == 40 ? new Color("78e781") : new Color("e6c34c"));
-        _policy.Text = _modify
-            ? "TAG SKILLS / TRAITS: SOURCE VALUES UNCHANGED"
-            : "TAG SKILLS / TRAITS: UNSELECTED IN THIS BOUNDED FLOW";
+        _rules.Text =
+            $"RULES  •  TAGS {_taggedSkills.Count}/3  •  TRAITS {_traits.Count}/2";
+        RefreshRulesPanel();
         _confirm.Disabled = !CanConfirm;
         _confirm.MouseDefaultCursorShape = CanConfirm
             ? CursorShape.PointingHand
@@ -809,11 +899,14 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetMeta("custom_portrait_generator", Fo2ProceduralPortrait.GeneratorId);
         SetMeta("custom_special", string.Join(",", _special));
         SetMeta("custom_special_total", AllocatedSpecial);
-        SetMeta("custom_tags_traits_policy", _modify ? "source-unchanged" : "unselected");
+        SetMeta("custom_tagged_skills", string.Join(",", _taggedSkills));
+        SetMeta("custom_traits", string.Join(",", _traits));
+        SetMeta("custom_tags_traits_policy", "player-selected-source-rules");
     }
 
     private void ToggleBodyEditor()
     {
+        SelectPreviewView(false);
         if (_bodyPanel.Visible)
         {
             ShowStatsEditor();
@@ -821,31 +914,76 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         }
         SetStatsControlsVisible(false);
         SetAppearanceControlsVisible(false);
+        _rulesPanel.Visible = false;
         _bodyPanel.Visible = true;
         _bodyToggle.Text = "STATS";
-        SetLivePreviewVisible(true);
         SetMeta(
             "custom_editor_panel",
             "body-proportions");
     }
 
-    private void ShowFaceEditor()
+    private void ShowSexEditor() => ShowStatsEditor();
+
+    private void ShowRaceEditor() => ShowAppearanceEditor(
+        _raceControls,
+        "race",
+        "human-race-and-complexion");
+
+    private void ShowFaceEditor() => ShowAppearanceEditor(
+        _faceControls,
+        "face",
+        "face-appearance");
+
+    private void ShowHairEditor() => ShowAppearanceEditor(
+        _hairControls,
+        "hair",
+        "hair-appearance");
+
+    private void ShowClassicPortrait()
+    {
+        ShowAppearanceEditor(_faceControls, "face", "face-preview");
+        SetMeta("custom_editor_panel", "face-preview");
+        SetMeta("custom_editor_view", "face-framing-of-current-live-3d-character");
+    }
+
+    private void ShowAppearanceEditor(
+        IReadOnlyList<Control> controls,
+        string sourceSection,
+        string editorPanel)
     {
         _bodyPanel.Visible = false;
+        _rulesPanel.Visible = false;
         SetStatsControlsVisible(false);
-        SetAppearanceControlsVisible(true);
+        SetAppearanceControlsVisible(false);
+        foreach (var control in controls)
+            control.Visible = true;
         _bodyToggle.Text = "BODY";
-        SetLivePreviewVisible(true);
-        SetMeta("custom_editor_panel", "face-appearance");
+        SelectPreviewView(true);
+        _reflectron.SetActiveList(sourceSection);
+        SetMeta("custom_editor_panel", editorPanel);
     }
 
     private void ShowStatsEditor()
     {
         _bodyPanel.Visible = false;
+        _rulesPanel.Visible = false;
         SetAppearanceControlsVisible(false);
         SetStatsControlsVisible(true);
         _bodyToggle.Text = "BODY";
+        SelectPreviewView(false);
+        _reflectron.SetActiveList("sex");
         SetMeta("custom_editor_panel", "identity-and-special");
+    }
+
+    private void ShowRulesEditor()
+    {
+        _bodyPanel.Visible = false;
+        SetAppearanceControlsVisible(false);
+        SetStatsControlsVisible(false);
+        _rulesPanel.Visible = true;
+        _bodyToggle.Text = "BODY";
+        SelectPreviewView(false);
+        SetMeta("custom_editor_panel", "tagged-skills-and-traits");
     }
 
     private void SetAppearanceControlsVisible(bool visible)
@@ -867,28 +1005,215 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             "height", "chest", "shoulders", "waist", "arms", "thighs", "calves",
         }.Select(role => $"{role}:{_bodyProportions.Value(role):F2}"));
 
-    private void SetLivePreviewVisible(bool visible)
+    private void SelectPreviewView(bool face)
     {
-        _classicProjectionEnabled = !visible;
+        _facePreviewEnabled = face;
+        ApplyPreviewState();
+    }
+
+    private void ApplyPreviewState()
+    {
         _livePreview.Visible = true;
-        _livePreview.SetClassicPortraitProjection(_classicProjectionEnabled);
+        _livePreview.SetPreviewState(_facePreviewEnabled, _classicProjectionEnabled);
         _sourcePanel.Visible = false;
         _portrait.Visible = false;
-        _previewToggle.Text = visible ? "CLASSIC" : "LIVE 3D";
-        if (visible)
+        _previewToggle.Text = _classicProjectionEnabled ? "SOURCE" : "PROJECT";
+        if (!_facePreviewEnabled)
             _livePreview.SetProportions(_bodyProportions);
         _reflectron.SetCreatorModeState(
-            visible ? "3D" : "2D",
+            _facePreviewEnabled ? "FACE" : "BODY",
             _bodyPanel.Visible,
-            projectionEnabled: _classicProjectionEnabled);
+            projectionEnabled: _classicProjectionEnabled,
+            faceEnabled: AppearanceControlsVisible);
         SetMeta(
             "custom_preview_mode",
-            visible
-                ? _livePreview.PresentationMode
-                : "classic-stylized-projection-of-current-3d-character");
+            _classicProjectionEnabled
+                ? _facePreviewEnabled
+                    ? "green-face-wireframe-closeup-projection-of-current-3d-character"
+                    : "green-wireframe-body-projection-of-current-3d-character"
+                : _facePreviewEnabled
+                    ? "source-material-live-3d-head-and-shoulders"
+                    : _livePreview.PresentationMode);
         SetMeta(
             "custom_live_3d_boundary",
-            "no substitute live 3D head; verified owned full-body donor only");
+            "verified owned full-body donor drives both face and body views; green projected views are presentation-only");
+    }
+
+    private void UpdateReflectronState() => _reflectron.SetCreatorModeState(
+        _facePreviewEnabled ? "FACE" : "BODY",
+        _bodyPanel.Visible,
+        projectionEnabled: _classicProjectionEnabled,
+        faceEnabled: AppearanceControlsVisible);
+
+    private Control BuildRulesPanel()
+    {
+        var panel = new Control
+        {
+            Name = "FO2_SOURCE_RULE_CONTROLS",
+            Size = new Vector2(ControlDesignWidth, 310.0f),
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Pass,
+        };
+        panel.AddChild(new ColorRect
+        {
+            Position = Vector2.Zero,
+            Size = panel.Size,
+            Color = new Color(0.0f, 0.035f, 0.018f, 0.96f),
+            MouseFilter = MouseFilterEnum.Stop,
+        });
+        var title = AddPanelText(panel, "TAGGED SKILLS", 10.0f, 8.0f, 280.0f, 26.0f, 12);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        for (var index = 0; index < _tagSkillValues.Length; index++)
+        {
+            var captured = index;
+            var y = 42.0f + index * 38.0f;
+            AddPanelButton(panel, "◀", 10.0f, y, 28.0f, 28.0f, () => CycleTag(captured, -1));
+            _tagSkillValues[index] = AddPanelText(
+                panel,
+                "",
+                42.0f,
+                y,
+                216.0f,
+                28.0f,
+                9);
+            _tagSkillValues[index].HorizontalAlignment = HorizontalAlignment.Center;
+            AddPanelButton(panel, "▶", 262.0f, y, 28.0f, 28.0f, () => CycleTag(captured, 1));
+        }
+        var traitsTitle = AddPanelText(panel, "OPTIONAL TRAITS", 10.0f, 160.0f, 280.0f, 26.0f, 12);
+        traitsTitle.HorizontalAlignment = HorizontalAlignment.Center;
+        for (var index = 0; index < _traitValues.Length; index++)
+        {
+            var captured = index;
+            var y = 194.0f + index * 38.0f;
+            AddPanelButton(panel, "◀", 10.0f, y, 28.0f, 28.0f, () => CycleTrait(captured, -1));
+            _traitValues[index] = AddPanelText(
+                panel,
+                "",
+                42.0f,
+                y,
+                216.0f,
+                28.0f,
+                9);
+            _traitValues[index].HorizontalAlignment = HorizontalAlignment.Center;
+            AddPanelButton(panel, "▶", 262.0f, y, 28.0f, 28.0f, () => CycleTrait(captured, 1));
+        }
+        AddPanelButton(panel, "BACK TO SPECIAL", 76.0f, 272.0f, 148.0f, 28.0f, ShowStatsEditor);
+        RefreshRulesPanel();
+        return panel;
+    }
+
+    private void CycleTag(int slot, int delta)
+    {
+        if (slot is < 0 or >= 3 || delta is not (-1 or 1))
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        var choices = Fo2CharacterStartCatalog.SkillNames;
+        var current = Array.IndexOf(choices, _taggedSkills[slot]);
+        for (var step = 1; step <= choices.Length; step++)
+        {
+            var candidate = choices[(current + delta * step % choices.Length + choices.Length) %
+                choices.Length];
+            if (_taggedSkills.Where((_, index) => index != slot).Contains(
+                    candidate,
+                    StringComparer.Ordinal))
+                continue;
+            _taggedSkills[slot] = candidate;
+            Refresh();
+            return;
+        }
+    }
+
+    private void CycleTrait(int slot, int delta)
+    {
+        if (slot is < 0 or >= 2 || delta is not (-1 or 1))
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        var choices = new string?[] { null }.Concat(
+            Fo2CharacterStartCatalog.TraitNames.Cast<string?>()).ToArray();
+        var currentValue = slot < _traits.Count ? _traits[slot] : null;
+        var current = Array.IndexOf(choices, currentValue);
+        for (var step = 1; step <= choices.Length; step++)
+        {
+            var candidate = choices[(current + delta * step % choices.Length + choices.Length) %
+                choices.Length];
+            if (candidate is not null &&
+                _traits.Where((_, index) => index != slot).Contains(
+                    candidate,
+                    StringComparer.Ordinal))
+                continue;
+            if (slot < _traits.Count)
+            {
+                if (candidate is null)
+                    _traits.RemoveAt(slot);
+                else
+                    _traits[slot] = candidate;
+            }
+            else if (candidate is not null)
+                _traits.Add(candidate);
+            Refresh();
+            return;
+        }
+    }
+
+    private void RefreshRulesPanel()
+    {
+        for (var index = 0; index < _tagSkillValues.Length; index++)
+            if (_tagSkillValues[index] is not null)
+                _tagSkillValues[index].Text =
+                    $"TAG {index + 1}: {_taggedSkills[index].ToUpperInvariant()}";
+        for (var index = 0; index < _traitValues.Length; index++)
+            if (_traitValues[index] is not null)
+                _traitValues[index].Text = index < _traits.Count
+                    ? $"TRAIT {index + 1}: {_traits[index].ToUpperInvariant()}"
+                    : $"TRAIT {index + 1}: NONE";
+    }
+
+    private static Label AddPanelText(
+        Control parent,
+        string text,
+        float x,
+        float y,
+        float width,
+        float height,
+        int fontSize)
+    {
+        var label = new Label
+        {
+            Text = text,
+            Position = new Vector2(x, y),
+            Size = new Vector2(width, height),
+            VerticalAlignment = VerticalAlignment.Center,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        label.AddThemeColorOverride("font_color", new Color("78e781"));
+        label.AddThemeColorOverride("font_outline_color", Colors.Black);
+        label.AddThemeConstantOverride("outline_size", 2);
+        label.AddThemeFontSizeOverride("font_size", fontSize);
+        parent.AddChild(label);
+        return label;
+    }
+
+    private static Button AddPanelButton(
+        Control parent,
+        string text,
+        float x,
+        float y,
+        float width,
+        float height,
+        Action pressed)
+    {
+        var button = new Button
+        {
+            Text = text,
+            Position = new Vector2(x, y),
+            Size = new Vector2(width, height),
+            Flat = true,
+            FocusMode = FocusModeEnum.None,
+        };
+        button.AddThemeColorOverride("font_color", new Color("78e781"));
+        button.AddThemeColorOverride("font_hover_color", Colors.White);
+        button.AddThemeFontSizeOverride("font_size", 9);
+        button.Pressed += pressed;
+        parent.AddChild(button);
+        return button;
     }
 
     private Control BuildBodyPanel()

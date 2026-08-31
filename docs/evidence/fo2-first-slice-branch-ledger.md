@@ -20,7 +20,7 @@ and the same modified owned Chitsa basis:
 
 | Contract | Current value |
 | --- | --- |
-| Selection mode / identity | `modified-owned-premade` / `custom` / Chitsa / Female |
+| Selection mode / identity | `custom-created-from-owned-rules` / `custom` / source-basis Chitsa / Female |
 | Owned GCD SHA-256 | `e5fe3b89d7c62edf629e249e4ffda2f7486701a73398e77b0ae9c0fc2a4bb010` |
 | Appearance recipe SHA-256 | `df10b7379f511a5d7b571edcb5f9a8013757e7d1069914d3ada03b04e3d90bf0` |
 | Opening handoff | terminal source frame `1145`; Skip applies the terminal state, presents black, then releases controls |

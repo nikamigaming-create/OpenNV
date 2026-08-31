@@ -86,6 +86,8 @@ internal static class Fo2ArroyoCavesMoldedPresentation
         uniform sampler2D source_surface_normal : repeat_enable, filter_linear_mipmap_anisotropic;
         uniform float source_detail_world_scale = 0.2;
         uniform float source_detail_mix = 0.0;
+        uniform float macro_detail_world_scale = 0.08;
+        uniform float macro_detail_mix = 0.0;
 
         varying vec3 world_position;
 
@@ -173,9 +175,16 @@ internal static class Fo2ArroyoCavesMoldedPresentation
             float rock = triplanar_rock(world_position * world_scale, world_normal);
             float ridge = smoothstep(0.28, 0.82, rock);
             vec3 analytic_rock = mix(dark_color.rgb, light_color.rgb, ridge);
-            vec3 owned_detail = triplanar_source_detail(
+            vec3 owned_fine_detail = triplanar_source_detail(
                 world_position * source_detail_world_scale,
                 world_normal);
+            vec3 owned_macro_detail = triplanar_source_detail(
+                world_position * macro_detail_world_scale,
+                world_normal);
+            vec3 owned_detail = mix(
+                owned_fine_detail,
+                owned_macro_detail,
+                macro_detail_mix);
             ALBEDO = mix(analytic_rock, owned_detail, source_detail_mix);
             ROUGHNESS = roughness_value;
             METALLIC = 0.0;
@@ -425,15 +434,25 @@ internal static class Fo2ArroyoCavesMoldedPresentation
         var builder = new IndexedMeshBuilder();
         var halfX = Fo1HexMath.ColumnSpacingMeters;
         var halfZ = Fo1HexMath.FlatToFlatMeters;
+        var stepX = halfX * 2.0f / profile.SubdivisionsPerAxis;
+        var stepZ = halfZ * 2.0f / profile.SubdivisionsPerAxis;
         foreach (var index in floorPatches)
         {
             var center = Fo1HexMath.FloorPatchCenter(index);
-            var first = FloorPoint(center + new Vector3(-halfX, 0.0f, -halfZ), profile);
-            var second = FloorPoint(center + new Vector3(-halfX, 0.0f, halfZ), profile);
-            var third = FloorPoint(center + new Vector3(halfX, 0.0f, halfZ), profile);
-            var fourth = FloorPoint(center + new Vector3(halfX, 0.0f, -halfZ), profile);
-            builder.AddTriangle(first, second, third);
-            builder.AddTriangle(first, third, fourth);
+            for (var row = 0; row < profile.SubdivisionsPerAxis; row++)
+                for (var column = 0; column < profile.SubdivisionsPerAxis; column++)
+                {
+                    var x0 = -halfX + column * stepX;
+                    var x1 = x0 + stepX;
+                    var z0 = -halfZ + row * stepZ;
+                    var z1 = z0 + stepZ;
+                    var first = FloorPoint(center + new Vector3(x0, 0.0f, z0), profile);
+                    var second = FloorPoint(center + new Vector3(x0, 0.0f, z1), profile);
+                    var third = FloorPoint(center + new Vector3(x1, 0.0f, z1), profile);
+                    var fourth = FloorPoint(center + new Vector3(x1, 0.0f, z0), profile);
+                    builder.AddTriangle(first, second, third);
+                    builder.AddTriangle(first, third, fourth);
+                }
         }
         return builder.Commit("Fallout 2 Arroyo molded source floor");
     }
@@ -1210,6 +1229,15 @@ internal static class Fo2ArroyoCavesMoldedPresentation
                 FogDensity = atmosphere.FogDensity,
                 FogAerialPerspective = atmosphere.FogAerialPerspective,
                 FogSkyAffect = atmosphere.FogSkyAffect,
+                VolumetricFogEnabled = true,
+                VolumetricFogDensity = atmosphere.VolumetricFogDensity,
+                VolumetricFogAlbedo = atmosphere.VolumetricFogAlbedo,
+                VolumetricFogEmission = atmosphere.VolumetricFogEmission,
+                VolumetricFogEmissionEnergy = atmosphere.VolumetricFogEmissionEnergy,
+                VolumetricFogLength = atmosphere.VolumetricFogLengthMeters,
+                VolumetricFogDetailSpread = atmosphere.VolumetricFogDetailSpread,
+                VolumetricFogAmbientInject = atmosphere.VolumetricFogAmbientInject,
+                VolumetricFogSkyAffect = atmosphere.VolumetricFogSkyAffect,
             },
         });
         root.AddChild(new DirectionalLight3D
@@ -1242,6 +1270,12 @@ internal static class Fo2ArroyoCavesMoldedPresentation
         material.SetShaderParameter(
             "source_detail_mix",
             materials.SourceDetailMix);
+        material.SetShaderParameter(
+            "macro_detail_world_scale",
+            materials.MacroDetailWorldScale);
+        material.SetShaderParameter(
+            "macro_detail_mix",
+            materials.MacroDetailMix);
         var image = Image.LoadFromFile(sourceTexturePath);
         var normalImage = Image.LoadFromFile(sourceNormalTexturePath);
         if (image.IsEmpty() || normalImage.IsEmpty() || image.GetSize() != normalImage.GetSize())

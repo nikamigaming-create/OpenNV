@@ -46,11 +46,15 @@ internal sealed record Fo1ExitGridTransitionContract(
 
     internal object Report(int? activatedTile, bool destinationSceneLoaded = false) => new
     {
-        schema = Schema, path = Path, sha256 = Sha256,
+        schema = Schema,
+        path = Path,
+        sha256 = Sha256,
         source = new { mapIndex = SourceMapIndex, name = SourceMapName, sha256 = SourceMapSha256 },
         destination = new { mapIndex = DestinationMapIndex, name = DestinationMapName, mapSha256 = DestinationMapSha256, tile = DestinationTile, elevation = DestinationElevation, rotation = DestinationRotation },
         triggers = Triggers.Select(trigger => new { trigger.Serial, trigger.Tile, trigger.Pid, trigger.PrototypeSha256 }).ToArray(),
-        activatedTile, transitionCommitted = activatedTile is not null, destinationSceneLoaded,
+        activatedTile,
+        transitionCommitted = activatedTile is not null,
+        destinationSceneLoaded,
     };
 
     private void Validate()

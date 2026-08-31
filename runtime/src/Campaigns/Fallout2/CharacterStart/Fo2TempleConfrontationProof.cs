@@ -78,8 +78,10 @@ internal static class Fo2TempleConfrontationProof
                 throw new InvalidOperationException(
                     "Fallout 2 integrated combat proof lost the paired-gate owned premade.");
             host.Picker.Select(selected.Index);
-            var editor = host.Picker.OpenCustom(modify: true);
-            editor.SetCharacterName(selected.Character.Profile.Name);
+            var editor = host.Picker.OpenCustom();
+            editor.SetCharacterName("Mara");
+            editor.SetTaggedSkills(selected.Character.Profile.TaggedSkills);
+            editor.SetTraits(selected.Character.Profile.Traits);
             editor.Confirm();
             var selectedIdentity = host.SelectedCharacter ??
                 throw new InvalidOperationException(
@@ -92,7 +94,7 @@ internal static class Fo2TempleConfrontationProof
             var runtime = host.Runtime ?? throw new InvalidOperationException(
                 "Fallout 2 confrontation proof did not enter Arroyo Caves.");
             var player = runtime.Player;
-            if (selectedIdentity.Mode != Fo2CharacterSelection.ModifyMode ||
+            if (selectedIdentity.Mode != Fo2CharacterSelection.CreateMode ||
                 selectedIdentity.Id != "custom" ||
                 selectedIdentity.Profile.Sex != "Female" ||
                 runtime.SelectedPlayerPresentation.LogicalPath !=
@@ -815,7 +817,7 @@ internal static class Fo2TempleConfrontationProof
             });
             var passed = host.RestoredFromSave && host.TempleScene is not null &&
                 restoredSelection == saved.Character &&
-                restoredSelection.Mode == Fo2CharacterSelection.ModifyMode &&
+                restoredSelection.Mode == Fo2CharacterSelection.CreateMode &&
                 restoredSelection.Id == "custom" &&
                 restoredSelection.Profile.Sex == "Female" &&
                 host.Runtime?.SelectedPlayerPresentation.LogicalPath ==

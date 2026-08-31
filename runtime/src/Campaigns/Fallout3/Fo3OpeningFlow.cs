@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -1177,9 +1178,12 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Fo3Stage100RuntimeContext? _stage100Runtime;
     private double _stage100TimerRemainingSeconds;
     private RuntimeConfiguration _runtimeConfiguration = null!;
+    private OpeningManifest? _characterReflectron;
+    private OpeningRaceSexRenderedDeviceHost? _reflectron;
     private string? _appearanceProofMode;
     private string? _appearanceProofReportPath;
     private string? _appearanceProofCaptureRoot;
+    private bool _characterVideo;
     private Control? _creatorLayer;
     private LineEdit? _activeNameInput;
     private OptionButton? _activeAppearanceCategory;
@@ -1221,7 +1225,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         string? cg01ProofCapturePath = null,
         Fo3Cg00RetailStage10Contract? retailCg00Stage10Contract = null,
         Fo3TtwCg00Stage10PresentationContract? ttwCg00Stage10PresentationContract = null,
-        Fo3TtwCg00Stage10SurfaceContract? ttwCg00Stage10SurfaceContract = null)
+        Fo3TtwCg00Stage10SurfaceContract? ttwCg00Stage10SurfaceContract = null,
+        OpeningManifest? characterReflectron = null,
+        bool characterVideo = false)
     {
         _profile = profile;
         _savePath = System.IO.Path.GetFullPath(savePath);
@@ -1231,6 +1237,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _retailCg00Stage10Contract = retailCg00Stage10Contract;
         _ttwCg00Stage10PresentationContract = ttwCg00Stage10PresentationContract;
         _ttwCg00Stage10SurfaceContract = ttwCg00Stage10SurfaceContract;
+        _characterReflectron = characterReflectron;
         if ((_ttwCg00Stage10PresentationContract is null) !=
             (_ttwCg00Stage10SurfaceContract is null))
             throw new InvalidOperationException(
@@ -1266,6 +1273,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _appearanceProofMode = appearanceProofMode;
         _appearanceProofReportPath = appearanceProofReportPath;
         _appearanceProofCaptureRoot = appearanceProofCaptureRoot;
+        _characterVideo = characterVideo;
         _cg01ProofMode = cg01ProofMode;
         _cg01ProofReportPath = cg01ProofReportPath;
         _cg01ProofCapturePath = cg01ProofCapturePath;
@@ -1276,6 +1284,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     public override void _Ready()
     {
         BuildShell();
+        if (_characterVideo)
+        {
+            RunCharacterGenerationVideo();
+            return;
+        }
         if (_cg01ProofMode is not null)
         {
             RunCg01Proof();
@@ -1978,13 +1991,52 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     {
         ClearContent();
         var ui = _profile.Appearance.Ui;
-        var panel = CreatorSurface(
-            ui.PanelX / (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
-            ui.PanelY / (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels,
-            ui.PanelWidth / (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
-            ui.PanelHeight / (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels,
-            ui.BackgroundTexture,
-            "FO3_RaceSexMenu_NOGLOW_BRANCH");
+        var characterReflectron = _characterReflectron ??
+            throw new InvalidOperationException(
+                "Fallout 3 character creation requires the shared owned Reflectron manifest.");
+        _creatorLayer = new Control { Name = "FO3_SHARED_REFLECTRON_HOST" };
+        _creatorLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_creatorLayer);
+        _panel.Visible = false;
+        _background.Visible = false;
+        var referenceCanvas = characterReflectron.NewGameFlow.ReferenceCanvasSize;
+        var viewportSize = GetViewport().GetVisibleRect().Size;
+        var deviceScale = MathF.Min(
+            viewportSize.X / referenceCanvas.X,
+            viewportSize.Y / referenceCanvas.Y);
+        var deviceCanvas = new Control
+        {
+            Name = "FO3_SHARED_REFLECTRON_1600X1200",
+            Size = referenceCanvas,
+            Scale = Vector2.One * deviceScale,
+            Position = (viewportSize - referenceCanvas * deviceScale) * 0.5f,
+        };
+        _creatorLayer.AddChild(deviceCanvas);
+        var renderedDevice = characterReflectron.NewGameFlow.Menus.Values
+            .Select(menu => menu.RenderedDevice)
+            .SingleOrDefault(device => device is not null)
+            ?? throw new InvalidOperationException(
+                "The shared owned opening manifest has no Reflectron device.");
+        var creatorLighting = new CellContentLoader.LightingContract(
+            "fo3-character-reflectron-2.0",
+            _birthPresentation!.ProofAmbientColor,
+            _birthPresentation.ProofAmbientColor,
+            _birthPresentation.ProofBackgroundColor,
+            _birthPresentation.ProofFogNearGameUnits,
+            _birthPresentation.ProofFogFarGameUnits,
+            _birthPresentation.ProofFogPower,
+            Vector2.Zero,
+            0.0f,
+            []);
+        _reflectron = new OpeningRaceSexRenderedDeviceHost(
+            renderedDevice,
+            deviceCanvas,
+            referenceCanvas,
+            _runtimeConfiguration,
+            creatorLighting,
+            _birthPresentation.UnitsToMeters);
+        var panel = _reflectron.CreateMenuPresentationHost(
+            new Rect2(0.0f, 0.0f, 340.0f, 500.0f));
         var content = CreatorColumn(
             panel,
             Fo3OpeningFlowNumericContracts.CreatorPanelMarginPixels);
@@ -1995,9 +2047,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"{playerName}{System.Environment.NewLine}{sex.Label.ToUpperInvariant()}",
             Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels));
 
-        var scaledListItemHeight = ui.ListItemHeight *
-            GetViewport().GetVisibleRect().Size.Y /
-            Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels;
+        var scaledListItemHeight = ui.ListItemHeight;
         var categorySelect = new OptionButton
         {
             CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight),
@@ -2027,19 +2077,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 
         var defaultSelection = _profile.Appearance.DefaultSelection(sex.EngineSex);
         FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId, "RACE");
-        var faceFrame = new MarginContainer
-        {
-            Name = "FO3_RaceSexMenu_RSM_Face_Grab",
-        };
-        faceFrame.AnchorLeft = ui.FaceGrabX /
-            (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels;
-        faceFrame.AnchorTop = ui.FaceGrabY /
-            (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels;
-        faceFrame.AnchorRight = (ui.FaceGrabX + ui.FaceGrabWidth) /
-            (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels;
-        faceFrame.AnchorBottom = (ui.FaceGrabY + ui.FaceGrabHeight) /
-            (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels;
-        _creatorLayer!.AddChild(faceFrame);
+        var faceFrame = _reflectron.CreateFacePresentationHost();
         var previewSource = _profile.Appearance.PreviewFor(
             defaultSelection,
             sex.EngineSex);
@@ -2097,23 +2135,27 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 control.Semantics),
             faceFrame,
             _runtimeConfiguration,
-            new CellContentLoader.LightingContract(
-                "fo3-owned-vault-proof",
-                _birthPresentation!.ProofAmbientColor,
-                _birthPresentation.ProofAmbientColor,
-                _birthPresentation.ProofBackgroundColor,
-                _birthPresentation.ProofFogNearGameUnits,
-                _birthPresentation.ProofFogFarGameUnits,
-                _birthPresentation.ProofFogPower,
-                Vector2.Zero,
-                0.0f,
-                []),
+            creatorLighting,
             _birthPresentation.UnitsToMeters,
-            new Vector2(
-                GetViewport().GetVisibleRect().Size.X * ui.FaceGrabWidth /
-                    Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
-                GetViewport().GetVisibleRect().Size.Y * ui.FaceGrabHeight /
-                    Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels));
+            faceFrame.Size,
+            renderedDevice);
+        var previewProportions =
+            CharacterBodyProportions.Neutral("fo3-custom-live-v1");
+        var faceFraming = true;
+        var greenProjection = false;
+        void RefreshProjection()
+        {
+            _activeFacePreview.SetPreviewState(
+                previewProportions,
+                faceFraming,
+                greenProjection);
+            _reflectron.SetCreatorModeState(
+                faceFraming ? "FACE" : "BODY",
+                bodyEnabled: !faceFraming,
+                projectionEnabled: greenProjection,
+                faceEnabled: faceFraming);
+        }
+        RefreshProjection();
         var liveStatus = Label(
             "SCULPT FACE",
             Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
@@ -2218,9 +2260,44 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             slider.Visible = index == 3;
             faceControlSelect.Visible = index == 3;
             liveStatus.Visible = index == 3;
+            _reflectron.SetActiveList(index switch
+            {
+                0 => "race",
+                1 => "hair",
+                2 => "eyes",
+                _ => "face",
+            });
         }
         categorySelect.ItemSelected += ShowCategory;
         ShowCategory(0);
+        void SelectCategory(int index)
+        {
+            categorySelect.Select(index);
+            ShowCategory(index);
+        }
+        _reflectron.ConfigureCharacterControls(
+            characterReflectron.Font,
+            () => { },
+            () => SelectCategory(0),
+            () => SelectCategory(3),
+            () => SelectCategory(1),
+            () =>
+            {
+                faceFraming = true;
+                SelectCategory(3);
+                RefreshProjection();
+            },
+            () =>
+            {
+                faceFraming = false;
+                RefreshProjection();
+            },
+            () =>
+            {
+                greenProjection = !greenProjection;
+                RefreshProjection();
+            });
+        RefreshProjection();
 
         var accept = Button("ACCEPT APPEARANCE");
         accept.CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight);
@@ -5252,6 +5329,70 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         }
     }
 
+    private async void RunCharacterGenerationVideo()
+    {
+        try
+        {
+            if (_birthPresentation is null || DisplayServer.GetName() == "headless")
+                throw new InvalidOperationException(
+                    "Fallout 3 character video requires the owned Vault presentation and a rendering display driver.");
+            if (File.Exists(_savePath))
+                throw new InvalidOperationException(
+                    "Fallout 3 character video requires a fresh save path.");
+            StartMenuMusic();
+            ShowMainMenu();
+            await WaitForCharacterVideoDraws(55);
+            ShowSexSelection();
+            await WaitForCharacterVideoDraws(55);
+            var sex = _profile.SexChoices.Single(value => value.EngineSex == "male");
+            ShowNameSelection(sex);
+            await WaitForCharacterVideoDraws(40);
+            _activeNameInput!.Text = "LONE WANDERER";
+            await WaitForCharacterVideoDraws(55);
+            AcceptName(_activeNameInput);
+            var appearanceCategory = _activeAppearanceCategory ??
+                throw new InvalidOperationException(
+                    "Fallout 3 generated character did not open the appearance categories.");
+            var faceControlSlider = _activeFaceControlSlider ??
+                throw new InvalidOperationException(
+                    "Fallout 3 generated character did not open the live face controls.");
+            appearanceCategory.Select(3);
+            appearanceCategory.EmitSignal(
+                OptionButton.SignalName.ItemSelected,
+                3);
+            faceControlSlider.Value =
+                _profile.Appearance.FaceControl.AcceptanceValue;
+            await WaitForCharacterVideoDraws(55);
+            _reflectron!.ActivateCreatorModeControl("BODY");
+            await WaitForCharacterVideoDraws(55);
+            _reflectron.ActivateCreatorModeControl("PROJECTION");
+            await WaitForCharacterVideoDraws(55);
+            _reflectron.ActivateCreatorModeControl("FACE");
+            await WaitForCharacterVideoDraws(55);
+            _reflectron.ActivateCreatorModeControl("PROJECTION");
+            await WaitForCharacterVideoDraws(55);
+            AcceptAppearance("LONE WANDERER", sex);
+            if (_creatorLayer is not null || _vaultBirthCoverage is null)
+                throw new InvalidOperationException(
+                    "Fallout 3 generated character did not enter the Vault 101 birth slice.");
+            await WaitForCharacterVideoDraws(180);
+            GD.Print(
+                $"OPENNV_FO3_CHARACTER_VIDEO_COMPLETE profile={_profile.ProfileId} save={_savePath}");
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO3_CHARACTER_VIDEO_FAIL {exception}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private async Task WaitForCharacterVideoDraws(int count)
+    {
+        for (var frame = 0; frame < count; frame++)
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+    }
+
     private Fo3AppearanceSelection LoadSavedAppearanceSelection()
     {
         using var document = JsonDocument.Parse(File.ReadAllBytes(_savePath));
@@ -6026,6 +6167,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _activeFaceControlSlider = null;
         _activeAppearanceSelection = null;
         _activeFacePreview = null;
+        _reflectron = null;
         _panel.Visible = true;
         foreach (var child in _content.GetChildren())
         {

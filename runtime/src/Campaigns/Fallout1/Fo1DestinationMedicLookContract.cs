@@ -78,12 +78,22 @@ internal sealed record Fo1DestinationMedicLookContract(
 
     internal object Report(bool viewed) => new
     {
-        schema = Schema, path = Path, sha256 = Sha256,
+        schema = Schema,
+        path = Path,
+        sha256 = Sha256,
         actor = new { Serial, Tile, Pid, Fid, PrototypeSha256, ArtSha256 },
-        semantics = new { procedure = LookAtProcedure, messageId = MessageId, messageText = MessageText,
-            result = DisplayMessageOnly, dialogue = "unimplemented-fail-closed",
-            combat = "not-proven-by-look-at-only", actionPoints = "not-source-backed" },
-        sourceWalkMaskRoute = SourceWalkMaskRoute, viewed,
+        semantics = new
+        {
+            procedure = LookAtProcedure,
+            messageId = MessageId,
+            messageText = MessageText,
+            result = DisplayMessageOnly,
+            dialogue = "unimplemented-fail-closed",
+            combat = "not-proven-by-look-at-only",
+            actionPoints = "not-source-backed"
+        },
+        sourceWalkMaskRoute = SourceWalkMaskRoute,
+        viewed,
     };
 
     private static string Required(JsonElement source, string name) =>

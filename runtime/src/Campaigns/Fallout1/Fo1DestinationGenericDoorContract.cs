@@ -73,9 +73,13 @@ internal sealed record Fo1DestinationGenericDoorContract(
 
     internal object Report(bool open) => new
     {
-        schema = Schema, path = Path, sha256 = Sha256,
-        door = Door.Report(open), sourceWalkMaskRoute = SourceWalkMaskRoute,
-        interactionActionPoints = "not-source-backed", sound = "unsupported-fail-closed",
+        schema = Schema,
+        path = Path,
+        sha256 = Sha256,
+        door = Door.Report(open),
+        sourceWalkMaskRoute = SourceWalkMaskRoute,
+        interactionActionPoints = "not-source-backed",
+        sound = "unsupported-fail-closed",
         animationTiming = "unsupported-fail-closed",
     };
 

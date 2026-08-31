@@ -1,26 +1,50 @@
 {
   "categories": {
-    "configuration-guessed-substitution": 16,
-    "content-form-id": 56,
-    "content-identity": 17,
-    "content-sha256": 5,
-    "csharp": 368,
-    "guessed-substitution": 6,
+    "configuration-guessed-substitution": 17,
+    "content-form-id": 78,
+    "content-identity": 34,
+    "content-sha256": 14,
+    "csharp": 769,
+    "guessed-substitution": 10,
     "javascript": 1,
-    "owned-asset-path": 3,
-    "powershell": 77,
-    "python": 153,
-    "unsupported-source": 5
+    "owned-asset-path": 8,
+    "powershell": 133,
+    "python": 209,
+    "unsupported-source": 6
   },
   "schema": "opennv-source-constant-debt-baseline/v1",
-  "sourceRevision": "982a922a2c96ecfc68618f96616307821a12d3c8",
-  "total": 707,
+  "sourceRevision": "d3d53bfc654fe5f7407eaeb3aac8915e2333ad85",
+  "total": 1279,
   "violations": [
     {
       "category": "configuration-guessed-substitution",
       "count": 16,
       "path": "content/recipes/fnv-new-game-opening-v1.json",
       "value": "fallback"
+    },
+    {
+      "category": "configuration-guessed-substitution",
+      "count": 1,
+      "path": "content/recipes/fo1-vault13-destination-presentation-v1.json",
+      "value": "fallback"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/actor_gltf.py",
+      "value": "16777619"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/actor_gltf.py",
+      "value": "2166136261"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/actor_gltf.py",
+      "value": "4294967295"
     },
     {
       "category": "python",
@@ -69,6 +93,138 @@
       "count": 1,
       "path": "content/tools/fo2_arroyo_caves_slice.py",
       "value": "99"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "fo2-arroyo-trial-route-v1"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "100"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "103"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "104"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "111"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "122"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "123"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "16"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "166"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "167"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "169"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "4095"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arroyo_trial_route.py",
+      "value": "99"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arvillag_slice.py",
+      "value": "16"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_arvillag_slice.py",
+      "value": "4095"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "0100003d"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "0100003e"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "103"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "121"
+    },
+    {
+      "category": "python",
+      "count": 3,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "5"
+    },
+    {
+      "category": "python",
+      "count": 2,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "50"
+    },
+    {
+      "category": "python",
+      "count": 2,
+      "path": "content/tools/fo2_first_slice.py",
+      "value": "751"
     },
     {
       "category": "python",
@@ -138,7 +294,7 @@
     },
     {
       "category": "python",
-      "count": 1,
+      "count": 2,
       "path": "content/tools/opening_catalog.py",
       "value": "16"
     },
@@ -153,6 +309,12 @@
       "count": 6,
       "path": "content/tools/opening_catalog.py",
       "value": "255"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/opening_catalog.py",
+      "value": "255.0"
     },
     {
       "category": "python",
@@ -174,9 +336,105 @@
     },
     {
       "category": "python",
-      "count": 1,
+      "count": 2,
       "path": "content/tools/opening_catalog.py",
       "value": "8"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "content/tools/prepare_classic_premade_analogs.py",
+      "value": "classic-premade-analog-cast-v1"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_classic_premade_analogs.py",
+      "value": "0.7"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_classic_premade_analogs.py",
+      "value": "1.3"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_classic_premade_analogs.py",
+      "value": "6"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_classic_premade_analogs.py",
+      "value": "8"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_exit_grid_return.py",
+      "value": "5"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_flare_use.py",
+      "value": "0000004f"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_flare_use.py",
+      "value": "16"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_flare_use.py",
+      "value": "223"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_generic_door.py",
+      "value": "ffffffff"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_generic_door.py",
+      "value": "256"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/prepare_fo1_destination_medic_look.py",
+      "value": "16"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "content/tools/prepare_fo2_arvillag_presentation.py",
+      "value": "fo2-arvillag-relief-v1"
+    },
+    {
+      "category": "python",
+      "count": 2,
+      "path": "content/tools/prepare_fo2_arvillag_presentation.py",
+      "value": "4095"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo2_character_start.py",
+      "value": "00000007"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo2_character_start.py",
+      "value": "0000002a"
     },
     {
       "category": "content-form-id",
@@ -191,14 +449,8 @@
       "value": "0100003d"
     },
     {
-      "category": "content-identity",
-      "count": 1,
-      "path": "content/tools/prepare_fo2_character_start.py",
-      "value": "fo2-character-start-v1"
-    },
-    {
       "category": "python",
-      "count": 2,
+      "count": 3,
       "path": "content/tools/prepare_fo2_character_start.py",
       "value": "10"
     },
@@ -342,7 +594,7 @@
     },
     {
       "category": "python",
-      "count": 2,
+      "count": 3,
       "path": "content/tools/prepare_fo2_character_start.py",
       "value": "8"
     },
@@ -351,6 +603,24 @@
       "count": 1,
       "path": "content/tools/prepare_fo2_character_start.py",
       "value": "80"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo2_player_presentation.py",
+      "value": "00000007"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo2_player_presentation.py",
+      "value": "0000002a"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "content/tools/prepare_fo2_player_presentation.py",
+      "value": "0003307c"
     },
     {
       "category": "content-form-id",
@@ -372,7 +642,7 @@
     },
     {
       "category": "python",
-      "count": 1,
+      "count": 2,
       "path": "content/tools/prepare_fo2_player_presentation.py",
       "value": "10"
     },
@@ -414,7 +684,7 @@
     },
     {
       "category": "python",
-      "count": 1,
+      "count": 2,
       "path": "content/tools/prepare_fo2_player_presentation.py",
       "value": "8"
     },
@@ -635,6 +905,108 @@
       "value": "9"
     },
     {
+      "category": "content-identity",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "fo3-vault101-dad-actor-v1"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "fo3-vault101-doctor-li-actor-v1"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "fo3-vault101-mom-actor-v1"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "005a5714e46411a54d5afd2990d7d20c4039571682d7a9e3f2d9137e4a0cec56"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "10094f4c73c22a31aeeef0c0e9012db735f4f7cc822d38419a1f70fa32173902"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "2271148feafb468252d5c57c734fe98d2cfe0546f3484fd26ef81b8ab4c4e006"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "4844912dd345643465f7829895c295d3ab38b949da3ed8524ad908bbbc7d2a13"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "76eba07ada2c703ae50efbed8b728823dd96078d385541762f167af09404f526"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "b6a8ff14ebb728fb880e90552a7a472f23234380cc46feff4c6bccdb6257b276"
+    },
+    {
+      "category": "owned-asset-path",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "meshes\\characters\\_male\\locomotion\\mtidle.kf"
+    },
+    {
+      "category": "python",
+      "count": 3,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "10"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "5"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_actor_materialization.py",
+      "value": "7"
+    },
+    {
+      "category": "python",
+      "count": 3,
+      "path": "content/tools/ttw_fo3_stage10_surface_contract.py",
+      "value": "10"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_surface_contract.py",
+      "value": "16"
+    },
+    {
+      "category": "python",
+      "count": 1,
+      "path": "content/tools/ttw_fo3_stage10_surface_contract.py",
+      "value": "64"
+    },
+    {
+      "category": "python",
+      "count": 2,
+      "path": "content/tools/ttw_fo3_stage10_surface_contract.py",
+      "value": "7"
+    },
+    {
       "category": "content-form-id",
       "count": 1,
       "path": "content/tools/validate_runtime_report.py",
@@ -663,6 +1035,630 @@
       "count": 1,
       "path": "desktop/src/main.mjs",
       "value": "20"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicCustomAppearanceProofHost.cs",
+      "value": "16"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicCustomAppearanceProofHost.cs",
+      "value": "480"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicCustomAppearanceProofHost.cs",
+      "value": "640"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "-26.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "-30.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.008f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.012f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.015f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.025f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.02f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.0722"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.2126"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.36f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.42f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.46f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.7152"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "0.74f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "1.12f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "1.15f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "10"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "100000.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "2.5f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "50.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "720"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Classic/ClassicPremadeAnalogProofHost.cs",
+      "value": "960"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "0.16f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "0.26f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "0.28f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "0.40f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "0.5f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "1.05f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "1.15f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs",
+      "value": "1.65f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CharacterCreator.cs",
+      "value": "0.10f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CharacterCreator.cs",
+      "value": "144.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CharacterCreator.cs",
+      "value": "5"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CharacterCreator.cs",
+      "value": "82.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CharacterProfile.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "-28.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "-32.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "10"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "100000.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "104.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "124.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "138.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "14"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "158.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "184.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "24.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "26.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 5,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "30.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "300.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "32.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "324.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "326.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "34.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "340.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "366.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "46.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "500.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "55.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "8.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "9"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomAppearanceEditor.cs",
+      "value": "92.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "-24.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "-30.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.008f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.012f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.03f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.05f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.46f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.56f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.64f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "0.86f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "1.12f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "1.28f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "100000.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1CustomPortraitPreview.cs",
+      "value": "20.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1DestinationFlareUseContract.cs",
+      "value": "64"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1DestinationGenericDoorContract.cs",
+      "value": "ffffffff"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1DestinationGenericDoorContract.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1DestinationMedicLookContract.cs",
+      "value": "64"
+    },
+    {
+      "category": "guessed-substitution",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1DestinationPresentationContract.cs",
+      "value": "Fallback"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1ExitGridTransitionContract.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "0.008f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "0.012f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "0.03f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "0.46f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "0.56f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "0.64f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1PremadePlayerPreview.cs",
+      "value": "100000.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout1/Fo1TacticalSession.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2ArroyoTrialRouteProof.cs",
+      "value": "8"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterGenerationVideo.cs",
+      "value": "18"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterGenerationVideo.cs",
+      "value": "26"
+    },
+    {
+      "category": "csharp",
+      "count": 5,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterGenerationVideo.cs",
+      "value": "5"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterGenerationVideo.cs",
+      "value": "6"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterGenerationVideo.cs",
+      "value": "7"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterGenerationVideo.cs",
+      "value": "8"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterPicker.cs",
+      "value": "0.10f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterPicker.cs",
+      "value": "0.47f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterPicker.cs",
+      "value": "0.51f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterPicker.cs",
+      "value": "0.91f"
     },
     {
       "category": "csharp",
@@ -848,6 +1844,48 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "0.92f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "0.94f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "0.96f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "1.01f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "1.03f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "1.10f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
+      "value": "1.12f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartContract.cs",
       "value": "10"
     },
     {
@@ -992,17 +2030,59 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "0.78f"
+      "value": "-28.0f"
     },
     {
       "category": "csharp",
-      "count": 8,
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "-32.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "0.018f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "0.035f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "0.90f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "0.96f"
+    },
+    {
+      "category": "csharp",
+      "count": 7,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "10"
     },
     {
       "category": "csharp",
-      "count": 7,
+      "count": 10,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "10.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "100000.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 9,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "11"
     },
@@ -1010,13 +2090,19 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "110.0f"
+      "value": "112.0f"
     },
     {
       "category": "csharp",
-      "count": 4,
+      "count": 5,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "12"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "12.0f"
     },
     {
       "category": "csharp",
@@ -1028,25 +2114,49 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "134.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "135.0f"
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "142.0f"
+      "value": "138.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "153.0f"
+      "value": "140.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "145.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "148.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "15"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "154.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "155.0f"
     },
     {
       "category": "csharp",
@@ -1058,17 +2168,23 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "181.0f"
+      "value": "160.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "190.0f"
+      "value": "162.0f"
     },
     {
       "category": "csharp",
-      "count": 10,
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "194.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "20.0f"
     },
@@ -1076,13 +2192,13 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "211.0f"
+      "value": "202.0f"
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "218.0f"
+      "value": "216.0f"
     },
     {
       "category": "csharp",
@@ -1098,13 +2214,25 @@
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "238.0f"
+      "value": "230.0f"
     },
     {
       "category": "csharp",
-      "count": 11,
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "236.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "24"
+    },
+    {
+      "category": "csharp",
+      "count": 10,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "24.0f"
     },
@@ -1112,73 +2240,73 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "240.0f"
+      "value": "246.0f"
     },
     {
       "category": "csharp",
-      "count": 3,
+      "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "25.0f"
     },
     {
       "category": "csharp",
-      "count": 2,
+      "count": 3,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "260.0f"
+      "value": "26.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "262.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "27.0f"
+      "value": "272.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "279.0f"
+      "value": "276.0f"
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 19,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "28.0f"
     },
     {
       "category": "csharp",
+      "count": 4,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "280.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "30.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "310.0f"
+    },
+    {
+      "category": "csharp",
       "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "285.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "292.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "301.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 6,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "304.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "309.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "32.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "320.0f"
     },
     {
       "category": "csharp",
@@ -1188,15 +2316,15 @@
     },
     {
       "category": "csharp",
-      "count": 2,
+      "count": 4,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "354.0f"
+      "value": "38.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "397.0f"
+      "value": "39.0f"
     },
     {
       "category": "csharp",
@@ -1206,39 +2334,21 @@
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 4,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "40.0f"
+      "value": "42.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "443.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "446.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "454.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "493.0f"
+      "value": "44.0f"
     },
     {
       "category": "csharp",
       "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "50.0f"
+      "value": "48.0f"
     },
     {
       "category": "csharp",
@@ -1250,43 +2360,25 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "518.0f"
+      "value": "54.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "6"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "60.0f"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "52.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "548.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "57.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "592.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "63.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "65.0f"
+      "value": "62.0f"
     },
     {
       "category": "csharp",
@@ -1298,19 +2390,31 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "72.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
+      "value": "74.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
       "value": "76.0f"
     },
     {
       "category": "csharp",
-      "count": 4,
+      "count": 3,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "79.0f"
+      "value": "77.0f"
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 3,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "8"
+      "value": "8.0f"
     },
     {
       "category": "csharp",
@@ -1322,19 +2426,103 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "82.0f"
+      "value": "86.0f"
     },
     {
       "category": "csharp",
-      "count": 2,
+      "count": 9,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "83.0f"
+      "value": "9"
     },
     {
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterEditor.cs",
-      "value": "90.0f"
+      "value": "92.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "-26.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "-30.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.01f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.1f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.4f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.74f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.90f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.92f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "0.94f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "1.08f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "1.15f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "1.20f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "1.24f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "1.25f"
     },
     {
       "category": "csharp",
@@ -1364,6 +2552,12 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "20.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
       "value": "26"
     },
     {
@@ -1377,6 +2571,12 @@
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
       "value": "35"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CustomCharacterPersistenceProof.cs",
+      "value": "36.0f"
     },
     {
       "category": "csharp",
@@ -1422,6 +2622,162 @@
     },
     {
       "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.008f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.012f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.015f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.01f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.03f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.36f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.42f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.46f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.5f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "0.75f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "100000.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "260"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2PremadeHumanoidPreview.cs",
+      "value": "592"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2ProceduralAppearanceCatalog.cs",
+      "value": "-50.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2ProceduralAppearanceCatalog.cs",
+      "value": "0.1f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2ProceduralAppearanceCatalog.cs",
+      "value": "50.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2ProceduralAppearanceCatalog.cs",
+      "value": "55"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "10"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "106"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "107"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "108"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "114"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "115"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "116"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "120"
+    },
+    {
+      "category": "csharp",
+      "count": 4,
+      "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
       "count": 2,
       "path": "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2WalkAnimationProof.cs",
       "value": "64"
@@ -1429,8 +2785,44 @@
     {
       "category": "unsupported-source",
       "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoArrivalFirstBeatProof.tscn",
+      "value": ".tscn"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCaves3DProfile.cs",
+      "value": "8"
+    },
+    {
+      "category": "unsupported-source",
+      "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesInteractive.tscn",
       "value": ".tscn"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayProof.cs",
+      "value": "0.01f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayProof.cs",
+      "value": "0.18f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayProof.cs",
+      "value": "10"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayProof.cs",
+      "value": "2.4f"
     },
     {
       "category": "unsupported-source",
@@ -1440,7 +2832,7 @@
     },
     {
       "category": "csharp",
-      "count": 1,
+      "count": 5,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs",
       "value": "64"
     },
@@ -1449,12 +2841,6 @@
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPresentationContract.cs",
       "value": "5"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.cs",
-      "value": "-10.0f"
     },
     {
       "category": "csharp",
@@ -1478,31 +2864,7 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.cs",
-      "value": "0.75f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.cs",
-      "value": "12.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.cs",
-      "value": "15.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.cs",
       "value": "16.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.cs",
-      "value": "24.0f"
     },
     {
       "category": "csharp",
@@ -1515,6 +2877,24 @@
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesRenderProof.tscn",
       "value": ".tscn"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoPlayerPresentation.cs",
+      "value": "00000007"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoPlayerPresentation.cs",
+      "value": "0000002a"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoPlayerPresentation.cs",
+      "value": "0003307c"
     },
     {
       "category": "content-form-id",
@@ -1537,8 +2917,176 @@
     {
       "category": "csharp",
       "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoTrialRouteContract.cs",
+      "value": "10"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoTrialRouteContract.cs",
+      "value": "12"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoTrialRouteContract.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoTrialRouteContract.cs",
+      "value": "8"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagPresentationContract.cs",
+      "value": "20"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagScene.cs",
+      "value": "0.00001f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagScene.cs",
+      "value": "0.0722f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagScene.cs",
+      "value": "0.2126f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagScene.cs",
+      "value": "0.7152f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagScene.cs",
+      "value": "360.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "0.0001f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "0.15f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "100"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "12"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "8"
+    },
+    {
+      "category": "guessed-substitution",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs",
+      "value": "fallback"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2MapSceneBuilder.cs",
       "value": "64"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "0100003d"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "0100003e"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "103"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "18"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "5"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "50"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "750"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs",
+      "value": "751"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.cs",
+      "value": "360.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleGuardianDialogue.cs",
+      "value": "10"
     },
     {
       "category": "csharp",
@@ -1557,12 +3105,6 @@
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TemplePresentationContract.cs",
       "value": "8"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTopology.cs",
-      "value": "0.006f"
     },
     {
       "category": "csharp",
@@ -1620,7 +3162,7 @@
     },
     {
       "category": "csharp",
-      "count": 3,
+      "count": 5,
       "path": "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs",
       "value": "64"
     },
@@ -1814,12 +3356,6 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "-120.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
       "value": "-150.0f"
     },
     {
@@ -1830,7 +3366,7 @@
     },
     {
       "category": "csharp",
-      "count": 2,
+      "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
       "value": "-20.0f"
     },
@@ -1838,7 +3374,7 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "-240.0f"
+      "value": "0.5f"
     },
     {
       "category": "csharp",
@@ -1850,19 +3386,37 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "0.9f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "120.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
       "value": "150.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
+      "value": "180"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
+      "value": "340.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
+      "value": "40"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
+      "value": "500.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 8,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
+      "value": "55"
     },
     {
       "category": "csharp",
@@ -1917,6 +3471,90 @@
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3Stage90Transition.cs",
       "value": "5"
+    },
+    {
+      "category": "content-form-id",
+      "count": 2,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "00000014"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "060290a5"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "060290a7"
+    },
+    {
+      "category": "content-form-id",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "0605ede0"
+    },
+    {
+      "category": "content-identity",
+      "count": 8,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "FalloutNV.esm"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "51746091059c5776de9d22d4a495aee455e0e646e07db61b2e8912c12a71d7d9"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "5"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "6"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "64"
+    },
+    {
+      "category": "owned-asset-path",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "Meshes\\Characters\\_Male\\IdleAnims\\CG00DadSection01.kf"
+    },
+    {
+      "category": "owned-asset-path",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "Meshes\\Characters\\_Male\\IdleAnims\\CG00DrLiSection01.kf"
+    },
+    {
+      "category": "owned-asset-path",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10PresentationContract.cs",
+      "value": "Meshes\\Characters\\_Male\\IdleAnims\\CG00MomSection01.kf"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3TtwCg00Stage10SurfaceContract.cs",
+      "value": "10"
     },
     {
       "category": "content-form-id",
@@ -2118,15 +3756,63 @@
     },
     {
       "category": "csharp",
+      "count": 15,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "1.0e-10"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "1.0e-12"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "1.0e-5"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "105"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "115"
+    },
+    {
+      "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
       "value": "200d"
     },
     {
       "category": "csharp",
+      "count": 4,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "255.0f"
+    },
+    {
+      "category": "csharp",
       "count": 3,
       "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
       "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "70"
+    },
+    {
+      "category": "owned-asset-path",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "value": "meshes\\\\terminals\\\\nv_reflectron_ui.nif"
     },
     {
       "category": "csharp",
@@ -2151,6 +3837,306 @@
       "count": 1,
       "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs",
       "value": "meshes\\\\pipboy3000\\\\pipboyarm.nif"
+    },
+    {
+      "category": "csharp",
+      "count": 4,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningPlayerFaceGenPreviewHost.cs",
+      "value": "0.5f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningPlayerFaceGenPreviewHost.cs",
+      "value": "1.035f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningPlayerFaceGenPreviewHost.cs",
+      "value": "1.18f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningPlayerFaceGenPreviewHost.cs",
+      "value": "180.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.00050f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.00072f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.00078f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.0007f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.0009f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.0013f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.0015f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.0018f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.0025f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.012f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.025f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.030f"
+    },
+    {
+      "category": "csharp",
+      "count": 4,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.035f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.040f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.061f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.06f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.075f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.13f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.14f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.15f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.199f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.22f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.255f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.28f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.46f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.48f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.57f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.58f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.5f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.62f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.64f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.68f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.72f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.85f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.88f"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.92f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.96f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "0.9f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "1.0e-5"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "18.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 2,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "2.4f"
+    },
+    {
+      "category": "guessed-substitution",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningRaceSexRenderedDeviceHost.cs",
+      "value": "Fallback"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "runtime/src/Campaigns/TTW/TtwFo3Cg00Stage10ActorSetAdapter.cs",
+      "value": "fo3-vault101-dad-actor-v1"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "runtime/src/Campaigns/TTW/TtwFo3Cg00Stage10ActorSetAdapter.cs",
+      "value": "fo3-vault101-doctor-li-actor-v1"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "runtime/src/Campaigns/TTW/TtwFo3Cg00Stage10ActorSetAdapter.cs",
+      "value": "fo3-vault101-mom-actor-v1"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/TTW/TtwFo3Cg00Stage10ActorSetAdapter.cs",
+      "value": "10"
     },
     {
       "category": "content-identity",
@@ -2298,6 +4284,12 @@
     },
     {
       "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Presentation/Actors/ActorComplexionMath.cs",
+      "value": "0.5f"
+    },
+    {
+      "category": "csharp",
       "count": 3,
       "path": "runtime/src/Presentation/Ui/GameplayUiController.cs",
       "value": "0.01f"
@@ -2353,6 +4345,54 @@
     {
       "category": "csharp",
       "count": 1,
+      "path": "runtime/src/RetailFaceGenMaterial.cs",
+      "value": "0.0125f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RetailFaceGenMaterial.cs",
+      "value": "0.18f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RetailFaceGenMaterial.cs",
+      "value": "0.78f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RetailFaceGenMaterial.cs",
+      "value": "0.82f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RetailFaceGenMaterial.cs",
+      "value": "0.98f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RuntimeCoordinator.cs",
+      "value": "45"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RuntimeCoordinator.cs",
+      "value": "600.0"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/RuntimeCoordinator.cs",
+      "value": "90"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
       "path": "runtime/src/VerifiedGltfLoader.cs",
       "value": "0.000001f"
     },
@@ -2379,6 +4419,132 @@
       "count": 1,
       "path": "runtime/src/World/Portals/CellRouteTravelAcceptance.cs",
       "value": "200"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Assert-ClassicHumanoidDonorPreviewSet.ps1",
+      "value": "0.70"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Assert-ClassicHumanoidDonorPreviewSet.ps1",
+      "value": "1.35"
+    },
+    {
+      "category": "powershell",
+      "count": 3,
+      "path": "scripts/Assert-ClassicHumanoidDonorPreviewSet.ps1",
+      "value": "32"
+    },
+    {
+      "category": "content-sha256",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "1c5e9daa5aa5eb9ae11044718874d0d27cb3665ec994487b2cc77a828805af98"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": ".2"
+    },
+    {
+      "category": "powershell",
+      "count": 3,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "10"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "100"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "1000"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "150"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "16"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "20"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "2000"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "31"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "31.0"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "34"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "34.0"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "4096"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "50"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "620"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "680"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Invoke-FNVRetailRaceSexCameraObservation.ps1",
+      "value": "8"
     },
     {
       "category": "content-sha256",
@@ -2466,7 +4632,7 @@
     },
     {
       "category": "powershell",
-      "count": 2,
+      "count": 1,
       "path": "scripts/Invoke-FO3RetailBirthObservation.ps1",
       "value": "4096"
     },
@@ -2484,12 +4650,6 @@
     },
     {
       "category": "powershell",
-      "count": 1,
-      "path": "scripts/Invoke-FO3RetailBirthObservation.ps1",
-      "value": "64"
-    },
-    {
-      "category": "powershell",
       "count": 2,
       "path": "scripts/Invoke-FO3RetailBirthObservation.ps1",
       "value": "7542.5361328125"
@@ -2503,8 +4663,62 @@
     {
       "category": "powershell",
       "count": 2,
+      "path": "scripts/Resolve-ClassicHumanoidDonorPreviewSet.ps1",
+      "value": "32"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
       "path": "scripts/Test-GodotRuntime.ps1",
       "value": "600"
+    },
+    {
+      "category": "powershell",
+      "count": 4,
+      "path": "scripts/Test-OpenNVFallout1ContinueVault13.ps1",
+      "value": "64"
+    },
+    {
+      "category": "guessed-substitution",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout1NativeFirstBeat.ps1",
+      "value": "Fallback"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout1NativeFirstBeat.ps1",
+      "value": "5"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout1NativeFirstBeat.ps1",
+      "value": "6"
+    },
+    {
+      "category": "powershell",
+      "count": 4,
+      "path": "scripts/Test-OpenNVFallout1NativeFirstBeat.ps1",
+      "value": "64"
+    },
+    {
+      "category": "content-identity",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout1PlayerPresentationStatic.ps1",
+      "value": "fo1-character-start-v1"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Test-OpenNVFallout1PlayerPresentationStatic.ps1",
+      "value": "64"
+    },
+    {
+      "category": "content-form-id",
+      "count": 2,
+      "path": "scripts/Test-OpenNVFallout2ArroyoPlayer.ps1",
+      "value": "0003307c"
     },
     {
       "category": "content-form-id",
@@ -2523,6 +4737,12 @@
       "count": 1,
       "path": "scripts/Test-OpenNVFallout2ArroyoPlayer.ps1",
       "value": "10"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2ArroyoPlayer.ps1",
+      "value": "5"
     },
     {
       "category": "powershell",
@@ -2562,6 +4782,54 @@
     },
     {
       "category": "powershell",
+      "count": 3,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "0.0001"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "0.90"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "0.92"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "0.94"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "1.03"
+    },
+    {
+      "category": "powershell",
+      "count": 2,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "1.08"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "1.10"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "1.20"
+    },
+    {
+      "category": "powershell",
       "count": 1,
       "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
       "value": "28707"
@@ -2571,6 +4839,18 @@
       "count": 1,
       "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
       "value": "40"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "7"
+    },
+    {
+      "category": "powershell",
+      "count": 1,
+      "path": "scripts/Test-OpenNVFallout2CustomCharacters.ps1",
+      "value": "8"
     },
     {
       "category": "content-sha256",

@@ -58,6 +58,22 @@ class Fo2TorchRuntimeSourceTest(unittest.TestCase):
         self.assertIn("OmniRange = placement.LightDistance", map_lights)
         self.assertNotIn("LightColor =", map_lights)
 
+    def test_cave_floor_and_atmosphere_use_the_molded_fo1_quality_layers(self) -> None:
+        molded = MOLDED.read_text(encoding="utf-8")
+        profile = PROFILE.read_text(encoding="utf-8")
+
+        self.assertIn("profile.SubdivisionsPerAxis", molded)
+        self.assertIn("VolumetricFogEnabled = true", molded)
+        self.assertIn('"subdivisionsPerAxis": 4', profile)
+        self.assertIn('"volumetricFogDensity"', profile)
+        self.assertIn("owned_fine_detail", molded)
+        self.assertIn("owned_macro_detail", molded)
+        self.assertIn("world_position * macro_detail_world_scale", molded)
+        self.assertIn(
+            '"opennv-world-space-owned-frm-multiscale-triplanar-albedo-normal-rock/v4"',
+            profile,
+        )
+
     def test_no_procedural_walk_overlay_disc_is_routed_into_temple_or_arroyo(self) -> None:
         molded = MOLDED.read_text(encoding="utf-8")
         topology = TOPOLOGY.read_text(encoding="utf-8")

@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal static class Fo2CustomCharacterPersistenceProof
 {
-    private const int DrawFrames = 4;
+    private const int DrawFrames = 12;
     private const int GroundingFrames = 120;
     private const int ExpectedWidth = 1280;
     private const int ExpectedHeight = 720;
@@ -29,13 +29,44 @@ internal static class Fo2CustomCharacterPersistenceProof
                 throw new InvalidOperationException(
                     "Fallout 2 custom-character write proof requires an empty save boundary.");
             host.Picker.Select(expected.SourceIndex);
-            var cancelledEditor = host.Picker.OpenCustom(expected.Modify);
+            var cancelledEditor = host.Picker.OpenCustom();
             cancelledEditor.Cancel();
             if (host.Picker.CustomEditor is not null || host.Runtime is not null ||
                 Fo2CharacterStartSaveState.Exists(host.SavePath))
                 throw new InvalidOperationException(
                     "Fallout 2 custom-character cancel path changed authoritative state.");
-            var editor = host.Picker.OpenCustom(expected.Modify);
+            var editor = host.Picker.OpenCustom();
+            await WaitForDraws(host, DrawFrames);
+            editor.ActivateRulesControl();
+            var publicRulesControlPassed = editor.RulesControlsVisible;
+            editor.ActivateReflectronSourceControl("sex");
+            var sourceSexControlPassed =
+                editor.ActiveEditorPanel == "identity-and-special" &&
+                !editor.AppearanceControlsVisible && !editor.BodyControlsVisible;
+            editor.ActivateReflectronSourceControl("race");
+            var sourceRaceControlPassed =
+                editor.ActiveEditorPanel == "human-race-and-complexion" &&
+                editor.AppearanceControlsVisible;
+            editor.ActivateReflectronSourceControl("face");
+            var sourceFaceControlPassed = editor.ActiveEditorPanel == "face-appearance" &&
+                editor.AppearanceControlsVisible;
+            editor.ActivateReflectronSourceControl("hair");
+            var sourceHairControlPassed = editor.ActiveEditorPanel == "hair-appearance" &&
+                editor.AppearanceControlsVisible;
+            var sourceSectionControlsPassed = sourceSexControlPassed &&
+                sourceRaceControlPassed && sourceFaceControlPassed && sourceHairControlPassed;
+            editor.SetTaggedSkills(expected.TaggedSkills);
+            editor.SetTraits(expected.Traits);
+            editor.ActivateReflectronFaceControl();
+            var reflectronFaceControlPassed = editor.FacePreviewVisible &&
+                editor.Live3DVisible && !editor.ClassicProjectionVisible &&
+                !editor.BodyControlsVisible &&
+                !editor.RulesControlsVisible;
+            editor.ActivateReflectronBodyControl();
+            var reflectronBodyControlPassed = editor.Live3DVisible &&
+                !editor.FacePreviewVisible && !editor.ClassicProjectionVisible &&
+                editor.BodyControlsVisible &&
+                !editor.AppearanceControlsVisible;
             editor.SetCharacterName(expected.Name);
             editor.SetSex(expected.Sex);
             editor.SetAge(expected.Age);
@@ -50,7 +81,6 @@ internal static class Fo2CustomCharacterPersistenceProof
             editor.SetMouthStyle(expected.Appearance.MouthStyleId);
             foreach (var role in BodyRoles)
                 editor.SetBodyProportion(role, expected.Body.Value(role));
-            editor.ToggleBodyControls();
             var preview = editor.LivePreview;
             preview._GuiInput(new InputEventMouseButton
             {
@@ -92,17 +122,32 @@ internal static class Fo2CustomCharacterPersistenceProof
                 $"custom-{sex.ToLowerInvariant()}-editor.png");
             editor.ToggleClassicProjection();
             await WaitForDraws(host, DrawFrames);
-            var classicProjectionFrame = Capture(
+            var bodyWireframeFrame = Capture(
                 host,
                 output,
-                $"custom-{sex.ToLowerInvariant()}-classic-projection.png");
-            var classicProjectionPassed = editor.ClassicProjectionVisible &&
-                preview.ClassicPortraitProjection && !editor.Live3DVisible &&
-                classicProjectionFrame.Sha256 != editorFrame.Sha256;
+                $"custom-{sex.ToLowerInvariant()}-body-wireframe.png");
+            var bodyWireframePassed = editor.ClassicProjectionVisible &&
+                preview.ClassicPortraitProjection && !editor.FacePreviewVisible &&
+                !preview.PortraitFraming &&
+                editor.ProjectionStyle == "green-body-wireframe" &&
+                bodyWireframeFrame.Sha256 != editorFrame.Sha256;
+            editor.ActivateReflectronFaceControl();
+            await WaitForDraws(host, DrawFrames);
+            var greenFaceFrame = Capture(
+                host,
+                output,
+                $"custom-{sex.ToLowerInvariant()}-green-face.png");
+            var greenFacePassed = editor.ClassicProjectionVisible &&
+                preview.ClassicPortraitProjection && editor.FacePreviewVisible &&
+                preview.PortraitFraming &&
+                editor.ProjectionStyle == "green-face-wireframe-closeup" &&
+                greenFaceFrame.Sha256 != bodyWireframeFrame.Sha256;
             editor.ToggleClassicProjection();
+            editor.ActivateReflectronBodyControl();
             await WaitForDraws(host, DrawFrames);
             var projectionRoundTripPassed = editor.Live3DVisible &&
                 !editor.ClassicProjectionVisible &&
+                !editor.FacePreviewVisible &&
                 !preview.ClassicPortraitProjection;
             editor.Confirm();
             var runtime = host.Runtime ?? throw new InvalidOperationException(
@@ -128,7 +173,9 @@ internal static class Fo2CustomCharacterPersistenceProof
             var passed = Matches(selection, expected) && saved.Character == selection &&
                 editor.Live3DVisible && editor.BodyControlsVisible &&
                 !editor.AppearanceControlsVisible && viewerInteractionPassed &&
-                classicProjectionPassed && projectionRoundTripPassed &&
+                reflectronFaceControlPassed && publicRulesControlPassed &&
+                reflectronBodyControlPassed && sourceSectionControlsPassed &&
+                bodyWireframePassed && greenFacePassed && projectionRoundTripPassed &&
                 Mathf.IsEqualApprox(
                     preview.CompositionRightOffset,
                     Fo2PremadeHumanoidPreview.EditorColumnCompositionRightOffset) &&
@@ -177,7 +224,13 @@ internal static class Fo2CustomCharacterPersistenceProof
                         nativeFaceGenControls = runtime.Player.VillageHumanoid?
                             .AppliedFaceGeometryControlCount,
                     },
-                    frames = new[] { editorFrame, classicProjectionFrame, worldFrame },
+                    frames = new[]
+                    {
+                        editorFrame,
+                        bodyWireframeFrame,
+                        greenFaceFrame,
+                        worldFrame,
+                    },
                     viewer = new
                     {
                         dragOrbit = true,
@@ -190,19 +243,34 @@ internal static class Fo2CustomCharacterPersistenceProof
                         compositionRightOffset = preview.CompositionRightOffset,
                         appearanceControlsHiddenInBodyMode =
                             !editor.AppearanceControlsVisible,
+                        reflectronFaceControlPassed,
+                        reflectronBodyControlPassed,
+                        sourceSectionControlsPassed,
+                        sourceSectionControls = new
+                        {
+                            sex = sourceSexControlPassed,
+                            race = sourceRaceControlPassed,
+                            face = sourceFaceControlPassed,
+                            hair = sourceHairControlPassed,
+                        },
+                        publicRulesControlPassed,
                         classicProjection = new
                         {
                             source = "current-data-bound-3d-character",
-                            shader = "frozen-stylized-live-character-projection",
+                            greenButtonOnly = true,
+                            bodyShader = "green-body-wireframe",
+                            faceShader = "green-face-wireframe-closeup",
                             substitutedModel = false,
-                            classicProjectionPassed,
+                            bodyWireframePassed,
+                            greenFacePassed,
                             projectionRoundTripPassed,
-                            frame = classicProjectionFrame,
+                            bodyFrame = bodyWireframeFrame,
+                            faceFrame = greenFaceFrame,
                         },
                     },
                     save = new { path = saved.Path, sha256 = saved.Sha256, schema = Fo2CharacterStartSaveState.Schema },
                     exactBounds = new { nameMaximum = 11, ageMinimum = 16, ageMaximum = 35, specialMinimum = 1, specialMaximum = 10, specialTotal = 40 },
-                    tagsAndTraits = expected.Modify ? "source-unchanged" : "unselected",
+                    tagsAndTraits = "player-selected-source-rules",
                     cancelPathPreservedState = true,
                     coldRestoreRequired = true,
                     windowsAppControlUsed = false,
@@ -302,8 +370,8 @@ internal static class Fo2CustomCharacterPersistenceProof
     private static ExpectedCharacter Expected(string sex) => sex switch
     {
         "Male" => new ExpectedCharacter(
-            "Male", "Korin", 26, [7, 6, 7, 4, 5, 6, 5], 0, true,
-            Fo2CharacterSelection.ModifyMode,
+            "Male", "Korin", 26, [7, 6, 7, 4, 5, 6, 5], 0,
+            Fo2CharacterSelection.CreateMode,
             Fo2CharacterBodyProfile.ForSex("Male") with
             {
                 Height = 1.08f,
@@ -318,9 +386,11 @@ internal static class Fo2CustomCharacterPersistenceProof
                 Fo2ProceduralPortrait.BlueEyeColor,
                 Fo2ProceduralPortrait.HeavyBrow,
                 Fo2ProceduralPortrait.BroadNose,
-                Fo2ProceduralPortrait.WideMouth)),
+                Fo2ProceduralPortrait.WideMouth),
+            ["Small Guns", "Melee Weapons", "Speech"],
+            ["Fast Shot"]),
         "Female" => new ExpectedCharacter(
-            "Female", "Mara", 18, [4, 7, 5, 6, 8, 5, 5], 2, false,
+            "Female", "Mara", 18, [4, 7, 5, 6, 8, 5, 5], 2,
             Fo2CharacterSelection.CreateMode,
             Fo2CharacterBodyProfile.ForSex("Female") with
             {
@@ -336,7 +406,9 @@ internal static class Fo2CustomCharacterPersistenceProof
                 Fo2ProceduralPortrait.GreenEyeColor,
                 Fo2ProceduralPortrait.ArchedBrow,
                 Fo2ProceduralPortrait.NarrowNose,
-                Fo2ProceduralPortrait.SmallMouth)),
+                Fo2ProceduralPortrait.SmallMouth),
+            ["Sneak", "First Aid", "Speech"],
+            ["Gifted", "Good Natured"]),
         _ => throw new InvalidOperationException(
             $"Unsupported Fallout 2 custom-character proof sex: {sex}"),
     };
@@ -350,10 +422,8 @@ internal static class Fo2CustomCharacterPersistenceProof
         selection.Profile.Age == expected.Age &&
         selection.Profile.Special.SequenceEqual(expected.Special) &&
         Fo2HumanoidAppearance.FromContract(selection.Appearance) == expected.Appearance &&
-        (expected.Modify
-            ? selection.Profile.TaggedSkills.SequenceEqual(selection.Source.Profile.TaggedSkills) &&
-              selection.Profile.Traits.SequenceEqual(selection.Source.Profile.Traits)
-            : selection.Profile.TaggedSkills.Count == 0 && selection.Profile.Traits.Count == 0);
+        selection.Profile.TaggedSkills.SequenceEqual(expected.TaggedSkills) &&
+        selection.Profile.Traits.SequenceEqual(expected.Traits);
 
     private static int ExpectedFaceControlCount(ExpectedCharacter expected) =>
         Fo2ProceduralAppearanceCatalog.Load().NativeFaceGenControls(
@@ -519,10 +589,11 @@ internal static class Fo2CustomCharacterPersistenceProof
         int Age,
         IReadOnlyList<int> Special,
         int SourceIndex,
-        bool Modify,
         string Mode,
         CharacterBodyProportions Body,
-        Fo2HumanoidAppearance Appearance);
+        Fo2HumanoidAppearance Appearance,
+        IReadOnlyList<string> TaggedSkills,
+        IReadOnlyList<string> Traits);
 
     private static readonly string[] BodyRoles =
     [

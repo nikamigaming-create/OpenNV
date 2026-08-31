@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -180,7 +181,7 @@ internal static class Fo1NewGameFlow
         var creator = new Fo1CharacterCreator();
         creator.Configure(
             contract,
-            enableHexPortraitToggle: startPresentation == "hex-tactical",
+            enableHexPortraitToggle: true,
             loaded.PlayerDonors);
         var resolved = false;
         creator.CharacterReady += profile =>
@@ -236,7 +237,7 @@ internal static class Fo1NewGameFlow
                 skipOpening,
                 loaded.RuntimeProfile.Showcase);
             GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE v13ent-handoff");
-            loaded.Session.ApplyCharacter(profile, creator.SelectedPremade);
+            loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
             loaded.Session.AttachClassicInterface(contract);
             if (nativeFirstBeatHeadlessProof)
@@ -274,6 +275,48 @@ internal static class Fo1NewGameFlow
         }
     }
 
+    internal static async Task RunCharacterVideo(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string character,
+        OpeningManifest characterReflectron)
+    {
+        try
+        {
+            ValidateHandoff(loaded, contract);
+            HideWorld(loaded);
+            var creator = new Fo1CharacterCreator();
+            creator.Configure(
+                contract,
+                enableHexPortraitToggle: true,
+                loaded.PlayerDonors,
+                characterReflectron);
+            host.AddChild(creator);
+            var profile = await creator.RunCharacterVideo(host, character);
+            profile.Validate();
+            var opening = await PlayOpening(
+                host,
+                contract,
+                creator,
+                accelerate: true,
+                forceSkip: true,
+                loaded.RuntimeProfile.Showcase);
+            loaded.Session.ApplyCharacter(profile);
+            loaded.Session.AttachPipBoy(contract, profile);
+            loaded.Session.AttachClassicInterface(contract);
+            await RevealWorld(host, loaded, profile, opening, "hex-tactical");
+            await WaitFrames(host, Fo1NewGameFlowNumericContracts.PresentationInt120);
+            GD.Print($"OPENNV_FO1_CHARACTER_VIDEO_COMPLETE character={character}");
+            host.GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO1_CHARACTER_VIDEO_FAIL {exception}");
+            host.GetTree().Quit(1);
+        }
+    }
+
     private static async Task CompleteInteractive(
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
@@ -292,7 +335,7 @@ internal static class Fo1NewGameFlow
                 false,
                 false,
                 loaded.RuntimeProfile.Showcase);
-            loaded.Session.ApplyCharacter(profile, creator.SelectedPremade);
+            loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
             loaded.Session.AttachClassicInterface(contract);
             await RevealWorld(host, loaded, profile, opening, startPresentation);
@@ -661,8 +704,14 @@ internal static class Fo1NewGameFlow
                 loaded.Camera._UnhandledInput(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Escape });
                 if (inventory.IsOpen || !loaded.Session.DestinationFlareLit)
                     throw new InvalidOperationException("Fallout flare Continue proof did not persist source-script lit state.");
-                flareUse = new { flare = flare.Report(), selectedSymbol = inventory.SelectedSymbol, lit = true,
-                    activeHand = "not-proven-by-script", expiry = "unimplemented-fail-closed" };
+                flareUse = new
+                {
+                    flare = flare.Report(),
+                    selectedSymbol = inventory.SelectedSymbol,
+                    lit = true,
+                    activeHand = "not-proven-by-script",
+                    expiry = "unimplemented-fail-closed"
+                };
             }
             object? genericDoor = null;
             int destinationMove;
@@ -687,8 +736,10 @@ internal static class Fo1NewGameFlow
                 {
                     descriptor = door.Report(open: true),
                     approach = new { sourceWalkMaskOnly = true, pathTiles = approachPath, contactTile },
-                    opened = true, movedThroughOpenedBlocker = true,
-                    interactionActionPoints = "not-source-backed", sound = "unsupported-fail-closed",
+                    opened = true,
+                    movedThroughOpenedBlocker = true,
+                    interactionActionPoints = "not-source-backed",
+                    sound = "unsupported-fail-closed",
                     animationTiming = "unsupported-fail-closed",
                 };
             }
@@ -1375,7 +1426,10 @@ internal static class Fo1NewGameFlow
             approach = new { sourceWalkMaskOnly = true, pathTiles = approachPath, contactTile, hostTile = inventoryHost.Tile, contactIsAdjacent = true },
             pickup = new { hostSerial = inventoryHost.Serial, items = inventoryHost.Items, looted = session.IsMapInventoryHostLooted(inventoryHost.Serial) },
             nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
-            gameplay = session.Report(), rendered = false, interactive = false, files = Array.Empty<object>(),
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
         };
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
         GD.Print($"OPENNV_FO1_VAULT13_INTERACTION_PASS host={inventoryHost.Serial} move={nextMove}");
@@ -1401,11 +1455,15 @@ internal static class Fo1NewGameFlow
         {
             schema = "opennv-fo1-destination-inventory-interaction-cold-restore-proof/v1",
             status = "pass-source-bound-vault13-container-cold-restore-headless-not-rendered",
-            coldProcess = true, interaction = interaction.Report(),
+            coldProcess = true,
+            interaction = interaction.Report(),
             flareUse = flareUse is null ? null : new { descriptor = flareUse.Report(), lit = session.DestinationFlareLit },
             restored = new { hostSerial = interaction.Host.Serial, looted = true, sourceWalkMaskOnly = true },
             nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
-            gameplay = session.Report(), rendered = false, interactive = false, files = Array.Empty<object>(),
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
         };
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
         GD.Print($"OPENNV_FO1_VAULT13_INTERACTION_COLD_PASS host={interaction.Host.Serial} move={nextMove}");
@@ -1441,13 +1499,28 @@ internal static class Fo1NewGameFlow
             destinationPresentation = destination.Report(session.ExitGridTransition!),
             genericDoor = door.Report(open: session.DestinationGenericDoorOpen),
             medicLook = medic.Report(viewed: session.DestinationMedicLookViewed),
-            approach = new { sourceWalkMaskOnly = true, pathTiles = approachPath, contactTile,
-                actorTile = medic.Tile, contactIsAdjacent = true },
-            interaction = new { result = "display-message-only", message = sourceMessage,
-                dialogue = "unimplemented-fail-closed", combat = "not-proven-by-look-at-only",
-                actionPoints = "not-source-backed", saved = true },
+            approach = new
+            {
+                sourceWalkMaskOnly = true,
+                pathTiles = approachPath,
+                contactTile,
+                actorTile = medic.Tile,
+                contactIsAdjacent = true
+            },
+            interaction = new
+            {
+                result = "display-message-only",
+                message = sourceMessage,
+                dialogue = "unimplemented-fail-closed",
+                combat = "not-proven-by-look-at-only",
+                actionPoints = "not-source-backed",
+                saved = true
+            },
             nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
-            gameplay = session.Report(), rendered = false, interactive = false, files = Array.Empty<object>(),
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
         };
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
         GD.Print($"OPENNV_FO1_VAULT13_MEDIC_LOOK_PASS actor={medic.Serial} move={nextMove}");
@@ -1476,10 +1549,15 @@ internal static class Fo1NewGameFlow
         {
             schema = "opennv-fo1-destination-medic-look-cold-restore-proof/v1",
             status = "pass-source-bound-vault13-medic-look-cold-restore-headless-not-rendered",
-            coldProcess = true, restored = new { playerTile = restoredTile, sourceWalkMaskOnly = true },
-            genericDoor = door.Report(open: true), medicLook = medic.Report(viewed: true),
+            coldProcess = true,
+            restored = new { playerTile = restoredTile, sourceWalkMaskOnly = true },
+            genericDoor = door.Report(open: true),
+            medicLook = medic.Report(viewed: true),
             nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
-            gameplay = session.Report(), rendered = false, interactive = false, files = Array.Empty<object>(),
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
         };
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
         GD.Print($"OPENNV_FO1_VAULT13_MEDIC_LOOK_COLD_PASS actor={medic.Serial} move={nextMove}");
@@ -1524,7 +1602,10 @@ internal static class Fo1NewGameFlow
                 loaded = true,
             },
             nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
-            gameplay = session.Report(), rendered = false, interactive = false, files = Array.Empty<object>(),
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
         };
         File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
         GD.Print($"OPENNV_FO1_V13ENT_RETURN_PASS trigger={activatedTile} arrival={transition.DestinationTile} move={nextMove}");

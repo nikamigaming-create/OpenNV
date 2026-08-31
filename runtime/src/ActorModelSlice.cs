@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.Actors;
+using OpenNV.Runtime.SceneGraph;
 
 namespace OpenNV.Runtime;
 
@@ -63,13 +65,14 @@ internal static class ActorModelSlice
         scene.Name = $"ACTOR_{root.GetProperty("actorFormId").GetString()}_{root.GetProperty("actorName").GetString()}";
         scene.Scale = Vector3.One * (scaleToMeters ? configuration.World.GameUnitsToMeters : 1.0f);
         parent.AddChild(scene);
-        var importedMeshes = Descendants<MeshInstance3D>(scene)
+        var importedMeshes = NodeTraversal.Descendants<MeshInstance3D>(scene)
             .Where(mesh => mesh.Mesh is not null)
             .ToArray();
         var surfaces = LoadSurfaces(root, importedMeshes, resolvedSidecar, configuration);
+        ActorComplexionJoin.Apply(scene, surfaces);
         var omittedSurfaces = LoadOmittedSurfaces(root, resolvedSidecar);
-        var skeletons = Descendants<Skeleton3D>(scene).ToArray();
-        var players = Descendants<AnimationPlayer>(scene).ToArray();
+        var skeletons = NodeTraversal.Descendants<Skeleton3D>(scene).ToArray();
+        var players = NodeTraversal.Descendants<AnimationPlayer>(scene).ToArray();
         var runtimeAnimations = players
             .SelectMany(player => player.GetAnimationList()
                 .Where(name => name != "RESET")
@@ -535,7 +538,7 @@ internal static class ActorModelSlice
 
     internal static Aabb WorldBounds(Node3D root)
     {
-        return WorldBounds(Descendants<MeshInstance3D>(root));
+        return WorldBounds(NodeTraversal.Descendants<MeshInstance3D>(root));
     }
 
     internal static Aabb PosedWorldBounds(
@@ -779,7 +782,7 @@ internal static class ActorModelSlice
         var direct = mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton);
         if (direct is not null)
             return direct;
-        var skeletons = Descendants<Skeleton3D>(actorRoot).ToArray();
+        var skeletons = NodeTraversal.Descendants<Skeleton3D>(actorRoot).ToArray();
         if (skeletons.Length != 1)
             throw new InvalidOperationException(
                 $"Actor skinned surface {mesh.Name} resolves {skeletons.Length} skeletons.");
@@ -834,18 +837,6 @@ internal static class ActorModelSlice
         if (points == 0)
             throw new InvalidOperationException("Actor scene contains no bounds.");
         return new Aabb(minimum, maximum - minimum);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal readonly record struct LoadedActor(

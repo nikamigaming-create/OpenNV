@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -90,87 +91,37 @@ internal sealed record Fo1PlayerPresentationIdentity(
     string Sex,
     string IdentityMode,
     string OwnedGcdSha256,
+    string OwnedBiographySha256,
     string OwnedPortraitFrmSha256)
 {
-    internal static Fo1PlayerPresentationIdentity FromSelection(
-        Fo1CharacterProfile profile,
-        Fo1PremadeCharacter? premade)
-    {
-        if (premade is not null && !Fo1TacticalSession.SameCharacter(profile, premade.Profile))
-            throw new InvalidOperationException(
-                "Fallout 1 selected premade/profile presentation identity differs.");
-        var result = new Fo1PlayerPresentationIdentity(
-            premade?.Id ?? "custom",
-            profile.Name,
-            profile.Sex,
-            premade is null ? "custom-profile" : "owned-premade-gcd-frm",
-            premade?.GcdSha256 ?? "none",
-            premade?.Portrait.SourceFrmSha256 ?? "none");
-        result.Validate(profile);
-        return result;
-    }
-
-    internal static Fo1PlayerPresentationIdentity Load(
-        JsonElement source,
+    internal static Fo1PlayerPresentationIdentity FromProfile(
         Fo1CharacterProfile profile)
     {
+        profile.Identity.Validate(profile);
         var result = new Fo1PlayerPresentationIdentity(
-            Required(source, "characterId"),
-            Required(source, "characterName"),
-            Required(source, "sex"),
-            Required(source, "identityMode"),
-            Required(source, "ownedGcdSha256"),
-            Required(source, "ownedPortraitFrmSha256"));
+            profile.Identity.CharacterId,
+            profile.Name,
+            profile.Sex,
+            profile.Identity.Mode,
+            profile.Identity.OwnedGcdSha256,
+            profile.Identity.OwnedBiographySha256,
+            profile.Identity.OwnedPortraitFrmSha256);
         result.Validate(profile);
         return result;
     }
-
-    internal object SaveState() => new
-    {
-        schema = "opennv-fo1-player-presentation-identity/v1",
-        characterId = CharacterId,
-        characterName = CharacterName,
-        sex = Sex,
-        identityMode = IdentityMode,
-        ownedGcdSha256 = OwnedGcdSha256,
-        ownedPortraitFrmSha256 = OwnedPortraitFrmSha256,
-    };
 
     internal void Validate(Fo1CharacterProfile profile)
     {
+        profile.Identity.Validate(profile);
         if (CharacterName != profile.Name || Sex != profile.Sex ||
-            CharacterId is not ("max-stone" or "natalia" or "albert" or "custom"))
+            CharacterId != profile.Identity.CharacterId ||
+            IdentityMode != profile.Identity.Mode ||
+            OwnedGcdSha256 != profile.Identity.OwnedGcdSha256 ||
+            OwnedBiographySha256 != profile.Identity.OwnedBiographySha256 ||
+            OwnedPortraitFrmSha256 != profile.Identity.OwnedPortraitFrmSha256)
             throw new InvalidOperationException(
                 "Fallout 1 saved player presentation identity differs from its character.");
-        var premade = CharacterId != "custom";
-        if (premade != (IdentityMode == "owned-premade-gcd-frm") ||
-            !premade && IdentityMode != "custom-profile" ||
-            premade && (!Hash(OwnedGcdSha256) || !Hash(OwnedPortraitFrmSha256)) ||
-            !premade && (OwnedGcdSha256 != "none" || OwnedPortraitFrmSha256 != "none") ||
-            CharacterId == "max-stone" && CharacterName != "Max Stone" ||
-            CharacterId == "natalia" && Sex != "Female" ||
-            CharacterId == "natalia" && CharacterName != "Natalia" ||
-            CharacterId == "albert" && CharacterName != "Albert" ||
-            (CharacterId is "max-stone" or "albert") && Sex != "Male")
-            throw new InvalidOperationException(
-                "Fallout 1 saved player presentation provenance is invalid.");
     }
-
-    private static string Required(JsonElement source, string property)
-    {
-        if (source.GetProperty("schema").GetString() !=
-                "opennv-fo1-player-presentation-identity/v1")
-            throw new InvalidOperationException(
-                "Fallout 1 saved player presentation schema is unknown.");
-        var value = source.GetProperty(property).GetString();
-        return string.IsNullOrWhiteSpace(value)
-            ? throw new InvalidOperationException(
-                $"Fallout 1 saved player presentation field is empty: {property}")
-            : value;
-    }
-
-    private static bool Hash(string value) =>
-        value.Length == 64 && value.All(Uri.IsHexDigit);
 }
 
 internal sealed record Fo1PlayerPresentationBinding(
@@ -180,6 +131,7 @@ internal sealed record Fo1PlayerPresentationBinding(
     string IdentityMode,
     string PresentationMode,
     string OwnedGcdSha256,
+    string OwnedBiographySha256,
     string OwnedPortraitFrmSha256,
     string DonorActorFormId,
     bool UsesOwnedDonor,
@@ -195,6 +147,7 @@ internal sealed record Fo1PlayerPresentationBinding(
         Sex,
         IdentityMode,
         OwnedGcdSha256,
+        OwnedBiographySha256,
         OwnedPortraitFrmSha256);
 
     internal object Report() => new
@@ -205,6 +158,7 @@ internal sealed record Fo1PlayerPresentationBinding(
         IdentityMode,
         PresentationMode,
         OwnedGcdSha256,
+        OwnedBiographySha256,
         OwnedPortraitFrmSha256,
         DonorActorFormId,
         UsesOwnedDonor,
@@ -1188,9 +1142,7 @@ internal partial class Fo1TacticalSession : Node
         RefreshHud();
     }
 
-    internal void ApplyCharacter(
-        Fo1CharacterProfile profile,
-        Fo1PremadeCharacter? premade = null)
+    internal void ApplyCharacter(Fo1CharacterProfile profile)
     {
         profile.Validate();
         if (_characterProfile is not null)
@@ -1199,7 +1151,7 @@ internal partial class Fo1TacticalSession : Node
                 throw new InvalidOperationException(
                     "Fallout save already belongs to a different created character.");
             _status = $"Resumed {_characterProfile.Name} with the saved combat inventory";
-            BindCharacterPresentation(profile, premade);
+            BindCharacterPresentation(profile);
             RefreshHud();
             Save();
             return;
@@ -1212,7 +1164,7 @@ internal partial class Fo1TacticalSession : Node
         _actionPoints = profile.ActionPoints;
         _playerHitPoints = profile.HitPoints;
         _status = $"{profile.Name} left Vault 13 • selected SPECIAL now drives live combat";
-        BindCharacterPresentation(profile, premade);
+        BindCharacterPresentation(profile);
         RefreshHud();
         Save();
     }
@@ -1280,11 +1232,9 @@ internal partial class Fo1TacticalSession : Node
         _maximumActionPoints = profile.ActionPoints;
     }
 
-    private void BindCharacterPresentation(
-        Fo1CharacterProfile profile,
-        Fo1PremadeCharacter? premade) => BindCharacterPresentation(
+    private void BindCharacterPresentation(Fo1CharacterProfile profile) => BindCharacterPresentation(
         profile,
-        Fo1PlayerPresentationIdentity.FromSelection(profile, premade));
+        Fo1PlayerPresentationIdentity.FromProfile(profile));
 
     private void BindCharacterPresentation(
         Fo1CharacterProfile profile,
@@ -1292,7 +1242,7 @@ internal partial class Fo1TacticalSession : Node
     {
         identity.Validate(profile);
         if (_ownedPlayerDonorsBySex.Count > 0)
-            SelectOwnedPlayerDonor(profile.Sex);
+            SelectOwnedPlayerDonor(identity.CharacterId, profile.Sex);
         var source = _ownedPlayerSource;
         var actor = _ownedPlayer;
         if (source is not null && actor is null || source is null && actor is not null)
@@ -1323,6 +1273,7 @@ internal partial class Fo1TacticalSession : Node
             identity.IdentityMode,
             "owned-fnv-full-body-presentation-donor-non-parity",
             identity.OwnedGcdSha256,
+            identity.OwnedBiographySha256,
             identity.OwnedPortraitFrmSha256,
             source?.SourceActorBaseFormId ?? "none",
             useOwnedDonor,
@@ -1379,6 +1330,7 @@ internal partial class Fo1TacticalSession : Node
         first.Luck == second.Luck &&
         first.TaggedSkills.SequenceEqual(second.TaggedSkills, StringComparer.Ordinal) &&
         first.Traits.SequenceEqual(second.Traits, StringComparer.Ordinal) &&
+        Equals(first.Identity, second.Identity) &&
         Equals(first.Appearance, second.Appearance);
 
     internal void SetWorldGuidesVisible(bool visible)
@@ -1945,6 +1897,19 @@ internal partial class Fo1TacticalSession : Node
         VerifiedGltfLoader.VerifyHash(source.Model, source.ModelSha256);
         VerifiedGltfLoader.VerifyHash(source.Sidecar, source.SidecarSha256);
         var actor = ActorModelSlice.Load(source.Model, source.Sidecar, _playerToken);
+        if (source.BodyProfile is { } bodyProfile)
+        {
+            var skeleton = actor.Root.FindChildren("*", "Skeleton3D", true, false)
+                .OfType<Skeleton3D>()
+                .Single();
+            CharacterBodyRig.Apply(
+                actor.Root,
+                skeleton,
+                bodyProfile,
+                this,
+                $"fallout1-gameplay-{source.DonorKey}");
+            actor = actor with { Bounds = ActorModelSlice.PosedWorldBounds(actor) };
+        }
         BindOwnedPlayerMaterialTextures(actor, source.Sidecar);
         _ownedPlayerLitMaterials = ApplyOwnedPlayerLighting(
             actor.Root,
@@ -1997,23 +1962,29 @@ internal partial class Fo1TacticalSession : Node
         actor.Root.SetMeta("source_actor_female", source.SourceActorFemale);
         actor.Root.SetMeta("source_model_sha256", source.ModelSha256);
         actor.Root.SetMeta("source_sidecar_sha256", source.SidecarSha256);
+        actor.Root.SetMeta("source_donor_key", source.DonorKey);
+        actor.Root.SetMeta(
+            "source_body_profile",
+            source.BodyProfile?.Id ?? "sex-default");
         actor.Root.SetMeta("selection_state", "unbound-until-character-selection");
         return grounded;
     }
 
     internal void RegisterOwnedPlayerDonor(Fo1HexSceneLoader.PlayerPresentationSource source)
     {
-        var sex = source.SourceActorFemale ? "Female" : "Male";
-        if (!_ownedPlayerDonorsBySex.TryAdd(sex, source))
+        if (!_ownedPlayerDonorsBySex.TryAdd(source.DonorKey, source))
             throw new InvalidOperationException(
-                $"Fallout 1 has duplicate owned humanoid donor identity: {sex}.");
+                $"Fallout 1 has duplicate owned humanoid donor identity: {source.DonorKey}.");
     }
 
-    private void SelectOwnedPlayerDonor(string sex)
+    private void SelectOwnedPlayerDonor(string characterId, string sex)
     {
-        if (!_ownedPlayerDonorsBySex.TryGetValue(sex, out var source))
+        var donorKey = _ownedPlayerDonorsBySex.ContainsKey(characterId)
+            ? characterId
+            : sex;
+        if (!_ownedPlayerDonorsBySex.TryGetValue(donorKey, out var source))
             throw new InvalidOperationException(
-                $"Fallout 1 selected identity has no registered owned donor for {sex}.");
+                $"Fallout 1 selected identity has no registered owned donor for {characterId}/{sex}.");
         if (_ownedPlayerSource is { } current && current == source)
             return;
         if (_ownedPlayerWeaponSource is not { } ranged ||
@@ -2972,7 +2943,6 @@ internal partial class Fo1TacticalSession : Node
             activeMap = SaveActiveMap(),
             sourceDoor = _sourceDoor?.Report(_sourceDoorOpen),
             character = _characterProfile?.Report(),
-            playerPresentationIdentity = _playerPresentationBinding?.Identity.SaveState(),
             camera = cameraState?.SaveState(),
             mobs = _mobs.Select(mob => mob.Report()).ToArray(),
         };
@@ -3046,15 +3016,13 @@ internal partial class Fo1TacticalSession : Node
         if (root.TryGetProperty("character", out var character) &&
             character.ValueKind == JsonValueKind.Object)
         {
-            ApplyCharacterStats(ParseSavedCharacter(character));
-            if (!root.TryGetProperty(
-                    "playerPresentationIdentity",
-                    out var presentationIdentity) ||
-                presentationIdentity.ValueKind != JsonValueKind.Object)
-                throw new InvalidOperationException(
-                    "Fallout 1 character save has no complete player presentation identity.");
-            _pendingSavedPlayerPresentation = Fo1PlayerPresentationIdentity.Load(
-                presentationIdentity,
+            JsonElement? legacyPresentationIdentity =
+                root.TryGetProperty("playerPresentationIdentity", out var presentationIdentity) &&
+                presentationIdentity.ValueKind == JsonValueKind.Object
+                    ? presentationIdentity.Clone()
+                    : null;
+            ApplyCharacterStats(ParseSavedCharacter(character, legacyPresentationIdentity));
+            _pendingSavedPlayerPresentation = Fo1PlayerPresentationIdentity.FromProfile(
                 _characterProfile!);
             _restoredCameraState = root.TryGetProperty("camera", out var camera) &&
                 camera.ValueKind == JsonValueKind.Object
@@ -3511,7 +3479,9 @@ internal partial class Fo1TacticalSession : Node
         return destination;
     }
 
-    private static Fo1CharacterProfile ParseSavedCharacter(JsonElement source)
+    private static Fo1CharacterProfile ParseSavedCharacter(
+        JsonElement source,
+        JsonElement? legacyPresentationIdentity)
     {
         var schema = source.GetProperty("schema").GetString();
         if (!string.Equals(
@@ -3521,6 +3491,10 @@ internal partial class Fo1TacticalSession : Node
             !string.Equals(
                 schema,
                 "opennv-fo1-character/v2",
+                StringComparison.Ordinal) &&
+            !string.Equals(
+                schema,
+                "opennv-fo1-character/v3",
                 StringComparison.Ordinal))
             throw new InvalidOperationException(
                 $"Fallout save contains an unknown character schema: {schema}");
@@ -3542,11 +3516,11 @@ internal partial class Fo1TacticalSession : Node
             source.GetProperty("traits").EnumerateArray()
                 .Select(row => row.GetString()!)
                 .ToArray());
-        if (schema == "opennv-fo1-character/v2")
+        if ((schema is "opennv-fo1-character/v2" or "opennv-fo1-character/v3") &&
+            source.TryGetProperty("appearance", out var appearance) &&
+            appearance.ValueKind == JsonValueKind.Object)
         {
-            var appearance = source.GetProperty("appearance");
-            if (appearance.ValueKind != JsonValueKind.Object ||
-                appearance.GetProperty("schema").GetString() !=
+            if (appearance.GetProperty("schema").GetString() !=
                     Fo1CharacterAppearance.ExpectedSchema ||
                 appearance.GetProperty("mode").GetString() !=
                     "hex-local-procedural-custom")
@@ -3569,8 +3543,62 @@ internal partial class Fo1TacticalSession : Node
                     appearance.GetProperty("portraitHeight").GetInt32()),
             };
         }
+        profile = profile with
+        {
+            Identity = schema == "opennv-fo1-character/v3"
+                ? ParseSavedCharacterIdentity(source.GetProperty("identity"))
+                : ParseLegacyCharacterIdentity(
+                    legacyPresentationIdentity ?? throw new InvalidOperationException(
+                        "Legacy Fallout 1 character save has no presentation identity."),
+                    profile),
+        };
         profile.Validate();
         return profile;
+    }
+
+    private static Fo1CharacterIdentity ParseSavedCharacterIdentity(JsonElement source)
+    {
+        if (source.ValueKind != JsonValueKind.Object ||
+            source.GetProperty("schema").GetString() != Fo1CharacterIdentity.ExpectedSchema)
+            throw new InvalidOperationException(
+                "Fallout 1 saved character identity schema is unknown.");
+        return new Fo1CharacterIdentity(
+            source.GetProperty("characterId").GetString()!,
+            source.GetProperty("role").GetString()!,
+            source.GetProperty("mode").GetString()!,
+            source.GetProperty("editingLocked").GetBoolean(),
+            source.GetProperty("ownedGcdSha256").GetString()!,
+            source.GetProperty("ownedBiographySha256").GetString()!,
+            source.GetProperty("ownedPortraitFrmSha256").GetString()!);
+    }
+
+    private static Fo1CharacterIdentity ParseLegacyCharacterIdentity(
+        JsonElement source,
+        Fo1CharacterProfile profile)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo1-player-presentation-identity/v1" ||
+            source.GetProperty("characterName").GetString() != profile.Name ||
+            source.GetProperty("sex").GetString() != profile.Sex)
+            throw new InvalidOperationException(
+                "Legacy Fallout 1 saved presentation identity is invalid.");
+        var characterId = source.GetProperty("characterId").GetString()!;
+        if (characterId == "custom")
+            return Fo1CharacterIdentity.Custom;
+        var role = characterId switch
+        {
+            "max-stone" => "combat",
+            "natalia" => "stealth",
+            "albert" => "diplomat",
+            _ => throw new InvalidOperationException(
+                $"Legacy Fallout 1 character identity is unknown: {characterId}"),
+        };
+        return Fo1CharacterIdentity.Premade(
+            characterId,
+            role,
+            source.GetProperty("ownedGcdSha256").GetString()!,
+            Fo1CharacterIdentity.LegacyBiographyHash,
+            source.GetProperty("ownedPortraitFrmSha256").GetString()!);
     }
 
     private static string ResolvePath(string path) =>

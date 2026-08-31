@@ -62,7 +62,9 @@ internal sealed record Fo1DestinationInventoryInteractionContract(
 
     internal object Report() => new
     {
-        schema = Schema, path = Path, sha256 = Sha256,
+        schema = Schema,
+        path = Path,
+        sha256 = Sha256,
         host = new { Host.Serial, Host.Tile, Host.Pid, Host.PrototypeSha256, items = Host.Items },
         sourceWalkMaskRoute = SourceWalkMaskRoute,
     };

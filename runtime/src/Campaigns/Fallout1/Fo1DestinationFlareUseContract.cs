@@ -49,8 +49,14 @@ internal sealed record Fo1DestinationFlareUseContract(
 
     internal object Report() => new
     {
-        schema = Schema, path = Path, sha256 = Sha256, HostSerial, Symbol, Pid,
-        PrototypeSha256, ScriptSha256,
+        schema = Schema,
+        path = Path,
+        sha256 = Sha256,
+        HostSerial,
+        Symbol,
+        Pid,
+        PrototypeSha256,
+        ScriptSha256,
         semantics = new { action = "use_proc", result = "lit-state", expiry = "unimplemented-fail-closed" },
     };
 

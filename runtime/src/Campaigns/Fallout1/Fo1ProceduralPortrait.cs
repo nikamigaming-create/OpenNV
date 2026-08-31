@@ -24,7 +24,13 @@ internal sealed record Fo1CharacterAppearance(
     internal object Report() => new
     {
         schema = ExpectedSchema,
-        mode = "hex-local-procedural-custom",
+        mode = GeneratorId switch
+        {
+            Fo1ProceduralPortrait.GeneratorId => "owned-donor-green-wireframe-face-projection",
+            Fo1ProceduralPortrait.LegacyDonorCartoonGeneratorId =>
+                "legacy-owned-donor-cartoon-face-projection",
+            _ => "legacy-hex-local-procedural-custom",
+        },
         faceShapeId = FaceShapeId,
         hairStyleId = HairStyleId,
         skinToneId = SkinToneId,
@@ -37,13 +43,18 @@ internal sealed record Fo1CharacterAppearance(
         portraitSha256 = PortraitSha256,
         portraitWidth = PortraitWidth,
         portraitHeight = PortraitHeight,
-        boundary = "local-procedural-preview-not-retail-head-geometry",
+        boundary = GeneratorId == Fo1ProceduralPortrait.GeneratorId
+            ? "owned-fnv-donor-is-presentation-only-not-fallout1-authored-head-geometry"
+            : "legacy-local-procedural-preview-not-retail-head-geometry",
     };
 }
 
 internal static class Fo1ProceduralPortrait
 {
-    internal const string GeneratorId = "opennv-fo1-classic-green-portrait/v1";
+    internal const string GeneratorId = "opennv-fo1-owned-donor-green-wireframe-face/v3";
+    internal const string LegacyDonorCartoonGeneratorId =
+        "opennv-fo1-owned-donor-cartoon-face/v2";
+    internal const string LegacyGeneratorId = "opennv-fo1-classic-green-portrait/v1";
     internal const int Width = 128;
     internal const int Height = 128;
     private const int HashLength = 64;
@@ -135,10 +146,17 @@ internal static class Fo1ProceduralPortrait
         string hairStyleId,
         string skinToneId,
         string hairColorId,
-        string eyeColorId)
+        string eyeColorId,
+        Image renderedPortrait)
     {
-        var image = Render(
+        ValidateIdentity(
             sex, faceShapeId, hairStyleId, skinToneId, hairColorId, eyeColorId);
+        if (renderedPortrait is null || renderedPortrait.IsEmpty())
+            throw new InvalidOperationException(
+                "Fallout 1 custom green portrait capture is empty.");
+        var image = (Image)renderedPortrait.Duplicate();
+        if (image.GetWidth() != Width || image.GetHeight() != Height)
+            image.Resize(Width, Height, Image.Interpolation.Lanczos);
         var root = PortraitRoot();
         Directory.CreateDirectory(root);
         var temporary = System.IO.Path.Combine(root, $".{Guid.NewGuid():N}.png");
@@ -194,7 +212,8 @@ internal static class Fo1ProceduralPortrait
             appearance.EyeColorId);
         if (appearance.RecipeId != Fo1ProceduralAppearanceCatalog.ExpectedId ||
             appearance.RecipeSha256 != Catalog.Sha256 ||
-            appearance.GeneratorId != GeneratorId ||
+            appearance.GeneratorId is not GeneratorId and
+                not LegacyDonorCartoonGeneratorId and not LegacyGeneratorId ||
             appearance.PortraitWidth != Width || appearance.PortraitHeight != Height ||
             appearance.PortraitSha256.Length != HashLength ||
             appearance.PortraitSha256.Any(character =>

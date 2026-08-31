@@ -37,8 +37,10 @@ internal static class Fo2ArroyoTrialRouteProof
                 throw new InvalidOperationException(
                     "Fallout 2 owned premades contain no exact tagged-Speech trial route.");
             host.Picker.Select(selected.Index);
-            var editor = host.Picker.OpenCustom(modify: true);
-            editor.SetCharacterName(selected.Character.Profile.Name);
+            var editor = host.Picker.OpenCustom();
+            editor.SetCharacterName("Mara");
+            editor.SetTaggedSkills(selected.Character.Profile.TaggedSkills);
+            editor.SetTraits(selected.Character.Profile.Traits);
             editor.Confirm();
             var handoff = host.OpeningHandoff ?? throw new InvalidOperationException(
                 "Fallout 2 paired gate did not start its owned opening-tail handoff.");
@@ -148,7 +150,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 ? "spear-equipped"
                 : "unarmed";
             var identityAndOutfitPassed =
-                selectedIdentity.Mode == Fo2CharacterSelection.ModifyMode &&
+                selectedIdentity.Mode == Fo2CharacterSelection.CreateMode &&
                 villageHumanoid.CharacterId == selectedIdentity.Id &&
                 villageHumanoid.OwnedIdentitySha256 == selectedIdentity.GcdSha256 &&
                 villageHumanoid.GetMeta("character_sex").AsString() ==

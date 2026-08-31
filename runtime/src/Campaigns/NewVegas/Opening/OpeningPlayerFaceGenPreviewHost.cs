@@ -27,8 +27,8 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
     private readonly Node3D _actorRoot;
     private readonly Skeleton3D _bodySkeleton;
     private readonly Camera3D _camera;
+    private readonly Aabb _faceBounds;
     private readonly Aabb _fullActorBounds;
-    private readonly Vector3 _cameraDirection;
     private readonly IReadOnlyList<MeshInstance3D> _actorMeshes;
     private readonly int _bodySurfaceCount;
     private readonly float _morphWeightScale;
@@ -40,8 +40,8 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         Node3D actorRoot,
         Skeleton3D bodySkeleton,
         Camera3D camera,
+        Aabb faceBounds,
         Aabb fullActorBounds,
-        Vector3 cameraDirection,
         IReadOnlyList<MeshInstance3D> actorMeshes,
         IReadOnlyDictionary<string, IReadOnlyList<MorphBinding>> bindings,
         int bodySurfaceCount,
@@ -54,8 +54,8 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         _actorRoot = actorRoot;
         _bodySkeleton = bodySkeleton;
         _camera = camera;
+        _faceBounds = faceBounds;
         _fullActorBounds = fullActorBounds;
-        _cameraDirection = cameraDirection;
         _actorMeshes = actorMeshes;
         _bindings = bindings;
         _bodySurfaceCount = bodySurfaceCount;
@@ -399,8 +399,8 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
             actor.Root,
             CharacterBodyRig.ResolveSkeleton(actor.Root, "reflectron-live-preview"),
             camera,
+            headFramedBounds,
             actor.Bounds,
-            (camera.Position - cameraTarget).Normalized(),
             Descendants<MeshInstance3D>(actor.Root).ToArray(),
             bindings,
             bodySurfaceCount,
@@ -436,64 +436,71 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
 
     internal void ShowThreeDimensional(CharacterBodyProportions proportions)
     {
-        ApplyBodyProportions(proportions);
-        FrameFullActor(proportions.Height);
-        var hologram = HologramOverlay();
-        foreach (var mesh in _actorMeshes)
-            mesh.MaterialOverlay = hologram;
-        _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        _actorRoot.SetMeta("reflectron_preview_mode", "3d-live-holographic-wire-overlay");
+        SetPreviewState(proportions, faceFraming: true, greenProjection: false);
     }
 
     internal void ShowTwoDimensional(CharacterBodyProportions proportions)
     {
-        ApplyBodyProportions(proportions);
-        FrameFullActor(proportions.Height);
-        foreach (var mesh in _actorMeshes)
-            mesh.MaterialOverlay = null;
-        // One final render produces a literal frozen orthographic-style card;
-        // the viewport then stops advancing until 3D mode is restored.
-        _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
-        _actorRoot.SetMeta("reflectron_preview_mode", "2d-generated-flat-capture");
+        SetPreviewState(proportions, faceFraming: true, greenProjection: true);
     }
 
-    private void FrameFullActor(float heightScale)
+    internal void SetPreviewState(
+        CharacterBodyProportions proportions,
+        bool faceFraming,
+        bool greenProjection)
     {
-        var target = _fullActorBounds.GetCenter();
+        ApplyBodyProportions(proportions);
+        foreach (var mesh in _actorMeshes)
+            mesh.MaterialOverlay = null;
+        Control.Material = greenProjection
+            ? ClassicGreenWireframeShader.Create(
+                "OpenNV_ReflectronCharacterGreenVatsEdgeProjection")
+            : null;
+        FrameBounds(
+            faceFraming ? _faceBounds : _fullActorBounds,
+            proportions.Height,
+            faceFraming ? 1.035f : 1.18f,
+            faceFraming ? "frontal classic portrait" : "frontal full-body");
+        _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        var mode = (greenProjection, faceFraming) switch
+        {
+            (true, true) => "green-face-wireframe-closeup",
+            (true, false) => "green-body-wireframe",
+            (false, true) => "normal-face",
+            _ => "normal-body",
+        };
+        _actorRoot.SetMeta("reflectron_preview_mode", mode);
+        _actorRoot.SetMeta("reflectron_camera_alignment", "front-centered");
+        _actorRoot.SetMeta(
+            "reflectron_projection_shader_role",
+            greenProjection ? ClassicGreenWireframeShader.ProjectionRole : "source-normal");
+    }
+
+    private void FrameBounds(
+        Aabb bounds,
+        float heightScale,
+        float margin,
+        string label)
+    {
+        var target = bounds.GetCenter();
         target.Y *= heightScale;
-        var size = _fullActorBounds.Size;
+        var size = bounds.Size;
         size.Y *= heightScale;
         var aspect = _viewport.Size.X / (float)_viewport.Size.Y;
         var halfFov = Mathf.DegToRad(_camera.Fov) * 0.5f;
         var tangent = MathF.Tan(halfFov);
         var distance = MathF.Max(
             size.Y * 0.5f / tangent,
-            size.X * 0.5f / (tangent * aspect)) * 1.18f;
+            size.X * 0.5f / (tangent * aspect)) * margin;
         if (!target.IsFinite() || !size.IsFinite() ||
             !float.IsFinite(distance) || distance <= 0.0f)
             throw new InvalidOperationException(
-                "Reflectron full-body preview framing is invalid.");
-        _camera.Position = target + _cameraDirection * (distance + size.Z * 0.5f);
+                $"Reflectron {label} preview framing is invalid.");
+        // Imported Gamebryo actors face the preview camera on Godot's forward axis.
+        // The device's decorative yaw must never turn a character portrait.
+        _camera.Position = target + Vector3.Forward * (distance + size.Z * 0.5f);
         _camera.LookAt(target, Vector3.Up);
     }
-
-    private static ShaderMaterial HologramOverlay() => new()
-    {
-        ResourceName = "OpenNV_ReflectronCharacterHologramWireOverlay",
-        Shader = new Shader
-        {
-            Code = """
-                shader_type spatial;
-                render_mode unshaded, wireframe, cull_disabled, blend_add, depth_draw_opaque;
-                void fragment() {
-                    vec3 glow = vec3(0.30, 1.0, 0.42);
-                    ALBEDO = glow;
-                    EMISSION = glow * 1.8;
-                    ALPHA = 0.72;
-                }
-                """,
-        },
-    };
 
     internal Image CaptureRenderedImage() => _viewport.GetTexture().GetImage();
 

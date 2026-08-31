@@ -14,11 +14,16 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Button> _creatorModeHitTargets =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Button> _sourceSectionHitTargets =
+        new(StringComparer.OrdinalIgnoreCase);
     private MeshInstance3D? _deviceMesh;
     private Camera3D? _deviceCamera;
     private RenderedDeviceFrame? _deviceFrame;
     private int _creatorButtonSurface = -1;
     private int _creatorGlowSurface = -1;
+    private int _sourceSexButtonSurface = -1;
+    private int _creatorBodyAlignmentSurface = -1;
+    private int _creatorFaceAlignmentSurface = -1;
     private int _shellSurface = -1;
 
     internal Control ScreenRoot { get; }
@@ -111,6 +116,10 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
                 candidate.Equals(role, StringComparison.OrdinalIgnoreCase)
                     ? glow.Active
                     : glow.Inactive);
+        foreach (var (candidate, button) in _sourceSectionHitTargets)
+            button.ButtonPressed = candidate.Equals(
+                activeList,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private void BuildDevice(
@@ -176,17 +185,34 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             surfaces,
             contract.SurfaceRoles["hairGlow"],
             "creator-glow-source");
+        var sourceSexButton = ResolveSurface(
+            surfaces,
+            contract.SurfaceRoles["sexButton"],
+            "creator-sex-alignment-source");
+        var creatorBodyAlignment = ResolveSurface(
+            surfaces,
+            contract.SurfaceRoles["raceButton"],
+            "creator-body-alignment-source");
+        var creatorFaceAlignment = ResolveSurface(
+            surfaces,
+            contract.SurfaceRoles["faceButton"],
+            "creator-face-alignment-source");
         var shell = ResolveSurface(
             surfaces,
             contract.SurfaceRoles["deviceShell2"],
             "creator-extension-shell-source");
         if (creatorButton.Mesh != screen.Mesh || creatorGlow.Mesh != screen.Mesh ||
-            shell.Mesh != screen.Mesh)
+            sourceSexButton.Mesh != screen.Mesh ||
+            creatorBodyAlignment.Mesh != screen.Mesh ||
+            creatorFaceAlignment.Mesh != screen.Mesh || shell.Mesh != screen.Mesh)
             throw new InvalidOperationException(
                 "Owned Reflectron creator-button source surfaces are not one modeled device.");
         _deviceMesh = screen.Mesh;
         _creatorButtonSurface = creatorButton.Surface;
         _creatorGlowSurface = creatorGlow.Surface;
+        _sourceSexButtonSurface = sourceSexButton.Surface;
+        _creatorBodyAlignmentSurface = creatorBodyAlignment.Surface;
+        _creatorFaceAlignmentSurface = creatorFaceAlignment.Surface;
         _shellSurface = shell.Surface;
         (FacePresentationRect, MenuPresentationRect) = DerivePresentationRects(
             screen.Mesh,
@@ -337,17 +363,25 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
 
     internal void ConfigureCharacterControls(
         OwnedBitmapFont sourceFont,
+        Action showSex,
+        Action showRace,
+        Action showFace,
+        Action showHair,
+        Action showPortrait,
         Action toggleBody,
         Action toggleProjection)
     {
         if (_deviceMesh is null || _deviceCamera is null || _deviceFrame is not { } frame ||
-            _creatorButtonSurface < 0 || _creatorGlowSurface < 0 || _shellSurface < 0 ||
-            _creatorModeHitTargets.Count != 0 ||
-            toggleBody is null || toggleProjection is null)
+            _creatorButtonSurface < 0 || _creatorGlowSurface < 0 ||
+            _sourceSexButtonSurface < 0 ||
+            _creatorBodyAlignmentSurface < 0 || _creatorFaceAlignmentSurface < 0 ||
+            _shellSurface < 0 ||
+            _creatorModeHitTargets.Count != 0 || _sourceSectionHitTargets.Count != 0 ||
+            showSex is null || showRace is null || showFace is null || showHair is null ||
+            showPortrait is null || toggleBody is null || toggleProjection is null)
             throw new InvalidOperationException(
                 "Reflectron 2.0 character controls are not in a buildable state.");
         var sourceMesh = _deviceMesh;
-        var sourceButtonCenter = SurfaceCenter(sourceMesh, _creatorButtonSurface);
         var sourceButtonMaterial = sourceMesh.GetSurfaceOverrideMaterial(_creatorButtonSurface)
             ?? throw new InvalidOperationException(
                 "Reflectron 2.0 has no owned button material.");
@@ -355,8 +389,10 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         var shellMaterial = sourceMesh.GetSurfaceOverrideMaterial(_shellSurface)
             ?? throw new InvalidOperationException(
                 "Reflectron 2.0 has no owned embossed-shell material.");
-        var buttonEmbossedMetal = SourceDerivedEmbossedMetal(sourceButtonMaterial);
         var shellEmbossedMetal = SourceDerivedEmbossedMetal(shellMaterial);
+        var raisedButtonMaterial = SourceAlphaMaskedRaisedButton(
+            sourceButtonMaterial,
+            shellMaterial);
         var transparent = new StandardMaterial3D
         {
             ResourceName = "OpenNV_ReflectronTwoPointZeroInactiveOwnedGlow",
@@ -375,17 +411,41 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             "OpenNV_ReflectronTwoPointZeroProjectionGreenActive",
             new Color(0.035f, 0.96f, 0.14f, 1.0f),
             2.4f);
-        var bodyCenter = sourceButtonCenter - frame.Right * (frame.Radius * 0.105f) -
-            frame.Up * (frame.Radius * 0.052f) +
+        var creatorInactive = SourceMaskedGlow(
+            sourceGlowMaterial,
+            "OpenNV_ReflectronTwoPointZeroCreatorRedInactive",
+            new Color(0.58f, 0.035f, 0.025f, 0.92f),
+            0.9f);
+        var creatorActive = SourceMaskedGlow(
+            sourceGlowMaterial,
+            "OpenNV_ReflectronTwoPointZeroCreatorRedActive",
+            new Color(1.0f, 0.06f, 0.035f, 1.0f),
+            2.4f);
+        const float creatorButtonScale = 0.50f;
+        var sourceRowCenter = SurfaceCenter(sourceMesh, _creatorButtonSurface);
+        var bodyHorizontalOffset =
+            (SurfaceCenter(sourceMesh, _creatorBodyAlignmentSurface) - sourceRowCenter)
+            .Dot(frame.Right);
+        var faceHorizontalOffset =
+            (SurfaceCenter(sourceMesh, _creatorFaceAlignmentSurface) - sourceRowCenter)
+            .Dot(frame.Right);
+        var bodyCenter = sourceRowCenter + frame.Right * bodyHorizontalOffset -
+            frame.Up * (frame.Radius * 0.061f) +
             frame.Normal * (frame.Radius * 0.040f);
-        var projectionCenter = frame.Center + frame.Right * (frame.Radius * 0.22f) -
-            frame.Up * (frame.Radius * 0.22f);
+        var faceCenter = sourceRowCenter + frame.Right * faceHorizontalOffset -
+            frame.Up * (frame.Radius * 0.061f) +
+            frame.Normal * (frame.Radius * 0.040f);
+        var lowerRowUp = ((bodyCenter + faceCenter) * 0.5f - frame.Center).Dot(frame.Up);
+        var projectionCenter = frame.Center + frame.Right * (frame.Radius * 0.22f) +
+            frame.Up * (lowerRowUp + frame.Radius * 0.012f) +
+            frame.Normal * (frame.Radius * 0.040f);
 
         MeshInstance3D CloneSourceSurface(
             int surface,
             string name,
             Vector3 center,
-            Material material)
+            Material material,
+            float scale)
         {
             var clone = CloneSingleSurface(
                 sourceMesh,
@@ -394,6 +454,8 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
                 name,
                 center - SurfaceCenter(sourceMesh, surface));
             clone.SetSurfaceOverrideMaterial(surface, material);
+            clone.Scale *= scale;
+            clone.Position += center - SurfaceCenter(clone, surface);
             DeviceViewport.AddChild(clone);
             return clone;
         }
@@ -402,30 +464,54 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             _creatorButtonSurface,
             "ReflectronTwoPointZeroOwnedBodyButton",
             bodyCenter,
-            sourceButtonMaterial);
+            raisedButtonMaterial,
+            creatorButtonScale);
         var bodyGlow = CloneSourceSurface(
             _creatorGlowSurface,
             "ReflectronTwoPointZeroOwnedBodyGlow",
             bodyCenter,
-            transparent);
+            transparent,
+            creatorButtonScale);
         _glows.Add(
             "creator-BODY",
             new RenderedDeviceGlow(
                 bodyGlow,
                 _creatorGlowSurface,
-                sourceGlowMaterial,
-                transparent));
+                creatorActive,
+                creatorInactive));
+
+        _ = CloneSourceSurface(
+            _creatorButtonSurface,
+            "ReflectronTwoPointZeroOwnedFaceButton",
+            faceCenter,
+            raisedButtonMaterial,
+            creatorButtonScale);
+        var faceGlow = CloneSourceSurface(
+            _creatorGlowSurface,
+            "ReflectronTwoPointZeroOwnedFaceGlow",
+            faceCenter,
+            transparent,
+            creatorButtonScale);
+        _glows.Add(
+            "creator-FACE",
+            new RenderedDeviceGlow(
+                faceGlow,
+                _creatorGlowSurface,
+                creatorActive,
+                creatorInactive));
 
         _ = CloneSourceSurface(
             _creatorButtonSurface,
             "ReflectronTwoPointZeroOwnedProjectionButton",
             projectionCenter,
-            sourceButtonMaterial);
+            raisedButtonMaterial,
+            creatorButtonScale);
         var projectionGlow = CloneSourceSurface(
             _creatorGlowSurface,
             "ReflectronTwoPointZeroOwnedProjectionGlow",
             projectionCenter,
-            projectionInactive);
+            projectionInactive,
+            creatorButtonScale);
         _glows.Add(
             "creator-PROJECTION",
             new RenderedDeviceGlow(
@@ -436,25 +522,48 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
 
         AddEmbossedDeviceText(
             "BODY",
-            bodyCenter + frame.Normal * (frame.Radius * 0.0015f),
+            bodyCenter - frame.Right * (frame.Radius * 0.030f) +
+                frame.Normal * (frame.Radius * 0.0015f),
             frame,
             sourceFont,
-            buttonEmbossedMetal,
-            pixelSize: frame.Radius * 0.00072f,
+            shellEmbossedMetal,
+            pixelSize: frame.Radius * 0.00050f,
+            depth: frame.Radius * 0.0018f);
+        AddEmbossedDeviceText(
+            "FACE",
+            faceCenter + frame.Right * (frame.Radius * 0.030f) +
+                frame.Normal * (frame.Radius * 0.0015f),
+            frame,
+            sourceFont,
+            shellEmbossedMetal,
+            pixelSize: frame.Radius * 0.00050f,
             depth: frame.Radius * 0.0018f);
         AddReflectronTwoPointZeroStamp(frame, sourceFont, shellEmbossedMetal);
         void BuildHitTargets()
         {
-            AddCreatorModeHitTarget("BODY", bodyCenter, toggleBody, frame);
+            AddSourceSectionHitTarget(
+                "sex", _sourceSexButtonSurface, showSex, frame);
+            AddSourceSectionHitTarget(
+                "race", _creatorBodyAlignmentSurface, showRace, frame);
+            AddSourceSectionHitTarget(
+                "face", _creatorFaceAlignmentSurface, showFace, frame);
+            AddSourceSectionHitTarget(
+                "hair", _creatorButtonSurface, showHair, frame);
+            AddCreatorModeHitTarget(
+                "FACE", faceCenter, showPortrait, frame, creatorButtonScale);
+            AddCreatorModeHitTarget(
+                "BODY", bodyCenter, toggleBody, frame, creatorButtonScale);
             AddCreatorModeHitTarget(
                 "PROJECTION",
                 projectionCenter,
                 toggleProjection,
-                frame);
+                frame,
+                creatorButtonScale);
             SetCreatorModeState(
-                "3D",
+                "BODY",
                 bodyEnabled: false,
-                projectionEnabled: false);
+                projectionEnabled: false,
+                faceEnabled: false);
         }
         if (_deviceCamera.IsInsideTree())
             BuildHitTargets();
@@ -462,16 +571,19 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             _host.Ready += BuildHitTargets;
         GD.Print(
             "OPENNV_REFLECTRON_TWO_POINT_ZERO_READY " +
-            "stamp=2.0 embossedSourceMaterial=true bodyButton=owned-clone-below-source-row " +
-            "bodyButtonEmbossed=true projectionButton=owned-clone-green-under-right-controls " +
-            "extraCreatorButtons=1 " +
+            "stamp=2.0 embossedSourceMaterial=true leftCreatorButtons=centered-lower-pair " +
+            "bodyButtonEmbossed=true faceButtonEmbossed=true " +
+            "projectionButton=owned-clone-green-straight-down-raised-from-left-row " +
+            "creatorButtons=3 sourceSectionButtons=4 redCenters=visible " +
+            $"raisedButtonMaterial=owned-alpha-masked-source buttonScale={creatorButtonScale:R} " +
             "authority=locally-exported-owned-device-plus-source-derived-code-layer");
     }
 
     internal void SetCreatorModeState(
         string previewMode,
         bool bodyEnabled,
-        bool projectionEnabled = false)
+        bool projectionEnabled = false,
+        bool faceEnabled = false)
     {
         if (_creatorModeHitTargets.Count == 0)
             return;
@@ -479,7 +591,8 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         {
             var selected = label switch
             {
-                "BODY" => bodyEnabled,
+                "FACE" => previewMode.Equals("FACE", StringComparison.OrdinalIgnoreCase),
+                "BODY" => previewMode.Equals("BODY", StringComparison.OrdinalIgnoreCase),
                 "PROJECTION" => projectionEnabled,
                 _ => label.Equals(previewMode, StringComparison.OrdinalIgnoreCase),
             };
@@ -491,14 +604,30 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         }
     }
 
+    internal void ActivateCreatorModeControl(string label)
+    {
+        if (!_creatorModeHitTargets.TryGetValue(label, out var button))
+            throw new InvalidOperationException(
+                $"Reflectron 2.0 creator control is unavailable: {label}");
+        button.EmitSignal(BaseButton.SignalName.Pressed);
+    }
+
+    internal void ActivateSourceSectionControl(string label)
+    {
+        if (!_sourceSectionHitTargets.TryGetValue(label, out var button))
+            throw new InvalidOperationException(
+                $"Reflectron source section control is unavailable: {label}");
+        button.EmitSignal(BaseButton.SignalName.Pressed);
+    }
+
     private void AddReflectronTwoPointZeroStamp(
         RenderedDeviceFrame frame,
         OwnedBitmapFont sourceFont,
         Material sourceMetal)
     {
         var plaqueCenter = frame.Center + frame.Right * (frame.Radius * 0.255f) +
-            frame.Up * (frame.Radius * 0.196f) +
-            frame.Normal * (frame.Radius * 0.004f);
+            frame.Up * (frame.Radius * 0.199f) +
+            frame.Normal * (frame.Radius * 0.0025f);
         var recess = EmbossRecessMetal(sourceMetal);
         var shadow = AddEmbossedDeviceText(
             "2.0",
@@ -678,6 +807,54 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         return result;
     }
 
+    private static Material SourceAlphaMaskedRaisedButton(
+        Material source,
+        Material shell)
+    {
+        Texture2D? sourceTexture = source is StandardMaterial3D standard
+            ? standard.AlbedoTexture
+            : source is ShaderMaterial sourceShaderMaterial &&
+                sourceShaderMaterial.GetShaderParameter("base_map").AsGodotObject()
+                    is Texture2D baseMap
+                ? baseMap
+                : null;
+        Texture2D? shellTexture = shell is StandardMaterial3D shellStandard
+            ? shellStandard.AlbedoTexture
+            : shell is ShaderMaterial shellShaderMaterial &&
+                shellShaderMaterial.GetShaderParameter("base_map").AsGodotObject()
+                    is Texture2D shellBaseMap
+                ? shellBaseMap
+                : null;
+        if (sourceTexture is null || shellTexture is null)
+            throw new InvalidOperationException(
+                "Reflectron button and shell do not expose their owned blend textures.");
+        var shader = new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode unshaded, cull_disabled, blend_mix, depth_prepass_alpha;
+                uniform sampler2D source_button : filter_linear_mipmap, repeat_disable;
+                uniform sampler2D shell_metal : source_color, filter_linear_mipmap, repeat_disable;
+                void fragment() {
+                    vec4 sampled = texture(source_button, UV);
+                    vec4 metal = texture(shell_metal, UV);
+                    float brightness = max(sampled.r, max(sampled.g, sampled.b));
+                    float dark_edge_mask = smoothstep(0.10, 0.24, brightness);
+                    ALBEDO = metal.rgb;
+                    ALPHA = sampled.a * dark_edge_mask;
+                }
+                """,
+        };
+        var result = new ShaderMaterial
+        {
+            ResourceName = "OpenNV_ReflectronRaisedButtonAlphaMask",
+            Shader = shader,
+        };
+        result.SetShaderParameter("source_button", sourceTexture);
+        result.SetShaderParameter("shell_metal", shellTexture);
+        return result;
+    }
+
     private MeshInstance3D CloneSingleSurface(
         MeshInstance3D source,
         int visibleSurface,
@@ -704,41 +881,91 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         string label,
         Vector3 worldCenter,
         Action action,
+        RenderedDeviceFrame frame,
+        float visualScale)
+    {
+        var button = CreateDeviceHitTarget(
+            $"ReflectronCreatorModeHitTarget_{label}",
+            label,
+            worldCenter,
+            action,
+            frame,
+            visualScale);
+        _creatorModeHitTargets.Add(label, button);
+    }
+
+    private void AddSourceSectionHitTarget(
+        string section,
+        int surface,
+        Action action,
         RenderedDeviceFrame frame)
     {
+        var button = CreateDeviceHitTarget(
+            $"ReflectronSourceSectionHitTarget_{section}",
+            section.ToUpperInvariant(),
+            SurfaceCenter(
+                _deviceMesh ?? throw new InvalidOperationException(
+                    "Reflectron source section has no device mesh."),
+                surface),
+            () =>
+            {
+                action();
+                SetActiveList(section);
+            },
+            frame,
+            0.72f);
+        _sourceSectionHitTargets.Add(section, button);
+    }
+
+    private Button CreateDeviceHitTarget(
+        string name,
+        string tooltip,
+        Vector3 worldCenter,
+        Action action,
+        RenderedDeviceFrame frame,
+        float visualScale)
+    {
         var camera = _deviceCamera ?? throw new InvalidOperationException(
-            "Reflectron creator-mode hit testing has no device camera.");
+            "Reflectron device hit testing has no device camera.");
         var center = camera.UnprojectPosition(worldCenter) +
             _source.Framing.Alignment.DeviceTranslationCanvasUnits;
         var edge = camera.UnprojectPosition(
-            worldCenter + frame.Right * (frame.Radius * 0.035f)) +
+            worldCenter + frame.Right * (frame.Radius * 0.035f * visualScale)) +
             _source.Framing.Alignment.DeviceTranslationCanvasUnits;
         var radius = MathF.Max(18.0f, center.DistanceTo(edge));
         if (!center.IsFinite() || !float.IsFinite(radius) ||
-            center.X < -radius || center.Y < -radius ||
-            center.X > _canvasSize.X + radius || center.Y > _canvasSize.Y + radius)
+            center.X < radius || center.Y < radius ||
+            center.X > _canvasSize.X - radius || center.Y > _canvasSize.Y - radius)
             throw new InvalidOperationException(
-                "Reflectron creator-mode button projects outside its canvas: " +
-                $"{label} center={center} radius={radius:R} world={worldCenter} " +
+                "Reflectron device button is not fully inside its canvas: " +
+                $"{tooltip} center={center} radius={radius:R} world={worldCenter} " +
                 $"frameCenter={frame.Center} frameRadius={frame.Radius:R} " +
                 $"canvas={_canvasSize}.");
         var button = new Button
         {
-            Name = $"ReflectronCreatorModeHitTarget_{label}",
+            Name = name,
             Position = center - Vector2.One * radius,
             Size = Vector2.One * radius * 2.0f,
             Flat = true,
             ToggleMode = true,
             FocusMode = Control.FocusModeEnum.All,
             MouseDefaultCursorShape = Control.CursorShape.PointingHand,
-            TooltipText = label,
+            TooltipText = tooltip,
         };
         var empty = new StyleBoxEmpty();
-        foreach (var state in new[] { "normal", "hover", "pressed", "focus" })
+        foreach (var state in new[] { "normal", "hover", "pressed", "focus", "disabled" })
             button.AddThemeStyleboxOverride(state, empty);
+        foreach (var state in new[]
+                 {
+                     "font_color", "font_hover_color", "font_pressed_color",
+                     "font_focus_color", "font_disabled_color", "icon_normal_color",
+                     "icon_hover_color", "icon_pressed_color", "icon_focus_color",
+                     "icon_disabled_color",
+                 })
+            button.AddThemeColorOverride(state, Colors.Transparent);
         button.Pressed += action;
         _host.AddChild(button);
-        _creatorModeHitTargets.Add(label, button);
+        return button;
     }
 
     private static Vector3 SurfaceCenter(MeshInstance3D mesh, int surface)

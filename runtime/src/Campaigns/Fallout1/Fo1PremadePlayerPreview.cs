@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -6,7 +7,7 @@ internal static class Fo1PremadePlayerPreviewContracts
 {
     internal const int ViewportWidth = 424;
     internal const int ViewportHeight = 374;
-    internal const float CameraMargin = 1.12f;
+    internal const float PortraitHeightMeters = 0.58f;
     internal const float CameraDepthMeters = 4.0f;
     internal const float CameraNearMeters = 0.05f;
     internal const float CameraFarMeters = 20.0f;
@@ -27,11 +28,14 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
     private const string UnavailableMode = "owned-humanoid-donor-unavailable-fail-closed";
 
     private readonly IReadOnlyDictionary<string, Fo1HexSceneLoader.PlayerPresentationSource> _sources;
+    private readonly SubViewport _viewport;
     private readonly Node3D _donorRoot;
     private readonly Camera3D _camera;
     private readonly Dictionary<string, PreviewEvidence> _evidence =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, ActorModelSlice.LoadedActor> _donors =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Skeleton3D> _skeletons =
         new(StringComparer.OrdinalIgnoreCase);
     private Fo1HexSceneLoader.PlayerPresentationSource? _activeSource;
     private Fo1PremadeCharacter? _pendingCharacter;
@@ -42,8 +46,7 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
         IReadOnlyDictionary<string, Fo1HexSceneLoader.PlayerPresentationSource> sources)
     {
         _sources = sources;
-        if (!_sources.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
-                .SetEquals(["Male", "Female"]))
+        if (!_sources.ContainsKey("Male") || !_sources.ContainsKey("Female"))
             throw new InvalidOperationException(
                 "Fallout 1 premade player preview requires male and female owned donors.");
         Name = "FO1_PREMADE_TRUE_3D_PLAYER_PREVIEW";
@@ -51,7 +54,7 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
         MouseFilter = MouseFilterEnum.Ignore;
         Visible = false;
 
-        var viewport = new SubViewport
+        _viewport = new SubViewport
         {
             Name = "FO1_PREMADE_TRUE_3D_PLAYER_VIEWPORT",
             Size = new Vector2I(
@@ -62,8 +65,10 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
             HandleInputLocally = false,
         };
-        AddChild(viewport);
-        viewport.AddChild(new WorldEnvironment
+        AddChild(_viewport);
+        Material = ClassicGreenWireframeShader.Create(
+            "OpenNV_Fallout1PremadeGreenPortraitProjection");
+        _viewport.AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
             {
@@ -74,7 +79,7 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
                 AmbientLightEnergy = Fo1PremadePlayerPreviewContracts.AmbientEnergy,
             },
         });
-        viewport.AddChild(new DirectionalLight3D
+        _viewport.AddChild(new DirectionalLight3D
         {
             RotationDegrees = new Vector3(
                 Fo1PremadePlayerPreviewContracts.KeyPitchDegrees,
@@ -84,7 +89,7 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
             ShadowEnabled = false,
         });
         _donorRoot = new Node3D { Name = "VerifiedOwnedFNVDonor" };
-        viewport.AddChild(_donorRoot);
+        _viewport.AddChild(_donorRoot);
         _camera = new Camera3D
         {
             Name = "FO1_PREMADE_TRUE_3D_PLAYER_CAMERA",
@@ -93,17 +98,19 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
             Far = Fo1PremadePlayerPreviewContracts.CameraFarMeters,
             Current = true,
         };
-        viewport.AddChild(_camera);
+        _viewport.AddChild(_camera);
     }
 
     internal string CharacterId => GetMeta("fo1_character_id").AsString();
     internal string PresentationMode => GetMeta("presentation_mode").AsString();
     internal string PresentationLabel => PresentationMode == OwnedDonorMode
-        ? "LIVE 3D: OWNED FNV VAULT-SUIT DONOR"
+        ? _activeSource?.BodyProfile is not null
+            ? "LIVE 3D: SELECTED OWNED FNV CHARACTER ANALOG"
+            : "LIVE 3D: OWNED FNV VAULT-SUIT DONOR"
         : "LIVE 3D UNAVAILABLE: OWNED DONOR DOES NOT MATCH SELECTION";
     internal bool UsesOwnedDonor => PresentationMode == OwnedDonorMode;
     internal int DonorSurfaces => _activeSource is { } source &&
-        _donors.TryGetValue(source.SourceActorFemale ? "Female" : "Male", out var donor)
+        _donors.TryGetValue(source.DonorKey, out var donor)
             ? donor.AuthoredSurfaces : 0;
     internal string DonorModelSha256 => _activeSource?.ModelSha256 ?? "";
     internal string DonorSourceActorFormId => _activeSource?.SourceActorBaseFormId ?? "";
@@ -114,10 +121,17 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
         schema = "opennv-fo1-premade-player-preview/v1",
         source = new
         {
-            donors = _sources.OrderBy(row => row.Key).Select(row => new {
-                sex = row.Key, row.Value.ModelSha256, row.Value.SidecarSha256,
-                row.Value.SourceActorBaseFormId, row.Value.Surfaces,
-                row.Value.Textures, row.Value.Animations }).ToArray(),
+            donors = _sources.OrderBy(row => row.Key).Select(row => new
+            {
+                donorKey = row.Key,
+                sex = row.Value.SourceActorFemale ? "Female" : "Male",
+                row.Value.ModelSha256,
+                row.Value.SidecarSha256,
+                row.Value.SourceActorBaseFormId,
+                row.Value.Surfaces,
+                row.Value.Textures,
+                row.Value.Animations
+            }).ToArray(),
         },
         characters = _evidence.Values
             .OrderBy(row => row.Index)
@@ -138,7 +152,8 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
     {
         try
         {
-            foreach (var (sex, source) in _sources)
+            var configuration = RuntimeConfiguration.Load();
+            foreach (var (donorKey, source) in _sources)
             {
                 var donor = ActorModelSlice.Load(source.Model, source.Sidecar, _donorRoot);
                 if (donor.FormId != source.SourceActorBaseFormId ||
@@ -147,11 +162,41 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
                     donor.Animations != source.Animations)
                     throw new InvalidOperationException(
                         "Fallout 1 premade preview donor coverage differs from the scene contract.");
-                donor.Root.Position += Vector3.Up * -donor.Bounds.Position.Y;
+                var skeleton = donor.Root.FindChildren(
+                        "*", "Skeleton3D", true, false)
+                    .OfType<Skeleton3D>()
+                    .Single();
+                if (skeleton.FindBone("Bip01 Head") < 0)
+                    throw new InvalidOperationException(
+                        $"Fallout 1 premade preview donor has no head bone: {donorKey}.");
+                if (source.BodyProfile is { } bodyProfile)
+                {
+                    CharacterBodyRig.Apply(
+                        donor.Root,
+                        skeleton,
+                        bodyProfile,
+                        this,
+                        $"fallout1-premade-preview-{donorKey}");
+                }
+                var litMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
+                    donor.Root,
+                    new Color(0.64f, 0.56f, 0.46f, 1.0f),
+                    new Color(0.008f, 0.012f, 0.008f, 1.0f),
+                    0.0f,
+                    100000.0f,
+                    1.0f,
+                    configuration.World.GameUnitsToMeters);
+                if (litMaterials <= 0)
+                    throw new InvalidOperationException(
+                        $"Fallout 1 premade preview donor has no source-lit materials: {donorKey}.");
+                var posedBounds = ActorModelSlice.PosedWorldBounds(donor);
+                donor.Root.Position += Vector3.Up * -posedBounds.Position.Y;
                 donor.Root.Visible = false;
-                _donors.Add(sex, donor with { Bounds = new Aabb(
-                    donor.Bounds.Position + Vector3.Up * -donor.Bounds.Position.Y,
-                    donor.Bounds.Size) });
+                _skeletons.Add(donorKey, skeleton);
+                _donors.Add(donorKey, donor with
+                {
+                    Bounds = ActorModelSlice.PosedWorldBounds(donor),
+                });
             }
         }
         catch (Exception exception)
@@ -173,11 +218,14 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
 
     private void ApplyCharacter(Fo1PremadeCharacter character)
     {
-        var useOwnedDonor = _sources.TryGetValue(character.Profile.Sex, out var source) &&
-            _donors.TryGetValue(character.Profile.Sex, out var donor);
+        var donorKey = _sources.ContainsKey(character.Id)
+            ? character.Id
+            : character.Profile.Sex;
+        var useOwnedDonor = _sources.TryGetValue(donorKey, out var source) &&
+            _donors.TryGetValue(donorKey, out var donor);
         _activeSource = useOwnedDonor ? source : null;
-        foreach (var (sex, row) in _donors)
-            row.Root.Visible = useOwnedDonor && sex.Equals(character.Profile.Sex,
+        foreach (var (key, row) in _donors)
+            row.Root.Visible = useOwnedDonor && key.Equals(donorKey,
                 StringComparison.OrdinalIgnoreCase);
         SetMeta("fo1_character_id", character.Id);
         SetMeta("fo1_character_sex", character.Profile.Sex);
@@ -186,6 +234,10 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
         SetMeta("owned_fnv_donor_model_sha256", _activeSource?.ModelSha256 ?? "none");
         SetMeta("owned_fnv_donor_sidecar_sha256", _activeSource?.SidecarSha256 ?? "none");
         SetMeta("owned_fnv_donor_source_actor_form_id", _activeSource?.SourceActorBaseFormId ?? "none");
+        SetMeta("owned_fnv_donor_key", useOwnedDonor ? donorKey : "none");
+        SetMeta("owned_fnv_donor_outfit_binding", useOwnedDonor && source.BodyProfile is not null
+            ? "character-specific"
+            : "sex-default");
         SetMeta(
             "boundary",
             useOwnedDonor
@@ -197,22 +249,30 @@ internal sealed partial class Fo1PremadePlayerPreview : SubViewportContainer
             character.Profile.Sex,
             useOwnedDonor ? OwnedDonorMode : UnavailableMode,
             character.Portrait.SourceFrmSha256);
-        if (useOwnedDonor && _donors.TryGetValue(character.Profile.Sex, out var framedDonor))
-            Frame(framedDonor.Bounds);
+        if (useOwnedDonor && _donors.TryGetValue(donorKey, out var framedDonor))
+            FrameHead(donorKey, framedDonor);
     }
 
-    private void Frame(Aabb bounds)
+    private void FrameHead(
+        string donorKey,
+        ActorModelSlice.LoadedActor donor)
     {
-        var center = bounds.GetCenter();
-        var aspect = (float)Fo1PremadePlayerPreviewContracts.ViewportWidth /
-            Fo1PremadePlayerPreviewContracts.ViewportHeight;
-        _camera.Size = MathF.Max(bounds.Size.Y, bounds.Size.X / aspect) *
-            Fo1PremadePlayerPreviewContracts.CameraMargin;
+        if (!_skeletons.TryGetValue(donorKey, out var skeleton))
+            throw new InvalidOperationException(
+                $"Fallout 1 premade preview has no framed skeleton: {donorKey}.");
+        var head = skeleton.FindBone("Bip01 Head");
+        var headWorld = skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(head);
+        var target = headWorld.Origin + Vector3.Down * 0.03f;
+        if (!target.IsFinite() || !donor.Bounds.Position.IsFinite())
+            throw new InvalidOperationException(
+                $"Fallout 1 premade preview head framing is invalid: {donorKey}.");
+        _camera.Size = Fo1PremadePlayerPreviewContracts.PortraitHeightMeters;
         _camera.Position = new Vector3(
-            center.X,
-            center.Y,
-            center.Z - Fo1PremadePlayerPreviewContracts.CameraDepthMeters);
-        _camera.LookAt(center, Vector3.Up);
+            target.X,
+            target.Y,
+            target.Z - Fo1PremadePlayerPreviewContracts.CameraDepthMeters);
+        _camera.LookAt(target, Vector3.Up);
+        SetMeta("preview_framing", "front-centered-green-head-portrait");
     }
 
     private readonly record struct PreviewEvidence(

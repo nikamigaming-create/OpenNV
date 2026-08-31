@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   FO3_STAGE10_ROUTE_CONTRACT,
@@ -12,6 +13,10 @@ import {
 } from "../src/fo3-stage10-routing-contract.mjs";
 
 const masterSha256 = "d9fb0a33af495ddb43992b96ea74f2741b123fefdb1fcdcea28096f7649b0d06";
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..");
 
 function standaloneInput() {
   return {
@@ -184,7 +189,8 @@ test("the file probe joins the profile and presentation before rejecting synthet
       schema: "opennv-fo3-vault101-birth-presentation/v9",
       source: { birthSlice: birthSlicePath, birthSliceSha256 }
     }));
-    const retailFixture = path.resolve(
+    const retailFixture = path.join(
+      repositoryRoot,
       "runtime/tests/fixtures/fo3-cg00-stage10-camera-contract.synthetic.json");
     const result = probeFo3Stage10Launch("fallout3", {
       fallout3ProfilePath: profilePath,

@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -9,6 +10,7 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
     private const float KeyPitchDegrees = -26.0f;
     private const float KeyYawDegrees = -30.0f;
     private const float KeyEnergy = 1.15f;
+    private const float PortraitCameraSize = 0.58f;
     private const float CameraSize = 2.25f;
     private const float CameraZ = 4.0f;
     private const float FramingMargin = 1.16f;
@@ -20,6 +22,7 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
     private const float ZoomStep = 0.88f;
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Fo2HumanoidDonorContract _humanoidDonor;
+    private readonly bool _useCustomDonor;
     private readonly SubViewport _viewport;
     private readonly Node3D _previewRoot;
     private readonly Camera3D _camera;
@@ -30,15 +33,18 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
     private float _zoom = 1.0f;
     private bool _orbitDragging;
     private bool _classicPortraitProjection;
+    private bool _portraitFraming;
 
     internal Fo2PremadeHumanoidPreview(
         Fo2PremadeCharacter character,
         Fo2CharacterStartCatalog catalog,
-        Fo2HumanoidDonorContract humanoidDonor)
+        Fo2HumanoidDonorContract humanoidDonor,
+        bool useCustomDonor = false)
     {
         _character = character;
         _catalog = catalog;
         _humanoidDonor = humanoidDonor;
+        _useCustomDonor = useCustomDonor;
         Name = "FO2_PREMADE_TRUE_3D_HUMANOID_PREVIEW";
         Stretch = true;
         ClipContents = true;
@@ -101,25 +107,38 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
     internal float OrbitYawRadians => _previewRoot.Rotation.Y;
     internal float CompositionRightOffset => _compositionRightOffset;
     internal bool ClassicPortraitProjection => _classicPortraitProjection;
+    internal bool PortraitFraming => _portraitFraming;
+    internal string ProjectionStyle => !_classicPortraitProjection
+        ? "source-material-live-3d"
+        : _portraitFraming
+            ? "green-face-wireframe-closeup"
+            : "green-body-wireframe";
 
     internal void SetClassicPortraitProjection(bool enabled)
     {
-        _classicPortraitProjection = enabled;
-        Material = enabled ? ClassicPortraitMaterial() : null;
-        _viewport.RenderTargetUpdateMode = enabled
-            ? SubViewport.UpdateMode.Once
-            : SubViewport.UpdateMode.Always;
-        if (enabled)
-        {
+        SetPreviewState(_portraitFraming, enabled);
+    }
+
+    internal void SetPreviewState(bool portraitFraming, bool projectionEnabled)
+    {
+        var framingChanged = _portraitFraming != portraitFraming;
+        _portraitFraming = portraitFraming;
+        _classicPortraitProjection = projectionEnabled;
+        Material = projectionEnabled ? GreenWireframeMaterial() : null;
+        _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        if (framingChanged)
             ResetView();
-            if (_donor?.UsesOwnedDonor == true)
-                FrameDonor(_donor);
-        }
+        if (_donor?.UsesOwnedDonor == true)
+            FrameDonor(_donor);
         SetMeta(
             "classic_portrait_projection",
-            enabled
-                ? "frozen-stylized-render-of-current-data-bound-3d-character"
+            projectionEnabled
+                ? portraitFraming
+                    ? "live-green-wireframe-close-face-of-current-data-bound-3d-character"
+                    : "live-green-wireframe-body-of-current-data-bound-3d-character"
                 : "live-source-material-3d-character");
+        SetMeta("preview_framing", portraitFraming ? "face" : "body");
+        SetMeta("projection_style", ProjectionStyle);
     }
 
     internal void SetProportions(
@@ -170,8 +189,21 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
             _previewRoot.RemoveChild(_donor);
             _donor.QueueFree();
         }
+        var identity = _useCustomDonor
+            ? new Fo2HumanoidIdentity(
+                "fallout2",
+                "custom",
+                "Custom Chosen One",
+                "Custom character",
+                character.Profile.Sex,
+                character.GcdSha256,
+                character.Panel.SourceSha256,
+                "custom-preview",
+                character.Panel.SourceSha256,
+                null)
+            : Fo2HumanoidIdentity.FromPremade(character);
         _donor = new Fo2HumanoidVisual(
-            Fo2HumanoidIdentity.FromPremade(character),
+            identity,
             _humanoidDonor,
             Fo2CharacterBodyProfile.ForSex(character.Profile.Sex))
         {
@@ -182,12 +214,19 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
             _donor.SetAppearance(_appearance);
         if (IsInsideTree())
             PrepareDonor(_donor);
-        SetMeta("source_character_id", character.Id);
+        SetMeta("source_character_id", _useCustomDonor ? "custom" : character.Id);
         SetMeta("source_panel_logical_path", character.Panel.LogicalPath);
         SetMeta("source_panel_sha256", character.Panel.SourceSha256);
         SetMeta("local_panel_png_sha256", character.Panel.PngSha256);
         SetMeta("donor_manifest_sha256", _humanoidDonor.ManifestSha256);
-        SetMeta("donor_outfit_form_id", _humanoidDonor.ForSex(character.Profile.Sex).OutfitFormId);
+        SetMeta(
+            "donor_outfit_form_id",
+            (_useCustomDonor
+                ? _humanoidDonor.ForSex(character.Profile.Sex)
+                : _humanoidDonor.ForClassicCharacter(
+                    "fallout2",
+                    character.Id,
+                    character.Profile.Sex)).OutfitFormId);
         SetMeta("presentation_boundary",
             "owned-fnv-body-is-presentation-only-not-fallout2-character-geometry");
     }
@@ -264,7 +303,11 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
         if (!donor.UsesOwnedDonor)
             throw new InvalidOperationException(
                 "Fallout 2 live 3D preview donor did not load its owned assembly.");
-        donor.SetDirection(_character.Profile.Sex == "Female" ? 2 : 3);
+        // Character-creation portraits are always straight-on. Gameplay keeps
+        // its six authored hex directions, but the shared Reflectron never
+        // inherits one of those three-quarter presentation rotations.
+        donor.Rotation = new Vector3(0.0f, MathF.PI * 0.5f, 0.0f);
+        donor.SetMeta("reflectron_camera_alignment", "front-centered");
         var configuration = RuntimeConfiguration.Load();
         var litMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
             donor,
@@ -280,55 +323,34 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
         FrameDonor(donor);
     }
 
-    private static ShaderMaterial ClassicPortraitMaterial() => new()
-    {
-        ResourceName = "OpenNV_FalloutClassicCustomPortraitProjection",
-        Shader = new Shader
-        {
-            Code = """
-                shader_type canvas_item;
-                render_mode unshaded;
-
-                void fragment() {
-                    vec4 source = texture(TEXTURE, UV);
-                    vec3 left = texture(TEXTURE, UV - vec2(TEXTURE_PIXEL_SIZE.x, 0.0)).rgb;
-                    vec3 right = texture(TEXTURE, UV + vec2(TEXTURE_PIXEL_SIZE.x, 0.0)).rgb;
-                    vec3 up = texture(TEXTURE, UV - vec2(0.0, TEXTURE_PIXEL_SIZE.y)).rgb;
-                    vec3 down = texture(TEXTURE, UV + vec2(0.0, TEXTURE_PIXEL_SIZE.y)).rgb;
-                    float edge = length(right - left) + length(down - up);
-                    vec3 graded = pow(max(source.rgb, vec3(0.0)), vec3(0.86));
-                    float luma = dot(graded, vec3(0.299, 0.587, 0.114));
-                    graded = mix(vec3(luma), graded, 1.28);
-                    graded *= vec3(1.06, 0.98, 0.86);
-                    graded = floor(graded * 6.0 + 0.5) / 6.0;
-                    float ink = smoothstep(0.19, 0.48, edge);
-                    float paper = fract(sin(dot(FRAGCOORD.xy, vec2(12.9898, 78.233))) * 43758.5453);
-                    graded *= mix(0.965, 1.035, paper);
-                    graded = mix(graded, vec3(0.018, 0.014, 0.010), ink * 0.86);
-                    COLOR = vec4(clamp(graded, vec3(0.0), vec3(1.0)), source.a);
-                }
-                """,
-        },
-    };
+    private static ShaderMaterial GreenWireframeMaterial() =>
+        ClassicGreenWireframeShader.Create(
+            "OpenNV_FalloutClassicCustomGreenWireframeProjection");
 
     private void FrameDonor(Fo2HumanoidVisual donor)
     {
         var bounds = donor.PresentationBounds;
         var aspect = Size.X / MathF.Max(Size.Y, 1.0f);
-        var size = MathF.Max(bounds.Size.Y, bounds.Size.X / MathF.Max(aspect, 0.01f)) *
-            FramingMargin * _zoom;
+        var size = _portraitFraming
+            ? PortraitCameraSize * _zoom
+            : MathF.Max(bounds.Size.Y, bounds.Size.X / MathF.Max(aspect, 0.01f)) *
+                FramingMargin * _zoom;
         if (!bounds.Position.IsFinite() || !bounds.Size.IsFinite() ||
             !float.IsFinite(size) || size <= 0.0f)
             throw new InvalidOperationException(
                 "Fallout 2 live 3D preview framing bounds are invalid.");
-        var target = bounds.GetCenter();
-        target += Vector3.Right * size * _compositionRightOffset;
+        var target = _portraitFraming
+            ? donor.PortraitHeadWorldPosition + Vector3.Down * 0.03f
+            : bounds.GetCenter();
+        var compositionRightOffset = _portraitFraming ? 0.0f : _compositionRightOffset;
+        target += Vector3.Right * size * compositionRightOffset;
         _camera.Size = size;
-        _camera.Position = target + Vector3.Back * MathF.Max(4.0f, bounds.Size.Z * 2.0f);
+        _camera.Position = target + Vector3.Forward *
+            MathF.Max(CameraZ, bounds.Size.Z * 2.0f);
         _camera.LookAt(target, Vector3.Up);
         SetMeta("presentation_bounds", bounds);
         SetMeta("presentation_camera_size", size);
         SetMeta("presentation_framing_margin", FramingMargin);
-        SetMeta("presentation_composition_right_offset", _compositionRightOffset);
+        SetMeta("presentation_composition_right_offset", compositionRightOffset);
     }
 }

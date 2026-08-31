@@ -896,6 +896,9 @@ def prepare_actor(
     if any(part is None for part in head_parts):
         raise ValueError("Proof actor has an unresolved head-part record")
     explicit_outfit_models = [str(value) for value in recipe.get("outfitModelPaths", [])]
+    explicit_outfit_shape_names = tuple(
+        str(value) for value in recipe.get("outfitShapeNames", [])
+    )
     if explicit_outfit_models:
         outfit_models = explicit_outfit_models
         outfit_forms = [
@@ -903,6 +906,10 @@ def prepare_actor(
         ]
         if len(outfit_forms) != len(outfit_models):
             raise ValueError("Explicit actor outfit models require one identity FormID each")
+        if explicit_outfit_shape_names and len(explicit_outfit_models) != 1:
+            raise ValueError(
+                "Exact actor outfit shape selection requires one explicit outfit model"
+            )
         outfits = []
     else:
         outfit_forms = list(resolve_actor_outfit_form_ids(catalog, actor))
@@ -1103,7 +1110,7 @@ def prepare_actor(
                     included_shape_names=(
                         runtime_surface_projection.included_shapes(outfit_model)
                         if runtime_surface_projection is not None
-                        else ()
+                        else explicit_outfit_shape_names
                     ),
                     generated_diffuse_by_source=generated_skin,
                 )

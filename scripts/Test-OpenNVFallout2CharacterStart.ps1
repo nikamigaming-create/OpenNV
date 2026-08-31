@@ -7,8 +7,8 @@ param(
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
     [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json",
     [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\character-start-v1",
-    [Parameter(Mandatory)]
-    [string]$ClassicHumanoidInstallManifest
+    [string]$ClassicHumanoidInstallManifest,
+    [string]$PresentationDonorPreviewSet
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,10 +20,18 @@ foreach ($inputPath in @($Godot, $TempleCache, $TempleTransitions, $ArroyoCache,
         throw "Required Fallout 2 character-start input is missing: $inputPath"
     }
 }
-$classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
-if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+$classicHumanoidDonorPreviewSet = if (
+    -not [string]::IsNullOrWhiteSpace($PresentationDonorPreviewSet)) {
+    [IO.Path]::GetFullPath($PresentationDonorPreviewSet)
+} else {
+    if ([string]::IsNullOrWhiteSpace($ClassicHumanoidInstallManifest)) {
+        throw 'Fallout 2 character-start proof requires an owned donor preview set or install manifest.'
+    }
+    & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+    if (-not $?) { throw 'Classic humanoid install-manifest resolution failed.' }
+}
 & $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
-if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
+if (-not $?) { throw 'Classic humanoid donor preflight failed.' }
 if (Test-Path -LiteralPath $Output) {
     throw "Refusing to overwrite Fallout 2 character-start proof: $Output"
 }

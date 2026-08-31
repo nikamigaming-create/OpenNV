@@ -10,9 +10,9 @@ $repository = Split-Path -Parent $PSScriptRoot
 $classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
 $classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
 $classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
-if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+if (-not $?) { throw 'Classic humanoid install-manifest resolution failed.' }
 & $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
-if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
+if (-not $?) { throw 'Classic humanoid donor preflight failed.' }
 if ([string]::IsNullOrWhiteSpace($HexScene)) {
     $cache = Join-Path $env:LOCALAPPDATA 'OpenNV\cache\fallout1'
     $candidates = if (Test-Path -LiteralPath $cache -PathType Container) {
@@ -72,36 +72,50 @@ $preview = Get-Content -LiteralPath (
     Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1PremadePlayerPreview.cs') -Raw
 $profile = Get-Content -LiteralPath (
     Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1CharacterProfile.cs') -Raw
+$creator = Get-Content -LiteralPath (
+    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1CharacterCreator.cs') -Raw
+$customEditor = Get-Content -LiteralPath (
+    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1CustomAppearanceEditor.cs') -Raw
+$customPortrait = Get-Content -LiteralPath (
+    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1CustomPortraitPreview.cs') -Raw
 foreach ($required in @(
-    'ApplyCharacter(profile, creator.SelectedPremade)',
-    'owned-premade-gcd-frm',
+    'ApplyCharacter(profile)',
+    'owned-premade-gcd-bio-frm',
     'WeaponAttachmentsBound',
-    'playerPresentationIdentity = _playerPresentationBinding?.Identity.SaveState()',
-    'Fo1PlayerPresentationIdentity.Load',
+    'identity = Identity.Report()',
+    'Fo1CharacterIdentity.ExpectedSchema',
     'RestoreSavedPlayerPresentationIfReady',
-    'CharacterId == "max-stone" && CharacterName != "Max Stone"',
-    'CharacterId == "natalia" && CharacterName != "Natalia"',
-    'CharacterId == "albert" && CharacterName != "Albert"',
-    'identity.CharacterId is "max-stone" or "albert"',
+    '"max-stone" => (Name: "Max Stone", Sex: "Male", Role: "combat")',
+    '"natalia" => (Name: "Natalia", Sex: "Female", Role: "stealth")',
+    '"albert" => (Name: "Albert", Sex: "Male", Role: "diplomat")',
+    'EditingLocked',
+    'InspectPremade',
     'actorSupportsWeapons && !_meleeWeaponEquipped',
     'actorSupportsWeapons && _meleeWeaponEquipped',
     'WeaponVisualsSuppressed',
-    'ApplyAppearance(profile.Appearance)',
-    'appearance_mode',
     'Equals(first.Appearance, second.Appearance)',
-    '"opennv-fo1-character/v2"',
+    '"opennv-fo1-character/v3"',
     'appearance = Appearance?.Report()',
-    'Natalia identity is exact owned GCD/portrait FRM',
     'requires male and female owned donors',
     'no substitute humanoid geometry'
 )) {
-    if (-not (($flow + $session + $preview + $profile).Contains($required))) {
+    if (-not (($flow + $session + $preview + $profile + $creator + $customEditor).Contains($required))) {
         throw "Fallout 1 player presentation wiring marker is missing: $required"
     }
 }
+if ($creator.Contains('ModifyPremade') -or
+    $session.Contains('playerPresentationIdentity =')) {
+    throw 'Fallout 1 premade editing or split character-save state was reintroduced.'
+}
+if (-not $customEditor.Contains('internal bool Live3DVisible => false;') -or
+    -not $customEditor.Contains('always a 2D cartoon projection') -or
+    -not $customPortrait.Contains('owned-data custom donor') -or
+    -not $customPortrait.Contains('never replaces authored premade art')) {
+    throw 'Fallout 1 custom 2D owned-donor portrait boundary is no longer explicit.'
+}
 
 Write-Output (
-    'OPENNV_FO1_PLAYER_PRESENTATION_STATIC_PASS donorPreviewSet={0} premades={1} policy={2} coldIdentity=v1 customAppearance=character-v2' -f
+    'OPENNV_FO1_PLAYER_PRESENTATION_STATIC_PASS donorPreviewSet={0} premades={1} policy={2} coldIdentity=character-embedded-v1 customAppearance=persisted-v3-owned-donor-cartoon-2d' -f
         ([IO.Path]::GetFullPath($classicHumanoidDonorPreviewSet)),
         ($premades.id -join ','),
         ($policy -join ','))
