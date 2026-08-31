@@ -13,8 +13,47 @@ internal sealed record ClassicIntProcedure(
 
 internal sealed record ClassicIntProgram(
     string Identity,
+    IReadOnlyList<ClassicIntProcedure> ProcedureOrder,
     IReadOnlyDictionary<string, ClassicIntProcedure> Procedures,
-    IReadOnlyDictionary<int, ClassicIntInstruction> Instructions);
+    IReadOnlyDictionary<int, ClassicIntInstruction> Instructions,
+    IReadOnlyDictionary<int, string> IdentifierReferences,
+    IReadOnlyDictionary<int, string> StringReferences);
+
+internal sealed record ClassicIntDoorObjectState(bool Open, bool Locked);
+
+internal interface IClassicIntWorldObjectState
+{
+    bool ScriptOverrides { get; }
+    IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors { get; }
+}
+
+internal sealed record ClassicIntWorldObjectState(
+    bool ScriptOverrides,
+    IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors) :
+    IClassicIntWorldObjectState
+{
+    internal static ClassicIntWorldObjectState Empty { get; } = new(
+        false, new Dictionary<int, ClassicIntDoorObjectState>());
+
+    internal object Save() => new
+    {
+        ScriptOverrides,
+        Doors = Doors.OrderBy(row => row.Key).Select(row => new
+        {
+            ObjectHandle = row.Key,
+            row.Value.Open,
+            row.Value.Locked,
+        }).ToArray(),
+    };
+
+    internal static ClassicIntWorldObjectState Restore(JsonElement source) => new(
+        source.GetProperty("ScriptOverrides").GetBoolean(),
+        source.GetProperty("Doors").EnumerateArray().ToDictionary(
+            row => row.GetProperty("ObjectHandle").GetInt32(),
+            row => new ClassicIntDoorObjectState(
+                row.GetProperty("Open").GetBoolean(),
+                row.GetProperty("Locked").GetBoolean())));
+}
 
 internal sealed record ClassicIntProcedureState(
     IReadOnlyDictionary<int, int> ProgramVariables,
@@ -29,12 +68,16 @@ internal sealed record ClassicIntProcedureResult(
     ClassicIntProcedureState State,
     int ExecutedInstructions,
     int ReturnValue,
-    IReadOnlyList<ClassicIntMessageEffect> MessageEffects);
+    IReadOnlyList<ClassicIntMessageEffect> MessageEffects,
+    IReadOnlyList<string> SoundEffects,
+    ClassicIntWorldObjectState WorldObjects);
 
 internal sealed record ClassicIntMessageEffect(
     int MessageList,
     int MessageId,
-    int MessageHandle);
+    int MessageHandle,
+    int? ObjectHandle,
+    int? Color);
 
 internal static class ClassicIntProcedureVm
 {
@@ -47,6 +90,7 @@ internal static class ClassicIntProcedureVm
     private const ushort Return = 0x801C;
     private const ushort FetchProgram = 0x8012;
     private const ushort StoreProgram = 0x8013;
+    private const ushort FetchExternal = 0x8014;
     private const ushort PushBase = 0x802B;
     private const ushort PopBase = 0x8029;
     private const ushort PopToBase = 0x802A;
@@ -57,6 +101,7 @@ internal static class ClassicIntProcedureVm
     private const ushort NotEqual = 0x8034;
     private const ushort GreaterThanOrEqual = 0x8036;
     private const ushort LessThan = 0x8037;
+    private const ushort GreaterThan = 0x8038;
     private const ushort Add = 0x8039;
     private const ushort Subtract = 0x803A;
     private const ushort Multiply = 0x803B;
@@ -69,6 +114,7 @@ internal static class ClassicIntProcedureVm
     private const ushort Negate = 0x8046;
     private const ushort Random = 0x80B4;
     private const ushort DisplayMessage = 0x80B8;
+    private const ushort ScriptOverrides = 0x80B9;
     private const ushort SelfObject = 0x80BC;
     private const ushort DudeObject = 0x80BF;
     private const ushort ScriptLocal = 0x80C1;
@@ -80,10 +126,19 @@ internal static class ClassicIntProcedureVm
     private const ushort CritterStat = 0x80CA;
     private const ushort Metarule = 0x810B;
     private const ushort MessageString = 0x8105;
+    private const ushort FloatMessage = 0x810A;
+    private const ushort PlaySound = 0x80A3;
+    private const ushort GameTime = 0x80EA;
+    private const ushort DoorLock = 0x812E;
+    private const ushort DoorUnlock = 0x812F;
+    private const ushort DoorIsOpen = 0x8130;
+    private const ushort DoorOpen = 0x8131;
+    private const ushort DoorClose = 0x8132;
     private const ushort DifficultyLevel = 0x812A;
     private const ushort CombatDifficulty = 0x814F;
     private const ushort SfallArrayLength = 0x8231;
     private const ushort PushInteger = 0xC001;
+    private const ushort PushReference = 0x9001;
 
     internal static ClassicIntProgram Parse(JsonElement inventory, string identity)
     {
@@ -132,7 +187,13 @@ internal static class ClassicIntProcedureVm
                         $"Classic INT instruction offset is duplicated: {identity}:" +
                         $"0x{instruction.Offset:x}.");
         }
-        return new ClassicIntProgram(identity, procedures, instructions);
+        return new ClassicIntProgram(
+            identity,
+            procedures.Values.ToArray(),
+            procedures,
+            instructions,
+            ParseReferences(inventory, "identifierReferences", identity),
+            ParseReferences(inventory, "stringReferences", identity));
     }
 
     internal static ClassicIntProcedureResult Execute(
@@ -140,6 +201,7 @@ internal static class ClassicIntProcedureVm
         string procedure,
         ClassicIntProcedureState source,
         ClassicIntExpressionContext game,
+        IClassicIntWorldObjectState sourceWorldObjects,
         ClassicRetailRandomContract randomContract,
         int instructionBudget)
     {
@@ -153,10 +215,15 @@ internal static class ClassicIntProcedureVm
         var mapVariables = new Dictionary<int, int>(source.MapVariables);
         var globals = new Dictionary<int, int>(source.GlobalVariables);
         var stack = source.ValueStack.ToList();
+        var addressStack = new Stack<int>();
         var bases = new Stack<int>();
         var calls = new Stack<(int Offset, ClassicIntProcedure Procedure)>();
         var random = source.RandomState;
         var messageEffects = new List<ClassicIntMessageEffect>();
+        var soundEffects = new List<string>();
+        var doors = new Dictionary<int, ClassicIntDoorObjectState>(
+            sourceWorldObjects.Doors);
+        var scriptOverrides = sourceWorldObjects.ScriptOverrides;
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -197,11 +264,24 @@ internal static class ClassicIntProcedureVm
                     stack.Add(instruction.Operand ?? throw Failure(
                         program, procedure, offset, "missing-integer-operand"));
                     break;
+                case PushReference:
+                    stack.Add(instruction.Operand ?? throw Failure(
+                        program, procedure, offset, "missing-reference-operand"));
+                    break;
                 case PushBase:
                     bases.Push(stack.Count);
                     break;
                 case PopOpcode:
                     Pop(stack, program, procedure, offset);
+                    break;
+                case DataToA:
+                    addressStack.Push(Pop(stack, program, procedure, offset));
+                    break;
+                case AToData:
+                    if (!addressStack.TryPop(out var addressValue))
+                        throw Failure(program, procedure, offset,
+                            "address-stack-underflow");
+                    stack.Add(addressValue);
                     break;
                 case FetchProgram:
                     stack.Add(Read(programVariables, Pop(stack, program, procedure, offset),
@@ -210,6 +290,15 @@ internal static class ClassicIntProcedureVm
                 case StoreProgram:
                     Store(programVariables, stack, program, procedure, offset, true);
                     break;
+                case FetchExternal:
+                    {
+                        var reference = Pop(stack, program, procedure, offset);
+                        var name = Read(program.IdentifierReferences, reference,
+                            program, procedure, offset, "identifier-reference");
+                        stack.Add(Read(game.ExternalVariables, name,
+                            program, procedure, offset, "external-variable"));
+                        break;
+                    }
                 case FetchLocal:
                     stack.Add(Read(locals, Pop(stack, program, procedure, offset),
                         program, procedure, offset, "procedure-local"));
@@ -277,6 +366,7 @@ internal static class ClassicIntProcedureVm
                 case NotEqual: Binary(stack, (left, right) => Bool(left != right), program, procedure, offset); break;
                 case GreaterThanOrEqual: Binary(stack, (left, right) => Bool(left >= right), program, procedure, offset); break;
                 case LessThan: Binary(stack, (left, right) => Bool(left < right), program, procedure, offset); break;
+                case GreaterThan: Binary(stack, (left, right) => Bool(left > right), program, procedure, offset); break;
                 case Add: Binary(stack, (left, right) => unchecked(left + right), program, procedure, offset); break;
                 case Subtract: Binary(stack, (left, right) => unchecked(left - right), program, procedure, offset); break;
                 case Multiply: Binary(stack, (left, right) => unchecked(left * right), program, procedure, offset); break;
@@ -300,6 +390,19 @@ internal static class ClassicIntProcedureVm
                         stack.Add(result.Value);
                         break;
                     }
+                case ScriptOverrides:
+                    scriptOverrides = true;
+                    break;
+                case PlaySound:
+                    {
+                        var reference = Pop(stack, program, procedure, offset);
+                        soundEffects.Add(Read(program.StringReferences, reference,
+                            program, procedure, offset, "string-reference"));
+                        break;
+                    }
+                case GameTime:
+                    stack.Add(game.GameTime);
+                    break;
                 case MessageString:
                     {
                         var messageId = Pop(stack, program, procedure, offset);
@@ -309,17 +412,34 @@ internal static class ClassicIntProcedureVm
                             "message"));
                         break;
                     }
+                case DoorIsOpen:
+                    stack.Add(Bool(Door(Pop(stack, program, procedure, offset)).Open));
+                    break;
+                case DoorOpen:
+                    SetDoor(Pop(stack, program, procedure, offset), open: true);
+                    break;
+                case DoorClose:
+                    SetDoor(Pop(stack, program, procedure, offset), open: false);
+                    break;
+                case DoorLock:
+                    SetDoor(Pop(stack, program, procedure, offset), locked: true);
+                    break;
+                case DoorUnlock:
+                    SetDoor(Pop(stack, program, procedure, offset), locked: false);
+                    break;
                 case DisplayMessage:
                     {
                         var handle = Pop(stack, program, procedure, offset);
-                        var matches = game.MessageHandles
-                            .Where(row => row.Value == handle).Select(row => row.Key)
-                            .Take(2).ToArray();
-                        if (matches.Length != 1)
-                            throw Failure(program, procedure, offset,
-                                "ambiguous-message-handle");
-                        messageEffects.Add(new ClassicIntMessageEffect(
-                            matches[0].MessageList, matches[0].MessageId, handle));
+                        messageEffects.Add(MessageEffect(handle, null, null));
+                        break;
+                    }
+                case FloatMessage:
+                    {
+                        var color = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var objectHandle = Pop(stack, program, procedure, offset);
+                        messageEffects.Add(MessageEffect(
+                            handle, objectHandle, color));
                         break;
                     }
                 case Jump:
@@ -335,13 +455,21 @@ internal static class ClassicIntProcedureVm
                     }
                 case Call:
                     {
-                        var target = Pop(stack, program, procedure, offset);
-                        var called = program.Procedures.Values.FirstOrDefault(
-                            row => row.BodyOffset == target) ?? throw Failure(
-                            program, procedure, offset, "call-target");
-                        calls.Push((next, current));
+                        var procedureIndex = Pop(stack, program, procedure, offset);
+                        var argumentCount = Pop(stack, program, procedure, offset);
+                        if (procedureIndex < 0 ||
+                            procedureIndex >= program.ProcedureOrder.Count)
+                            throw Failure(program, procedure, offset, "call-target");
+                        var called = program.ProcedureOrder[procedureIndex];
+                        if (argumentCount != 0 || called.Instructions.Count == 0)
+                            throw Failure(program, procedure, offset, "call-arguments");
+                        if (!addressStack.TryPop(out var returnOffset) ||
+                            returnOffset != next)
+                            throw Failure(program, procedure, offset,
+                                "call-return-address");
+                        calls.Push((returnOffset, current));
                         current = called;
-                        next = target;
+                        next = called.BodyOffset;
                         break;
                     }
                 case Return:
@@ -366,7 +494,57 @@ internal static class ClassicIntProcedureVm
                 stack, random),
             executed,
             returnValue,
-            messageEffects);
+            messageEffects,
+            soundEffects,
+            new ClassicIntWorldObjectState(scriptOverrides, doors));
+
+        ClassicIntDoorObjectState Door(int objectHandle) =>
+            doors.TryGetValue(objectHandle, out var door)
+                ? door
+                : throw Failure(program, procedure, offset, "missing-door-object");
+
+        void SetDoor(int objectHandle, bool? open = null, bool? locked = null)
+        {
+            var door = Door(objectHandle);
+            doors[objectHandle] = door with
+            {
+                Open = open ?? door.Open,
+                Locked = locked ?? door.Locked,
+            };
+        }
+
+        ClassicIntMessageEffect MessageEffect(
+            int handle,
+            int? objectHandle,
+            int? color)
+        {
+            var matches = game.MessageHandles
+                .Where(row => row.Value == handle).Select(row => row.Key)
+                .Take(2).ToArray();
+            if (matches.Length != 1)
+                throw Failure(program, procedure, offset,
+                    "ambiguous-message-handle");
+            return new ClassicIntMessageEffect(
+                matches[0].MessageList, matches[0].MessageId, handle,
+                objectHandle, color);
+        }
+    }
+
+    private static IReadOnlyDictionary<int, string> ParseReferences(
+        JsonElement inventory,
+        string property,
+        string identity)
+    {
+        if (!inventory.TryGetProperty(property, out var source))
+            return new Dictionary<int, string>();
+        var result = new Dictionary<int, string>();
+        foreach (var row in source.EnumerateObject())
+            if (!int.TryParse(row.Name, NumberStyles.None, CultureInfo.InvariantCulture,
+                    out var offset) || string.IsNullOrEmpty(row.Value.GetString()) ||
+                !result.TryAdd(offset, row.Value.GetString()!))
+                throw new InvalidOperationException(
+                    $"Classic INT reference table is invalid: {identity}:{property}.");
+        return result;
     }
 
     private static int ValidateCanonicalEpilogue(
@@ -423,8 +601,8 @@ internal static class ClassicIntProcedureVm
         values[indexOnTop ? first : second] = indexOnTop ? second : first;
     }
 
-    private static int Read<TKey>(
-        IReadOnlyDictionary<TKey, int> values,
+    private static TValue Read<TKey, TValue>(
+        IReadOnlyDictionary<TKey, TValue> values,
         TKey key,
         ClassicIntProgram program,
         string procedure,

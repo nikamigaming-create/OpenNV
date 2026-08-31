@@ -209,6 +209,9 @@ using var randomDocument = JsonDocument.Parse(File.ReadAllBytes(
     Path.Combine("runtime", "config", "classic-retail-random-fo2-1.02-v1.json")));
 var randomContract = ClassicRetailRandomContract.Parse(randomDocument.RootElement);
 var randomState = ClassicRetailRandomLifecycle.Initialize(1, randomContract);
+var messageHandles = Enumerable.Range(100, 24).ToDictionary(
+    messageId => (MessageList: 344, MessageId: messageId),
+    messageId => 9000 + messageId);
 var gameContext = new ClassicIntExpressionContext(
         new Dictionary<int, int>(),
         new Dictionary<int, int>(),
@@ -222,7 +225,9 @@ var gameContext = new ClassicIntExpressionContext(
         new Dictionary<(int, int), int> { [(100, 6)] = 3 },
         new Dictionary<(int, int), int>(),
         new Dictionary<int, int>(),
-        new Dictionary<(int, int), int> { [(344, 103)] = 9001 });
+        messageHandles,
+        new Dictionary<string, int>(),
+        0);
 var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
     intInitialization.RandomSites[1],
     gameContext,
@@ -249,6 +254,7 @@ var procedureResult = ClassicIntProcedureVm.Execute(
         [],
         randomState),
     gameContext,
+    ClassicIntWorldObjectState.Empty,
     randomContract,
     procedureProgram.Procedures["map_enter_p_proc"].Instructions.Count);
 if (procedureResult.State.ProgramVariables[3] != 9 ||
@@ -258,23 +264,26 @@ if (procedureResult.State.ProgramVariables[3] != 9 ||
 
 using var callDocument = JsonDocument.Parse("""
     { "procedures": [{
-      "name": "caller", "bodyOffset": 100, "canonicalEpilogueOffset": 120,
+      "name": "caller", "bodyOffset": 100, "canonicalEpilogueOffset": 132,
       "instructions": [
         { "offset": 100, "opcode": "802b", "operand": null },
-        { "offset": 102, "opcode": "c001", "operand": 200 },
-        { "offset": 108, "opcode": "8005", "operand": null },
-        { "offset": 110, "opcode": "c001", "operand": 7 },
-        { "offset": 116, "opcode": "8013", "operand": null },
-        { "offset": 120, "opcode": "c001", "operand": 0 },
-        { "offset": 126, "opcode": "800d", "operand": null },
-        { "offset": 128, "opcode": "8019", "operand": null },
-        { "offset": 130, "opcode": "802a", "operand": null },
-        { "offset": 132, "opcode": "8029", "operand": null },
-        { "offset": 134, "opcode": "800c", "operand": null },
-        { "offset": 136, "opcode": "801c", "operand": null },
-        { "offset": 138, "opcode": "802a", "operand": null },
-        { "offset": 140, "opcode": "8029", "operand": null },
-        { "offset": 142, "opcode": "801c", "operand": null }
+        { "offset": 102, "opcode": "c001", "operand": 124 },
+        { "offset": 108, "opcode": "800d", "operand": null },
+        { "offset": 110, "opcode": "c001", "operand": 0 },
+        { "offset": 116, "opcode": "c001", "operand": 1 },
+        { "offset": 122, "opcode": "8005", "operand": null },
+        { "offset": 124, "opcode": "c001", "operand": 7 },
+        { "offset": 130, "opcode": "8013", "operand": null },
+        { "offset": 132, "opcode": "c001", "operand": 0 },
+        { "offset": 138, "opcode": "800d", "operand": null },
+        { "offset": 140, "opcode": "8019", "operand": null },
+        { "offset": 142, "opcode": "802a", "operand": null },
+        { "offset": 144, "opcode": "8029", "operand": null },
+        { "offset": 146, "opcode": "800c", "operand": null },
+        { "offset": 148, "opcode": "801c", "operand": null },
+        { "offset": 150, "opcode": "802a", "operand": null },
+        { "offset": 152, "opcode": "8029", "operand": null },
+        { "offset": 154, "opcode": "801c", "operand": null }
       ]
     }, {
       "name": "callee", "bodyOffset": 200, "canonicalEpilogueOffset": 202,
@@ -300,9 +309,9 @@ var callResult = ClassicIntProcedureVm.Execute(
         new Dictionary<int, int>(), new Dictionary<int, int>(),
         new Dictionary<int, int>(), new Dictionary<int, int>(),
         new Dictionary<int, int>(), [], randomState),
-    gameContext, randomContract, 26);
+    gameContext, ClassicIntWorldObjectState.Empty, randomContract, 29);
 if (callResult.State.ProgramVariables[7] != 0 ||
-    callResult.ExecutedInstructions != 26 || callResult.ReturnValue != 0)
+    callResult.ExecutedInstructions != 29 || callResult.ReturnValue != 0)
     throw new InvalidOperationException(
         "Classic INT call/D-A return ABI execution drifted.");
 
@@ -372,12 +381,119 @@ foreach (var path in args)
             if (ownedResult.ExecutedInstructions != 15 ||
                 ownedResult.ReturnValue != 0 ||
                 ownedResult.MessageEffects is not
-                    [{ MessageList: 344, MessageId: 103, MessageHandle: 9001 }])
+                    [{ MessageList: 344, MessageId: 103, MessageHandle: 9103 }])
                 throw new InvalidOperationException(
                     "Owned V13 computer description effect drifted.");
             Console.WriteLine(
                 $"{Path.GetFileName(path)}|V13Comp.int|description_p_proc|" +
                 $"{ownedResult.ExecutedInstructions}");
+
+            const int v13DoorHandle = 42;
+            var useContext = gameContext with
+            {
+                ExternalVariables = new Dictionary<string, int>
+                {
+                    ["vault_door_ptr"] = v13DoorHandle,
+                },
+                GameTime = 864000,
+            };
+            var useState = new ClassicIntProcedureState(
+                new Dictionary<int, int>(),
+                new Dictionary<int, int>(),
+                new Dictionary<int, int> { [0] = 0, [1] = 0 },
+                new Dictionary<int, int>(),
+                new Dictionary<int, int> { [1409] = 0, [1618] = 0 },
+                [],
+                randomState);
+            var closed = new ClassicIntWorldObjectState(
+                false,
+                new Dictionary<int, ClassicIntDoorObjectState>
+                {
+                    [v13DoorHandle] = new(false, true),
+                });
+            var overridden = ClassicIntProcedureVm.Execute(
+                ownedProgram, "use_p_proc",
+                useState with
+                {
+                    ScriptLocalVariables = new Dictionary<int, int>
+                    {
+                        [0] = 0,
+                        [1] = 1,
+                    },
+                },
+                useContext, closed, randomContract,
+                ownedProgram.Procedures["use_p_proc"].Instructions.Count);
+            if (!overridden.WorldObjects.ScriptOverrides ||
+                overridden.MessageEffects is not [{ MessageId: 123 }] ||
+                overridden.SoundEffects.Count != 0)
+                throw new InvalidOperationException(
+                    "Owned V13 computer override-message branch drifted.");
+
+            var recentContext = useContext with { GameTime = 0 };
+            var firstRecent = ClassicIntProcedureVm.Execute(
+                ownedProgram, "use_p_proc", useState, recentContext, closed,
+                randomContract,
+                ownedProgram.Procedures["use_p_proc"].Instructions.Count);
+            if (firstRecent.State.ScriptLocalVariables[0] != 1 ||
+                firstRecent.MessageEffects is not [{ MessageId: 100 }])
+                throw new InvalidOperationException(
+                    "Owned V13 computer first-use message branch drifted.");
+            var secondRecent = ClassicIntProcedureVm.Execute(
+                ownedProgram, "use_p_proc", firstRecent.State, recentContext,
+                firstRecent.WorldObjects, randomContract,
+                ownedProgram.Procedures["use_p_proc"].Instructions.Count);
+            if (secondRecent.MessageEffects is not
+                [{ MessageId: 101 }, { MessageId: 102, ObjectHandle: 200, Color: 0 }])
+                throw new InvalidOperationException(
+                    "Owned V13 computer repeated-use message branch drifted.");
+
+            var opened = ClassicIntProcedureVm.Execute(
+                ownedProgram, "use_p_proc", useState, useContext, closed,
+                randomContract,
+                ownedProgram.Procedures["use_p_proc"].Instructions.Count);
+            if (!opened.WorldObjects.ScriptOverrides ||
+                opened.WorldObjects.Doors[v13DoorHandle] is not
+                { Open: true, Locked: false } ||
+                opened.SoundEffects is not ["SLDOORSO"])
+                throw new InvalidOperationException(
+                    "Owned V13 computer door-open effect drifted.");
+            var restoredWorld = ClassicIntWorldObjectState.Restore(
+                JsonSerializer.SerializeToElement(opened.WorldObjects.Save()));
+            var closedAgain = ClassicIntProcedureVm.Execute(
+                ownedProgram, "use_p_proc", opened.State, useContext,
+                restoredWorld, randomContract,
+                ownedProgram.Procedures["use_p_proc"].Instructions.Count);
+            if (closedAgain.WorldObjects.Doors[v13DoorHandle] is not
+                { Open: false, Locked: true } ||
+                closedAgain.SoundEffects is not ["SLDOORSO"])
+                throw new InvalidOperationException(
+                    "Owned V13 computer door-close effect drifted.");
+
+            var banished = ClassicIntProcedureVm.Execute(
+                ownedProgram, "use_p_proc",
+                useState with
+                {
+                    GlobalVariables = new Dictionary<int, int>
+                    {
+                        [1409] = 0,
+                        [1618] = 1,
+                        [1619] = 0,
+                    },
+                },
+                useContext, closed, randomContract,
+                ownedProgram.Procedures["use_p_proc"].Instructions.Count +
+                ownedProgram.Procedures["Banished"].Instructions.Count);
+            if (banished.MessageEffects is not
+                [
+                { MessageId: 101 },
+                { MessageId: >= 104 and <= 108, ObjectHandle: 200, Color: 8 },
+                ])
+                throw new InvalidOperationException(
+                    "Owned V13 computer procedure-call message branch drifted: " +
+                    JsonSerializer.Serialize(banished.MessageEffects));
+            Console.WriteLine(
+                $"{Path.GetFileName(path)}|V13Comp.int|use_p_proc|" +
+                $"{opened.ExecutedInstructions}|{closedAgain.ExecutedInstructions}");
         }
         continue;
     }
@@ -402,5 +518,6 @@ ClassicIntProcedureResult ExecuteOwned(
         [],
         randomState),
     gameContext,
+    ClassicIntWorldObjectState.Empty,
     randomContract,
     ownedProgram.Procedures[procedure].Instructions.Count);

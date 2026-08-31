@@ -184,6 +184,12 @@ def _u32(data: bytes, offset: int, label: str) -> int:
     return struct.unpack_from(">I", data, offset)[0]
 
 
+def _i32(data: bytes, offset: int, label: str) -> int:
+    if offset < 0 or offset + 4 > len(data):
+        raise ClassicIntDecodeError(f"truncated INT {label} at 0x{offset:x}")
+    return struct.unpack_from(">i", data, offset)[0]
+
+
 def _procedure_inventory(
     data: bytes,
     require_bounded_signature: bool,
@@ -245,6 +251,42 @@ def _procedures(data: bytes) -> dict[str, tuple[int, int]]:
     }
 
 
+def _reference_tables(data: bytes, first_body: int) -> tuple[dict[str, str], dict[str, str]]:
+    count = _u32(data, PROCEDURE_TABLE_OFFSET, "procedure count")
+    identifiers = PROCEDURE_TABLE_OFFSET + 4 + count * PROCEDURE_SIZE
+    identifier_end = identifiers + 4 + _u32(data, identifiers, "identifier table size")
+
+    def references(base: int, end: int) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for procedure in _procedure_inventory(data, False).values():
+            for instruction in _instructions(data, procedure["bounds"]):
+                if instruction.opcode != PUSH_STRING or instruction.operand is None:
+                    continue
+                start = base + instruction.operand
+                if start < base + 4 or start >= end:
+                    continue
+                finish = data.find(b"\0", start, end)
+                if finish < 0 or finish == start:
+                    continue
+                try:
+                    result[str(instruction.operand)] = data[start:finish].decode("ascii")
+                except UnicodeDecodeError:
+                    continue
+        return result
+
+    identifiers_by_offset = references(identifiers, identifier_end)
+    strings_by_offset: dict[str, str] = {}
+    string_header = identifier_end + 4
+    if (
+        string_header + 4 <= first_body
+        and _i32(data, identifier_end, "identifier terminator") == -1
+    ):
+        string_end = string_header + 4 + _u32(data, string_header, "string table size")
+        if string_end <= first_body:
+            strings_by_offset = references(string_header, string_end)
+    return identifiers_by_offset, strings_by_offset
+
+
 def _instructions(data: bytes, bounds: tuple[int, int]) -> list[Instruction]:
     offset, end = bounds
     result: list[Instruction] = []
@@ -267,6 +309,9 @@ def _instructions(data: bytes, bounds: tuple[int, int]) -> list[Instruction]:
 def inventory_int_program(data: bytes) -> dict[str, Any]:
     """Inventory source procedures and RANDOM operand shapes without executing them."""
     procedures = _procedure_inventory(data, False)
+    identifier_references, string_references = _reference_tables(
+        data, min(row["bounds"][0] for row in procedures.values())
+    )
     rows: list[dict[str, Any]] = []
     random_sites: list[dict[str, Any]] = []
     for name, procedure in procedures.items():
@@ -395,6 +440,8 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
         "procedures": rows,
         "randomSites": random_sites,
         "randomOpcode": f"{RANDOM:04x}",
+        "identifierReferences": identifier_references,
+        "stringReferences": string_references,
     }
 
 

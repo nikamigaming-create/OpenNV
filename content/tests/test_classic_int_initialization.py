@@ -58,6 +58,27 @@ def synthetic_expression_branch_int() -> bytes:
     )
 
 
+def synthetic_reference_int() -> bytes:
+    push_ref = lambda value: struct.pack(">Hi", 0x9001, value)
+    opcode = lambda value: struct.pack(">H", value)
+    identifiers = b"start\0door_ref\0"
+    strings = b"SOURCE_SFX\0"
+    body_offset = 42 + 4 + 24 + 4 + len(identifiers) + 4 + 4 + len(strings)
+    body = b"".join(
+        [push_ref(10), opcode(0x8014), push_ref(4), opcode(0x80A3), opcode(0x801C)]
+    )
+    return (
+        b"\0" * 42
+        + struct.pack(">I6I", 1, 4, 0, 0, 0, body_offset, 0)
+        + struct.pack(">I", len(identifiers))
+        + identifiers
+        + struct.pack(">I", 0xFFFFFFFF)
+        + struct.pack(">I", len(strings))
+        + strings
+        + body
+    )
+
+
 class ClassicIntInitializationTests(unittest.TestCase):
     def test_int_inventory_decodes_literal_random_and_branch_free_start(self) -> None:
         inventory = inventory_int_program(synthetic_random_int())
@@ -92,6 +113,15 @@ class ClassicIntInitializationTests(unittest.TestCase):
         self.assertEqual(
             [argument["value"] for argument in branch["condition"]["arguments"]],
             [1, 2],
+        )
+
+    def test_int_inventory_keeps_identifier_and_string_namespaces_distinct(self) -> None:
+        inventory = inventory_int_program(synthetic_reference_int())
+        self.assertEqual(
+            inventory["identifierReferences"], {"4": "start", "10": "door_ref"}
+        )
+        self.assertEqual(
+            inventory["stringReferences"], {"4": "SOURCE_SFX", "10": "_SFX"}
         )
 
     def test_map_script_records_decode_type_specific_program_indices(self) -> None:
