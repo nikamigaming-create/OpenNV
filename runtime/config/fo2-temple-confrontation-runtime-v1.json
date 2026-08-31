@@ -28,6 +28,7 @@
     "combat": { "action": "fo2_temple_combat", "physicalKey": "C", "joyButton": "X" },
     "attack": { "action": "fo2_temple_attack", "physicalKey": "Space", "joyButton": "A" },
     "endTurn": { "action": "fo2_temple_end_turn", "physicalKey": "Enter", "joyButton": "Start" },
+    "look": { "action": "fo2_temple_look", "physicalKey": "L", "joyButton": "DpadUp" },
     "loot": { "action": "fo2_temple_loot", "physicalKey": "E", "joyButton": "B" },
     "inventory": { "action": "fo2_temple_inventory", "physicalKey": "I", "joyButton": "Y" }
   },

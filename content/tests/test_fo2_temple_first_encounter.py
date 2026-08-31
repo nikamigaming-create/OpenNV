@@ -44,6 +44,7 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
             [option["messageId"] for option in guardian["nodes"][2]["options"]],
             [114, 115, 116],
         )
+        self.assertNotIn("hostilityTrigger", guardian)
         self.assertEqual(profile["adapter"]["movementActionPointCost"], 1)
         self.assertEqual(
             profile["adapter"]["movementResolution"],
@@ -86,6 +87,8 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
         self.assertIn("_state.PlayerActionPoints - _profile.MovementActionPointCost", combat)
         self.assertIn("TargetPlacementExact", combat)
         self.assertIn("internal bool Talk()", combat)
+        self.assertIn("internal bool LookAtGuardian()", combat)
+        self.assertIn('"look_at_p_proc"', combat)
         self.assertIn("internal bool SelectDialogueOption(int messageId)", combat)
         self.assertIn("confrontation.SelectDialogueOption(106)", proof)
         self.assertIn("confrontation.SelectDialogueOption(116)", proof)

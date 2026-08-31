@@ -41,6 +41,7 @@ MAP_WIDTH_TILES = 200
 CONFRONTATION_SCHEMA = "opennv-fo2-temple-confrontation/v1"
 CONFRONTATION_RECIPE_SCHEMA = "opennv-fo2-temple-confrontation-recipe/v1"
 MESSAGE_ROW = re.compile(r"^\{(-?[0-9]+)\}\{[^}]*\}\{(.*)\}$")
+ACKLINT_MESSAGE_LIST_ID = 751
 CRITTER_PRO_SUPPORTED_SIZES = frozenset({0x19C, 0x1A0})
 CRITTER_PRO_HEADER_OFFSET = 0x20
 CRITTER_PRO_HEADER_FIELD_COUNT = 3
@@ -186,7 +187,7 @@ def _compile_guardian_script(
     if (
         message_catalog.logical_path.casefold() != "text\\english\\dialog\\acklint.msg"
         or message_catalog.sha256 != str(catalog_rule["sha256"]).casefold()
-        or int(catalog_rule["messageListId"]) != 751
+        or int(catalog_rule["messageListId"]) != ACKLINT_MESSAGE_LIST_ID
     ):
         raise Fo1ProfileError("Fallout 2 guardian MSG identity drifted")
     messages = _parse_message_catalog(message_catalog.data)
@@ -257,6 +258,21 @@ def _compile_guardian_script(
         raise Fo1ProfileError("Fallout 2 guardian dialogue message coverage drifted")
 
     effect_program = decode_acklint_effects(program.data)
+    look_message_operations = [
+        operation
+        for rule in effect_program["events"]["look_at_p_proc"]
+        for operation in rule["then"]
+        if operation["operation"] == "display-message"
+    ]
+    if (
+        len(look_message_operations) != 2
+        or any(
+            row["messageListId"] != ACKLINT_MESSAGE_LIST_ID
+            for row in look_message_operations
+        )
+        or any(not messages.get(row["messageId"]) for row in look_message_operations)
+    ):
+        raise Fo1ProfileError("Fallout 2 guardian look-at messages are unavailable")
     result = {
         "schema": "opennv-fo2-acklint-guardian-script/v1",
         "authority": "decoded hash-bound owned ACKlint.int procedures plus owned ACKlint.msg rows",
@@ -270,7 +286,7 @@ def _compile_guardian_script(
             "sha256": program.sha256,
         },
         "messageCatalog": {
-            "messageListId": 751,
+            "messageListId": ACKLINT_MESSAGE_LIST_ID,
             "logicalPath": message_catalog.logical_path,
             "source": message_catalog.source,
             "bytes": len(message_catalog.data),
@@ -280,6 +296,10 @@ def _compile_guardian_script(
         "initialNode": "Node001",
         "terminalNode": terminal,
         "nodes": emitted_nodes,
+        "displayMessages": [
+            {"messageId": row["messageId"], "text": messages[row["messageId"]]}
+            for row in look_message_operations
+        ],
         "effectProgram": effect_program,
         "implementedBoundary": {
             "dialogueNodes": True,

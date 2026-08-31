@@ -128,7 +128,7 @@ def synthetic_acklint_int() -> bytes:
         opcode(0x8029), opcode(0x800C), opcode(0x801C), opcode(0x802A),
         opcode(0x8029), opcode(0x801C),
     ])
-    names = ["main", "critter_p_proc", "pickup_p_proc"]
+    names = ["main", "critter_p_proc", "pickup_p_proc", "look_at_p_proc"]
     identifiers = bytearray()
     name_offsets = []
     for name in names:
@@ -155,7 +155,17 @@ def synthetic_acklint_int() -> bytes:
         opcode(0x8033), opcode(0x802F), push(5), push(2), opcode(0x80C2),
         epilogue,
     ])
-    bodies = [body_start, critter_start, pickup_start]
+    look_start = pickup_start + len(pickup)
+    look_else = look_start + 66
+    look_epilogue = look_else + 16
+    look = b"".join([
+        opcode(0x802B), opcode(0x80B9), push(look_else), push(7),
+        opcode(0x80C1), push(0), opcode(0x8033), opcode(0x802F),
+        push(7), push(1), opcode(0x80C2), push(751), push(100),
+        opcode(0x8105), opcode(0x80B8), push(look_epilogue), opcode(0x8004),
+        push(751), push(101), opcode(0x8105), opcode(0x80B8), epilogue,
+    ])
+    bodies = [body_start, critter_start, pickup_start, look_start]
     table = b"".join(
         struct.pack(">6I", name_offsets[index], 0, 0, 0, bodies[index], 0)
         for index in range(len(names))
@@ -169,6 +179,7 @@ def synthetic_acklint_int() -> bytes:
         + main
         + critter
         + pickup
+        + look
     )
 
 
@@ -253,7 +264,7 @@ class Fo2FirstSliceTest(unittest.TestCase):
             guardian_script = synthetic_acklint_int()
             guardian_messages = b"".join(
                 f"{{{message_id}}}{{}}{{guardian {message_id}}}\r\n".encode("ascii")
-                for message_id in range(103, 121)
+                for message_id in range(100, 121)
             )
             script_entries = ["unused.int"] * 751
             script_entries[750] = "ACKlint.int"
@@ -462,6 +473,14 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertEqual(
                 effects["events"]["pickup_proc"][0]["then"][0],
                 {"operation": "set-local", "index": 5, "value": 2},
+            )
+            self.assertEqual(
+                [row["messageId"] for row in guardian["displayMessages"]],
+                [100, 101],
+            )
+            self.assertEqual(
+                effects["events"]["look_at_p_proc"][0]["then"][2]["messageId"],
+                100,
             )
             self.assertTrue(document["promotion"]["transported"])
             self.assertFalse(document["runtimeCompatibility"]["ready"])

@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
-
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.Campaigns.Fallout1;
 internal sealed record Fo1DestinationMedicLookContract(
     string Path, string Sha256, int Serial, int Tile, string Pid, string Fid,
     string PrototypeSha256, string ArtSha256, string MessageText, int MessageId,
-    IReadOnlyList<int> SourceWalkMaskRoute)
+    IReadOnlyList<int> SourceWalkMaskRoute, ClassicScriptProgram Program)
 {
     private const string Schema = "opennv-fo1-destination-medic-look/v1";
     private const string GenericDoorSchema = "opennv-fo1-destination-generic-door/v1";
@@ -66,6 +66,16 @@ internal sealed record Fo1DestinationMedicLookContract(
         var messageId = semantics.GetProperty("messageId").GetInt32();
         if (messageId < 0)
             throw new InvalidOperationException("Fallout Medic look descriptor message ID is invalid.");
+        var program = ClassicScriptProgram.Parse(root.GetProperty("effectProgram"));
+        var execution = program.ExecuteWithActions(
+            LookAtProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
+        if (!execution.Executed || !execution.ScriptOverrides ||
+            execution.DisplayMessages.Count != 1 ||
+            execution.DisplayMessages[0] != new ClassicScriptMessage(null, messageId))
+            throw new InvalidOperationException(
+                "Fallout Medic look descriptor does not execute its source message.");
         var route = root.GetProperty("sourceWalkMaskRoute").GetProperty("pathTiles")
             .EnumerateArray().Select(value => value.GetInt32()).ToArray();
         var tile = actor.GetProperty("tile").GetInt32();
@@ -76,7 +86,8 @@ internal sealed record Fo1DestinationMedicLookContract(
             throw new InvalidOperationException("Fallout Medic look descriptor route is not source-adjacent.");
         return new Fo1DestinationMedicLookContract(
             resolved, sha256, actor.GetProperty("serial").GetInt32(), tile, Required(actor, "pid"),
-            Required(actor, "fid"), prototypeSha256, artSha256, messageText, messageId, route);
+            Required(actor, "fid"), prototypeSha256, artSha256, messageText, messageId, route,
+            program);
     }
 
     internal object Report(bool viewed) => new

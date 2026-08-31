@@ -83,6 +83,13 @@ internal readonly record struct ClassicScriptContext(
     bool CanSeePlayer,
     int GameTime);
 
+internal readonly record struct ClassicScriptMessage(int? MessageListId, int MessageId);
+
+internal sealed record ClassicScriptExecution(
+    bool Executed,
+    bool ScriptOverrides,
+    IReadOnlyList<ClassicScriptMessage> DisplayMessages);
+
 internal sealed class ClassicScriptProgram
 {
     private const string Schema = "opennv-classic-script-effects/v1";
@@ -109,18 +116,25 @@ internal sealed class ClassicScriptProgram
     }
 
     internal bool Execute(string eventName, ClassicScriptState state, ClassicScriptContext context)
+        => ExecuteWithActions(eventName, state, context).Executed;
+
+    internal ClassicScriptExecution ExecuteWithActions(
+        string eventName,
+        ClassicScriptState state,
+        ClassicScriptContext context)
     {
         if (!_events.TryGetValue(eventName, out var rules))
-            return false;
-        var executed = false;
-        foreach (var rule in rules.Where(rule => rule.Conditions.All(condition =>
-                     Matches(condition, state, context))))
+            return new ClassicScriptExecution(false, false, []);
+        var matched = rules.Where(rule => rule.Conditions.All(condition =>
+            Matches(condition, state, context))).ToArray();
+        var scriptOverrides = false;
+        var messages = new List<ClassicScriptMessage>();
+        foreach (var rule in matched)
         {
             foreach (var effect in rule.Effects)
-                Apply(effect, state, context);
-            executed = true;
+                Apply(effect, state, context, ref scriptOverrides, messages);
         }
-        return executed;
+        return new ClassicScriptExecution(matched.Length > 0, scriptOverrides, messages);
     }
 
     private static Rule ParseRule(JsonElement source)
@@ -130,9 +144,10 @@ internal sealed class ClassicScriptProgram
         var effects = source.GetProperty("then").EnumerateArray()
             .Select(ParseOperation).ToArray();
         if (conditions.Any(row => row.Name is not
-                ("source-is-player" or "can-see-player" or "local-equals")) ||
+                ("source-is-player" or "can-see-player" or "local-equals" or
+                 "local-not-equals")) ||
             effects.Length == 0 || effects.Any(row => row.Name is not
-                ("set-local" or "set-flag")))
+                ("set-local" or "set-flag" or "script-overrides" or "display-message")))
             throw new InvalidOperationException(
                 "Classic script rule mixes conditions and effects.");
         return new Rule(conditions, effects);
@@ -142,7 +157,8 @@ internal sealed class ClassicScriptProgram
     {
         var operation = source.GetProperty("operation").GetString() ?? "";
         if (operation is not ("source-is-player" or "can-see-player" or "local-equals" or
-            "set-local" or "set-flag"))
+            "local-not-equals" or "set-local" or "set-flag" or "script-overrides" or
+            "display-message"))
             throw new InvalidOperationException($"Unsupported classic script operation: {operation}");
         int? index = source.TryGetProperty("index", out var indexValue)
             ? indexValue.GetInt32()
@@ -156,13 +172,21 @@ internal sealed class ClassicScriptProgram
         var flag = source.TryGetProperty("flag", out var flagElement)
             ? flagElement.GetString()
             : null;
+        int? messageListId = source.TryGetProperty("messageListId", out var listElement)
+            ? listElement.GetInt32()
+            : null;
+        int? messageId = source.TryGetProperty("messageId", out var messageElement)
+            ? messageElement.GetInt32()
+            : null;
         if (index is < 0 ||
-            operation is "local-equals" && (index is null || value is null) ||
+            operation is ("local-equals" or "local-not-equals") &&
+                (index is null || value is null) ||
             operation is "set-local" && (index is null || (value is null) == (valueFrom is null)) ||
             valueFrom is not null && valueFrom != "game-time" ||
-            operation is "set-flag" && string.IsNullOrWhiteSpace(flag))
+            operation is "set-flag" && string.IsNullOrWhiteSpace(flag) ||
+            operation is "display-message" && (messageId is null or < 0 || messageListId is < 0))
             throw new InvalidOperationException($"Classic script operation is incomplete: {operation}");
-        return new Operation(operation, index, value, valueFrom, flag);
+        return new Operation(operation, index, value, valueFrom, flag, messageListId, messageId);
     }
 
     private static bool Matches(
@@ -173,6 +197,7 @@ internal sealed class ClassicScriptProgram
             "source-is-player" => context.SourceIsPlayer,
             "can-see-player" => context.CanSeePlayer,
             "local-equals" => state.Local(operation.Index!.Value) == operation.Value,
+            "local-not-equals" => state.Local(operation.Index!.Value) != operation.Value,
             _ => throw new InvalidOperationException(
                 $"Classic script effect used as a condition: {operation.Name}"),
         };
@@ -180,7 +205,9 @@ internal sealed class ClassicScriptProgram
     private static void Apply(
         Operation operation,
         ClassicScriptState state,
-        ClassicScriptContext context)
+        ClassicScriptContext context,
+        ref bool scriptOverrides,
+        ICollection<ClassicScriptMessage> messages)
     {
         switch (operation.Name)
         {
@@ -190,6 +217,14 @@ internal sealed class ClassicScriptProgram
                 break;
             case "set-flag":
                 state.SetFlag(operation.Flag!);
+                break;
+            case "script-overrides":
+                scriptOverrides = true;
+                break;
+            case "display-message":
+                messages.Add(new ClassicScriptMessage(
+                    operation.MessageListId,
+                    operation.MessageId!.Value));
                 break;
             default:
                 throw new InvalidOperationException(
@@ -203,5 +238,7 @@ internal sealed class ClassicScriptProgram
         int? Index,
         int? Value,
         string? ValueFrom,
-        string? Flag);
+        string? Flag,
+        int? MessageListId,
+        int? MessageId);
 }

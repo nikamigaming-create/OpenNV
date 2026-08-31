@@ -62,6 +62,7 @@ internal sealed record Fo2TempleGuardianScript(
     string InitialNode,
     string TerminalNode,
     IReadOnlyDictionary<string, Fo2TempleGuardianDialogueNode> Nodes,
+    IReadOnlyDictionary<int, string> DisplayMessages,
     ClassicScriptProgram EffectProgram,
     string ContractSha256);
 
@@ -242,6 +243,11 @@ internal sealed record Fo2TempleConfrontationContract(
         var nodes = source.GetProperty("nodes").EnumerateArray()
             .Select(ReadGuardianNode)
             .ToDictionary(row => row.Id, StringComparer.Ordinal);
+        var displayMessages = source.GetProperty("displayMessages").EnumerateArray()
+            .ToDictionary(
+                row => row.GetProperty("messageId").GetInt32(),
+                row => Fo2TemplePresentationCatalog.RequiredString(row, "text"));
+        var effectProgram = ClassicScriptProgram.Parse(source.GetProperty("effectProgram"));
         var result = new Fo2TempleGuardianScript(
             Fo2TemplePresentationCatalog.RequiredString(source, "schema"),
             Fo2TemplePresentationCatalog.RequiredString(source, "authority"),
@@ -259,8 +265,16 @@ internal sealed record Fo2TempleConfrontationContract(
             Fo2TemplePresentationCatalog.RequiredString(source, "initialNode"),
             Fo2TemplePresentationCatalog.RequiredString(source, "terminalNode"),
             nodes,
-            ClassicScriptProgram.Parse(source.GetProperty("effectProgram")),
+            displayMessages,
+            effectProgram,
             Fo2TemplePresentationCatalog.RequiredHash(source, "contractSha256"));
+        var lookState = new ClassicScriptState();
+        var firstLook = effectProgram.ExecuteWithActions(
+            "look_at_p_proc", lookState, new ClassicScriptContext(false, false, default));
+        var repeatLook = effectProgram.ExecuteWithActions(
+            "look_at_p_proc", lookState, new ClassicScriptContext(false, false, default));
+        var lookMessageIds = firstLook.DisplayMessages.Concat(repeatLook.DisplayMessages)
+            .Select(row => row.MessageId).ToHashSet();
         if (result.Schema != "opennv-fo2-acklint-guardian-script/v1" ||
             string.IsNullOrWhiteSpace(result.Authority) ||
             result.ScriptsListIndex != 750 ||
@@ -274,6 +288,14 @@ internal sealed record Fo2TempleConfrontationContract(
             result.TerminalNode != "Node999" || result.Nodes.Count != 5 ||
             !result.Nodes.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
                 new[] { "Node001", "Node002", "Node003", "Node004", "Node005" }) ||
+            !firstLook.Executed || !firstLook.ScriptOverrides ||
+            firstLook.DisplayMessages.Count != 1 ||
+            firstLook.DisplayMessages[0].MessageListId != result.MessageListId ||
+            !repeatLook.Executed || !repeatLook.ScriptOverrides ||
+            repeatLook.DisplayMessages.Count != 1 ||
+            repeatLook.DisplayMessages[0].MessageListId != result.MessageListId ||
+            lookMessageIds.Count != 2 ||
+            !result.DisplayMessages.Keys.ToHashSet().SetEquals(lookMessageIds) ||
             !boundary.GetProperty("dialogueNodes").GetBoolean() ||
             !boundary.GetProperty("pickupToAttackTransition").GetBoolean() ||
             boundary.GetProperty("generalIntExecution").GetBoolean())

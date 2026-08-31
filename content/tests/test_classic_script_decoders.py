@@ -9,7 +9,11 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from classic_int_effects import ClassicIntDecodeError, decode_acklint_effects  # noqa: E402
-from classic_ssl_effects import ClassicSslParseError, decode_flare_effects  # noqa: E402
+from classic_ssl_effects import (  # noqa: E402
+    ClassicSslParseError,
+    decode_flare_effects,
+    decode_single_message_look,
+)
 from content.tests.test_fo2_first_slice import synthetic_acklint_int  # noqa: E402
 
 
@@ -47,6 +51,10 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         self.assertEqual(critter["all"][0]["index"], 5)
         self.assertEqual(critter["then"][0]["value"], 1)
         self.assertEqual(critter["then"][1]["flag"], "attack-player-requested")
+        look = program["events"]["look_at_p_proc"]
+        self.assertEqual(look[0]["all"][0]["index"], 7)
+        self.assertEqual(look[0]["then"][2]["messageId"], 100)
+        self.assertEqual(look[1]["then"][1]["messageId"], 101)
 
     def test_int_decoder_rejects_opcode_and_branch_drift(self) -> None:
         source = synthetic_acklint_int()
@@ -85,6 +93,20 @@ class ClassicScriptDecoderTest(unittest.TestCase):
             decode_flare_effects(FLARE_SSL.replace("lit := 1", "lit := 2"))
         with self.assertRaises(ClassicSslParseError):
             decode_flare_effects(FLARE_SSL.replace("destroy_object", "display_msg"))
+
+    def test_ssl_parser_recovers_single_message_look_actions(self) -> None:
+        source = """
+        procedure look_at_p_proc begin
+          script_overrides;
+          display_msg(mstr(136));
+        end
+        """
+        program = decode_single_message_look(source)
+        effects = program["events"]["look_at_p_proc"][0]["then"]
+        self.assertEqual(effects[0]["operation"], "script-overrides")
+        self.assertEqual(effects[1]["messageId"], 136)
+        with self.assertRaises(ClassicSslParseError):
+            decode_single_message_look(source.replace("script_overrides;", ""))
 
 
 if __name__ == "__main__":

@@ -28,6 +28,10 @@ AND = 0x803E
 IF = 0x802F
 CAN_SEE = 0x80DC
 ATTACK = 0x80D0
+JUMP = 0x8004
+DISPLAY_MSG = 0x80B8
+SCRIPT_OVERRIDES = 0x80B9
+MESSAGE_STR = 0x8105
 D_TO_A = 0x800D
 SWAP_RETURN = 0x8019
 POP_TO_BASE = 0x802A
@@ -225,11 +229,64 @@ def _decode_critter(data: bytes, bounds: tuple[int, int]) -> tuple[int, int, int
     return local, required, set_value
 
 
+def _decode_look_at(data: bytes, bounds: tuple[int, int]) -> tuple[int, int, int, int]:
+    code = _instructions(data, bounds)
+    cursor = 0
+
+    def take(opcode: int, operand: int | None = None) -> Instruction:
+        nonlocal cursor
+        instruction = _expect(code, cursor, opcode, operand)
+        cursor += 1
+        return instruction
+
+    take(PUSH_BASE)
+    take(SCRIPT_OVERRIDES)
+    else_branch = take(PUSH_INT)
+    local = take(PUSH_INT).operand
+    take(LOCAL_VAR)
+    take(PUSH_INT, 0)
+    take(EQUAL)
+    take(IF)
+    set_local = take(PUSH_INT).operand
+    take(PUSH_INT, 1)
+    take(SET_LOCAL_VAR)
+    message_list = take(PUSH_INT).operand
+    first_message = take(PUSH_INT).operand
+    take(MESSAGE_STR)
+    take(DISPLAY_MSG)
+    end_branch = take(PUSH_INT)
+    take(JUMP)
+    if cursor >= len(code) or else_branch.operand != code[cursor].offset:
+        raise ClassicIntDecodeError("INT look-at else target is invalid")
+    repeat_list = take(PUSH_INT).operand
+    repeat_message = take(PUSH_INT).operand
+    take(MESSAGE_STR)
+    take(DISPLAY_MSG)
+    if (
+        cursor >= len(code)
+        or end_branch.operand != code[cursor].offset
+        or local is None
+        or local < 0
+        or set_local != local
+        or message_list is None
+        or message_list < 0
+        or repeat_list != message_list
+        or first_message is None
+        or first_message < 0
+        or repeat_message is None
+        or repeat_message < 0
+    ):
+        raise ClassicIntDecodeError("INT look-at state or message identity is invalid")
+    _expect_epilogue(code, cursor)
+    return local, message_list, first_message, repeat_message
+
+
 def decode_acklint_effects(data: bytes) -> dict[str, Any]:
     procedures = _procedures(data)
     try:
         pickup = _decode_pickup(data, procedures["pickup_p_proc"])
         critter = _decode_critter(data, procedures["critter_p_proc"])
+        look_at = _decode_look_at(data, procedures["look_at_p_proc"])
     except KeyError as error:
         raise ClassicIntDecodeError(
             f"required ACKlint INT procedure is absent: {error.args[0]}"
@@ -238,6 +295,7 @@ def decode_acklint_effects(data: bytes) -> dict[str, Any]:
         raise ClassicIntDecodeError("ACKlint procedures do not share one local variable")
     local, pickup_value = pickup
     _, required_value, attack_value = critter
+    look_local, message_list, first_message, repeat_message = look_at
     return {
         "schema": "opennv-classic-script-effects/v1",
         "events": {
@@ -267,5 +325,42 @@ def decode_acklint_effects(data: bytes) -> dict[str, Any]:
                     {"operation": "set-flag", "flag": "attack-player-requested"},
                 ],
             }],
+            "look_at_p_proc": [
+                {
+                    "all": [{
+                        "operation": "local-equals",
+                        "index": look_local,
+                        "value": 0,
+                    }],
+                    "then": [
+                        {
+                            "operation": "set-local",
+                            "index": look_local,
+                            "value": 1,
+                        },
+                        {"operation": "script-overrides"},
+                        {
+                            "operation": "display-message",
+                            "messageListId": message_list,
+                            "messageId": first_message,
+                        },
+                    ],
+                },
+                {
+                    "all": [{
+                        "operation": "local-not-equals",
+                        "index": look_local,
+                        "value": 0,
+                    }],
+                    "then": [
+                        {"operation": "script-overrides"},
+                        {
+                            "operation": "display-message",
+                            "messageListId": message_list,
+                            "messageId": repeat_message,
+                        },
+                    ],
+                },
+            ],
         },
     }

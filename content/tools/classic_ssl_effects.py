@@ -14,6 +14,9 @@ CLASSIC_SSL_SOURCE_CONTRACT_HOURS = 2
 CLASSIC_SSL_SOURCE_CONTRACT_MINUTES_PER_HOUR = 60
 CLASSIC_SSL_SOURCE_CONTRACT_SECONDS_PER_MINUTE = 60
 CLASSIC_SSL_SOURCE_CONTRACT_TICKS_PER_SECOND = 10
+CLASSIC_SSL_SOURCE_CONTRACT_LOOK_TOKEN_COUNT = 10
+CLASSIC_SSL_SOURCE_CONTRACT_LOOK_MESSAGE_INDEX = 6
+CLASSIC_SSL_SOURCE_CONTRACT_LOOK_TAIL_INDEX = 7
 
 
 @dataclass(frozen=True)
@@ -68,9 +71,7 @@ def _tokens(source: str) -> list[Token]:
         elif source[offset] in "()*,;+-><":
             offset += 1
         else:
-            raise ClassicSslParseError(
-                f"unsupported SSL token at source offset {offset}"
-            )
+            offset += 1
         result.append(Token(source[start:offset], start))
     return result
 
@@ -205,3 +206,43 @@ def decode_flare_effects(source: str) -> tuple[dict[str, Any], dict[str, Any]]:
         "runtime": "unimplemented-fail-closed",
     }
     return program, expiry
+
+
+def decode_single_message_look(source: str) -> dict[str, Any]:
+    tokens = _tokens(source)
+    header = ("procedure", "look_at_p_proc", "begin")
+    blocks = [
+        _block(tokens, index + len(header) - 1)
+        for index in _find_all(tokens, header)
+    ]
+    if len(blocks) != 1:
+        raise ClassicSslParseError("SSL single-message look procedure is not unique")
+    expected = (
+        "script_overrides", ";", "display_msg", "(", "mstr", "(",
+    )
+    candidates: list[int] = []
+    for block in blocks:
+        folded = tuple(token.text.casefold() for token in block)
+        if (
+            len(folded) != CLASSIC_SSL_SOURCE_CONTRACT_LOOK_TOKEN_COUNT
+            or folded[:CLASSIC_SSL_SOURCE_CONTRACT_LOOK_MESSAGE_INDEX] != expected
+            or folded[CLASSIC_SSL_SOURCE_CONTRACT_LOOK_TAIL_INDEX:] != (")", ")", ";")
+        ):
+            continue
+        message = block[CLASSIC_SSL_SOURCE_CONTRACT_LOOK_MESSAGE_INDEX].text
+        if message.isdecimal():
+            candidates.append(int(message))
+    if len(candidates) != 1:
+        raise ClassicSslParseError("SSL single-message look procedure is unsupported")
+    return {
+        "schema": "opennv-classic-script-effects/v1",
+        "events": {
+            "look_at_p_proc": [{
+                "all": [],
+                "then": [
+                    {"operation": "script-overrides"},
+                    {"operation": "display-message", "messageId": candidates[0]},
+                ],
+            }],
+        },
+    }

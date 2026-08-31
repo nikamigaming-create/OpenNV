@@ -13,6 +13,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from classic_ssl_effects import decode_single_message_look
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError, sha256_path
 from prepare_fo1_destination_generic_door import (
@@ -26,8 +27,6 @@ MAP_PRESENTATION_SCHEMA = "opennv-fo1-campaign-map-presentation/v1"
 FLOOR_WIDTH = MAP_WIDTH // 2
 MEDIC_SYMBOL = "SCRIPT_MEDIC"
 SCRIPT_DEFINE = re.compile(r"^\s*#define\s+(SCRIPT_[A-Z0-9_]+)\s+\(\s*(\d+)\s*\)", re.MULTILINE)
-LOOK_AT = re.compile(r"procedure\s+look_at_p_proc\s+begin(?P<body>.*?)\bend\b", re.IGNORECASE | re.DOTALL)
-DISPLAY_MESSAGE = re.compile(r"display_msg\s*\(\s*mstr\s*\(\s*(\d+)\s*\)\s*\)", re.IGNORECASE)
 MESSAGE_ROW = re.compile(r"^\s*\{\s*(\d+)\s*\}\s*\{[^}]*\}\s*\{(?P<text>.*)\}\s*$")
 
 
@@ -42,17 +41,12 @@ def read_script_id(header: Path) -> int:
     return values[MEDIC_SYMBOL]
 
 
-def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str]:
+def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str, dict[str, Any]]:
     script = script_path.read_text(encoding="cp1252")
     if not re.search(rf"#define\s+NAME\s+{MEDIC_SYMBOL}\b", script):
         raise Fo1ProfileError("Medic script does not bind NAME to SCRIPT_MEDIC")
-    match = LOOK_AT.search(script)
-    if match is None:
-        raise Fo1ProfileError("Medic script has no look_at_p_proc")
-    message = DISPLAY_MESSAGE.search(match.group("body"))
-    if message is None:
-        raise Fo1ProfileError("Medic look_at_p_proc does not emit one source message")
-    message_id = int(message.group(1))
+    effect_program = decode_single_message_look(script)
+    message_id = effect_program["events"]["look_at_p_proc"][0]["then"][1]["messageId"]
     messages: dict[int, str] = {}
     for line in message_path.read_text(encoding="cp1252").splitlines():
         row = MESSAGE_ROW.match(line)
@@ -60,7 +54,7 @@ def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str]:
             messages[int(row.group(1))] = row.group("text")
     if message_id not in messages or not messages[message_id]:
         raise Fo1ProfileError("Medic source message file does not contain the look-at message")
-    return message_id, messages[message_id]
+    return message_id, messages[message_id], effect_program
 
 
 def shortest_contact_path(start: int, target: int, floor_ids: list[int], default_tile: int,
@@ -125,7 +119,7 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
     if elevation is None or source_rows is None:
         raise Fo1ProfileError("Medic look destination elevation is absent from source/presentation")
     script_id = read_script_id(scripts_header)
-    message_id, message_text = read_look_message(medic_script, medic_message)
+    message_id, message_text, effect_program = read_look_message(medic_script, medic_message)
     door = generic_door["door"]
     if not door.get("open", {}).get("walkable"):
         raise Fo1ProfileError("generic-door descriptor does not mark its opened tile walkable")
@@ -173,6 +167,7 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
         "semantics": {"procedure": "look_at_p_proc", "messageId": message_id, "messageText": message_text,
                       "result": "display-message-only", "dialogue": "unimplemented-fail-closed",
                       "combat": "not-proven-by-look-at-only", "actionPoints": "not-source-backed"},
+        "effectProgram": effect_program,
         "sourceWalkMaskRoute": {"pathTiles": route, "contactTile": route[-1], "contactIsAdjacent": route[-1] in neighbors(actor["tile"])},
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,
     }

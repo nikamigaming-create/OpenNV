@@ -567,6 +567,15 @@ internal partial class Fo1TacticalSession : Node
             "Fallout destination has no explicit Medic look-at contract.");
         if (!Fo1HexMath.AreNeighbors(_playerTile, medic.Tile))
             return false;
+        var execution = medic.Program.ExecuteWithActions(
+            "look_at_p_proc",
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        if (!execution.Executed || !execution.ScriptOverrides ||
+            execution.DisplayMessages.Count != 1 ||
+            execution.DisplayMessages[0].MessageId != medic.MessageId)
+            throw new InvalidOperationException(
+                "Fallout Medic look script did not emit its admitted message.");
         _destinationMedicLookViewed = true;
         _status = medic.MessageText;
         RefreshHud();

@@ -27,6 +27,7 @@ internal sealed record Fo2TempleConfrontationProfile(
     Fo2TempleConfrontationInput Combat,
     Fo2TempleConfrontationInput Attack,
     Fo2TempleConfrontationInput EndTurn,
+    Fo2TempleConfrontationInput Look,
     Fo2TempleConfrontationInput Loot,
     Fo2TempleConfrontationInput Inventory,
     string Title,
@@ -90,6 +91,7 @@ internal sealed record Fo2TempleConfrontationProfile(
             ReadInput(input, "combat"),
             ReadInput(input, "attack"),
             ReadInput(input, "endTurn"),
+            ReadInput(input, "look"),
             ReadInput(input, "loot"),
             ReadInput(input, "inventory"),
             RequiredString(ui, "title"),
@@ -102,6 +104,7 @@ internal sealed record Fo2TempleConfrontationProfile(
             result.Combat,
             result.Attack,
             result.EndTurn,
+            result.Look,
             result.Loot,
             result.Inventory,
         };
@@ -124,7 +127,7 @@ internal sealed record Fo2TempleConfrontationProfile(
 
     internal void ConfigureInput()
     {
-        foreach (var binding in new[] { Combat, Attack, EndTurn, Loot, Inventory })
+        foreach (var binding in new[] { Combat, Attack, EndTurn, Look, Loot, Inventory })
         {
             if (InputMap.HasAction(binding.Action))
                 InputMap.EraseAction(binding.Action);
@@ -335,7 +338,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         content.AddChild(_status);
         content.AddChild(Label("Inventory: press I / controller Y"));
         content.AddChild(Label(
-            "C/X: Combat   Space/A: Attack   Enter/Start: End Turn   E/B: Talk/Loot   I/Y: Inventory"));
+            "C/X: Combat   Space/A: Attack   Enter/Start: End Turn   L/D-pad Up: Look   E/B: Talk/Loot   I/Y: Inventory"));
         AddChild(panel);
         _inventory = new Fo2TempleInventoryScreen(
             inventorySource,
@@ -429,6 +432,8 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             Attack();
         if (Input.IsActionJustPressed(_profile.EndTurn.Action))
             EndTurn();
+        if (Input.IsActionJustPressed(_profile.Look.Action))
+            LookAtGuardian();
         if (Input.IsActionJustPressed(_profile.Loot.Action))
         {
             if (_state.TargetHitPoints > 0 && !_state.CombatActive)
@@ -509,6 +514,31 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         _player.SetPhysicsProcess(false);
         _dialogue.Open();
         SetStatus("Owned ACKlint dialogue active; general INT execution remains disabled.");
+        return true;
+    }
+
+    internal bool LookAtGuardian()
+    {
+        if (_dialogue.IsOpen || _inventory.IsOpen || _state.TargetHitPoints == 0 ||
+            !Adjacent())
+        {
+            SetStatus("Look requires a live adjacent guardian.");
+            return false;
+        }
+        var script = _contract.GuardianScript;
+        var execution = script.EffectProgram.ExecuteWithActions(
+            "look_at_p_proc",
+            _state.ScriptState,
+            new ClassicScriptContext(false, true, default));
+        if (!execution.Executed || !execution.ScriptOverrides ||
+            execution.DisplayMessages.Count != 1 ||
+            execution.DisplayMessages[0].MessageListId != script.MessageListId ||
+            !script.DisplayMessages.TryGetValue(
+                execution.DisplayMessages[0].MessageId, out var message))
+            throw new InvalidOperationException(
+                "Fallout 2 guardian look-at script did not emit an admitted message.");
+        SetStatus(message);
+        Changed();
         return true;
     }
 
