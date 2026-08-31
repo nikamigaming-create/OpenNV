@@ -221,7 +221,8 @@ var gameContext = new ClassicIntExpressionContext(
         1,
         new Dictionary<(int, int), int> { [(100, 6)] = 3 },
         new Dictionary<(int, int), int>(),
-        new Dictionary<int, int>());
+        new Dictionary<int, int>(),
+        new Dictionary<(int, int), int> { [(344, 103)] = 9001 });
 var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
     intInitialization.RandomSites[1],
     gameContext,
@@ -254,6 +255,56 @@ if (procedureResult.State.ProgramVariables[3] != 9 ||
     procedureResult.ExecutedInstructions != 8)
     throw new InvalidOperationException(
         "Classic INT procedure stack/store/return execution drifted.");
+
+using var callDocument = JsonDocument.Parse("""
+    { "procedures": [{
+      "name": "caller", "bodyOffset": 100, "canonicalEpilogueOffset": 120,
+      "instructions": [
+        { "offset": 100, "opcode": "802b", "operand": null },
+        { "offset": 102, "opcode": "c001", "operand": 200 },
+        { "offset": 108, "opcode": "8005", "operand": null },
+        { "offset": 110, "opcode": "c001", "operand": 7 },
+        { "offset": 116, "opcode": "8013", "operand": null },
+        { "offset": 120, "opcode": "c001", "operand": 0 },
+        { "offset": 126, "opcode": "800d", "operand": null },
+        { "offset": 128, "opcode": "8019", "operand": null },
+        { "offset": 130, "opcode": "802a", "operand": null },
+        { "offset": 132, "opcode": "8029", "operand": null },
+        { "offset": 134, "opcode": "800c", "operand": null },
+        { "offset": 136, "opcode": "801c", "operand": null },
+        { "offset": 138, "opcode": "802a", "operand": null },
+        { "offset": 140, "opcode": "8029", "operand": null },
+        { "offset": 142, "opcode": "801c", "operand": null }
+      ]
+    }, {
+      "name": "callee", "bodyOffset": 200, "canonicalEpilogueOffset": 202,
+      "instructions": [
+        { "offset": 200, "opcode": "802b", "operand": null },
+        { "offset": 202, "opcode": "c001", "operand": 0 },
+        { "offset": 208, "opcode": "800d", "operand": null },
+        { "offset": 210, "opcode": "8019", "operand": null },
+        { "offset": 212, "opcode": "802a", "operand": null },
+        { "offset": 214, "opcode": "8029", "operand": null },
+        { "offset": 216, "opcode": "800c", "operand": null },
+        { "offset": 218, "opcode": "801c", "operand": null },
+        { "offset": 220, "opcode": "802a", "operand": null },
+        { "offset": 222, "opcode": "8029", "operand": null },
+        { "offset": 224, "opcode": "801c", "operand": null }
+      ]
+    }] }
+    """);
+var callProgram = ClassicIntProcedureVm.Parse(callDocument.RootElement, "abi.int");
+var callResult = ClassicIntProcedureVm.Execute(
+    callProgram, "caller",
+    new ClassicIntProcedureState(
+        new Dictionary<int, int>(), new Dictionary<int, int>(),
+        new Dictionary<int, int>(), new Dictionary<int, int>(),
+        new Dictionary<int, int>(), [], randomState),
+    gameContext, randomContract, 26);
+if (callResult.State.ProgramVariables[7] != 0 ||
+    callResult.ExecutedInstructions != 26 || callResult.ReturnValue != 0)
+    throw new InvalidOperationException(
+        "Classic INT call/D-A return ABI execution drifted.");
 
 using var missingScript = JsonDocument.Parse("""
     {
@@ -293,35 +344,41 @@ foreach (var path in args)
             "initializationScripts",
             out var ownedScripts))
     {
-        var jasmine = ownedScripts.GetProperty("liveScriptSlots").EnumerateArray()
-            .Select(row => row.GetProperty("program"))
-            .First(row => string.Equals(
-                row.GetProperty("program").GetString(),
-                "jasmine.int",
-                StringComparison.OrdinalIgnoreCase));
-        var ownedProgram = ClassicIntProcedureVm.Parse(
-            jasmine.GetProperty("inventory"),
-            jasmine.GetProperty("program").GetString()!);
-        var ownedResult = ClassicIntProcedureVm.Execute(
-            ownedProgram,
-            "map_enter_p_proc",
-            new ClassicIntProcedureState(
-                new Dictionary<int, int>(),
-                new Dictionary<int, int>(),
-                new Dictionary<int, int>(),
-                new Dictionary<int, int>(),
-                new Dictionary<int, int>(),
-                [],
-                randomState),
-            gameContext,
-            randomContract,
-            ownedProgram.Procedures["map_enter_p_proc"].Instructions.Count);
-        if (ownedResult.State.ProgramVariables[4] != 0)
-            throw new InvalidOperationException(
-                "Owned classic INT procedure mutation drifted.");
-        Console.WriteLine(
-            $"{Path.GetFileName(path)}|jasmine.int|map_enter_p_proc|" +
-            $"{ownedResult.ExecutedInstructions}");
+        var programs = ownedScripts.GetProperty("liveScriptSlots").EnumerateArray()
+            .Select(row => row.GetProperty("program")).ToArray();
+        var jasmine = programs.FirstOrDefault(row => string.Equals(
+            row.GetProperty("program").GetString(), "jasmine.int",
+            StringComparison.OrdinalIgnoreCase));
+        if (jasmine.ValueKind != JsonValueKind.Undefined)
+        {
+            var ownedProgram = ClassicIntProcedureVm.Parse(
+                jasmine.GetProperty("inventory"), "jasmine.int");
+            var ownedResult = ExecuteOwned(ownedProgram, "map_enter_p_proc");
+            if (ownedResult.State.ProgramVariables[4] != 0)
+                throw new InvalidOperationException(
+                    "Owned classic INT procedure mutation drifted.");
+            Console.WriteLine(
+                $"{Path.GetFileName(path)}|jasmine.int|map_enter_p_proc|" +
+                $"{ownedResult.ExecutedInstructions}");
+        }
+        var v13Computer = programs.FirstOrDefault(row => string.Equals(
+            row.GetProperty("program").GetString(), "V13Comp.int",
+            StringComparison.OrdinalIgnoreCase));
+        if (v13Computer.ValueKind != JsonValueKind.Undefined)
+        {
+            var ownedProgram = ClassicIntProcedureVm.Parse(
+                v13Computer.GetProperty("inventory"), "V13Comp.int");
+            var ownedResult = ExecuteOwned(ownedProgram, "description_p_proc");
+            if (ownedResult.ExecutedInstructions != 15 ||
+                ownedResult.ReturnValue != 0 ||
+                ownedResult.MessageEffects is not
+                    [{ MessageList: 344, MessageId: 103, MessageHandle: 9001 }])
+                throw new InvalidOperationException(
+                    "Owned V13 computer description effect drifted.");
+            Console.WriteLine(
+                $"{Path.GetFileName(path)}|V13Comp.int|description_p_proc|" +
+                $"{ownedResult.ExecutedInstructions}");
+        }
         continue;
     }
     var owned = ClassicMapInitializationOwner.Parse(
@@ -330,3 +387,20 @@ foreach (var path in args)
         $"{Path.GetFileName(path)}|{owned.Objects.Count}|" +
         $"{owned.ScriptedObjects.Count}|{owned.ScriptSlots.Count}");
 }
+
+ClassicIntProcedureResult ExecuteOwned(
+    ClassicIntProgram ownedProgram,
+    string procedure) => ClassicIntProcedureVm.Execute(
+    ownedProgram,
+    procedure,
+    new ClassicIntProcedureState(
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        [],
+        randomState),
+    gameContext,
+    randomContract,
+    ownedProgram.Procedures[procedure].Instructions.Count);

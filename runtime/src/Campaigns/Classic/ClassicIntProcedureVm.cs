@@ -27,17 +27,29 @@ internal sealed record ClassicIntProcedureState(
 
 internal sealed record ClassicIntProcedureResult(
     ClassicIntProcedureState State,
-    int ExecutedInstructions);
+    int ExecutedInstructions,
+    int ReturnValue,
+    IReadOnlyList<ClassicIntMessageEffect> MessageEffects);
+
+internal sealed record ClassicIntMessageEffect(
+    int MessageList,
+    int MessageId,
+    int MessageHandle);
 
 internal static class ClassicIntProcedureVm
 {
     private const ushort Jump = 0x8004;
     private const ushort Call = 0x8005;
+    private const ushort AToData = 0x800C;
+    private const ushort DataToA = 0x800D;
+    private const ushort SwapReturn = 0x8019;
     private const ushort PopOpcode = 0x801A;
     private const ushort Return = 0x801C;
     private const ushort FetchProgram = 0x8012;
     private const ushort StoreProgram = 0x8013;
     private const ushort PushBase = 0x802B;
+    private const ushort PopBase = 0x8029;
+    private const ushort PopToBase = 0x802A;
     private const ushort Branch = 0x802F;
     private const ushort StoreLocal = 0x8031;
     private const ushort FetchLocal = 0x8032;
@@ -56,6 +68,7 @@ internal static class ClassicIntProcedureVm
     private const ushort Not = 0x8045;
     private const ushort Negate = 0x8046;
     private const ushort Random = 0x80B4;
+    private const ushort DisplayMessage = 0x80B8;
     private const ushort SelfObject = 0x80BC;
     private const ushort DudeObject = 0x80BF;
     private const ushort ScriptLocal = 0x80C1;
@@ -66,6 +79,7 @@ internal static class ClassicIntProcedureVm
     private const ushort SetGlobalVariable = 0x80C6;
     private const ushort CritterStat = 0x80CA;
     private const ushort Metarule = 0x810B;
+    private const ushort MessageString = 0x8105;
     private const ushort DifficultyLevel = 0x812A;
     private const ushort CombatDifficulty = 0x814F;
     private const ushort SfallArrayLength = 0x8231;
@@ -142,6 +156,8 @@ internal static class ClassicIntProcedureVm
         var bases = new Stack<int>();
         var calls = new Stack<(int Offset, ClassicIntProcedure Procedure)>();
         var random = source.RandomState;
+        var messageEffects = new List<ClassicIntMessageEffect>();
+        var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
         var executed = 0;
@@ -149,6 +165,13 @@ internal static class ClassicIntProcedureVm
         {
             if (current.CanonicalEpilogueOffset == offset)
             {
+                var epilogueLength = ValidateCanonicalEpilogue(
+                    program, procedure, current, offset);
+                if (executed + epilogueLength > instructionBudget)
+                    throw Failure(program, procedure, offset, "instruction-budget");
+                executed += epilogueLength;
+                returnValue = current.Instructions
+                    .Single(row => row.Offset == offset).Operand!.Value;
                 if (bases.Count != 0)
                 {
                     var valueBase = bases.Pop();
@@ -158,6 +181,7 @@ internal static class ClassicIntProcedureVm
                 if (calls.Count == 0)
                     return Result();
                 var frame = calls.Pop();
+                stack.Add(returnValue);
                 offset = frame.Offset;
                 current = frame.Procedure;
                 continue;
@@ -276,6 +300,28 @@ internal static class ClassicIntProcedureVm
                         stack.Add(result.Value);
                         break;
                     }
+                case MessageString:
+                    {
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        stack.Add(Read(game.MessageHandles,
+                            (messageList, messageId), program, procedure, offset,
+                            "message"));
+                        break;
+                    }
+                case DisplayMessage:
+                    {
+                        var handle = Pop(stack, program, procedure, offset);
+                        var matches = game.MessageHandles
+                            .Where(row => row.Value == handle).Select(row => row.Key)
+                            .Take(2).ToArray();
+                        if (matches.Length != 1)
+                            throw Failure(program, procedure, offset,
+                                "ambiguous-message-handle");
+                        messageEffects.Add(new ClassicIntMessageEffect(
+                            matches[0].MessageList, matches[0].MessageId, handle));
+                        break;
+                    }
                 case Jump:
                     next = Pop(stack, program, procedure, offset);
                     break;
@@ -318,7 +364,32 @@ internal static class ClassicIntProcedureVm
             new ClassicIntProcedureState(
                 programVariables, locals, scriptLocals, mapVariables, globals,
                 stack, random),
-            executed);
+            executed,
+            returnValue,
+            messageEffects);
+    }
+
+    private static int ValidateCanonicalEpilogue(
+        ClassicIntProgram program,
+        string procedure,
+        ClassicIntProcedure current,
+        int offset)
+    {
+        // The compiler's procedure ABI returns a typed zero through the data/A
+        // stacks, restores both saved bases, and unwinds the return stack twice.
+        // Validate the complete source sequence before applying its atomic effect.
+        (ushort Opcode, int? Operand)[] expected =
+        [
+            (PushInteger, 0), (DataToA, null), (SwapReturn, null),
+            (PopToBase, null), (PopBase, null), (AToData, null),
+            (Return, null), (PopToBase, null), (PopBase, null), (Return, null),
+        ];
+        var actual = current.Instructions.Where(row => row.Offset >= offset).ToArray();
+        if (actual.Length != expected.Length || actual.Where((row, index) =>
+                row.Opcode != expected[index].Opcode ||
+                row.Operand != expected[index].Operand).Any())
+            throw Failure(program, procedure, offset, "canonical-epilogue-abi");
+        return actual.Length;
     }
 
     private static int NextOffset(ClassicIntProcedure procedure, int offset) =>

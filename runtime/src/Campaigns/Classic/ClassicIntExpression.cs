@@ -18,7 +18,8 @@ internal sealed record ClassicIntExpressionContext(
     int DifficultyLevel,
     IReadOnlyDictionary<(int Object, int Stat), int> CritterStats,
     IReadOnlyDictionary<(int Rule, int Argument), int> MetaruleValues,
-    IReadOnlyDictionary<int, int> SfallArrayLengths);
+    IReadOnlyDictionary<int, int> SfallArrayLengths,
+    IReadOnlyDictionary<(int MessageList, int MessageId), int> MessageHandles);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,
