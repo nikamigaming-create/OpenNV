@@ -47,6 +47,10 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const int FaceGenAsymmetricGeometryFloats = 30;
     internal const int FaceGenSymmetricTextureFloats = 50;
     internal const int AabbCornerCount = 8;
+    internal const int DialogueConditionEqual = 0;
+    internal const int DialogueConditionGetItemCount = 47;
+    internal const int DialogueConditionGetQuestVariable = 79;
+    internal const int DialogueConditionGetIsCurrentPackage = 161;
     internal const float FaceGenPreviewNormalizedMorphWeightScale = 1.0f;
     internal const float FaceGenSliderSourceMinimum = -5.0f;
     internal const float FaceGenSliderSourceMaximum = 5.0f;

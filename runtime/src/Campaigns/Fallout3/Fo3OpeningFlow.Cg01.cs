@@ -810,14 +810,13 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01ToddlerPlayer player,
         Action<string, int?> completed)
     {
-        if (!_cg02IntroActors.TryGetValue(participant.ReferenceFormId, out var actor))
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday participant actor is absent.");
+        var actor = EnsureCg02BirthdayActor(participant);
         var engineSex = (_selectedSex ?? throw new InvalidOperationException(
             "Fallout 3 CG02 birthday player sex is absent.")).EngineSex;
         var greeting = participant.GreetingInfoFormIds
             .Select(formId => participant.Nodes[formId])
-            .Single(node => node.EngineSex is null || node.EngineSex == engineSex);
+            .Single(node => (node.EngineSex is null || node.EngineSex == engineSex) &&
+                Cg02BirthdayConditionsMatch(node, actor, player));
         var subtitle = AddVaultDialogueOverlay(
             $"FO3_CG02_BIRTHDAY_{participant.ReferenceFormId}");
         var menu = subtitle.GetParent() as OwnedGamebryoDialogueMenuRuntime ??
@@ -854,9 +853,37 @@ internal partial class Fo3OpeningFlow
                         if (effect.Kind == "setTimer")
                             player.SetMeta("opennv_cg02_timer", effect.Seconds);
                         else if (effect.Kind == "setQuestVariable")
+                        {
                             player.SetMeta(
                                 $"opennv_cg02_{effect.Variable.ToLowerInvariant()}",
                                 effect.Value);
+                            player.SetMeta(
+                                $"opennv_cg02_quest_variable_{effect.Variable}",
+                                effect.Value);
+                        }
+                        else if (effect.Kind == "setActorVariable")
+                            _cg02IntroActors[effect.ReferenceFormId].Placement.SetMeta(
+                                $"opennv_{effect.Variable.ToLowerInvariant()}",
+                                effect.Value);
+                        else if (effect.Kind == "removeItem")
+                        {
+                            var key = $"opennv_cg02_item_{effect.FormId}";
+                            var remaining = player.GetMeta(key, 0).AsInt32() - effect.Count;
+                            if (remaining < 0)
+                                throw new InvalidOperationException(
+                                    "Fallout 3 CG02 removed item count differs.");
+                            player.SetMeta(key, remaining);
+                        }
+                        else if (effect.Kind == "startCombat")
+                        {
+                            actor.Placement.SetMeta("opennv_combat_target", effect.Target);
+                            (_cg02IntroActors.TryGetValue(effect.ReferenceFormId,
+                                out var responder) ? responder.Placement :
+                                Cg01WorldReference(effect.ReferenceFormId))
+                                .SetMeta("opennv_evaluate_package", 1);
+                            player.SetMeta("opennv_cg02_combat_runtime_blocker",
+                                "fo3-cg02-butch-combat-runtime-not-implemented");
+                        }
                     }
                     completed(node.InfoFormId, targetStage);
                     if (node.LinkedTopicFormIds.Count == 0)
@@ -869,14 +896,16 @@ internal partial class Fo3OpeningFlow
                     }
                     menu.ShowTopics(
                         participant.DisplayName,
-                        node.LinkedTopicFormIds.Select(topicFormId =>
+                        node.LinkedTopicFormIds.SelectMany(topicFormId =>
                         {
                             var topic = participant.Topics[topicFormId];
-                            var next = participant.Nodes.Values.Single(value =>
+                            var candidates = participant.Nodes.Values.Where(value =>
                                 value.TopicFormId.Equals(topicFormId,
                                     StringComparison.OrdinalIgnoreCase) &&
-                                (value.EngineSex is null || value.EngineSex == engineSex));
-                            return (topic.FormId, topic.Text, (Action)(() => PlayNode(next)));
+                                (value.EngineSex is null || value.EngineSex == engineSex) &&
+                                Cg02BirthdayConditionsMatch(value, actor, player)).ToArray();
+                            return candidates.Select(next =>
+                                (topic.FormId, topic.Text, (Action)(() => PlayNode(next))));
                         }).ToArray());
                     return;
                 }
@@ -903,6 +932,75 @@ internal partial class Fo3OpeningFlow
                     () => PlayLine(index + 1));
             }
         }
+    }
+
+    private CellActorLoader.PlacedActor EnsureCg02BirthdayActor(
+        Fo3Cg02BirthdayParticipant participant)
+    {
+        if (_cg02IntroActors.TryGetValue(participant.ReferenceFormId, out var existing))
+            return existing;
+        if (participant.ActorScenePath is null || participant.ActorSceneSha256 is null)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 birthday actor scene is absent.");
+        using var stream = File.OpenRead(participant.ActorScenePath);
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!actual.Equals(participant.ActorSceneSha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 birthday actor scene hash differs.");
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG02 birthday world is absent.");
+        var actor = CellActorLoader.Load(
+                participant.ActorScenePath,
+                new HashSet<string>([coverage.Contract.CellFormId],
+                    StringComparer.OrdinalIgnoreCase),
+                coverage.CellRoot,
+                coverage.Contract.EntryPositionGameUnits,
+                _runtimeConfiguration,
+                proofEnableInitiallyDisabled: false,
+                materializeInitiallyDisabled: true)
+            ?? throw new InvalidOperationException(
+                "Fallout 3 CG02 birthday actor is absent.");
+        if (actor.ReferenceFormId != participant.ReferenceFormId ||
+            actor.BaseFormId != participant.BaseFormId)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 birthday actor identity differs.");
+        _cg02IntroActors.Add(actor.ReferenceFormId, actor);
+        return actor;
+    }
+
+    private static bool Cg02BirthdayConditionsMatch(
+        Fo3Cg02BirthdayDialogueNode node,
+        CellActorLoader.PlacedActor actor,
+        Fo3Cg01ToddlerPlayer player)
+    {
+        foreach (var condition in node.Conditions)
+        {
+            if (condition.OperatorFlags !=
+                Fo3OpeningFlowNumericContracts.DialogueConditionEqual)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG02 dialogue condition comparison is unsupported.");
+            double actual = condition.Function switch
+            {
+                Fo3OpeningFlowNumericContracts.DialogueConditionGetItemCount =>
+                    player.GetMeta($"opennv_cg02_item_{condition.Parameter1:x8}", 0)
+                        .AsInt32(),
+                Fo3OpeningFlowNumericContracts.DialogueConditionGetQuestVariable =>
+                    player.GetMeta(
+                        $"opennv_cg02_quest_variable_{condition.Parameter2}", 0)
+                        .AsInt32(),
+                Fo3OpeningFlowNumericContracts.DialogueConditionGetIsCurrentPackage =>
+                    actor.Placement.GetMeta("opennv_active_package_form_id", "")
+                        .AsString().Equals($"{condition.Parameter1:x8}",
+                            StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.0,
+                _ => throw new InvalidOperationException(
+                    $"Fallout 3 CG02 dialogue condition is unsupported: " +
+                    condition.Function),
+            };
+            if (actual != condition.ComparisonValue)
+                return false;
+        }
+        return true;
     }
 
     private CellActorLoader.PlacedActor EnsureCg02CakeAndy(
@@ -2269,6 +2367,85 @@ internal partial class Fo3OpeningFlow
         {
             var cake = birthday.CakeRuntime ?? throw new InvalidOperationException(
                 "Fallout 3 CG02 cake runtime is absent.");
+            var butch = birthday.ButchRuntime ?? throw new InvalidOperationException(
+                "Fallout 3 CG02 Butch runtime is absent.");
+            bool InfoAppliedAtStage(int stage) => birthday.Participants
+                .SelectMany(value => value.Nodes.Values)
+                .Where(node => current.AppliedInfoFormIds.Contains(
+                    node.InfoFormId, StringComparer.OrdinalIgnoreCase))
+                .SelectMany(node => node.Effects)
+                .Any(effect => effect.Kind == "setStage" && effect.Stage == stage);
+            bool InfoRemovedItem(string formId) => birthday.Participants
+                .SelectMany(value => value.Nodes.Values)
+                .Where(node => current.AppliedInfoFormIds.Contains(
+                    node.InfoFormId, StringComparer.OrdinalIgnoreCase))
+                .SelectMany(node => node.Effects)
+                .Any(effect => effect.Kind == "removeItem" &&
+                    effect.FormId.Equals(formId, StringComparison.OrdinalIgnoreCase));
+            var sweetrollCount = InfoAppliedAtStage(butch.SourceStage) &&
+                !InfoRemovedItem(butch.SweetrollFormId) ? 1 : 0;
+            player.SetMeta($"opennv_cg02_item_{butch.SweetrollFormId}", sweetrollCount);
+
+            void ApplyStage35()
+            {
+                foreach (var command in butch.Stage35Commands)
+                {
+                    if (command.Kind == "evaluatePackage")
+                        (_cg02IntroActors.TryGetValue(command.ReferenceFormId,
+                            out var packageActor) ? packageActor.Placement :
+                            Cg01WorldReference(command.ReferenceFormId))
+                            .SetMeta("opennv_evaluate_package", 1);
+                    else if (command.Kind == "setTalkingActivatorActor")
+                        Cg01WorldReference(command.ReferenceFormId).SetMeta(
+                            "opennv_talking_activator_actor",
+                            command.ActorReferenceFormId);
+                    else if (command.Kind == "setQuestVariable")
+                        player.SetMeta(
+                            $"opennv_cg02_{command.Variable.ToLowerInvariant()}",
+                            command.Value);
+                    else
+                        throw new InvalidOperationException(
+                            $"Fallout 3 CG02 stage-35 command is unsupported: " +
+                            command.Kind);
+                }
+                current = current with
+                {
+                    ActiveStage = butch.IntercomStage,
+                    TimerRemainingSeconds = 0.0,
+                    TimerAdvancing = false,
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        butch.Stage35Commands.Count,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        butch.Stage35Commands.Count,
+                };
+                player.SetMeta("opennv_cg02_stage", butch.IntercomStage);
+                _cg02ButchTimerTick = null;
+                Persist();
+            }
+            void StartIntercomTimer(double remainingSeconds)
+            {
+                if (_cg02ButchTimerTick is not null)
+                    return;
+                _cg02ButchTimerTick = delta =>
+                {
+                    var remaining = Math.Max(
+                        0.0, current.TimerRemainingSeconds - delta);
+                    current = current with { TimerRemainingSeconds = remaining };
+                    if (remaining > 0.0)
+                    {
+                        Persist();
+                        return;
+                    }
+                    ApplyStage35();
+                };
+                current = current with
+                {
+                    TimerRemainingSeconds = remainingSeconds,
+                    TimerAdvancing = true,
+                };
+                player.SetMeta("opennv_cg02_timer", remainingSeconds);
+                Persist();
+            }
             void CakeStageChanged(int stage, string? packageFormId)
             {
                 if (current.ActiveStage == stage)
@@ -2353,7 +2530,7 @@ internal partial class Fo3OpeningFlow
             }
             foreach (var participant in birthday.Participants)
             {
-                var actor = _cg02IntroActors[participant.ReferenceFormId];
+                var actor = EnsureCg02BirthdayActor(participant);
                 var bodyName = $"SOURCE_ACTIVATION_{participant.ReferenceFormId}";
                 if (actor.Placement.HasNode(bodyName))
                     continue;
@@ -2372,6 +2549,88 @@ internal partial class Fo3OpeningFlow
                 });
                 actor.Placement.AddChild(body);
             }
+            foreach (var effect in birthday.Participants
+                .SelectMany(value => value.Nodes.Values)
+                .Where(node => current.AppliedInfoFormIds.Contains(
+                    node.InfoFormId, StringComparer.OrdinalIgnoreCase))
+                .SelectMany(node => node.Effects))
+            {
+                if (effect.Kind == "setQuestVariable")
+                    player.SetMeta(
+                        $"opennv_cg02_{effect.Variable.ToLowerInvariant()}",
+                        effect.Value);
+                else if (effect.Kind == "setActorVariable")
+                    _cg02IntroActors[effect.ReferenceFormId].Placement.SetMeta(
+                        $"opennv_{effect.Variable.ToLowerInvariant()}", effect.Value);
+                else if (effect.Kind == "startCombat")
+                {
+                    EnsureCg02BirthdayActor(birthday.Participants.Single(value =>
+                        value.ReferenceFormId.Equals(butch.ReferenceFormId,
+                            StringComparison.OrdinalIgnoreCase))).Placement.SetMeta(
+                        "opennv_combat_target", effect.Target);
+                    (_cg02IntroActors.TryGetValue(effect.ReferenceFormId,
+                        out var responder) ? responder.Placement :
+                        Cg01WorldReference(effect.ReferenceFormId))
+                        .SetMeta("opennv_evaluate_package", 1);
+                    player.SetMeta("opennv_cg02_combat_runtime_blocker",
+                        butch.NextBoundaryBlocker);
+                }
+            }
+            void StartButchPackageIfEligible()
+            {
+                var butchActor = EnsureCg02BirthdayActor(
+                    birthday.Participants.Single(value =>
+                        value.ReferenceFormId.Equals(butch.ReferenceFormId,
+                            StringComparison.OrdinalIgnoreCase)));
+                var eligible = current.AppliedPackageFormIds.Contains(
+                        cake.PackageFormId, StringComparer.OrdinalIgnoreCase) &&
+                    InfoAppliedAtStage(butch.SourceStage) &&
+                    current.ActiveStage != butch.SceneDoneStage &&
+                    current.ActiveStage != butch.IntercomStage;
+                if (!eligible)
+                    return;
+                butchActor.Placement.SetMeta(
+                    "opennv_active_package_form_id", butch.FindPlayerPackageFormId);
+                if (!current.AppliedPackageFormIds.Contains(
+                        butch.FindPlayerPackageFormId,
+                        StringComparer.OrdinalIgnoreCase))
+                {
+                    current = current with
+                    {
+                        AppliedPackageFormIds = current.AppliedPackageFormIds
+                            .Append(butch.FindPlayerPackageFormId).ToArray(),
+                    };
+                    Persist();
+                }
+                if (current.AppliedPackageFormIds.Count(value => value.Equals(
+                        butch.FindPlayerPackageFormId,
+                        StringComparison.OrdinalIgnoreCase)) > 1)
+                    return;
+                _cg02ButchPackageTick ??= _ =>
+                {
+                    if (butchActor.Placement.GlobalPosition.DistanceTo(
+                            player.GlobalPosition) >
+                        butch.FindPlayerRadiusGameUnits *
+                            _runtimeConfiguration.World.GameUnitsToMeters)
+                        return;
+                    _cg02ButchPackageTick = null;
+                    var paul = birthday.Participants.Single(value =>
+                        value.DisplayName.Equals("Paul Hannon",
+                            StringComparison.OrdinalIgnoreCase));
+                    EnsureCg02BirthdayActor(paul).Placement.SetMeta(
+                        "opennv_evaluate_package", 1);
+                    current = current with
+                    {
+                        AppliedPackageFormIds = current.AppliedPackageFormIds
+                            .Append(butch.FindPlayerPackageFormId).ToArray(),
+                        AccountedCommandCount = current.AccountedCommandCount +
+                            butch.FindPlayerResultCommandCount,
+                        AppliedCommandCount = current.AppliedCommandCount +
+                            butch.FindPlayerResultCommandCount,
+                    };
+                    Persist();
+                };
+            }
             var activations = birthday.Participants.ToDictionary(
                 participant => participant.ReferenceFormId,
                 participant => (Action)(() => StartCg02BirthdayInteraction(
@@ -2383,26 +2642,47 @@ internal partial class Fo3OpeningFlow
                                 infoFormId, StringComparer.OrdinalIgnoreCase))
                             throw new InvalidOperationException(
                                 "Fallout 3 CG02 birthday INFO replay differs.");
-                        var appliedCommands = 0;
+                        var completedNode = participant.Nodes[infoFormId];
+                        var appliedCommands = completedNode.Effects.Count(effect =>
+                            effect.Kind != "sourceConditional");
+                        int? effectiveStage = targetStage;
                         if (targetStage is not null)
                         {
                             if (targetStage == cake.TriggerStage)
                                 StartCake();
-                            else
+                            else if (birthday.StageResults.TryGetValue(
+                                targetStage.Value, out var result))
                             {
-                                var result = birthday.StageResults[targetStage.Value];
                                 player.SetMeta(
                                     $"opennv_cg02_{result.Kind.ToLowerInvariant()}_{result.FormId}",
                                     result.Count);
+                                if (result.Kind == "addItem")
+                                    player.SetMeta(
+                                        $"opennv_cg02_item_{result.FormId}",
+                                        result.Count);
                                 player.SetMeta("opennv_cg02_stage", targetStage.Value);
-                                appliedCommands = 2;
+                                appliedCommands += result.CommandCount;
+                                if (result.AggregateStage is not null)
+                                {
+                                    if (result.AggregateStage != butch.AggregateStage)
+                                        throw new InvalidOperationException(
+                                            "Fallout 3 CG02 aggregate stage differs.");
+                                    appliedCommands++;
+                                    effectiveStage = result.AggregateStage;
+                                    StartIntercomTimer(butch.AggregateTimerSeconds);
+                                }
                             }
+                            else if (targetStage == butch.SceneDoneStage)
+                                appliedCommands = 1;
+                            else
+                                throw new InvalidOperationException(
+                                    "Fallout 3 CG02 birthday stage is unsupported.");
                         }
                         current = current with
                         {
                             ActiveStage = targetStage == cake.TriggerStage
                                 ? current.ActiveStage
-                                : targetStage ?? current.ActiveStage,
+                                : effectiveStage ?? current.ActiveStage,
                             AppliedInfoFormIds = current.AppliedInfoFormIds
                                 .Append(infoFormId).ToArray(),
                             AccountedCommandCount = current.AccountedCommandCount +
@@ -2413,9 +2693,15 @@ internal partial class Fo3OpeningFlow
                                 false, birthday.NextBoundaryBlocker),
                         };
                         Persist();
+                        StartButchPackageIfEligible();
                     })),
                 StringComparer.OrdinalIgnoreCase);
             player.ConfigureSourceFormActivations(activations);
+            StartButchPackageIfEligible();
+            if ((current.ActiveStage == butch.AggregateStage ||
+                 current.ActiveStage == butch.SceneDoneStage) &&
+                current.TimerAdvancing)
+                StartIntercomTimer(current.TimerRemainingSeconds);
             if (current.ActiveStage == cake.TriggerStage &&
                 !current.AppliedPackageFormIds.Contains(
                     cake.PackageFormId, StringComparer.OrdinalIgnoreCase))
@@ -2874,7 +3160,11 @@ internal partial class Fo3OpeningFlow
              restoredBirthday?.StageResults.ContainsKey(current.ActiveStage) == true ||
              restoredBirthday?.CakeRuntime is { } restoredCake &&
                  (current.ActiveStage == restoredCake.TriggerStage ||
-                  current.ActiveStage == restoredCake.TargetStage)))
+                  current.ActiveStage == restoredCake.TargetStage) ||
+             restoredBirthday?.ButchRuntime is { } restoredButch &&
+                 (current.ActiveStage == restoredButch.SceneDoneStage ||
+                  current.ActiveStage == restoredButch.AggregateStage ||
+                  current.ActiveStage == restoredButch.IntercomStage)))
         {
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 restored completion player is absent."))
@@ -3021,7 +3311,11 @@ internal partial class Fo3OpeningFlow
                 (restoredBirthday.StageResults.ContainsKey(current.ActiveStage) ||
                  restoredBirthday.CakeRuntime is { } cake &&
                     (current.ActiveStage == cake.TriggerStage ||
-                     current.ActiveStage == cake.TargetStage)))
+                     current.ActiveStage == cake.TargetStage) ||
+                 restoredBirthday.ButchRuntime is { } butch &&
+                    (current.ActiveStage == butch.SceneDoneStage ||
+                     current.ActiveStage == butch.AggregateStage ||
+                     current.ActiveStage == butch.IntercomStage)))
             {
                 InstallBirthday(restoredBirthday, restoredPlayer);
             }

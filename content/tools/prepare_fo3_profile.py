@@ -262,6 +262,7 @@ TRIGGER_PRIMITIVE_ORIENTED_BOX_TYPE = 1
 TRIGGER_PRIMITIVE_COLOR_START = 3
 TRIGGER_PRIMITIVE_TYPE_INDEX = TRIGGER_PRIMITIVE_FLOATS
 CG01_WALK_OBJECTIVE_INDEX = 10
+CG02_INTERCOM_STAGE_COMMAND_COUNT = 6
 CG01_WALK_TARGET_STAGE = 12
 CG01_DAD_COMPLETION_CONDITIONAL_SOURCE_STAGE = 75
 CG01_DAD_COMPLETION_CONDITIONAL_TARGET_STAGE = 80
@@ -324,10 +325,14 @@ CONDITION_RUN_ON_OFFSET = 20
 CONDITION_REFERENCE_OFFSET = 24
 GET_IS_SEX_FUNCTION = 70
 GET_STAGE_FUNCTION = 58
+GET_STAGE_DONE_FUNCTION = 59
 CONDITION_EQUAL_OPERATOR_FLAGS = 0x60
 GET_IS_VOICE_TYPE_FUNCTION = 427
 GET_PC_IS_SEX_FUNCTION = 131
 GET_IS_ID_FUNCTION = 72
+GET_ITEM_COUNT_FUNCTION = 47
+GET_QUEST_VARIABLE_FUNCTION = 79
+GET_IS_CURRENT_PACKAGE_FUNCTION = 161
 DIALOGUE_CHILD_GROUP_TYPE = 7
 DIALOGUE_INFO_DATA_BYTES = 4
 DIALOGUE_INFO_SAY_ONCE_FLAG = 0x0004
@@ -4014,6 +4019,37 @@ def _compile_cg02_birthday_interactions_runtime(
                     effects.append({"kind": "setQuestVariable",
                                     "variable": match.group("variable"),
                                     "value": int(match.group("value"))})
+                elif match := re.fullmatch(
+                    r"set\s+(?P<subject>\w+)\.(?P<variable>\w+)\s+to\s+"
+                    r"(?P<value>-?\d+)", command, re.IGNORECASE):
+                    references = [record for record in records
+                                  if (_editor_id(record) or "").casefold() ==
+                                  match.group("subject").casefold()]
+                    if len(references) != 1 or references[0].signature != ACTOR_REFERENCE_RECORD:
+                        raise ValueError("Fallout 3 CG02 birthday actor variable differs")
+                    effects.append({"kind": "setActorVariable",
+                                    "referenceFormId": _form_id(references[0].form_id),
+                                    "variable": match.group("variable"),
+                                    "value": int(match.group("value"))})
+                elif match := re.fullmatch(
+                    r"player\.removeitem\s+(?P<item>\w+)\s+(?P<count>\d+)",
+                    command, re.IGNORECASE):
+                    items = [record for record in records
+                             if (_editor_id(record) or "").casefold() ==
+                             match.group("item").casefold()]
+                    if len(items) != 1:
+                        raise ValueError("Fallout 3 CG02 birthday removed item differs")
+                    effects.append({"kind": "removeItem",
+                                    "formId": _form_id(items[0].form_id),
+                                    "count": int(match.group("count"))})
+                elif command.casefold() == "startcombat player":
+                    security = [record for record in records
+                                if (_editor_id(record) or "").casefold() ==
+                                "cg02vault101security04ref"]
+                    if len(security) != 1 or security[0].signature != ACTOR_REFERENCE_RECORD:
+                        raise ValueError("Fallout 3 CG02 birthday combat response differs")
+                    effects.append({"kind": "startCombat", "target": "player",
+                                    "referenceFormId": _form_id(security[0].form_id)})
                 elif command.casefold().startswith("if ") or command.casefold() == "endif":
                     effects.append({"kind": "sourceConditional", "source": command})
                 else:
@@ -4037,6 +4073,10 @@ def _compile_cg02_birthday_interactions_runtime(
                 "engineSex": None if not sex_values else ("female" if sex_values[0] else "male"),
                 "responseIndexes": branch_lines,
                 "linkedTopicFormIds": [_form_id(value) for value in linked_topics],
+                "conditions": ([condition for condition in conditions
+                                if int(condition["function"]) not in
+                                {GET_IS_ID_FUNCTION, GET_PC_IS_SEX_FUNCTION}]
+                               if "actorRecipeId" in participant else []),
                 "effects": effects,
             })
             for topic_id in linked_topics:
@@ -4059,6 +4099,8 @@ def _compile_cg02_birthday_interactions_runtime(
             "referenceFormId": _form_id(reference.form_id),
             "baseFormId": _form_id(base.form_id),
             "displayName": _text_values(base, "FULL")[0],
+            **({"actorRecipeId": str(participant["actorRecipeId"])}
+               if "actorRecipeId" in participant else {}),
             "greetingInfoFormIds": [_form_id(value) for value in greeting_ids],
             "dialogue": {"voiceType": {"formId": _form_id(voice.form_id),
                                          "editorId": _editor_id(voice)},
@@ -4084,14 +4126,15 @@ def _compile_cg02_birthday_interactions_runtime(
             if item is None:
                 raise ValueError("Fallout 3 CG02 birthday gift item differs")
             stage_results[str(stage)] = {"kind": "addItem", "formId": _form_id(item.form_id),
-                                         "count": int(match.group(2))}
+                                         "count": int(match.group(2)),
+                                         "commandCount": len(commands)}
         elif match := re.fullmatch(r"player\.addnote\s+(\w+)", commands[0], re.IGNORECASE):
             note = next((record for record in records
                          if (_editor_id(record) or "").casefold() == match.group(1).casefold()), None)
             if note is None:
                 raise ValueError("Fallout 3 CG02 birthday gift note differs")
             stage_results[str(stage)] = {"kind": "addNote", "formId": _form_id(note.form_id),
-                                         "count": 1}
+                                         "count": 1, "commandCount": len(commands)}
         else:
             raise ValueError("Fallout 3 CG02 birthday gift command differs")
         for command in commands[1:]:
@@ -4100,6 +4143,7 @@ def _compile_cg02_birthday_interactions_runtime(
                     (_editor_id(quest) or "").casefold():
                 raise ValueError("Fallout 3 CG02 birthday aggregate result differs")
             aggregate_stages.add(int(match.group("stage")))
+            stage_results[str(stage)]["aggregateStage"] = int(match.group("stage"))
     if len(aggregate_stages) != 1:
         raise ValueError("Fallout 3 CG02 birthday aggregate stage differs")
     result = {
@@ -4118,7 +4162,132 @@ def _compile_cg02_birthday_interactions_runtime(
             records, quest, stage_sources, dict(config["cake"]))
         result["cakeRuntime"]["failsafeSeconds"] = failsafe_seconds
         result["nextBoundary"] = {"applied": True, "blocker": None}
+    if "butch" in config:
+        result["butchRuntime"] = _compile_cg02_butch_runtime(
+            records, quest, stage_sources, dict(config["butch"]))
+        result["nextBoundary"] = {"applied": True, "blocker": None}
     return result
+
+
+def _compile_cg02_butch_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    config: dict[str, object],
+) -> dict[str, object]:
+    by_form = {record.form_id: record for record in records}
+    by_editor = {(_editor_id(record) or "").casefold(): record for record in records
+                 if _editor_id(record)}
+    def exact(name: str, signature: str) -> object:
+        record = by_form.get(int(str(config[name]), FORM_ID_RADIX))
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG02 Butch {name} differs")
+        return record
+    reference = exact("referenceFormId", ACTOR_REFERENCE_RECORD)
+    base = exact("baseFormId", NPC_RECORD)
+    script = exact("scriptFormId", SCRIPT_RECORD)
+    package = exact("findPlayerPackageFormId", PACKAGE_RECORD)
+    sweetroll = exact("sweetrollFormId", "ALCH")
+    if (struct.unpack("<I", _single_subrecord(reference, "NAME"))[0] != base.form_id or
+        struct.unpack("<I", _single_subrecord(base, "SCRI"))[0] != script.form_id or
+        package.form_id not in [struct.unpack("<I", row.data)[0]
+                                for row in iter_subrecords(base)
+                                if row.signature == "PKID" and
+                                len(row.data) == FORM_ID_BYTES]):
+        raise ValueError("Fallout 3 CG02 Butch actor/package join differs")
+    script_source = _script_source(script)
+    if not re.search(
+        r"begin\s+OnStartCombat\s+player.*?CG02Vault101Security04REF\.evp.*?"
+        r"SayTo\s+player\s+CG02ButchSpeech",
+        script_source, re.IGNORECASE | re.DOTALL):
+        raise ValueError("Fallout 3 CG02 Butch script differs")
+    targets = [row.data for row in iter_subrecords(package) if row.signature == "PTDT"]
+    conditions = [_dialogue_condition(row.data) for row in iter_subrecords(package)
+                  if row.signature == "CTDA"]
+    if len(targets) != 1 or len(targets[0]) != struct.calcsize("<IiII"):
+        raise ValueError("Fallout 3 CG02 Butch package target differs")
+    target_kind, target_form_id, radius, target_count = struct.unpack("<IiII", targets[0])
+    if (target_kind != 0 or
+        target_form_id != int(str(config["playerReferenceFormId"]), FORM_ID_RADIX) or
+        target_count != 0):
+        raise ValueError("Fallout 3 CG02 Butch package player target differs")
+    expected_stage_values = {
+        int(config["sourceStage"]): 1.0,
+        int(config["requiredCakeStage"]): 1.0,
+        int(config["sceneDoneStage"]): 0.0,
+        int(config["intercomStage"]): 0.0,
+    }
+    actual_stage_values = {
+        int(row["parameter2"]): float(row["comparisonValue"])
+        for row in conditions
+        if int(row["function"]) == GET_STAGE_DONE_FUNCTION and
+        int(row["parameter1"]) == quest.form_id
+    }
+    if actual_stage_values != expected_stage_values:
+        raise ValueError("Fallout 3 CG02 Butch package conditions differ")
+    package_commands = [command for source in _text_values(package, "SCTX")
+                        for command in _source_commands(source)]
+    if [command.casefold() for command in package_commands] != [
+        "cg02paulhannonref.evp"]:
+        raise ValueError("Fallout 3 CG02 Butch package result differs")
+    stage34 = [command for source in stage_sources.get(int(config["aggregateStage"]), [])
+               for command in _source_commands(source)]
+    stage35 = [command for source in stage_sources.get(int(config["intercomStage"]), [])
+               for command in _source_commands(source)]
+    stage34_timer = (re.fullmatch(
+        r"set\s+CG02\.timer\s+to\s+(?P<seconds>\d+)", stage34[0], re.IGNORECASE)
+        if len(stage34) == 1 else None)
+    if stage34_timer is None or len(stage35) != CG02_INTERCOM_STAGE_COMMAND_COUNT:
+        raise ValueError("Fallout 3 CG02 Butch aggregation stages differ")
+    resolved_stage35 = []
+    for command in stage35:
+        if match := re.fullmatch(r"(?P<subject>\w+)\.evp", command,
+                                 re.IGNORECASE):
+            actor = by_editor.get(match.group("subject").casefold())
+            if actor is None or actor.signature != ACTOR_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 intercom package actor differs")
+            resolved_stage35.append({"kind": "evaluatePackage",
+                                     "referenceFormId": _form_id(actor.form_id)})
+        elif match := re.fullmatch(
+                r"(?P<subject>\w+)\.setTalkingActivatorActor\s+(?P<actor>\w+)",
+                command, re.IGNORECASE):
+            subject = by_editor.get(match.group("subject").casefold())
+            actor = by_editor.get(match.group("actor").casefold())
+            if subject is None or actor is None:
+                raise ValueError("Fallout 3 CG02 intercom actor join differs")
+            resolved_stage35.append({"kind": "setTalkingActivatorActor",
+                                     "referenceFormId": _form_id(subject.form_id),
+                                     "actorReferenceFormId": _form_id(actor.form_id)})
+        elif match := re.fullmatch(
+                r"set\s+CG02\.(?P<variable>\w+)\s+to\s+(?P<value>\d+)",
+                command, re.IGNORECASE):
+            resolved_stage35.append({"kind": "setQuestVariable",
+                                     "variable": match.group("variable"),
+                                     "value": int(match.group("value"))})
+        else:
+            raise ValueError(f"Fallout 3 CG02 intercom command differs: {command}")
+    return {
+        "schema": "opennv-fo3-cg02-stage-20-butch-runtime/v1",
+        "sourceStage": int(config["sourceStage"]),
+        "requiredCakeStage": int(config["requiredCakeStage"]),
+        "sceneDoneStage": int(config["sceneDoneStage"]),
+        "aggregateStage": int(config["aggregateStage"]),
+        "intercomStage": int(config["intercomStage"]),
+        "referenceFormId": _form_id(reference.form_id),
+        "baseFormId": _form_id(base.form_id),
+        "actorRecipeId": str(config["actorRecipeId"]),
+        "sweetrollFormId": _form_id(sweetroll.form_id),
+        "findPlayerPackage": {
+            "formId": _form_id(package.form_id), "target": "player",
+            "radiusGameUnits": radius, "conditions": conditions,
+            "resultCommands": package_commands,
+        },
+        "stage34": {"timerSeconds": int(stage34_timer.group("seconds")),
+                    "commands": stage34},
+        "stage35": {"commands": resolved_stage35},
+        "nextBoundary": {"applied": False,
+                         "blocker": "fo3-cg02-butch-combat-runtime-not-implemented"},
+    }
 
 
 def _compile_cg02_cake_runtime(
@@ -7611,6 +7780,10 @@ def _bind_cg02_intro_assets(
             party = dict(dict(dad_speech["overseerSpeechRuntime"]).get(
                 "dadPartyRuntime", {}))
             birthday = dict(party.get("birthdayInteractionsRuntime", {}))
+            for participant in birthday.get("participants", []):
+                actor_recipe_id = dict(participant).get("actorRecipeId")
+                if actor_recipe_id is not None:
+                    actor_recipe_ids.append(str(actor_recipe_id))
             cake = dict(birthday.get("cakeRuntime", {}))
             if cake:
                 andy = dict(cake["andy"])
@@ -7706,6 +7879,18 @@ def _bind_cg02_intro_assets(
             overseer["actorScene"] = actor_scene
             party = dict(overseer.get("dadPartyRuntime", {}))
             birthday = dict(party.get("birthdayInteractionsRuntime", {}))
+            birthday_participants = []
+            for raw_participant in birthday.get("participants", []):
+                participant = dict(raw_participant)
+                if "actorRecipeId" in participant:
+                    actor_scene = scenes.get(
+                        str(participant["referenceFormId"]).casefold())
+                    if actor_scene is None:
+                        raise ValueError(
+                            "Fallout 3 CG02 birthday actor scene is absent")
+                    participant["actorScene"] = actor_scene
+                birthday_participants.append(participant)
+            birthday["participants"] = birthday_participants
             cake = dict(birthday.get("cakeRuntime", {}))
             if cake:
                 andy = dict(cake["andy"])
@@ -7727,8 +7912,8 @@ def _bind_cg02_intro_assets(
                 package["locomotion"] = locomotion
                 cake["package"] = package
                 birthday["cakeRuntime"] = cake
-                party["birthdayInteractionsRuntime"] = birthday
-                overseer["dadPartyRuntime"] = party
+            party["birthdayInteractionsRuntime"] = birthday
+            overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer
             intro["dadSpeechRuntime"] = dad_speech
     intro["sounds"] = [

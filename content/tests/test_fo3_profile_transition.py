@@ -25,6 +25,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_cg02_dad_speech_runtime,
     _compile_cg02_dad_party_runtime,
     _compile_cg02_birthday_interactions_runtime,
+    _compile_cg02_butch_runtime,
     _compile_cg02_cake_runtime,
     _compile_cg02_overseer_speech_runtime,
     _compile_cg00_section4_transition,
@@ -90,6 +91,7 @@ def condition(
     function: int,
     parameter1: int,
     *,
+    parameter2: int = 0,
     operator_flags: int = 0,
     comparison: float = 1.0,
     run_on: int = 0,
@@ -100,7 +102,7 @@ def condition(
         comparison,
         function,
         parameter1,
-        0,
+        parameter2,
         run_on,
         0,
     )
@@ -449,6 +451,63 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("0009f64f", result["trigger"]["referenceFormId"])
         self.assertEqual("00020458", result["package"]["targetMarkerFormId"])
         self.assertEqual(3, len(result["dialogue"]["cues"]))
+
+    def test_compiles_cg02_butch_package_and_intercom_handoff(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        script = Record(
+            "SCPT", 0x31642, 0,
+            subrecord("EDID", b"CG02ButchSCRIPT\0") +
+            subrecord("SCTX", b"begin OnStartCombat player\n"
+                      b"CG02Vault101Security04REF.evp\nend\n"
+                      b"SayTo player CG02ButchSpeech\0"), ())
+        package = Record(
+            "PACK", 0x3135C, 0,
+            subrecord("EDID", b"CG02ButchFindPlayer\0") +
+            subrecord("PTDT", struct.pack("<IiII", 0, 0x14, 150, 0)) +
+            b"".join(subrecord("CTDA", condition(
+                         59, quest.form_id, parameter2=stage,
+                         comparison=comparison))
+                     for stage, comparison in ((20, 1), (16, 1), (30, 0), (35, 0))) +
+            subrecord("SCTX", b"CG02PaulHannonREF.evp\0"), ())
+        base = Record(
+            "NPC_", 0x300EA, 0,
+            subrecord("EDID", b"CG02Butch\0") +
+            subrecord("SCRI", struct.pack("<I", script.form_id)) +
+            subrecord("PKID", struct.pack("<I", package.form_id)), ())
+        reference = Record(
+            "ACHR", 0x300F3, 0,
+            subrecord("EDID", b"CG02ButchREF\0") +
+            subrecord("NAME", struct.pack("<I", base.form_id)), ())
+        sweetroll = Record("ALCH", 0x30A23, 0,
+                           subrecord("EDID", b"CG02Sweetroll\0"), ())
+        def actor(form_id: int, editor_id: str, signature: str = "ACHR") -> Record:
+            return Record(signature, form_id, 0,
+                          subrecord("EDID", editor_id.encode() + b"\0"), ())
+        stage_actors = (
+            actor(0x300EF, "CG02DadREF"),
+            actor(0x300F5, "CG02Vault101Security02REF"),
+            actor(0x300F2, "CG02AmataREF"),
+            actor(0x30A00, "CG02DinerIntercomREF", "REFR"),
+            actor(0x300EE, "CG02JonasREF"),
+        )
+        result = _compile_cg02_butch_runtime(
+            (quest, script, package, base, reference, sweetroll, *stage_actors),
+            quest,
+            {34: ["set CG02.timer to 10"],
+             35: ["CG02DadREF.evp\nCG02Vault101Security02REF.evp\n"
+                  "CG02AmataREF.evp\n"
+                  "CG02DinerIntercomREF.setTalkingActivatorActor CG02JonasREF\n"
+                  "set CG02.intercomBeep to 1\nset CG02.runTimer to 1"]},
+            {"referenceFormId": "000300f3", "baseFormId": "000300ea",
+             "scriptFormId": "00031642",
+             "actorRecipeId": "fo3-vault101-cg02-butch-actor-v1",
+             "findPlayerPackageFormId": "0003135c",
+             "playerReferenceFormId": "00000014",
+             "sweetrollFormId": "00030a23", "sourceStage": 20,
+             "requiredCakeStage": 16, "sceneDoneStage": 30,
+             "aggregateStage": 34, "intercomStage": 35})
+        self.assertEqual(150, result["findPlayerPackage"]["radiusGameUnits"])
+        self.assertEqual(6, len(result["stage35"]["commands"]))
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(
