@@ -39,6 +39,8 @@ class PortalArrivalAcceptanceTest(unittest.TestCase):
         self.assertNotIn("loaded.Player.CollisionMask", arrival)
         self.assertIn("portal.ToRoot.IsAncestorOf", arrival)
         self.assertIn("ActiveSet.Activate(portal.FromCellFormId)", arrival)
+        self.assertIn("portal is null", passage)
+        self.assertIn("ray.To - ray.From", passage)
 
     def test_acceptance_reuses_the_production_xtel_arrival_transform(self) -> None:
         acceptance = ACCEPTANCE.read_text(encoding="utf-8")

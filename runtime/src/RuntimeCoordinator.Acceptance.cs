@@ -763,7 +763,12 @@ public partial class RuntimeCoordinator
             portalCenter);
         if (portalFloor.Hit)
             portalCenter.Y = portalFloor.Y + _configuration.Proof.PortalCapsuleCenterHeightMeters;
-        var portalMotion = portalDirection * _configuration.Proof.PortalCapsuleMotionMeters;
+        // XTEL doors do not lead into a continuous three-metre corridor. Prove
+        // that the player capsule clears the source-authored door aperture;
+        // destination support is verified independently at the XTEL arrival.
+        var portalMotion = portal is null
+            ? portalDirection * _configuration.Proof.PortalCapsuleMotionMeters
+            : ray.To - ray.From;
         var forwardCollision = new KinematicCollision3D();
         var walkForwardBlocked = toDoor is not null && loaded.Player.TestMove(
             new Transform3D(Basis.Identity, portalCenter - portalMotion / 2.0f),
