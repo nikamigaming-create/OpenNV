@@ -3824,6 +3824,107 @@ def _compile_cg02_overseer_speech_runtime(
     }
 
 
+def _compile_cg02_dad_party_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    definition: dict[str, object],
+) -> dict[str, object]:
+    config = dict(definition["cg02DadPartySpeech"])
+    by_form = {record.form_id: record for record in records}
+    by_editor = {_editor_id(record).casefold(): record for record in records if _editor_id(record)}
+    def exact(name: str, signature: str) -> object:
+        record = by_form.get(int(str(config[name]), FORM_ID_RADIX))
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG02 Dad party {name} differs")
+        return record
+    package = exact("packageFormId", PACKAGE_RECORD)
+    dad_reference = exact("dadReferenceFormId", ACTOR_REFERENCE_RECORD)
+    dad_base = exact("dadBaseFormId", NPC_RECORD)
+    marker = exact("playerMarkerFormId", PLACED_REFERENCE_RECORD)
+    topic = exact("topicFormId", DIALOGUE_TOPIC_RECORD)
+    info = exact("infoFormId", DIALOGUE_INFO_RECORD)
+    if struct.unpack("<I", _single_subrecord(dad_reference, "NAME"))[0] != dad_base.form_id:
+        raise ValueError("Fallout 3 CG02 Dad party actor differs")
+    package_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(dad_base)
+                   if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES]
+    conditions = [_dialogue_condition(row.data) for row in iter_subrecords(package)
+                  if row.signature == "CTDA"]
+    source_stage = int(config["sourceStage"])
+    if package.form_id not in package_ids or len(conditions) != 1 or conditions[0]["function"] != GET_STAGE_FUNCTION or conditions[0]["parameter1"] != quest.form_id or conditions[0]["comparisonValue"] != float(source_stage):
+        raise ValueError("Fallout 3 CG02 Dad party package selection differs")
+    targets = [row.data for row in iter_subrecords(package) if row.signature == "PTDT"]
+    if len(targets) != 1 or len(targets[0]) != struct.calcsize("<IIiI"):
+        raise ValueError("Fallout 3 CG02 Dad party package target differs")
+    target_kind, target_form_id, radius, target_unknown = struct.unpack("<IIiI", targets[0])
+    player_form_id = int(str(config["playerReferenceFormId"]), FORM_ID_RADIX)
+    if target_kind != 0 or target_form_id != player_form_id or radius < 0 or target_unknown != 0:
+        raise ValueError("Fallout 3 CG02 Dad party player target differs")
+    dad_position = _reference_transform_contract(dad_reference)["positionGameUnits"]
+    player_position = _reference_transform_contract(marker)["positionGameUnits"]
+    initial_distance = math.dist(dad_position, player_position)
+    if not any(group.group_type == DIALOGUE_CHILD_GROUP_TYPE and group.label_u32 == topic.form_id for group in info.groups):
+        raise ValueError("Fallout 3 CG02 Dad party INFO differs")
+    responses = [value for value in _text_values(info, "NAM1") if value]
+    idle_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(info)
+                if row.signature == "SNAM" and len(row.data) == FORM_ID_BYTES]
+    voice_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(dad_base)
+                 if row.signature == "VTCK" and len(row.data) == FORM_ID_BYTES]
+    idle = by_form.get(idle_ids[0]) if len(idle_ids) == 1 else None
+    voice = by_form.get(voice_ids[0]) if len(voice_ids) == 1 else None
+    idle_models = [] if idle is None else _text_values(idle, "MODL")
+    result_commands = [command for source in _text_values(info, "SCTX")
+                       for command in _source_commands(source)]
+    target_stage = int(config["targetStage"])
+    if len(responses) != 1 or idle is None or len(idle_models) != 1 or voice is None or result_commands != [f"setstage {_editor_id(quest)} {target_stage}"]:
+        raise ValueError("Fallout 3 CG02 Dad party response differs")
+
+    stage_commands = []
+    for index, command in enumerate(command for source in stage_sources.get(target_stage, []) for command in _source_commands(source)):
+        if match := re.fullmatch(r"EnablePlayerControls\s+(?P<arguments>[\d\s]+)", command, re.IGNORECASE):
+            stage_commands.append({"index": index, "kind": "enablePlayerControls",
+                                   "arguments": [int(value) for value in match.group("arguments").split()]})
+        elif AUTOSAVE_PATTERN.fullmatch(command):
+            stage_commands.append({"index": index, "kind": "autosave"})
+        elif match := SET_OBJECTIVE_DISPLAYED_PATTERN.fullmatch(command):
+            stage_commands.append({"index": index, "kind": "setObjectiveDisplayed",
+                                   "objectiveIndex": int(match.group("index")), "value": int(match.group("value"))})
+        elif match := re.fullmatch(r"(?P<subject>\w+)\.enable", command, re.IGNORECASE):
+            target = by_editor.get(match.group("subject").casefold())
+            if target is None: raise ValueError("Fallout 3 CG02 Dad party enable differs")
+            stage_commands.append({"index": index, "kind": "enable", "referenceFormId": _form_id(target.form_id)})
+        elif match := re.fullmatch(r"(?P<subject>\w+)\.evp", command, re.IGNORECASE):
+            target = by_editor.get(match.group("subject").casefold())
+            if target is None: raise ValueError("Fallout 3 CG02 Dad party package actor differs")
+            stage_commands.append({"index": index, "kind": "evaluatePackage", "referenceFormId": _form_id(target.form_id)})
+        elif match := SET_STAGE_PATTERN.fullmatch(command):
+            target = by_editor.get(match.group("quest").casefold())
+            if target is None or target.signature != QUEST_RECORD: raise ValueError("Fallout 3 CG02 Dad party tutorial differs")
+            stage_commands.append({"index": index, "kind": "setStage", "questFormId": _form_id(target.form_id), "stage": int(match.group("stage"))})
+        elif command.casefold() == "forceradiostationupdate":
+            stage_commands.append({"index": index, "kind": "forceRadioStationUpdate"})
+        else:
+            raise ValueError(f"Fallout 3 CG02 Dad party stage command differs: {command}")
+    return {
+        "schema": "opennv-fo3-cg02-stage-10-dad-party-runtime/v1",
+        "sourceStage": source_stage, "targetStage": target_stage,
+        "dadReferenceFormId": _form_id(dad_reference.form_id),
+        "playerReferenceFormId": _form_id(player_form_id),
+        "playerMarker": {"formId": _form_id(marker.form_id), "sourceTransform": _reference_transform_contract(marker)},
+        "package": {"formId": _form_id(package.form_id), "editorId": _editor_id(package),
+                    "recordSha256": hashlib.sha256(package.data).hexdigest(), "radiusGameUnits": radius,
+                    "initialDistanceGameUnits": initial_distance,
+                    "arrivedAtStart": initial_distance <= radius},
+        "dialogue": {"voiceType": {"formId": _form_id(voice.form_id), "editorId": _editor_id(voice)},
+                     "branches": [{"sequence": 0, "engineSex": None, "infoFormId": _form_id(info.form_id),
+                                   "sayOnce": True, "response": {"index": 1, "text": responses[0], "textSha256": hashlib.sha256(responses[0].encode()).hexdigest()},
+                                   "speakerIdle": {"formId": _form_id(idle.form_id), "modelPath": canonical_member_path(f"meshes\\{idle_models[0]}")}, "effects": [{"kind": "setStage", "stage": target_stage}]}],
+                     "dialoguePlaybackPrepared": False, "dialoguePlaybackImplemented": False},
+        "stageResult": {"commands": stage_commands},
+        "nextBoundary": {"applied": False, "blocker": "fo3-cg02-stage-12-birthday-interactions-runtime-not-implemented"},
+    }
+
+
 def _compile_cg01_post_stage14_transition(
     records: tuple[object, ...],
     definition: dict[str, object],
@@ -4875,14 +4976,17 @@ def _compile_cg01_post_stage14_transition(
                 definition,
             )
             if "cg02OverseerSpeech" in definition:
-                dad_speech["overseerSpeechRuntime"] = (
-                    _compile_cg02_overseer_speech_runtime(
+                overseer_speech = _compile_cg02_overseer_speech_runtime(
                         records,
                         next_quest,
                         next_stage_sources,
                         definition,
                     )
-                )
+                if "cg02DadPartySpeech" in definition:
+                    overseer_speech["dadPartyRuntime"] = _compile_cg02_dad_party_runtime(
+                        records, next_quest, next_stage_sources, definition)
+                    overseer_speech["nextBoundary"] = {"applied": True, "blocker": None}
+                dad_speech["overseerSpeechRuntime"] = overseer_speech
                 dad_speech["nextBoundary"] = {"applied": True, "blocker": None}
             intro_runtime["dadSpeechRuntime"] = dad_speech
             intro_runtime["nextBoundary"] = {
@@ -7141,6 +7245,14 @@ def _bind_cg02_intro_assets(
                 for branch in overseer_branches
                 if dict(branch)["speakerIdle"] is not None
             ))
+            if "dadPartyRuntime" in overseer:
+                party = dict(overseer["dadPartyRuntime"])
+                party_branches = list(dict(party["dialogue"])["branches"])
+                animation_paths[dad_reference_id] = tuple(dict.fromkeys((
+                    *animation_paths.get(dad_reference_id, ()),
+                    *(str(dict(branch)["speakerIdle"]["modelPath"])
+                      for branch in party_branches),
+                )))
     actor_recipe_ids = list(dict.fromkeys(
         str(row["actorRecipeId"]) for row in participants
     ))
@@ -8437,6 +8549,16 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
                 profile_root,
             )
             overseer["dialogue"] = overseer_dialogue
+            if "dadPartyRuntime" in overseer:
+                party = dict(overseer["dadPartyRuntime"])
+                party_dialogue = dict(party["dialogue"])
+                _bind_owned_dad_dialogue_animations(
+                    party_dialogue, meshes_archive, meshes_archive_sha256)
+                _bind_owned_dad_dialogue_audio(
+                    party_dialogue, voices_archive, voices_archive_sha256,
+                    profile_root)
+                party["dialogue"] = party_dialogue
+                overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer
         cg02_intro["dadSpeechRuntime"] = dad_speech
     cg02_stage0["introRuntime"] = cg02_intro

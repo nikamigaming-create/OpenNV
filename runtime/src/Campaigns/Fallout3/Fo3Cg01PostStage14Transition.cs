@@ -182,6 +182,25 @@ internal sealed record Fo3Cg02OverseerSpeechRuntime(
     string ActorSceneSha256,
     IReadOnlyList<Fo3Cg02OverseerSpeechCue> Cues,
     IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02OverseerCommand>> StageResults,
+    Fo3Cg02DadPartyRuntime? DadPartyRuntime,
+    string NextBoundaryBlocker);
+
+internal sealed record Fo3Cg02DadPartyStageCommand(
+    string Kind,
+    string ReferenceFormId,
+    int Value,
+    IReadOnlyList<int> Arguments);
+
+internal sealed record Fo3Cg02DadPartyRuntime(
+    int SourceStage,
+    int TargetStage,
+    string DadReferenceFormId,
+    string PackageFormId,
+    int PackageRadiusGameUnits,
+    double InitialDistanceGameUnits,
+    bool ArrivedAtStart,
+    Fo3Cg02DadSpeechCue Cue,
+    IReadOnlyList<Fo3Cg02DadPartyStageCommand> StageCommands,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02IntroRuntime(
@@ -930,9 +949,11 @@ internal sealed record Fo3Cg01Stage50Timer(
                     .Select(LoadCommand).ToArray());
         var actor = source.GetProperty("actorScene");
         var boundary = source.GetProperty("nextBoundary");
-        if (boundary.GetProperty("applied").GetBoolean())
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Overseer boundary differs.");
+        var boundaryApplied = boundary.GetProperty("applied").GetBoolean();
+        var party = boundaryApplied
+            ? LoadCg02DadParty(source.GetProperty("dadPartyRuntime"),
+                source.GetProperty("targetStage").GetInt32())
+            : null;
         return new Fo3Cg02OverseerSpeechRuntime(
             expectedSourceStage,
             source.GetProperty("targetStage").GetInt32(),
@@ -943,6 +964,59 @@ internal sealed record Fo3Cg01Stage50Timer(
             actor.GetProperty("sha256").GetString()!,
             cues,
             stageResults,
+            party,
+            boundaryApplied ? party!.NextBoundaryBlocker :
+                boundary.GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg02DadPartyRuntime LoadCg02DadParty(
+        JsonElement source,
+        int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-10-dad-party-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG02 Dad party identity differs.");
+        var dialogue = source.GetProperty("dialogue");
+        if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG02 Dad party assets differ.");
+        var row = dialogue.GetProperty("branches").EnumerateArray().Single();
+        var response = row.GetProperty("response");
+        var idle = row.GetProperty("speakerIdle");
+        var infoFormId = row.GetProperty("infoFormId").GetString()!;
+        var cue = new Fo3Cg02DadSpeechCue(
+            row.GetProperty("sequence").GetInt32(), null, infoFormId,
+            idle.GetProperty("formId").GetString()!,
+            idle.GetProperty("modelPath").GetString()!,
+            idle.GetProperty("sourceSha256").GetString()!,
+            new Fo3OwnedDialogueResponse(
+                response.GetProperty("index").GetInt32(),
+                response.GetProperty("text").GetString()!,
+                Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                    response.GetProperty("voice"), $"_{infoFormId}_1.ogg"),
+                Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                    response.GetProperty("lip"), $"_{infoFormId}_1.lip")),
+            source.GetProperty("targetStage").GetInt32());
+        var commands = source.GetProperty("stageResult").GetProperty("commands")
+            .EnumerateArray().Select(row => new Fo3Cg02DadPartyStageCommand(
+                row.GetProperty("kind").GetString()!,
+                row.TryGetProperty("referenceFormId", out var reference)
+                    ? reference.GetString()! : "",
+                row.TryGetProperty("stage", out var stage) ? stage.GetInt32() :
+                    row.TryGetProperty("objectiveIndex", out var objective)
+                        ? objective.GetInt32() : 0,
+                row.TryGetProperty("arguments", out var arguments)
+                    ? arguments.EnumerateArray().Select(value => value.GetInt32()).ToArray()
+                    : [])).ToArray();
+        var package = source.GetProperty("package");
+        var boundary = source.GetProperty("nextBoundary");
+        return new Fo3Cg02DadPartyRuntime(
+            expectedSourceStage, source.GetProperty("targetStage").GetInt32(),
+            source.GetProperty("dadReferenceFormId").GetString()!,
+            package.GetProperty("formId").GetString()!,
+            package.GetProperty("radiusGameUnits").GetInt32(),
+            package.GetProperty("initialDistanceGameUnits").GetDouble(),
+            package.GetProperty("arrivedAtStart").GetBoolean(), cue, commands,
             boundary.GetProperty("blocker").GetString()!);
     }
 
@@ -1374,6 +1448,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var cg02Intro = completion.Cg02Stage0.IntroRuntime;
         var cg02DadSpeech = cg02Intro?.DadSpeechRuntime;
         var cg02Overseer = cg02DadSpeech?.OverseerSpeechRuntime;
+        var cg02Party = cg02Overseer?.DadPartyRuntime;
         var savedInfoFormIds = RequiredArray(source, "appliedInfoFormIds")
             .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
         var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
@@ -1389,7 +1464,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
                     cg02Overseer.Cues.Where(value => value.EngineSex is null ||
                             value.EngineSex == dadSexCue.EngineSex)
                         .OrderBy(value => value.Sequence)
-                        .Select(value => value.InfoFormId)).ToArray())
+                        .Select(value => value.InfoFormId))
+                    .Concat(cg02Party is null ? [] : [cg02Party.Cue.InfoFormId])
+                    .ToArray())
                 .ToArray();
         var matchingCg02Sequence = validCg02Sequences.SingleOrDefault(sequence =>
             savedCg02InfoFormIds.Length <= sequence.Length &&
@@ -1400,6 +1477,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
              cg02Overseer is not null &&
                 (stage == cg02Overseer.TargetStage ||
                  cg02Overseer.StageResults.ContainsKey(stage)));
+        cg02IntroComplete = cg02IntroComplete || stage == cg02Party?.TargetStage;
         var cg02DadComplete = cg02DadSpeech is not null &&
             savedCg02InfoFormIds.Length >= 2;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
@@ -1473,7 +1551,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
             interactionCommandCount += cg02DadSpeech!.FinalCommandCount;
         if (cg02Overseer is not null && savedCg02InfoFormIds.Length > 2)
         {
-            foreach (var infoFormId in savedCg02InfoFormIds.Skip(2))
+            foreach (var infoFormId in savedCg02InfoFormIds.Skip(2).Where(infoFormId =>
+                cg02Overseer.Cues.Any(value => value.InfoFormId.Equals(
+                    infoFormId, StringComparison.OrdinalIgnoreCase))))
             {
                 var cue = cg02Overseer.Cues.Single(value =>
                     value.InfoFormId.Equals(infoFormId,
@@ -1485,6 +1565,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
                         (int)stageCommand.Value].Count;
             }
         }
+        if (cg02Party is not null && savedCg02InfoFormIds.Contains(
+                cg02Party.Cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
+            interactionCommandCount += cg02Party.StageCommands.Count + 1;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
         if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
@@ -1522,6 +1605,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             (stage != cg02DadSpeech?.TargetStage ||
                 savedCg02InfoFormIds.Length is >= 2 and <= 3) &&
             (cg02Overseer is null || stage != cg02Overseer.TargetStage ||
+                savedCg02InfoFormIds.Length == matchingCg02Sequence.Length - 1) &&
+            (cg02Party is null || stage != cg02Party.TargetStage ||
                 savedCg02InfoFormIds.Length == matchingCg02Sequence.Length);
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
             (!reachedNextQuest && RequiredFormId(active, "formId") != baseline.ActiveQuestFormId) ||

@@ -257,6 +257,17 @@
           "pipBoyStage": 8,
           "targetStage": 10
         },
+        "cg02DadPartySpeech": {
+          "packageFormId": "000309a5",
+          "dadReferenceFormId": "000300ef",
+          "dadBaseFormId": "0002fdcf",
+          "playerReferenceFormId": "00000014",
+          "playerMarkerFormId": "00030768",
+          "topicFormId": "0001f574",
+          "infoFormId": "0001f9c2",
+          "sourceStage": 10,
+          "targetStage": 12
+        },
         "questEditorId": "CG01",
         "questFormId": "00014e83",
         "entryStage": 0,

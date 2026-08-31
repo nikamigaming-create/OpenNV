@@ -23,6 +23,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _cg00_package_stage_condition,
     _compile_cg01_stage0_transition,
     _compile_cg02_dad_speech_runtime,
+    _compile_cg02_dad_party_runtime,
     _compile_cg02_overseer_speech_runtime,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
@@ -248,6 +249,56 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                          [row["kind"] for row in result["stageResults"]["8"]["commands"]])
         self.assertEqual("addAchievement",
                          result["stageResults"]["10"]["commands"][-1]["kind"])
+
+        dad_topic = Record("DIAL", 0x1F574, 0,
+                           subrecord("EDID", b"CG02DadSpeech\0"), ())
+        party_package = Record(
+            "PACK", 0x309A5, 0,
+            subrecord("EDID", b"CG02DadTowardsPlayerInDiner\0") +
+            subrecord("PTDT", struct.pack("<IIiI", 0, 0x14, 120, 0)) +
+            subrecord("CTDA", condition(58, quest.form_id,
+                                        operator_flags=96, comparison=10.0)), ())
+        dad_base = Record("NPC_", 0x2FDCF, 0,
+                          subrecord("EDID", b"CG02Dad\0") +
+                          subrecord("VTCK", struct.pack("<I", voice.form_id)) +
+                          subrecord("PKID", struct.pack("<I", party_package.form_id)), ())
+        dad_party_ref = Record(
+            "ACHR", 0x300EF, 0,
+            subrecord("EDID", b"CG02DadREF\0") +
+            subrecord("NAME", struct.pack("<I", dad_base.form_id)) +
+            subrecord("DATA", struct.pack("<6f", 1815.0, -10371.0, 7552.0,
+                                           0.0, 0.0, 0.0)), ())
+        player_marker = Record(
+            "REFR", 0x30768, 0,
+            subrecord("EDID", b"CG02PlayerStartMarker\0") +
+            subrecord("DATA", struct.pack("<6f", 1888.0, -10361.0, 7552.0,
+                                           0.0, 0.0, 0.0)), ())
+        dad_party_idle = idle(0x61212, "DadParty", r"Characters\_Male\party.kf")
+        dad_party_info = Record(
+            "INFO", 0x1F9C2, 0,
+            subrecord("NAM1", b"Enjoy your party!\0") +
+            subrecord("SNAM", struct.pack("<I", dad_party_idle.form_id)) +
+            subrecord("SCTX", b"setstage CG02 12\0"),
+            (GroupContext(struct.pack("<I", dad_topic.form_id), 7),))
+        tutorial = Record("QUST", 0x59C85, 0,
+                          subrecord("EDID", b"CGTutorial\0"), ())
+        radio = Record("REFR", 0x31A00, 0,
+                       subrecord("EDID", b"RadioVault101REF\0") +
+                       subrecord("NAME", struct.pack("<I", 0x31A01)), ())
+        party_definition = {"cg02DadPartySpeech": {
+            "packageFormId": "000309a5", "dadReferenceFormId": "000300ef",
+            "dadBaseFormId": "0002fdcf", "playerReferenceFormId": "00000014",
+            "playerMarkerFormId": "00030768", "topicFormId": "0001f574",
+            "infoFormId": "0001f9c2", "sourceStage": 10, "targetStage": 12}}
+        party = _compile_cg02_dad_party_runtime(
+            (*records, dad_topic, party_package, dad_base, dad_party_ref, player_marker,
+             dad_party_idle, dad_party_info, tutorial, radio), quest,
+            {12: ["EnablePlayerControls 1 1 0 1 1 1\nautosave\n"
+                  "setObjectiveDisplayed CG02 10 1\nRadioVault101REF.enable\n"
+                  "CG02AmataREF.evp\nsetstage CGTutorial 50\n"
+                  "ForceRadioStationUpdate"]}, party_definition)
+        self.assertTrue(party["package"]["arrivedAtStart"])
+        self.assertEqual(7, len(party["stageResult"]["commands"]))
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(
