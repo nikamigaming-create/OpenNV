@@ -25,11 +25,13 @@ internal interface IClassicIntWorldObjectState
 {
     bool ScriptOverrides { get; }
     IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors { get; }
+    int? LightLevel { get; }
 }
 
 internal sealed record ClassicIntWorldObjectState(
     bool ScriptOverrides,
-    IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors) :
+    IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors,
+    int? LightLevel = null) :
     IClassicIntWorldObjectState
 {
     internal static ClassicIntWorldObjectState Empty { get; } = new(
@@ -44,6 +46,7 @@ internal sealed record ClassicIntWorldObjectState(
             row.Value.Open,
             row.Value.Locked,
         }).ToArray(),
+        LightLevel,
     };
 
     internal static ClassicIntWorldObjectState Restore(JsonElement source) => new(
@@ -52,7 +55,11 @@ internal sealed record ClassicIntWorldObjectState(
             row => row.GetProperty("ObjectHandle").GetInt32(),
             row => new ClassicIntDoorObjectState(
                 row.GetProperty("Open").GetBoolean(),
-                row.GetProperty("Locked").GetBoolean())));
+                row.GetProperty("Locked").GetBoolean())),
+        source.TryGetProperty("LightLevel", out var lightLevel) &&
+        lightLevel.ValueKind != JsonValueKind.Null
+            ? lightLevel.GetInt32()
+            : null);
 }
 
 internal sealed record ClassicIntProcedureState(
@@ -128,6 +135,7 @@ internal static class ClassicIntProcedureVm
     private const ushort MessageString = 0x8105;
     private const ushort FloatMessage = 0x810A;
     private const ushort PlaySound = 0x80A3;
+    private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
     private const ushort DoorLock = 0x812E;
     private const ushort DoorUnlock = 0x812F;
@@ -224,6 +232,7 @@ internal static class ClassicIntProcedureVm
         var doors = new Dictionary<int, ClassicIntDoorObjectState>(
             sourceWorldObjects.Doors);
         var scriptOverrides = sourceWorldObjects.ScriptOverrides;
+        var lightLevel = sourceWorldObjects.LightLevel;
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -403,6 +412,9 @@ internal static class ClassicIntProcedureVm
                 case GameTime:
                     stack.Add(game.GameTime);
                     break;
+                case SetLightLevel:
+                    lightLevel = Pop(stack, program, procedure, offset);
+                    break;
                 case MessageString:
                     {
                         var messageId = Pop(stack, program, procedure, offset);
@@ -496,7 +508,7 @@ internal static class ClassicIntProcedureVm
             returnValue,
             messageEffects,
             soundEffects,
-            new ClassicIntWorldObjectState(scriptOverrides, doors));
+            new ClassicIntWorldObjectState(scriptOverrides, doors, lightLevel));
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
             doors.TryGetValue(objectHandle, out var door)

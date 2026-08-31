@@ -355,6 +355,70 @@ foreach (var path in args)
     {
         var programs = ownedScripts.GetProperty("liveScriptSlots").EnumerateArray()
             .Select(row => row.GetProperty("program")).ToArray();
+        if (ownedDocument.RootElement.TryGetProperty("map", out var ownedMapSource) &&
+            ownedMapSource.TryGetProperty("objects", out _))
+        {
+            var ownedMap = ClassicMapInitializationOwner.Parse(ownedMapSource);
+            var parsedInitialization = ClassicMapIntInitializationOwner.Parse(
+                ownedScripts, ownedMap);
+            if (parsedInitialization.HeaderProgram is { } header &&
+                string.Equals(header.Program, "ArCaves.int",
+                    StringComparison.OrdinalIgnoreCase) &&
+                header.ExecutableProgram.Procedures.ContainsKey("map_enter_p_proc"))
+            {
+                var arcavesContext = gameContext with
+                {
+                    MetaruleValues = new Dictionary<(int, int), int>
+                    {
+                        [(14, 0)] = 1,
+                    },
+                    MessageHandles = new Dictionary<(int, int), int>
+                    {
+                        [(25, 100)] = 25100,
+                    },
+                };
+                var arcavesState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int> { [27] = 99 }, [], randomState);
+                var instructionBudget = header.ExecutableProgram
+                    .Procedures["map_enter_p_proc"].Instructions.Count;
+                var entered = ClassicIntEventDispatcher.Execute(
+                    header, "map_enter_p_proc", arcavesState, arcavesContext,
+                    ClassicIntWorldObjectState.Empty, randomContract,
+                    instructionBudget);
+                if (entered.ExecutedInstructions != instructionBudget ||
+                    entered.State.GlobalVariables[27] != 0 ||
+                    entered.WorldObjects.LightLevel != 50 ||
+                    entered.MessageEffects is not
+                        [{ MessageList: 25, MessageId: 100 }])
+                    throw new InvalidOperationException(
+                        "Owned classic header map-enter effects drifted.");
+                var restoredWorld = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(entered.WorldObjects.Save()));
+                if (restoredWorld.LightLevel != 50)
+                    throw new InvalidOperationException(
+                        "Owned classic map light save state drifted.");
+                var hiddenMessage = ClassicIntEventDispatcher.Execute(
+                    header, "map_enter_p_proc", arcavesState,
+                    arcavesContext with
+                    {
+                        MetaruleValues = new Dictionary<(int, int), int>
+                        {
+                            [(14, 0)] = 0,
+                        },
+                    },
+                    ClassicIntWorldObjectState.Empty, randomContract,
+                    instructionBudget);
+                if (hiddenMessage.MessageEffects.Count != 0 ||
+                    hiddenMessage.WorldObjects.LightLevel != 50)
+                    throw new InvalidOperationException(
+                        "Owned classic conditional map-enter effects drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{header.Program}|map_enter_p_proc|" +
+                    $"{entered.ExecutedInstructions}");
+            }
+        }
         var jasmine = programs.FirstOrDefault(row => string.Equals(
             row.GetProperty("program").GetString(), "jasmine.int",
             StringComparison.OrdinalIgnoreCase));

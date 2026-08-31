@@ -8,7 +8,8 @@ internal sealed record ClassicMapIntProgram(
     string LogicalPath,
     string Sha256,
     int ProcedureCount,
-    int RandomSiteCount);
+    int RandomSiteCount,
+    ClassicIntProgram ExecutableProgram);
 
 internal sealed record ClassicMapIntScriptSlot(
     int Order,
@@ -188,13 +189,15 @@ internal static class ClassicMapIntInitializationOwner
                 row.GetProperty("bodyEndOffset").GetInt32()))
             throw new InvalidOperationException(
                 "Classic MAP INT procedure inventory is invalid.");
+        var identity = RequiredString(source, "program");
         return new ClassicMapIntProgram(
             source.GetProperty("scriptsListIndex").GetInt32(),
-            RequiredString(source, "program"),
+            identity,
             RequiredString(source, "logicalPath"),
             RequiredHash(source, "sha256"),
             procedures.Length,
-            inventory.GetProperty("randomSites").GetArrayLength());
+            inventory.GetProperty("randomSites").GetArrayLength(),
+            ClassicIntProcedureVm.Parse(inventory, identity));
     }
 
     private static string RequiredString(JsonElement source, string property)
