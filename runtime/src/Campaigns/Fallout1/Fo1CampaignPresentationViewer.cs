@@ -10,6 +10,7 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     private Fo1CameraProfile _cameraProfile = null!;
     private Node3D _mapRoot = null!;
     private Node3D _spriteRoot = null!;
+    private Sprite3D? _playablePlayer;
     private Node3D _yawPivot = null!;
     private Node3D _pitchPivot = null!;
     private Camera3D _camera = null!;
@@ -70,6 +71,69 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     }
 
     internal void SetStatusVisible(bool visible) => _statusLayer.Visible = visible;
+
+    internal Fo1CampaignMapPresentation CurrentMap => _currentMap;
+    internal Fo1CampaignElevationPresentation CurrentElevation =>
+        _currentMap.Elevations[_elevationIndex];
+
+    internal Fo1CampaignMapViewCoverage LoadPlayableMap(
+        string mapName,
+        int elevation,
+        int tile,
+        int rotation)
+    {
+        var mapId = Path.GetFileNameWithoutExtension(mapName);
+        var index = _catalog.Maps.ToList().FindIndex(row =>
+            row.Id.Equals(mapId, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            throw new InvalidOperationException(
+                $"Fallout playable adjacent MAP is absent: {mapName}");
+        LoadMap(index, elevation);
+        SetPlayablePlayer(tile, rotation);
+        return _coverage;
+    }
+
+    internal void SetPlayablePlayer(int tile, int rotation)
+    {
+        if (!CurrentElevation.FloorIds.Any() ||
+            !Walkable(CurrentElevation).Contains(tile) ||
+            !_catalog.PlayerArtifacts.TryGetValue(rotation, out var artifactId))
+            throw new InvalidOperationException(
+                "Fallout playable player state is outside source MAP topology.");
+        var artifact = _catalog.SpriteArtifacts[artifactId];
+        _playablePlayer ??= BuildPlayablePlayer();
+        _playablePlayer.Texture = LoadTexture(
+            artifact.Path, artifact.Width, artifact.Height);
+        _playablePlayer.Offset = new Vector2(
+            artifact.FrameOffset.X,
+            -artifact.FrameOffset.Y + artifact.Height / 2.0f);
+        _playablePlayer.Position = Fo1HexMath.Center(tile) +
+            Vector3.Up * _catalog.GroundAnchorMeters;
+        _playablePlayer.SetMeta("source_tile", tile);
+        _playablePlayer.SetMeta("source_rotation", rotation);
+    }
+
+    internal IReadOnlySet<int> Walkable(Fo1CampaignElevationPresentation elevation)
+    {
+        var blocked = elevation.Blockers.Select(row => row.Tile).ToHashSet();
+        return Enumerable.Range(0, Fo1HexMath.Width * Fo1HexMath.Height)
+            .Where(tile => elevation.FloorIds[Fo1HexMath.FloorIndex(tile)] !=
+                    CurrentMap.DefaultTileId &&
+                !blocked.Contains(tile))
+            .ToHashSet();
+    }
+
+    internal int TileAtScreen(Vector2 screenPosition)
+    {
+        var origin = _camera.ProjectRayOrigin(screenPosition);
+        var direction = _camera.ProjectRayNormal(screenPosition);
+        if (Mathf.IsZeroApprox(direction.Y))
+            return -1;
+        var distance = -origin.Y / direction.Y;
+        return distance >= 0.0f
+            ? Fo1HexMath.NearestTile(origin + direction * distance)
+            : -1;
+    }
 
     internal void ActivateCamera() => _camera.Current = true;
 
@@ -367,6 +431,23 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             Modulate = _catalog.Viewer.Scene.SourceColorMultiplier,
             Visible = visible,
         });
+    }
+
+    private Sprite3D BuildPlayablePlayer()
+    {
+        var player = new Sprite3D
+        {
+            Name = "VaultDwellerPlayable",
+            PixelSize = 1.0f / _catalog.PixelsPerMeter,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            DoubleSided = true,
+            AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            Modulate = _catalog.Viewer.Scene.SourceColorMultiplier,
+        };
+        AddChild(player);
+        return player;
     }
 
     private Texture2D LoadTexture(string path, int expectedWidth, int expectedHeight)

@@ -22,7 +22,7 @@ internal sealed record Fo2MapSceneBuildCoverage(
 
 internal static class Fo2MapSceneBuilder
 {
-    private const int FloorIdMask = 0x0fff;
+    internal const int FloorIdMask = 0x0fff;
     private const int RoofIdShift = 16;
     private const float DegreesPerRotation = 60.0f;
 

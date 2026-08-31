@@ -1,7 +1,7 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 using OpenNV.Runtime.Campaigns.Fallout1;
-using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -699,6 +699,51 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         SetMeta("destination_player_source_fid", _selectedSourcePresentation.Fid);
         SetMeta("destination_player_source_frm_sha256",
             _selectedSourcePresentation.SourceSha256);
+        SetMeta("owned_map_arrival", true);
+    }
+
+    internal void EnterAdjacentMap(
+        Node3D destinationRoot,
+        ClassicMapEndpoint destination,
+        IReadOnlySet<int> walkable,
+        string walkMaskSha256,
+        string cacheSha256)
+    {
+        if (_profile is null || _presentation is null ||
+            destination.Elevation is not int elevation ||
+            destination.Rotation is not int rotation ||
+            destination.MapSha256.Length !=
+                Fo2TemplePresentationCatalog.Sha256HexCharacters ||
+            walkMaskSha256.Length != Fo2TemplePresentationCatalog.Sha256HexCharacters ||
+            cacheSha256.Length != Fo2TemplePresentationCatalog.Sha256HexCharacters ||
+            !walkable.Contains(destination.Tile))
+            throw new InvalidOperationException(
+                "Fallout 2 adjacent destination state is incomplete.");
+        Reparent(destinationRoot, keepGlobalTransform: false);
+        _arrivalComponent = walkable.ToHashSet();
+        _villageFloorHeightByTile = null;
+        CurrentMapIndex = destination.MapIndex;
+        CurrentElevation = elevation;
+        CurrentMapSha256 = destination.MapSha256;
+        CurrentWalkMaskSha256 = walkMaskSha256;
+        ArrivalTile = destination.Tile;
+        CurrentTile = destination.Tile;
+        _spawnWorldMeters = Fo1HexMath.Center(CurrentTile) +
+            Vector3.Up * _profile.SpawnCenterHeightMeters;
+        Position = _spawnWorldMeters;
+        Velocity = Vector3.Zero;
+        _presentation.SetDirection(rotation);
+        GroundVillageHumanoid(CurrentTile);
+        _villageHumanoid?.SetDirection(rotation);
+        SetControlsEnabled(true);
+        SetMeta("current_map_index", CurrentMapIndex);
+        SetMeta("current_elevation", CurrentElevation);
+        SetMeta("source_map_sha256", CurrentMapSha256);
+        SetMeta("source_walk_mask_sha256", CurrentWalkMaskSha256);
+        SetMeta("arrival_tile", ArrivalTile);
+        SetMeta("arrival_rotation", rotation);
+        SetMeta("current_tile", CurrentTile);
+        SetMeta("destination_cache_manifest_sha256", cacheSha256);
         SetMeta("owned_map_arrival", true);
     }
 

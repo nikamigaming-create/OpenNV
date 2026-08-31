@@ -72,7 +72,7 @@ internal sealed class Fo2TemplePresentationCatalog
     private const int TileIdMask = 0x0fff;
     private const int RoofIdShift = 16;
     private const int MapVersion = 20;
-    private const int Sha256HexCharacters = 64;
+    internal const int Sha256HexCharacters = 64;
     private const string FloorProjectionMode = "classic-fallout-isometric-floor-unproject-v1";
     private const string FloorAlphaFill = "nearest-owned-opaque-pixel-v1";
     private const int FloorSourceWidth = 80;

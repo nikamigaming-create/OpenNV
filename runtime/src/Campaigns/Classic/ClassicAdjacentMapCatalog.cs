@@ -14,24 +14,77 @@ internal sealed record ClassicAdjacentMapCatalog(
     string Sha256,
     IReadOnlyList<ClassicReciprocalMapJoins> ReciprocalJoins)
 {
+    internal ClassicMapJoinState? TryCommitAt(
+        int mapIndex,
+        string mapSha256,
+        int tile,
+        int elevation)
+    {
+        var candidates = Matching(mapIndex, mapSha256, tile, elevation);
+        return candidates.Length == 0
+            ? null
+            : Commit(candidates, mapIndex, mapSha256, tile, elevation);
+    }
+
     internal ClassicMapJoinState CommitAt(
         int mapIndex,
         string mapSha256,
         int tile,
         int elevation)
     {
-        var candidates = ReciprocalJoins
-            .SelectMany(row => row.Forward.Concat(row.Reverse))
-            .Where(row =>
-                row.Source.MapIndex == mapIndex &&
-                row.Source.MapSha256.Equals(
-                    mapSha256, StringComparison.OrdinalIgnoreCase) &&
-                row.Source.Tile == tile && row.Source.Elevation == elevation)
-            .OrderBy(row => row.SourceSerial)
-            .ToArray();
+        var candidates = Matching(mapIndex, mapSha256, tile, elevation);
         if (candidates.Length == 0)
             throw new InvalidOperationException(
                 "Classic active MAP state has no compiled reciprocal join.");
+        return Commit(candidates, mapIndex, mapSha256, tile, elevation);
+    }
+
+    internal ClassicMapEndpoint RequireMap(string mapName, string mapSha256)
+    {
+        var maps = ReciprocalJoins
+            .SelectMany(row => row.Forward.Concat(row.Reverse))
+            .SelectMany(row => new[] { row.Source, row.Destination })
+            .Where(row =>
+                row.MapName is not null &&
+                System.IO.Path.GetFileNameWithoutExtension(row.MapName).Equals(
+                    System.IO.Path.GetFileNameWithoutExtension(mapName),
+                    StringComparison.OrdinalIgnoreCase) &&
+                row.MapSha256.Equals(mapSha256, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(row => new
+            {
+                row.MapIndex,
+                Name = System.IO.Path.GetFileNameWithoutExtension(row.MapName),
+                Hash = row.MapSha256.ToLowerInvariant(),
+            })
+            .Select(row => row.First())
+            .ToArray();
+        return maps.Length == 1
+            ? maps[0]
+            : throw new InvalidOperationException(
+                "Classic saved MAP identity is absent or ambiguous in its join catalog.");
+    }
+
+    private ClassicMapJoin[] Matching(
+        int mapIndex,
+        string mapSha256,
+        int tile,
+        int elevation) => ReciprocalJoins
+        .SelectMany(row => row.Forward.Concat(row.Reverse))
+        .Where(row =>
+            row.Source.MapIndex == mapIndex &&
+            row.Source.MapSha256.Equals(
+                mapSha256, StringComparison.OrdinalIgnoreCase) &&
+            row.Source.Tile == tile && row.Source.Elevation == elevation)
+        .OrderBy(row => row.SourceSerial)
+        .ToArray();
+
+    private static ClassicMapJoinState Commit(
+        IReadOnlyList<ClassicMapJoin> candidates,
+        int mapIndex,
+        string mapSha256,
+        int tile,
+        int elevation)
+    {
         var join = candidates[0];
         if (candidates.Any(row => row.Destination != join.Destination))
             throw new InvalidOperationException(

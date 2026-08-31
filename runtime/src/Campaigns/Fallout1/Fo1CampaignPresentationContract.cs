@@ -137,6 +137,10 @@ internal static class Fo1CampaignPresentationContract
             throw new InvalidOperationException($"Unexpected Fallout campaign presentation map: {mapId}");
 
         var defaultTileId = ValidateGrid(root.GetProperty("grid"));
+        var mapSha256 = HexString(
+            root.GetProperty("source"),
+            "mapSha256",
+            Fo1CampaignPresentationContractNumericContracts.PresentationInt64);
         var entry = ReadEntry(root.GetProperty("entry"), catalog);
         var elevations = root.GetProperty("elevations").EnumerateArray()
             .Select(row => ReadElevation(catalogRow.Id, row, catalog, defaultTileId))
@@ -162,6 +166,8 @@ internal static class Fo1CampaignPresentationContract
         return new Fo1CampaignMapPresentation(
             catalogRow.Id,
             catalogRow.SourceFile,
+            mapSha256,
+            defaultTileId,
             entry,
             elevations,
             coverage);
@@ -1011,6 +1017,8 @@ internal sealed record Fo1CampaignMapCatalogRow(
 internal sealed record Fo1CampaignMapPresentation(
     string Id,
     string SourceFile,
+    string MapSha256,
+    int DefaultTileId,
     Fo1CampaignMapEntry Entry,
     IReadOnlyList<Fo1CampaignElevationPresentation> Elevations,
     Fo1CampaignMapPresentationCoverage Coverage);

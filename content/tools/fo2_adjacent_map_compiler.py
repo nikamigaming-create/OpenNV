@@ -12,16 +12,25 @@ from typing import Any
 
 from classic_map_joins import exit_grid_records, reciprocal_map_joins
 from corpus_io import atomic_json
+from fo1_frm import decode_frm
 from fo1_map_objects import Fo1ResourceResolver, parse_map_objects, parse_script_section
 from fo1_profile import Fo1ProfileError, map_layout_manifest, parse_map_layout
 from fo2_arroyo_trial_route import _walk_mask_sha256, _walkable_by_elevation
-from fo2_first_slice import FORM_ID_RADIX, _archive_paths, _flatten_objects, _load_json
+from fo2_first_slice import (
+    FORM_ID_RADIX,
+    FRM_PALETTE_SIZE,
+    _archive_paths,
+    _flatten_objects,
+    _frm_structure,
+    _load_json,
+)
 from fo2_temple_transitions import NO_BLOCK_FLAG, _maps_sections
 from plugin_stack import file_sha256
 
 
 SCHEMA = "opennv-fo2-adjacent-map-catalog/v1"
 SOURCE_SCHEMA = "opennv-fo2-owned-map-slice/v1"
+CLASSIC_DEFAULT_TILE_ID = 1
 
 
 def _compile_map(
@@ -44,6 +53,33 @@ def _compile_map(
             f"Fallout 2 adjacent MAP object graph has trailing bytes: {logical_path}"
         )
     flat = _flatten_objects(objects)
+    frm_placements: dict[str, list[dict[str, Any]]] = {}
+    for obj in flat:
+        frm_path = resolver.placed_idle_frm_path(int(obj["fid"], FORM_ID_RADIX))
+        frm_placements.setdefault(frm_path, []).append(
+            {
+                "serial": obj["serial"],
+                "fid": obj["fid"],
+                "frame": obj["frame"],
+                "rotation": obj["rotation"],
+                "elevation": obj["elevation"],
+                "tile": obj["tile"],
+            }
+        )
+    palette = [(0, 0, 0, 0)] * FRM_PALETTE_SIZE
+    frms = []
+    for frm_path in sorted(frm_placements):
+        frm = resolver.read(frm_path)
+        frms.append(
+            {
+                "logicalPath": frm.logical_path,
+                "source": frm.source,
+                "bytes": len(frm.data),
+                "sha256": frm.sha256,
+                "structure": _frm_structure(decode_frm(frm.data, palette)),
+                "placements": frm_placements[frm_path],
+            }
+        )
     walkable = _walkable_by_elevation(
         {"map": {"layout": map_layout_manifest(layout), "objects": objects}}
     )
@@ -54,10 +90,15 @@ def _compile_map(
         "source": resource.source,
         "bytes": len(resource.data),
         "mapSha256": resource.sha256,
+        "sha256": resource.sha256,
         "header": asdict(layout.header),
         "layout": map_layout_manifest(layout),
+        "defaultTileId": CLASSIC_DEFAULT_TILE_ID,
         "scriptLists": scripts,
+        "objectsOffset": objects_offset,
+        "endOffset": end_offset,
         "objects": objects,
+        "frms": frms,
         "allObjectCount": len(flat),
         "blockerSerials": sorted(
             int(row["serial"])
@@ -69,6 +110,7 @@ def _compile_map(
                 "elevation": elevation,
                 "walkableHexes": len(tiles),
                 "walkMaskSha256": _walk_mask_sha256(tiles),
+                "tiles": sorted(tiles),
             }
             for elevation, tiles in sorted(walkable.items())
         ],
@@ -166,6 +208,7 @@ def compile_fo2_adjacent_maps(
         "schema": SCHEMA,
         "status": "compiled-owned-reciprocal-adjacent-maps",
         "campaign": "Fallout2",
+        "slice": "AdjacentMaps",
         "sourceProfile": {
             "file": str(profile_path),
             "sourceProfileId": profile["sourceProfileId"],
@@ -177,6 +220,13 @@ def compile_fo2_adjacent_maps(
             "sha256": file_sha256(source_slice_path),
             "mapIndex": source_index,
         },
+        "recipe": {
+            "file": str(recipe_path),
+            "schema": recipe["schema"],
+            "id": recipe["id"],
+            "sha256": file_sha256(recipe_path),
+        },
+        "overlayOrderHighToLow": recipe["overlayOrderHighToLow"],
         "maps": adjacent,
         "mapJoins": joins,
         "resources": [
@@ -193,6 +243,9 @@ def compile_fo2_adjacent_maps(
             "missingReciprocalJoin": "fail-closed",
             "scriptExecution": "decoded-subsets-only",
         },
+        "promotion": {"transported": True},
+        "runtimeCompatibility": {"ready": False},
+        "generatedCaches": [],
         "retailOrDerivedAssetsPackaged": False,
     }
 
