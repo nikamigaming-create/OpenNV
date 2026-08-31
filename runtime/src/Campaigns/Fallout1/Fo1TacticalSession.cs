@@ -1832,10 +1832,6 @@ internal partial class Fo1TacticalSession : Node
         BuildFpsCrosshair();
     }
 
-    private string ControlsText() => _firstPersonModeActive
-        ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • I inventory • P Pip-Boy • Esc mouse"
-        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save";
-
     private void BuildFpsCrosshair()
     {
         _fpsCrosshair = new Control
@@ -1949,23 +1945,6 @@ internal partial class Fo1TacticalSession : Node
         _targetReticleLabel.Text =
             $"TARGET: GIANT RAT  HP {_selectedMob.HitPoints}/{_selectedMob.MaximumHitPoints}";
         _targetReticle.Visible = true;
-    }
-
-    private void RefreshMobReadability()
-    {
-        var tactical = _camera is null ||
-            _camera.Projection == Camera3D.ProjectionType.Orthogonal;
-        foreach (var mob in _mobs)
-            mob.UpdateReadability(_playerTile, tactical);
-    }
-
-    private static Label HudLabel(Container parent)
-    {
-        var label = new Label();
-        label.AddThemeColorOverride("font_color", new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point68f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point96f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point48f));
-        label.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt16);
-        parent.AddChild(label);
-        return label;
     }
 
     private void RefreshHud()

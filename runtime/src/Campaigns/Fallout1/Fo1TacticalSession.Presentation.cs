@@ -16,6 +16,27 @@ namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal partial class Fo1TacticalSession
 {
+    private string ControlsText() => _firstPersonModeActive
+        ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • I inventory • P Pip-Boy • Esc mouse"
+        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save";
+
+    private void RefreshMobReadability()
+    {
+        var tactical = _camera is null ||
+            _camera.Projection == Camera3D.ProjectionType.Orthogonal;
+        foreach (var mob in _mobs)
+            mob.UpdateReadability(_playerTile, tactical);
+    }
+
+    private static Label HudLabel(Container parent)
+    {
+        var label = new Label();
+        label.AddThemeColorOverride("font_color", new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point68f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point96f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point48f));
+        label.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt16);
+        parent.AddChild(label);
+        return label;
+    }
+
     internal Fo1PipBoy2000 AttachPipBoy(
         Fo1CharacterStartContract contract,
         Fo1CharacterProfile profile)
