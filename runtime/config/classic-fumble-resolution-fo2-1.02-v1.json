@@ -1,0 +1,21 @@
+{
+  "schema": "opennv-classic-fumble-resolution/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "effectOrder": [
+    "drop",
+    "hit-self",
+    "hurt-self",
+    "lose-turn",
+    "random-cripple",
+    "random-hit"
+  ],
+  "hurtSelfDamageRange": [1, 5],
+  "randomCrippleRollRange": [0, 3],
+  "randomCrippleFlags": [
+    "crippled-left-leg",
+    "crippled-right-leg",
+    "crippled-left-arm",
+    "crippled-right-arm"
+  ],
+  "loseTurnActionPoints": 0
+}
