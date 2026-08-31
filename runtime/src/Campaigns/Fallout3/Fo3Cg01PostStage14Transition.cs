@@ -316,8 +316,12 @@ internal sealed record Fo3Cg01Stage50Timer(
             !double.IsFinite(initialSeconds) || initialSeconds <= 0.0 || runValue != 1 ||
             stage90[3].GetProperty("value").GetInt32() != 0)
             throw new InvalidOperationException("Fallout 3 CG01 stage-90 result differs.");
-        var modifierSource = stage90[5].GetProperty("modifier");
-        var soundSource = stage90[6].GetProperty("sound");
+        var modifierSource = stage90.Single(row =>
+            row.GetProperty("kind").GetString() == "applyImageSpaceModifier")
+            .GetProperty("modifier");
+        var soundSource = stage90.Single(row =>
+            row.GetProperty("kind").GetString() == "playSound")
+            .GetProperty("sound");
         var modifier = Fo3Stage90Transition.LoadModifier(
             modifierSource, modifierSource.GetProperty("editorId").GetString()!);
         var sound = Fo3Stage90Transition.LoadSound(
@@ -334,13 +338,21 @@ internal sealed record Fo3Cg01Stage50Timer(
                 row.GetProperty("index").GetInt32() != index ||
                 row.GetProperty("kind").GetString() != stage100Kinds[index]).Any())
             throw new InvalidOperationException("Fallout 3 CG01 stage-100 command order differs.");
-        var scale = stage100[2].GetProperty("value").GetDouble();
-        var toddler = stage100[3].GetProperty("value").GetInt32();
+        var dadDisable = stage100.Single(row =>
+            row.GetProperty("kind").GetString() == "disable");
+        var scale = stage100.Single(row =>
+            row.GetProperty("kind").GetString() == "setPlayerScale")
+            .GetProperty("value").GetDouble();
+        var toddler = stage100.Single(row =>
+            row.GetProperty("kind").GetString() == "setPlayerToddler")
+            .GetProperty("value").GetInt32();
+        var nextStage = stage100.Single(row =>
+            row.GetProperty("kind").GetString() == "setStage");
         var next = source.GetProperty("nextBoundary");
         if (!next.GetProperty("applied").GetBoolean() ||
-            stage100[5].GetProperty("questFormId").GetString() != next.GetProperty("questFormId").GetString() ||
-            stage100[5].GetProperty("questEditorId").GetString() != next.GetProperty("questEditorId").GetString() ||
-            stage100[5].GetProperty("stage").GetInt32() != next.GetProperty("stage").GetInt32() ||
+            nextStage.GetProperty("questFormId").GetString() != next.GetProperty("questFormId").GetString() ||
+            nextStage.GetProperty("questEditorId").GetString() != next.GetProperty("questEditorId").GetString() ||
+            nextStage.GetProperty("stage").GetInt32() != next.GetProperty("stage").GetInt32() ||
             !double.IsFinite(scale) || scale <= 0.0 || toddler is not 0)
             throw new InvalidOperationException("Fallout 3 CG01 stage-100 completion differs.");
         return new Fo3Cg01Stage90Completion(
@@ -352,7 +364,7 @@ internal sealed record Fo3Cg01Stage50Timer(
             sound,
             stage90.Length,
             stage100.Length,
-            stage100[1].GetProperty("referenceFormId").GetString()!,
+            dadDisable.GetProperty("referenceFormId").GetString()!,
             scale,
             false,
             next.GetProperty("questFormId").GetString()!,

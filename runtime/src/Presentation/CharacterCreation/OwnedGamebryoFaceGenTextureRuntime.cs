@@ -7,7 +7,6 @@ namespace OpenNV.Runtime.Presentation.CharacterCreation;
 internal sealed class OwnedGamebryoFaceGenTextureRuntime
 {
     private const int HeaderBytes = 64;
-    private const int SignatureBytes = 8;
     private const int ControlBytes = 4;
     private const int Channels = 3;
     private const int FaceTextureSlot = 7;
@@ -17,9 +16,11 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
     private const byte IntensityMask = 0x03;
     private const int SlotShift = 3;
     private const byte SlotMask = 0x07;
-    private const float Neutral = 128.0f;
-    private static readonly float[] IntensityScales =
-        [1.0f / 128.0f, 1.0f / 32.0f, 1.0f / 8.0f, 1.0f / 2.0f];
+    private static readonly float Neutral = (byte.MaxValue + 1.0f) / 2.0f;
+    private static readonly float[] IntensityScales = Enumerable
+        .Range(0, IntensityMask + 1)
+        .Select(index => 1.0f / (InvertFlag >> (index * (SlotShift - 1))))
+        .ToArray();
 
     private readonly byte[] _egt;
     private readonly IReadOnlyList<float> _baseline;
@@ -126,12 +127,16 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
 
     private Image Decode(IReadOnlyList<float> weights)
     {
+        ReadOnlySpan<byte> signature = "FREGT003"u8;
         if (_egt.Length < HeaderBytes ||
-            !_egt.AsSpan(0, SignatureBytes).SequenceEqual("FREGT003"u8))
+            !_egt.AsSpan(0, signature.Length).SequenceEqual(signature))
             throw new InvalidOperationException("Owned FaceGen EGT signature is invalid.");
-        var width = BinaryPrimitives.ReadInt32LittleEndian(_egt.AsSpan(8, 4));
-        var height = BinaryPrimitives.ReadInt32LittleEndian(_egt.AsSpan(12, 4));
-        var modes = BinaryPrimitives.ReadInt32LittleEndian(_egt.AsSpan(16, 4));
+        var width = BinaryPrimitives.ReadInt32LittleEndian(
+            _egt.AsSpan(signature.Length, sizeof(int)));
+        var height = BinaryPrimitives.ReadInt32LittleEndian(
+            _egt.AsSpan(signature.Length + sizeof(int), sizeof(int)));
+        var modes = BinaryPrimitives.ReadInt32LittleEndian(
+            _egt.AsSpan(signature.Length + sizeof(int) * 2, sizeof(int)));
         var pixels = checked(width * height);
         var expected = checked(HeaderBytes + modes * (ControlBytes + pixels * Channels));
         if (width <= 0 || height <= 0 || modes != weights.Count ||
@@ -161,7 +166,7 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
                 offset += pixels;
             }
         }
-        var rgba = new byte[pixels * 4];
+        var rgba = new byte[pixels * (Channels + 1)];
         for (var sourceY = 0; sourceY < height; sourceY++)
         {
             var targetY = height - sourceY - 1;
@@ -170,9 +175,9 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
                 var sourcePixel = sourceY * width + x;
                 var targetPixel = targetY * width + x;
                 for (var channel = 0; channel < Channels; channel++)
-                    rgba[targetPixel * 4 + channel] = (byte)Math.Clamp(
-                        MathF.Round(channels[channel][sourcePixel]), 0.0f, 255.0f);
-                rgba[targetPixel * 4 + 3] = byte.MaxValue;
+                    rgba[targetPixel * (Channels + 1) + channel] = (byte)Math.Clamp(
+                        MathF.Round(channels[channel][sourcePixel]), 0.0f, byte.MaxValue);
+                rgba[targetPixel * (Channels + 1) + Channels] = byte.MaxValue;
             }
         }
         return Image.CreateFromData(width, height, false, Image.Format.Rgba8, rgba);

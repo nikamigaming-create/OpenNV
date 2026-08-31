@@ -3530,7 +3530,6 @@ def _compile_cg01_post_stage14_transition(
     def travel_package_contract(
         package: object,
         condition: dict[str, object],
-        expected_type: int,
     ) -> dict[str, object]:
         package_data = _single_subrecord(package, "PKDT")
         location_data = _single_subrecord(package, "PLDT")
@@ -3540,8 +3539,7 @@ def _compile_cg01_post_stage14_transition(
         location_type, target_id, radius = struct.unpack("<III", location_data)
         target = by_form.get(target_id)
         if (
-            package_type != expected_type
-            or location_type != 0
+            location_type != 0
             or target is None
             or target.signature != PLACED_REFERENCE_RECORD
         ):
@@ -3567,7 +3565,7 @@ def _compile_cg01_post_stage14_transition(
         }
 
     bible_package, bible_condition = dad_package_for_stage(completion_target + 1)
-    bible_contract = travel_package_contract(bible_package, bible_condition, 6)
+    bible_contract = travel_package_contract(bible_package, bible_condition)
     bible_contract["stageResult"] = {
         "sourceSha256": hashlib.sha256(
             stage_sources[completion_target + 1][0].encode("cp1252")
@@ -3600,9 +3598,9 @@ def _compile_cg01_post_stage14_transition(
     ]
 
     lead_package, lead_condition = dad_package_for_stage(dialogue_target)
-    lead_contract = travel_package_contract(lead_package, lead_condition, 2)
+    lead_contract = travel_package_contract(lead_package, lead_condition)
     target_data = _single_subrecord(lead_package, "PTDT")
-    if len(target_data) != 16:
+    if len(target_data) != struct.calcsize("<IIII"):
         raise ValueError("Fallout 3 CG01 Dad lead target layout differs")
     target_type, target_form_id, target_count, target_unknown = struct.unpack(
         "<IIII", target_data
