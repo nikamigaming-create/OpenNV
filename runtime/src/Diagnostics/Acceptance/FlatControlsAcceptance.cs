@@ -24,14 +24,17 @@ internal static class FlatControlsAcceptance
             var initialPosition = loaded.Player.GlobalPosition;
             var initialYaw = loaded.Player.Rotation.Y;
             var initialPitch = loaded.Player.Camera.Rotation.X;
+            var activationEdgesBefore = loaded.Player.DesktopActivationEdges;
 
             await PulseMouseBinding(host, input.CaptureMouse, input.Acceptance.SettleFrames);
-            if (Input.MouseMode != Input.MouseModeEnum.Captured)
+            var mouseCaptured = Input.MouseMode == Input.MouseModeEnum.Captured;
+            if (!mouseCaptured)
                 throw new InvalidOperationException("Configured desktop mouse capture was not accepted.");
 
-            var doorRay = CellSceneLoader.BuildProofRay(loaded.ProofDoor, configuration.Proof);
-            var doorCenter = (doorRay.From + doorRay.To) / 2.0f;
-            ApplyMouseLook(loaded.Player, doorCenter, configuration.Player);
+            ApplyMouseRotation(
+                input.Acceptance.MinimumLookRadians * 2.0f,
+                0.0f,
+                configuration.Player.MouseSensitivityRadiansPerPixel);
             await WaitPhysicsFrames(host, input.Acceptance.SettleFrames);
             var lookRadians = MathF.Sqrt(
                 MathF.Pow(Mathf.AngleDifference(initialYaw, loaded.Player.Rotation.Y), 2.0f) +
@@ -41,8 +44,10 @@ internal static class FlatControlsAcceptance
                     $"Configured desktop mouse look did not rotate far enough: {lookRadians:F4}");
 
             await PulseKeyBinding(host, input.Activate, input.Acceptance.SettleFrames);
-            if (!loaded.ProofDoor.IsOpen || loaded.Session.OpenDoorsCount < 1)
-                throw new InvalidOperationException("Configured desktop activate input did not open the proof door.");
+            var activationEdges = loaded.Player.DesktopActivationEdges - activationEdgesBefore;
+            if (activationEdges != 1)
+                throw new InvalidOperationException(
+                    $"Configured desktop activation edge count differs: {activationEdges}.");
 
             ApplyMouseRotation(
                 Mathf.AngleDifference(loaded.Player.Rotation.Y, initialYaw),
@@ -116,7 +121,7 @@ internal static class FlatControlsAcceptance
 
             var report = new
             {
-                schema = "opennv-flat-controls-acceptance/v1",
+                schema = "opennv-flat-controls-acceptance/v2",
                 status = "pass",
                 inputTransport = "godot-input-map-plus-parse-input-event",
                 windowsAppControlUsed = false,
@@ -125,8 +130,9 @@ internal static class FlatControlsAcceptance
                 configurationSha256 = configuration.Sha256,
                 scene = scenePath,
                 proofDoorReferenceFormId = loaded.ProofDoorFormId,
-                mouseCaptured = Input.MouseMode == Input.MouseModeEnum.Captured,
+                mouseCaptured,
                 lookRadians,
+                activationEdges,
                 locomotionMeters = movement.Length(),
                 leftHandVisible = loaded.Player.HasLeftHand,
                 rightHandVisible = loaded.Player.HasRightHand,
@@ -160,7 +166,7 @@ internal static class FlatControlsAcceptance
             GD.Print(
                 $"OPENNV_FLAT_CONTROLS_PASS movement={movement.Length():F3} " +
                 $"look={lookRadians:F3} fire={loaded.Session.ShotsFired - shotsBefore} " +
-                $"doors={loaded.Session.OpenDoorsCount}");
+                $"activations={activationEdges}");
         }
         finally
         {
@@ -234,6 +240,7 @@ internal static class FlatControlsAcceptance
         {
             Relative = new Vector2(-yawDelta / sensitivity, -pitchDelta / sensitivity),
         });
+        Input.FlushBufferedEvents();
     }
 
     internal static async Task WaitPhysicsFrames(RuntimeCoordinator host, int frameCount)

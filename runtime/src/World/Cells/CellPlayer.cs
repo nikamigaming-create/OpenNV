@@ -121,6 +121,7 @@ internal partial class CellPlayer : CharacterBody3D
     internal string LastMovementState { get; private set; } = "none";
     internal string LastActivationCollider { get; private set; } = "none";
     internal string LastActivationDoorFormId { get; private set; } = "none";
+    internal int DesktopActivationEdges { get; private set; }
     internal Vector3 LastBlockingNormal { get; private set; }
     internal Node? LastBlockingCollider { get; private set; }
     internal Vector3? LastBlockingPosition { get; private set; }
@@ -1005,6 +1006,7 @@ internal partial class CellPlayer : CharacterBody3D
             DropHeldPickup();
         if (_activationEnabled && Input.IsActionJustPressed(input.Activate.Action))
         {
+            DesktopActivationEdges++;
             bool accepted;
             if (_activePool is null)
                 accepted = Activate(_camera);

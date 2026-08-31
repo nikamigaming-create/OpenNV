@@ -14,7 +14,7 @@ from runtime_configuration import RuntimeConfiguration, load_runtime_configurati
 CELL_REPORT_SCHEMA = "opennv-godot-cell/v1"
 XR_REPORT_SCHEMA = "opennv-openxr-rig/v3"
 XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
-FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
+FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v2"
 FLAT_ROUTE_TRAVEL_REPORT_SCHEMA = "opennv-flat-route-travel/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
 CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v7"
@@ -448,7 +448,7 @@ def validate_flat_controls_report(
         and bool(pip_boy["closed"]),
         "Flat Pip-Boy did not open and close",
     )
-    _require(int(report["openDoors"]) >= 1, "Flat activate did not open a door")
+    _require(int(report["activationEdges"]) == 1, "Flat activation edge count differs")
     expected_keys = {
         str(desktop[name]["action"]): str(desktop[name]["physicalKey"])
         for name in (
