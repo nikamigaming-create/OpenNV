@@ -229,7 +229,6 @@
           "fo3-vault101-cg02-amata-actor-v1",
           "fo3-vault101-cg02-beatrice-actor-v1",
           "fo3-vault101-cg02-dad-actor-v1",
-          "fo3-vault101-cg02-overseer-actor-v1",
           "fo3-vault101-cg02-old-lady-palmer-actor-v1",
           "fo3-vault101-cg02-stanley-actor-v1",
           "fo3-vault101-cg02-paul-hannon-actor-v1",
@@ -267,6 +266,28 @@
           "infoFormId": "0001f9c2",
           "sourceStage": 10,
           "targetStage": 12
+        },
+        "cg02BirthdayInteractions": {
+          "sourceStage": 12,
+          "failsafeTimerFormId": "0008a3c9",
+          "participants": [
+            {
+              "referenceFormId": "000300f2",
+              "baseFormId": "000300e9",
+              "greetingInfoFormIds": ["000319bd"]
+            },
+            {
+              "referenceFormId": "000309ad",
+              "baseFormId": "000309ac",
+              "greetingInfoFormIds": ["000784d9"]
+            },
+            {
+              "referenceFormId": "00031649",
+              "baseFormId": "00031648",
+              "greetingInfoFormIds": ["000319b9", "000784dc"]
+            }
+          ],
+          "giftStages": [21, 22, 23]
         },
         "questEditorId": "CG01",
         "questFormId": "00014e83",

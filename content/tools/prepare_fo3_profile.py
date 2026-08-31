@@ -3925,6 +3925,188 @@ def _compile_cg02_dad_party_runtime(
     }
 
 
+def _compile_cg02_birthday_interactions_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    definition: dict[str, object],
+) -> dict[str, object]:
+    config = dict(definition["cg02BirthdayInteractions"])
+    by_form = {record.form_id: record for record in records}
+    info_by_topic: dict[int, list[object]] = {}
+    for record in records:
+        if record.signature != DIALOGUE_INFO_RECORD:
+            continue
+        groups = [group for group in record.groups
+                  if group.group_type == DIALOGUE_CHILD_GROUP_TYPE]
+        if len(groups) == 1:
+            info_by_topic.setdefault(groups[0].label_u32, []).append(record)
+
+    failsafe = by_form.get(int(str(config["failsafeTimerFormId"]), FORM_ID_RADIX))
+    if failsafe is None or failsafe.signature != "GLOB":
+        raise ValueError("Fallout 3 CG02 birthday failsafe timer differs")
+    timer_rows = [row.data for row in iter_subrecords(failsafe) if row.signature == "FLTV"]
+    if len(timer_rows) != 1 or len(timer_rows[0]) != struct.calcsize("<f"):
+        raise ValueError("Fallout 3 CG02 birthday failsafe value differs")
+    failsafe_seconds = struct.unpack("<f", timer_rows[0])[0]
+
+    participants = []
+    reached_stages: set[int] = set()
+    for raw_participant in config["participants"]:
+        participant = dict(raw_participant)
+        reference = by_form.get(int(str(participant["referenceFormId"]), FORM_ID_RADIX))
+        base = by_form.get(int(str(participant["baseFormId"]), FORM_ID_RADIX))
+        if reference is None or reference.signature != ACTOR_REFERENCE_RECORD or \
+                base is None or base.signature != NPC_RECORD or \
+                struct.unpack("<I", _single_subrecord(reference, "NAME"))[0] != base.form_id:
+            raise ValueError("Fallout 3 CG02 birthday participant differs")
+        voice_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(base)
+                     if row.signature == "VTCK" and len(row.data) == FORM_ID_BYTES]
+        voice = by_form.get(voice_ids[0]) if len(voice_ids) == 1 else None
+        if voice is None or voice.signature != "VTYP":
+            raise ValueError("Fallout 3 CG02 birthday voice type differs")
+        greeting_ids = [int(str(value), FORM_ID_RADIX)
+                        for value in participant["greetingInfoFormIds"]]
+        pending = list(greeting_ids)
+        seen_infos: set[int] = set()
+        seen_topics: set[int] = set()
+        nodes: list[dict[str, object]] = []
+        branches: list[dict[str, object]] = []
+        while pending:
+            info_id = pending.pop(0)
+            if info_id in seen_infos:
+                continue
+            info = by_form.get(info_id)
+            if info is None or info.signature != DIALOGUE_INFO_RECORD:
+                raise ValueError("Fallout 3 CG02 birthday INFO differs")
+            seen_infos.add(info_id)
+            conditions = [_dialogue_condition(row.data) for row in iter_subrecords(info)
+                          if row.signature == "CTDA"]
+            if not any(int(row["function"]) == GET_IS_ID_FUNCTION and
+                       int(row["parameter1"]) == base.form_id for row in conditions):
+                raise ValueError("Fallout 3 CG02 birthday speaker condition differs")
+            sex_values = [int(row["parameter1"]) for row in conditions
+                          if int(row["function"]) == GET_PC_IS_SEX_FUNCTION]
+            if len(sex_values) > 1 or any(value not in (0, 1) for value in sex_values):
+                raise ValueError("Fallout 3 CG02 birthday sex condition differs")
+            linked_topics = [struct.unpack("<I", row.data)[0]
+                             for row in iter_subrecords(info)
+                             if row.signature == "TCLT" and len(row.data) == FORM_ID_BYTES]
+            results = [command for source in _text_values(info, "SCTX")
+                       for command in _source_commands(source)]
+            effects = []
+            for command in results:
+                if match := SET_STAGE_PATTERN.fullmatch(command):
+                    if match.group("quest").casefold() != (_editor_id(quest) or "").casefold():
+                        raise ValueError("Fallout 3 CG02 birthday result quest differs")
+                    stage = int(match.group("stage"))
+                    reached_stages.add(stage)
+                    effects.append({"kind": "setStage", "stage": stage})
+                elif match := re.fullmatch(
+                    r"set\s+CG02\.timer\s+to\s+CG02FailsafeTimer", command,
+                    re.IGNORECASE):
+                    effects.append({"kind": "setTimer", "seconds": failsafe_seconds})
+                elif command.casefold().startswith("if ") or command.casefold() == "endif":
+                    effects.append({"kind": "sourceConditional", "source": command})
+                else:
+                    raise ValueError(
+                        f"Fallout 3 CG02 birthday INFO result differs: {command}")
+            response_rows = [value for value in _text_values(info, "NAM1") if value]
+            if not response_rows:
+                raise ValueError("Fallout 3 CG02 birthday response differs")
+            response_indexes = list(range(1, len(response_rows) + 1))
+            branch_lines = []
+            for response_index, response in zip(response_indexes, response_rows):
+                line = {"infoFormId": _form_id(info.form_id),
+                        "response": {"index": response_index, "text": response,
+                                     "textSha256": hashlib.sha256(response.encode()).hexdigest()}}
+                branches.append(line)
+                branch_lines.append(response_index)
+            nodes.append({
+                "infoFormId": _form_id(info.form_id),
+                "topicFormId": _form_id(next(group.label_u32 for group in info.groups
+                                              if group.group_type == DIALOGUE_CHILD_GROUP_TYPE)),
+                "engineSex": None if not sex_values else ("female" if sex_values[0] else "male"),
+                "responseIndexes": branch_lines,
+                "linkedTopicFormIds": [_form_id(value) for value in linked_topics],
+                "effects": effects,
+            })
+            for topic_id in linked_topics:
+                topic = by_form.get(topic_id)
+                if topic is None or topic.signature != DIALOGUE_TOPIC_RECORD:
+                    raise ValueError("Fallout 3 CG02 birthday choice topic differs")
+                if topic_id not in seen_topics:
+                    seen_topics.add(topic_id)
+                    for child in info_by_topic.get(topic_id, []):
+                        pending.append(child.form_id)
+        topics = []
+        for topic_id in sorted(seen_topics):
+            topic = by_form[topic_id]
+            labels = [value for value in _text_values(topic, "FULL") if value]
+            if len(labels) != 1:
+                raise ValueError("Fallout 3 CG02 birthday choice label differs")
+            topics.append({"formId": _form_id(topic_id), "text": labels[0],
+                           "textSha256": hashlib.sha256(labels[0].encode()).hexdigest()})
+        participants.append({
+            "referenceFormId": _form_id(reference.form_id),
+            "baseFormId": _form_id(base.form_id),
+            "displayName": _text_values(base, "FULL")[0],
+            "greetingInfoFormIds": [_form_id(value) for value in greeting_ids],
+            "dialogue": {"voiceType": {"formId": _form_id(voice.form_id),
+                                         "editorId": _editor_id(voice)},
+                         "branches": branches,
+                         "nodes": nodes,
+                         "topics": topics,
+                         "dialoguePlaybackPrepared": False,
+                         "dialoguePlaybackImplemented": False},
+        })
+    gift_stages = {int(value) for value in config["giftStages"]}
+    if reached_stages != gift_stages:
+        raise ValueError("Fallout 3 CG02 birthday gift stages differ")
+    stage_results = {}
+    aggregate_stages: set[int] = set()
+    for stage in sorted(gift_stages):
+        commands = [command for source in stage_sources.get(stage, [])
+                    for command in _source_commands(source)]
+        if not commands:
+            raise ValueError("Fallout 3 CG02 birthday gift result differs")
+        if match := re.fullmatch(r"player\.additem\s+(\w+)\s+(\d+)", commands[0], re.IGNORECASE):
+            item = next((record for record in records
+                         if (_editor_id(record) or "").casefold() == match.group(1).casefold()), None)
+            if item is None:
+                raise ValueError("Fallout 3 CG02 birthday gift item differs")
+            stage_results[str(stage)] = {"kind": "addItem", "formId": _form_id(item.form_id),
+                                         "count": int(match.group(2))}
+        elif match := re.fullmatch(r"player\.addnote\s+(\w+)", commands[0], re.IGNORECASE):
+            note = next((record for record in records
+                         if (_editor_id(record) or "").casefold() == match.group(1).casefold()), None)
+            if note is None:
+                raise ValueError("Fallout 3 CG02 birthday gift note differs")
+            stage_results[str(stage)] = {"kind": "addNote", "formId": _form_id(note.form_id),
+                                         "count": 1}
+        else:
+            raise ValueError("Fallout 3 CG02 birthday gift command differs")
+        for command in commands[1:]:
+            match = SET_STAGE_PATTERN.fullmatch(command)
+            if match is None or match.group("quest").casefold() != \
+                    (_editor_id(quest) or "").casefold():
+                raise ValueError("Fallout 3 CG02 birthday aggregate result differs")
+            aggregate_stages.add(int(match.group("stage")))
+    if len(aggregate_stages) != 1:
+        raise ValueError("Fallout 3 CG02 birthday aggregate stage differs")
+    return {
+        "schema": "opennv-fo3-cg02-stage-12-birthday-interactions-runtime/v1",
+        "sourceStage": int(config["sourceStage"]),
+        "failsafeTimer": {"formId": _form_id(failsafe.form_id),
+                          "seconds": failsafe_seconds},
+        "participants": participants,
+        "stageResults": stage_results,
+        "aggregateStage": aggregate_stages.pop(),
+        "nextBoundary": {"applied": False,
+                         "blocker": "fo3-cg02-stage-12-cake-trigger-runtime-not-implemented"},
+    }
+
+
 def _compile_cg01_post_stage14_transition(
     records: tuple[object, ...],
     definition: dict[str, object],
@@ -4983,8 +5165,14 @@ def _compile_cg01_post_stage14_transition(
                         definition,
                     )
                 if "cg02DadPartySpeech" in definition:
-                    overseer_speech["dadPartyRuntime"] = _compile_cg02_dad_party_runtime(
+                    party_runtime = _compile_cg02_dad_party_runtime(
                         records, next_quest, next_stage_sources, definition)
+                    if "cg02BirthdayInteractions" in definition:
+                        party_runtime["birthdayInteractionsRuntime"] = (
+                            _compile_cg02_birthday_interactions_runtime(
+                                records, next_quest, next_stage_sources, definition))
+                        party_runtime["nextBoundary"] = {"applied": True, "blocker": None}
+                    overseer_speech["dadPartyRuntime"] = party_runtime
                     overseer_speech["nextBoundary"] = {"applied": True, "blocker": None}
                 dad_speech["overseerSpeechRuntime"] = overseer_speech
                 dad_speech["nextBoundary"] = {"applied": True, "blocker": None}
@@ -7933,7 +8121,10 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     NPC_RECORD,
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
+                    GLOBAL_RECORD,
                     "ARMO",
+                    "BOOK",
+                    "NOTE",
                     "NAVM",
                 }
             ),
@@ -8558,6 +8749,19 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
                     party_dialogue, voices_archive, voices_archive_sha256,
                     profile_root)
                 party["dialogue"] = party_dialogue
+                if "birthdayInteractionsRuntime" in party:
+                    birthday = dict(party["birthdayInteractionsRuntime"])
+                    prepared_participants = []
+                    for raw_participant in birthday["participants"]:
+                        participant = dict(raw_participant)
+                        participant_dialogue = dict(participant["dialogue"])
+                        _bind_owned_dad_dialogue_audio(
+                            participant_dialogue, voices_archive,
+                            voices_archive_sha256, profile_root)
+                        participant["dialogue"] = participant_dialogue
+                        prepared_participants.append(participant)
+                    birthday["participants"] = prepared_participants
+                    party["birthdayInteractionsRuntime"] = birthday
                 overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer
         cg02_intro["dadSpeechRuntime"] = dad_speech

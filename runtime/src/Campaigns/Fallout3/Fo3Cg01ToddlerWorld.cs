@@ -567,10 +567,12 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
     private Action? _gateActivated;
     private Action? _bookActivated;
     private Func<InputEvent, bool>? _menuInputHandler;
+    private IReadOnlyDictionary<string, Action>? _sourceFormActivations;
 
     internal bool MovementEnabled { get; private set; } = true;
     internal int AcceptancePhysicsFrames { get; private set; }
     internal float AcceptanceHorizontalTravelMeters { get; private set; }
+    internal uint SourceActivationCollisionLayer => _contract.CollisionMask;
 
     internal void Configure(
         Fo3Cg01ToddlerWorldContract contract,
@@ -707,7 +709,8 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         }
         if (!MovementEnabled)
             return;
-        if (_interaction is not null && inputEvent.IsActionPressed(_contract.ActivateAction))
+        if ((_interaction is not null || _sourceFormActivations is not null) &&
+            inputEvent.IsActionPressed(_contract.ActivateAction))
         {
             var query = PhysicsRayQueryParameters3D.Create(
                 _camera.GlobalPosition,
@@ -722,9 +725,13 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
                     if (!current.HasMeta("opennv_source_form_id"))
                         continue;
                     var formId = current.GetMeta("opennv_source_form_id").AsString();
-                    if (formId.Equals(_interaction.GateReferenceFormId, StringComparison.OrdinalIgnoreCase))
+                    if (_sourceFormActivations?.TryGetValue(formId, out var activated) == true)
+                        activated();
+                    else if (_interaction is not null && formId.Equals(
+                        _interaction.GateReferenceFormId, StringComparison.OrdinalIgnoreCase))
                         _gateActivated?.Invoke();
-                    else if (formId.Equals(_interaction.BookReferenceFormId, StringComparison.OrdinalIgnoreCase))
+                    else if (_interaction is not null && formId.Equals(
+                        _interaction.BookReferenceFormId, StringComparison.OrdinalIgnoreCase))
                         _bookActivated?.Invoke();
                     break;
                 }
@@ -762,6 +769,16 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         _menuInputHandler = handler;
         MovementEnabled = handler is null;
         Velocity = Vector3.Zero;
+    }
+
+    internal void ConfigureSourceFormActivations(
+        IReadOnlyDictionary<string, Action>? activations)
+    {
+        if ((activations is null) == (_sourceFormActivations is null) ||
+            activations is { Count: 0 })
+            throw new InvalidOperationException(
+                "Fallout 3 source-form activation lifecycle differs.");
+        _sourceFormActivations = activations;
     }
 
     public override void _PhysicsProcess(double delta)

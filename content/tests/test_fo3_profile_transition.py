@@ -24,6 +24,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_cg01_stage0_transition,
     _compile_cg02_dad_speech_runtime,
     _compile_cg02_dad_party_runtime,
+    _compile_cg02_birthday_interactions_runtime,
     _compile_cg02_overseer_speech_runtime,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
@@ -299,6 +300,76 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                   "ForceRadioStationUpdate"]}, party_definition)
         self.assertTrue(party["package"]["arrivedAtStart"])
         self.assertEqual(7, len(party["stageResult"]["commands"]))
+
+    def test_compiles_cg02_stage12_source_dialogue_graph_and_gifts(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        voice = Record("VTYP", 0x19FDF, 0, subrecord("EDID", b"VoiceAmata\0"), ())
+        base = Record(
+            "NPC_", 0x300E9, 0,
+            subrecord("EDID", b"CG02Amata\0") +
+            subrecord("FULL", b"Amata\0") +
+            subrecord("VTCK", struct.pack("<I", voice.form_id)), ())
+        reference = Record(
+            "ACHR", 0x300F2, 0,
+            subrecord("EDID", b"CG02AmataREF\0") +
+            subrecord("NAME", struct.pack("<I", base.form_id)), ())
+        timer = Record(
+            "GLOB", 0x8A3C9, 0,
+            subrecord("EDID", b"CG02FailsafeTimer\0") +
+            subrecord("FLTV", struct.pack("<f", 60.0)), ())
+        topics = tuple(
+            Record("DIAL", form_id, 0,
+                   subrecord("EDID", f"Gift{stage}".encode() + b"\0") +
+                   subrecord("FULL", f"Gift choice {stage}".encode() + b"\0"), ())
+            for stage, form_id in zip((21, 22, 23), (0x784A1, 0x784A2, 0x784A3)))
+        greeting_topic = Record(
+            "DIAL", 0xC8, 0, subrecord("EDID", b"GREETING\0"), ())
+        greeting = Record(
+            "INFO", 0x319BD, 0,
+            subrecord("NAM1", b"Happy birthday!\0") +
+            subrecord("CTDA", condition(72, base.form_id)) +
+            b"".join(subrecord("TCLT", struct.pack("<I", topic.form_id))
+                     for topic in topics) +
+            subrecord("SCTX", b"set CG02.timer to CG02FailsafeTimer\0"),
+            (GroupContext(struct.pack("<I", greeting_topic.form_id), 7),))
+        gift_infos = tuple(
+            Record(
+                "INFO", 0x79000 + stage, 0,
+                subrecord("NAM1", f"Gift {stage}.".encode() + b"\0") +
+                subrecord("CTDA", condition(72, base.form_id)) +
+                subrecord("SCTX", f"setstage CG02 {stage}".encode() + b"\0"),
+                (GroupContext(struct.pack("<I", topic.form_id), 7),))
+            for stage, topic in zip((21, 22, 23), topics))
+        gifts = (
+            Record("BOOK", 0x34040, 0, subrecord("EDID", b"BookSkillMelee\0"), ()),
+            Record("NOTE", 0x744B7, 0, subrecord("EDID", b"CG02Note\0"), ()),
+            Record("ARMO", 0x340C1, 0,
+                   subrecord("EDID", b"KIDHatPrewarCapKid\0"), ()),
+        )
+        definition = {"cg02BirthdayInteractions": {
+            "sourceStage": 12,
+            "failsafeTimerFormId": "0008a3c9",
+            "participants": [{
+                "referenceFormId": "000300f2",
+                "baseFormId": "000300e9",
+                "greetingInfoFormIds": ["000319bd"],
+            }],
+            "giftStages": [21, 22, 23],
+        }}
+        result = _compile_cg02_birthday_interactions_runtime(
+            (quest, voice, base, reference, timer, greeting_topic, *topics,
+             greeting, *gift_infos, *gifts), quest,
+            {
+                21: ["player.additem BookSkillMelee 1\nsetstage CG02 34"],
+                22: ["player.addNote CG02Note"],
+                23: ["player.additem KIDHatPrewarCapKid 1\nsetstage CG02 34"],
+            }, definition)
+        self.assertEqual(34, result["aggregateStage"])
+        self.assertEqual(4, len(result["participants"][0]["dialogue"]["nodes"]))
+        self.assertEqual(
+            ["addItem", "addNote", "addItem"],
+            [result["stageResults"][str(stage)]["kind"]
+             for stage in (21, 22, 23)])
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(

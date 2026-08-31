@@ -201,6 +201,48 @@ internal sealed record Fo3Cg02DadPartyRuntime(
     bool ArrivedAtStart,
     Fo3Cg02DadSpeechCue Cue,
     IReadOnlyList<Fo3Cg02DadPartyStageCommand> StageCommands,
+    Fo3Cg02BirthdayInteractionsRuntime? BirthdayInteractionsRuntime,
+    string NextBoundaryBlocker);
+
+internal sealed record Fo3Cg02BirthdayEffect(
+    string Kind,
+    int Stage,
+    double Seconds,
+    string Source);
+
+internal sealed record Fo3Cg02BirthdayDialogueNode(
+    string InfoFormId,
+    string TopicFormId,
+    string? EngineSex,
+    IReadOnlyList<int> ResponseIndexes,
+    IReadOnlyList<string> LinkedTopicFormIds,
+    IReadOnlyList<Fo3Cg02BirthdayEffect> Effects);
+
+internal sealed record Fo3Cg02BirthdayTopic(
+    string FormId,
+    string Text);
+
+internal sealed record Fo3Cg02BirthdayParticipant(
+    string ReferenceFormId,
+    string BaseFormId,
+    string DisplayName,
+    IReadOnlyList<string> GreetingInfoFormIds,
+    IReadOnlyDictionary<string, Fo3OwnedDialogueResponse> Lines,
+    IReadOnlyDictionary<string, Fo3Cg02BirthdayDialogueNode> Nodes,
+    IReadOnlyDictionary<string, Fo3Cg02BirthdayTopic> Topics);
+
+internal sealed record Fo3Cg02BirthdayStageResult(
+    int Stage,
+    string Kind,
+    string FormId,
+    int Count);
+
+internal sealed record Fo3Cg02BirthdayInteractionsRuntime(
+    int SourceStage,
+    double FailsafeSeconds,
+    IReadOnlyList<Fo3Cg02BirthdayParticipant> Participants,
+    IReadOnlyDictionary<int, Fo3Cg02BirthdayStageResult> StageResults,
+    int AggregateStage,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02IntroRuntime(
@@ -1010,6 +1052,12 @@ internal sealed record Fo3Cg01Stage50Timer(
                     : [])).ToArray();
         var package = source.GetProperty("package");
         var boundary = source.GetProperty("nextBoundary");
+        var boundaryApplied = boundary.GetProperty("applied").GetBoolean();
+        var birthday = boundaryApplied
+            ? LoadCg02BirthdayInteractions(
+                source.GetProperty("birthdayInteractionsRuntime"),
+                source.GetProperty("targetStage").GetInt32())
+            : null;
         return new Fo3Cg02DadPartyRuntime(
             expectedSourceStage, source.GetProperty("targetStage").GetInt32(),
             source.GetProperty("dadReferenceFormId").GetString()!,
@@ -1017,7 +1065,103 @@ internal sealed record Fo3Cg01Stage50Timer(
             package.GetProperty("radiusGameUnits").GetInt32(),
             package.GetProperty("initialDistanceGameUnits").GetDouble(),
             package.GetProperty("arrivedAtStart").GetBoolean(), cue, commands,
-            boundary.GetProperty("blocker").GetString()!);
+            birthday,
+            boundaryApplied ? birthday!.NextBoundaryBlocker :
+                boundary.GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg02BirthdayInteractionsRuntime LoadCg02BirthdayInteractions(
+        JsonElement source,
+        int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-12-birthday-interactions-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 birthday interaction identity differs.");
+        var participants = source.GetProperty("participants").EnumerateArray()
+            .Select(participant =>
+            {
+                var dialogue = participant.GetProperty("dialogue");
+                if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean() ||
+                    !dialogue.GetProperty("dialoguePlaybackImplemented").GetBoolean())
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG02 birthday dialogue assets differ.");
+                var lines = dialogue.GetProperty("branches").EnumerateArray()
+                    .ToDictionary(
+                        row => $"{row.GetProperty("infoFormId").GetString()!}:" +
+                            row.GetProperty("response").GetProperty("index").GetInt32(),
+                        row =>
+                        {
+                            var response = row.GetProperty("response");
+                            var infoFormId = row.GetProperty("infoFormId").GetString()!;
+                            var index = response.GetProperty("index").GetInt32();
+                            return new Fo3OwnedDialogueResponse(
+                                index,
+                                response.GetProperty("text").GetString()!,
+                                Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                                    response.GetProperty("voice"),
+                                    $"_{infoFormId}_{index}.ogg"),
+                                Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                                    response.GetProperty("lip"),
+                                    $"_{infoFormId}_{index}.lip"));
+                        }, StringComparer.OrdinalIgnoreCase);
+                var nodes = dialogue.GetProperty("nodes").EnumerateArray()
+                    .Select(row => new Fo3Cg02BirthdayDialogueNode(
+                        row.GetProperty("infoFormId").GetString()!,
+                        row.GetProperty("topicFormId").GetString()!,
+                        row.TryGetProperty("engineSex", out var sex) &&
+                            sex.ValueKind != JsonValueKind.Null ? sex.GetString() : null,
+                        row.GetProperty("responseIndexes").EnumerateArray()
+                            .Select(value => value.GetInt32()).ToArray(),
+                        row.GetProperty("linkedTopicFormIds").EnumerateArray()
+                            .Select(value => value.GetString()!).ToArray(),
+                        row.GetProperty("effects").EnumerateArray()
+                            .Select(effect => new Fo3Cg02BirthdayEffect(
+                                effect.GetProperty("kind").GetString()!,
+                                effect.TryGetProperty("stage", out var stage)
+                                    ? stage.GetInt32() : 0,
+                                effect.TryGetProperty("seconds", out var seconds)
+                                    ? seconds.GetDouble() : 0.0,
+                                effect.TryGetProperty("source", out var effectSource)
+                                    ? effectSource.GetString()! : ""))
+                            .ToArray()))
+                    .ToDictionary(row => row.InfoFormId,
+                        StringComparer.OrdinalIgnoreCase);
+                var topics = dialogue.GetProperty("topics").EnumerateArray()
+                    .Select(row => new Fo3Cg02BirthdayTopic(
+                        row.GetProperty("formId").GetString()!,
+                        row.GetProperty("text").GetString()!))
+                    .ToDictionary(row => row.FormId,
+                        StringComparer.OrdinalIgnoreCase);
+                return new Fo3Cg02BirthdayParticipant(
+                    participant.GetProperty("referenceFormId").GetString()!,
+                    participant.GetProperty("baseFormId").GetString()!,
+                    participant.GetProperty("displayName").GetString()!,
+                    participant.GetProperty("greetingInfoFormIds").EnumerateArray()
+                        .Select(value => value.GetString()!).ToArray(),
+                    lines, nodes, topics);
+            }).ToArray();
+        var stageResults = source.GetProperty("stageResults").EnumerateObject()
+            .ToDictionary(
+                property => int.Parse(property.Name,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                property => new Fo3Cg02BirthdayStageResult(
+                    int.Parse(property.Name,
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    property.Value.GetProperty("kind").GetString()!,
+                    property.Value.GetProperty("formId").GetString()!,
+                    property.Value.GetProperty("count").GetInt32()));
+        if (participants.Length == 0 || stageResults.Count == 0)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 birthday interaction graph is empty.");
+        return new Fo3Cg02BirthdayInteractionsRuntime(
+            expectedSourceStage,
+            source.GetProperty("failsafeTimer").GetProperty("seconds").GetDouble(),
+            participants,
+            stageResults,
+            source.GetProperty("aggregateStage").GetInt32(),
+            source.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
     }
 
     private static Fo3Cg01DadTravelPackage LoadTravelPackage(
@@ -1449,6 +1593,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var cg02DadSpeech = cg02Intro?.DadSpeechRuntime;
         var cg02Overseer = cg02DadSpeech?.OverseerSpeechRuntime;
         var cg02Party = cg02Overseer?.DadPartyRuntime;
+        var cg02Birthday = cg02Party?.BirthdayInteractionsRuntime;
         var savedInfoFormIds = RequiredArray(source, "appliedInfoFormIds")
             .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
         var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
@@ -1468,16 +1613,23 @@ internal sealed record Fo3Cg01PostStage14Transition(
                     .Concat(cg02Party is null ? [] : [cg02Party.Cue.InfoFormId])
                     .ToArray())
                 .ToArray();
+        var birthdayInfoFormIds = cg02Birthday?.Participants
+            .SelectMany(value => value.Nodes.Keys)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
         var matchingCg02Sequence = validCg02Sequences.SingleOrDefault(sequence =>
-            savedCg02InfoFormIds.Length <= sequence.Length &&
-            sequence.Take(savedCg02InfoFormIds.Length).SequenceEqual(
-                savedCg02InfoFormIds, StringComparer.OrdinalIgnoreCase));
+            sequence.Take(Math.Min(savedCg02InfoFormIds.Length, sequence.Length))
+                .SequenceEqual(savedCg02InfoFormIds.Take(sequence.Length),
+                    StringComparer.OrdinalIgnoreCase) &&
+            (savedCg02InfoFormIds.Length <= sequence.Length ||
+             savedCg02InfoFormIds.Skip(sequence.Length).All(birthdayInfoFormIds.Contains)));
         var cg02IntroComplete = cg02Intro is not null &&
             (stage == cg02Intro.TargetStage || stage == cg02DadSpeech?.TargetStage ||
              cg02Overseer is not null &&
                 (stage == cg02Overseer.TargetStage ||
                  cg02Overseer.StageResults.ContainsKey(stage)));
         cg02IntroComplete = cg02IntroComplete || stage == cg02Party?.TargetStage;
+        cg02IntroComplete = cg02IntroComplete ||
+            cg02Birthday?.StageResults.ContainsKey(stage) == true;
         var cg02DadComplete = cg02DadSpeech is not null &&
             savedCg02InfoFormIds.Length >= 2;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
@@ -1568,6 +1720,18 @@ internal sealed record Fo3Cg01PostStage14Transition(
         if (cg02Party is not null && savedCg02InfoFormIds.Contains(
                 cg02Party.Cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
             interactionCommandCount += cg02Party.StageCommands.Count + 1;
+        if (cg02Birthday is not null)
+        {
+            foreach (var infoFormId in savedCg02InfoFormIds.Where(
+                birthdayInfoFormIds.Contains))
+            {
+                var node = cg02Birthday.Participants.SelectMany(value => value.Nodes.Values)
+                    .Single(value => value.InfoFormId.Equals(
+                        infoFormId, StringComparison.OrdinalIgnoreCase));
+                if (node.Effects.Any(value => value.Kind == "setStage"))
+                    interactionCommandCount += 2;
+            }
+        }
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
         if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
@@ -1607,7 +1771,10 @@ internal sealed record Fo3Cg01PostStage14Transition(
             (cg02Overseer is null || stage != cg02Overseer.TargetStage ||
                 savedCg02InfoFormIds.Length == matchingCg02Sequence.Length - 1) &&
             (cg02Party is null || stage != cg02Party.TargetStage ||
-                savedCg02InfoFormIds.Length == matchingCg02Sequence.Length);
+                savedCg02InfoFormIds.Length >= matchingCg02Sequence.Length) &&
+            (cg02Birthday is null || !cg02Birthday.StageResults.ContainsKey(stage) ||
+                savedCg02InfoFormIds.Skip(matchingCg02Sequence.Length)
+                    .Any(birthdayInfoFormIds.Contains));
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
             (!reachedNextQuest && RequiredFormId(active, "formId") != baseline.ActiveQuestFormId) ||
             (!reachedNextQuest && RequiredString(active, "editorId") != baseline.ActiveQuestEditorId) ||
