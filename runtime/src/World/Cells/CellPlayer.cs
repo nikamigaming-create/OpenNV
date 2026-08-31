@@ -7,6 +7,7 @@ using OpenNV.Runtime.Presentation.OpenXR;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -51,6 +52,7 @@ internal partial class CellPlayer : CharacterBody3D
     private FirstPersonRig.LoadedRig? _firstPersonRig;
     private readonly PlayerControlTelemetry _controlTelemetry = new();
     private Node3D? _weaponMount;
+    private string? _heldWeaponFormId;
     private PoolTableInstance? _activePool;
     private PickupInstance? _heldPickup;
     private Node3D? _poolCueMount;
@@ -878,6 +880,7 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void AttachHeldWeapon(
         Node3D weapon,
+        string weaponFormId,
         float unitsToMeters,
         Vector3 muzzlePositionGodotUnits)
     {
@@ -895,6 +898,7 @@ internal partial class CellPlayer : CharacterBody3D
         };
         weaponAnchor.AddChild(_weaponMount);
         _weaponRestPosition = _weaponMount.Position;
+        _heldWeaponFormId = FalloutFormId.Normalize(weaponFormId);
         weapon.Name = "HeldWeapon";
         weapon.Scale = Vector3.One * unitsToMeters;
         _weaponMount.AddChild(weapon);
@@ -931,6 +935,16 @@ internal partial class CellPlayer : CharacterBody3D
             Visible = false,
         };
         weapon.AddChild(_muzzleLight);
+    }
+
+    internal void SynchronizeHeldWeapon(string? equippedWeaponFormId)
+    {
+        if (_weaponMount?.FindChild("HeldWeapon", true, false) is not Node3D heldWeapon)
+            return;
+        heldWeapon.Visible = equippedWeaponFormId is not null &&
+            _heldWeaponFormId!.Equals(
+                FalloutFormId.Normalize(equippedWeaponFormId),
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static XRController3D BuildController(string name, string tracker, string pose) => new()

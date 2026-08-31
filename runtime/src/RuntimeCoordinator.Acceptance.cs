@@ -533,10 +533,14 @@ public partial class RuntimeCoordinator
             loaded.Session.Fire(loaded.Player.Camera, loaded.Player.CollisionMask);
             var aid = loaded.Pickups.Values.First(
                 pickup => pickup.EditorId == route.AidPickupEditorId);
+            var aidItemFormId = aid.ItemFormId;
             loaded.Session.Collect(aid);
             var container = loaded.Containers.Values.Single(
                 candidate => candidate.EditorId == route.ContainerEditorId);
             loaded.Session.OpenContainer(container);
+            loaded.Session.StoreOneInContainer(container.ReferenceFormId, aidItemFormId);
+            loaded.Session.TakeOneFromContainer(container.ReferenceFormId, aidItemFormId);
+            loaded.Session.TakeAllFromContainer(container.ReferenceFormId);
             loaded.ProofDoor.SetOpen(true);
             loaded.Session.DoorChanged(loaded.ProofDoor);
             if (!loaded.Session.ObjectiveComplete ||
@@ -599,6 +603,8 @@ public partial class RuntimeCoordinator
                 "fire-physical-ray",
                 "pickup-aid",
                 "open-resolved-container",
+                "store-and-retake-aid",
+                "take-container-contents",
                 "open-entry-door",
             },
             session = loaded.Session.Report(),

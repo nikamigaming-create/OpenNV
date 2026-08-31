@@ -15,6 +15,7 @@ internal partial class ContainerInteractionView : CanvasLayer
     private VBoxContainer _containerItems = null!;
     private Button _takeAll = null!;
     private Action<string>? _takeOneAction;
+    private Action<string>? _storeOneAction;
     private Action? _takeAllAction;
     private Action? _exitAction;
     private string? _referenceFormId;
@@ -36,6 +37,7 @@ internal partial class ContainerInteractionView : CanvasLayer
         ContainerInventorySnapshot snapshot,
         PlayerContainerInventorySnapshot playerInventory,
         Action<string> takeOneAction,
+        Action<string> storeOneAction,
         Action takeAllAction,
         Action exitAction)
     {
@@ -43,6 +45,7 @@ internal partial class ContainerInteractionView : CanvasLayer
             throw new InvalidOperationException("Another container view is already open.");
         _referenceFormId = snapshot.ReferenceFormId;
         _takeOneAction = takeOneAction;
+        _storeOneAction = storeOneAction;
         _takeAllAction = takeAllAction;
         _exitAction = exitAction;
         _previousPauseState = GetTree().Paused;
@@ -61,13 +64,27 @@ internal partial class ContainerInteractionView : CanvasLayer
             !_referenceFormId.Equals(snapshot.ReferenceFormId, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Container view refresh changed reference identity.");
         _containerTitle.Text = snapshot.DisplayName.ToUpperInvariant();
+        var focusedControlName = GetViewport().GuiGetFocusOwner()?.Name.ToString();
+        Button? retainedFocus = null;
         foreach (var child in _playerItems.GetChildren())
             child.Free();
         foreach (var item in playerInventory.Items)
-            _playerItems.AddChild(ItemLabel(item.DisplayName, item.Count));
-        if (playerInventory.OtherItemCount > 0)
-            _playerItems.AddChild(ItemLabel("OTHER ITEMS", playerInventory.OtherItemCount));
-        if (playerInventory.Items.Count == 0 && playerInventory.OtherItemCount == 0)
+        {
+            var itemFormId = item.ItemFormId;
+            var button = new Button
+            {
+                Name = $"PlayerItem_{item.ItemFormId}",
+                Text = ItemText(item.DisplayName, item.Count),
+                Alignment = HorizontalAlignment.Left,
+                FocusMode = Control.FocusModeEnum.All,
+                Disabled = !item.CanStore,
+            };
+            button.Pressed += () => _storeOneAction?.Invoke(itemFormId);
+            _playerItems.AddChild(button);
+            if (button.Name.ToString() == focusedControlName)
+                retainedFocus = button;
+        }
+        if (playerInventory.Items.Count == 0)
             _playerItems.AddChild(EmptyLabel());
 
         foreach (var child in _containerItems.GetChildren())
@@ -84,6 +101,7 @@ internal partial class ContainerInteractionView : CanvasLayer
                 var itemFormId = item.ItemFormId;
                 var button = new Button
                 {
+                    Name = $"ContainerItem_{item.ItemFormId}",
                     Text = ItemText(item.DisplayName, item.RemainingCount),
                     Alignment = HorizontalAlignment.Left,
                     FocusMode = Control.FocusModeEnum.All,
@@ -91,10 +109,12 @@ internal partial class ContainerInteractionView : CanvasLayer
                 button.Pressed += () => _takeOneAction?.Invoke(itemFormId);
                 _containerItems.AddChild(button);
                 first ??= button;
+                if (button.Name.ToString() == focusedControlName)
+                    retainedFocus = button;
             }
         }
         _takeAll.Disabled = snapshot.IsEmpty;
-        first?.GrabFocus();
+        (retainedFocus ?? first)?.GrabFocus();
     }
 
     internal void Close()
@@ -104,6 +124,7 @@ internal partial class ContainerInteractionView : CanvasLayer
         _root.Visible = false;
         _referenceFormId = null;
         _takeOneAction = null;
+        _storeOneAction = null;
         _takeAllAction = null;
         _exitAction = null;
         GetTree().Paused = _previousPauseState;
@@ -166,7 +187,7 @@ internal partial class ContainerInteractionView : CanvasLayer
         columns.AddThemeConstantOverride("separation", 24);
         layout.AddChild(columns);
 
-        var playerColumn = InventoryColumn("ITEMS  •  VIEW ONLY", out _playerItems);
+        var playerColumn = InventoryColumn("ITEMS  •  SELECT TO STORE", out _playerItems);
         playerColumn.SizeFlagsStretchRatio = 1.0f;
         columns.AddChild(playerColumn);
         var separator = new VSeparator();
@@ -257,7 +278,13 @@ internal partial class ContainerInteractionView : CanvasLayer
 }
 
 internal sealed record PlayerContainerInventorySnapshot(
-    IReadOnlyList<PlayerContainerInventoryItem> Items,
-    int OtherItemCount);
+    IReadOnlyList<PlayerContainerInventoryItem> Items);
 
-internal sealed record PlayerContainerInventoryItem(string DisplayName, int Count);
+internal sealed record PlayerContainerInventoryItem(
+    string ItemFormId,
+    string EditorId,
+    string DisplayName,
+    string RecordType,
+    int Count,
+    bool Equipped,
+    bool CanStore);

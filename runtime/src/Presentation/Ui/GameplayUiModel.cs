@@ -15,6 +15,7 @@ internal enum GameplayUiPanel
 internal sealed record GameplayUiInventoryItem(
     string FormId,
     string EditorId,
+    string DisplayName,
     string RecordType,
     int Count,
     bool Equipped);

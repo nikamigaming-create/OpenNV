@@ -58,6 +58,8 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
 $contentRoot = Join-Path $repoRoot "content"
 $solution = Join-Path $runtimeRoot "OpenNV.sln"
+$containerInventoryProbe = Join-Path $repoRoot `
+    "contract-tests\ContainerInventoryContractProbe\ContainerInventoryContractProbe.csproj"
 $exporter = Join-Path $contentRoot "tools\export_static_nif_gltf.py"
 $preparer = Join-Path $contentRoot "tools\prepare_legal_assets.py"
 $reportValidator = Join-Path $contentRoot "tools\validate_runtime_report.py"
@@ -92,7 +94,7 @@ function Resolve-OwnedDataRoot(
     throw "Select either the configured game installation folder or its data folder."
 }
 
-foreach ($path in @($Godot, $solution, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
+foreach ($path in @($Godot, $solution, $containerInventoryProbe, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Missing OpenNV Godot gate input: $path"
     }
@@ -139,6 +141,8 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV Godot Release build failed." }
 if ($LASTEXITCODE -ne 0) { throw "OpenNV C# format/analyzer gate failed." }
 & dotnet build (Join-Path $runtimeRoot "OpenNV.csproj") --configuration Debug --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Godot Debug build failed." }
+& dotnet run --project $containerInventoryProbe --configuration Release --no-restore
+if ($LASTEXITCODE -ne 0) { throw "Container inventory contract probe failed." }
 
 $startupOutput = & $Godot --headless --xr-mode off --path $runtimeRoot 2>&1
 if ($LASTEXITCODE -ne 0 -or ($startupOutput | Out-String) -notmatch "OPENNV_GODOT_EXPERIMENTAL_READY playable=0") {

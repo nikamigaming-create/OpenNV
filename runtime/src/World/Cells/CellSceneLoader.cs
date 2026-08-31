@@ -311,6 +311,8 @@ internal static class CellSceneLoader
             if (main.HeldWeapon is not null)
                 player.AttachHeldWeapon(
                     main.HeldWeapon,
+                    main.StartingLoadout?.WeaponFormId ?? throw new InvalidOperationException(
+                        "Held weapon has no source loadout identity."),
                     main.UnitsToMeters,
                     main.MuzzlePosition);
         }

@@ -135,9 +135,12 @@ internal sealed record OpeningCampaignState(
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>
                  item.FormId.Equals(weapon.WeaponFormId, StringComparison.OrdinalIgnoreCase) &&
-                 item.RecordType == "WEAP")))
+                 item.RecordType == "WEAP") ||
+             weapon.AmmoFormId is not null && Inventory.Any(item =>
+                 item.FormId.Equals(weapon.AmmoFormId, StringComparison.OrdinalIgnoreCase) &&
+                 item.RecordType != "AMMO")))
             throw new InvalidOperationException(
-                "Saved opening equipped weapon is absent from authoritative inventory state.");
+                "Saved opening weapon or ammunition differs from authoritative inventory state.");
         PlayerTransform.Validate();
         GuideTransform.Validate();
     }
