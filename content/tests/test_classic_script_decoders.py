@@ -12,6 +12,7 @@ from classic_int_effects import ClassicIntDecodeError, decode_acklint_effects  #
 from classic_ssl_effects import (  # noqa: E402
     ClassicSslParseError,
     decode_flare_effects,
+    decode_medic_heal_player,
     decode_single_reply_option_dialogue,
     decode_single_message_look,
 )
@@ -150,6 +151,34 @@ class ClassicScriptDecoderTest(unittest.TestCase):
             decode_single_reply_option_dialogue(
                 source.replace("NOption", "BOption"), "MedicSeriouslyWounded"
             )
+
+    def test_ssl_parser_recovers_medic_heal_player_without_invented_amount(self) -> None:
+        source = """
+        #define player_damage (dude_max_hp - dude_cur_hp)
+        procedure MedicHealPlayer begin
+          if is_poisoned then begin poison(dude_obj, -PoisAmt); end
+          gfade_out(1);
+          if is_poisoned then begin game_time_advance_minutes(PoisAmt * 3); end
+          critter_heal(dude_obj, player_damage);
+          critter_uninjure(dude_obj, (DAM_CRIP_LEG_LEFT bwor DAM_CRIP_LEG_RIGHT bwor DAM_CRIP_ARM_LEFT bwor DAM_CRIP_ARM_RIGHT));
+          game_time_advance_minutes(player_damage * 5);
+          gfade_in(1);
+          NMessage(131);
+          if (player_damage) <= 3 then begin critter_heal(dude_obj, dude_max_hp); end
+          if rads then begin call MedicRediationCheck; end
+        end
+        """
+        program, boundary = decode_medic_heal_player(source)
+        effects = program["events"]["MedicHealPlayer"][0]["then"]
+        self.assertEqual(effects[0]["operation"], "heal-player-to-maximum")
+        self.assertEqual(effects[1]["messageId"], 131)
+        self.assertEqual(boundary["healAmount"], "dude_max_hp-minus-dude_cur_hp")
+        self.assertEqual(
+            boundary["damageTimeAdvance"],
+            "reevaluated-player-damage-after-heal-zero",
+        )
+        with self.assertRaises(ClassicSslParseError):
+            decode_medic_heal_player(source.replace("player_damage * 5", "player_damage * 4"))
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from classic_ssl_effects import (
+    decode_medic_heal_player,
     decode_single_message_look,
     decode_single_reply_option_dialogue,
 )
@@ -47,7 +48,7 @@ def read_script_id(header: Path) -> int:
 def read_look_message(
     script_path: Path,
     message_path: Path,
-) -> tuple[int, str, dict[str, Any], dict[int, str]]:
+) -> tuple[int, str, dict[str, Any], dict[int, str], dict[str, Any]]:
     script = script_path.read_text(encoding="cp1252")
     if not re.search(rf"#define\s+NAME\s+{MEDIC_SYMBOL}\b", script):
         raise Fo1ProfileError("Medic script does not bind NAME to SCRIPT_MEDIC")
@@ -63,7 +64,9 @@ def read_look_message(
     for procedure in ("MedicSeriouslyWounded", "MedicStartHealing"):
         dialogue = decode_single_reply_option_dialogue(script, procedure)
         effect_program["events"].update(dialogue["events"])
-    return message_id, messages[message_id], effect_program, messages
+    healing, healing_boundary = decode_medic_heal_player(script)
+    effect_program["events"].update(healing["events"])
+    return message_id, messages[message_id], effect_program, messages, healing_boundary
 
 
 def shortest_contact_path(start: int, target: int, floor_ids: list[int], default_tile: int,
@@ -128,9 +131,11 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
     if elevation is None or source_rows is None:
         raise Fo1ProfileError("Medic look destination elevation is absent from source/presentation")
     script_id = read_script_id(scripts_header)
-    message_id, message_text, effect_program, messages = read_look_message(
+    message_id, message_text, effect_program, messages, healing_boundary = read_look_message(
         medic_script, medic_message
     )
+    if not messages.get(healing_boundary["messageId"]):
+        raise Fo1ProfileError("Medic healing source message is unavailable")
     dialogue_procedures = ("MedicSeriouslyWounded", "MedicStartHealing")
     dialogue_nodes = []
     for procedure in dialogue_procedures:
@@ -199,12 +204,22 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
                       "result": "display-message-only", "dialogue": "decoded-bounded-option-results",
                       "combat": "not-proven-by-look-at-only", "actionPoints": "not-source-backed"},
         "effectProgram": effect_program,
+        "healingResult": {
+            **healing_boundary,
+            "messageText": messages[healing_boundary["messageId"]],
+        },
         "dialogueResult": {
             "entryProcedure": "MedicSeriouslyWounded",
             "nodes": dialogue_nodes,
+            "effectTargets": sorted({
+                node["option"]["target"] for node in dialogue_nodes
+                if node["option"]["target"] in effect_program["events"]
+                and node["option"]["target"] not in dialogue_procedures
+            }),
             "unsupportedTargets": sorted({
                 node["option"]["target"] for node in dialogue_nodes
                 if node["option"]["target"] not in dialogue_procedures
+                and node["option"]["target"] not in effect_program["events"]
             }),
             "optionSelection": "decoded-targets-only",
         },

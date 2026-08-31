@@ -21,6 +21,7 @@ CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REPLY_MESSAGE_INDEX = 2
 CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_MESSAGE_INDEX = 7
 CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_TARGET_INDEX = 9
 CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REACTION_INDEX = 11
+CLASSIC_SSL_SOURCE_CONTRACT_MEDIC_HEAL_MESSAGE_ID = 131
 
 
 @dataclass(frozen=True)
@@ -307,3 +308,73 @@ def decode_single_reply_option_dialogue(source: str, procedure: str) -> dict[str
             }],
         },
     }
+
+
+def decode_medic_heal_player(source: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    macro_lines = [
+        line.strip() for line in source.splitlines()
+        if line.strip().casefold().startswith("#define player_damage ")
+    ]
+    if len(macro_lines) != 1:
+        raise ClassicSslParseError("SSL player_damage definition is not unique")
+    macro = tuple(token.text.casefold() for token in _tokens(
+        macro_lines[0].split("player_damage", 1)[1]
+    ))
+    if macro != ("(", "dude_max_hp", "-", "dude_cur_hp", ")"):
+        raise ClassicSslParseError("SSL player_damage definition is unsupported")
+
+    tokens = _tokens(source)
+    header = ("procedure", "medichealplayer", "begin")
+    matches = _find_all(tokens, header)
+    if len(matches) != 1:
+        raise ClassicSslParseError("SSL MedicHealPlayer procedure is not unique")
+    body = [token.text.casefold() for token in _block(tokens, matches[0] + 2)]
+    expected = (
+        "if", "is_poisoned", "then", "begin", "poison", "(", "dude_obj", ",",
+        "-", "poisamt", ")", ";", "end", "gfade_out", "(", "1", ")", ";",
+        "if", "is_poisoned", "then", "begin", "game_time_advance_minutes", "(",
+        "poisamt", "*", "3", ")", ";", "end", "critter_heal", "(", "dude_obj",
+        ",", "player_damage", ")", ";", "critter_uninjure", "(", "dude_obj", ",",
+        "(", "dam_crip_leg_left", "bwor", "dam_crip_leg_right", "bwor",
+        "dam_crip_arm_left", "bwor", "dam_crip_arm_right", ")", ")", ";",
+        "game_time_advance_minutes", "(", "player_damage", "*", "5", ")", ";",
+        "gfade_in", "(", "1", ")", ";", "nmessage", "(",
+        str(CLASSIC_SSL_SOURCE_CONTRACT_MEDIC_HEAL_MESSAGE_ID), ")", ";",
+        "if", "(", "player_damage", ")", "<=", "3", "then", "begin",
+        "critter_heal", "(", "dude_obj", ",", "dude_max_hp", ")", ";", "end",
+        "if", "rads", "then", "begin", "call", "medicrediationcheck", ";", "end",
+    )
+    if tuple(body) != expected:
+        raise ClassicSslParseError("SSL MedicHealPlayer body is unsupported")
+    program = {
+        "schema": "opennv-classic-script-effects/v1",
+        "events": {
+            "MedicHealPlayer": [{
+                "all": [
+                    {"operation": "player-poison-equals", "value": 0},
+                    {"operation": "player-radiation-equals", "value": 0},
+                    {"operation": "player-injuries-equals", "value": 0},
+                ],
+                "then": [
+                    {"operation": "heal-player-to-maximum"},
+                    {
+                        "operation": "display-message",
+                        "messageId": CLASSIC_SSL_SOURCE_CONTRACT_MEDIC_HEAL_MESSAGE_ID,
+                    },
+                ],
+            }],
+        },
+    }
+    boundary = {
+        "procedure": "MedicHealPlayer",
+        "healAmount": "dude_max_hp-minus-dude_cur_hp",
+        "messageId": CLASSIC_SSL_SOURCE_CONTRACT_MEDIC_HEAL_MESSAGE_ID,
+        "preconditions": {
+            "poison": 0,
+            "radiation": 0,
+            "injuryFlags": 0,
+        },
+        "damageTimeAdvance": "reevaluated-player-damage-after-heal-zero",
+        "unsupportedStatusBranches": ["poison", "radiation", "limb-injury"],
+    }
+    return program, boundary

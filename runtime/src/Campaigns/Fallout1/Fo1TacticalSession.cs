@@ -629,6 +629,30 @@ internal partial class Fo1TacticalSession : Node
             .ToArray();
         if (options.Length != 1 || options[0].Target != current.OptionTarget)
             return false;
+        if (medic.EffectDialogueTargets.Contains(options[0].Target))
+        {
+            var healing = medic.Program.ExecuteWithActions(
+                options[0].Target,
+                new ClassicScriptState(),
+                new ClassicScriptContext(
+                    false,
+                    false,
+                    _classicScriptGameTime,
+                    PlayerCurrentHitPoints: _playerHitPoints,
+                    PlayerMaximumHitPoints: _playerProfile.HitPoints));
+            if (!healing.Executed || healing.PlayerHealing < 0 ||
+                _playerHitPoints + healing.PlayerHealing != _playerProfile.HitPoints ||
+                healing.DisplayMessages.Count != 1 ||
+                healing.DisplayMessages[0].MessageId != medic.HealingMessageId)
+                throw new InvalidOperationException(
+                    $"Fallout Medic healing result did not execute: {options[0].Target}");
+            _playerHitPoints += healing.PlayerHealing;
+            _destinationMedicDialogueProcedure = null;
+            _status = medic.HealingMessageText;
+            RefreshHud();
+            Save();
+            return true;
+        }
         if (!medic.DialogueNodes.TryGetValue(options[0].Target, out var target))
         {
             if (!medic.UnsupportedDialogueTargets.Contains(options[0].Target))

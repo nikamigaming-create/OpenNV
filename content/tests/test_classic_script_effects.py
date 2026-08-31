@@ -21,6 +21,8 @@ class ClassicScriptEffectsTest(unittest.TestCase):
         self.assertIn('"set-flag"', source)
         self.assertIn('"dialogue-end"', source)
         self.assertIn("DialogueEnded", source)
+        self.assertIn('"heal-player-to-maximum"', source)
+        self.assertIn("PlayerHealing", source)
         self.assertNotIn("ACKlint", source)
         self.assertNotIn("flare", source.casefold())
         self.assertNotIn("Fallout1", source)

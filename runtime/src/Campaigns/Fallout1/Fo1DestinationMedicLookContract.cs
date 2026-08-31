@@ -22,6 +22,10 @@ internal sealed record Fo1DestinationMedicLookContract(
     IReadOnlyList<int> SourceWalkMaskRoute, ClassicScriptProgram Program,
     string DialogueEntryProcedure,
     IReadOnlyDictionary<string, Fo1MedicDialogueNode> DialogueNodes,
+    IReadOnlySet<string> EffectDialogueTargets,
+    string HealingProcedure,
+    int HealingMessageId,
+    string HealingMessageText,
     IReadOnlySet<string> UnsupportedDialogueTargets)
 {
     private const string Schema = "opennv-fo1-destination-medic-look/v1";
@@ -107,6 +111,17 @@ internal sealed record Fo1DestinationMedicLookContract(
         var unsupportedDialogueTargets = dialogue.GetProperty("unsupportedTargets")
             .EnumerateArray().Select(target => target.GetString() ?? "")
             .ToHashSet(StringComparer.Ordinal);
+        var effectDialogueTargets = dialogue.GetProperty("effectTargets")
+            .EnumerateArray().Select(target => target.GetString() ?? "")
+            .ToHashSet(StringComparer.Ordinal);
+        var healing = root.GetProperty("healingResult");
+        var healingProcedure = Required(healing, "procedure");
+        var healingMessageId = healing.GetProperty("messageId").GetInt32();
+        var healingMessageText = Required(healing, "messageText");
+        var healingExecution = program.ExecuteWithActions(
+            healingProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
         bool DialogueMatches(Fo1MedicDialogueNode node)
         {
             var dialogueExecution = program.ExecuteWithActions(
@@ -125,12 +140,23 @@ internal sealed record Fo1DestinationMedicLookContract(
         if (Required(dialogue, "optionSelection") != "decoded-targets-only" ||
             dialogueNodes.Count == 0 || !dialogueNodes.ContainsKey(dialogueEntryProcedure) ||
             dialogueNodes.Values.Any(node => !DialogueMatches(node)) ||
-            unsupportedDialogueTargets.Count == 0 ||
             unsupportedDialogueTargets.Any(string.IsNullOrWhiteSpace) ||
+            effectDialogueTargets.Count != 1 ||
+            !effectDialogueTargets.SetEquals([healingProcedure]) ||
+            !healingExecution.Executed || healingExecution.PlayerHealing != 0 ||
+            healingExecution.DisplayMessages.Count != 1 ||
+            healingExecution.DisplayMessages[0] !=
+                new ClassicScriptMessage(null, healingMessageId) ||
+            Required(healing, "healAmount") != "dude_max_hp-minus-dude_cur_hp" ||
+            Required(healing, "damageTimeAdvance") !=
+                "reevaluated-player-damage-after-heal-zero" ||
             dialogueNodes.Values.Any(node =>
                 !dialogueNodes.ContainsKey(node.OptionTarget) &&
+                !effectDialogueTargets.Contains(node.OptionTarget) &&
                 !unsupportedDialogueTargets.Contains(node.OptionTarget)) ||
-            dialogueNodes.Keys.Any(unsupportedDialogueTargets.Contains))
+            dialogueNodes.Keys.Any(unsupportedDialogueTargets.Contains) ||
+            dialogueNodes.Keys.Any(effectDialogueTargets.Contains) ||
+            effectDialogueTargets.Overlaps(unsupportedDialogueTargets))
             throw new InvalidOperationException(
                 "Fallout Medic dialogue result does not execute its source actions.");
         var route = root.GetProperty("sourceWalkMaskRoute").GetProperty("pathTiles")
@@ -147,6 +173,10 @@ internal sealed record Fo1DestinationMedicLookContract(
             program,
             dialogueEntryProcedure,
             dialogueNodes,
+            effectDialogueTargets,
+            healingProcedure,
+            healingMessageId,
+            healingMessageText,
             unsupportedDialogueTargets);
     }
 
@@ -170,8 +200,16 @@ internal sealed record Fo1DestinationMedicLookContract(
         {
             entryProcedure = DialogueEntryProcedure,
             nodes = DialogueNodes.Values,
+            effectTargets = EffectDialogueTargets.Order(StringComparer.Ordinal),
             unsupportedTargets = UnsupportedDialogueTargets.Order(StringComparer.Ordinal),
             optionSelection = "decoded-targets-only",
+        },
+        healingResult = new
+        {
+            procedure = HealingProcedure,
+            messageId = HealingMessageId,
+            messageText = HealingMessageText,
+            healAmount = "dude_max_hp-minus-dude_cur_hp",
         },
         sourceWalkMaskRoute = SourceWalkMaskRoute,
         viewed,

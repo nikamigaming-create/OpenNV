@@ -82,7 +82,12 @@ internal readonly record struct ClassicScriptContext(
     bool SourceIsPlayer,
     bool CanSeePlayer,
     int GameTime,
-    string? PlayerArtFid = null);
+    string? PlayerArtFid = null,
+    int PlayerCurrentHitPoints = 0,
+    int PlayerMaximumHitPoints = 0,
+    int PlayerPoison = 0,
+    int PlayerRadiation = 0,
+    int PlayerInjuryFlags = 0);
 
 internal readonly record struct ClassicScriptMessage(int? MessageListId, int MessageId);
 
@@ -103,6 +108,7 @@ internal sealed record ClassicScriptExecution(
     IReadOnlyList<ClassicScriptMessage> DisplayMessages,
     string? OpenDialogueNode,
     bool DialogueEnded,
+    int PlayerHealing,
     IReadOnlyList<ClassicDialogueReplySegment> DialogueReply,
     IReadOnlyList<ClassicDialogueOption> DialogueOptions);
 
@@ -140,13 +146,14 @@ internal sealed class ClassicScriptProgram
         ClassicScriptContext context)
     {
         if (!_events.TryGetValue(eventName, out var rules))
-            return new ClassicScriptExecution(false, false, [], null, false, [], []);
+            return new ClassicScriptExecution(false, false, [], null, false, 0, [], []);
         var matched = rules.Where(rule => rule.Conditions.All(condition =>
             Matches(condition, state, context))).ToArray();
         var scriptOverrides = false;
         var messages = new List<ClassicScriptMessage>();
         string? openDialogueNode = null;
         var dialogueEnded = false;
+        var playerHealing = 0;
         var dialogueReply = new List<ClassicDialogueReplySegment>();
         var dialogueOptions = new List<ClassicDialogueOption>();
         foreach (var rule in matched)
@@ -154,7 +161,8 @@ internal sealed class ClassicScriptProgram
             foreach (var effect in rule.Effects)
                 Apply(
                     effect, state, context, ref scriptOverrides, messages,
-                    ref openDialogueNode, ref dialogueEnded, dialogueReply, dialogueOptions);
+                    ref openDialogueNode, ref dialogueEnded, ref playerHealing,
+                    dialogueReply, dialogueOptions);
         }
         if (dialogueEnded &&
             (openDialogueNode is not null || dialogueReply.Count > 0 || dialogueOptions.Count > 0))
@@ -166,6 +174,7 @@ internal sealed class ClassicScriptProgram
             messages,
             openDialogueNode,
             dialogueEnded,
+            playerHealing,
             dialogueReply,
             dialogueOptions);
     }
@@ -178,11 +187,14 @@ internal sealed class ClassicScriptProgram
             .Select(ParseOperation).ToArray();
         if (conditions.Any(row => row.Name is not
                 ("source-is-player" or "can-see-player" or "local-equals" or
-                 "local-not-equals" or "player-art-fid-in")) ||
+                 "local-not-equals" or "player-art-fid-in" or
+                 "player-poison-equals" or "player-radiation-equals" or
+                 "player-injuries-equals")) ||
             effects.Length == 0 || effects.Any(row => row.Name is not
                 ("set-local" or "set-flag" or "script-overrides" or "display-message" or
                  "open-dialogue" or "dialogue-reply-message" or
-                 "dialogue-reply-player-name" or "dialogue-option" or "dialogue-end")))
+                 "dialogue-reply-player-name" or "dialogue-option" or "dialogue-end" or
+                 "heal-player-to-maximum")))
             throw new InvalidOperationException(
                 "Classic script rule mixes conditions and effects.");
         return new Rule(conditions, effects);
@@ -195,7 +207,9 @@ internal sealed class ClassicScriptProgram
             "local-not-equals" or "set-local" or "set-flag" or "script-overrides" or
             "display-message" or "player-art-fid-in" or "open-dialogue" or
             "dialogue-reply-message" or "dialogue-reply-player-name" or
-            "dialogue-option" or "dialogue-end"))
+            "dialogue-option" or "dialogue-end" or "player-poison-equals" or
+            "player-radiation-equals" or "player-injuries-equals" or
+            "heal-player-to-maximum"))
             throw new InvalidOperationException($"Unsupported classic script operation: {operation}");
         int? index = source.TryGetProperty("index", out var indexValue)
             ? indexValue.GetInt32()
@@ -238,6 +252,8 @@ internal sealed class ClassicScriptProgram
         if (index is < 0 ||
             operation is ("local-equals" or "local-not-equals") &&
                 (index is null || value is null) ||
+            operation is ("player-poison-equals" or "player-radiation-equals" or
+                "player-injuries-equals") && value is null ||
             operation is "set-local" && (index is null || (value is null) == (valueFrom is null)) ||
             valueFrom is not null && valueFrom != "game-time" ||
             operation is "set-flag" && string.IsNullOrWhiteSpace(flag) ||
@@ -267,6 +283,9 @@ internal sealed class ClassicScriptProgram
             "local-not-equals" => state.Local(operation.Index!.Value) != operation.Value,
             "player-art-fid-in" => operation.Values!.Contains(
                 context.PlayerArtFid ?? "", StringComparer.OrdinalIgnoreCase),
+            "player-poison-equals" => context.PlayerPoison == operation.Value,
+            "player-radiation-equals" => context.PlayerRadiation == operation.Value,
+            "player-injuries-equals" => context.PlayerInjuryFlags == operation.Value,
             _ => throw new InvalidOperationException(
                 $"Classic script effect used as a condition: {operation.Name}"),
         };
@@ -279,6 +298,7 @@ internal sealed class ClassicScriptProgram
         ICollection<ClassicScriptMessage> messages,
         ref string? openDialogueNode,
         ref bool dialogueEnded,
+        ref int playerHealing,
         ICollection<ClassicDialogueReplySegment> dialogueReply,
         ICollection<ClassicDialogueOption> dialogueOptions)
     {
@@ -298,6 +318,14 @@ internal sealed class ClassicScriptProgram
                 messages.Add(new ClassicScriptMessage(
                     operation.MessageListId,
                     operation.MessageId!.Value));
+                break;
+            case "heal-player-to-maximum":
+                if (context.PlayerCurrentHitPoints < 0 || context.PlayerMaximumHitPoints < 0 ||
+                    context.PlayerCurrentHitPoints > context.PlayerMaximumHitPoints ||
+                    playerHealing != 0)
+                    throw new InvalidOperationException(
+                        "Classic script player healing context is invalid.");
+                playerHealing = context.PlayerMaximumHitPoints - context.PlayerCurrentHitPoints;
                 break;
             case "open-dialogue":
                 if (openDialogueNode is not null || dialogueEnded)
