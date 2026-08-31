@@ -68,6 +68,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Action<double>? _cg01Stage90TimerTick;
     private Action? _cg02IntroBegin;
     private Action<double>? _cg02IntroTimerTick;
+    private Action<double>? _cg02CakePackageTick;
     private readonly Dictionary<string, CellActorLoader.PlacedActor> _cg02IntroActors =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly List<GamebryoDialoguePlayback> _cg02IntroDialogue = [];
@@ -219,6 +220,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _cg01DadPackageTravelTick?.Invoke(delta);
         _cg01Stage90TimerTick?.Invoke(delta);
         _cg02IntroTimerTick?.Invoke(delta);
+        _cg02CakePackageTick?.Invoke(delta);
         foreach (var dialogue in _cg02IntroDialogue)
             dialogue.Update();
         foreach (var animation in _cg02IntroAnimations.Values)

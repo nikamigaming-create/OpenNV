@@ -272,6 +272,11 @@
           "failsafeTimerFormId": "0008a3c9",
           "participants": [
             {
+              "referenceFormId": "000309a8",
+              "baseFormId": "000309a7",
+              "greetingInfoFormIds": ["00030a19"]
+            },
+            {
               "referenceFormId": "000300f2",
               "baseFormId": "000300e9",
               "greetingInfoFormIds": ["000319bd"]
@@ -287,7 +292,24 @@
               "greetingInfoFormIds": ["000319b9", "000784dc"]
             }
           ],
-          "giftStages": [21, 22, 23]
+          "giftStages": [20, 21, 22, 23],
+          "cake": {
+            "triggerReferenceFormId": "0009f64f",
+            "triggerBaseFormId": "0009fb07",
+            "triggerScriptFormId": "0009f64e",
+            "sourceStage": 12,
+            "triggerStage": 15,
+            "andyReferenceFormId": "0009d1bb",
+            "andyBaseFormId": "00020456",
+            "andyActorRecipeId": "fo3-vault101-cg02-andy-actor-v1",
+            "packageFormId": "0009f64c",
+            "locomotionPath": "meshes\\creatures\\mistergutsy\\mtforward.kf",
+            "targetMarkerFormId": "00020458",
+            "cakeReferenceFormId": "0009fe60",
+            "topicFormId": "0009ee18",
+            "infoFormIds": ["0009f646", "0009f647", "000bb784"],
+            "targetStage": 16
+          }
         },
         "questEditorId": "CG01",
         "questFormId": "00014e83",

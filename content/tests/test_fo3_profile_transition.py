@@ -25,6 +25,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_cg02_dad_speech_runtime,
     _compile_cg02_dad_party_runtime,
     _compile_cg02_birthday_interactions_runtime,
+    _compile_cg02_cake_runtime,
     _compile_cg02_overseer_speech_runtime,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
@@ -370,6 +371,84 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             ["addItem", "addNote", "addItem"],
             [result["stageResults"][str(stage)]["kind"]
              for stage in (21, 22, 23)])
+
+    def test_compiles_cg02_source_cake_trigger_package_and_dialogue(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        trigger_script = Record(
+            "SCPT", 0x9F64E, 0,
+            subrecord("EDID", b"CG02CakeTriggerSCRIPT\0") +
+            subrecord("SCTX", b"begin OnTriggerEnter player\n"
+                      b"SetStage CG02 15\nend\0"), ())
+        trigger_base = Record(
+            "ACTI", 0x9FB07, 0,
+            subrecord("SCRI", struct.pack("<I", trigger_script.form_id)), ())
+        trigger = Record(
+            "REFR", 0x9F64F, 0,
+            subrecord("NAME", struct.pack("<I", trigger_base.form_id)) +
+            subrecord("DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0)) +
+            subrecord("XPRM", struct.pack("<7fI", 106.5, 176, 70,
+                                           .5, 0, 1, .15, 1)), ())
+        voice = Record("VTYP", 0x19FDF, 0, subrecord("EDID", b"VoiceTest\0"), ())
+        idle_record = idle(0x9E687, "CutCake",
+                           r"Creatures\MisterGutsy\IdleAnims\SpecialIdle_CutCake.kf")
+        package = Record(
+            "PACK", 0x9F64C, 0,
+            subrecord("PLDT", struct.pack("<IiI", 0, 0x20458, 1)) +
+            subrecord("INAM", struct.pack("<I", idle_record.form_id)) +
+            subrecord("SCTX", b"CG02AndyREF.SayTo player CG02CakeSpeech\n"
+                      b"setstage CG02 16\0"), ())
+        andy_base = Record(
+            "CREA", 0x20456, 0,
+            subrecord("EDID", b"CG02Andy\0") +
+            subrecord("PKID", struct.pack("<I", package.form_id)) +
+            subrecord("VTCK", struct.pack("<I", voice.form_id)), ())
+        andy = Record("ACRE", 0x9D1BB, 0,
+                      subrecord("NAME", struct.pack("<I", andy_base.form_id)), ())
+        amata = Record(
+            "NPC_", 0x300E9, 0,
+            subrecord("EDID", b"CG02Amata\0") +
+            subrecord("VTCK", struct.pack("<I", voice.form_id)), ())
+        marker = Record("REFR", 0x20458, 0,
+                        subrecord("DATA", struct.pack("<6f", 4, 5, 6, 0, 0, 0)), ())
+        cake = Record("REFR", 0x9FE60, 0,
+                      subrecord("NAME", struct.pack("<I", 0x9FE61)), ())
+        topic = Record("DIAL", 0x9EE18, 0,
+                       subrecord("EDID", b"CG02CakeSpeech\0"), ())
+        speakers = (andy_base, amata, amata)
+        infos = tuple(
+            Record(
+                "INFO", form_id, 0,
+                subrecord("NAM1", f"Cake line {index}".encode() + b"\0") +
+                subrecord("CTDA", condition(72, speaker.form_id)) +
+                (subrecord("SCTX", b"CG02AmataREF.SayTo CG02AndyREF CG02CakeSpeech\0")
+                 if index == 0 else b""),
+                (GroupContext(struct.pack("<I", topic.form_id), 7),))
+            for index, (form_id, speaker) in enumerate(
+                zip((0x9F646, 0x9F647, 0xBB784), speakers)))
+        definition = {
+            "sourceStage": 12, "triggerStage": 15, "targetStage": 16,
+            "triggerReferenceFormId": "0009f64f",
+            "triggerBaseFormId": "0009fb07",
+            "triggerScriptFormId": "0009f64e",
+            "andyReferenceFormId": "0009d1bb", "andyBaseFormId": "00020456",
+            "andyActorRecipeId": "fo3-vault101-cg02-andy-actor-v1",
+            "packageFormId": "0009f64c", "targetMarkerFormId": "00020458",
+            "cakeReferenceFormId": "0009fe60", "topicFormId": "0009ee18",
+            "infoFormIds": ["0009f646", "0009f647", "000bb784"],
+            "locomotionPath": r"meshes\creatures\mistergutsy\mtforward.kf",
+        }
+        result = _compile_cg02_cake_runtime(
+            (quest, trigger_script, trigger_base, trigger, voice, idle_record,
+             package, andy_base, andy, amata, marker, cake, topic, *infos),
+            quest,
+            {15: ["CG02AndyREF.evp\nCG02.timer to 1"],
+             16: ["CG02CakeREF.playgroup forward 1\n"
+                  "CG02AmataREF.SayTo CG02AndyREF CG02CakeSpeech\n"
+                  "set CG02.runTimer to 1"]},
+            definition)
+        self.assertEqual("0009f64f", result["trigger"]["referenceFormId"])
+        self.assertEqual("00020458", result["package"]["targetMarkerFormId"])
+        self.assertEqual(3, len(result["dialogue"]["cues"]))
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(

@@ -573,6 +573,7 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
     internal int AcceptancePhysicsFrames { get; private set; }
     internal float AcceptanceHorizontalTravelMeters { get; private set; }
     internal uint SourceActivationCollisionLayer => _contract.CollisionMask;
+    internal uint SourceBodyCollisionLayer => _contract.CollisionLayer;
 
     internal void Configure(
         Fo3Cg01ToddlerWorldContract contract,

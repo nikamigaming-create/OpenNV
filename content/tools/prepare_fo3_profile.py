@@ -258,6 +258,7 @@ DEFAULT_REFERENCE_SCALE = 1.0
 TRIGGER_PRIMITIVE_FLOATS = 7
 TRIGGER_PRIMITIVE_BYTES = TRIGGER_PRIMITIVE_FLOATS * 4 + 4
 TRIGGER_PRIMITIVE_BOX_TYPE = 2
+TRIGGER_PRIMITIVE_ORIENTED_BOX_TYPE = 1
 TRIGGER_PRIMITIVE_COLOR_START = 3
 TRIGGER_PRIMITIVE_TYPE_INDEX = TRIGGER_PRIMITIVE_FLOATS
 CG01_WALK_OBJECTIVE_INDEX = 10
@@ -1773,6 +1774,7 @@ def _appearance_inventory(
                     GLOBAL_RECORD,
                     ACTOR_REFERENCE_RECORD,
                     CREATURE_REFERENCE_RECORD,
+                    "CREA",
                     ACTOR_BASE_RECORD,
                     SCRIPT_RECORD,
                     PACKAGE_RECORD,
@@ -4006,6 +4008,12 @@ def _compile_cg02_birthday_interactions_runtime(
                     r"set\s+CG02\.timer\s+to\s+CG02FailsafeTimer", command,
                     re.IGNORECASE):
                     effects.append({"kind": "setTimer", "seconds": failsafe_seconds})
+                elif match := re.fullmatch(
+                    r"set\s+CG02\.(?P<variable>\w+)\s+to\s+(?P<value>-?\d+)",
+                    command, re.IGNORECASE):
+                    effects.append({"kind": "setQuestVariable",
+                                    "variable": match.group("variable"),
+                                    "value": int(match.group("value"))})
                 elif command.casefold().startswith("if ") or command.casefold() == "endif":
                     effects.append({"kind": "sourceConditional", "source": command})
                 else:
@@ -4061,7 +4069,7 @@ def _compile_cg02_birthday_interactions_runtime(
                          "dialoguePlaybackImplemented": False},
         })
     gift_stages = {int(value) for value in config["giftStages"]}
-    if reached_stages != gift_stages:
+    if reached_stages & gift_stages != gift_stages:
         raise ValueError("Fallout 3 CG02 birthday gift stages differ")
     stage_results = {}
     aggregate_stages: set[int] = set()
@@ -4094,7 +4102,7 @@ def _compile_cg02_birthday_interactions_runtime(
             aggregate_stages.add(int(match.group("stage")))
     if len(aggregate_stages) != 1:
         raise ValueError("Fallout 3 CG02 birthday aggregate stage differs")
-    return {
+    result = {
         "schema": "opennv-fo3-cg02-stage-12-birthday-interactions-runtime/v1",
         "sourceStage": int(config["sourceStage"]),
         "failsafeTimer": {"formId": _form_id(failsafe.form_id),
@@ -4104,6 +4112,156 @@ def _compile_cg02_birthday_interactions_runtime(
         "aggregateStage": aggregate_stages.pop(),
         "nextBoundary": {"applied": False,
                          "blocker": "fo3-cg02-stage-12-cake-trigger-runtime-not-implemented"},
+    }
+    if "cake" in config:
+        result["cakeRuntime"] = _compile_cg02_cake_runtime(
+            records, quest, stage_sources, dict(config["cake"]))
+        result["cakeRuntime"]["failsafeSeconds"] = failsafe_seconds
+        result["nextBoundary"] = {"applied": True, "blocker": None}
+    return result
+
+
+def _compile_cg02_cake_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    config: dict[str, object],
+) -> dict[str, object]:
+    by_form = {record.form_id: record for record in records}
+    def exact(name: str, signature: str) -> object:
+        record = by_form.get(int(str(config[name]), FORM_ID_RADIX))
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG02 cake {name} differs")
+        return record
+    trigger = exact("triggerReferenceFormId", PLACED_REFERENCE_RECORD)
+    trigger_base = exact("triggerBaseFormId", ACTIVATOR_RECORD)
+    trigger_script = exact("triggerScriptFormId", SCRIPT_RECORD)
+    if (struct.unpack("<I", _single_subrecord(trigger, "NAME"))[0] != trigger_base.form_id or
+        struct.unpack("<I", _single_subrecord(trigger_base, "SCRI"))[0] != trigger_script.form_id):
+        raise ValueError("Fallout 3 CG02 cake trigger join differs")
+    trigger_stage = int(config["triggerStage"])
+    trigger_source = _script_source(trigger_script)
+    trigger_match = re.search(
+        rf"begin\s+OnTriggerEnter\s+player\s+SetStage\s+{re.escape(_editor_id(quest) or '')}\s+{trigger_stage}\s+end",
+        trigger_source, re.IGNORECASE | re.DOTALL)
+    if trigger_match is None:
+        raise ValueError("Fallout 3 CG02 cake trigger script differs")
+    primitive_data = _single_subrecord(trigger, "XPRM")
+    if len(primitive_data) != TRIGGER_PRIMITIVE_BYTES:
+        raise ValueError("Fallout 3 CG02 cake trigger primitive differs")
+    primitive = struct.unpack(f"<{TRIGGER_PRIMITIVE_FLOATS}fI", primitive_data)
+    if (not all(math.isfinite(value) and value > 0 for value in primitive[:3]) or
+        primitive[TRIGGER_PRIMITIVE_TYPE_INDEX] !=
+            TRIGGER_PRIMITIVE_ORIENTED_BOX_TYPE):
+        raise ValueError("Fallout 3 CG02 cake trigger dimensions differ")
+
+    andy_reference = exact("andyReferenceFormId", CREATURE_REFERENCE_RECORD)
+    andy_base = exact("andyBaseFormId", "CREA")
+    package = exact("packageFormId", PACKAGE_RECORD)
+    marker = exact("targetMarkerFormId", PLACED_REFERENCE_RECORD)
+    cake_reference = exact("cakeReferenceFormId", PLACED_REFERENCE_RECORD)
+    topic = exact("topicFormId", DIALOGUE_TOPIC_RECORD)
+    if struct.unpack("<I", _single_subrecord(andy_reference, "NAME"))[0] != andy_base.form_id:
+        raise ValueError("Fallout 3 CG02 cake Andy actor differs")
+    package_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(andy_base)
+                   if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES]
+    locations = [row.data for row in iter_subrecords(package) if row.signature == "PLDT"]
+    if len(locations) != 1 or len(locations[0]) != struct.calcsize("<IiI"):
+        raise ValueError("Fallout 3 CG02 cake package location differs")
+    location_kind, location_form_id, location_radius = struct.unpack("<IiI", locations[0])
+    if package.form_id not in package_ids or location_kind != 0 or \
+            location_form_id != marker.form_id or location_radius < 0:
+        raise ValueError("Fallout 3 CG02 cake package target differs")
+    package_sources = _text_values(package, "SCTX")
+    package_commands = [command for source in package_sources for command in _source_commands(source)]
+    target_stage = int(config["targetStage"])
+    if package_commands[-1].casefold() != f"setstage {_editor_id(quest)} {target_stage}".casefold():
+        raise ValueError("Fallout 3 CG02 cake package result differs")
+    idle_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(package)
+                if row.signature == "INAM" and len(row.data) == FORM_ID_BYTES and
+                struct.unpack("<I", row.data)[0] != 0]
+    idle = by_form.get(idle_ids[0]) if len(idle_ids) == 1 else None
+    idle_models = [] if idle is None else _text_values(idle, "MODL")
+    if idle is None or idle.signature != IDLE_RECORD or len(idle_models) != 1:
+        raise ValueError("Fallout 3 CG02 cake package idle differs")
+    recipe = actor_preparation.load_recipe(str(config["andyActorRecipeId"]))
+    if (str(recipe["proofActorReferenceFormId"]).casefold() != _form_id(andy_reference.form_id) or
+        str(recipe["expectedBaseFormId"]).casefold() != _form_id(andy_base.form_id)):
+        raise ValueError("Fallout 3 CG02 cake Andy recipe differs")
+
+    info_ids = [int(str(value), FORM_ID_RADIX) for value in config["infoFormIds"]]
+    infos = [exact_info for info_id in info_ids
+             for exact_info in [by_form.get(info_id)]
+             if exact_info is not None and exact_info.signature == DIALOGUE_INFO_RECORD]
+    if len(infos) != len(info_ids) or any(not any(
+        group.group_type == DIALOGUE_CHILD_GROUP_TYPE and group.label_u32 == topic.form_id
+        for group in info.groups) for info in infos):
+        raise ValueError("Fallout 3 CG02 cake dialogue identity differs")
+    cues = []
+    for sequence, info in enumerate(infos):
+        conditions = [_dialogue_condition(row.data) for row in iter_subrecords(info)
+                      if row.signature == "CTDA"]
+        identities = [int(row["parameter1"]) for row in conditions
+                      if int(row["function"]) == GET_IS_ID_FUNCTION]
+        if len(identities) != 1:
+            raise ValueError("Fallout 3 CG02 cake dialogue speaker differs")
+        speaker = by_form.get(identities[0])
+        if speaker is None or speaker.signature not in {NPC_RECORD, "CREA"}:
+            raise ValueError("Fallout 3 CG02 cake speaker base differs")
+        voice_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(speaker)
+                     if row.signature == "VTCK" and len(row.data) == FORM_ID_BYTES]
+        voice = by_form.get(voice_ids[0]) if len(voice_ids) == 1 else None
+        responses = [value for value in _text_values(info, "NAM1") if value]
+        if voice is None or voice.signature != VOICE_TYPE_RECORD or len(responses) != 1:
+            raise ValueError("Fallout 3 CG02 cake dialogue response differs")
+        response = responses[0]
+        cues.append({
+            "sequence": sequence,
+            "speakerBaseFormId": _form_id(speaker.form_id),
+            "voiceType": {"formId": _form_id(voice.form_id), "editorId": _editor_id(voice)},
+            "infoFormId": _form_id(info.form_id),
+            "response": {"index": 1, "text": response,
+                         "textSha256": hashlib.sha256(response.encode()).hexdigest()},
+            "effects": [command for source in _text_values(info, "SCTX")
+                        for command in _source_commands(source)],
+        })
+    stage15_commands = [command for source in stage_sources.get(trigger_stage, [])
+                        for command in _source_commands(source)]
+    stage16_commands = [command for source in stage_sources.get(target_stage, [])
+                        for command in _source_commands(source)]
+    if len(stage15_commands) != 2 or len(stage16_commands) != 3:
+        raise ValueError("Fallout 3 CG02 cake stage command count differs")
+    return {
+        "schema": "opennv-fo3-cg02-stage-12-cake-runtime/v1",
+        "sourceStage": int(config["sourceStage"]), "triggerStage": trigger_stage,
+        "targetStage": target_stage,
+        "trigger": {"referenceFormId": _form_id(trigger.form_id),
+                    "baseFormId": _form_id(trigger_base.form_id),
+                    "scriptFormId": _form_id(trigger_script.form_id),
+                    "sourceTransform": _reference_transform_contract(trigger),
+                    "dimensionsGameUnits": list(primitive[:3]),
+                    "primitiveType": int(primitive[TRIGGER_PRIMITIVE_TYPE_INDEX])},
+        "andy": {"referenceFormId": _form_id(andy_reference.form_id),
+                 "baseFormId": _form_id(andy_base.form_id),
+                 "actorRecipeId": str(config["andyActorRecipeId"])},
+        "package": {"formId": _form_id(package.form_id),
+                    "targetMarkerFormId": _form_id(marker.form_id),
+                    "targetTransform": _reference_transform_contract(marker),
+                    "radiusGameUnits": location_radius,
+                    "locomotion": {"logicalPath": canonical_member_path(
+                        str(config["locomotionPath"])),
+                        "rootNode": str(recipe["locomotionRootNode"])},
+                    "idle": {"formId": _form_id(idle.form_id),
+                             "modelPath": canonical_member_path(
+                                 f"meshes\\{idle_models[0]}")},
+                    "resultCommands": package_commands},
+        "cakeReferenceFormId": _form_id(cake_reference.form_id),
+        "dialogue": {"cues": cues, "dialoguePlaybackPrepared": False,
+                     "dialoguePlaybackImplemented": False},
+        "stage15Commands": stage15_commands,
+        "stage16Commands": stage16_commands,
+        "nextBoundary": {"applied": False,
+                         "blocker": "fo3-cg02-stage-20-butch-sweetroll-runtime-not-implemented"},
     }
 
 
@@ -7396,6 +7554,7 @@ def _bind_stage90_sound(
 
 def _bind_cg02_intro_assets(
     intro: dict[str, object],
+    configuration: object,
     data_root: Path,
     profile_root: Path,
     meshes_archive: BsaArchive,
@@ -7449,6 +7608,17 @@ def _bind_cg02_intro_assets(
         if "overseerSpeechRuntime" in dad_speech:
             actor_recipe_ids.append(str(dict(
                 dad_speech["overseerSpeechRuntime"])["actorRecipeId"]))
+            party = dict(dict(dad_speech["overseerSpeechRuntime"]).get(
+                "dadPartyRuntime", {}))
+            birthday = dict(party.get("birthdayInteractionsRuntime", {}))
+            cake = dict(birthday.get("cakeRuntime", {}))
+            if cake:
+                andy = dict(cake["andy"])
+                actor_recipe_ids.append(str(andy["actorRecipeId"]))
+                animation_paths[str(andy["referenceFormId"]).casefold()] = (
+                    str(dict(dict(cake["package"])["locomotion"])["logicalPath"]),
+                    str(dict(cake["package"])["idle"]["modelPath"]),
+                )
     actor_set = actor_preparation.prepare_actor_set(
         data_root,
         profile_root,
@@ -7534,6 +7704,31 @@ def _bind_cg02_intro_assets(
             if actor_scene is None:
                 raise ValueError("Fallout 3 CG02 Overseer actor scene is absent")
             overseer["actorScene"] = actor_scene
+            party = dict(overseer.get("dadPartyRuntime", {}))
+            birthday = dict(party.get("birthdayInteractionsRuntime", {}))
+            cake = dict(birthday.get("cakeRuntime", {}))
+            if cake:
+                andy = dict(cake["andy"])
+                andy_scene = scenes.get(str(andy["referenceFormId"]).casefold())
+                if andy_scene is None:
+                    raise ValueError("Fallout 3 CG02 Andy actor scene is absent")
+                andy["actorScene"] = andy_scene
+                cake["andy"] = andy
+                package = dict(cake["package"])
+                locomotion = dict(package["locomotion"])
+                locomotion_member = meshes_archive.extract(
+                    str(locomotion["logicalPath"]))
+                locomotion["sha256"] = locomotion_member.sha256
+                locomotion["rootMotion"] = sample_root_motion(
+                    locomotion_member.data,
+                    str(locomotion["rootNode"]),
+                    configuration.content_compiler.animation_samples_per_second,
+                ).manifest()
+                package["locomotion"] = locomotion
+                cake["package"] = package
+                birthday["cakeRuntime"] = cake
+                party["birthdayInteractionsRuntime"] = birthday
+                overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer
             intro["dadSpeechRuntime"] = dad_speech
     intro["sounds"] = [
@@ -8114,6 +8309,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     SOUND_RECORD,
                     ACTOR_REFERENCE_RECORD,
                     CREATURE_REFERENCE_RECORD,
+                    "CREA",
                     PLACED_REFERENCE_RECORD,
                     ACTIVATOR_RECORD,
                     DOOR_RECORD,
@@ -8122,6 +8318,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
                     GLOBAL_RECORD,
+                    "ALCH",
                     "ARMO",
                     "BOOK",
                     "NOTE",
@@ -8701,6 +8898,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     cg02_intro = dict(cg02_stage0["introRuntime"])
     _bind_cg02_intro_assets(
         cg02_intro,
+        configuration,
         resolved_data_root,
         profile_root,
         meshes_archive,
@@ -8761,6 +8959,30 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
                         participant["dialogue"] = participant_dialogue
                         prepared_participants.append(participant)
                     birthday["participants"] = prepared_participants
+                    if "cakeRuntime" in birthday:
+                        cake = dict(birthday["cakeRuntime"])
+                        cake_dialogue = dict(cake["dialogue"])
+                        prepared_cues = []
+                        for raw_cue in cake_dialogue["cues"]:
+                            cue = dict(raw_cue)
+                            branch_dialogue = {
+                                "voiceType": dict(cue["voiceType"]),
+                                "branches": [{
+                                    "infoFormId": cue["infoFormId"],
+                                    "response": dict(cue["response"]),
+                                }],
+                            }
+                            _bind_owned_dad_dialogue_audio(
+                                branch_dialogue, voices_archive,
+                                voices_archive_sha256, profile_root)
+                            cue["response"] = dict(
+                                list(branch_dialogue["branches"])[0])["response"]
+                            prepared_cues.append(cue)
+                        cake_dialogue["cues"] = prepared_cues
+                        cake_dialogue["dialoguePlaybackPrepared"] = True
+                        cake_dialogue["dialoguePlaybackImplemented"] = True
+                        cake["dialogue"] = cake_dialogue
+                        birthday["cakeRuntime"] = cake
                     party["birthdayInteractionsRuntime"] = birthday
                 overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer

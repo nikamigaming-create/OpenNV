@@ -146,6 +146,7 @@ internal sealed record Fo3Cg02DadStage7Command(
 internal sealed record Fo3Cg02DadSpeechRuntime(
     int SourceStage,
     int TargetStage,
+    double FailsafeSeconds,
     string DadReferenceFormId,
     IReadOnlyList<Fo3Cg02DadSpeechCue> Cues,
     IReadOnlyList<Fo3Cg02DadStage7Command> Stage7Commands,
@@ -197,6 +198,7 @@ internal sealed record Fo3Cg02DadPartyRuntime(
     string DadReferenceFormId,
     string PackageFormId,
     int PackageRadiusGameUnits,
+    int PackageResultCommandCount,
     double InitialDistanceGameUnits,
     bool ArrivedAtStart,
     Fo3Cg02DadSpeechCue Cue,
@@ -208,6 +210,8 @@ internal sealed record Fo3Cg02BirthdayEffect(
     string Kind,
     int Stage,
     double Seconds,
+    string Variable,
+    int Value,
     string Source);
 
 internal sealed record Fo3Cg02BirthdayDialogueNode(
@@ -243,11 +247,47 @@ internal sealed record Fo3Cg02BirthdayInteractionsRuntime(
     IReadOnlyList<Fo3Cg02BirthdayParticipant> Participants,
     IReadOnlyDictionary<int, Fo3Cg02BirthdayStageResult> StageResults,
     int AggregateStage,
+    Fo3Cg02CakeRuntime? CakeRuntime,
+    string NextBoundaryBlocker);
+
+internal sealed record Fo3Cg02CakeCue(
+    int Sequence,
+    string SpeakerBaseFormId,
+    string InfoFormId,
+    Fo3OwnedDialogueResponse Response,
+    IReadOnlyList<string> Effects);
+
+internal sealed record Fo3Cg02CakeRuntime(
+    int SourceStage,
+    int TriggerStage,
+    int TargetStage,
+    double FailsafeSeconds,
+    string TriggerReferenceFormId,
+    Fo3Cg01Transform TriggerTransform,
+    Fo3Cg01Vector3 TriggerDimensionsGameUnits,
+    string AndyReferenceFormId,
+    string AndyBaseFormId,
+    string AndyActorScenePath,
+    string AndyActorSceneSha256,
+    string PackageFormId,
+    string PackageTargetMarkerFormId,
+    Fo3Cg01Transform PackageTargetTransform,
+    int PackageRadiusGameUnits,
+    string PackageLocomotionLogicalPath,
+    string PackageLocomotionSha256,
+    float PackageLocomotionSpeedGameUnitsPerSecond,
+    string PackageIdleLogicalPath,
+    string CakeReferenceFormId,
+    IReadOnlyList<Fo3Cg02CakeCue> Cues,
+    int PackageResultCommandCount,
+    int Stage15CommandCount,
+    int Stage16CommandCount,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02IntroRuntime(
     int SourceStage,
     int TargetStage,
+    double FailsafeSeconds,
     double InitialSeconds,
     IReadOnlyList<Fo3Cg02IntroParticipant> Participants,
     IReadOnlyList<Fo3Cg02IntroSound> Sounds,
@@ -806,6 +846,7 @@ internal sealed record Fo3Cg01Stage50Timer(
         return new Fo3Cg02IntroRuntime(
             sourceStage,
             source.GetProperty("targetStage").GetInt32(),
+            source.GetProperty("failsafeSeconds").GetDouble(),
             timer.GetProperty("initialSeconds").GetDouble(),
             participants,
             sounds,
@@ -906,6 +947,7 @@ internal sealed record Fo3Cg01Stage50Timer(
         return new Fo3Cg02DadSpeechRuntime(
             expectedSourceStage,
             targetStage,
+            source.GetProperty("failsafeSeconds").GetDouble(),
             source.GetProperty("dadReferenceFormId").GetString()!,
             cues,
             commands,
@@ -1063,6 +1105,7 @@ internal sealed record Fo3Cg01Stage50Timer(
             source.GetProperty("dadReferenceFormId").GetString()!,
             package.GetProperty("formId").GetString()!,
             package.GetProperty("radiusGameUnits").GetInt32(),
+            package.GetProperty("resultCommands").GetArrayLength(),
             package.GetProperty("initialDistanceGameUnits").GetDouble(),
             package.GetProperty("arrivedAtStart").GetBoolean(), cue, commands,
             birthday,
@@ -1123,6 +1166,10 @@ internal sealed record Fo3Cg01Stage50Timer(
                                     ? stage.GetInt32() : 0,
                                 effect.TryGetProperty("seconds", out var seconds)
                                     ? seconds.GetDouble() : 0.0,
+                                effect.TryGetProperty("variable", out var variable)
+                                    ? variable.GetString()! : "",
+                                effect.TryGetProperty("value", out var value)
+                                    ? value.GetInt32() : 0,
                                 effect.TryGetProperty("source", out var effectSource)
                                     ? effectSource.GetString()! : ""))
                             .ToArray()))
@@ -1155,13 +1202,97 @@ internal sealed record Fo3Cg01Stage50Timer(
         if (participants.Length == 0 || stageResults.Count == 0)
             throw new InvalidOperationException(
                 "Fallout 3 CG02 birthday interaction graph is empty.");
+        var boundary = source.GetProperty("nextBoundary");
+        var boundaryApplied = boundary.GetProperty("applied").GetBoolean();
+        var cake = boundaryApplied
+            ? LoadCg02Cake(source.GetProperty("cakeRuntime"), expectedSourceStage)
+            : null;
         return new Fo3Cg02BirthdayInteractionsRuntime(
             expectedSourceStage,
             source.GetProperty("failsafeTimer").GetProperty("seconds").GetDouble(),
             participants,
             stageResults,
             source.GetProperty("aggregateStage").GetInt32(),
+            cake,
+            boundaryApplied ? cake!.NextBoundaryBlocker :
+                boundary.GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg02CakeRuntime LoadCg02Cake(
+        JsonElement source,
+        int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-12-cake-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 cake runtime identity differs.");
+        var dialogue = source.GetProperty("dialogue");
+        if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean() ||
+            !dialogue.GetProperty("dialoguePlaybackImplemented").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 cake dialogue assets differ.");
+        var cues = dialogue.GetProperty("cues").EnumerateArray().Select(row =>
+        {
+            var response = row.GetProperty("response");
+            var infoFormId = row.GetProperty("infoFormId").GetString()!;
+            var index = response.GetProperty("index").GetInt32();
+            return new Fo3Cg02CakeCue(
+                row.GetProperty("sequence").GetInt32(),
+                row.GetProperty("speakerBaseFormId").GetString()!,
+                infoFormId,
+                new Fo3OwnedDialogueResponse(
+                    index,
+                    response.GetProperty("text").GetString()!,
+                    Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                        response.GetProperty("voice"), $"_{infoFormId}_{index}.ogg"),
+                    Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                        response.GetProperty("lip"), $"_{infoFormId}_{index}.lip")),
+                row.GetProperty("effects").EnumerateArray()
+                    .Select(value => value.GetString()!).ToArray());
+        }).ToArray();
+        var trigger = source.GetProperty("trigger");
+        var andy = source.GetProperty("andy");
+        var actorScene = andy.GetProperty("actorScene");
+        var package = source.GetProperty("package");
+        return new Fo3Cg02CakeRuntime(
+            expectedSourceStage,
+            source.GetProperty("triggerStage").GetInt32(),
+            source.GetProperty("targetStage").GetInt32(),
+            source.GetProperty("failsafeSeconds").GetDouble(),
+            trigger.GetProperty("referenceFormId").GetString()!,
+            Fo3Cg01Stage12Transition.LoadTransform(
+                trigger.GetProperty("sourceTransform")),
+            LoadCg02CakeVector(trigger.GetProperty("dimensionsGameUnits")),
+            andy.GetProperty("referenceFormId").GetString()!,
+            andy.GetProperty("baseFormId").GetString()!,
+            actorScene.GetProperty("scene").GetString()!,
+            actorScene.GetProperty("sha256").GetString()!,
+            package.GetProperty("formId").GetString()!,
+            package.GetProperty("targetMarkerFormId").GetString()!,
+            Fo3Cg01Stage12Transition.LoadTransform(
+                package.GetProperty("targetTransform")),
+            package.GetProperty("radiusGameUnits").GetInt32(),
+            package.GetProperty("locomotion").GetProperty("logicalPath").GetString()!,
+            package.GetProperty("locomotion").GetProperty("sha256").GetString()!,
+            package.GetProperty("locomotion").GetProperty("rootMotion")
+                .GetProperty("speedGameUnitsPerSecond").GetSingle(),
+            package.GetProperty("idle").GetProperty("modelPath").GetString()!,
+            source.GetProperty("cakeReferenceFormId").GetString()!,
+            cues,
+            package.GetProperty("resultCommands").GetArrayLength(),
+            source.GetProperty("stage15Commands").GetArrayLength(),
+            source.GetProperty("stage16Commands").GetArrayLength(),
             source.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg01Vector3 LoadCg02CakeVector(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetDouble()).ToArray();
+        if (values.Length != 3 || values.Any(value => !double.IsFinite(value) || value <= 0.0))
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 cake trigger dimensions differ.");
+        return new Fo3Cg01Vector3(values[0], values[1], values[2]);
     }
 
     private static Fo3Cg01DadTravelPackage LoadTravelPackage(
@@ -1613,9 +1744,14 @@ internal sealed record Fo3Cg01PostStage14Transition(
                     .Concat(cg02Party is null ? [] : [cg02Party.Cue.InfoFormId])
                     .ToArray())
                 .ToArray();
-        var birthdayInfoFormIds = cg02Birthday?.Participants
+        var birthdayParticipantInfoFormIds = cg02Birthday?.Participants
             .SelectMany(value => value.Nodes.Keys)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        var birthdayInfoFormIds = new HashSet<string>(
+            birthdayParticipantInfoFormIds, StringComparer.OrdinalIgnoreCase);
+        if (cg02Birthday?.CakeRuntime is { } cakeRuntime)
+            birthdayInfoFormIds.UnionWith(
+                cakeRuntime.Cues.Select(value => value.InfoFormId));
         var matchingCg02Sequence = validCg02Sequences.SingleOrDefault(sequence =>
             sequence.Take(Math.Min(savedCg02InfoFormIds.Length, sequence.Length))
                 .SequenceEqual(savedCg02InfoFormIds.Take(sequence.Length),
@@ -1630,6 +1766,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
         cg02IntroComplete = cg02IntroComplete || stage == cg02Party?.TargetStage;
         cg02IntroComplete = cg02IntroComplete ||
             cg02Birthday?.StageResults.ContainsKey(stage) == true;
+        cg02IntroComplete = cg02IntroComplete ||
+            cg02Birthday?.CakeRuntime is { } cake &&
+                (stage == cake.TriggerStage || stage == cake.TargetStage);
         var cg02DadComplete = cg02DadSpeech is not null &&
             savedCg02InfoFormIds.Length >= 2;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
@@ -1723,13 +1862,26 @@ internal sealed record Fo3Cg01PostStage14Transition(
         if (cg02Birthday is not null)
         {
             foreach (var infoFormId in savedCg02InfoFormIds.Where(
-                birthdayInfoFormIds.Contains))
+                birthdayParticipantInfoFormIds.Contains))
             {
                 var node = cg02Birthday.Participants.SelectMany(value => value.Nodes.Values)
                     .Single(value => value.InfoFormId.Equals(
                         infoFormId, StringComparison.OrdinalIgnoreCase));
                 if (node.Effects.Any(value => value.Kind == "setStage"))
                     interactionCommandCount += 2;
+            }
+            if (cg02Birthday.CakeRuntime is { } commandCake)
+            {
+                if (stage == commandCake.TriggerStage ||
+                    stage == commandCake.TargetStage)
+                    interactionCommandCount += commandCake.Stage15CommandCount + 1;
+                if (stage == commandCake.TargetStage)
+                    interactionCommandCount += commandCake.PackageResultCommandCount +
+                        commandCake.Stage16CommandCount;
+                interactionCommandCount += commandCake.Cues
+                    .Where(cue => savedCg02InfoFormIds.Contains(
+                        cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
+                    .Sum(cue => cue.Effects.Count);
             }
         }
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
@@ -1741,6 +1893,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
             expectedPackages = expectedPackages.Append(dadLead.BibleTravel.Package.FormId);
         if (progressStage >= dadLead.SayToDoneStage)
             expectedPackages = expectedPackages.Append(dadLead.LeadTravel.Package.FormId);
+        if (cg02Birthday?.CakeRuntime is { } expectedCake &&
+            stage == expectedCake.TargetStage)
+            expectedPackages = expectedPackages.Append(expectedCake.PackageFormId);
         var expectedPackageArray = expectedPackages.ToArray();
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
         var timerAdvancing = RequiredBoolean(source, "timerAdvancing");

@@ -536,7 +536,8 @@ def _prepare_creature_actor(
         raise ValueError("Creature recipe must pin its expected CREA base")
     if not isinstance(recipe.get("expectedInitiallyDisabled"), bool):
         raise ValueError("Creature recipe must pin its authored initially-disabled state")
-    if recipe.get("enableParentPolicy") != "require-absent":
+    enable_parent_policy = recipe.get("enableParentPolicy")
+    if enable_parent_policy not in {"require-absent", "require-source-form-id"}:
         raise ValueError("Creature recipe must declare its enable-parent policy")
 
     catalog = context.catalog
@@ -552,10 +553,25 @@ def _prepare_creature_actor(
             f"expected={recipe['expectedInitiallyDisabled']} "
             f"actual={reference.initially_disabled}"
         )
-    if reference.enable_parent_form_id is not None:
+    expected_enable_parent = (
+        form_id(str(recipe["expectedEnableParentFormId"]))
+        if enable_parent_policy == "require-source-form-id" and
+        "expectedEnableParentFormId" in recipe
+        else None
+    )
+    if enable_parent_policy == "require-absent" and \
+            reference.enable_parent_form_id is not None:
         raise ValueError(
             "Creature ACRE has an XESP enable parent but its recipe requires none: "
             f"{reference.enable_parent_form_id:08x}"
+        )
+    if enable_parent_policy == "require-source-form-id" and (
+        expected_enable_parent is None or
+        reference.enable_parent_form_id != expected_enable_parent
+    ):
+        raise ValueError(
+            "Creature ACRE enable parent differs from its recipe: "
+            f"expected={expected_enable_parent} actual={reference.enable_parent_form_id}"
         )
 
     configured_origin = recipe.get("originGameUnits")

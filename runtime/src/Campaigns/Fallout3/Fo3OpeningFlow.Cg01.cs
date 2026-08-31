@@ -849,6 +849,15 @@ internal partial class Fo3OpeningFlow
                         .Where(effect => effect.Kind == "setStage")
                         .Select(effect => (int?)effect.Stage)
                         .SingleOrDefault();
+                    foreach (var effect in node.Effects)
+                    {
+                        if (effect.Kind == "setTimer")
+                            player.SetMeta("opennv_cg02_timer", effect.Seconds);
+                        else if (effect.Kind == "setQuestVariable")
+                            player.SetMeta(
+                                $"opennv_cg02_{effect.Variable.ToLowerInvariant()}",
+                                effect.Value);
+                    }
                     completed(node.InfoFormId, targetStage);
                     if (node.LinkedTopicFormIds.Count == 0)
                     {
@@ -893,6 +902,145 @@ internal partial class Fo3OpeningFlow
                         _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
                     () => PlayLine(index + 1));
             }
+        }
+    }
+
+    private CellActorLoader.PlacedActor EnsureCg02CakeAndy(
+        Fo3Cg02CakeRuntime cake)
+    {
+        if (_cg02IntroActors.TryGetValue(cake.AndyReferenceFormId, out var existing))
+            return existing;
+        using var stream = File.OpenRead(cake.AndyActorScenePath);
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!actual.Equals(cake.AndyActorSceneSha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Andy actor scene hash differs.");
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG02 cake world is absent.");
+        var actor = CellActorLoader.Load(
+                cake.AndyActorScenePath,
+                new HashSet<string>([coverage.Contract.CellFormId],
+                    StringComparer.OrdinalIgnoreCase),
+                coverage.CellRoot,
+                coverage.Contract.EntryPositionGameUnits,
+                _runtimeConfiguration,
+                proofEnableInitiallyDisabled: false,
+                materializeInitiallyDisabled: true)
+            ?? throw new InvalidOperationException("Fallout 3 CG02 Andy is absent.");
+        if (actor.ReferenceFormId != cake.AndyReferenceFormId ||
+            actor.BaseFormId != cake.AndyBaseFormId)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Andy actor identity differs.");
+        _cg02IntroActors.Add(actor.ReferenceFormId, actor);
+        return actor;
+    }
+
+    private void StartCg02CakeRuntime(
+        Fo3Cg02CakeRuntime cake,
+        Fo3Cg01ToddlerPlayer player,
+        Action<int, string?> stageChanged,
+        Action<Fo3Cg02CakeCue> cueCompleted,
+        IReadOnlyCollection<string> appliedInfoFormIds,
+        bool packageCompleted)
+    {
+        if (_cg02CakePackageTick is not null)
+            return;
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG02 cake world is absent.");
+        var andy = EnsureCg02CakeAndy(cake);
+        if (packageCompleted)
+        {
+            PlayCue(0);
+            return;
+        }
+        var target = GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
+            cake.PackageTargetMarkerFormId,
+            new Vector3((float)cake.PackageTargetTransform.PositionGameUnits.X,
+                (float)cake.PackageTargetTransform.PositionGameUnits.Y,
+                (float)cake.PackageTargetTransform.PositionGameUnits.Z),
+            new Vector3((float)cake.PackageTargetTransform.RotationRadians.X,
+                (float)cake.PackageTargetTransform.RotationRadians.Y,
+                (float)cake.PackageTargetTransform.RotationRadians.Z),
+            (float)cake.PackageTargetTransform.Scale,
+            coverage.Contract.EntryPositionGameUnits);
+        var travel = GamebryoPackageTravel.Start(
+            cake.PackageFormId,
+            target,
+            andy.Placement.Transform,
+            [target.SourceTransform.Origin],
+            cake.PackageLocomotionSpeedGameUnitsPerSecond,
+            cake.PackageRadiusGameUnits);
+        var locomotion = andy.Actor.LoadedAnimations.Single(value =>
+            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(
+                    cake.PackageLocomotionLogicalPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            value.SourceSha256.Equals(cake.PackageLocomotionSha256,
+                StringComparison.OrdinalIgnoreCase));
+        locomotion.Player.Play(locomotion.RuntimeName);
+        travel.Publish(andy.Placement);
+        stageChanged(cake.TriggerStage, null);
+        PlayCue(0);
+        _cg02CakePackageTick = delta =>
+        {
+            var arrived = travel.Advance(delta);
+            travel.Publish(andy.Placement);
+            if (!arrived)
+                return;
+            _cg02CakePackageTick = null;
+            var idle = andy.Actor.LoadedAnimations.Single(value =>
+                ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                    ActorModelSlice.NormalizeAnimationPath(cake.PackageIdleLogicalPath),
+                    StringComparison.OrdinalIgnoreCase));
+            idle.Player.Play(idle.RuntimeName);
+            Cg01WorldReference(cake.CakeReferenceFormId)
+                .SetMeta("opennv_animation_group", "forward");
+            player.SetMeta("opennv_cg02_timer", cake.FailsafeSeconds);
+            player.SetMeta("opennv_cg02_run_timer", 1);
+            stageChanged(cake.TargetStage, cake.PackageFormId);
+        };
+
+        void PlayCue(int index)
+        {
+            if (index == cake.Cues.Count)
+                return;
+            var cue = cake.Cues[index];
+            if (appliedInfoFormIds.Contains(
+                    cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
+            {
+                PlayCue(index + 1);
+                return;
+            }
+            var speaker = cue.SpeakerBaseFormId.Equals(
+                    cake.AndyBaseFormId, StringComparison.OrdinalIgnoreCase)
+                ? andy
+                : _cg02IntroActors.Values.Single(value =>
+                    value.BaseFormId.Equals(cue.SpeakerBaseFormId,
+                        StringComparison.OrdinalIgnoreCase));
+            var voice = new AudioStreamPlayer
+            {
+                Name = $"Fallout3Cg02CakeVoice{cue.Sequence}",
+            };
+            AddChild(voice);
+            var dialogue = new GamebryoDialoguePlayback(
+                voice, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
+            _cg02IntroDialogue.Add(dialogue);
+            dialogue.Start(
+                new SourceDialogueLine(
+                    cue.InfoFormId, cue.Response.Index, cue.SpeakerBaseFormId,
+                    cue.Response.Text,
+                    new SourceDialogueAsset(cue.Response.Voice.LogicalPath,
+                        cue.Response.Voice.SourcePath, cue.Response.Voice.Sha256),
+                    new SourceDialogueAsset(cue.Response.Lip.LogicalPath,
+                        cue.Response.Lip.SourcePath, cue.Response.Lip.Sha256)),
+                new FaceGenMorphController(speaker.Actor,
+                    _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
+                () =>
+                {
+                    cueCompleted(cue);
+                    PlayCue(index + 1);
+                });
         }
     }
 
@@ -2119,6 +2267,90 @@ internal partial class Fo3OpeningFlow
             Fo3Cg02BirthdayInteractionsRuntime birthday,
             Fo3Cg01ToddlerPlayer player)
         {
+            var cake = birthday.CakeRuntime ?? throw new InvalidOperationException(
+                "Fallout 3 CG02 cake runtime is absent.");
+            void CakeStageChanged(int stage, string? packageFormId)
+            {
+                if (current.ActiveStage == stage)
+                    return;
+                var commandCount = stage == cake.TriggerStage
+                    ? cake.Stage15CommandCount + 1
+                    : cake.PackageResultCommandCount + cake.Stage16CommandCount;
+                current = current with
+                {
+                    ActiveStage = stage,
+                    AppliedPackageFormIds = packageFormId is null
+                        ? current.AppliedPackageFormIds
+                        : current.AppliedPackageFormIds.Append(packageFormId).ToArray(),
+                    AccountedCommandCount = current.AccountedCommandCount + commandCount,
+                    AppliedCommandCount = current.AppliedCommandCount + commandCount,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(
+                        false, cake.NextBoundaryBlocker),
+                };
+                player.SetMeta("opennv_cg02_stage", stage);
+                Persist();
+            }
+            void CakeCueCompleted(Fo3Cg02CakeCue cue)
+            {
+                if (current.AppliedInfoFormIds.Contains(
+                        cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
+                    return;
+                current = current with
+                {
+                    AppliedInfoFormIds = current.AppliedInfoFormIds
+                        .Append(cue.InfoFormId).ToArray(),
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        cue.Effects.Count,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        cue.Effects.Count,
+                };
+                Persist();
+            }
+            void StartCake() => StartCg02CakeRuntime(
+                cake, player, CakeStageChanged, CakeCueCompleted,
+                current.AppliedInfoFormIds,
+                current.AppliedPackageFormIds.Contains(
+                    cake.PackageFormId, StringComparer.OrdinalIgnoreCase));
+            var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+                "Fallout 3 CG02 cake trigger world is absent.");
+            var triggerName = $"SOURCE_TRIGGER_{cake.TriggerReferenceFormId}";
+            if (!coverage.CellRoot.HasNode(triggerName))
+            {
+                var source = cake.TriggerTransform;
+                var trigger = new Area3D
+                {
+                    Name = triggerName,
+                    Position = GamebryoCoordinate.ConvertVector(
+                        new Vector3((float)source.PositionGameUnits.X,
+                            (float)source.PositionGameUnits.Y,
+                            (float)source.PositionGameUnits.Z) -
+                        coverage.Contract.EntryPositionGameUnits),
+                    Rotation = new Vector3(0.0f, -(float)source.RotationRadians.Z, 0.0f),
+                    Scale = Vector3.One * (float)source.Scale,
+                    CollisionLayer = 0,
+                    CollisionMask = player.SourceBodyCollisionLayer,
+                    Monitoring = true,
+                };
+                trigger.SetMeta("opennv_source_form_id", cake.TriggerReferenceFormId);
+                trigger.AddChild(new CollisionShape3D
+                {
+                    Shape = new BoxShape3D
+                    {
+                        Size = new Vector3(
+                            (float)cake.TriggerDimensionsGameUnits.X,
+                            (float)cake.TriggerDimensionsGameUnits.Z,
+                            (float)cake.TriggerDimensionsGameUnits.Y),
+                    },
+                });
+                trigger.BodyEntered += body =>
+                {
+                    if (body == player && _cg02CakePackageTick is null &&
+                        !current.AppliedPackageFormIds.Contains(
+                            cake.PackageFormId, StringComparer.OrdinalIgnoreCase))
+                        StartCake();
+                };
+                coverage.CellRoot.AddChild(trigger);
+            }
             foreach (var participant in birthday.Participants)
             {
                 var actor = _cg02IntroActors[participant.ReferenceFormId];
@@ -2154,16 +2386,23 @@ internal partial class Fo3OpeningFlow
                         var appliedCommands = 0;
                         if (targetStage is not null)
                         {
-                            var result = birthday.StageResults[targetStage.Value];
-                            player.SetMeta(
-                                $"opennv_cg02_{result.Kind.ToLowerInvariant()}_{result.FormId}",
-                                result.Count);
-                            player.SetMeta("opennv_cg02_stage", targetStage.Value);
-                            appliedCommands = 2;
+                            if (targetStage == cake.TriggerStage)
+                                StartCake();
+                            else
+                            {
+                                var result = birthday.StageResults[targetStage.Value];
+                                player.SetMeta(
+                                    $"opennv_cg02_{result.Kind.ToLowerInvariant()}_{result.FormId}",
+                                    result.Count);
+                                player.SetMeta("opennv_cg02_stage", targetStage.Value);
+                                appliedCommands = 2;
+                            }
                         }
                         current = current with
                         {
-                            ActiveStage = targetStage ?? current.ActiveStage,
+                            ActiveStage = targetStage == cake.TriggerStage
+                                ? current.ActiveStage
+                                : targetStage ?? current.ActiveStage,
                             AppliedInfoFormIds = current.AppliedInfoFormIds
                                 .Append(infoFormId).ToArray(),
                             AccountedCommandCount = current.AccountedCommandCount +
@@ -2177,6 +2416,14 @@ internal partial class Fo3OpeningFlow
                     })),
                 StringComparer.OrdinalIgnoreCase);
             player.ConfigureSourceFormActivations(activations);
+            if (current.ActiveStage == cake.TriggerStage &&
+                !current.AppliedPackageFormIds.Contains(
+                    cake.PackageFormId, StringComparer.OrdinalIgnoreCase))
+                StartCake();
+            else if (current.ActiveStage == cake.TargetStage &&
+                cake.Cues.Any(cue => !current.AppliedInfoFormIds.Contains(
+                    cue.InfoFormId, StringComparer.OrdinalIgnoreCase)))
+                StartCake();
         }
         void StartDadParty(
             Fo3Cg02DadPartyRuntime party,
@@ -2624,7 +2871,10 @@ internal partial class Fo3OpeningFlow
                  (current.ActiveStage == restoredOverseer.TargetStage ||
                   restoredOverseer.StageResults.ContainsKey(current.ActiveStage)) ||
              current.ActiveStage == restoredParty?.TargetStage ||
-             restoredBirthday?.StageResults.ContainsKey(current.ActiveStage) == true))
+             restoredBirthday?.StageResults.ContainsKey(current.ActiveStage) == true ||
+             restoredBirthday?.CakeRuntime is { } restoredCake &&
+                 (current.ActiveStage == restoredCake.TriggerStage ||
+                  current.ActiveStage == restoredCake.TargetStage)))
         {
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 restored completion player is absent."))
@@ -2768,7 +3018,10 @@ internal partial class Fo3OpeningFlow
                         restoredPlayer);
             }
             else if (restoredBirthday is not null &&
-                restoredBirthday.StageResults.ContainsKey(current.ActiveStage))
+                (restoredBirthday.StageResults.ContainsKey(current.ActiveStage) ||
+                 restoredBirthday.CakeRuntime is { } cake &&
+                    (current.ActiveStage == cake.TriggerStage ||
+                     current.ActiveStage == cake.TargetStage)))
             {
                 InstallBirthday(restoredBirthday, restoredPlayer);
             }
