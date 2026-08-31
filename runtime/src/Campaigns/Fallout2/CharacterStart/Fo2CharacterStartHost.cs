@@ -2,13 +2,15 @@ using Godot;
 using System.Text.Json;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
-using OpenNV.Runtime.Campaigns.Fallout1;
 using OpenNV.Runtime.Campaigns.Classic;
+using OpenNV.Runtime.Campaigns.Fallout1;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 public sealed partial class Fo2CharacterStartHost : Node3D
 {
+    private const string RetailRandomContractResource =
+        "res://config/classic-retail-random-fo2-1.02-v1.json";
     private Fo2ArroyoCavesPresentationCatalog _arroyo = null!;
     private Fo2TemplePresentationCatalog _temple = null!;
     private Fo2TempleTransitionCatalog _transition = null!;
@@ -22,6 +24,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private string? _arrivalVisualProofRoot;
     private string? _villageArrivalCaptureRoot;
     private string _savePath = "";
+    private ClassicRetailRandomContract _retailRandomContract = null!;
+    private ClassicRetailRandomLifecycleState _retailRandomLifecycle = null!;
     private bool _persistenceEnabled;
     private IReadOnlyList<Fo2AdjacentMapSession> _adjacentSessions =
         Array.Empty<Fo2AdjacentMapSession>();
@@ -44,6 +48,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2OpeningTailHandoff? OpeningHandoff { get; private set; }
     internal Task? OpeningHandoffTask { get; private set; }
     internal string SavePath => _savePath;
+    internal ClassicRetailRandomLifecycleState RetailRandomLifecycle =>
+        _retailRandomLifecycle;
     internal Fo2ArroyoPlayerPresentationSource MalePlayerPresentation =>
         _malePresentation.Source;
 
@@ -52,6 +58,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         try
         {
             var runtimeConfiguration = RuntimeConfiguration.Load();
+            _retailRandomContract = LoadRetailRandomContract();
+            _retailRandomLifecycle =
+                ClassicRetailRandomLifecycle.InitializeFromExactBuildClock(
+                    _retailRandomContract);
             GetWindow().Size = new Vector2I(
                 runtimeConfiguration.Capture.ExpectedWidthPixels,
                 runtimeConfiguration.Capture.ExpectedHeightPixels);
@@ -282,12 +292,22 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             throw new InvalidOperationException(
                 "Fallout 2 character start may hand off exactly once.");
         character.Validate(_characterStart);
+        _retailRandomLifecycle = restoredState is null
+            ? ClassicRetailRandomLifecycle.ResetForNewGame(
+                _retailRandomLifecycle, _retailRandomContract)
+            : ClassicRetailRandomLifecycle.ResetForLoad(
+                _retailRandomLifecycle, _retailRandomContract);
         SelectedCharacter = character;
         Picker.Visible = false;
         Picker.SetProcessInput(false);
         var selectedPresentation = _characterStart.PresentationFor(
             character,
             _malePresentation);
+        _retailRandomLifecycle = ClassicRetailRandomLifecycle.RequireSourceCall(
+            _retailRandomLifecycle,
+            _retailRandomContract,
+            "arroyo-map-load",
+            "engine-map-object-script-initialization");
         Scene = Fo2ArroyoCavesScene.Build(_arroyo, this);
         Runtime = Fo2ArroyoCavesPlayerRuntime.Build(
             _arroyo,
@@ -406,6 +426,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             $"OPENNV_FO2_CHARACTER_HANDOFF mode={character.Mode} name={character.Profile.Name} " +
             $"sex={character.Profile.Sex} map={player.CurrentMapIndex} tile={player.CurrentTile} " +
             $"fid={selectedPresentation.Fid} restored={restoredState is not null}");
+    }
+
+    private static ClassicRetailRandomContract LoadRetailRandomContract()
+    {
+        var bytes = Godot.FileAccess.GetFileAsBytes(RetailRandomContractResource);
+        if (bytes.Length == 0)
+            throw new FileNotFoundException(
+                "Fallout 2 retail random contract is missing.",
+                RetailRandomContractResource);
+        using var document = JsonDocument.Parse(bytes);
+        return ClassicRetailRandomContract.Parse(document.RootElement);
     }
 
     private async Task RunOpeningTail(
