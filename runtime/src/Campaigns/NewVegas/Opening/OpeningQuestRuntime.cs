@@ -1240,9 +1240,18 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         if (command.Index is not { } index || command.Enabled is not { } enabled ||
             command.State is null || command.QuestFormId is null ||
-            command.QuestEditorId is null ||
-            !_flow.Objectives.TryGetValue(index, out var text))
+            command.QuestEditorId is null)
             throw new InvalidOperationException("Owned opening objective command is incomplete.");
+        var objectives = command.QuestFormId.Equals(
+            _flow.QuestFormId,
+            StringComparison.OrdinalIgnoreCase)
+            ? _flow.Objectives
+            : _flow.OrdinaryQuests.TryGetValue(command.QuestFormId, out var ordinary)
+                ? ordinary.Objectives
+                : throw new InvalidOperationException(
+                    "Owned objective quest is absent from the compiled flow.");
+        if (!objectives.TryGetValue(index, out var text))
+            throw new InvalidOperationException("Owned opening objective text is absent.");
         var state = new OpeningObjectiveState(
             command.QuestFormId,
             command.QuestEditorId,

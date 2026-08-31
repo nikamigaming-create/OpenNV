@@ -6420,6 +6420,94 @@ def _interaction_from_script(
     }
 
 
+def _compile_ordinary_quests(
+    records: list[dict[str, object]],
+    editor_ids: Iterable[object],
+    predecessor_editor_id: str,
+    predecessor_completion_stage: int,
+) -> list[dict[str, object]]:
+    ordinary_quests = []
+    for ordinary_editor_id in editor_ids:
+        ordinary_quest = _unique_manifest_record(
+            records, str(ordinary_editor_id), "QUST"
+        )
+        script_form_ids = [
+            str(link["formId"])
+            for link in ordinary_quest["links"]
+            if link["signature"] == "SCRI"
+        ]
+        if len(script_form_ids) != 1:
+            raise ValueError(
+                "Owned ordinary quest has no unique script: "
+                f"{ordinary_editor_id}"
+            )
+        script_matches = [
+            record
+            for record in records
+            if record["recordType"] == "SCPT"
+            and str(record["formId"]).casefold() == script_form_ids[0].casefold()
+        ]
+        if len(script_matches) != 1:
+            raise ValueError(
+                "Owned ordinary quest script record is absent: "
+                f"{ordinary_editor_id} {script_form_ids[0]}"
+            )
+        ordinary_script = script_matches[0]
+        ordinary_sources = _record_text_values(ordinary_script, "SCTX")
+        if len(ordinary_sources) != 1:
+            raise ValueError(
+                f"Owned ordinary quest script source is ambiguous: {ordinary_editor_id}"
+            )
+        ordinary_programs, _, _ = _stage_programs(
+            ordinary_quest, ordinary_sources[0]
+        )
+        entry_stages = []
+        for record in records:
+            for source in _record_text_values(record, "SCTX"):
+                commands = _script_commands(source)
+                if not any(
+                    command["kind"] == "setStage"
+                    and str(command.get("questEditorId", "")).casefold()
+                    == predecessor_editor_id.casefold()
+                    and int(command.get("stage", -1))
+                    == predecessor_completion_stage
+                    for command in commands
+                ):
+                    continue
+                entry_stages.extend(
+                    int(command["stage"])
+                    for command in commands
+                    if command["kind"] == "setStage"
+                    and str(command.get("questEditorId", "")).casefold()
+                    == str(ordinary_editor_id).casefold()
+                )
+        if len(entry_stages) != 1:
+            raise ValueError(
+                "Owned ordinary quest entry-stage handoff is ambiguous: "
+                f"{ordinary_editor_id} matches={entry_stages}"
+            )
+        ordinary_commands = [
+            command
+            for program in ordinary_programs
+            for command in program["commands"]
+        ]
+        ordinary_quests.append(
+            {
+                "formId": ordinary_quest["formId"],
+                "editorId": str(ordinary_editor_id),
+                "scriptFormId": ordinary_script["formId"],
+                "scriptEditorId": _record_editor_id_from_manifest(ordinary_script),
+                "entryStage": entry_stages[0],
+                "objectives": ordinary_quest["questObjectives"],
+                "stages": ordinary_programs,
+                "commandContract": _resolve_command_record_identities(
+                    ordinary_commands, records
+                ),
+            }
+        )
+    return ordinary_quests
+
+
 def compile_new_game_flow(
     master_path: Path,
     ui_archive_path: Path,
@@ -6440,6 +6528,23 @@ def compile_new_game_flow(
         raise ValueError("Owned opening quest script source is ambiguous")
     programs, timer_transitions, menu_close_transitions = _stage_programs(
         quest, quest_script_sources[0]
+    )
+    completion_stages = [
+        int(program["stage"])
+        for program in programs
+        if re.search(
+            rf"StopQuest\s+{re.escape(quest_editor_id)}\b",
+            str(program["source"]),
+            re.IGNORECASE,
+        )
+    ]
+    if len(completion_stages) != 1:
+        raise ValueError("Owned opening completion stage is ambiguous")
+    ordinary_quests = _compile_ordinary_quests(
+        records,
+        flow.get("ordinaryQuestEditorIds", []),
+        quest_editor_id,
+        completion_stages[0],
     )
     roles = []
     needed_forms = set()
@@ -6754,17 +6859,6 @@ def compile_new_game_flow(
     ]
     if len(tag_menu_commands) != 1 or len(special_menu_commands) != 1:
         raise ValueError("Owned opening character menu parameters are ambiguous")
-    completion_stages = [
-        int(program["stage"])
-        for program in programs
-        if re.search(
-            rf"StopQuest\s+{re.escape(quest_editor_id)}\b",
-            str(program["source"]),
-            re.IGNORECASE,
-        )
-    ]
-    if len(completion_stages) != 1:
-        raise ValueError("Owned opening completion stage is ambiguous")
     icon_paths = tuple(
         sorted(
             {
@@ -6789,6 +6883,7 @@ def compile_new_game_flow(
                 "menuCloseTransitions": menu_close_transitions,
                 "completionStage": completion_stages[0],
             },
+            "ordinaryQuests": ordinary_quests,
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
             "guideActorAi": guide_actor_ai,

@@ -5,12 +5,14 @@
   "provenance": {
     "classification": "owned-data-root-selection",
     "status": "opening-route-rooted",
-    "source": "FalloutNV.esm VCG00/VCG01 plus the owned Fallout UI, voice, lip, and loose Video sources",
+    "source": "FalloutNV.esm VCG00/VCG01/VCG02 plus the owned Fallout UI, voice, lip, and loose Video sources",
     "evidence": "The compiler derives stages, scripts, references, dialogue, voice types, paired voice/lip members, packages, CELL ownership, menu tiles, includes, textures, and Bink assets from selected owned records and archive bytes."
   },
   "rootEditorIds": [
     "VCG00",
-    "VCG01"
+    "VCG01",
+    "VCG02",
+    "VGenericTimer"
   ],
   "entryPoint": {
     "questEditorId": "VCG00",
@@ -231,6 +233,9 @@
   "newGameFlow": {
     "questEditorId": "VCG01",
     "questScriptEditorId": "VCG01SCRIPT",
+    "ordinaryQuestEditorIds": [
+      "VCG02"
+    ],
     "dialogueVoice": {
       "speakerRole": "guideActor"
     },

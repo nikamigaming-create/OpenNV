@@ -311,12 +311,55 @@ internal partial class OpeningQuestRuntime
         if (!starting && !stopping)
             throw new InvalidOperationException(
                 $"Owned quest-lifecycle operation is unsupported: {command.Kind}");
+        _flow.OrdinaryQuests.TryGetValue(command.QuestFormId, out var ordinary);
         _quests[command.QuestFormId] = new OpeningQuestState(
             command.QuestFormId,
             command.QuestEditorId,
-            existing?.Stage ?? 0,
+            existing?.Stage ?? (starting && ordinary is not null ? ordinary.EntryStage : 0),
             starting,
             stopping);
+        if (starting && existing is null && ordinary is not null)
+            ExecuteOrdinaryQuestStage(ordinary, ordinary.EntryStage);
+    }
+
+    private void ExecuteOrdinaryQuestStage(OpeningOrdinaryQuest quest, int stage)
+    {
+        if (!quest.Stages.TryGetValue(stage, out var program))
+            throw new InvalidOperationException(
+                $"Owned ordinary quest stage is absent: {quest.EditorId} {stage}");
+        var commands = program.Commands.Select((command, sourceIndex) =>
+            new SourceGamebryoStageCommand<OpeningFlowCommand>(
+                sourceIndex,
+                StageCommandKind(command.Kind),
+                command)).ToArray();
+        for (var index = 0; index < commands.Length; index++)
+        {
+            GamebryoStageCommandExecutor.ExecuteOne(commands, index, sourceCommand =>
+            {
+                var source = sourceCommand.Value;
+                if (source.Kind != "objective")
+                    throw new InvalidOperationException(
+                        "Owned ordinary quest stage command is not admitted by this handoff.");
+                ApplyObjective(source);
+                return true;
+            });
+        }
+    }
+
+    private void ApplyOrdinaryQuestHandoffs()
+    {
+        foreach (var quest in _flow.OrdinaryQuests.Values)
+        {
+            if (_quests.ContainsKey(quest.FormId))
+                continue;
+            _quests[quest.FormId] = new OpeningQuestState(
+                quest.FormId,
+                quest.EditorId,
+                quest.EntryStage,
+                true,
+                false);
+            ExecuteOrdinaryQuestStage(quest, quest.EntryStage);
+        }
     }
 
     private void ApplyGlobal(OpeningFlowCommand command)
@@ -881,6 +924,7 @@ internal partial class OpeningQuestRuntime
     private void CompleteOpening()
     {
         _openingQuestCompleted = true;
+        ApplyOrdinaryQuestHandoffs();
         EvaluateGuidePackage();
         _objective.Visible = false;
         CloseModal();

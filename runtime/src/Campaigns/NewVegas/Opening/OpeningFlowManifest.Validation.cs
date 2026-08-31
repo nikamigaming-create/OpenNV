@@ -44,6 +44,24 @@ internal sealed partial record OpeningNewGameFlow
                 flow.QuestFormId,
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Owned New Game flow is incomplete.");
+        foreach (var ordinary in flow.OrdinaryQuests.Values)
+        {
+            if (string.IsNullOrWhiteSpace(ordinary.FormId) ||
+                string.IsNullOrWhiteSpace(ordinary.EditorId) ||
+                string.IsNullOrWhiteSpace(ordinary.ScriptFormId) ||
+                string.IsNullOrWhiteSpace(ordinary.ScriptEditorId) ||
+                ordinary.Stages.Count == 0 ||
+                !ordinary.Stages.ContainsKey(ordinary.EntryStage) ||
+                ordinary.Stages.Values.SelectMany(stage => stage.Commands)
+                    .Where(command => command.Kind == "objective")
+                    .Any(command => command.Index is null ||
+                        !ordinary.Objectives.ContainsKey(command.Index.Value)))
+                throw new InvalidOperationException(
+                    "Owned ordinary quest handoff is incomplete.");
+            ValidateCommandContract(
+                ordinary.CommandContract,
+                ordinary.Stages.Values.SelectMany(stage => stage.Commands).ToArray());
+        }
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)
             .Where(value => value.Kind == "objective" &&

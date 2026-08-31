@@ -317,6 +317,16 @@ internal sealed record OpeningStageProgram(
     string Source,
     IReadOnlyList<OpeningFlowCommand> Commands);
 
+internal sealed record OpeningOrdinaryQuest(
+    string FormId,
+    string EditorId,
+    string ScriptFormId,
+    string ScriptEditorId,
+    int EntryStage,
+    IReadOnlyDictionary<int, string> Objectives,
+    IReadOnlyDictionary<int, OpeningStageProgram> Stages,
+    OpeningCommandContract CommandContract);
+
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
 internal sealed record OpeningCommandContract(

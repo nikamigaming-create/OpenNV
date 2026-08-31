@@ -11,6 +11,7 @@ internal sealed partial record OpeningNewGameFlow(
     string QuestFormId,
     string QuestEditorId,
     IReadOnlyDictionary<int, string> Objectives,
+    IReadOnlyDictionary<string, OpeningOrdinaryQuest> OrdinaryQuests,
     int CompletionStage,
     int PsychologyStartStage,
     int OutroStartStage,
@@ -176,6 +177,9 @@ internal sealed partial record OpeningNewGameFlow(
             .ToDictionary(
                 value => value.GetProperty("index").GetInt32(),
                 value => value.GetProperty("text").GetString()!);
+        var ordinaryQuests = source.GetProperty("ordinaryQuests").EnumerateArray()
+            .Select(ParseOrdinaryQuest)
+            .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase);
         var timerTransitions = quest.GetProperty("timerTransitions").EnumerateArray()
             .Select(value => new OpeningTimerTransition(
                 value.GetProperty("fromStage").GetInt32(),
@@ -223,6 +227,7 @@ internal sealed partial record OpeningNewGameFlow(
             quest.GetProperty("formId").GetString()!,
             quest.GetProperty("editorId").GetString()!,
             objectives,
+            ordinaryQuests,
             quest.GetProperty("completionStage").GetInt32(),
             dialogue.GetProperty("psychologyStartStage").GetInt32(),
             dialogue.GetProperty("outroStartStage").GetInt32(),
@@ -245,6 +250,25 @@ internal sealed partial record OpeningNewGameFlow(
             character);
         Validate(result);
         return result;
+    }
+
+    private static OpeningOrdinaryQuest ParseOrdinaryQuest(JsonElement source)
+    {
+        var objectives = source.GetProperty("objectives").EnumerateArray()
+            .ToDictionary(
+                value => value.GetProperty("index").GetInt32(),
+                value => value.GetProperty("text").GetString()!);
+        return new OpeningOrdinaryQuest(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            source.GetProperty("scriptFormId").GetString()!,
+            source.GetProperty("scriptEditorId").GetString()!,
+            source.GetProperty("entryStage").GetInt32(),
+            objectives,
+            source.GetProperty("stages").EnumerateArray()
+                .Select(ParseStage)
+                .ToDictionary(value => value.Stage),
+            ParseCommandContract(source.GetProperty("commandContract")));
     }
 
     private static OpeningCommandContract ParseCommandContract(JsonElement source) => new(
