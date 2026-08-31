@@ -11,6 +11,7 @@ internal static class Fo1CampaignPresentationContractNumericContracts
     // Immutable format, source-art, geometry, and acceptance contracts.
     // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
     internal const float PresentationFloat1Point08f = 1.08f;
+    internal const int PresentationInt1 = 1;
     internal const int PresentationInt10 = 10;
     internal const int PresentationInt12 = 12;
     internal const int PresentationInt13 = 13;
@@ -278,6 +279,18 @@ internal static class Fo1CampaignPresentationContract
         if (!world.IsEqualApprox(Fo1HexMath.Center(tile)))
             throw new InvalidOperationException(
                 $"Fallout campaign placement world position drifted: {mapId}/{elevation}/{serial}");
+        Fo1CampaignCritterFidState? critterFidState = null;
+        if (source.TryGetProperty("critterFidState", out var critterSource))
+            critterFidState = new Fo1CampaignCritterFidState(
+                critterSource.GetProperty("animation").GetInt32(),
+                critterSource.GetProperty("weapon").GetInt32(),
+                critterSource.GetProperty("packedRotation").GetInt32());
+        if ((objectType == Fo1CampaignPresentationContractNumericContracts.PresentationInt1) !=
+            (critterFidState is not null) ||
+            critterFidState is { Animation: < 0 } or { Weapon: < 0 } or
+            { PackedRotation: not 0 })
+            throw new InvalidOperationException(
+                $"Fallout campaign critter FID state is invalid: {mapId}/{elevation}/{serial}");
         return new Fo1CampaignPlacement(
             serial,
             source.GetProperty("objectId").GetInt32(),
@@ -288,7 +301,8 @@ internal static class Fo1CampaignPresentationContract
             objectType,
             RequiredString(source, "objectTypeName"),
             RequiredString(source, "artFilename"),
-            artifactId);
+            artifactId,
+            critterFidState);
     }
 
     private static Fo1CampaignWallTopology ReadWallTopology(
@@ -472,6 +486,15 @@ internal static class Fo1CampaignPresentationContract
         var averageOpaqueColor = averageSource.ValueKind == JsonValueKind.Null
             ? (Color?)null
             : ReadColor(averageSource, "sprite average opaque");
+        var framesPerSecond = source.GetProperty("framesPerSecond").GetInt32();
+        var actionFrame = source.GetProperty("actionFrame").GetInt32();
+        var framesPerDirection = source.GetProperty("framesPerDirection").GetInt32();
+        var directionCount = source.GetProperty("directionCount").GetInt32();
+        if (framesPerSecond <= 0 || framesPerDirection <= frame ||
+            actionFrame < 0 || actionFrame >= framesPerDirection ||
+            directionCount != Fo1HexMath.DirectionCount)
+            throw new InvalidOperationException(
+                $"Fallout sprite timing/direction contract is invalid: {id}");
         return new Fo1CampaignSpriteArtifact(
             id,
             RequiredString(source, "logicalPath"),
@@ -480,8 +503,13 @@ internal static class Fo1CampaignPresentationContract
             file.Width,
             file.Height,
             ReadVector2(source.GetProperty("frameOffset")),
+            ReadVector2(source.GetProperty("directionOffset")),
             rotation,
             frame,
+            framesPerSecond,
+            actionFrame,
+            framesPerDirection,
+            directionCount,
             averageOpaqueColor);
     }
 
@@ -983,8 +1011,13 @@ internal sealed record Fo1CampaignSpriteArtifact(
     int Width,
     int Height,
     Vector2 FrameOffset,
+    Vector2 DirectionOffset,
     int Rotation,
     int Frame,
+    int FramesPerSecond,
+    int ActionFrame,
+    int FramesPerDirection,
+    int DirectionCount,
     Color? AverageOpaqueColor);
 
 internal sealed record Fo1CampaignCritterProfile(
@@ -1080,7 +1113,13 @@ internal sealed record Fo1CampaignPlacement(
     int ObjectType,
     string ObjectTypeName,
     string ArtFilename,
-    string ArtifactId);
+    string ArtifactId,
+    Fo1CampaignCritterFidState? CritterFidState);
+
+internal sealed record Fo1CampaignCritterFidState(
+    int Animation,
+    int Weapon,
+    int PackedRotation);
 
 internal sealed record Fo1CampaignSkippedPlacement(int Serial, string Reason);
 internal sealed record Fo1CampaignBlocker(int Serial, int Tile, bool Multihex);

@@ -105,8 +105,9 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
         _playablePlayer.Texture = LoadTexture(
             artifact.Path, artifact.Width, artifact.Height);
         _playablePlayer.Offset = new Vector2(
-            artifact.FrameOffset.X,
-            -artifact.FrameOffset.Y + artifact.Height / 2.0f);
+            artifact.DirectionOffset.X + artifact.FrameOffset.X,
+            -(artifact.DirectionOffset.Y + artifact.FrameOffset.Y) +
+                artifact.Height / 2.0f);
         _playablePlayer.Position = Fo1HexMath.Center(tile) +
             Vector3.Up * _catalog.GroundAnchorMeters;
         _playablePlayer.SetMeta("source_tile", tile);
@@ -386,9 +387,10 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     {
         var artifact = _catalog.SpriteArtifacts[placement.ArtifactId];
         var offset = new Vector2(
-            placement.PixelOffset.X + artifact.FrameOffset.X,
-            -(placement.PixelOffset.Y + artifact.FrameOffset.Y) + artifact.Height / 2.0f);
-        root.AddChild(new Sprite3D
+            placement.PixelOffset.X + artifact.DirectionOffset.X + artifact.FrameOffset.X,
+            -(placement.PixelOffset.Y + artifact.DirectionOffset.Y + artifact.FrameOffset.Y) +
+                artifact.Height / 2.0f);
+        var sprite = new Sprite3D
         {
             Name = $"Object_{placement.Serial}_{NodeIdentifier(placement.ArtFilename)}",
             Texture = LoadTexture(artifact.Path, artifact.Width, artifact.Height),
@@ -408,7 +410,20 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
             Modulate = _catalog.Viewer.Scene.SourceColorMultiplier,
-        });
+        };
+        if (placement.CritterFidState is { } critter)
+        {
+            sprite.SetMeta("source_fid_animation", critter.Animation);
+            sprite.SetMeta("source_fid_weapon", critter.Weapon);
+            sprite.SetMeta("source_fid_packed_rotation", critter.PackedRotation);
+            sprite.SetMeta("source_frm_fps", artifact.FramesPerSecond);
+            sprite.SetMeta("source_frm_action_frame", artifact.ActionFrame);
+            sprite.SetMeta("source_frm_frames_per_direction", artifact.FramesPerDirection);
+            sprite.SetMeta("source_frm_direction_count", artifact.DirectionCount);
+            sprite.SetMeta("source_frm_rotation", artifact.Rotation);
+            sprite.SetMeta("source_frm_frame", artifact.Frame);
+        }
+        root.AddChild(sprite);
     }
 
     private void BuildPlayer(Node3D root, Fo1CampaignMapEntry entry, bool visible)
@@ -421,8 +436,9 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             PixelSize = 1.0f / _catalog.PixelsPerMeter,
             Position = entry.WorldMeters + Vector3.Up * _catalog.GroundAnchorMeters,
             Offset = new Vector2(
-                artifact.FrameOffset.X,
-                -artifact.FrameOffset.Y + artifact.Height / 2.0f),
+                artifact.DirectionOffset.X + artifact.FrameOffset.X,
+                -(artifact.DirectionOffset.Y + artifact.FrameOffset.Y) +
+                    artifact.Height / 2.0f),
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             Shaded = false,
             DoubleSided = true,

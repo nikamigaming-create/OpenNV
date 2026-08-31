@@ -8,6 +8,7 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
+from fo1_map_objects import critter_fid_fields  # noqa: E402
 from fo1_profile import Fo1ProfileError  # noqa: E402
 from prepare_fo1_campaign_presentation import (  # noqa: E402
     build_connected_wall_topology,
@@ -58,18 +59,55 @@ class Fo1CampaignPresentationTest(unittest.TestCase):
             "art\\scenery\\door.frm",
         )
 
-    def test_only_supported_idle_critter_state_is_prepared(self) -> None:
+    def test_source_critter_fid_selects_exact_weapon_and_rejects_non_idle(self) -> None:
         idle = {
             "artFilename": "hmjmps,0",
             "prototype": {"object_type": 1},
             "fid": "01000001",
         }
-        animated = {**idle, "fid": "01010001"}
+        weaponed = {**idle, "fid": "01007001"}
+        animated = {**idle, "fid": "01070001"}
         self.assertEqual(
             source_sprite_logical_path(idle, MAP_FORMAT),
             "art\\critters\\hmjmpsaa.frm",
         )
+        self.assertEqual(
+            source_sprite_logical_path(weaponed, MAP_FORMAT),
+            "art\\critters\\hmjmpsja.frm",
+        )
         self.assertIsNone(source_sprite_logical_path(animated, MAP_FORMAT))
+        self.assertIsNone(
+            source_sprite_logical_path({**idle, "fid": "11000001"}, MAP_FORMAT)
+        )
+        self.assertEqual(
+            critter_fid_fields(int("0100700a", 16)),
+            {"animation": 0, "weapon": 7, "packedRotation": 0},
+        )
+
+    def test_runtime_binds_source_critter_fid_and_frm_timing(self) -> None:
+        runtime_root = Path(__file__).resolve().parents[2] / "runtime" / "src"
+        contract = (
+            runtime_root
+            / "Campaigns/Fallout1/Fo1CampaignPresentationContract.cs"
+        ).read_text(encoding="utf-8")
+        viewer = (
+            runtime_root
+            / "Campaigns/Fallout1/Fo1CampaignPresentationViewer.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn('TryGetProperty("critterFidState"', contract)
+        for field in (
+            'GetProperty("directionOffset")',
+            'GetProperty("framesPerSecond")',
+            'GetProperty("actionFrame")',
+        ):
+            self.assertIn(field, contract)
+        for metadata in (
+            '"source_fid_animation"',
+            '"source_fid_weapon"',
+            '"source_frm_fps"',
+            '"source_frm_action_frame"',
+        ):
+            self.assertIn(metadata, viewer)
 
     def test_campaign_child_paths_cannot_escape(self) -> None:
         root = Path.cwd().resolve()

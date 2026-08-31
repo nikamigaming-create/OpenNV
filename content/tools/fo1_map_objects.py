@@ -77,6 +77,43 @@ TYPE_DIRECTORIES = {
     4: "tiles",
     5: "misc",
 }
+CRITTER_WEAPON_SUFFIXES = "adefghij"
+CRITTER_BASIC_ANIMATION_SUFFIXES = "abcdefghijklmnopqrst"
+
+
+def critter_fid_fields(fid: int) -> dict[str, int]:
+    return {
+        "animation": (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16)
+        & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF,
+        "weapon": (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_12)
+        & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F,
+        "packedRotation": (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_28)
+        & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_07,
+    }
+
+
+def placed_critter_frm_path(art_filename: str, fid: int) -> str:
+    fields = critter_fid_fields(fid)
+    if (
+        fields["packedRotation"] != 0
+        or fields["weapon"] >= len(CRITTER_WEAPON_SUFFIXES)
+        or fields["animation"] >= len(CRITTER_BASIC_ANIMATION_SUFFIXES)
+    ):
+        raise Fo1ProfileError(
+            f"unsupported placed critter FID art variant: {fid:08x}"
+        )
+    art_base = art_filename.split(",", 1)[0].strip()
+    if not art_base:
+        raise Fo1ProfileError(f"empty critter art base for FID {fid:08x}")
+    return canonical_dat2_path(
+        "art\\critters\\"
+        + art_base
+        + CRITTER_WEAPON_SUFFIXES[fields["weapon"]]
+        + CRITTER_BASIC_ANIMATION_SUFFIXES[fields["animation"]]
+        + ".frm"
+    )
+
+
 ITEM_SUBTYPES = {
     0: "armor",
     1: "container",
@@ -300,20 +337,12 @@ class Fo1ResourceResolver:
         if object_type != 1:
             return canonical_dat2_path(f"art\\{directory}\\{art_filename}")
 
-        animation = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
-        weapon = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_12) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F
-        packed_rotation = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_28) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_07
-        weapon_suffixes = "adefghij"
-        if animation != 0 or packed_rotation != 0 or weapon >= len(weapon_suffixes):
+        fields = critter_fid_fields(fid)
+        if fields["animation"] != 0:
             raise Fo1ProfileError(
                 f"unsupported placed critter FID for idle FRM transport: {fid:08x}"
             )
-        art_base = art_filename.split(",", 1)[0].strip()
-        if not art_base:
-            raise Fo1ProfileError(f"empty critter art base for FID {fid:08x}")
-        return canonical_dat2_path(
-            f"art\\critters\\{art_base}{weapon_suffixes[weapon]}a.frm"
-        )
+        return placed_critter_frm_path(art_filename, fid)
 
 
 def _read_i32(data: bytes, offset: int, label: str) -> tuple[int, int]:
