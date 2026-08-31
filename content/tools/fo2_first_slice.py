@@ -192,72 +192,81 @@ def _compile_guardian_script(
         raise Fo1ProfileError("Fallout 2 guardian MSG identity drifted")
     messages = _parse_message_catalog(message_catalog.data)
 
-    terminal = str(configured["terminalNode"])
-    nodes = list(configured["nodes"])
-    node_ids = [str(node["id"]) for node in nodes]
-    if (
-        str(configured["initialNode"]) != "Node001"
-        or terminal != "Node999"
-        or len(nodes) != 5
-        or len(set(node_ids)) != len(node_ids)
-        or set(node_ids) != {"Node001", "Node002", "Node003", "Node004", "Node005"}
-        or sorted(str(value).casefold() for value in configured["preTrialPlayerArtFids"])
-        != ["0100003d", "0100003e"]
-    ):
-        raise Fo1ProfileError("Fallout 2 guardian dialogue node identity drifted")
-
-    emitted_nodes = []
+    effect_program = decode_acklint_effects(program.data)
+    talk_rule = effect_program["events"]["talk_p_proc"]
+    if len(talk_rule) != 1 or len(talk_rule[0]["all"]) != 1:
+        raise Fo1ProfileError("Fallout 2 guardian talk entry is unsupported")
+    pre_trial_player_art_fids = list(talk_rule[0]["all"][0]["values"])
+    initial_node = talk_rule[0]["then"][0]["node"]
+    node_ids: list[str] = []
+    terminal_nodes: set[str] = set()
+    pending = [initial_node]
+    while pending:
+        node_id = pending.pop(0)
+        if node_id in node_ids or node_id in terminal_nodes:
+            continue
+        node_rules = effect_program["events"].get(node_id)
+        if node_rules is None:
+            terminal_nodes.add(node_id)
+            continue
+        node_ids.append(node_id)
+        pending.extend(
+            operation["target"]
+            for operation in node_rules[0]["then"]
+            if operation["operation"] == "dialogue-option"
+        )
+    if len(terminal_nodes) != 1:
+        raise Fo1ProfileError("Fallout 2 guardian dialogue terminal is not unique")
+    terminal = next(iter(terminal_nodes))
+    emitted_nodes: list[dict[str, Any]] = []
     referenced_messages: set[int] = set()
-    for node in nodes:
+    for node_id in node_ids:
         reply = []
-        for segment in node["reply"]:
-            if set(segment) == {"messageId"}:
-                message_id = int(segment["messageId"])
+        options = []
+        node_rules = effect_program["events"].get(node_id, [])
+        if len(node_rules) != 1 or node_rules[0]["all"]:
+            raise Fo1ProfileError(f"Fallout 2 guardian dialogue node is unsupported: {node_id}")
+        for operation in node_rules[0]["then"]:
+            if operation["operation"] == "dialogue-reply-message":
+                message_id = int(operation["messageId"])
                 text = messages.get(message_id, "")
-                if not text:
+                if operation["messageListId"] != ACKLINT_MESSAGE_LIST_ID or not text:
                     raise Fo1ProfileError(
                         f"Fallout 2 guardian reply message is absent: {message_id}"
                     )
                 referenced_messages.add(message_id)
                 reply.append({"messageId": message_id, "text": text})
-            elif segment == {"playerName": True}:
+            elif operation["operation"] == "dialogue-reply-player-name":
                 reply.append({"playerName": True})
-            else:
-                raise Fo1ProfileError("Fallout 2 guardian reply segment is unsupported")
-        options = []
-        for option in node["options"]:
-            message_id = int(option["messageId"])
-            target = str(option["target"])
-            minimum = option.get("minimumIntelligence")
-            maximum = option.get("maximumIntelligence")
-            text = messages.get(message_id, "")
-            if (
-                not text
-                or target not in {*node_ids, terminal}
-                or (minimum is None) == (maximum is None)
-                or minimum is not None and int(minimum) != 4
-                or maximum is not None and int(maximum) != 3
-                or int(option["reaction"]) != 50
-            ):
-                raise Fo1ProfileError(
-                    f"Fallout 2 guardian option contract drifted: {message_id}"
-                )
-            referenced_messages.add(message_id)
-            options.append(
-                {
+            elif operation["operation"] == "dialogue-option":
+                message_id = int(operation["messageId"])
+                target = str(operation["target"])
+                text = messages.get(message_id, "")
+                if (
+                    operation["messageListId"] != ACKLINT_MESSAGE_LIST_ID
+                    or not text
+                    or target not in {*node_ids, terminal}
+                ):
+                    raise Fo1ProfileError(
+                        f"Fallout 2 guardian option contract drifted: {message_id}"
+                    )
+                referenced_messages.add(message_id)
+                options.append({
                     "messageId": message_id,
                     "text": text,
                     "target": target,
-                    "minimumIntelligence": None if minimum is None else int(minimum),
-                    "maximumIntelligence": None if maximum is None else int(maximum),
-                    "reaction": 50,
-                }
-            )
-        emitted_nodes.append({"id": str(node["id"]), "reply": reply, "options": options})
-    if referenced_messages != set(range(103, 121)):
-        raise Fo1ProfileError("Fallout 2 guardian dialogue message coverage drifted")
+                    "minimumIntelligence": operation.get("minimumIntelligence"),
+                    "maximumIntelligence": operation.get("maximumIntelligence"),
+                    "reaction": int(operation["reaction"]),
+                })
+            else:
+                raise Fo1ProfileError(
+                    f"Fallout 2 guardian dialogue action is unsupported: {operation['operation']}"
+                )
+        emitted_nodes.append({"id": node_id, "reply": reply, "options": options})
+    if not referenced_messages:
+        raise Fo1ProfileError("Fallout 2 guardian dialogue emitted no source messages")
 
-    effect_program = decode_acklint_effects(program.data)
     look_message_operations = [
         operation
         for rule in effect_program["events"]["look_at_p_proc"]
@@ -292,8 +301,8 @@ def _compile_guardian_script(
             "bytes": len(message_catalog.data),
             "sha256": message_catalog.sha256,
         },
-        "preTrialPlayerArtFids": list(configured["preTrialPlayerArtFids"]),
-        "initialNode": "Node001",
+        "preTrialPlayerArtFids": pre_trial_player_art_fids,
+        "initialNode": initial_node,
         "terminalNode": terminal,
         "nodes": emitted_nodes,
         "displayMessages": [

@@ -13,7 +13,10 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from classic_ssl_effects import decode_single_message_look
+from classic_ssl_effects import (
+    decode_single_message_look,
+    decode_single_reply_option_dialogue,
+)
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError, sha256_path
 from prepare_fo1_destination_generic_door import (
@@ -41,7 +44,10 @@ def read_script_id(header: Path) -> int:
     return values[MEDIC_SYMBOL]
 
 
-def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str, dict[str, Any]]:
+def read_look_message(
+    script_path: Path,
+    message_path: Path,
+) -> tuple[int, str, dict[str, Any], dict[int, str]]:
     script = script_path.read_text(encoding="cp1252")
     if not re.search(rf"#define\s+NAME\s+{MEDIC_SYMBOL}\b", script):
         raise Fo1ProfileError("Medic script does not bind NAME to SCRIPT_MEDIC")
@@ -54,7 +60,9 @@ def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str, 
             messages[int(row.group(1))] = row.group("text")
     if message_id not in messages or not messages[message_id]:
         raise Fo1ProfileError("Medic source message file does not contain the look-at message")
-    return message_id, messages[message_id], effect_program
+    dialogue = decode_single_reply_option_dialogue(script, "MedicSeriouslyWounded")
+    effect_program["events"].update(dialogue["events"])
+    return message_id, messages[message_id], effect_program, messages
 
 
 def shortest_contact_path(start: int, target: int, floor_ids: list[int], default_tile: int,
@@ -119,7 +127,13 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
     if elevation is None or source_rows is None:
         raise Fo1ProfileError("Medic look destination elevation is absent from source/presentation")
     script_id = read_script_id(scripts_header)
-    message_id, message_text, effect_program = read_look_message(medic_script, medic_message)
+    message_id, message_text, effect_program, messages = read_look_message(
+        medic_script, medic_message
+    )
+    dialogue_actions = effect_program["events"]["MedicSeriouslyWounded"][0]["then"]
+    reply_action, option_action = dialogue_actions
+    if not messages.get(reply_action["messageId"]) or not messages.get(option_action["messageId"]):
+        raise Fo1ProfileError("Medic dialogue source messages are unavailable")
     door = generic_door["door"]
     if not door.get("open", {}).get("walkable"):
         raise Fo1ProfileError("generic-door descriptor does not mark its opened tile walkable")
@@ -168,6 +182,20 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
                       "result": "display-message-only", "dialogue": "unimplemented-fail-closed",
                       "combat": "not-proven-by-look-at-only", "actionPoints": "not-source-backed"},
         "effectProgram": effect_program,
+        "dialogueResult": {
+            "procedure": "MedicSeriouslyWounded",
+            "reply": {
+                "messageId": reply_action["messageId"],
+                "messageText": messages[reply_action["messageId"]],
+            },
+            "option": {
+                "messageId": option_action["messageId"],
+                "messageText": messages[option_action["messageId"]],
+                "target": option_action["target"],
+                "reaction": option_action["reaction"],
+            },
+            "optionSelection": "unimplemented-fail-closed",
+        },
         "sourceWalkMaskRoute": {"pathTiles": route, "contactTile": route[-1], "contactIsAdjacent": route[-1] in neighbors(actor["tile"])},
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,
     }

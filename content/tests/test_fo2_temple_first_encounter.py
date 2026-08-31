@@ -36,14 +36,8 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
             guardian["messageCatalog"]["logicalPath"],
             "text\\english\\dialog\\acklint.msg",
         )
-        self.assertEqual(
-            [node["id"] for node in guardian["nodes"]],
-            ["Node001", "Node002", "Node003", "Node004", "Node005"],
-        )
-        self.assertEqual(
-            [option["messageId"] for option in guardian["nodes"][2]["options"]],
-            [114, 115, 116],
-        )
+        self.assertNotIn("nodes", guardian)
+        self.assertNotIn("preTrialPlayerArtFids", guardian)
         self.assertNotIn("hostilityTrigger", guardian)
         self.assertEqual(profile["adapter"]["movementActionPointCost"], 1)
         self.assertEqual(

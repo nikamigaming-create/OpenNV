@@ -81,14 +81,29 @@ internal sealed class ClassicScriptState : IEquatable<ClassicScriptState>
 internal readonly record struct ClassicScriptContext(
     bool SourceIsPlayer,
     bool CanSeePlayer,
-    int GameTime);
+    int GameTime,
+    string? PlayerArtFid = null);
 
 internal readonly record struct ClassicScriptMessage(int? MessageListId, int MessageId);
+
+internal readonly record struct ClassicDialogueReplySegment(
+    ClassicScriptMessage? Message,
+    bool PlayerName);
+
+internal readonly record struct ClassicDialogueOption(
+    ClassicScriptMessage Message,
+    string Target,
+    int? MinimumIntelligence,
+    int? MaximumIntelligence,
+    int Reaction);
 
 internal sealed record ClassicScriptExecution(
     bool Executed,
     bool ScriptOverrides,
-    IReadOnlyList<ClassicScriptMessage> DisplayMessages);
+    IReadOnlyList<ClassicScriptMessage> DisplayMessages,
+    string? OpenDialogueNode,
+    IReadOnlyList<ClassicDialogueReplySegment> DialogueReply,
+    IReadOnlyList<ClassicDialogueOption> DialogueOptions);
 
 internal sealed class ClassicScriptProgram
 {
@@ -124,17 +139,28 @@ internal sealed class ClassicScriptProgram
         ClassicScriptContext context)
     {
         if (!_events.TryGetValue(eventName, out var rules))
-            return new ClassicScriptExecution(false, false, []);
+            return new ClassicScriptExecution(false, false, [], null, [], []);
         var matched = rules.Where(rule => rule.Conditions.All(condition =>
             Matches(condition, state, context))).ToArray();
         var scriptOverrides = false;
         var messages = new List<ClassicScriptMessage>();
+        string? openDialogueNode = null;
+        var dialogueReply = new List<ClassicDialogueReplySegment>();
+        var dialogueOptions = new List<ClassicDialogueOption>();
         foreach (var rule in matched)
         {
             foreach (var effect in rule.Effects)
-                Apply(effect, state, context, ref scriptOverrides, messages);
+                Apply(
+                    effect, state, context, ref scriptOverrides, messages,
+                    ref openDialogueNode, dialogueReply, dialogueOptions);
         }
-        return new ClassicScriptExecution(matched.Length > 0, scriptOverrides, messages);
+        return new ClassicScriptExecution(
+            matched.Length > 0,
+            scriptOverrides,
+            messages,
+            openDialogueNode,
+            dialogueReply,
+            dialogueOptions);
     }
 
     private static Rule ParseRule(JsonElement source)
@@ -145,9 +171,11 @@ internal sealed class ClassicScriptProgram
             .Select(ParseOperation).ToArray();
         if (conditions.Any(row => row.Name is not
                 ("source-is-player" or "can-see-player" or "local-equals" or
-                 "local-not-equals")) ||
+                 "local-not-equals" or "player-art-fid-in")) ||
             effects.Length == 0 || effects.Any(row => row.Name is not
-                ("set-local" or "set-flag" or "script-overrides" or "display-message")))
+                ("set-local" or "set-flag" or "script-overrides" or "display-message" or
+                 "open-dialogue" or "dialogue-reply-message" or
+                 "dialogue-reply-player-name" or "dialogue-option")))
             throw new InvalidOperationException(
                 "Classic script rule mixes conditions and effects.");
         return new Rule(conditions, effects);
@@ -158,7 +186,9 @@ internal sealed class ClassicScriptProgram
         var operation = source.GetProperty("operation").GetString() ?? "";
         if (operation is not ("source-is-player" or "can-see-player" or "local-equals" or
             "local-not-equals" or "set-local" or "set-flag" or "script-overrides" or
-            "display-message"))
+            "display-message" or "player-art-fid-in" or "open-dialogue" or
+            "dialogue-reply-message" or "dialogue-reply-player-name" or
+            "dialogue-option"))
             throw new InvalidOperationException($"Unsupported classic script operation: {operation}");
         int? index = source.TryGetProperty("index", out var indexValue)
             ? indexValue.GetInt32()
@@ -178,15 +208,45 @@ internal sealed class ClassicScriptProgram
         int? messageId = source.TryGetProperty("messageId", out var messageElement)
             ? messageElement.GetInt32()
             : null;
+        var values = source.TryGetProperty("values", out var valuesElement)
+            ? valuesElement.EnumerateArray().Select(row => row.GetString() ?? "").ToArray()
+            : null;
+        var node = source.TryGetProperty("node", out var nodeElement)
+            ? nodeElement.GetString()
+            : null;
+        var target = source.TryGetProperty("target", out var targetElement)
+            ? targetElement.GetString()
+            : null;
+        int? minimumIntelligence = source.TryGetProperty(
+            "minimumIntelligence", out var minimumElement)
+            ? minimumElement.GetInt32()
+            : null;
+        int? maximumIntelligence = source.TryGetProperty(
+            "maximumIntelligence", out var maximumElement)
+            ? maximumElement.GetInt32()
+            : null;
+        int? reaction = source.TryGetProperty("reaction", out var reactionElement)
+            ? reactionElement.GetInt32()
+            : null;
         if (index is < 0 ||
             operation is ("local-equals" or "local-not-equals") &&
                 (index is null || value is null) ||
             operation is "set-local" && (index is null || (value is null) == (valueFrom is null)) ||
             valueFrom is not null && valueFrom != "game-time" ||
             operation is "set-flag" && string.IsNullOrWhiteSpace(flag) ||
-            operation is "display-message" && (messageId is null or < 0 || messageListId is < 0))
+            operation is ("display-message" or "dialogue-reply-message") &&
+                (messageId is null or < 0 || messageListId is < 0) ||
+            operation is "player-art-fid-in" &&
+                (values is null || values.Length == 0 || values.Any(string.IsNullOrWhiteSpace)) ||
+            operation is "open-dialogue" && string.IsNullOrWhiteSpace(node) ||
+            operation is "dialogue-option" &&
+                (messageId is null or < 0 || messageListId is < 0 ||
+                 string.IsNullOrWhiteSpace(target) || reaction is null ||
+                 minimumIntelligence is not null && maximumIntelligence is not null))
             throw new InvalidOperationException($"Classic script operation is incomplete: {operation}");
-        return new Operation(operation, index, value, valueFrom, flag, messageListId, messageId);
+        return new Operation(
+            operation, index, value, valueFrom, flag, messageListId, messageId,
+            values, node, target, minimumIntelligence, maximumIntelligence, reaction);
     }
 
     private static bool Matches(
@@ -198,6 +258,8 @@ internal sealed class ClassicScriptProgram
             "can-see-player" => context.CanSeePlayer,
             "local-equals" => state.Local(operation.Index!.Value) == operation.Value,
             "local-not-equals" => state.Local(operation.Index!.Value) != operation.Value,
+            "player-art-fid-in" => operation.Values!.Contains(
+                context.PlayerArtFid ?? "", StringComparer.OrdinalIgnoreCase),
             _ => throw new InvalidOperationException(
                 $"Classic script effect used as a condition: {operation.Name}"),
         };
@@ -207,7 +269,10 @@ internal sealed class ClassicScriptProgram
         ClassicScriptState state,
         ClassicScriptContext context,
         ref bool scriptOverrides,
-        ICollection<ClassicScriptMessage> messages)
+        ICollection<ClassicScriptMessage> messages,
+        ref string? openDialogueNode,
+        ICollection<ClassicDialogueReplySegment> dialogueReply,
+        ICollection<ClassicDialogueOption> dialogueOptions)
     {
         switch (operation.Name)
         {
@@ -226,6 +291,32 @@ internal sealed class ClassicScriptProgram
                     operation.MessageListId,
                     operation.MessageId!.Value));
                 break;
+            case "open-dialogue":
+                if (openDialogueNode is not null)
+                    throw new InvalidOperationException(
+                        "Classic script requested multiple dialogue entry nodes.");
+                openDialogueNode = operation.Node;
+                break;
+            case "dialogue-reply-message":
+                dialogueReply.Add(new ClassicDialogueReplySegment(
+                    new ClassicScriptMessage(
+                        operation.MessageListId,
+                        operation.MessageId!.Value),
+                    false));
+                break;
+            case "dialogue-reply-player-name":
+                dialogueReply.Add(new ClassicDialogueReplySegment(null, true));
+                break;
+            case "dialogue-option":
+                dialogueOptions.Add(new ClassicDialogueOption(
+                    new ClassicScriptMessage(
+                        operation.MessageListId,
+                        operation.MessageId!.Value),
+                    operation.Target!,
+                    operation.MinimumIntelligence,
+                    operation.MaximumIntelligence,
+                    operation.Reaction!.Value));
+                break;
             default:
                 throw new InvalidOperationException(
                     $"Classic script condition used as an effect: {operation.Name}");
@@ -240,5 +331,11 @@ internal sealed class ClassicScriptProgram
         string? ValueFrom,
         string? Flag,
         int? MessageListId,
-        int? MessageId);
+        int? MessageId,
+        IReadOnlyList<string>? Values,
+        string? Node,
+        string? Target,
+        int? MinimumIntelligence,
+        int? MaximumIntelligence,
+        int? Reaction);
 }

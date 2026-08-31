@@ -583,6 +583,32 @@ internal partial class Fo1TacticalSession : Node
         return true;
     }
 
+    internal bool TryTalkToAdjacentDestinationMedicSeriouslyWounded()
+    {
+        var medic = _destinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit Medic dialogue-result contract.");
+        if (!Fo1HexMath.AreNeighbors(_playerTile, medic.Tile))
+            return false;
+        var execution = medic.Program.ExecuteWithActions(
+            medic.DialogueProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        if (!execution.Executed || execution.DialogueReply.Count != 1 ||
+            execution.DialogueOptions.Count != 1 ||
+            execution.DialogueReply[0].Message!.Value.MessageId !=
+                medic.DialogueReplyMessageId ||
+            execution.DialogueOptions[0].Message.MessageId !=
+                medic.DialogueOptionMessageId ||
+            execution.DialogueOptions[0].Target != medic.DialogueOptionTarget ||
+            execution.DialogueOptions[0].Reaction != medic.DialogueOptionReaction)
+            throw new InvalidOperationException(
+                "Fallout Medic dialogue result did not execute its admitted actions.");
+        _status = medic.DialogueReplyText;
+        RefreshHud();
+        Save();
+        return true;
+    }
+
     internal bool TryActivateDestinationReturnExitGrid()
     {
         var transition = _destinationReturnExitGrid ?? throw new InvalidOperationException(

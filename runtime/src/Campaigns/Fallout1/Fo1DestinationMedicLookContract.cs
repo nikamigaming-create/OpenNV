@@ -10,7 +10,10 @@ namespace OpenNV.Runtime.Campaigns.Fallout1;
 internal sealed record Fo1DestinationMedicLookContract(
     string Path, string Sha256, int Serial, int Tile, string Pid, string Fid,
     string PrototypeSha256, string ArtSha256, string MessageText, int MessageId,
-    IReadOnlyList<int> SourceWalkMaskRoute, ClassicScriptProgram Program)
+    IReadOnlyList<int> SourceWalkMaskRoute, ClassicScriptProgram Program,
+    string DialogueProcedure, int DialogueReplyMessageId, string DialogueReplyText,
+    int DialogueOptionMessageId, string DialogueOptionText, string DialogueOptionTarget,
+    int DialogueOptionReaction)
 {
     private const string Schema = "opennv-fo1-destination-medic-look/v1";
     private const string GenericDoorSchema = "opennv-fo1-destination-generic-door/v1";
@@ -76,6 +79,26 @@ internal sealed record Fo1DestinationMedicLookContract(
             execution.DisplayMessages[0] != new ClassicScriptMessage(null, messageId))
             throw new InvalidOperationException(
                 "Fallout Medic look descriptor does not execute its source message.");
+        var dialogue = root.GetProperty("dialogueResult");
+        var dialogueProcedure = Required(dialogue, "procedure");
+        var dialogueReply = dialogue.GetProperty("reply");
+        var dialogueOption = dialogue.GetProperty("option");
+        var dialogueExecution = program.ExecuteWithActions(
+            dialogueProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
+        if (Required(dialogue, "optionSelection") != "unimplemented-fail-closed" ||
+            !dialogueExecution.Executed || dialogueExecution.DialogueReply.Count != 1 ||
+            dialogueExecution.DialogueOptions.Count != 1 ||
+            dialogueExecution.DialogueReply[0].Message!.Value.MessageId !=
+                dialogueReply.GetProperty("messageId").GetInt32() ||
+            dialogueExecution.DialogueOptions[0].Message.MessageId !=
+                dialogueOption.GetProperty("messageId").GetInt32() ||
+            dialogueExecution.DialogueOptions[0].Target != Required(dialogueOption, "target") ||
+            dialogueExecution.DialogueOptions[0].Reaction !=
+                dialogueOption.GetProperty("reaction").GetInt32())
+            throw new InvalidOperationException(
+                "Fallout Medic dialogue result does not execute its source actions.");
         var route = root.GetProperty("sourceWalkMaskRoute").GetProperty("pathTiles")
             .EnumerateArray().Select(value => value.GetInt32()).ToArray();
         var tile = actor.GetProperty("tile").GetInt32();
@@ -87,7 +110,14 @@ internal sealed record Fo1DestinationMedicLookContract(
         return new Fo1DestinationMedicLookContract(
             resolved, sha256, actor.GetProperty("serial").GetInt32(), tile, Required(actor, "pid"),
             Required(actor, "fid"), prototypeSha256, artSha256, messageText, messageId, route,
-            program);
+            program,
+            dialogueProcedure,
+            dialogueReply.GetProperty("messageId").GetInt32(),
+            Required(dialogueReply, "messageText"),
+            dialogueOption.GetProperty("messageId").GetInt32(),
+            Required(dialogueOption, "messageText"),
+            Required(dialogueOption, "target"),
+            dialogueOption.GetProperty("reaction").GetInt32());
     }
 
     internal object Report(bool viewed) => new
@@ -105,6 +135,19 @@ internal sealed record Fo1DestinationMedicLookContract(
             dialogue = "unimplemented-fail-closed",
             combat = "not-proven-by-look-at-only",
             actionPoints = "not-source-backed"
+        },
+        dialogueResult = new
+        {
+            procedure = DialogueProcedure,
+            reply = new { messageId = DialogueReplyMessageId, text = DialogueReplyText },
+            option = new
+            {
+                messageId = DialogueOptionMessageId,
+                text = DialogueOptionText,
+                target = DialogueOptionTarget,
+                reaction = DialogueOptionReaction,
+            },
+            optionSelection = "unimplemented-fail-closed",
         },
         sourceWalkMaskRoute = SourceWalkMaskRoute,
         viewed,

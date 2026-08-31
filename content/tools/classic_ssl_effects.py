@@ -17,6 +17,10 @@ CLASSIC_SSL_SOURCE_CONTRACT_TICKS_PER_SECOND = 10
 CLASSIC_SSL_SOURCE_CONTRACT_LOOK_TOKEN_COUNT = 10
 CLASSIC_SSL_SOURCE_CONTRACT_LOOK_MESSAGE_INDEX = 6
 CLASSIC_SSL_SOURCE_CONTRACT_LOOK_TAIL_INDEX = 7
+CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REPLY_MESSAGE_INDEX = 2
+CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_MESSAGE_INDEX = 7
+CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_TARGET_INDEX = 9
+CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REACTION_INDEX = 11
 
 
 @dataclass(frozen=True)
@@ -242,6 +246,63 @@ def decode_single_message_look(source: str) -> dict[str, Any]:
                 "then": [
                     {"operation": "script-overrides"},
                     {"operation": "display-message", "messageId": candidates[0]},
+                ],
+            }],
+        },
+    }
+
+
+def decode_single_reply_option_dialogue(source: str, procedure: str) -> dict[str, Any]:
+    tokens = _tokens(source)
+    header = ("procedure", procedure.casefold(), "begin")
+    blocks = [
+        _block(tokens, index + len(header) - 1)
+        for index in _find_all(tokens, header)
+    ]
+    if len(blocks) != 1:
+        raise ClassicSslParseError("SSL single-reply dialogue procedure is not unique")
+    folded = [token.text.casefold() for token in blocks[0]]
+    expected = (
+        "reply", "(", None, ")", ";", "noption", "(", None, ",",
+        None, ",", None, ")", ";",
+    )
+    if len(folded) != len(expected) or any(
+        wanted is not None and actual != wanted
+        for actual, wanted in zip(folded, expected)
+    ):
+        raise ClassicSslParseError("SSL single-reply dialogue body is unsupported")
+    numeric_indices = (
+        CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REPLY_MESSAGE_INDEX,
+        CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_MESSAGE_INDEX,
+        CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REACTION_INDEX,
+    )
+    if not all(blocks[0][index].text.isdecimal() for index in numeric_indices):
+        raise ClassicSslParseError("SSL dialogue message or reaction is not numeric")
+    target = blocks[0][CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_TARGET_INDEX].text
+    if not target or not (target[0].isalpha() or target[0] == "_"):
+        raise ClassicSslParseError("SSL dialogue option target is invalid")
+    return {
+        "schema": "opennv-classic-script-effects/v1",
+        "events": {
+            procedure: [{
+                "all": [],
+                "then": [
+                    {
+                        "operation": "dialogue-reply-message",
+                        "messageId": int(blocks[0][
+                            CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REPLY_MESSAGE_INDEX
+                        ].text),
+                    },
+                    {
+                        "operation": "dialogue-option",
+                        "messageId": int(blocks[0][
+                            CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_OPTION_MESSAGE_INDEX
+                        ].text),
+                        "target": target,
+                        "reaction": int(blocks[0][
+                            CLASSIC_SSL_SOURCE_CONTRACT_DIALOGUE_REACTION_INDEX
+                        ].text),
+                    },
                 ],
             }],
         },

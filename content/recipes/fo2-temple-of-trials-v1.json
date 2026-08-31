@@ -62,64 +62,7 @@
         "logicalPath": "text\\english\\dialog\\acklint.msg",
         "sha256": "c60317b30da26c7b4b4dab38c40e769e8efb7959186e4cd497cae282f6c0201e",
         "messageListId": 751
-      },
-      "preTrialPlayerArtFids": ["0100003d", "0100003e"],
-      "initialNode": "Node001",
-      "terminalNode": "Node999",
-      "nodes": [
-        {
-          "id": "Node001",
-          "reply": [
-            { "messageId": 103 },
-            { "playerName": true },
-            { "messageId": 104 }
-          ],
-          "options": [
-            { "messageId": 105, "target": "Node002", "maximumIntelligence": 3, "reaction": 50 },
-            { "messageId": 106, "target": "Node003", "minimumIntelligence": 4, "reaction": 50 },
-            { "messageId": 107, "target": "Node004", "minimumIntelligence": 4, "reaction": 50 },
-            { "messageId": 108, "target": "Node999", "minimumIntelligence": 4, "reaction": 50 }
-          ]
-        },
-        {
-          "id": "Node002",
-          "reply": [
-            { "messageId": 109 },
-            { "playerName": true },
-            { "messageId": 110 }
-          ],
-          "options": [
-            { "messageId": 111, "target": "Node999", "maximumIntelligence": 3, "reaction": 50 }
-          ]
-        },
-        {
-          "id": "Node003",
-          "reply": [
-            { "messageId": 112 },
-            { "playerName": true },
-            { "messageId": 113 }
-          ],
-          "options": [
-            { "messageId": 114, "target": "Node999", "minimumIntelligence": 4, "reaction": 50 },
-            { "messageId": 115, "target": "Node004", "minimumIntelligence": 4, "reaction": 50 },
-            { "messageId": 116, "target": "Node005", "minimumIntelligence": 4, "reaction": 50 }
-          ]
-        },
-        {
-          "id": "Node004",
-          "reply": [{ "messageId": 117 }],
-          "options": [
-            { "messageId": 118, "target": "Node999", "minimumIntelligence": 4, "reaction": 50 }
-          ]
-        },
-        {
-          "id": "Node005",
-          "reply": [{ "messageId": 119 }],
-          "options": [
-            { "messageId": 120, "target": "Node999", "minimumIntelligence": 4, "reaction": 50 }
-          ]
-        }
-      ]
+      }
     }
   },
   "declaredRole": "new-game Temple of Trials source slice",

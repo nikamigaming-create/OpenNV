@@ -12,6 +12,7 @@ from classic_int_effects import ClassicIntDecodeError, decode_acklint_effects  #
 from classic_ssl_effects import (  # noqa: E402
     ClassicSslParseError,
     decode_flare_effects,
+    decode_single_reply_option_dialogue,
     decode_single_message_look,
 )
 from content.tests.test_fo2_first_slice import synthetic_acklint_int  # noqa: E402
@@ -55,6 +56,13 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         self.assertEqual(look[0]["all"][0]["index"], 7)
         self.assertEqual(look[0]["then"][2]["messageId"], 100)
         self.assertEqual(look[1]["then"][1]["messageId"], 101)
+        talk = program["events"]["talk_p_proc"][0]
+        self.assertEqual(talk["then"], [{"operation": "open-dialogue", "node": "Node001"}])
+        self.assertEqual(talk["all"][0]["values"], ["0100003e", "0100003d"])
+        node = program["events"]["Node001"][0]["then"]
+        self.assertEqual(node[0]["messageId"], 103)
+        self.assertEqual(node[1]["operation"], "dialogue-reply-player-name")
+        self.assertEqual(node[-1]["target"], "Node999")
 
     def test_int_decoder_rejects_opcode_and_branch_drift(self) -> None:
         source = synthetic_acklint_int()
@@ -71,6 +79,13 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         branch_drift[location + 4:location + 8] = bytes(4)
         with self.assertRaises(ClassicIntDecodeError):
             decode_acklint_effects(bytes(branch_drift))
+
+        dialogue_drift = bytearray(source)
+        location = dialogue_drift.find(bytes.fromhex("81 1e"))
+        self.assertGreater(location, 0)
+        dialogue_drift[location:location + 2] = bytes.fromhex("80 00")
+        with self.assertRaises(ClassicIntDecodeError):
+            decode_acklint_effects(bytes(dialogue_drift))
 
     def test_ssl_parser_recovers_flare_local_and_expiry(self) -> None:
         program, expiry = decode_flare_effects(FLARE_SSL)
@@ -107,6 +122,25 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         self.assertEqual(effects[1]["messageId"], 136)
         with self.assertRaises(ClassicSslParseError):
             decode_single_message_look(source.replace("script_overrides;", ""))
+
+    def test_ssl_parser_recovers_single_reply_option_dialogue(self) -> None:
+        source = """
+        procedure MedicSeriouslyWounded begin
+          Reply(105);
+          NOption(164, MedicStartHealing, 1);
+        end
+        """
+        program = decode_single_reply_option_dialogue(
+            source, "MedicSeriouslyWounded"
+        )
+        effects = program["events"]["MedicSeriouslyWounded"][0]["then"]
+        self.assertEqual(effects[0]["messageId"], 105)
+        self.assertEqual(effects[1]["messageId"], 164)
+        self.assertEqual(effects[1]["target"], "MedicStartHealing")
+        with self.assertRaises(ClassicSslParseError):
+            decode_single_reply_option_dialogue(
+                source.replace("NOption", "BOption"), "MedicSeriouslyWounded"
+            )
 
 
 if __name__ == "__main__":

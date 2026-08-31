@@ -351,6 +351,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             character.Profile.Name,
             EffectiveIntelligence(character),
             player.GetMeta("character_fid").AsString(),
+            _state.ScriptState,
             profile.WidthPixels,
             profile.FontSizePixels);
         AddChild(_dialogue);
@@ -510,10 +511,22 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             SetStatus("Talk requires a live, non-hostile adjacent guardian.");
             return false;
         }
+        var script = _contract.GuardianScript;
+        var entry = script.EffectProgram.ExecuteWithActions(
+            "talk_p_proc",
+            _state.ScriptState,
+            new ClassicScriptContext(
+                false,
+                true,
+                default,
+                _player.GetMeta("character_fid").AsString()));
+        if (!entry.Executed || entry.OpenDialogueNode is null)
+            throw new InvalidOperationException(
+                "Fallout 2 guardian talk script did not open an admitted dialogue node.");
         _player.Presentation.StopWalking();
         _player.SetPhysicsProcess(false);
-        _dialogue.Open();
-        SetStatus("Owned ACKlint dialogue active; general INT execution remains disabled.");
+        _dialogue.Open(entry.OpenDialogueNode);
+        SetStatus("Owned ACKlint dialogue procedure active; unsupported INT remains fail-closed.");
         return true;
     }
 

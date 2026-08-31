@@ -128,15 +128,25 @@ def synthetic_acklint_int() -> bytes:
         opcode(0x8029), opcode(0x800C), opcode(0x801C), opcode(0x802A),
         opcode(0x8029), opcode(0x801C),
     ])
-    names = ["main", "critter_p_proc", "pickup_p_proc", "look_at_p_proc"]
+    names = [
+        "..............", "checkPartyMembersNearDoor", "start", "critter_p_proc",
+        "pickup_p_proc", "talk_p_proc", "destroy_p_proc", "look_at_p_proc",
+        "description_p_proc", "use_skill_on_p_proc", "damage_p_proc",
+        "map_enter_p_proc", "Node998", "Node999", "Node001", "Node002",
+        "Node003", "Node004", "Node005",
+    ]
     identifiers = bytearray()
     name_offsets = []
     for name in names:
         name_offsets.append(4 + len(identifiers))
         identifiers.extend(name.encode("ascii") + b"\0")
     body_start = 42 + 4 + len(names) * 24 + 4 + len(identifiers)
-    main = opcode(0x8000)
-    critter_start = body_start + len(main)
+    bodies_by_name: dict[str, bytes] = {
+        name: opcode(0x8000) for name in names
+    }
+    critter_start = body_start + sum(
+        len(bodies_by_name[name]) for name in names[:3]
+    )
     critter_prefix_length = 2 + 6 + 6 + 2 + 6 + 2 + 2 + 2 + 2 + 2 + 2
     critter_effect_length = 6 + 6 + 2 + 2 + 7 * 6 + 2
     critter_epilogue = critter_start + critter_prefix_length + critter_effect_length
@@ -148,6 +158,7 @@ def synthetic_acklint_int() -> bytes:
         *(push(value) for value in [0, 1, 0, 0, 30000, 0, 0]),
         opcode(0x80D0), epilogue,
     ])
+    bodies_by_name["critter_p_proc"] = critter
     pickup_start = critter_start + len(critter)
     pickup_epilogue = pickup_start + 2 + 6 + 2 + 2 + 2 + 2 + 6 + 6 + 2
     pickup = b"".join([
@@ -155,7 +166,31 @@ def synthetic_acklint_int() -> bytes:
         opcode(0x8033), opcode(0x802F), push(5), push(2), opcode(0x80C2),
         epilogue,
     ])
-    look_start = pickup_start + len(pickup)
+    bodies_by_name["pickup_p_proc"] = pickup
+
+    def dialogue_call(target_index: int) -> bytes:
+        return b"".join([
+            push(751), opcode(0x80BC), push(4), push(1), opcode(0x8046),
+            push(1), opcode(0x8046), opcode(0x80DE), opcode(0x811C), push(0),
+            opcode(0x800D), push(0), push(target_index), opcode(0x8005),
+            opcode(0x801A), opcode(0x811D), opcode(0x80DF),
+        ])
+
+    talk_start = pickup_start + len(pickup)
+    first_call = dialogue_call(14)
+    second_call = dialogue_call(14)
+    talk_prefix_length = 6 + 2 + 2 + 6 + 2 + 2 + 2 + 6 + 2 + 2 + 2
+    talk_else = talk_start + talk_prefix_length + len(first_call) + 8
+    talk_end = talk_else + len(second_call)
+    talk = b"".join([
+        push(talk_else), opcode(0x80BF), opcode(0x8149), push(0x0100003E),
+        opcode(0x8033), opcode(0x80BF), opcode(0x8149), push(0x0100003D),
+        opcode(0x8033), opcode(0x803F), opcode(0x802F), first_call,
+        push(talk_end), opcode(0x8004), second_call, epilogue,
+    ])
+    bodies_by_name["talk_p_proc"] = talk
+
+    look_start = talk_start + len(talk) + len(bodies_by_name["destroy_p_proc"])
     look_else = look_start + 66
     look_epilogue = look_else + 16
     look = b"".join([
@@ -165,7 +200,55 @@ def synthetic_acklint_int() -> bytes:
         opcode(0x8105), opcode(0x80B8), push(look_epilogue), opcode(0x8004),
         push(751), push(101), opcode(0x8105), opcode(0x80B8), epilogue,
     ])
-    bodies = [body_start, critter_start, pickup_start, look_start]
+    bodies_by_name["look_at_p_proc"] = look
+
+    def dialogue_node(
+        reply_ids: tuple[int, ...],
+        options: list[tuple[int, int, int, bool]],
+    ) -> bytes:
+        if len(reply_ids) == 2:
+            reply = b"".join([
+                push(751), push(751), push(reply_ids[0]), opcode(0x8105),
+                opcode(0x80BF), opcode(0x80A4), opcode(0x8039), push(751),
+                push(reply_ids[1]), opcode(0x8105), opcode(0x8039), opcode(0x811E),
+            ])
+        else:
+            reply = b"".join([push(751), push(reply_ids[0]), opcode(0x811E)])
+        encoded_options = []
+        for message_id, target_index, intelligence, maximum in options:
+            encoded_options.extend([
+                push(intelligence),
+                opcode(0x8046) if maximum else b"",
+                push(751), push(message_id), push(target_index), push(50),
+                opcode(0x8121),
+            ])
+        return b"".join([opcode(0x802B), reply, *encoded_options, epilogue])
+
+    bodies_by_name["Node998"] = b"".join([
+        opcode(0x802B), push(5), push(2), opcode(0x80C2), epilogue,
+    ])
+    bodies_by_name["Node999"] = opcode(0x802B) + epilogue
+    bodies_by_name["Node001"] = dialogue_node(
+        (103, 104),
+        [(105, 15, 3, True), (106, 16, 4, False),
+         (107, 17, 4, False), (108, 13, 4, False)],
+    )
+    bodies_by_name["Node002"] = dialogue_node((109, 110), [(111, 13, 3, True)])
+    bodies_by_name["Node003"] = dialogue_node(
+        (112, 113),
+        [(114, 13, 4, False), (115, 17, 4, False), (116, 18, 4, False)],
+    )
+    bodies_by_name["Node004"] = dialogue_node((117,), [(118, 13, 4, False)])
+    bodies_by_name["Node005"] = dialogue_node((119,), [(120, 13, 4, False)])
+
+    bodies = []
+    body_offset = body_start
+    payload = bytearray()
+    for name in names:
+        bodies.append(body_offset)
+        body = bodies_by_name[name]
+        payload.extend(body)
+        body_offset += len(body)
     table = b"".join(
         struct.pack(">6I", name_offsets[index], 0, 0, 0, bodies[index], 0)
         for index in range(len(names))
@@ -176,10 +259,7 @@ def synthetic_acklint_int() -> bytes:
         + table
         + struct.pack(">I", len(identifiers))
         + identifiers
-        + main
-        + critter
-        + pickup
-        + look
+        + payload
     )
 
 

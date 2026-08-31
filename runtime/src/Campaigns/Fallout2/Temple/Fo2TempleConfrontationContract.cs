@@ -275,6 +275,33 @@ internal sealed record Fo2TempleConfrontationContract(
             "look_at_p_proc", lookState, new ClassicScriptContext(false, false, default));
         var lookMessageIds = firstLook.DisplayMessages.Concat(repeatLook.DisplayMessages)
             .Select(row => row.MessageId).ToHashSet();
+        var talkEntries = result.PreTrialPlayerArtFids.Select(fid =>
+            effectProgram.ExecuteWithActions(
+                "talk_p_proc",
+                new ClassicScriptState(),
+                new ClassicScriptContext(false, false, default, fid))).ToArray();
+        bool DialogueMatches(Fo2TempleGuardianDialogueNode node)
+        {
+            var execution = effectProgram.ExecuteWithActions(
+                node.Id,
+                new ClassicScriptState(),
+                new ClassicScriptContext(false, false, default));
+            var reply = execution.DialogueReply.Select(segment =>
+                segment.PlayerName ? (int?)null : segment.Message!.Value.MessageId).ToArray();
+            var expectedReply = node.Reply.Select(segment => segment.MessageId).ToArray();
+            var options = execution.DialogueOptions.Select(option =>
+                (option.Message.MessageId, option.Target, option.MinimumIntelligence,
+                    option.MaximumIntelligence, option.Reaction)).ToArray();
+            var expectedOptions = node.Options.Select(option =>
+                (option.MessageId, option.Target, option.MinimumIntelligence,
+                    option.MaximumIntelligence, option.Reaction)).ToArray();
+            return execution.Executed && reply.SequenceEqual(expectedReply) &&
+                options.SequenceEqual(expectedOptions) &&
+                execution.DialogueReply.Where(segment => !segment.PlayerName).All(segment =>
+                    segment.Message!.Value.MessageListId == result.MessageListId) &&
+                execution.DialogueOptions.All(option =>
+                    option.Message.MessageListId == result.MessageListId);
+        }
         if (result.Schema != "opennv-fo2-acklint-guardian-script/v1" ||
             string.IsNullOrWhiteSpace(result.Authority) ||
             result.ScriptsListIndex != 750 ||
@@ -284,10 +311,11 @@ internal sealed record Fo2TempleConfrontationContract(
                 "scripts\\acklint.int", StringComparison.OrdinalIgnoreCase) ||
             !result.MessageLogicalPath.Equals(
                 "text\\english\\dialog\\acklint.msg", StringComparison.OrdinalIgnoreCase) ||
-            result.MessageListId != 751 || result.InitialNode != "Node001" ||
-            result.TerminalNode != "Node999" || result.Nodes.Count != 5 ||
-            !result.Nodes.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
-                new[] { "Node001", "Node002", "Node003", "Node004", "Node005" }) ||
+            result.MessageListId != 751 || result.Nodes.Count == 0 ||
+            !result.Nodes.ContainsKey(result.InitialNode) ||
+            talkEntries.Length == 0 || talkEntries.Any(entry =>
+                !entry.Executed || entry.OpenDialogueNode != result.InitialNode) ||
+            result.Nodes.Values.Any(node => !DialogueMatches(node)) ||
             !firstLook.Executed || !firstLook.ScriptOverrides ||
             firstLook.DisplayMessages.Count != 1 ||
             firstLook.DisplayMessages[0].MessageListId != result.MessageListId ||
@@ -301,19 +329,12 @@ internal sealed record Fo2TempleConfrontationContract(
             boundary.GetProperty("generalIntExecution").GetBoolean())
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint guardian script contract is invalid.");
-        var messages = result.Nodes.Values.SelectMany(node =>
-                node.Reply.Where(segment => segment.MessageId is not null)
-                    .Select(segment => segment.MessageId!.Value)
-                    .Concat(node.Options.Select(option => option.MessageId)))
-            .ToHashSet();
-        if (!messages.SetEquals(Enumerable.Range(103, 18)) ||
-            result.Nodes.Values.SelectMany(node => node.Options).Any(option =>
+        if (result.Nodes.Values.SelectMany(node => node.Options).Any(option =>
                 !result.Nodes.ContainsKey(option.Target) && option.Target != result.TerminalNode ||
                 (option.MinimumIntelligence is not null) ==
                     (option.MaximumIntelligence is not null) ||
-                option.MinimumIntelligence is not null && option.MinimumIntelligence != 4 ||
-                option.MaximumIntelligence is not null && option.MaximumIntelligence != 3 ||
-                option.Reaction != 50 || string.IsNullOrWhiteSpace(option.Text)))
+                option.MinimumIntelligence is < 0 || option.MaximumIntelligence is < 0 ||
+                string.IsNullOrWhiteSpace(option.Text)))
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint guardian dialogue graph is invalid.");
         return result;

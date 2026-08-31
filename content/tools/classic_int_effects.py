@@ -32,6 +32,19 @@ JUMP = 0x8004
 DISPLAY_MSG = 0x80B8
 SCRIPT_OVERRIDES = 0x80B9
 MESSAGE_STR = 0x8105
+ADD = 0x8039
+NEGATE = 0x8046
+OR = 0x803F
+DUDE_NAME = 0x80A4
+GSAY_REPLY = 0x811E
+GIQ_OPTION = 0x8121
+OBJECT_ART_FID = 0x8149
+START_GDIALOG = 0x80DE
+GSAY_START = 0x811C
+CALL = 0x8005
+RESTORE_RETURN = 0x801A
+GSAY_END = 0x811D
+END_DIALOGUE = 0x80DF
 D_TO_A = 0x800D
 SWAP_RETURN = 0x8019
 POP_TO_BASE = 0x802A
@@ -52,6 +65,7 @@ EPILOGUE = (
     (POP_RETURN, None),
 )
 ATTACK_ARGUMENT_COUNT = 7
+TALK_ENTRY_ART_COUNT = 2
 
 
 class ClassicIntDecodeError(ValueError):
@@ -281,12 +295,204 @@ def _decode_look_at(data: bytes, bounds: tuple[int, int]) -> tuple[int, int, int
     return local, message_list, first_message, repeat_message
 
 
+def _decode_dialogue_node(
+    data: bytes,
+    bounds: tuple[int, int],
+    procedure_names: list[str],
+) -> list[dict[str, Any]]:
+    code = _instructions(data, bounds)
+    cursor = 0
+
+    def take(opcode: int, operand: int | None = None) -> Instruction:
+        nonlocal cursor
+        instruction = _expect(code, cursor, opcode, operand)
+        cursor += 1
+        return instruction
+
+    take(PUSH_BASE)
+    effects: list[dict[str, Any]] = []
+    first = take(PUSH_INT).operand
+    if cursor + 1 < len(code) and code[cursor + 1].opcode == PUSH_INT:
+        message_list = take(PUSH_INT).operand
+        first_message = take(PUSH_INT).operand
+        take(MESSAGE_STR)
+        take(DUDE_OBJ)
+        take(DUDE_NAME)
+        take(ADD)
+        repeat_list = take(PUSH_INT).operand
+        second_message = take(PUSH_INT).operand
+        take(MESSAGE_STR)
+        take(ADD)
+        take(GSAY_REPLY)
+        if first != message_list or repeat_list != message_list:
+            raise ClassicIntDecodeError("INT dialogue reply message-list identity drifted")
+        effects.extend([
+            {
+                "operation": "dialogue-reply-message",
+                "messageListId": message_list,
+                "messageId": first_message,
+            },
+            {"operation": "dialogue-reply-player-name"},
+            {
+                "operation": "dialogue-reply-message",
+                "messageListId": message_list,
+                "messageId": second_message,
+            },
+        ])
+    else:
+        message_id = take(PUSH_INT).operand
+        take(GSAY_REPLY)
+        message_list = first
+        effects.append({
+            "operation": "dialogue-reply-message",
+            "messageListId": message_list,
+            "messageId": message_id,
+        })
+    while len(code) - cursor > len(EPILOGUE):
+        intelligence = take(PUSH_INT).operand
+        if cursor < len(code) and code[cursor].opcode == NEGATE:
+            take(NEGATE)
+            intelligence = -intelligence if intelligence is not None else None
+        option_list = take(PUSH_INT).operand
+        option_message = take(PUSH_INT).operand
+        target_index = take(PUSH_INT).operand
+        reaction = take(PUSH_INT).operand
+        take(GIQ_OPTION)
+        if (
+            intelligence is None
+            or option_list != message_list
+            or option_message is None
+            or target_index is None
+            or target_index < 0
+            or target_index >= len(procedure_names)
+            or reaction is None
+        ):
+            raise ClassicIntDecodeError("INT dialogue option identity is invalid")
+        target = procedure_names[target_index]
+        if not target.startswith("Node"):
+            raise ClassicIntDecodeError("INT dialogue option target is not a node")
+        option: dict[str, Any] = {
+            "operation": "dialogue-option",
+            "messageListId": option_list,
+            "messageId": option_message,
+            "target": target,
+            "reaction": reaction,
+        }
+        option["minimumIntelligence" if intelligence >= 0 else "maximumIntelligence"] = abs(
+            intelligence
+        )
+        effects.append(option)
+    _expect_epilogue(code, cursor)
+    return effects
+
+
+def _decode_talk_entry(
+    data: bytes,
+    bounds: tuple[int, int],
+    procedure_names: list[str],
+) -> tuple[list[str], str]:
+    code = _instructions(data, bounds)
+    candidates = [
+        index for index in range(2, len(code))
+        if code[index].opcode == OBJECT_ART_FID
+        and code[index - 1].opcode == DUDE_OBJ
+    ]
+    if len(candidates) < TALK_ENTRY_ART_COUNT:
+        raise ClassicIntDecodeError("INT talk entry art branch is absent")
+    cursor = candidates[-TALK_ENTRY_ART_COUNT] - 2
+
+    def take(opcode: int, operand: int | None = None) -> Instruction:
+        nonlocal cursor
+        instruction = _expect(code, cursor, opcode, operand)
+        cursor += 1
+        return instruction
+
+    else_branch = take(PUSH_INT)
+    art_fids: list[str] = []
+    for _ in range(TALK_ENTRY_ART_COUNT):
+        take(DUDE_OBJ)
+        take(OBJECT_ART_FID)
+        art = take(PUSH_INT).operand
+        take(EQUAL)
+        if art is None or art < 0:
+            raise ClassicIntDecodeError("INT talk entry art identity is invalid")
+        art_fids.append(f"{art:08x}")
+    take(OR)
+    take(IF)
+
+    def dialogue_call() -> str:
+        take(PUSH_INT)
+        take(SELF_OBJ)
+        take(PUSH_INT)
+        take(PUSH_INT)
+        take(NEGATE)
+        take(PUSH_INT)
+        take(NEGATE)
+        take(START_GDIALOG)
+        take(GSAY_START)
+        take(PUSH_INT)
+        take(D_TO_A)
+        take(PUSH_INT, 0)
+        target_index = take(PUSH_INT).operand
+        take(CALL)
+        take(RESTORE_RETURN)
+        take(GSAY_END)
+        take(END_DIALOGUE)
+        if target_index is None or target_index >= len(procedure_names):
+            raise ClassicIntDecodeError("INT talk entry node target is invalid")
+        return procedure_names[target_index]
+
+    entry_node = dialogue_call()
+    end_branch = take(PUSH_INT)
+    take(JUMP)
+    if cursor >= len(code) or else_branch.operand != code[cursor].offset:
+        raise ClassicIntDecodeError("INT talk entry else target is invalid")
+    dialogue_call()
+    if cursor >= len(code) or end_branch.operand != code[cursor].offset:
+        raise ClassicIntDecodeError("INT talk entry end target is invalid")
+    _expect_epilogue(code, cursor)
+    if not entry_node.startswith("Node"):
+        raise ClassicIntDecodeError("INT talk entry does not call a dialogue node")
+    return art_fids, entry_node
+
+
 def decode_acklint_effects(data: bytes) -> dict[str, Any]:
     procedures = _procedures(data)
+    procedure_names = list(procedures)
     try:
         pickup = _decode_pickup(data, procedures["pickup_p_proc"])
         critter = _decode_critter(data, procedures["critter_p_proc"])
         look_at = _decode_look_at(data, procedures["look_at_p_proc"])
+        player_art_fids, initial_node = _decode_talk_entry(
+            data, procedures["talk_p_proc"], procedure_names
+        )
+        dialogue_nodes: dict[str, list[dict[str, Any]]] = {}
+        pending = [initial_node]
+        terminal_nodes: set[str] = set()
+        while pending:
+            name = pending.pop(0)
+            if name in dialogue_nodes or name in terminal_nodes:
+                continue
+            bounds = procedures.get(name)
+            if bounds is None:
+                raise ClassicIntDecodeError(f"INT dialogue node is absent: {name}")
+            instructions = _instructions(data, bounds)
+            if (
+                len(instructions) == len(EPILOGUE) + 1
+                and instructions[0].opcode == PUSH_BASE
+            ):
+                _expect_epilogue(instructions, 1)
+                terminal_nodes.add(name)
+                continue
+            effects = _decode_dialogue_node(data, bounds, procedure_names)
+            dialogue_nodes[name] = effects
+            pending.extend(
+                operation["target"]
+                for operation in effects
+                if operation["operation"] == "dialogue-option"
+            )
+        if len(terminal_nodes) != 1:
+            raise ClassicIntDecodeError("INT dialogue graph has no unique terminal node")
     except KeyError as error:
         raise ClassicIntDecodeError(
             f"required ACKlint INT procedure is absent: {error.args[0]}"
@@ -362,5 +568,16 @@ def decode_acklint_effects(data: bytes) -> dict[str, Any]:
                     ],
                 },
             ],
+            "talk_p_proc": [{
+                "all": [{
+                    "operation": "player-art-fid-in",
+                    "values": player_art_fids,
+                }],
+                "then": [{"operation": "open-dialogue", "node": initial_node}],
+            }],
+            **{
+                node: [{"all": [], "then": effects}]
+                for node, effects in dialogue_nodes.items()
+            },
         },
     }
