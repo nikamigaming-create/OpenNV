@@ -939,6 +939,12 @@ internal partial class Fo3OpeningFlow
     {
         if (_cg02IntroActors.TryGetValue(participant.ReferenceFormId, out var existing))
             return existing;
+        if (_vaultBirthCoverage?.Cg01DadActor is { } dad &&
+            dad.ReferenceFormId.Equals(
+                participant.ReferenceFormId, StringComparison.OrdinalIgnoreCase) &&
+            dad.BaseFormId.Equals(
+                participant.BaseFormId, StringComparison.OrdinalIgnoreCase))
+            return dad;
         if (participant.ActorScenePath is null || participant.ActorSceneSha256 is null)
             throw new InvalidOperationException(
                 "Fallout 3 CG02 birthday actor scene is absent.");
@@ -2372,6 +2378,9 @@ internal partial class Fo3OpeningFlow
             var postIntercom = butch.PostIntercomRuntime ??
                 throw new InvalidOperationException(
                     "Fallout 3 CG02 post-intercom runtime is absent.");
+            var reactorGift = postIntercom.ReactorGiftRuntime ??
+                throw new InvalidOperationException(
+                    "Fallout 3 CG02 reactor-gift runtime is absent.");
             bool InfoAppliedAtStage(int stage) => birthday.Participants
                 .SelectMany(value => value.Nodes.Values)
                 .Where(node => current.AppliedInfoFormIds.Contains(
@@ -2545,7 +2554,11 @@ internal partial class Fo3OpeningFlow
                         current = current with
                         {
                             AppliedInfoFormIds =
-                            current.AppliedInfoFormIds.Append(cue.InfoFormId).ToArray()
+                                current.AppliedInfoFormIds.Append(cue.InfoFormId).ToArray(),
+                            AccountedCommandCount = current.AccountedCommandCount +
+                                (cue.TargetStage is null ? 0 : 1),
+                            AppliedCommandCount = current.AppliedCommandCount +
+                                (cue.TargetStage is null ? 0 : 1),
                         };
                         if (cue.TargetStage is { } targetStage)
                             ApplyPostIntercomStage(targetStage);
@@ -2620,6 +2633,118 @@ internal partial class Fo3OpeningFlow
                 var greeting = postIntercom.Cues.Single(value =>
                     value.TargetStage == postIntercom.TargetStage);
                 PlayPostIntercomCue(greeting, () => { });
+            }
+
+            void ExecuteReactorGiftStageCommands(int stage)
+            {
+                var commands = reactorGift.StageResults[stage];
+                foreach (var command in commands)
+                {
+                    switch (command.Kind)
+                    {
+                        case "removeItem":
+                            (_cg02IntroActors.TryGetValue(command.ReferenceFormId,
+                                out var removeActor) ? removeActor.Placement :
+                                _vaultBirthCoverage!.Cg01DadActor.Placement).SetMeta(
+                                    $"opennv_item_{command.ItemFormId}", 0);
+                            break;
+                        case "moveToReference":
+                            {
+                                var source = command.TargetTransform ??
+                                    throw new InvalidOperationException(
+                                        "Fallout 3 CG02 reactor-gift move target is absent.");
+                                var package = new Fo3Cg01PostStage14Package(
+                                    command.TargetFormId, command.TargetFormId,
+                                    command.TargetFormId, source, 0, null);
+                                var coverage = _vaultBirthCoverage!;
+                                var placement = Cg01DadPackagePlacement(
+                                    package, stage5, coverage);
+                                GamebryoPackageTravel.ArriveAtSourceTarget(
+                                    command.TargetFormId, placement,
+                                    coverage.Cg01DadActor.Placement.Transform,
+                                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits)
+                                    .Publish(coverage.Cg01DadActor.Placement);
+                                break;
+                            }
+                        case "setOpenState":
+                            SetCg01WorldReferenceOpen(
+                                command.ReferenceFormId, command.Value != 0);
+                            break;
+                        case "lock":
+                            SetCg01WorldReferenceLock(
+                                command.ReferenceFormId, command.Value);
+                            break;
+                        case "addItem":
+                            player.SetMeta($"opennv_cg02_item_{command.ItemFormId}",
+                                player.GetMeta(
+                                    $"opennv_cg02_item_{command.ItemFormId}", 0).AsInt32() +
+                                command.Count);
+                            break;
+                        case "equipItem":
+                            player.SetMeta("opennv_equipped_item_form_id",
+                                command.ItemFormId);
+                            break;
+                        case "unlock":
+                            SetCg01WorldReferenceLock(command.ReferenceFormId, 0);
+                            break;
+                        case "enablePlayerControls":
+                            player.SetMeta("opennv_enabled_player_controls",
+                                string.Join(',', command.Arguments));
+                            break;
+                        case "setObjectiveCompleted":
+                            player.SetMeta("opennv_cg02_objective_completed",
+                                command.ObjectiveIndex);
+                            break;
+                        default:
+                            throw new InvalidOperationException(
+                                $"Fallout 3 CG02 reactor-gift command is unsupported: {command.Kind}");
+                    }
+                }
+            }
+
+            void ApplyReactorGiftStage(int stage)
+            {
+                var commands = reactorGift.StageResults[stage];
+                ExecuteReactorGiftStageCommands(stage);
+                current = current with
+                {
+                    ActiveStage = stage,
+                    AppliedPackageFormIds = current.AppliedPackageFormIds.Append(
+                        stage == reactorGift.JonasStage
+                            ? reactorGift.JonasGreetPackageFormId
+                            : reactorGift.DadGreetPackageFormId).ToArray(),
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        commands.Count + 1,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        commands.Count + 1,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(false,
+                        stage == reactorGift.TargetStage
+                            ? reactorGift.NextBoundaryBlocker
+                            : postIntercom.NextBoundaryBlocker),
+                };
+                player.SetMeta("opennv_cg02_stage", stage);
+                Persist();
+            }
+
+            void StartReactorGiftParticipant(Fo3Cg02BirthdayParticipant participant)
+            {
+                StartCg02BirthdayInteraction(
+                    participant, player, (infoFormId, targetStage) =>
+                    {
+                        if (current.AppliedInfoFormIds.Contains(
+                                infoFormId, StringComparer.OrdinalIgnoreCase))
+                            throw new InvalidOperationException(
+                                "Fallout 3 CG02 reactor-gift INFO replay differs.");
+                        current = current with
+                        {
+                            AppliedInfoFormIds = current.AppliedInfoFormIds
+                                .Append(infoFormId).ToArray(),
+                        };
+                        if (targetStage is { } stage)
+                            ApplyReactorGiftStage(stage);
+                        else
+                            Persist();
+                    });
             }
 
             void ApplyStage35()
@@ -2940,7 +3065,24 @@ internal partial class Fo3OpeningFlow
                     })),
                 StringComparer.OrdinalIgnoreCase);
             activations[postIntercom.IntercomReferenceFormId] = ActivateIntercom;
-            activations[postIntercom.DadReferenceFormId] = ActivateDadPostIntercom;
+            var jonasGift = reactorGift.Participants.Single(value =>
+                value.ReferenceFormId.Equals(postIntercom.JonasReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase));
+            var dadGift = reactorGift.Participants.Single(value =>
+                value.ReferenceFormId.Equals(postIntercom.DadReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase));
+            activations[postIntercom.JonasReferenceFormId] = () =>
+            {
+                if (current.ActiveStage == reactorGift.SourceStage)
+                    StartReactorGiftParticipant(jonasGift);
+            };
+            activations[postIntercom.DadReferenceFormId] = () =>
+            {
+                if (current.ActiveStage == postIntercom.GoodbyeStage)
+                    ActivateDadPostIntercom();
+                else if (current.ActiveStage == reactorGift.JonasStage)
+                    StartReactorGiftParticipant(dadGift);
+            };
             player.ConfigureSourceFormActivations(activations);
             if (current.ActiveStage >= postIntercom.SourceStage)
             {
@@ -2956,6 +3098,10 @@ internal partial class Fo3OpeningFlow
                     _cg01DadPackageTravelTick is null)
                     StartDadToIntercomTravel();
             }
+            if (current.ActiveStage >= reactorGift.JonasStage)
+                ExecuteReactorGiftStageCommands(reactorGift.JonasStage);
+            if (current.ActiveStage >= reactorGift.TargetStage)
+                ExecuteReactorGiftStageCommands(reactorGift.TargetStage);
             StartButchPackageIfEligible();
             if ((current.ActiveStage == butch.AggregateStage ||
                  current.ActiveStage == butch.SceneDoneStage) &&

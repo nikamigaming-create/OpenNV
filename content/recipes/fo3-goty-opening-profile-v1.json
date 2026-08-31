@@ -350,7 +350,28 @@
               "sourceStage": 35,
               "answerStage": 36,
               "goodbyeStage": 38,
-              "targetStage": 40
+              "targetStage": 40,
+              "reactorGift": {
+                "sourceStage": 40,
+                "jonasStage": 42,
+                "targetStage": 44,
+                "playerReferenceFormId": "00000014",
+                "jonasReferenceFormId": "000300e8",
+                "jonasBaseFormId": "000300e7",
+                "jonasGreetPackageFormId": "00063aa6",
+                "jonasMarkerFormId": "00075335",
+                "jonasGreetingInfoFormIds": ["00063a9e", "00063a9f"],
+                "dadReferenceFormId": "000300ef",
+                "dadBaseFormId": "0002fdcf",
+                "dadGreetPackageFormId": "000304e1",
+                "dadGreetingInfoFormId": "0001f9cb",
+                "dadMoveMarkerFormId": "00063aa7",
+                "reactorStairDoorFormId": "000744b8",
+                "targetRangeDoorFormId": "000297bb",
+                "partyHatFormId": "00050e44",
+                "bbGunFormId": "000c0327",
+                "bbAmmoFormId": "0002935b"
+              }
             }
           }
         },
