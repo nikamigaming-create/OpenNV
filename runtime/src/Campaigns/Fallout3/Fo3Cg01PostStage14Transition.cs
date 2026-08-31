@@ -184,7 +184,7 @@ internal sealed record Fo3Cg01Stage20Interaction(
     private static string RequiredFormId(JsonElement parent, string name)
     {
         var value = RequiredString(parent, name);
-        return value.Length == 8 && value.All(Uri.IsHexDigit) ? value : throw new InvalidOperationException($"Fallout 3 CG01 interaction FormID {name} differs.");
+        return value.Length == sizeof(uint) * 2 && value.All(Uri.IsHexDigit) ? value : throw new InvalidOperationException($"Fallout 3 CG01 interaction FormID {name} differs.");
     }
     private static JsonElement RequiredObject(JsonElement parent, string name) =>
         parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object ? value : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");

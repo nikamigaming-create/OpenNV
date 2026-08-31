@@ -1667,7 +1667,9 @@ def _special_book_menu_tile_contract(member: object) -> dict[str, object]:
         }
         controls.append(control)
     targets = {str(row["tile"]) for row in controls}
-    if len(controls) != 8 or any(str(row["tile"]) not in targets for row in bindings):
+    if len(controls) != len(bindings) + 1 or any(
+        str(row["tile"]) not in targets for row in bindings
+    ):
         raise ValueError("Fallout 3 SPECIALBookMenu control coverage differs")
     return {
         "schema": "opennv-owned-special-book-menu-tiles/v1",
@@ -3193,7 +3195,7 @@ def _compile_cg01_post_stage14_transition(
     if len(player_rows) != 1:
         raise ValueError("Fallout 3 SPECIAL player base is absent")
     player_data = _single_subrecord(player_rows[0], "DATA")
-    if len(player_data) != 11:
+    if len(player_data) != FORM_ID_BYTES + len(GAMEBRYO_SPECIAL_EDITOR_IDS):
         raise ValueError("Fallout 3 SPECIAL player DATA layout differs")
     initial_values = list(player_data[-len(GAMEBRYO_SPECIAL_EDITOR_IDS):])
     actor_values = []
