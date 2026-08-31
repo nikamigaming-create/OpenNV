@@ -41,6 +41,8 @@ internal sealed record Fo3Cg01Stage20State(
     bool SpecialBookAccepted,
     double TimerRemainingSeconds,
     bool TimerAdvancing,
+    double ImageSpaceElapsedSeconds,
+    bool Stage90SoundStarted,
     Fo3Cg01Stage12Boundary NextBoundary);
 
 internal sealed record Fo3SpecialActorValue(
@@ -77,6 +79,23 @@ internal sealed record Fo3Cg01DadLeadTrigger(
     int SourceStage,
     int TargetStage);
 
+internal sealed record Fo3Cg01Stage90Completion(
+    int SourceStage,
+    int TargetStage,
+    double TimerInitialSeconds,
+    int RunTimerValue,
+    Fo3Stage90ImageSpaceModifier ImageSpaceModifier,
+    Fo3Stage90Sound Sound,
+    int Stage90CommandCount,
+    int Stage100CommandCount,
+    string DisabledDadReferenceFormId,
+    double PlayerScale,
+    bool PlayerToddler,
+    string NextQuestFormId,
+    string NextQuestEditorId,
+    int NextQuestStage,
+    string NextBoundaryBlocker);
+
 internal sealed record Fo3Cg01DadLeadSequence(
     Fo3Cg01DadTravelPackage BibleTravel,
     Fo3Cg01DadTravelPackage LeadTravel,
@@ -90,6 +109,7 @@ internal sealed record Fo3Cg01DadLeadSequence(
     string LocomotionSha256,
     float LocomotionSpeedGameUnitsPerSecond,
     Fo3Cg01DadLeadTrigger EndTrigger,
+    Fo3Cg01Stage90Completion Completion,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg01Stage50Timer(
@@ -211,6 +231,10 @@ internal sealed record Fo3Cg01Stage50Timer(
             .Select(value => value.GetDouble()).ToArray();
         if (dimensions.Length != 3 || dimensions.Any(value => !double.IsFinite(value) || value <= 0.0))
             throw new InvalidOperationException("Fallout 3 CG01 end trigger dimensions differ.");
+        var stage90Completion = LoadStage90Completion(
+            lead.GetProperty("completion"),
+            endTrigger.GetProperty("targetStage").GetInt32(),
+            lead.GetProperty("nextBoundary"));
         var dadLead = new Fo3Cg01DadLeadSequence(
             biblePackage,
             leadPackage,
@@ -233,7 +257,8 @@ internal sealed record Fo3Cg01Stage50Timer(
                 new Fo3Cg01Vector3(dimensions[0], dimensions[1], dimensions[2]),
                 endTrigger.GetProperty("sourceStage").GetInt32(),
                 endTrigger.GetProperty("targetStage").GetInt32()),
-            lead.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
+            stage90Completion,
+            stage90Completion.NextBoundaryBlocker);
         return new Fo3Cg01Stage50Timer(expectedSourceStage, targetStage,
             timer.GetProperty("initialSeconds").GetDouble(), commands,
             new Fo3Cg01PostStage14Package(package.GetProperty("formId").GetString()!,
@@ -245,6 +270,95 @@ internal sealed record Fo3Cg01Stage50Timer(
             mainDoorLock.GetProperty("value").GetInt32(),
             mainDoorOpen.GetProperty("value").GetInt32() != 0,
             dadLead.NextBoundaryBlocker);
+    }
+
+    private static Fo3Cg01Stage90Completion LoadStage90Completion(
+        JsonElement source,
+        int expectedSourceStage,
+        JsonElement completedBoundary)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg01-stage-90-to-cg02-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage ||
+            !completedBoundary.GetProperty("applied").GetBoolean() ||
+            completedBoundary.GetProperty("blocker").ValueKind != JsonValueKind.Null)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-90 completion differs.");
+        var timer = source.GetProperty("timer");
+        if (timer.GetProperty("decrementSource").GetString() != "GetSecondsPassed")
+            throw new InvalidOperationException("Fallout 3 CG01 stage-90 timer source differs.");
+        _ = timer.GetProperty("scriptFormId").GetString();
+        _ = timer.GetProperty("scriptEditorId").GetString();
+        _ = timer.GetProperty("scriptSourceSha256").GetString();
+        var targetStage = timer.GetProperty("targetStage").GetInt32();
+        if (targetStage <= expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-90 timer target differs.");
+
+        var stage90 = source.GetProperty("stage90Result").GetProperty("commands")
+            .EnumerateArray().ToArray();
+        var stage90Kinds = new[]
+        {
+            "setQuestVariable", "setQuestVariable", "completeAllObjectives",
+            "autoDisplayObjectives", "killQuestUpdates", "applyImageSpaceModifier",
+            "playSound",
+        };
+        if (stage90.Length != stage90Kinds.Length || stage90.Where((row, index) =>
+                row.GetProperty("index").GetInt32() != index ||
+                row.GetProperty("kind").GetString() != stage90Kinds[index]).Any())
+            throw new InvalidOperationException("Fallout 3 CG01 stage-90 command order differs.");
+        var timerVariable = stage90[0];
+        var runVariable = stage90[1];
+        var initialSeconds = timerVariable.GetProperty("value").GetDouble();
+        var runValue = runVariable.GetProperty("value").GetInt32();
+        if (timerVariable.GetProperty("variable").GetString() != "timer" ||
+            timerVariable.GetProperty("variableType").GetString() != "float" ||
+            runVariable.GetProperty("variable").GetString() != "runTimer" ||
+            runVariable.GetProperty("variableType").GetString() != "short" ||
+            !double.IsFinite(initialSeconds) || initialSeconds <= 0.0 || runValue != 1 ||
+            stage90[3].GetProperty("value").GetInt32() != 0)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-90 result differs.");
+        var modifierSource = stage90[5].GetProperty("modifier");
+        var soundSource = stage90[6].GetProperty("sound");
+        var modifier = Fo3Stage90Transition.LoadModifier(
+            modifierSource, modifierSource.GetProperty("editorId").GetString()!);
+        var sound = Fo3Stage90Transition.LoadSound(
+            soundSource, soundSource.GetProperty("editorId").GetString()!);
+
+        var stage100 = source.GetProperty("stage100Result").GetProperty("commands")
+            .EnumerateArray().ToArray();
+        var stage100Kinds = new[]
+        {
+            "stopQuest", "disable", "setPlayerScale", "setPlayerToddler",
+            "clearNoActivationSound", "setStage",
+        };
+        if (stage100.Length != stage100Kinds.Length || stage100.Where((row, index) =>
+                row.GetProperty("index").GetInt32() != index ||
+                row.GetProperty("kind").GetString() != stage100Kinds[index]).Any())
+            throw new InvalidOperationException("Fallout 3 CG01 stage-100 command order differs.");
+        var scale = stage100[2].GetProperty("value").GetDouble();
+        var toddler = stage100[3].GetProperty("value").GetInt32();
+        var next = source.GetProperty("nextBoundary");
+        if (!next.GetProperty("applied").GetBoolean() ||
+            stage100[5].GetProperty("questFormId").GetString() != next.GetProperty("questFormId").GetString() ||
+            stage100[5].GetProperty("questEditorId").GetString() != next.GetProperty("questEditorId").GetString() ||
+            stage100[5].GetProperty("stage").GetInt32() != next.GetProperty("stage").GetInt32() ||
+            !double.IsFinite(scale) || scale <= 0.0 || toddler is not 0)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-100 completion differs.");
+        return new Fo3Cg01Stage90Completion(
+            expectedSourceStage,
+            targetStage,
+            initialSeconds,
+            runValue,
+            modifier,
+            sound,
+            stage90.Length,
+            stage100.Length,
+            stage100[1].GetProperty("referenceFormId").GetString()!,
+            scale,
+            false,
+            next.GetProperty("questFormId").GetString()!,
+            next.GetProperty("questEditorId").GetString()!,
+            next.GetProperty("stage").GetInt32(),
+            next.GetProperty("blocker").GetString()!);
     }
 
     private static Fo3Cg01DadTravelPackage LoadTravelPackage(
@@ -477,7 +591,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-14-to-20-runtime/v1";
     internal const string ExpectedSavedStateSchema =
-        "opennv-fo3-cg01-stage-14-to-90-runtime-state/v3";
+        "opennv-fo3-cg01-stage-14-to-cg02-runtime-state/v4";
 
     private const string ExpectedStatus = "source-backed-package-dialogue-runtime-ready";
     private const int GetPcIsSexFunction = 131;
@@ -624,6 +738,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             false,
             Stage20Interaction.TimerTransition.InitialSeconds,
             false,
+            0.0,
+            false,
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
     }
 
@@ -654,6 +770,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
         specialBookAccepted = state.SpecialBookAccepted,
         timerRemainingSeconds = state.TimerRemainingSeconds,
         timerAdvancing = state.TimerAdvancing,
+        imageSpaceElapsedSeconds = state.ImageSpaceElapsedSeconds,
+        stage90SoundStarted = state.Stage90SoundStarted,
         nextBoundary = new { applied = false, blocker = state.NextBoundary.Blocker },
     };
 
@@ -666,6 +784,12 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var door = RequiredObject(source, "playroomDoor");
         var boundary = RequiredObject(source, "nextBoundary");
         var stage = RequiredInteger(active, "stage");
+        var dadLead = Stage20Interaction.TimerTransition.DadLead;
+        var completion = dadLead.Completion;
+        var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
+            RequiredString(active, "editorId") == completion.NextQuestEditorId &&
+            stage == completion.NextQuestStage;
+        var progressStage = reachedNextQuest ? completion.TargetStage : stage;
         var values = RequiredArray(source, "specialValues").EnumerateArray()
             .Select(value => value.GetInt32()).ToArray();
         var accepted = RequiredBoolean(source, "specialBookAccepted");
@@ -683,7 +807,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
         };
         supportedStages.UnionWith(Stage20Interaction.TimerTransition.DialogueCues
             .Where(cue => cue.TargetStage is not null).Select(cue => cue.TargetStage!.Value));
-        if (!supportedStages.Contains(stage) ||
+        if (!reachedNextQuest && !supportedStages.Contains(stage) ||
             values.Length != Stage20Interaction.ActorValues.Count ||
             values.Select((value, index) =>
                 value < Stage20Interaction.ActorValues[index].MinimumValue ||
@@ -694,52 +818,65 @@ internal sealed record Fo3Cg01PostStage14Transition(
             throw new InvalidOperationException(
                 "Saved Fallout 3 SPECIAL allocation differs.");
         var gateOpen = RequiredBoolean(gate, "open");
-        var expectedGateOpen = stage != TargetStage;
+        var expectedGateOpen = progressStage != TargetStage;
         var objective = RequiredInteger(source, "displayedObjectiveIndex");
-        var expectedObjective = stage switch
-        {
-            var value when value == TargetStage => TargetStage,
-            var value when value == Stage20Interaction.GateStage => Stage20Interaction.GateStage,
-            var value when value >= Stage20Interaction.TimerTransition.DadLead.SayToDoneStage =>
-                Stage20Interaction.TimerTransition.DadLead.DisplayedObjectiveIndex,
-            _ => Stage20Interaction.ExitStage,
-        };
+        var expectedObjective = reachedNextQuest
+            ? dadLead.DisplayedObjectiveIndex
+            : stage switch
+            {
+                var value when value == TargetStage => TargetStage,
+                var value when value == Stage20Interaction.GateStage => Stage20Interaction.GateStage,
+                var value when value >= Stage20Interaction.TimerTransition.DadLead.SayToDoneStage =>
+                    Stage20Interaction.TimerTransition.DadLead.DisplayedObjectiveIndex,
+                _ => Stage20Interaction.ExitStage,
+            };
         var interactionCommandCount = Stage20Interaction.StageResults
-            .Where(result => result.Stage <= stage)
+            .Where(result => result.Stage <= progressStage)
             .Sum(result => result.Commands.Count);
-        if (stage == Stage20Interaction.TimerTransition.TargetStage)
+        if (progressStage == Stage20Interaction.TimerTransition.TargetStage)
             interactionCommandCount += Stage20Interaction.TimerTransition.TargetCommands.Count;
-        else if (stage >= Stage20Interaction.TimerTransition.CompletionStage)
+        else if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
             interactionCommandCount += Stage20Interaction.TimerTransition.TargetCommands.Count +
                 Stage20Interaction.TimerTransition.CompletionCommands.Count;
-        var dadLead = Stage20Interaction.TimerTransition.DadLead;
-        if (stage >= dadLead.BibleTravel.CompletionStage!.Value)
+        if (progressStage >= dadLead.BibleTravel.CompletionStage!.Value)
             interactionCommandCount += dadLead.BibleTravel.StageCommands.Count +
                 dadLead.BibleTravel.CompletionCommands.Count;
-        if (stage >= dadLead.SayToDoneStage)
+        if (progressStage >= dadLead.SayToDoneStage)
             interactionCommandCount += dadLead.LeadTravel.StageCommands.Count +
                 dadLead.SayToDoneCommands.Count;
-        if (stage >= dadLead.EndTrigger.TargetStage)
+        if (progressStage >= dadLead.EndTrigger.TargetStage)
             interactionCommandCount++;
+        if (reachedNextQuest)
+            interactionCommandCount += completion.Stage90CommandCount +
+                completion.Stage100CommandCount;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
-        if (stage >= Stage20Interaction.TimerTransition.CompletionStage)
+        if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
             expectedPackages = expectedPackages.Append(
                 Stage20Interaction.TimerTransition.DadReturnPackage.FormId);
-        if (stage >= dadLead.BibleTravel.CompletionStage!.Value)
+        if (progressStage >= dadLead.BibleTravel.CompletionStage!.Value)
             expectedPackages = expectedPackages.Append(dadLead.BibleTravel.Package.FormId);
-        if (stage >= dadLead.SayToDoneStage)
+        if (progressStage >= dadLead.SayToDoneStage)
             expectedPackages = expectedPackages.Append(dadLead.LeadTravel.Package.FormId);
         var expectedPackageArray = expectedPackages.ToArray();
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
         var timerAdvancing = RequiredBoolean(source, "timerAdvancing");
+        var imageSpaceElapsed = source.GetProperty("imageSpaceElapsedSeconds").GetDouble();
+        var soundStarted = RequiredBoolean(source, "stage90SoundStarted");
         if (!double.IsFinite(timerRemaining) || timerRemaining < 0.0 ||
             timerAdvancing && (!accepted || stage != Stage20Interaction.BookStage) ||
-            stage >= Stage20Interaction.TimerTransition.TargetStage &&
-                (timerAdvancing || timerRemaining != 0.0))
+            progressStage >= Stage20Interaction.TimerTransition.TargetStage &&
+                (timerAdvancing || timerRemaining != 0.0) ||
+            reachedNextQuest &&
+                (!double.IsFinite(imageSpaceElapsed) ||
+                 imageSpaceElapsed < completion.TimerInitialSeconds ||
+                 imageSpaceElapsed > completion.ImageSpaceModifier.DurationSeconds ||
+                 !soundStarted) ||
+            !reachedNextQuest && (imageSpaceElapsed != 0.0 || soundStarted))
             throw new InvalidOperationException("Saved Fallout 3 CG01 timer state differs.");
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
-            RequiredFormId(active, "formId") != baseline.ActiveQuestFormId ||
+            (!reachedNextQuest && RequiredFormId(active, "formId") != baseline.ActiveQuestFormId) ||
+            (!reachedNextQuest && RequiredString(active, "editorId") != baseline.ActiveQuestEditorId) ||
             !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
                 .Select(value => value.GetString()).SequenceEqual(baseline.AppliedInfoFormIds) ||
             !RequiredArray(source, "appliedPackageFormIds").EnumerateArray()
@@ -748,9 +885,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
             gateOpen != expectedGateOpen ||
             RequiredFormId(door, "referenceFormId") != baseline.PlayroomDoorReferenceFormId ||
             RequiredBoolean(door, "open") !=
-                (stage >= Stage20Interaction.TimerTransition.CompletionStage) ||
+                (progressStage >= Stage20Interaction.TimerTransition.CompletionStage) ||
             RequiredInteger(door, "lockLevel") !=
-                (stage >= Stage20Interaction.TimerTransition.CompletionStage
+                (progressStage >= Stage20Interaction.TimerTransition.CompletionStage
                     ? 0
                     : baseline.PlayroomDoorLockLevel) ||
             !RequiredBoolean(source, "playerMovementEnabled") ||
@@ -763,20 +900,24 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 "Saved Fallout 3 CG01 stage-20 state differs.");
         return baseline with
         {
+            ActiveQuestFormId = reachedNextQuest ? completion.NextQuestFormId : baseline.ActiveQuestFormId,
+            ActiveQuestEditorId = reachedNextQuest ? completion.NextQuestEditorId : baseline.ActiveQuestEditorId,
             ActiveStage = stage,
             PlaypenGateOpen = gateOpen,
             DisplayedObjectiveIndex = objective,
             AccountedCommandCount = expectedCommandCount,
             AppliedCommandCount = expectedCommandCount,
             AppliedPackageFormIds = expectedPackageArray,
-            PlayroomDoorOpen = stage >= Stage20Interaction.TimerTransition.CompletionStage,
-            PlayroomDoorLockLevel = stage >= Stage20Interaction.TimerTransition.CompletionStage
+            PlayroomDoorOpen = progressStage >= Stage20Interaction.TimerTransition.CompletionStage,
+            PlayroomDoorLockLevel = progressStage >= Stage20Interaction.TimerTransition.CompletionStage
                 ? 0
                 : baseline.PlayroomDoorLockLevel,
             SpecialValues = values,
             SpecialBookAccepted = accepted,
             TimerRemainingSeconds = timerRemaining,
             TimerAdvancing = timerAdvancing,
+            ImageSpaceElapsedSeconds = imageSpaceElapsed,
+            Stage90SoundStarted = soundStarted,
         };
     }
 

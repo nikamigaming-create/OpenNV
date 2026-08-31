@@ -165,6 +165,14 @@ AUTO_DISPLAY_OBJECTIVES_PATTERN = re.compile(
     r"^AutoDisplayObjectives\s+(?P<value>\d+)$",
     re.IGNORECASE,
 )
+COMPLETE_ALL_OBJECTIVES_PATTERN = re.compile(
+    r"^completeAllObjectives\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+KILL_QUEST_UPDATES_PATTERN = re.compile(r"^KillQuestUpdates$", re.IGNORECASE)
+CLEAR_NO_ACTIVATION_SOUND_PATTERN = re.compile(
+    r"^ClearNoActivationSound$", re.IGNORECASE
+)
 SET_OBJECTIVE_DISPLAYED_PATTERN = re.compile(
     r"^setObjectiveDisplayed\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)\s+"
     r"(?P<index>\d+)\s+(?P<value>\d+)$",
@@ -2151,6 +2159,102 @@ def _parse_stage100_commands(source: str) -> list[dict[str, object]]:
     return commands
 
 
+def _parse_cg01_stage90_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw_value = match.group("value")
+            commands.append(
+                {
+                    "kind": "setQuestVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": float(raw_value) if "." in raw_value else int(raw_value),
+                }
+            )
+            continue
+        if match := COMPLETE_ALL_OBJECTIVES_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "completeAllObjectives", "questEditorId": match.group("quest")}
+            )
+            continue
+        if match := AUTO_DISPLAY_OBJECTIVES_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "autoDisplayObjectives", "value": int(match.group("value"))}
+            )
+            continue
+        if KILL_QUEST_UPDATES_PATTERN.fullmatch(text):
+            commands.append({"kind": "killQuestUpdates"})
+            continue
+        if match := IMAGE_SPACE_MODIFIER_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "applyImageSpaceModifier",
+                    "modifierEditorId": match.group("modifier"),
+                }
+            )
+            continue
+        if match := PLAY_SOUND_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "playSound", "soundEditorId": match.group("sound")}
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG01 stage 90 uses an unsupported command: {text}")
+    expected = [
+        "setQuestVariable",
+        "setQuestVariable",
+        "completeAllObjectives",
+        "autoDisplayObjectives",
+        "killQuestUpdates",
+        "applyImageSpaceModifier",
+        "playSound",
+    ]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG01 stage 90 command order differs")
+    return commands
+
+
+def _parse_cg01_stage100_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := STOP_QUEST_PATTERN.fullmatch(text):
+            commands.append({"kind": "stopQuest", "questEditorId": match.group("quest")})
+            continue
+        if match := DISABLE_REFERENCE_PATTERN.fullmatch(text):
+            commands.append({"kind": "disable", "subject": match.group("subject")})
+            continue
+        if match := SET_PLAYER_SCALE_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerScale", "value": float(match.group("value"))})
+            continue
+        if match := SET_PC_TODDLER_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerToddler", "value": int(match.group("value"))})
+            continue
+        if CLEAR_NO_ACTIVATION_SOUND_PATTERN.fullmatch(text):
+            commands.append({"kind": "clearNoActivationSound"})
+            continue
+        if match := SET_STAGE_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "setStage",
+                    "questEditorId": match.group("quest"),
+                    "stage": int(match.group("stage")),
+                }
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG01 stage 100 uses an unsupported command: {text}")
+    expected = [
+        "stopQuest",
+        "disable",
+        "setPlayerScale",
+        "setPlayerToddler",
+        "clearNoActivationSound",
+        "setStage",
+    ]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG01 stage 100 command order differs")
+    return commands
+
+
 def _parse_cg01_stage0_commands(source: str) -> list[dict[str, object]]:
     commands = []
     for text in _source_commands(source):
@@ -3620,6 +3724,172 @@ def _compile_cg01_post_stage14_transition(
         "sourceStage": say_done_stage,
         "targetStage": end_stage,
     }
+    stage90_sources = stage_sources.get(end_stage, [])
+    if len(stage90_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage 90 result source is ambiguous")
+    stage90_source = stage90_sources[0]
+    stage90_commands = _parse_cg01_stage90_commands(stage90_source)
+    quest_script_source = _script_source(by_form[struct.unpack(
+        "<I", _single_subrecord(quest, "SCRI")
+    )[0]])
+    timer_target = next(
+        (
+            int(match.group("target"))
+            for match in re.finditer(
+                rf"if\s+getstage\s+{re.escape(_editor_id(quest) or '')}\s*==\s*{end_stage}\s*"
+                rf"setstage\s+{re.escape(_editor_id(quest) or '')}\s+(?P<target>\d+)",
+                quest_script_source,
+                re.IGNORECASE | re.DOTALL,
+            )
+        ),
+        None,
+    )
+    if timer_target is None:
+        raise ValueError("Fallout 3 CG01 stage 90 timer target differs")
+    timer_source = re.search(
+        r"if\s+runTimer\s*==\s*1.*?if\s+timer\s*>\s*0\s*"
+        r"set\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed",
+        quest_script_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if timer_source is None:
+        raise ValueError("Fallout 3 CG01 stage 90 timer decrement differs")
+    quest_script = by_form[struct.unpack("<I", _single_subrecord(quest, "SCRI"))[0]]
+    script_hash = hashlib.sha256(quest_script_source.encode("cp1252")).hexdigest()
+    resolved_stage90 = []
+    for index, command in enumerate(stage90_commands):
+        kind = str(command["kind"])
+        resolved: dict[str, object] = {"index": index, "kind": kind}
+        if kind == "setQuestVariable":
+            variable = str(command["variable"])
+            declarations = [
+                match.group("type").casefold()
+                for match in re.finditer(
+                    rf"^\s*(?P<type>short|float)\s+{re.escape(variable)}\b",
+                    quest_script_source,
+                    re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if str(command["subject"]).casefold() != (_editor_id(quest) or "").casefold() or len(declarations) != 1:
+                raise ValueError("Fallout 3 CG01 stage 90 quest variable differs")
+            resolved.update(
+                {
+                    "questFormId": _form_id(quest.form_id),
+                    "questEditorId": _editor_id(quest),
+                    "scriptFormId": _form_id(quest_script.form_id),
+                    "scriptEditorId": _editor_id(quest_script),
+                    "scriptSourceSha256": script_hash,
+                    "variable": variable,
+                    "variableType": declarations[0],
+                    "value": command["value"],
+                }
+            )
+        elif kind == "completeAllObjectives":
+            if str(command["questEditorId"]).casefold() != (_editor_id(quest) or "").casefold():
+                raise ValueError("Fallout 3 CG01 objective completion quest differs")
+            resolved.update({"questFormId": _form_id(quest.form_id), "questEditorId": _editor_id(quest)})
+        elif kind == "autoDisplayObjectives":
+            resolved["value"] = command["value"]
+        elif kind == "killQuestUpdates":
+            pass
+        elif kind == "applyImageSpaceModifier":
+            editor_id = str(command["modifierEditorId"])
+            matches = [record for record in by_editor.get(editor_id.casefold(), []) if record.signature == IMAGE_SPACE_MODIFIER_RECORD]
+            if len(matches) != 1:
+                raise ValueError("Fallout 3 CG01 stage 90 image-space modifier differs")
+            resolved["modifier"] = {
+                **parse_image_space_modifier(matches[0]).manifest(),
+                "formId": _form_id(matches[0].form_id),
+            }
+        elif kind == "playSound":
+            editor_id = str(command["soundEditorId"])
+            matches = [record for record in by_editor.get(editor_id.casefold(), []) if record.signature == SOUND_RECORD]
+            if len(matches) != 1:
+                raise ValueError("Fallout 3 CG01 stage 90 sound differs")
+            sound = matches[0]
+            paths = _text_values(sound, "FNAM")
+            data = [row.data for row in iter_subrecords(sound) if row.signature == "SNDD"]
+            if len(paths) != 1 or len(data) != 1:
+                raise ValueError("Fallout 3 CG01 stage 90 sound layout differs")
+            resolved["sound"] = {
+                "formId": _form_id(sound.form_id),
+                "editorId": _editor_id(sound),
+                "logicalPath": canonical_member_path(f"sound\\{paths[0]}"),
+                "recordSha256": hashlib.sha256(sound.data).hexdigest(),
+                "soundDataSha256": hashlib.sha256(data[0]).hexdigest(),
+            }
+        resolved_stage90.append(resolved)
+
+    stage100_sources = stage_sources.get(timer_target, [])
+    if len(stage100_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage 100 result source is ambiguous")
+    stage100_source = stage100_sources[0]
+    stage100_commands = _parse_cg01_stage100_commands(stage100_source)
+    resolved_stage100 = []
+    next_quest = None
+    for index, command in enumerate(stage100_commands):
+        kind = str(command["kind"])
+        resolved = {"index": index, "kind": kind}
+        if kind == "stopQuest":
+            if str(command["questEditorId"]).casefold() != (_editor_id(quest) or "").casefold():
+                raise ValueError("Fallout 3 CG01 stopped quest differs")
+            resolved.update({"questFormId": _form_id(quest.form_id), "questEditorId": _editor_id(quest)})
+        elif kind == "disable":
+            if str(command["subject"]).casefold() != (_editor_id(dad_reference) or "").casefold():
+                raise ValueError("Fallout 3 CG01 disabled Dad differs")
+            resolved.update(
+                {
+                    "referenceFormId": _form_id(dad_reference.form_id),
+                    "referenceEditorId": _editor_id(dad_reference),
+                    "referenceRecordSha256": hashlib.sha256(dad_reference.data).hexdigest(),
+                }
+            )
+        elif kind in {"setPlayerScale", "setPlayerToddler"}:
+            resolved["value"] = command["value"]
+        elif kind == "clearNoActivationSound":
+            pass
+        elif kind == "setStage":
+            matches = [record for record in by_editor.get(str(command["questEditorId"]).casefold(), []) if record.signature == QUEST_RECORD]
+            if len(matches) != 1:
+                raise ValueError("Fallout 3 CG01 next quest differs")
+            next_quest = matches[0]
+            resolved.update(
+                {
+                    "questFormId": _form_id(next_quest.form_id),
+                    "questEditorId": _editor_id(next_quest),
+                    "questRecordSha256": hashlib.sha256(next_quest.data).hexdigest(),
+                    "stage": command["stage"],
+                }
+            )
+        resolved_stage100.append(resolved)
+    if next_quest is None:
+        raise ValueError("Fallout 3 CG01 completion has no next quest")
+    lead_contract["completion"] = {
+        "schema": "opennv-fo3-cg01-stage-90-to-cg02-runtime/v1",
+        "sourceStage": end_stage,
+        "timer": {
+            "decrementSource": "GetSecondsPassed",
+            "targetStage": timer_target,
+            "scriptFormId": _form_id(quest_script.form_id),
+            "scriptEditorId": _editor_id(quest_script),
+            "scriptSourceSha256": script_hash,
+        },
+        "stage90Result": {
+            "sourceSha256": hashlib.sha256(stage90_source.encode("cp1252")).hexdigest(),
+            "commands": resolved_stage90,
+        },
+        "stage100Result": {
+            "sourceSha256": hashlib.sha256(stage100_source.encode("cp1252")).hexdigest(),
+            "commands": resolved_stage100,
+        },
+        "nextBoundary": {
+            "applied": True,
+            "questFormId": _form_id(next_quest.form_id),
+            "questEditorId": _editor_id(next_quest),
+            "stage": int(stage100_commands[-1]["stage"]),
+            "blocker": "fo3-cg02-stage-0-result-runtime-not-implemented",
+        },
+    }
     navmeshes = [
         parse_navmesh(record)
         for record in records
@@ -3640,8 +3910,8 @@ def _compile_cg01_post_stage14_transition(
         "logicalPath": canonical_member_path(str(locomotion["walkLogicalPath"])),
     }
     lead_contract["nextBoundary"] = {
-        "applied": False,
-        "blocker": "fo3-cg01-stage-90-timer-runtime-not-implemented",
+        "applied": True,
+        "blocker": None,
     }
     timer_contract = dict(stage20_interaction["timerTransition"])
     timer_contract["dadReturn"] = {
@@ -6931,6 +7201,16 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         **locomotion_playback,
         "rootMotion": locomotion_root,
     }
+    completion = dict(dad_lead["completion"])
+    stage90_result = dict(completion["stage90Result"])
+    _bind_stage90_sound(
+        stage90_result,
+        sound_archive,
+        sound_archive_sha256,
+        profile_root,
+    )
+    completion["stage90Result"] = stage90_result
+    dad_lead["completion"] = completion
     dad_return["dadLead"] = dad_lead
     timer_transition["dadReturn"] = dad_return
     stage20_interaction["timerTransition"] = timer_transition

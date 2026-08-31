@@ -668,6 +668,15 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         MovementEnabled = true;
     }
 
+    internal void ApplySourceScale(double sourceScale)
+    {
+        if (!double.IsFinite(sourceScale) || sourceScale <= 0.0)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 player source scale differs.");
+        Scale = Vector3.One * (float)(sourceScale / _contract.PlayerScale);
+        SetMeta("opennv_source_player_scale", sourceScale);
+    }
+
     public override void _Ready()
     {
         if (DisplayServer.GetName() != "headless")

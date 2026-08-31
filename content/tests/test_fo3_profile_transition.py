@@ -705,7 +705,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 b"float timer\nshort runTimer\nbegin gamemode\nif runTimer == 1\n"
                 b"if timer > 0\nset timer to timer - GetSecondsPassed\nelse\n"
                 b"if getstageDone CG01 50 == 1 && getstageDone CG01 70 == 0\n"
-                b"setstage CG01 70\nendif\nendif\nendif\nend\0")),
+                b"setstage CG01 70\nendif\n"
+                b"if getstage CG01 == 90\nsetstage CG01 100\nendif\n"
+                b"endif\nendif\nend\0")),
             (),
         )
         cg01_dad_base = Record(
@@ -957,6 +959,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "set CG01DadREF.doTalk to 0", "CG01MainDoor.Unlock"))
         cg01_stage80_source = "\n".join((
             "setObjectiveDisplayed CG01 80 1", "CG01DadREF.evp"))
+        cg01_stage90_source = "\n".join((
+            "set CG01.timer to 2.2", "set CG01.runTimer to 1",
+            "completeAllObjectives CG01", "AutoDisplayObjectives 0",
+            "KillQuestUpdates", "imod FadeToWhiteAndBackISFX",
+            "playSound QSTFadeToWhiteB"))
+        cg01_stage100_source = "\n".join((
+            "stopQuest CG01", "CG01DadRef.disable", "player.setscale 1",
+            "SetPCToddler 0", "ClearNoActivationSound", "setstage CG02 0"))
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -997,6 +1007,10 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage75_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 80))
             + subrecord("SCTX", cg01_stage80_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 90))
+            + subrecord("SCTX", cg01_stage90_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 100))
+            + subrecord("SCTX", cg01_stage100_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -1309,6 +1323,27 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             subrecord("EDID", b"CG00BirthBaseISFX\0"),
             (),
         )
+        cg01_fade = Record(
+            "IMAD", 0x0002D14C, 0,
+            subrecord("EDID", b"FadeToWhiteAndBackISFX\0")
+            + subrecord("DNAM", struct.pack("<If", 1, 8.0))
+            + subrecord("NAM3", struct.pack(
+                "<10f", 0.0, 1.0, 1.0, 1.0, 0.0,
+                1.0, 1.0, 1.0, 1.0, 0.0)),
+            (),
+        )
+        cg01_fade_sound = Record(
+            "SOUN", 0x000BC425, 0,
+            subrecord("EDID", b"QSTFadeToWhiteB\0")
+            + subrecord("FNAM", b"fx\\qst\\qst_fadetowhite_b.wav\0")
+            + subrecord("SNDD", bytes(36)),
+            (),
+        )
+        cg02 = Record(
+            "QUST", 0x00014E84, 0,
+            subrecord("EDID", b"CG02\0"),
+            (),
+        )
         stage100_source = "\n".join(
             (
                 "player.removescriptpackage",
@@ -1454,6 +1489,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg02_dad_ref,
             baby_babble,
             modifier,
+            cg01_fade,
+            cg01_fade_sound,
+            cg02,
         )
         contract = _compile_stage100_transition(
             records,
@@ -1640,9 +1678,29 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("00000014", dad_lead["escortTarget"]["formId"])
         self.assertEqual((75, 80), (dad_return["targetStage"], dad_lead["sayToDoneStage"]))
         self.assertEqual(90, dad_lead["endTrigger"]["targetStage"])
+        self.assertTrue(dad_lead["nextBoundary"]["applied"])
+        self.assertIsNone(dad_lead["nextBoundary"]["blocker"])
+        completion = dad_lead["completion"]
+        self.assertEqual((90, 100), (
+            completion["sourceStage"], completion["timer"]["targetStage"]))
         self.assertEqual(
-            "fo3-cg01-stage-90-timer-runtime-not-implemented",
-            dad_lead["nextBoundary"]["blocker"],
+            [
+                "setQuestVariable", "setQuestVariable", "completeAllObjectives",
+                "autoDisplayObjectives", "killQuestUpdates",
+                "applyImageSpaceModifier", "playSound",
+            ],
+            [command["kind"] for command in completion["stage90Result"]["commands"]],
+        )
+        self.assertEqual(
+            [
+                "stopQuest", "disable", "setPlayerScale", "setPlayerToddler",
+                "clearNoActivationSound", "setStage",
+            ],
+            [command["kind"] for command in completion["stage100Result"]["commands"]],
+        )
+        self.assertEqual(
+            "fo3-cg02-stage-0-result-runtime-not-implemented",
+            completion["nextBoundary"]["blocker"],
         )
         self.assertEqual(
             [

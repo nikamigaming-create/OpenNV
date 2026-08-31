@@ -1388,10 +1388,14 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage20State state)
     {
         var timer = _profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition;
+        var completion = timer.DadLead.Completion;
+        var completed = state.ActiveQuestFormId.Equals(
+            completion.NextQuestFormId, StringComparison.OrdinalIgnoreCase);
+        var progressStage = completed ? completion.TargetStage : state.ActiveStage;
         ApplyCg01DadPackage(
-            state.ActiveStage >= timer.DadLead.SayToDoneStage
+            progressStage >= timer.DadLead.SayToDoneStage
                 ? timer.DadLead.LeadTravel.Package
-                : state.ActiveStage >= timer.CompletionStage
+                : progressStage >= timer.CompletionStage
                     ? timer.DadReturnPackage
                     : _profile.Cg01PostStage14Transition.LeaveRoomPackage,
             stage5);
@@ -1402,12 +1406,12 @@ internal partial class Fo3OpeningFlow
         SetCg01WorldReferenceOpen(
             state.PlaypenGateReferenceFormId,
             state.PlaypenGateOpen);
-        if (state.ActiveStage >= _profile.Cg01PostStage14Transition.Stage20Interaction
+        if (progressStage >= _profile.Cg01PostStage14Transition.Stage20Interaction
                 .TimerTransition.CompletionStage)
         {
             SetCg01WorldReferenceLock(
                 timer.MainDoorReferenceFormId,
-                state.ActiveStage >= timer.DadLead.SayToDoneStage
+                progressStage >= timer.DadLead.SayToDoneStage
                     ? 0
                     : timer.MainDoorLockLevel);
             SetCg01WorldReferenceOpen(timer.MainDoorReferenceFormId, timer.MainDoorOpen);
@@ -1675,14 +1679,98 @@ internal partial class Fo3OpeningFlow
                     var trigger = interaction.TimerTransition.DadLead.EndTrigger;
                     if (current.ActiveStage != trigger.SourceStage)
                         return;
+                    var completion = interaction.TimerTransition.DadLead.Completion;
                     current = current with
                     {
                         ActiveStage = trigger.TargetStage,
-                        AccountedCommandCount = current.AccountedCommandCount + 1,
-                        AppliedCommandCount = current.AppliedCommandCount + 1,
+                        TimerRemainingSeconds = completion.TimerInitialSeconds,
+                        TimerAdvancing = true,
+                        AccountedCommandCount = current.AccountedCommandCount + 1 +
+                            completion.Stage90CommandCount,
+                        AppliedCommandCount = current.AppliedCommandCount + 1 +
+                            completion.Stage90CommandCount,
                     };
-                    Persist();
+                    var stage90World = _cg01ToddlerWorld ??
+                        throw new InvalidOperationException(
+                            "Fallout 3 CG01 stage-90 player is absent.");
+                    stage90World.Player.SetMeta("opennv_objectives_completed", true);
+                    stage90World.Player.SetMeta("opennv_auto_display_objectives", false);
+                    stage90World.Player.SetMeta("opennv_quest_updates_enabled", false);
+                    StartStage90ImageSpace(completion.ImageSpaceModifier);
+                    StartStage90Sound(completion.Sound);
+                    _cg01Stage90TimerTick = delta =>
+                    {
+                        current = current with
+                        {
+                            TimerRemainingSeconds = Math.Max(
+                                0.0, current.TimerRemainingSeconds - delta),
+                        };
+                        if (current.TimerRemainingSeconds > 0.0)
+                            return;
+                        _cg01Stage90TimerTick = null;
+                        current = current with
+                        {
+                            ActiveQuestFormId = completion.NextQuestFormId,
+                            ActiveQuestEditorId = completion.NextQuestEditorId,
+                            ActiveStage = completion.NextQuestStage,
+                            TimerAdvancing = false,
+                            ImageSpaceElapsedSeconds = Math.Min(
+                                completion.ImageSpaceModifier.DurationSeconds,
+                                _stage90ImageSpaceElapsedSeconds + delta),
+                            Stage90SoundStarted = true,
+                            AccountedCommandCount = current.AccountedCommandCount +
+                                completion.Stage100CommandCount,
+                            AppliedCommandCount = current.AppliedCommandCount +
+                                completion.Stage100CommandCount,
+                            NextBoundary = new Fo3Cg01Stage12Boundary(
+                                false, completion.NextBoundaryBlocker),
+                        };
+                        var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
+                            "Fallout 3 CG01 completion player is absent.");
+                        world.Player.ApplySourceScale(completion.PlayerScale);
+                        world.Player.SetMeta("opennv_player_toddler", completion.PlayerToddler);
+                        world.Player.SetMeta("opennv_no_activation_sound", false);
+                        var dad = _vaultBirthCoverage?.Cg01DadActor.Placement ??
+                            throw new InvalidOperationException(
+                                "Fallout 3 CG01 completion Dad is absent.");
+                        if (!dad.GetMeta("opennv_source_form_id").AsString().Equals(
+                                completion.DisabledDadReferenceFormId,
+                                StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException(
+                                "Fallout 3 CG01 completion Dad identity differs.");
+                        dad.Visible = false;
+                        dad.ProcessMode = ProcessModeEnum.Disabled;
+                        dad.SetMeta("opennv_enabled", 0);
+                        Persist();
+                    };
                 });
+        var restoredCompletion = interaction.TimerTransition.DadLead.Completion;
+        if (current.ActiveQuestFormId.Equals(
+                restoredCompletion.NextQuestFormId, StringComparison.OrdinalIgnoreCase) &&
+            current.ActiveStage == restoredCompletion.NextQuestStage)
+        {
+            (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+                "Fallout 3 CG01 restored completion player is absent."))
+                .Player.ApplySourceScale(restoredCompletion.PlayerScale);
+            var restoredPlayer = _cg01ToddlerWorld.Player;
+            restoredPlayer.SetMeta("opennv_player_toddler", restoredCompletion.PlayerToddler);
+            restoredPlayer.SetMeta("opennv_no_activation_sound", false);
+            restoredPlayer.SetMeta("opennv_objectives_completed", true);
+            restoredPlayer.SetMeta("opennv_auto_display_objectives", false);
+            restoredPlayer.SetMeta("opennv_quest_updates_enabled", false);
+            if (current.ImageSpaceElapsedSeconds <
+                restoredCompletion.ImageSpaceModifier.DurationSeconds)
+            {
+                StartStage90ImageSpace(restoredCompletion.ImageSpaceModifier);
+                _stage90ImageSpaceElapsedSeconds = current.ImageSpaceElapsedSeconds;
+            }
+            var dad = (_vaultBirthCoverage ?? throw new InvalidOperationException(
+                "Fallout 3 CG01 restored completion Dad is absent."))
+                .Cg01DadActor.Placement;
+            dad.Visible = false;
+            dad.ProcessMode = ProcessModeEnum.Disabled;
+            dad.SetMeta("opennv_enabled", 0);
+        }
         if (current.ActiveStage == interaction.BookStage && !current.SpecialBookAccepted)
             Book();
         else if (current.TimerAdvancing)

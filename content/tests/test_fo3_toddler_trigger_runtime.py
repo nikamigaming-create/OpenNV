@@ -61,6 +61,24 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
         self.assertIn("NextBoundaryBlocker", contract)
         self.assertIn("InstallStage20Interactions", (FO3 / "Fo3Cg01ToddlerWorld.cs").read_text(encoding="utf-8"))
 
+    def test_stage90_uses_frame_delta_and_shared_owned_effect_owners(self) -> None:
+        contract = (FO3 / "Fo3Cg01PostStage14Transition.cs").read_text(
+            encoding="utf-8"
+        )
+        flow = (FO3 / "Fo3OpeningFlow.Cg01.cs").read_text(encoding="utf-8")
+
+        self.assertIn('"GetSecondsPassed"', contract)
+        self.assertIn("Fo3Stage90Transition.LoadModifier(", contract)
+        self.assertIn("Fo3Stage90Transition.LoadSound(", contract)
+        self.assertIn("current.TimerRemainingSeconds - delta", flow)
+        self.assertIn("StartStage90ImageSpace(completion.ImageSpaceModifier)", flow)
+        self.assertIn("StartStage90Sound(completion.Sound)", flow)
+        self.assertIn("completion.NextQuestFormId", flow)
+        self.assertIn("completion.NextBoundaryBlocker", flow)
+        self.assertNotIn(
+            "fo3-cg01-stage-90-timer-runtime-not-implemented", contract
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
