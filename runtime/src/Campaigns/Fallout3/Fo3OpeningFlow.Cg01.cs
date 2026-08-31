@@ -1355,6 +1355,37 @@ internal partial class Fo3OpeningFlow
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 interaction world is absent.")).State(triggerEntered: true),
             stage14, current);
+        void StartStage50Timer()
+        {
+            if (!current.TimerAdvancing ||
+                current.ActiveStage != interaction.TimerTransition.SourceStage ||
+                _cg01Stage50TimerTick is not null)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 stage-50 timer start differs.");
+            _cg01Stage50TimerTick = delta =>
+            {
+                var remaining = Math.Max(0.0, current.TimerRemainingSeconds - delta);
+                current = current with { TimerRemainingSeconds = remaining };
+                if (remaining > 0.0)
+                {
+                    Persist();
+                    return;
+                }
+                var applied = interaction.TimerTransition.ExecuteTargetResult();
+                current = current with
+                {
+                    ActiveStage = interaction.TimerTransition.TargetStage,
+                    TimerAdvancing = false,
+                    AccountedCommandCount = current.AccountedCommandCount + applied,
+                    AppliedCommandCount = current.AppliedCommandCount + applied
+                };
+                (_vaultBirthCoverage ?? throw new InvalidOperationException(
+                    "Fallout 3 CG01 stage-70 Dad world is absent."))
+                    .Cg01DadActor.Placement.SetMeta("opennv_package_evaluated", true);
+                _cg01Stage50TimerTick = null;
+                Persist();
+            };
+        }
         void Gate()
         {
             if (current.ActiveStage != interaction.SourceStage)
@@ -1422,10 +1453,13 @@ internal partial class Fo3OpeningFlow
                     current = current with
                     {
                         SpecialValues = values,
-                        SpecialBookAccepted = true
+                        SpecialBookAccepted = true,
+                        TimerRemainingSeconds = interaction.TimerTransition.InitialSeconds,
+                        TimerAdvancing = true
                     };
                     _cg01SpecialBookMenu = null;
                     Persist();
+                    StartStage50Timer();
                 });
             _cg01SpecialBookMenu.Open(
                 Cg01WorldReference(interaction.BookReferenceFormId),
@@ -1440,6 +1474,8 @@ internal partial class Fo3OpeningFlow
                 interaction, Gate, Exit, Book);
         if (current.ActiveStage == interaction.BookStage && !current.SpecialBookAccepted)
             Book();
+        else if (current.TimerAdvancing)
+            StartStage50Timer();
     }
 
     private Node3D Cg01WorldReference(string formId) =>

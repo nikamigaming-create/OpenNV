@@ -3249,7 +3249,56 @@ def _compile_cg01_post_stage14_transition(
             "actorValues": actor_values,
         },
         "stageResults": result_contracts,
-        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-stage-50-timer-runtime-not-implemented"},
+        "nextBoundary": {"applied": True, "blocker": None},
+    }
+    quest_script_ids = [
+        struct.unpack("<I", row.data)[0] for row in iter_subrecords(quest)
+        if row.signature == "SCRI" and len(row.data) == FORM_ID_BYTES
+    ]
+    if len(quest_script_ids) != 1:
+        raise ValueError("Fallout 3 CG01 quest script identity differs")
+    quest_script = exact(_form_id(quest_script_ids[0]), SCRIPT_RECORD, "quest script")
+    quest_script_source = _script_source(quest_script)
+    timer_transition_match = re.search(
+        r"if\s+getstageDone\s+CG01\s+(?P<source>\d+)\s*==\s*1\s*&&\s*"
+        r"getstageDone\s+CG01\s+(?P<target>\d+)\s*==\s*0\s*"
+        r"setstage\s+CG01\s+(?P=target)",
+        quest_script_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if timer_transition_match is None or int(timer_transition_match.group("source")) != interaction_stages[2]:
+        raise ValueError("Fallout 3 CG01 stage-50 timer transition differs")
+    timer_target_stage = int(timer_transition_match.group("target"))
+    timer_decrement = re.search(
+        r"if\s+runTimer\s*==\s*1.*?if\s+timer\s*>\s*0\s*"
+        r"set\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed",
+        quest_script_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if timer_decrement is None:
+        raise ValueError("Fallout 3 CG01 timer decrement differs")
+    stage50_compiled = result_contracts[-1]["commands"]
+    timer_rows = [row for row in stage50_compiled if row["kind"] == "setQuestVariable"]
+    timer_by_name = {str(row["variable"]): row["value"] for row in timer_rows}
+    if set(timer_by_name) != {"timer", "runTimer"} or float(timer_by_name["timer"]) <= 0 or int(timer_by_name["runTimer"]) != 1:
+        raise ValueError("Fallout 3 CG01 stage-50 timer initialization differs")
+    target_commands = stage_commands(timer_target_stage)
+    target_compiled = [compile_command(text, index) for index, text in enumerate(target_commands)]
+    stage20_interaction["timerTransition"] = {
+        "schema": "opennv-fo3-cg01-stage-50-timer-runtime/v1",
+        "scriptFormId": _form_id(quest_script.form_id),
+        "scriptEditorId": _editor_id(quest_script),
+        "scriptSourceSha256": hashlib.sha256(quest_script_source.encode("cp1252")).hexdigest(),
+        "sourceStage": interaction_stages[2],
+        "targetStage": timer_target_stage,
+        "timerVariable": {"name": "timer", "initialSeconds": float(timer_by_name["timer"])},
+        "runVariable": {"name": "runTimer", "requiredValue": int(timer_by_name["runTimer"])},
+        "decrementSource": "GetSecondsPassed",
+        "targetResult": {
+            "sourceSha256": hashlib.sha256(stage_sources[timer_target_stage][0].encode("cp1252")).hexdigest(),
+            "commands": target_compiled,
+        },
+        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-stage-70-dad-package-runtime-not-implemented"},
     }
 
     return {

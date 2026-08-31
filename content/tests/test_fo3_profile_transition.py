@@ -698,7 +698,11 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "SCPT",
             0x00030769,
             0,
-            subrecord("EDID", b"CG01SCRIPT\0") + subrecord("SCTX", b"short runTimer\0"),
+            subrecord("EDID", b"CG01SCRIPT\0") + subrecord("SCTX", (
+                b"float timer\nshort runTimer\nbegin gamemode\nif runTimer == 1\n"
+                b"if timer > 0\nset timer to timer - GetSecondsPassed\nelse\n"
+                b"if getstageDone CG01 50 == 1 && getstageDone CG01 70 == 0\n"
+                b"setstage CG01 70\nendif\nendif\nendif\nend\0")),
             (),
         )
         cg01_dad_base = Record(
@@ -908,6 +912,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "CG01PlayroomDoor.setOpenState 0", "CG01PlayroomDoor.Lock 100"))
         cg01_stage50_source = "\n".join((
             "setObjectiveCompleted CG01 40 1", "set CG01.timer to 10", "set CG01.runTimer to 1"))
+        cg01_stage70_source = "\n".join(("set CG01.runTimer to 0", "CG01DadREF.evp"))
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -936,6 +941,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage40_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 50))
             + subrecord("SCTX", cg01_stage50_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 70))
+            + subrecord("SCTX", cg01_stage70_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -1493,9 +1500,17 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             [[command["kind"] for command in row["commands"]]
              for row in interaction["stageResults"]],
         )
+        self.assertTrue(interaction["nextBoundary"]["applied"])
+        timer = interaction["timerTransition"]
+        self.assertEqual((50, 70), (timer["sourceStage"], timer["targetStage"]))
+        self.assertEqual(10.0, timer["timerVariable"]["initialSeconds"])
         self.assertEqual(
-            "fo3-cg01-stage-50-timer-runtime-not-implemented",
-            interaction["nextBoundary"]["blocker"],
+            ["setQuestVariable", "evaluatePackage"],
+            [row["kind"] for row in timer["targetResult"]["commands"]],
+        )
+        self.assertEqual(
+            "fo3-cg01-stage-70-dad-package-runtime-not-implemented",
+            timer["nextBoundary"]["blocker"],
         )
         self.assertEqual(
             [

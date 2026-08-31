@@ -38,6 +38,8 @@ internal sealed record Fo3Cg01Stage20State(
     int AppliedCommandCount,
     IReadOnlyList<int> SpecialValues,
     bool SpecialBookAccepted,
+    double TimerRemainingSeconds,
+    bool TimerAdvancing,
     Fo3Cg01Stage12Boundary NextBoundary);
 
 internal sealed record Fo3SpecialActorValue(
@@ -53,6 +55,59 @@ internal sealed record Fo3SpecialActorValue(
 internal sealed record Fo3SpecialStageResult(
     int Stage,
     IReadOnlyList<SourceGamebryoStageCommand<string>> Commands);
+
+internal sealed record Fo3Cg01Stage50Timer(
+    int SourceStage,
+    int TargetStage,
+    double InitialSeconds,
+    IReadOnlyList<SourceGamebryoStageCommand<string>> TargetCommands,
+    string NextBoundaryBlocker)
+{
+    internal static Fo3Cg01Stage50Timer Load(JsonElement source, int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg01-stage-50-timer-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage ||
+            source.GetProperty("decrementSource").GetString() != "GetSecondsPassed")
+            throw new InvalidOperationException("Fallout 3 CG01 stage-50 timer identity differs.");
+        var targetStage = source.GetProperty("targetStage").GetInt32();
+        var timer = source.GetProperty("timerVariable");
+        var run = source.GetProperty("runVariable");
+        if (timer.GetProperty("name").GetString() != "timer" ||
+            run.GetProperty("name").GetString() != "runTimer" ||
+            run.GetProperty("requiredValue").GetInt32() != 1 || targetStage <= expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-50 timer variables differ.");
+        var commands = source.GetProperty("targetResult").GetProperty("commands")
+            .EnumerateArray().Select((row, index) =>
+            {
+                if (row.GetProperty("index").GetInt32() != index)
+                    throw new InvalidOperationException("Fallout 3 CG01 stage-70 command order differs.");
+                var kind = row.GetProperty("kind").GetString() switch
+                {
+                    "setQuestVariable" => GamebryoStageCommandKind.SetQuestVariable,
+                    "evaluatePackage" => GamebryoStageCommandKind.ActorIntent,
+                    _ => throw new InvalidOperationException("Fallout 3 CG01 stage-70 command differs."),
+                };
+                return new SourceGamebryoStageCommand<string>(index, kind,
+                    row.GetProperty("kind").GetString()!);
+            }).ToArray();
+        var boundary = source.GetProperty("nextBoundary");
+        return new Fo3Cg01Stage50Timer(expectedSourceStage, targetStage,
+            timer.GetProperty("initialSeconds").GetDouble(), commands,
+            boundary.GetProperty("blocker").GetString()!);
+    }
+
+    internal int ExecuteTargetResult()
+    {
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(TargetCommands, command =>
+        {
+            applied++;
+            return applied == command.SourceIndex + 1;
+        });
+        return applied;
+    }
+}
 
 internal sealed record Fo3Cg01Stage20Interaction(
     int SourceStage,
@@ -70,6 +125,7 @@ internal sealed record Fo3Cg01Stage20Interaction(
     IReadOnlyList<Fo3SpecialActorValue> ActorValues,
     OwnedGamebryoSpecialBookMenu Tiles,
     IReadOnlyList<Fo3SpecialStageResult> StageResults,
+    Fo3Cg01Stage50Timer TimerTransition,
     string NextBoundaryBlocker)
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-20-special-runtime/v1";
@@ -100,7 +156,8 @@ internal sealed record Fo3Cg01Stage20Interaction(
         if (position.Length != 3 || rotation.Length != 3)
             throw new InvalidOperationException("Fallout 3 CG01 crib-exit transform differs.");
         var boundary = RequiredObject(source, "nextBoundary");
-        if (RequiredBoolean(boundary, "applied"))
+        if (!RequiredBoolean(boundary, "applied") ||
+            boundary.GetProperty("blocker").ValueKind != JsonValueKind.Null)
             throw new InvalidOperationException("Fallout 3 CG01 stage-50 boundary differs.");
         var actorValues = RequiredArray(book, "actorValues").EnumerateArray()
             .Select((row, index) =>
@@ -157,7 +214,8 @@ internal sealed record Fo3Cg01Stage20Interaction(
             actorValues,
             OwnedGamebryoTileRuntime.ParseSpecialBookMenu(RequiredObject(book, "tiles")),
             stageResults,
-            RequiredString(boundary, "blocker"));
+            Fo3Cg01Stage50Timer.Load(RequiredObject(source, "timerTransition"), bookStage),
+            RequiredString(RequiredObject(RequiredObject(source, "timerTransition"), "nextBoundary"), "blocker"));
     }
 
     internal int ExecuteStageResult(int stage)
@@ -213,7 +271,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-14-to-20-runtime/v1";
     internal const string ExpectedSavedStateSchema =
-        "opennv-fo3-cg01-stage-14-to-20-runtime-state/v1";
+        "opennv-fo3-cg01-stage-14-to-70-runtime-state/v2";
 
     private const string ExpectedStatus = "source-backed-package-dialogue-runtime-ready";
     private const int GetPcIsSexFunction = 131;
@@ -358,6 +416,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             AccountedCommandCount,
             Stage20Interaction.ActorValues.Select(value => value.InitialValue).ToArray(),
             false,
+            Stage20Interaction.TimerTransition.InitialSeconds,
+            false,
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
     }
 
@@ -386,6 +446,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
         appliedCommandCount = state.AppliedCommandCount,
         specialValues = state.SpecialValues,
         specialBookAccepted = state.SpecialBookAccepted,
+        timerRemainingSeconds = state.TimerRemainingSeconds,
+        timerAdvancing = state.TimerAdvancing,
         nextBoundary = new { applied = false, blocker = state.NextBoundary.Blocker },
     };
 
@@ -407,13 +469,14 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 Stage20Interaction.GateStage,
                 Stage20Interaction.ExitStage,
                 Stage20Interaction.BookStage,
+                Stage20Interaction.TimerTransition.TargetStage,
             }.Contains(stage) ||
             values.Length != Stage20Interaction.ActorValues.Count ||
             values.Select((value, index) =>
                 value < Stage20Interaction.ActorValues[index].MinimumValue ||
                 value > Stage20Interaction.ActorValues[index].MaximumValue).Any(value => value) ||
             values.Sum() > Stage20Interaction.MenuPoints ||
-            accepted && (stage != Stage20Interaction.BookStage ||
+            accepted && (stage < Stage20Interaction.BookStage ||
                 values.Sum() != Stage20Interaction.MenuPoints))
             throw new InvalidOperationException(
                 "Saved Fallout 3 SPECIAL allocation differs.");
@@ -429,7 +492,16 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var interactionCommandCount = Stage20Interaction.StageResults
             .Where(result => result.Stage <= stage)
             .Sum(result => result.Commands.Count);
+        if (stage == Stage20Interaction.TimerTransition.TargetStage)
+            interactionCommandCount += Stage20Interaction.TimerTransition.TargetCommands.Count;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
+        var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
+        var timerAdvancing = RequiredBoolean(source, "timerAdvancing");
+        if (!double.IsFinite(timerRemaining) || timerRemaining < 0.0 ||
+            timerAdvancing && (!accepted || stage != Stage20Interaction.BookStage) ||
+            stage == Stage20Interaction.TimerTransition.TargetStage &&
+                (timerAdvancing || timerRemaining != 0.0))
+            throw new InvalidOperationException("Saved Fallout 3 CG01 timer state differs.");
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
             RequiredFormId(active, "formId") != baseline.ActiveQuestFormId ||
             !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
@@ -458,6 +530,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             AppliedCommandCount = expectedCommandCount,
             SpecialValues = values,
             SpecialBookAccepted = accepted,
+            TimerRemainingSeconds = timerRemaining,
+            TimerAdvancing = timerAdvancing,
         };
     }
 
