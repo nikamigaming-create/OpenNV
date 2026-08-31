@@ -29,7 +29,7 @@ class ClassicRetailRandomLifecycleTests(unittest.TestCase):
         self.assertLess(boundary, scene)
         self.assertIn('"arroyo-map-load"', host)
         self.assertIn(
-            '"exact-build-rng-dispatch-for-source-ordered-map-object-script-initialization"',
+            '"exact-build-engine-script-interleaving-before-source-map-enter-random"',
             host,
         )
         self.assertIn("ClassicRetailRandomLifecycle.ResetForLoad", host)

@@ -18,6 +18,10 @@ MAX_PROCEDURES = 4096
 
 PUSH_BASE = 0x802B
 PUSH_INT = 0xC001
+# Published classic INT format/opcode identities; operands still come from owned INT.
+PUSH_STRING = 0x9001
+PUSH_FLOAT = 0xA001
+RANDOM = 0x80B4
 SOURCE_OBJ = 0x80BD
 SELF_OBJ = 0x80BC
 DUDE_OBJ = 0x80BF
@@ -138,13 +142,84 @@ def _instructions(data: bytes, bounds: tuple[int, int]) -> list[Instruction]:
         opcode = struct.unpack_from(">H", data, offset)[0]
         offset += 2
         operand = None
-        if opcode == PUSH_INT:
+        if opcode in {PUSH_STRING, PUSH_FLOAT, PUSH_INT}:
             if offset + 4 > end:
                 raise ClassicIntDecodeError("truncated INT integer push")
             operand = struct.unpack_from(">i", data, offset)[0]
             offset += 4
         result.append(Instruction(instruction_offset, opcode, operand))
     return result
+
+
+def inventory_int_program(data: bytes) -> dict[str, Any]:
+    """Inventory source procedures and literal RANDOM sites without executing them."""
+    procedures = _procedures(data)
+    rows: list[dict[str, Any]] = []
+    random_sites: list[dict[str, Any]] = []
+    for name, bounds in procedures.items():
+        instructions = _instructions(data, bounds)
+        branches = []
+        for index, instruction in enumerate(instructions):
+            if instruction.opcode not in {IF, JUMP}:
+                continue
+            target = instructions[index - 1] if index >= 1 else None
+            branches.append(
+                {
+                    "offset": instruction.offset,
+                    "kind": "conditional" if instruction.opcode == IF else "jump",
+                    "target": (
+                        target.operand
+                        if target is not None and target.opcode == PUSH_INT
+                        else None
+                    ),
+                }
+            )
+        sites: list[dict[str, Any]] = []
+        for index, instruction in enumerate(instructions):
+            if instruction.opcode != RANDOM:
+                continue
+            lower = instructions[index - 2] if index >= 2 else None
+            upper = instructions[index - 1] if index >= 1 else None
+            literal = (
+                lower is not None
+                and upper is not None
+                and lower.opcode == PUSH_INT
+                and upper.opcode == PUSH_INT
+            )
+            site = {
+                "procedure": name,
+                "offset": instruction.offset,
+                "operandKind": "literal-inclusive-range" if literal else "dynamic-stack-range",
+                "minimum": lower.operand if literal else None,
+                "maximum": upper.operand if literal else None,
+            }
+            sites.append(site)
+            random_sites.append(site)
+        rows.append(
+            {
+                "name": name,
+                "bodyOffset": bounds[0],
+                "bodyEndOffset": bounds[1],
+                "eventKind": (
+                    "program-start"
+                    if name == "start"
+                    else "map-enter"
+                    if name == "map_enter_p_proc"
+                    else "object-event"
+                    if name.endswith("_p_proc")
+                    else "helper"
+                ),
+                "instructionCount": len(instructions),
+                "branches": branches,
+                "randomSites": sites,
+            }
+        )
+    return {
+        "schema": "opennv-classic-int-initialization-inventory/v1",
+        "procedures": rows,
+        "randomSites": random_sites,
+        "randomOpcode": f"{RANDOM:04x}",
+    }
 
 
 def _expect(

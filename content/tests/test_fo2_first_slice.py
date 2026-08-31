@@ -348,6 +348,7 @@ class Fo2FirstSliceTest(unittest.TestCase):
                 for message_id in range(100, 121)
             )
             script_entries = ["unused.int"] * 751
+            script_entries[744] = "ARTemple.int"
             script_entries[750] = "ACKlint.int"
             scripts_list = ("\r\n".join(script_entries) + "\r\n").encode("ascii")
             (install / "master.dat").write_bytes(
@@ -366,6 +367,7 @@ class Fo2FirstSliceTest(unittest.TestCase):
                         ("text\\english\\game\\pro_item.msg", b"{700}{}{Spear}\r\n", False),
                         ("text\\english\\dialog\\acklint.msg", guardian_messages, False),
                         ("scripts\\acklint.int", guardian_script, False),
+                        ("scripts\\artemple.int", guardian_script, False),
                         ("scripts\\scripts.lst", scripts_list, False),
                     ]
                 )
@@ -529,6 +531,13 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertFalse(document["newGameStart"]["playerEntry"]["placedPlayerObject"])
             self.assertEqual(document["map"]["objects"]["totalTopLevelObjects"], 1)
             self.assertEqual(document["map"]["allObjectCount"], 2)
+            initialization = document["initializationScripts"]
+            self.assertEqual(
+                initialization["mapHeader"]["program"]["program"],
+                "ARTemple.int",
+            )
+            self.assertEqual(initialization["liveScriptSlots"], [])
+            self.assertEqual(initialization["randomSites"], [])
             confrontation = document["boundedConfrontation"]
             self.assertEqual(confrontation["critter"]["serial"], 2)
             self.assertEqual(confrontation["critter"]["currentHitPoints"], 50)

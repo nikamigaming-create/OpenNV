@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from classic_int_effects import decode_acklint_effects
+from classic_int_initialization import compile_map_int_initialization
 from corpus_io import atomic_json
 from fo1_frm import decode_frm
 from fo1_map_objects import (
@@ -739,6 +740,8 @@ def compile_fo2_first_slice(
                 f"Fallout 2 Temple object graph leaves {len(map_resource.data) - end_offset} trailing bytes"
             )
 
+        initialization_scripts = compile_map_int_initialization(header, scripts, resolver)
+
         flat_objects = _flatten_objects(objects)
         bounded_confrontation = _compile_bounded_confrontation(
             flat_objects,
@@ -847,6 +850,7 @@ def compile_fo2_first_slice(
             "objects": objects,
             "allObjectCount": len(flat_objects),
         },
+        "initializationScripts": initialization_scripts,
         "prototypes": [prototypes[pid] for pid in sorted(prototypes)],
         "frms": frms,
         "boundedConfrontation": bounded_confrontation,

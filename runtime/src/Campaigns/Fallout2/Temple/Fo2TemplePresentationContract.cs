@@ -97,6 +97,7 @@ internal sealed class Fo2TemplePresentationCatalog
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
         ClassicMapInitialization initialization,
+        ClassicMapIntInitialization intInitialization,
         Fo2TempleConfrontationContract confrontation,
         int inventoryObjects,
         int verifiedResources)
@@ -117,6 +118,7 @@ internal sealed class Fo2TemplePresentationCatalog
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
         Initialization = initialization;
+        IntInitialization = intInitialization;
         Confrontation = confrontation;
         InventoryObjects = inventoryObjects;
         VerifiedResources = verifiedResources;
@@ -139,6 +141,7 @@ internal sealed class Fo2TemplePresentationCatalog
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
     internal ClassicMapInitialization Initialization { get; }
+    internal ClassicMapIntInitialization IntInitialization { get; }
     internal Fo2TempleConfrontationContract Confrontation { get; }
     internal int InventoryObjects { get; }
     internal int VerifiedResources { get; }
@@ -268,6 +271,8 @@ internal sealed class Fo2TemplePresentationCatalog
             new Dictionary<int, IReadOnlyList<uint>> { [0] = tileEntries },
             tileBindings);
         var initialization = ClassicMapInitializationOwner.Parse(map);
+        var intInitialization = ClassicMapIntInitializationOwner.Parse(
+            source.GetProperty("initializationScripts"), initialization);
         var objectRows = FlattenObjects(map.GetProperty("objects"));
         var objectPlacements = LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
@@ -310,6 +315,7 @@ internal sealed class Fo2TemplePresentationCatalog
             tileBindings,
             objectPlacements,
             initialization,
+            intInitialization,
             confrontation,
             objectRows.Values.Count(row => !row.TopLevel),
             resources.Length);

@@ -70,6 +70,82 @@ if (!initialization.Objects.Select(row => row.SourceOffset).SequenceEqual([100, 
     throw new InvalidOperationException(
         "Classic MAP source initialization ordering or live-slot join drifted.");
 
+using var intDocument = JsonDocument.Parse("""
+    {
+      "schema": "opennv-classic-map-int-initialization/v1",
+      "engineInterleavingTransported": false,
+      "mapHeader": {
+        "storedScriptIndex": 25,
+        "indexSemantics": "MAP-header-one-based-to-scripts-list",
+        "program": {
+          "scriptsListIndex": 24,
+          "program": "ArCaves.int",
+          "logicalPath": "scripts\\arcaves.int",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "inventory": {
+            "schema": "opennv-classic-int-initialization-inventory/v1",
+            "randomOpcode": "80b4",
+            "procedures": [{
+              "name": "map_enter_p_proc",
+              "bodyOffset": 100,
+              "bodyEndOffset": 120
+            }],
+            "randomSites": []
+          }
+        }
+      },
+      "liveScriptSlots": [{
+        "order": 0,
+        "type": 4,
+        "extent": 0,
+        "slot": 0,
+        "sid": "04000001",
+        "scriptIndex": 750,
+        "program": {
+          "scriptsListIndex": 750,
+          "program": "ACKlint.int",
+          "logicalPath": "scripts\\acklint.int",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "inventory": {
+            "schema": "opennv-classic-int-initialization-inventory/v1",
+            "randomOpcode": "80b4",
+            "procedures": [{
+              "name": "map_enter_p_proc",
+              "bodyOffset": 200,
+              "bodyEndOffset": 240
+            }],
+            "randomSites": [{
+              "procedure": "map_enter_p_proc",
+              "offset": 212,
+              "operandKind": "literal-inclusive-range",
+              "minimum": 1,
+              "maximum": 5
+            }]
+          }
+        }
+      }],
+      "randomSites": [{
+        "owner": "live-map-script-slot",
+        "sid": "04000001",
+        "program": "ACKlint.int",
+        "procedure": "map_enter_p_proc",
+        "offset": 212,
+        "operandKind": "literal-inclusive-range",
+        "minimum": 1,
+        "maximum": 5
+      }]
+    }
+    """);
+var intInitialization = ClassicMapIntInitializationOwner.Parse(
+    intDocument.RootElement,
+    initialization);
+if (intInitialization.EngineInterleavingTransported ||
+    intInitialization.ScriptSlots.Single().Program.ScriptsListIndex != 750 ||
+    intInitialization.RandomSites.Single().Minimum != 1 ||
+    intInitialization.RandomSites.Single().Maximum != 5)
+    throw new InvalidOperationException(
+        "Classic MAP INT initialization contract drifted.");
+
 using var missingScript = JsonDocument.Parse("""
     {
       "objects": {

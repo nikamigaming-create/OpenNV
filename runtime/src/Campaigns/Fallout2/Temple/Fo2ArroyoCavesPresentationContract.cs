@@ -163,6 +163,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
         ClassicMapInitialization initialization,
+        ClassicMapIntInitialization intInitialization,
         int verifiedResources,
         bool[] walkable,
         string walkMaskSha256,
@@ -188,6 +189,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
         Initialization = initialization;
+        IntInitialization = intInitialization;
         VerifiedResources = verifiedResources;
         Walkable = walkable;
         WalkMaskSha256 = walkMaskSha256;
@@ -214,6 +216,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
     internal ClassicMapInitialization Initialization { get; }
+    internal ClassicMapIntInitialization IntInitialization { get; }
     internal int VerifiedResources { get; }
     internal IReadOnlyList<bool> Walkable { get; }
     internal string WalkMaskSha256 { get; }
@@ -371,6 +374,8 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
             artifacts);
         Fo2TemplePresentationCatalog.VerifyTileBindings(entriesByElevation, tileBindings);
         var initialization = ClassicMapInitializationOwner.Parse(map);
+        var intInitialization = ClassicMapIntInitializationOwner.Parse(
+            source.GetProperty("initializationScripts"), initialization);
         var sourceObjects = Fo2TemplePresentationCatalog.FlattenObjects(map.GetProperty("objects"));
         var objectPlacements = Fo2TemplePresentationCatalog.LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
@@ -481,6 +486,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
             tileBindings,
             objectPlacements,
             initialization,
+            intInitialization,
             resources.Length,
             walkable.ToArray(),
             walkMaskSha256,

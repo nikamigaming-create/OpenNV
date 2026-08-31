@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "runtime/src/Campaigns/Classic/ClassicMapInitialization.cs"
+INT_OWNER = ROOT / "runtime/src/Campaigns/Classic/ClassicMapIntInitialization.cs"
 TEMPLE = ROOT / "runtime/src/Campaigns/Fallout2/Temple/Fo2TemplePresentationContract.cs"
 CAVES = ROOT / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPresentationContract.cs"
 
@@ -22,6 +23,15 @@ class ClassicMapInitializationTests(unittest.TestCase):
             source = path.read_text(encoding="utf-8")
             self.assertIn("ClassicMapInitializationOwner.Parse(map)", source)
             self.assertIn("ClassicMapInitialization Initialization", source)
+            self.assertIn("ClassicMapIntInitializationOwner.Parse", source)
+            self.assertIn("ClassicMapIntInitialization IntInitialization", source)
+
+    def test_int_owner_keeps_engine_interleaving_explicitly_untransported(self) -> None:
+        owner = INT_OWNER.read_text(encoding="utf-8")
+        self.assertIn("literal-inclusive-range", owner)
+        self.assertIn("EngineInterleavingTransported", owner)
+        self.assertIn("source.GetProperty(\"engineInterleavingTransported\")", owner)
+        self.assertNotIn("ClassicRetailRandomLifecycle.Consume", owner)
 
 
 if __name__ == "__main__":

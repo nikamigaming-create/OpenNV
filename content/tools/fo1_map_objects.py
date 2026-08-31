@@ -87,6 +87,9 @@ CRITTER_SINGLE_FRAME_BLOOD_LAST = 62
 CRITTER_CALLED_SHOT_PICTURE = 63
 CRITTER_DEATH_FIRST = 20
 CRITTER_BLOOD_DEATH_FIRST = 34
+MAP_SCRIPT_OBJECT_PROGRAM_WORD = 3
+MAP_SCRIPT_SPATIAL_PROGRAM_WORD = 5
+MAP_SCRIPT_OBJECT_ID_WORD = 5
 
 
 @dataclass(frozen=True)
@@ -484,12 +487,31 @@ def parse_script_section(data: bytes, offset: int) -> tuple[list[dict[str, Any]]
             for slot_index in range(FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16):
                 if offset + 4 > len(data):
                     raise Fo1ProfileError("truncated MAP script slot")
+                record_offset = offset
                 sid = struct.unpack_from(">i", data, offset)[0]
                 sid_type = ((sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF) >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) if sid >= 0 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
                 record_size = FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_72 if sid_type == 1 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68 if sid_type == 2 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_64
                 if offset + record_size > len(data):
                     raise Fo1ProfileError("truncated MAP script record")
-                slots.append({"slot": slot_index, "sid": f"{sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF:08x}", "bytes": record_size})
+                record = struct.unpack_from(f">{record_size // 4}i", data, offset)
+                slots.append(
+                    {
+                        "slot": slot_index,
+                        "sourceOffset": record_offset,
+                        "sid": f"{sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF:08x}",
+                        "bytes": record_size,
+                        "scriptIndex": (
+                            record[MAP_SCRIPT_SPATIAL_PROGRAM_WORD]
+                            if sid_type == 1
+                            else record[MAP_SCRIPT_OBJECT_PROGRAM_WORD]
+                        ),
+                        "objectId": (
+                            None
+                            if sid_type == 1
+                            else record[MAP_SCRIPT_OBJECT_ID_WORD]
+                        ),
+                    }
+                )
                 offset += record_size
             length, offset = _read_i32(data, offset, "script extent length")
             next_value, offset = _read_i32(data, offset, "script extent next")
