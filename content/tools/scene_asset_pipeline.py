@@ -14,7 +14,9 @@ from cell_catalog import (
     BaseObject,
     CellCatalog,
     PlacedReference,
+    ScriptSource,
 )
+from crafting_catalog import recipe_menu_category_editor_id
 from export_static_nif_gltf import NoStaticPresentationGeometryError, export_static_nif
 from material_contract import (
     material_bindings,
@@ -27,6 +29,45 @@ from texture_pipeline import OwnedTexturePipeline, TexturePipeline
 
 
 FORM_ID_RADIX = 16
+ITEM_DEFINITION_SCHEMA = "opennv-owned-item-definition/v1"
+
+
+def item_definition_manifest(
+    base: BaseObject,
+    catalog: CellCatalog,
+) -> dict[str, object]:
+    item = catalog.items.get(base.form_id)
+    source: dict[str, object] = {
+        "recordFormId": form_id(base.form_id),
+        "recordType": base.record_type,
+    }
+    if item is None:
+        source["economicsStatus"] = "unsupported-record-layout"
+    else:
+        source.update(
+            {
+                "economicsStatus": "source-bound",
+                "subrecord": item.source_subrecord,
+                "layout": item.source_layout,
+            }
+        )
+    return {
+        "schema": ITEM_DEFINITION_SCHEMA,
+        "formId": form_id(base.form_id),
+        "editorId": base.editor_id,
+        "displayName": base.display_name or "",
+        "recordType": base.record_type,
+        "source": source,
+    }
+
+
+def _item_economics_manifest(base: BaseObject, catalog: CellCatalog) -> dict[str, object]:
+    item = catalog.items.get(base.form_id)
+    return (
+        {"itemValue": item.value, "itemWeight": item.weight}
+        if item is not None
+        else {}
+    )
 
 
 def _quest_identity(catalog: CellCatalog, editor_id: str) -> tuple[int, str]:
@@ -139,6 +180,88 @@ def _delayed_objective_event(
     }
 
 
+def _crafting_entry_manifest(
+    item_form_id: int,
+    count: int,
+    catalog: CellCatalog,
+) -> dict[str, object]:
+    item = catalog.base_objects.get(item_form_id)
+    if item is None or item.record_type not in ITEM_RECORD_TYPES or not item.display_name:
+        raise ValueError(f"Crafting item identity does not resolve: {item_form_id:08x}")
+    return {
+        "itemFormId": form_id(item.form_id),
+        "itemEditorId": item.editor_id,
+        "itemDisplayName": item.display_name,
+        "itemRecordType": item.record_type,
+        "count": count,
+        "itemDefinition": item_definition_manifest(item, catalog),
+        **_item_economics_manifest(item, catalog),
+    }
+
+
+def _crafting_station_manifest(
+    base: BaseObject,
+    script: ScriptSource,
+    catalog: CellCatalog,
+) -> dict[str, object] | None:
+    try:
+        category_editor_id = recipe_menu_category_editor_id(script.source)
+    except ValueError:
+        return None
+    categories = [
+        category
+        for category in catalog.crafting_categories.values()
+        if category.editor_id.casefold() == category_editor_id.casefold()
+    ]
+    if len(categories) != 1:
+        raise ValueError(
+            f"ACTI {base.form_id:08x} recipe category is ambiguous: {category_editor_id}"
+        )
+    category = categories[0]
+    supported = [
+        recipe
+        for recipe in catalog.crafting_recipes.values()
+        if recipe.category_form_id == category.form_id
+        and recipe.skill_actor_value_form_id is None
+        and recipe.required_skill_level == 0
+        and not recipe.condition_data
+    ]
+    recipes = [
+        {
+            "schema": "opennv-owned-crafting-recipe/v1",
+            "formId": form_id(recipe.form_id),
+            "editorId": recipe.editor_id,
+            "displayName": recipe.display_name,
+            "categoryFormId": form_id(recipe.category_form_id),
+            "subcategoryFormId": form_id(recipe.subcategory_form_id),
+            "requiredSkillLevel": recipe.required_skill_level,
+            "ingredients": [
+                _crafting_entry_manifest(entry.item_form_id, entry.count, catalog)
+                for entry in recipe.ingredients
+            ],
+            "outputs": [
+                _crafting_entry_manifest(entry.item_form_id, entry.count, catalog)
+                for entry in recipe.outputs
+            ],
+        }
+        for recipe in sorted(supported, key=lambda value: value.form_id)
+    ]
+    if not recipes:
+        raise ValueError(f"ACTI {base.form_id:08x} has no supported source recipes")
+    return {
+        "type": "crafting-station",
+        "script": {"formId": form_id(script.form_id), "editorId": script.editor_id},
+        "category": {
+            "formId": form_id(category.form_id),
+            "editorId": category.editor_id,
+            "displayName": category.display_name,
+            "sourceKind": category.source_kind,
+        },
+        "recipes": recipes,
+        "support": "unconditioned-zero-skill-recipes",
+    }
+
+
 def _scripted_activator_manifest(base: BaseObject, catalog: CellCatalog) -> dict[str, object]:
     if base.attached_script_form_id is None:
         raise ValueError("ACTI scripted activator has no source script identity")
@@ -148,6 +271,9 @@ def _scripted_activator_manifest(base: BaseObject, catalog: CellCatalog) -> dict
             f"ACTI {base.form_id:08x} attached SCPT does not resolve: "
             f"{base.attached_script_form_id:08x}"
         )
+    crafting = _crafting_station_manifest(base, script, catalog)
+    if crafting is not None:
+        return crafting
     events = [
         event
         for event in (
@@ -233,6 +359,8 @@ def interaction_manifest(
             "itemDisplayName": base.display_name or "",
             "itemRecordType": base.record_type,
             "count": 1,
+            "itemDefinition": item_definition_manifest(base, catalog),
+            **_item_economics_manifest(base, catalog),
         }
         weapon = catalog.weapons.get(base.form_id)
         if weapon is not None:
@@ -258,6 +386,14 @@ def interaction_manifest(
                         "itemRecordType": item.record_type if item is not None else "",
                         "count": entry.count,
                         "resolved": item is not None,
+                        **(
+                            {
+                                "itemDefinition": item_definition_manifest(item, catalog),
+                                **_item_economics_manifest(item, catalog),
+                            }
+                            if item is not None
+                            else {}
+                        ),
                     }
                 )
         return {

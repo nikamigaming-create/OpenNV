@@ -6,10 +6,16 @@ import argparse
 import json
 import math
 import struct
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from functools import cache
 from pathlib import Path
 
+from crafting_catalog import (
+    CraftingCategory,
+    CraftingRecipe,
+    decode_category,
+    decode_recipe,
+)
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 
 
@@ -37,7 +43,8 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "TREE",
 }
 CATALOG_RECORD_TYPES = frozenset(
-    BASE_RECORD_TYPES | {"CELL", "LGTM", "NAVM", "QUST", "REFR", "SCPT", "TES4"}
+    BASE_RECORD_TYPES
+    | {"CELL", "LGTM", "NAVM", "QUST", "RCCT", "RCPE", "REFR", "SCPT", "TES4"}
 )
 PLUGIN_LOCALIZED_FLAG = 0x00000080
 
@@ -91,6 +98,12 @@ CONTAINER_ITEM_BYTES = 8
 WEAPON_DATA_BYTES = 15
 WEAPON_DAMAGE_OFFSET = 12
 WEAPON_CLIP_SIZE_OFFSET = 14
+ITEM_VALUE_OFFSET = 0
+ITEM_WEIGHT_OFFSET = 4
+ARMO_WEAP_ITEM_WEIGHT_OFFSET = 8
+SIMPLE_ITEM_DATA_BYTES = 8
+ARMOR_ITEM_DATA_BYTES = 12
+ITEM_ECONOMICS_RECORD_TYPES = frozenset({"ARMO", "IMOD", "KEYM", "MISC", "WEAP"})
 TELEPORT_DESTINATION_TRANSFORM_OFFSET = 4
 TELEPORT_DESTINATION_BYTES = 28
 NAVM_DATA_BYTES = 24
@@ -209,6 +222,15 @@ class WeaponObject:
 
 
 @dataclass(frozen=True)
+class ItemObject:
+    form_id: int
+    value: int
+    weight: float
+    source_subrecord: str
+    source_layout: str
+
+
+@dataclass(frozen=True)
 class NavMeshTriangle:
     vertex_indices: tuple[int, int, int]
     adjacent_triangles: tuple[int, int, int]
@@ -273,6 +295,9 @@ class CellCatalog:
     weapons: dict[int, WeaponObject]
     navmeshes: dict[int, list[CellNavMesh]]
     references: list[PlacedReference]
+    items: dict[int, ItemObject] = field(default_factory=dict)
+    crafting_categories: dict[int, CraftingCategory] = field(default_factory=dict)
+    crafting_recipes: dict[int, CraftingRecipe] = field(default_factory=dict)
 
     def references_for(self, cell_form_id: int) -> list[PlacedReference]:
         return [reference for reference in self.references if reference.cell_form_id == cell_form_id]
@@ -664,13 +689,46 @@ def _container_object(record: Record, values: dict[str, list[bytes]]) -> Contain
     return ContainerObject(record.form_id, tuple(items))
 
 
-def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObject:
+def _single_data(
+    record: Record,
+    values: dict[str, list[bytes]],
+    expected_bytes: int,
+) -> bytes:
     matches = values.get("DATA", [])
-    if len(matches) != 1 or len(matches[0]) != WEAPON_DATA_BYTES:
+    if len(matches) != 1 or len(matches[0]) != expected_bytes:
         raise ValueError(
-            f"WEAP DATA must be {WEAPON_DATA_BYTES} bytes in {record.form_id:08x}"
+            f"{record.signature} DATA must be {expected_bytes} bytes in "
+            f"{record.form_id:08x}"
         )
-    data = matches[0]
+    return matches[0]
+
+
+def _item_object(record: Record, values: dict[str, list[bytes]]) -> ItemObject | None:
+    if record.signature not in ITEM_ECONOMICS_RECORD_TYPES:
+        return None
+    if record.signature in {"IMOD", "KEYM", "MISC"}:
+        data = _single_data(record, values, SIMPLE_ITEM_DATA_BYTES)
+        weight_offset = ITEM_WEIGHT_OFFSET
+        layout = f"fnv-{record.signature.lower()}-data-8-v1"
+    elif record.signature == "ARMO":
+        data = _single_data(record, values, ARMOR_ITEM_DATA_BYTES)
+        weight_offset = ARMO_WEAP_ITEM_WEIGHT_OFFSET
+        layout = "fnv-armo-data-12-v1"
+    else:
+        data = _single_data(record, values, WEAPON_DATA_BYTES)
+        weight_offset = ARMO_WEAP_ITEM_WEIGHT_OFFSET
+        layout = "fnv-weap-data-15-v1"
+    value = struct.unpack_from("<i", data, ITEM_VALUE_OFFSET)[0]
+    weight = struct.unpack_from("<f", data, weight_offset)[0]
+    if value < 0 or not math.isfinite(weight) or weight < 0.0:
+        raise ValueError(
+            f"{record.signature} DATA has invalid item economics in {record.form_id:08x}"
+        )
+    return ItemObject(record.form_id, value, weight, "DATA", layout)
+
+
+def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObject:
+    data = _single_data(record, values, WEAPON_DATA_BYTES)
     ammo_values = values.get("NAM0", [])
     ammo = parse_form_id(ammo_values[0], record, "NAM0") if ammo_values else None
     return WeaponObject(
@@ -751,6 +809,9 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 if values.get("SCRI")
                 else None,
             )
+            item = _item_object(record, values)
+            if item is not None:
+                catalog.items[record.form_id] = item
             if record.signature == "LIGH":
                 light = parse_light_object(record, values)
                 if light is not None:
@@ -769,6 +830,12 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 _first_text(values, "EDID"),
                 zstring(sources[0]),
             )
+        elif record.signature == "RCCT":
+            category = decode_category(record)
+            catalog.crafting_categories[category.form_id] = category
+        elif record.signature == "RCPE":
+            recipe = decode_recipe(record)
+            catalog.crafting_recipes[recipe.form_id] = recipe
         elif record.signature == "QUST":
             values = subrecords_by_signature(record)
             catalog.quests[record.form_id] = QuestIdentity(

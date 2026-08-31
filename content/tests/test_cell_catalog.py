@@ -13,6 +13,8 @@ sys.path.insert(0, str(TOOLS))
 from cell_catalog import (  # noqa: E402
     CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR,
     BaseObject,
+    PlacedReference,
+    Transform,
     scan_cell_catalog,
 )
 from cell_scene import (  # noqa: E402
@@ -71,7 +73,8 @@ def synthetic_plugin() -> bytes:
         0x303,
         subrecord("EDID", b"SyntheticPickup\0")
         + subrecord("FULL", b"Synthetic Pickup\0")
-        + subrecord("MODL", b"clutter/test/pickup.nif\0"),
+        + subrecord("MODL", b"clutter/test/pickup.nif\0")
+        + subrecord("DATA", struct.pack("<if", 25, 0.5)),
     )
     container = record(
         "CONT",
@@ -271,6 +274,134 @@ def synthetic_plugin() -> bytes:
 
 
 class CellCatalogTest(unittest.TestCase):
+    def test_item_economics_use_exact_supported_record_layouts(self) -> None:
+        header = record("TES4", 0, subrecord("HEDR", struct.pack("<fII", 1.34, 5, 0)))
+        rows = (
+            ("MISC", 0x510, struct.pack("<if", 10, 1.25), 10, 1.25, "fnv-misc-data-8-v1"),
+            ("KEYM", 0x511, struct.pack("<if", 0, 0.0), 0, 0.0, "fnv-keym-data-8-v1"),
+            ("IMOD", 0x512, struct.pack("<if", 175, 0.5), 175, 0.5, "fnv-imod-data-8-v1"),
+            ("ARMO", 0x513, struct.pack("<iif", 250, 400, 12.0), 250, 12.0, "fnv-armo-data-12-v1"),
+            (
+                "WEAP",
+                0x514,
+                struct.pack("<iifHB", 500, 300, 5.5, 18, 10),
+                500,
+                5.5,
+                "fnv-weap-data-15-v1",
+            ),
+        )
+        plugin = header + b"".join(
+            group(
+                signature.encode("ascii"),
+                0,
+                record(
+                    signature,
+                    form_id,
+                    subrecord("EDID", f"Synthetic{signature}\0".encode("ascii"))
+                    + subrecord("DATA", data),
+                ),
+            )
+            for signature, form_id, data, _, _, _ in rows
+        )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "supported-item-layouts.esm"
+            path.write_bytes(plugin)
+            catalog = scan_cell_catalog(path)
+
+        for _, form_id, _, value, weight, layout in rows:
+            with self.subTest(form_id=f"{form_id:08x}"):
+                item = catalog.items[form_id]
+                self.assertEqual(item.value, value)
+                self.assertEqual(item.weight, weight)
+                self.assertEqual(item.source_subrecord, "DATA")
+                self.assertEqual(item.source_layout, layout)
+
+    def test_supported_item_economics_fail_closed_on_malformed_data(self) -> None:
+        layouts = {"MISC": 8, "KEYM": 8, "IMOD": 8, "ARMO": 12, "WEAP": 15}
+        for ordinal, (signature, expected_bytes) in enumerate(layouts.items()):
+            with self.subTest(signature=signature):
+                header = record(
+                    "TES4",
+                    0,
+                    subrecord("HEDR", struct.pack("<fII", 1.34, 1, 0)),
+                )
+                item = record(
+                    signature,
+                    0x520 + ordinal,
+                    subrecord("EDID", f"Malformed{signature}\0".encode("ascii"))
+                    + subrecord("DATA", bytes(expected_bytes - 1)),
+                )
+                with tempfile.TemporaryDirectory() as raw_directory:
+                    path = Path(raw_directory) / f"malformed-{signature.lower()}.esm"
+                    path.write_bytes(header + group(signature.encode("ascii"), 0, item))
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"{signature} DATA must be {expected_bytes} bytes",
+                    ):
+                        scan_cell_catalog(path)
+
+    def test_item_economics_reject_invalid_values_and_mark_unsupported_layouts(self) -> None:
+        for suffix, data in (
+            ("negative-value", struct.pack("<if", -1, 1.0)),
+            ("negative-weight", struct.pack("<if", 1, -1.0)),
+            ("non-finite-weight", struct.pack("<if", 1, float("nan"))),
+        ):
+            with self.subTest(suffix=suffix):
+                header = record(
+                    "TES4",
+                    0,
+                    subrecord("HEDR", struct.pack("<fII", 1.34, 1, 0)),
+                )
+                item = record(
+                    "MISC",
+                    0x530,
+                    subrecord("EDID", b"InvalidMisc\0") + subrecord("DATA", data),
+                )
+                with tempfile.TemporaryDirectory() as raw_directory:
+                    path = Path(raw_directory) / f"{suffix}.esm"
+                    path.write_bytes(header + group(b"MISC", 0, item))
+                    with self.assertRaisesRegex(ValueError, "invalid item economics"):
+                        scan_cell_catalog(path)
+
+        header = record("TES4", 0, subrecord("HEDR", struct.pack("<fII", 1.34, 1, 0)))
+        unsupported = record(
+            "ALCH",
+            0x531,
+            subrecord("EDID", b"UnsupportedAlchemy\0")
+            + subrecord("FULL", b"Unsupported Alchemy\0")
+            + subrecord("DATA", b"\x00"),
+        )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "unsupported-alch.esm"
+            path.write_bytes(header + group(b"ALCH", 0, unsupported))
+            catalog = scan_cell_catalog(path)
+        base = catalog.base_objects[0x531]
+        interaction = interaction_manifest(
+            PlacedReference(
+                0x532,
+                0x100,
+                base.form_id,
+                0,
+                Transform((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+                1.0,
+                None,
+                None,
+            ),
+            base,
+            catalog,
+        )
+        self.assertNotIn(base.form_id, catalog.items)
+        self.assertNotIn("itemValue", interaction)
+        self.assertNotIn("itemWeight", interaction)
+        self.assertEqual(
+            interaction["itemDefinition"]["source"],
+            {
+                "recordFormId": "00000531",
+                "recordType": "ALCH",
+                "economicsStatus": "unsupported-record-layout",
+            },
+        )
+
     def test_static_collection_base_resolves_for_placed_reference(self) -> None:
         header = record("TES4", 0, subrecord("HEDR", struct.pack("<fII", 1.34, 1, 0)))
         static_collection = record(
@@ -359,6 +490,9 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(catalog.lights[0x302].color_rgb, (100, 80, 40))
         self.assertEqual(catalog.lights[0x302].intensity, 1.5)
         self.assertEqual(catalog.base_objects[0x303].record_type, "MISC")
+        self.assertEqual(catalog.items[0x303].value, 25)
+        self.assertEqual(catalog.items[0x303].weight, 0.5)
+        self.assertEqual(catalog.items[0x303].source_layout, "fnv-misc-data-8-v1")
         self.assertEqual(catalog.containers[0x304].items[0].item_form_id, 0x303)
         self.assertEqual(catalog.containers[0x304].items[0].count, 2)
         self.assertEqual(catalog.weapons[0x305].damage, 26)
@@ -415,6 +549,22 @@ class CellCatalogTest(unittest.TestCase):
                         "itemRecordType": "MISC",
                         "count": 2,
                         "resolved": True,
+                        "itemDefinition": {
+                            "schema": "opennv-owned-item-definition/v1",
+                            "formId": "00000303",
+                            "editorId": "SyntheticPickup",
+                            "displayName": "Synthetic Pickup",
+                            "recordType": "MISC",
+                            "source": {
+                                "recordFormId": "00000303",
+                                "recordType": "MISC",
+                                "economicsStatus": "source-bound",
+                                "subrecord": "DATA",
+                                "layout": "fnv-misc-data-8-v1",
+                            },
+                        },
+                        "itemValue": 25,
+                        "itemWeight": 0.5,
                     }
                 ],
             },
@@ -427,6 +577,12 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(weapon_interaction["weapon"]["damage"], 26)
         self.assertEqual(weapon_interaction["weapon"]["clipSize"], 6)
         self.assertEqual(weapon_interaction["weapon"]["ammoFormId"], "00000306")
+        self.assertEqual(weapon_interaction["itemValue"], 100)
+        self.assertEqual(weapon_interaction["itemWeight"], 2.0)
+        self.assertEqual(
+            weapon_interaction["itemDefinition"]["source"]["layout"],
+            "fnv-weap-data-15-v1",
+        )
         activator = catalog.base_objects[0x308]
         self.assertEqual(activator.attached_script_form_id, 0x307)
         self.assertEqual(catalog.scripts[0x307].editor_id, "SyntheticDelayedActivatorSCRIPT")
