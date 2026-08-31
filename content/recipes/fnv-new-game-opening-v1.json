@@ -379,7 +379,16 @@
       },
       "name": {
         "document": "menus\\dialog\\texteditmenu.xml",
-        "layoutTile": "TEM_MainRect"
+        "layoutTile": "TEM_MainRect",
+        "textEditTiles": {
+          "menuName": "TextEditMenu",
+          "panelTile": "TEM_MainRect",
+          "promptTile": "textedit_prompt",
+          "promptEntity": "-sEnterName",
+          "inputTile": "textedit_text",
+          "acceptTile": "textedit_button_ok",
+          "acceptEntity": "-sOk"
+        }
       },
       "appearance": {
         "document": "menus\\chargen\\race_sex_menu.xml",

@@ -287,31 +287,46 @@ internal partial class Fo3OpeningFlow
         EnsureCreatorVaultBackdrop(sex);
         ClearContent();
         var nameUi = _profile.Appearance.Ui.Name;
+        var source = nameUi.TextEditMenu;
         var panel = CreatorSurface(
-            nameUi.Panel,
+            source.Panel,
             nameUi.BackgroundTexture,
-            new Vector2(
-                Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
-                Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels));
-        var content = CreatorColumn(
-            panel,
-            (int)Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels);
+            source.CanvasSize);
         var prompt = Label("", Fo3OpeningFlowNumericContracts.BodyFontPixels);
-        OwnedGamebryoTileRuntime.BindText(prompt, nameUi.Prompt);
-        content.AddChild(prompt);
+        OwnedGamebryoTileRuntime.BindText(prompt, source.Prompt.Text);
+        var promptSize = prompt.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            prompt,
+            source.Prompt.Placement,
+            source.Panel.Rect.Size,
+            promptSize);
+        panel.AddChild(prompt);
         var name = new LineEdit
         {
-            PlaceholderText = "Name",
+            PlaceholderText = source.Prompt.Text.Text,
+            Alignment = HorizontalAlignment.Center,
             CustomMinimumSize = new Vector2(
-                0.0f,
+                source.InputWrapWidth,
                 Fo3OpeningFlowNumericContracts.ButtonMinimumHeightPixels),
         };
         name.AddThemeFontSizeOverride("font_size", Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            name,
+            source.Input,
+            source.Panel.Rect.Size,
+            name.CustomMinimumSize);
         name.TextSubmitted += _ => AcceptName(name);
-        content.AddChild(name);
-        var accept = Button("ACCEPT");
+        panel.AddChild(name);
+        var accept = Button("");
+        OwnedGamebryoTileRuntime.BindText(accept, source.Accept.Text);
+        var acceptSize = accept.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            accept,
+            source.Accept.Placement,
+            source.Panel.Rect.Size,
+            acceptSize);
         accept.Pressed += () => AcceptName(name);
-        content.AddChild(accept);
+        panel.AddChild(accept);
         _activeNameInput = name;
         Callable.From(name.GrabFocus).CallDeferred();
         GD.Print(

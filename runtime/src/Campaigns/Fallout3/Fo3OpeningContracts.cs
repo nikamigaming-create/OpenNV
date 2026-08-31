@@ -96,8 +96,7 @@ internal sealed record Fo3AppearanceNameUi(
     int PanelWidth,
     int PanelHeight,
     Fo3AppearanceAsset BackgroundTexture,
-    OwnedGamebryoTileLayout Panel,
-    OwnedGamebryoTextBinding Prompt);
+    OwnedGamebryoTextEditMenu TextEditMenu);
 
 internal sealed record Fo3AppearancePreviewPresentation(
     float ViewportWidthFraction,
@@ -227,11 +226,11 @@ internal sealed record Fo3AppearanceContract(
         var nameSource = RequiredObject(uiSource, "name");
         var nameWidth = PositiveInteger(nameSource, "panelWidth");
         var nameHeight = PositiveInteger(nameSource, "panelHeight");
-        var namePrompt = RequiredObject(nameSource, "prompt");
-        var namePromptSha256 = RequiredString(namePrompt, "sourceSha256");
-        if (!ValidHex(namePromptSha256, Fo3OpeningFlowNumericContracts.Sha256HexCharacters))
+        var textEditMenu = OwnedGamebryoTileRuntime.ParseTextEditMenu(
+            RequiredObject(nameSource, "textEditMenuTiles"));
+        if (textEditMenu.Panel.Rect.Size != new Vector2(nameWidth, nameHeight))
             throw new InvalidOperationException(
-                "Fallout 3 name prompt source hash is invalid.");
+                "Fallout 3 TextEditMenu panel dimensions differ.");
         var ui = new Fo3AppearanceUi(
             PositiveInteger(uiSource, "panelX"),
             PositiveInteger(uiSource, "panelY"),
@@ -250,25 +249,7 @@ internal sealed record Fo3AppearanceContract(
                 nameWidth,
                 nameHeight,
                 LoadAsset(RequiredObject(nameSource, "backgroundTexture")),
-                new OwnedGamebryoTileLayout(
-                    RequiredString(nameSource, "document"),
-                    RequiredString(nameSource, "documentSha256"),
-                    RequiredString(nameSource, "panelName"),
-                    new Rect2(
-                        (Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels - nameWidth) /
-                            2.0f,
-                        (Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels - nameHeight) /
-                            2.0f,
-                        nameWidth,
-                        nameHeight),
-                    ParseTileVisibility(RequiredString(nameSource, "panelVisibility"))),
-                new OwnedGamebryoTextBinding(
-                    RequiredString(namePrompt, "tile"),
-                    RequiredString(namePrompt, "stringEntity"),
-                    RequiredString(namePrompt, "text"),
-                    [namePromptSha256])));
-        OwnedGamebryoTileRuntime.Validate(ui.Name.Panel);
-        OwnedGamebryoTileRuntime.Validate(ui.Name.Prompt);
+                textEditMenu));
         var playerFaceGen = RequiredObject(RequiredObject(source, "player"), "faceGen");
         var controlSpace = RequiredObject(playerFaceGen, "controlSpace");
         var previewControl = RequiredObject(controlSpace, "runtimePreviewControl");
@@ -768,16 +749,6 @@ internal sealed record Fo3AppearanceContract(
             throw new InvalidOperationException($"Fallout 3 appearance UI field {name} is invalid.");
         return value;
     }
-
-    private static OwnedGamebryoTileVisibility ParseTileVisibility(string source) =>
-        source switch
-        {
-            "inherited" => OwnedGamebryoTileVisibility.Inherited,
-            "visible" => OwnedGamebryoTileVisibility.Visible,
-            "hidden" => OwnedGamebryoTileVisibility.Hidden,
-            _ => throw new InvalidOperationException(
-                $"Fallout 3 appearance UI visibility is unsupported: {source}"),
-        };
 
     private static string RequiredFormId(JsonElement source, string name)
     {

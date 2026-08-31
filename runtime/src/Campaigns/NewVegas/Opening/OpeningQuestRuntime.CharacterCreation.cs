@@ -12,18 +12,28 @@ internal partial class OpeningQuestRuntime
 {
     private void ShowNameMenu(Action completed)
     {
-        var content = OpenPanel(MenuRect("name"), "name");
-        var prompt = NewLabel(_flow.Strings["namePrompt"]);
+        if (!_flow.Menus.TryGetValue("name", out var nameMenu) ||
+            nameMenu.TextEditMenu is not { } source)
+            throw new InvalidOperationException(
+                "Owned TextEditMenu tile contract is absent.");
+        var content = OpenOwnedTilePanel(source.Panel, "name");
+        var prompt = NewLabel("");
         prompt.HorizontalAlignment = HorizontalAlignment.Center;
+        OwnedGamebryoTileRuntime.BindText(prompt, source.Prompt.Text);
+        var promptSize = prompt.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            prompt,
+            source.Prompt.Placement,
+            source.Panel.Rect.Size,
+            promptSize);
         content.AddChild(prompt);
         var input = new LineEdit
         {
-            Name = "OwnedPlayerNameInput",
             Text = _playerName,
-            PlaceholderText = _flow.Strings["namePrompt"],
+            PlaceholderText = source.Prompt.Text.Text,
             Alignment = HorizontalAlignment.Center,
             CustomMinimumSize = new Vector2(
-                0.0f,
+                source.InputWrapWidth,
                 _opening.Font.LineHeightPixels * 2.0f),
         };
         ApplyTextTheme(input);
@@ -32,8 +42,20 @@ internal partial class OpeningQuestRuntime
             _opening.Style);
         input.AddThemeStyleboxOverride("normal", inputStyle);
         input.AddThemeStyleboxOverride("focus", inputStyle);
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            input,
+            source.Input,
+            source.Panel.Rect.Size,
+            input.CustomMinimumSize);
         content.AddChild(input);
-        var accept = NewButton(_flow.Strings["ok"]);
+        var accept = NewButton("");
+        OwnedGamebryoTileRuntime.BindText(accept, source.Accept.Text);
+        var acceptSize = accept.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            accept,
+            source.Accept.Placement,
+            source.Panel.Rect.Size,
+            acceptSize);
         content.AddChild(accept);
         void Submit()
         {

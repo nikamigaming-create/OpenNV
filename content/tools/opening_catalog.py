@@ -45,6 +45,7 @@ OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
 OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
 RACE_SEX_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-racesex-menu-tiles/v1"
+TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-textedit-menu-tiles/v1"
 GAMEPLAY_VITALS_SCHEMA = "opennv-owned-gameplay-vitals/v1"
 PLAYER_BASE_EDITOR_ID = "Player"
 PLAYER_BASE_LEVEL_OFFSET = 8
@@ -1541,6 +1542,130 @@ def _layout_trait(
         active.remove(identity)
 
 
+def _affine_axis_expression(node: TileNode, trait_name: str) -> dict[str, float]:
+    """Compile the TextEditMenu parent/self affine trait subset without evaluating it."""
+    trait = node.child(trait_name)
+    if trait is None:
+        raise ValueError(
+            f"Owned TextEditMenu trait is absent: {node.name}.{trait_name}"
+        )
+    direct = _direct_number(trait)
+    if direct is not None:
+        return {"parentFactor": 0.0, "selfFactor": 0.0, "constant": direct}
+
+    dimension_trait = "width" if trait_name in {"x", "_x"} else "height"
+    value: list[float] | None = None
+    for operation in trait.children:
+        source = operation.attributes.get("src")
+        source_trait = operation.attributes.get("trait", dimension_trait)
+        if source == "parent()" and source_trait == dimension_trait:
+            operand = [1.0, 0.0, 0.0]
+        elif source == "me()" and source_trait == dimension_trait:
+            operand = [0.0, 1.0, 0.0]
+        elif source is None and not operation.children:
+            operand = [0.0, 0.0, float(operation.text)]
+        else:
+            raise ValueError(
+                f"Owned TextEditMenu affine source is unsupported: "
+                f"{node.name}.{trait_name}.{operation.tag}"
+            )
+        if operation.tag == "copy":
+            value = operand
+        elif value is None:
+            raise ValueError(
+                f"Owned TextEditMenu affine expression begins with {operation.tag}"
+            )
+        elif operation.tag == "add":
+            value = [left + right for left, right in zip(value, operand)]
+        elif operation.tag == "sub":
+            value = [left - right for left, right in zip(value, operand)]
+        elif (
+            operation.tag == "div"
+            and operand[:2] == [0.0, 0.0]
+            and operand[2] != 0.0
+        ):
+            value = [component / operand[2] for component in value]
+        else:
+            raise ValueError(
+                f"Owned TextEditMenu affine operation is unsupported: {operation.tag}"
+            )
+    if value is None or any(not math.isfinite(component) for component in value):
+        raise ValueError("Owned TextEditMenu affine expression is invalid")
+    return dict(zip(("parentFactor", "selfFactor", "constant"), value))
+
+
+def _text_edit_menu_tile_contract(
+    root: TileNode,
+    document: dict[str, object],
+    screen: dict[str, float],
+    selectors: dict[str, object],
+) -> dict[str, object]:
+    menus = [node for node in root.children if node.tag == "menu"]
+    if len(menus) != 1 or menus[0].name != str(selectors["menuName"]):
+        raise ValueError("Owned TextEditMenu document identity differs")
+    menu = menus[0]
+    parents = _tile_parent_index(root)
+    panel = _named_tile(root, str(selectors["panelTile"]))
+    prompt = _named_tile(root, str(selectors["promptTile"]))
+    input_tile = _named_tile(root, str(selectors["inputTile"]))
+    accept = _named_tile(root, str(selectors["acceptTile"]))
+
+    def text_binding(node: TileNode, expected_entity: object) -> dict[str, object]:
+        entity = _entity_name(_required_tile_text(node, "string"))
+        if entity != str(expected_entity):
+            raise ValueError(f"Owned TextEditMenu string binding differs: {node.name}")
+        return {
+            "tile": node.name,
+            "stringEntity": entity,
+            "text": _display_entity(f"&{entity};"),
+            "sourceSha256": str(document["sha256"]),
+        }
+
+    def placement(
+        node: TileNode,
+        x_trait: str = "x",
+        y_trait: str = "y",
+    ) -> dict[str, object]:
+        justify = _required_tile_identity(node, "justify")
+        if justify not in {"left", "center", "right"}:
+            raise ValueError(f"Owned TextEditMenu justification differs: {node.name}")
+        return {
+            "tile": node.name,
+            "x": _affine_axis_expression(node, x_trait),
+            "y": _affine_axis_expression(node, y_trait),
+            "justify": justify,
+        }
+
+    panel_rect = [
+        _layout_trait(panel, trait, root, parents, screen)
+        for trait in ("x", "y", "width", "height")
+    ]
+    if any(not math.isfinite(value) for value in panel_rect) or any(
+        value <= 0.0 for value in panel_rect[2:]
+    ):
+        raise ValueError("Owned TextEditMenu panel geometry is invalid")
+    wrap_width = _required_tile_number(input_tile, "wrapwidth")
+    if wrap_width <= 0.0:
+        raise ValueError("Owned TextEditMenu input wrap width is invalid")
+    return {
+        "schema": TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA,
+        "document": str(document["path"]),
+        "documentSha256": str(document["sha256"]),
+        "menuName": menu.name,
+        "canvasSize": [screen["width"], screen["height"]],
+        "panel": {"tile": panel.name, "rect": panel_rect},
+        "prompt": {
+            **placement(prompt),
+            **text_binding(prompt, selectors["promptEntity"]),
+        },
+        "input": {**placement(input_tile), "wrapWidth": wrap_width},
+        "accept": {
+            **placement(accept, "_x", "_y"),
+            **text_binding(accept, selectors["acceptEntity"]),
+        },
+    }
+
+
 def _required_tile_number(node: TileNode, trait_name: str) -> float:
     value = _direct_number(node.child(trait_name))
     if value is None:
@@ -2167,6 +2292,13 @@ def _flow_menu_contract(
         if documents[document]["menuName"] == "RaceSexMenu":
             row["raceSexMenuTiles"] = _race_sex_menu_tile_contract(
                 trees[document], documents[document], screen, trees
+            )
+        if "textEditTiles" in definition:
+            row["textEditMenuTiles"] = _text_edit_menu_tile_contract(
+                trees[document],
+                documents[document],
+                screen,
+                dict(definition["textEditTiles"]),
             )
         rows.append(row)
     closure = set()

@@ -27,10 +27,21 @@ class Fo3OwnedUiTileContractTest(unittest.TestCase):
         name_xml = br"""
             <menu name="TextEditMenu"><rect name="TEM_MainRect">
             <width>720</width><height>180</height>
-            <text name="textedit_prompt"><string>&-sEnterName;</string></text>
+            <x><copy src="screen()" trait="width"/><sub src="me()" trait="width"/><div>2</div></x>
+            <y><copy src="screen()" trait="height"/><sub src="me()" trait="height"/><div>2</div></y>
+            <text name="textedit_prompt"><string>&-sEnterName;</string><justify>&center;</justify>
+            <x><copy src="parent()" trait="width"/><div>2</div></x><y>32</y></text>
+            <text name="textedit_text"><justify>&center;</justify><wrapwidth>250</wrapwidth>
+            <x><copy src="parent()" trait="width"/><div>2</div></x>
+            <y><copy src="parent()" trait="height"/><sub src="me()" trait="height"/><div>2</div></y></text>
+            <hotrect name="textedit_button_ok"><string>&-sOk;</string><justify>&right;</justify>
+            <_x><copy src="parent()" trait="width"/><sub>16</sub></_x>
+            <_y><copy src="parent()" trait="height"/><sub src="me()" trait="height"/><sub>16</sub></_y></hotrect>
             Interface\Shared\Background\solid_black.dds</rect></menu>
         """
         definition = {
+            "sourceCanvasWidth": 1600,
+            "sourceCanvasHeight": 1200,
             "document": "menus\\chargen\\race_sex_menu.xml",
             "menuName": "RaceSexMenu",
             "panelName": "NOGLOW_BRANCH",
@@ -52,6 +63,9 @@ class Fo3OwnedUiTileContractTest(unittest.TestCase):
             "namePanelName": "TEM_MainRect",
             "namePromptTile": "textedit_prompt",
             "namePromptEntity": "-sEnterName",
+            "nameInputTile": "textedit_text",
+            "nameAcceptTile": "textedit_button_ok",
+            "nameAcceptEntity": "-sOk",
             "namePanelWidth": 720,
             "namePanelHeight": 180,
             "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds",
@@ -81,15 +95,14 @@ class Fo3OwnedUiTileContractTest(unittest.TestCase):
         self.assertEqual(result["panelVisibility"], "inherited")
         self.assertEqual(result["name"]["panelName"], "TEM_MainRect")
         self.assertEqual(result["name"]["panelVisibility"], "inherited")
-        self.assertEqual(
-            result["name"]["prompt"],
-            {
-                "tile": "textedit_prompt",
-                "stringEntity": "-sEnterName",
-                "text": "Enter Name",
-                "sourceSha256": "b" * 64,
-            },
-        )
+        tiles = result["name"]["textEditMenuTiles"]
+        self.assertEqual(tiles["panel"]["rect"], [440.0, 510.0, 720.0, 180.0])
+        self.assertEqual(tiles["prompt"]["text"], "Enter Name")
+        self.assertEqual(tiles["prompt"]["x"]["parentFactor"], 0.5)
+        self.assertEqual(tiles["input"]["y"]["selfFactor"], -0.5)
+        self.assertEqual(tiles["accept"]["text"], "Ok")
+        self.assertEqual(tiles["accept"]["x"]["constant"], -16.0)
+        self.assertEqual(tiles["accept"]["sourceSha256"], "b" * 64)
 
 
 if __name__ == "__main__":

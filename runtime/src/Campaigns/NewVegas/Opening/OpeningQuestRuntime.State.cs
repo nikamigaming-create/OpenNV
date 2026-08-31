@@ -800,6 +800,34 @@ internal partial class OpeningQuestRuntime
         return content;
     }
 
+    private Control OpenOwnedTilePanel(
+        OwnedGamebryoTileLayout layout,
+        string menuRole)
+    {
+        var root = OpenModalRoot(menuRole);
+        var panel = new Panel { MouseFilter = Control.MouseFilterEnum.Stop };
+        OwnedGamebryoTileRuntime.ApplyAbsolute(panel, layout);
+        panel.AddThemeStyleboxOverride(
+            "panel",
+            OwnedUiTheme.HighlightedStyle(_opening.MainMenuColor, _opening.Style));
+        if (!_flow.Menus.TryGetValue(menuRole, out var menu) ||
+            menu.Background is not { } background)
+            throw new InvalidOperationException(
+                $"Owned tile panel background is unavailable: {menuRole}");
+        var backgroundTexture = new TextureRect
+        {
+            Name = $"Owned{menu.MenuName}Background",
+            Texture = OwnedUiTheme.LoadTexture(background.Path),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        backgroundTexture.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        panel.AddChild(backgroundTexture);
+        root.AddChild(panel);
+        return panel;
+    }
+
     private Control OpenModalRoot(string? menuRole = null)
     {
         CloseModal(false);

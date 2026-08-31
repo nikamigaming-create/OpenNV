@@ -153,6 +153,11 @@ internal sealed partial record OpeningNewGameFlow(
             .ToDictionary(value => value.Role, StringComparer.OrdinalIgnoreCase);
         var referenceCanvas = OpeningManifest.ReadVector(
             uiFlow.GetProperty("referenceCanvasSize"));
+        if (menus.Values.Any(menu =>
+                menu.TextEditMenu is { } textEdit &&
+                textEdit.CanvasSize != referenceCanvas))
+            throw new InvalidOperationException(
+                "Owned TextEditMenu reference canvas differs.");
         var strings = uiFlow.GetProperty("strings").EnumerateObject()
             .ToDictionary(
                 value => value.Name,
@@ -306,6 +311,9 @@ internal sealed partial record OpeningNewGameFlow(
                 : new Dictionary<string, OpeningFlowSemanticRect>(
                     StringComparer.Ordinal),
             background,
+            value.TryGetProperty("textEditMenuTiles", out var textEditMenuTiles)
+                ? OwnedGamebryoTileRuntime.ParseTextEditMenu(textEditMenuTiles)
+                : null,
             value.TryGetProperty("raceSexMenuTiles", out var raceSexMenuTiles)
                 ? ParseRaceSexMenuTiles(
                     raceSexMenuTiles,

@@ -32,6 +32,7 @@ from opening_catalog import (  # noqa: E402
     _resolve_command_record_identities,
     _resolve_actor_animation_commands,
     _script_commands,
+    _text_edit_menu_tile_contract,
     parse_tile_document,
 )
 from bsa_archive import ExtractedMember  # noqa: E402
@@ -81,6 +82,46 @@ def subrecord(signature: str, data: bytes = b"") -> bytes:
 
 
 class OpeningCatalogTest(unittest.TestCase):
+    def test_text_edit_menu_compiles_parent_self_affine_traits(self):
+        document = "menus\\dialog\\texteditmenu.xml"
+        tree = parse_tile_document(
+            b"""
+            <menu name="TextEditMenu"><rect name="TEM_MainRect">
+              <width>720</width><height>180</height>
+              <x><copy src="screen()" trait="width"/><sub src="me()" trait="width"/><div>2</div></x>
+              <y><copy src="screen()" trait="height"/><sub src="me()" trait="height"/><div>2</div></y>
+              <text name="prompt"><string>&-sEnterName;</string><justify>&center;</justify>
+                <x><copy src="parent()" trait="width"/><div>2</div></x><y>32</y></text>
+              <text name="input"><justify>&center;</justify><wrapwidth>250</wrapwidth>
+                <x><copy src="parent()" trait="width"/><div>2</div></x>
+                <y><copy src="parent()" trait="height"/><sub src="me()" trait="height"/><div>2</div></y></text>
+              <hotrect name="ok"><string>&-sOk;</string><justify>&right;</justify>
+                <_x><copy src="parent()" trait="width"/><sub>16</sub></_x>
+                <_y><copy src="parent()" trait="height"/><sub src="me()" trait="height"/><sub>16</sub></_y></hotrect>
+            </rect></menu>
+            """
+        )
+        result = _text_edit_menu_tile_contract(
+            tree,
+            {"path": document, "sha256": "a" * 64},
+            {"width": 1600.0, "height": 1200.0},
+            {
+                "menuName": "TextEditMenu",
+                "panelTile": "TEM_MainRect",
+                "promptTile": "prompt",
+                "promptEntity": "-sEnterName",
+                "inputTile": "input",
+                "acceptTile": "ok",
+                "acceptEntity": "-sOk",
+            },
+        )
+
+        self.assertEqual(result["panel"]["rect"], [440.0, 510.0, 720.0, 180.0])
+        self.assertEqual(result["prompt"]["x"]["parentFactor"], 0.5)
+        self.assertEqual(result["input"]["y"]["selfFactor"], -0.5)
+        self.assertEqual(result["accept"]["y"]["constant"], -16.0)
+        self.assertEqual(result["accept"]["text"], "Ok")
+
     def test_full_body_preview_set_is_emitted_verbatim_with_hash_bound_path(self):
         preview_set = {
             "schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,

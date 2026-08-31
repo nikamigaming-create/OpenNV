@@ -249,6 +249,8 @@
       }
     },
     "appearanceUi": {
+      "sourceCanvasWidth": 1600,
+      "sourceCanvasHeight": 1200,
       "document": "menus\\chargen\\race_sex_menu.xml",
       "menuName": "RaceSexMenu",
       "panelName": "NOGLOW_BRANCH",
@@ -270,6 +272,9 @@
       "namePanelName": "TEM_MainRect",
       "namePromptTile": "textedit_prompt",
       "namePromptEntity": "-sEnterName",
+      "nameInputTile": "textedit_text",
+      "nameAcceptTile": "textedit_button_ok",
+      "nameAcceptEntity": "-sOk",
       "namePanelWidth": 720,
       "namePanelHeight": 180,
       "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds"
