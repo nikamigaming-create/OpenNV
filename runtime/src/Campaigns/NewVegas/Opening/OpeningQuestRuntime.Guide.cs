@@ -228,6 +228,10 @@ internal partial class OpeningQuestRuntime
     }
 
     private SourcePackagePlacement ResolveGuideFurniturePlacement(string referenceFormId)
+        => GamebryoFurnitureSession.PlacementFromSource(
+            ResolveGuideFurnitureSource(referenceFormId));
+
+    private SourceGamebryoFurniture ResolveGuideFurnitureSource(string referenceFormId)
     {
         var contract = _flow.GuideActorAi.FurnitureOccupancy.Furniture;
         var furniture = _loaded.MainContent.PlacedReferences.Where(value =>
@@ -239,14 +243,40 @@ internal partial class OpeningQuestRuntime
                 "Owned package furniture target is absent or ambiguous: " +
                 referenceFormId);
         var marker = contract.Marker;
-        return GamebryoPackagePlacement.FromFurnitureMarker(
+        var occupancy = _flow.GuideActorAi.FurnitureOccupancy;
+        var packageLoop = FurniturePackageLoopAnimation(occupancy);
+        var exitRoot = occupancy.Exit.RootMotion ?? throw new InvalidOperationException(
+            "Owned furniture exit has no root-motion contract.");
+        return new SourceGamebryoFurniture(
             referenceFormId,
+            occupancy.MarkerId,
             furniture[0].Placement.Transform,
             marker.OffsetGodotGameUnits,
             marker.RotationGodot,
             marker.ActorPlacementOffset.OffsetGodotGameUnits,
             marker.ActorForwardHeadingDelta.RotationGodot,
-            _guideActor.Placement.Scale);
+            _guideActor.Placement.Scale,
+            SourceAnimation(occupancy.SeatedLoop, ZeroedAccumulationRootTranslation),
+            packageLoop,
+            SourceAnimation(occupancy.Exit, RetainedAccumulationRootTranslation),
+            exitRoot.DisplacementGodotGameUnits);
+    }
+
+    private SourceActorAnimation FurniturePackageLoopAnimation(
+        OpeningGuideFurnitureOccupancy furniture)
+    {
+        var animationObject = _flow.GuideActorAi.AnimationObjects.Single(value =>
+            value.IdleAnimationFormId.Equals(
+                furniture.AnimationObjectIdleFormId,
+                StringComparison.OrdinalIgnoreCase));
+        return new SourceActorAnimation(
+            animationObject.IdleAnimationLogicalPath,
+            animationObject.IdleAnimationSha256,
+            animationObject.IdleAnimationSequenceName,
+            animationObject.IdleAnimationStartSeconds,
+            animationObject.IdleAnimationStopSeconds,
+            animationObject.IdleAnimationCycleType,
+            ZeroedAccumulationRootTranslation);
     }
 
     private void BeginGuidePackage(OpeningGuidePackage package)
@@ -407,13 +437,24 @@ internal partial class OpeningQuestRuntime
         var placement = _activeGuidePackageTarget.Placement ??
             throw new InvalidOperationException(
                 "Owned furniture package has no selected marker placement.");
-        GamebryoPackagePlacement.Publish(_guideActor, placement);
+        var furnitureSource = ResolveGuideFurnitureSource(source.FormId);
+        _guideFurnitureSession = GamebryoFurnitureSession.Occupy(
+            _guideActor,
+            furnitureSource,
+            furnitureSource.Loop.StartSeconds,
+            furnitureSource.PackageLoop?.StartSeconds);
+        if (!_guideFurnitureSession.Placement.SourceTransform.IsEqualApprox(
+                placement.SourceTransform) ||
+            !_guideFurnitureSession.Placement.TargetFormId.Equals(
+                placement.TargetFormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Owned furniture session placement differs from its selected package.");
         _loaded.ActorGrounding.RegisterOwnedFurnitureMarkerOccupancy(
             _guideActor,
             furniture[0].Placement,
             placement.SourceTransform.Origin);
         _guideFurnitureOccupied = true;
-        _guideFurnitureExitRootMotionApplied = false;
         _guideFurnitureReferenceFormId = source.FormId;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_OCCUPIED " +
@@ -446,14 +487,7 @@ internal partial class OpeningQuestRuntime
             seatedSource);
         var smoking = ActorAnimationPlayback.Resolve(
             _guideActor.Actor,
-            new SourceActorAnimation(
-                animationObject.IdleAnimationLogicalPath,
-                animationObject.IdleAnimationSha256,
-                animationObject.IdleAnimationSequenceName,
-                animationObject.IdleAnimationStartSeconds,
-                animationObject.IdleAnimationStopSeconds,
-                animationObject.IdleAnimationCycleType,
-                ZeroedAccumulationRootTranslation));
+            FurniturePackageLoopAnimation(furniture));
         if (smoking.SequenceName != animationObject.IdleAnimationSequenceName ||
             smoking.StartSeconds != animationObject.IdleAnimationStartSeconds ||
             smoking.StopSeconds != animationObject.IdleAnimationStopSeconds ||
@@ -471,6 +505,12 @@ internal partial class OpeningQuestRuntime
                 animationObject.AttachmentNode);
         var layered = _guideFurnitureLayeredSeatedAnimation;
         layered.Play();
+        (_guideFurnitureSession ?? throw new InvalidOperationException(
+            "Owned seated guide has no furniture session."))
+            .PublishLoopPhase(
+                _guideActor,
+                layered.FurniturePositionSeconds,
+                layered.PackagePositionSeconds);
         _activeGuideIdleAnimation = null;
         SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
         _activeGuideAnimation = layered.ActiveAnimation;
@@ -487,7 +527,7 @@ internal partial class OpeningQuestRuntime
     private void BeginGuideFurnitureExit(OpeningGuidePackage package)
     {
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
-        if (_guideFurnitureExiting || _guideFurnitureExitRootMotionApplied ||
+        if (_guideFurnitureExiting ||
             _stage != furniture.ReleaseStage ||
             !package.FormId.Equals(
                 furniture.ReleasePackageFormId,
@@ -500,13 +540,16 @@ internal partial class OpeningQuestRuntime
         _guideMoving = false;
         _guidePackageTravel = null;
         _activeGuideLocomotion = null;
-        _guideFurnitureExitPlayback = ActorAnimationPlayback.Start(
-            _guideActor.Actor,
-            _activeGuidePackageAnimation ?? throw new InvalidOperationException(
-                "Owned furniture-exit package has no selected source animation."));
+        if (_activeGuidePackageAnimation is null)
+            throw new InvalidOperationException(
+                "Owned furniture-exit package has no selected source animation.");
+        var exitPlayback = (_guideFurnitureSession ??
+            throw new InvalidOperationException(
+                "Owned furniture-exit package has no furniture session."))
+            .BeginExit(_guideActor);
         _activeGuideIdleAnimation = null;
         SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
-        _activeGuideAnimation = _guideFurnitureExitPlayback.Animation;
+        _activeGuideAnimation = exitPlayback.Animation;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_EXIT_BEGIN " +
             $"reference={_guideFurnitureReferenceFormId} " +
@@ -520,14 +563,17 @@ internal partial class OpeningQuestRuntime
             ?? throw new InvalidOperationException(
                 "Owned guide furniture exit has no pending package.");
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
-        if (_guideFurnitureExitRootMotionApplied ||
-            furniture.Exit.RootMotion is not { } rootMotion)
+        if (furniture.Exit.RootMotion is not { } rootMotion)
             throw new InvalidOperationException(
-                "Owned guide furniture exit root motion is absent or already applied.");
-        var transfer = GamebryoPackagePlacement.TransferRoot(
-            _guideActor,
-            rootMotion.DisplacementGodotGameUnits);
-        _guideFurnitureExitRootMotionApplied = true;
+                "Owned guide furniture exit root motion is absent.");
+        var session = _guideFurnitureSession ?? throw new InvalidOperationException(
+            "Owned guide furniture exit has no furniture session.");
+        var transfer = session.CompleteExit(_guideActor);
+        var expectedDisplacement = transfer.Before.Basis.Orthonormalized() *
+            rootMotion.DisplacementGodotGameUnits;
+        if (!transfer.AppliedDisplacement.IsEqualApprox(expectedDisplacement))
+            throw new InvalidOperationException(
+                "Owned guide furniture exit root differs from its source animation.");
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_EXIT_ROOT " +
             $"reference={_guideFurnitureReferenceFormId} " +
@@ -543,7 +589,7 @@ internal partial class OpeningQuestRuntime
         _guideFurnitureExiting = false;
         _guideFurnitureReferenceFormId = null;
         _guideFurnitureExitPackage = null;
-        _guideFurnitureExitPlayback = null;
+        _guideFurnitureSession = null;
         _activeGuideAnimation = null;
         ContinueGuidePackage(package);
     }
@@ -554,11 +600,13 @@ internal partial class OpeningQuestRuntime
             return;
         if (_guideFurnitureExiting)
         {
-            if (_guideFurnitureExitPlayback is not { } exit)
+            var session = _guideFurnitureSession ?? throw new InvalidOperationException(
+                "Owned guide furniture exit has no furniture session.");
+            if (session.ExitPlayback is not { } exit)
                 throw new InvalidOperationException(
                     "Owned guide furniture exit has no active animation.");
-            exit.Advance(delta);
-            if (!exit.Terminal)
+            var terminal = session.AdvanceExit(_guideActor, delta);
+            if (!terminal || !exit.Terminal)
                 return;
             FinishGuideFurnitureExit();
             return;
@@ -566,6 +614,13 @@ internal partial class OpeningQuestRuntime
         if (_guideFurnitureOccupied)
         {
             _guideFurnitureLayeredSeatedAnimation?.Advance(delta);
+            if (_guideFurnitureLayeredSeatedAnimation is { } layered)
+                (_guideFurnitureSession ?? throw new InvalidOperationException(
+                    "Owned seated guide has no furniture session."))
+                    .PublishLoopPhase(
+                        _guideActor,
+                        layered.FurniturePositionSeconds,
+                        layered.PackagePositionSeconds);
             if (_activeGuideAnimation is not { } seatedAnimation ||
                 !seatedAnimation.Player.IsPlaying() ||
                 !seatedAnimation.Player.CurrentAnimation.ToString().Equals(

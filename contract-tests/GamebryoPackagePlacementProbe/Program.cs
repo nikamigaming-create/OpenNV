@@ -41,5 +41,41 @@ if (!transfer.After.Basis.IsEqualApprox(transfer.Before.Basis) ||
         transfer.Before.Origin + transfer.AppliedDisplacement))
     throw new InvalidOperationException("Furniture exit root transfer differs.");
 
+var loop = new SourceActorAnimation(
+    "meshes\\characters\\loop.kf",
+    new string('a', 64),
+    "Loop",
+    0.0f,
+    2.0f,
+    ActorAnimationPlayback.LoopCycleType,
+    "owned-world-root-authoritative-zero-local-translation");
+var exit = loop with
+{
+    LogicalPath = "meshes\\characters\\exit.kf",
+    Sha256 = new string('b', 64),
+    SequenceName = "Exit",
+    CycleType = ActorAnimationPlayback.ClampCycleType,
+    AccumulationRootTranslationDisposition =
+        "preserve-hash-bound-owned-clip-root-curve",
+};
+var furnitureSource = new SourceGamebryoFurniture(
+    "00000010",
+    14,
+    Transform3D.Identity,
+    new Vector3(2.0f, 3.0f, 4.0f),
+    Quaternion.Identity,
+    new Vector3(0.5f, 1.0f, 1.5f),
+    new Quaternion(Vector3.Up, Mathf.Pi),
+    Vector3.One,
+    loop,
+    null,
+    exit,
+    new Vector3(0.0f, 0.0f, 2.0f));
+var sessionPlacement = GamebryoFurnitureSession.PlacementFromSource(furnitureSource);
+if (!sessionPlacement.SourceTransform.IsEqualApprox(furniture.SourceTransform) ||
+    sessionPlacement.TargetFormId != furniture.TargetFormId)
+    throw new InvalidOperationException("Furniture session placement differs.");
+
 Console.WriteLine(
-    "GAMEBRYO_PACKAGE_PLACEMENT_PROBE_PASS furniture=1 marker=1 supportHeightOnly=1 root=1");
+    "GAMEBRYO_PACKAGE_PLACEMENT_PROBE_PASS furniture=1 marker=1 supportHeightOnly=1 " +
+    "root=1 session=1");

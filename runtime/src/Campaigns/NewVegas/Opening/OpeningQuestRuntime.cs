@@ -128,9 +128,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;
-    private ActorAnimationPlayback? _guideFurnitureExitPlayback;
     private OpeningGuidePriorityAnimation.LayeredPlayback?
         _guideFurnitureLayeredSeatedAnimation;
+    private GamebryoFurnitureSession? _guideFurnitureSession;
     private string? _guideAnimationObjectIdleFormId;
     private OpeningCigaretteSmokePresentation? _guideCigaretteSmokePresentation;
     private GamebryoPackageTravel? _guidePackageTravel;
@@ -141,7 +141,6 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private bool _guidePackageBegan;
     private bool _guideFurnitureOccupied;
     private bool _guideFurnitureExiting;
-    private bool _guideFurnitureExitRootMotionApplied;
     private string? _guideFurnitureReferenceFormId;
     private OpeningGuidePackage? _guideFurnitureExitPackage;
     private bool _guideLookAtPlayer;
