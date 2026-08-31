@@ -246,8 +246,6 @@ def _crafting_station_manifest(
         }
         for recipe in sorted(supported, key=lambda value: value.form_id)
     ]
-    if not recipes:
-        raise ValueError(f"ACTI {base.form_id:08x} has no supported source recipes")
     return {
         "type": "crafting-station",
         "script": {"formId": form_id(script.form_id), "editorId": script.editor_id},
@@ -258,7 +256,11 @@ def _crafting_station_manifest(
             "sourceKind": category.source_kind,
         },
         "recipes": recipes,
-        "support": "unconditioned-zero-skill-recipes",
+        "support": (
+            "unconditioned-zero-skill-recipes"
+            if recipes
+            else "unsupported-conditioned-or-skilled-recipes"
+        ),
     }
 
 

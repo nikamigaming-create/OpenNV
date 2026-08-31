@@ -151,6 +151,48 @@ class CraftingCatalogTest(unittest.TestCase):
             [row["itemEditorId"] for row in interaction["recipes"][0]["ingredients"]],
         )
 
+    def test_station_without_admitted_recipes_remains_explicitly_unsupported(self) -> None:
+        category = decode_category(
+            record(
+                "RCCT",
+                2,
+                [("EDID", b"SkilledRecipes\0"), ("FULL", b"Workbench\0"), ("DATA", b"\x01")],
+            )
+        )
+        recipe = decode_recipe(
+            record(
+                "RCPE",
+                3,
+                [
+                    ("EDID", b"SkilledRecipe\0"),
+                    ("FULL", b"Skilled Recipe\0"),
+                    ("DATA", struct.pack("<iiII", 4, 25, category.form_id, 0)),
+                    ("RCIL", struct.pack("<I", 5)),
+                    ("RCQY", struct.pack("<I", 1)),
+                    ("RCOD", struct.pack("<I", 6)),
+                    ("RCQY", struct.pack("<I", 1)),
+                ],
+            )
+        )
+        station = BaseObject(7, "ACTI", "Workbench", None, "Workbench", 8)
+        catalog = CellCatalog(
+            {}, {}, {station.form_id: station},
+            {8: ScriptSource(8, "WorkbenchScript", "player.ShowRecipeMenu SkilledRecipes")},
+            {}, {}, {}, {}, {}, [], crafting_categories={category.form_id: category},
+            crafting_recipes={recipe.form_id: recipe},
+        )
+        reference = PlacedReference(
+            9, 1, station.form_id, 0, Transform((0, 0, 0), (0, 0, 0)), 1.0, None, None
+        )
+
+        interaction = interaction_manifest(reference, station, catalog)
+
+        self.assertIsNotNone(interaction)
+        assert interaction is not None
+        self.assertEqual("crafting-station", interaction["type"])
+        self.assertEqual("unsupported-conditioned-or-skilled-recipes", interaction["support"])
+        self.assertEqual([], interaction["recipes"])
+
 
 if __name__ == "__main__":
     unittest.main()
