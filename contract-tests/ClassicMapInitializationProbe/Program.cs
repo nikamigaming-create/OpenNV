@@ -517,6 +517,93 @@ foreach (var path in args)
                     $"{Path.GetFileName(path)}|{templeHeader.Program}|map_update_p_proc|" +
                     $"{mapUpdated.ExecutedInstructions}");
             }
+            var lintGuardian = parsedInitialization.ScriptSlots.SingleOrDefault(row =>
+                string.Equals(row.Program.Program, "ACKlint.int",
+                    StringComparison.OrdinalIgnoreCase));
+            if (lintGuardian is not null)
+            {
+                const int playerHandle = 100;
+                const int guardianHandle = 750;
+                var guardianState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int> { [5] = 0 },
+                    new Dictionary<int, int>(), new Dictionary<int, int>(), [],
+                    randomState);
+                var pickupBudget = lintGuardian.Program.ExecutableProgram
+                    .Procedures["pickup_p_proc"].Instructions.Count;
+                var ignoredPickup = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "pickup_p_proc", guardianState,
+                    gameContext with { SourceObject = guardianHandle },
+                    ClassicIntWorldObjectState.Empty, randomContract, pickupBudget);
+                if (ignoredPickup.State.ScriptLocalVariables[5] != 0 ||
+                    ignoredPickup.WorldObjects.AttackRequests.Count != 0)
+                    throw new InvalidOperationException(
+                        "Owned Temple guardian non-player pickup branch drifted.");
+
+                var playerPickup = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "pickup_p_proc", guardianState,
+                    gameContext with { SourceObject = playerHandle },
+                    ClassicIntWorldObjectState.Empty, randomContract, pickupBudget);
+                if (playerPickup.State.ScriptLocalVariables[5] != 2 ||
+                    playerPickup.WorldObjects.AttackRequests.Count != 0)
+                    throw new InvalidOperationException(
+                        "Owned Temple guardian player pickup branch drifted.");
+                var restoredGuardianState = ClassicIntProcedureState.Restore(
+                    JsonSerializer.SerializeToElement(playerPickup.State.Save()),
+                    randomContract);
+                var critterBudget = lintGuardian.Program.ExecutableProgram
+                    .Procedures["critter_p_proc"].Instructions.Count;
+                var hiddenPlayer = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "critter_p_proc", restoredGuardianState,
+                    gameContext with
+                    {
+                        SelfObject = guardianHandle,
+                        ActorQueries = new ClassicIntActorQueryTable(
+                            new Dictionary<(int, int), bool>
+                            {
+                                [(guardianHandle, playerHandle)] = false,
+                            }),
+                    },
+                    playerPickup.WorldObjects, randomContract, critterBudget);
+                if (hiddenPlayer.State.ScriptLocalVariables[5] != 2 ||
+                    hiddenPlayer.WorldObjects.AttackRequests.Count != 0)
+                    throw new InvalidOperationException(
+                        "Owned Temple guardian hidden-player branch drifted.");
+
+                var attackStarted = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "critter_p_proc", restoredGuardianState,
+                    gameContext with
+                    {
+                        SelfObject = guardianHandle,
+                        ActorQueries = new ClassicIntActorQueryTable(
+                            new Dictionary<(int, int), bool>
+                            {
+                                [(guardianHandle, playerHandle)] = true,
+                            }),
+                    },
+                    playerPickup.WorldObjects, randomContract, critterBudget);
+                if (attackStarted.State.ScriptLocalVariables[5] != 1 ||
+                    attackStarted.WorldObjects.AttackRequests is not
+                    [{ ActorHandle: guardianHandle, TargetHandle: playerHandle } attack] ||
+                    !attack.SourceArguments.SequenceEqual(
+                        new[] { 0, 1, 0, 0, 30000, 0, 0 }))
+                    throw new InvalidOperationException(
+                        "Owned Temple guardian attack request drifted.");
+                var restoredCombat = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(
+                        attackStarted.WorldObjects.Save()));
+                if (restoredCombat.AttackRequests is not
+                    [{ ActorHandle: guardianHandle, TargetHandle: playerHandle }
+                        restoredAttack] ||
+                    !restoredAttack.SourceArguments.SequenceEqual(
+                        attack.SourceArguments))
+                    throw new InvalidOperationException(
+                        "Owned Temple guardian combat save state drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{lintGuardian.Program.Program}|" +
+                    $"pickup_p_proc+critter_p_proc|" +
+                    $"{playerPickup.ExecutedInstructions + attackStarted.ExecutedInstructions}");
+            }
         }
         var jasmine = programs.FirstOrDefault(row => string.Equals(
             row.GetProperty("program").GetString(), "jasmine.int",

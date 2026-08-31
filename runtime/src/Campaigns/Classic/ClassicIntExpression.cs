@@ -24,7 +24,9 @@ internal sealed record ClassicIntExpressionContext(
     int GameTime,
     int GameTimeHour,
     int Month,
-    IClassicIntObjectFactory ObjectFactory);
+    IClassicIntObjectFactory ObjectFactory,
+    int? SourceObject = null,
+    IClassicIntActorQueries? ActorQueries = null);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,

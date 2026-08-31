@@ -42,6 +42,28 @@ internal sealed record ClassicIntMapStartOverride(
     int Elevation,
     int Rotation);
 
+internal sealed record ClassicIntAttackRequest(
+    int ActorHandle,
+    int TargetHandle,
+    IReadOnlyList<int> SourceArguments);
+
+internal interface IClassicIntActorQueries
+{
+    bool CanSee(int observerHandle, int targetHandle);
+}
+
+internal sealed record ClassicIntActorQueryTable(
+    IReadOnlyDictionary<(int Observer, int Target), bool> Visibility) :
+    IClassicIntActorQueries
+{
+    public bool CanSee(int observerHandle, int targetHandle) =>
+        Visibility.TryGetValue((observerHandle, targetHandle), out var visible)
+            ? visible
+            : throw new InvalidOperationException(
+                $"Classic INT actor visibility is not admitted: " +
+                $"{observerHandle}->{targetHandle}.");
+}
+
 internal interface IClassicIntObjectFactory
 {
     int Create(ClassicIntObjectCreation source);
@@ -66,6 +88,7 @@ internal interface IClassicIntWorldObjectState
     IReadOnlyDictionary<int, ClassicIntCreatedObject> CreatedObjects { get; }
     IReadOnlyList<ClassicIntInventoryEntry> Inventory { get; }
     ClassicIntMapStartOverride? MapStartOverride { get; }
+    IReadOnlyList<ClassicIntAttackRequest> AttackRequests { get; }
 }
 
 internal sealed record ClassicIntWorldObjectState(
@@ -81,6 +104,9 @@ internal sealed record ClassicIntWorldObjectState(
     { get; init; } = [];
 
     public ClassicIntMapStartOverride? MapStartOverride { get; init; }
+
+    public IReadOnlyList<ClassicIntAttackRequest> AttackRequests
+    { get; init; } = [];
 
     internal static ClassicIntWorldObjectState Empty { get; } = new(
         false, new Dictionary<int, ClassicIntDoorObjectState>());
@@ -106,10 +132,23 @@ internal sealed record ClassicIntWorldObjectState(
         Inventory = Inventory.OrderBy(row => row.OwnerHandle)
             .ThenBy(row => row.ObjectHandle).ToArray(),
         MapStartOverride,
+        AttackRequests,
     };
 
     internal static ClassicIntWorldObjectState Restore(JsonElement source)
     {
+        var attackRequests = source.TryGetProperty("AttackRequests", out var attacks)
+            ? attacks.EnumerateArray().Select(row =>
+                new ClassicIntAttackRequest(
+                    row.GetProperty("ActorHandle").GetInt32(),
+                    row.GetProperty("TargetHandle").GetInt32(),
+                    row.GetProperty("SourceArguments").EnumerateArray()
+                        .Select(value => value.GetInt32()).ToArray())).ToArray()
+            : [];
+        if (attackRequests.Any(row =>
+                row.SourceArguments.Count != ClassicIntProcedureVm.AttackArgumentCount))
+            throw new InvalidOperationException(
+                "Classic INT saved attack request is invalid.");
         var result = new ClassicIntWorldObjectState(
             source.GetProperty("ScriptOverrides").GetBoolean(),
             source.GetProperty("Doors").EnumerateArray().ToDictionary(
@@ -150,6 +189,7 @@ internal sealed record ClassicIntWorldObjectState(
                         mapStart.GetProperty("Elevation").GetInt32(),
                         mapStart.GetProperty("Rotation").GetInt32())
                     : null,
+            AttackRequests = attackRequests,
         };
     }
 }
@@ -161,7 +201,28 @@ internal sealed record ClassicIntProcedureState(
     IReadOnlyDictionary<int, int> MapVariables,
     IReadOnlyDictionary<int, int> GlobalVariables,
     IReadOnlyList<int> ValueStack,
-    ClassicRetailRandomLifecycleState RandomState);
+    ClassicRetailRandomLifecycleState RandomState)
+{
+    internal object Save() => this;
+
+    internal static ClassicIntProcedureState Restore(
+        JsonElement source,
+        ClassicRetailRandomContract randomContract)
+    {
+        var result = source.Deserialize<ClassicIntProcedureState>() ??
+            throw new InvalidOperationException(
+                "Classic INT procedure save state is invalid.");
+        if (result.ProgramVariables is null || result.LocalVariables is null ||
+            result.ScriptLocalVariables is null || result.MapVariables is null ||
+            result.GlobalVariables is null || result.ValueStack is null ||
+            result.RandomState is null ||
+            result.ScriptLocalVariables.Keys.Any(index => index < 0))
+            throw new InvalidOperationException(
+                "Classic INT procedure save state is invalid.");
+        result.RandomState.Validate(randomContract);
+        return result;
+    }
+}
 
 internal sealed record ClassicIntProcedureResult(
     ClassicIntProcedureState State,
@@ -217,6 +278,7 @@ internal static class ClassicIntProcedureVm
     private const ushort DisplayMessage = 0x80B8;
     private const ushort ScriptOverrides = 0x80B9;
     private const ushort SelfObject = 0x80BC;
+    private const ushort SourceObject = 0x80BD;
     private const ushort DudeObject = 0x80BF;
     private const ushort ScriptLocal = 0x80C1;
     private const ushort SetScriptLocal = 0x80C2;
@@ -224,6 +286,8 @@ internal static class ClassicIntProcedureVm
     private const ushort SetMapVariable = 0x80C4;
     private const ushort GlobalVariable = 0x80C5;
     private const ushort SetGlobalVariable = 0x80C6;
+    private const ushort Attack = 0x80D0;
+    private const ushort ObjectCanSeeObject = 0x80DC;
     private const ushort CritterStat = 0x80CA;
     private const ushort Metarule = 0x810B;
     private const ushort MessageString = 0x8105;
@@ -244,6 +308,7 @@ internal static class ClassicIntProcedureVm
     private const ushort SfallArrayLength = 0x8231;
     private const ushort PushInteger = 0xC001;
     private const ushort PushReference = 0x9001;
+    internal const int AttackArgumentCount = 7;
 
     internal static ClassicIntProgram Parse(JsonElement inventory, string identity)
     {
@@ -334,6 +399,7 @@ internal static class ClassicIntProcedureVm
             sourceWorldObjects.CreatedObjects);
         var inventory = sourceWorldObjects.Inventory.ToList();
         var mapStartOverride = sourceWorldObjects.MapStartOverride;
+        var attackRequests = sourceWorldObjects.AttackRequests.ToList();
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -443,6 +509,19 @@ internal static class ClassicIntProcedureVm
                 case SelfObject:
                     stack.Add(game.SelfObject);
                     break;
+                case SourceObject:
+                    stack.Add(game.SourceObject ?? throw Failure(
+                        program, procedure, offset, "missing-source-object"));
+                    break;
+                case ObjectCanSeeObject:
+                    {
+                        var target = Pop(stack, program, procedure, offset);
+                        var observer = Pop(stack, program, procedure, offset);
+                        var queries = game.ActorQueries ?? throw Failure(
+                            program, procedure, offset, "missing-actor-queries");
+                        stack.Add(Bool(queries.CanSee(observer, target)));
+                        break;
+                    }
                 case CombatDifficulty:
                     stack.Add(game.CombatDifficulty);
                     break;
@@ -601,6 +680,17 @@ internal static class ClassicIntProcedureVm
                             ownerHandle, objectHandle, quantity));
                         break;
                     }
+                case Attack:
+                    {
+                        var arguments = new int[AttackArgumentCount];
+                        for (var index = arguments.Length - 1; index >= 0; index--)
+                            arguments[index] = Pop(
+                                stack, program, procedure, offset);
+                        var target = Pop(stack, program, procedure, offset);
+                        attackRequests.Add(new ClassicIntAttackRequest(
+                            game.SelfObject, target, arguments));
+                        break;
+                    }
                 case Jump:
                     next = Pop(stack, program, procedure, offset);
                     break;
@@ -660,6 +750,7 @@ internal static class ClassicIntProcedureVm
                 CreatedObjects = createdObjects,
                 Inventory = inventory,
                 MapStartOverride = mapStartOverride,
+                AttackRequests = attackRequests,
             });
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
