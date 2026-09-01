@@ -150,9 +150,10 @@ internal sealed class RetailExteriorEnvironment
         var skyModels = source.GetProperty("skyModels").EnumerateObject()
             .Select(ParseSkyModel)
             .ToDictionary(value => value.Role, StringComparer.Ordinal);
-        if (!skyModels.ContainsKey("atmosphere") || !skyModels.ContainsKey("clouds"))
+        if (!skyModels.ContainsKey("atmosphere") || !skyModels.ContainsKey("clouds") ||
+            !skyModels.ContainsKey("nightSky"))
             throw new InvalidOperationException(
-                "Owned environment has no exact atmosphere/cloud model pair.");
+                "Owned environment has no exact atmosphere/cloud/night-sky model set.");
         return new RetailExteriorEnvironment(
             worldspaceForm,
             climate,
@@ -238,7 +239,10 @@ internal sealed class RetailExteriorEnvironment
             composedImageSpace);
     }
 
-    internal ResolvedEnvironment ResolveConfiguredClearDay()
+    internal ResolvedEnvironment ResolveConfiguredClearDay() =>
+        ResolveClimateWeather(ResolveUnconditionalClimateWeather(), Climate.SunriseEndHour);
+
+    internal uint ResolveUnconditionalClimateWeather()
     {
         var defaults = Climate.WeatherEntries
             .Where(entry => entry.GlobalFormId is null && entry.Chance == 100)
@@ -246,20 +250,24 @@ internal sealed class RetailExteriorEnvironment
         if (defaults.Length != 1)
             throw new InvalidOperationException(
                 "Configured clear-day mode requires one unconditional 100-percent CLMT weather.");
-        if (!_weather.TryGetValue(defaults[0].WeatherFormId, out var current))
+        return defaults[0].WeatherFormId;
+    }
+
+    internal ResolvedEnvironment ResolveClimateWeather(uint weatherFormId, float gameHour)
+    {
+        if (!Climate.WeatherEntries.Any(entry => entry.WeatherFormId == weatherFormId))
+            throw new InvalidOperationException(
+                $"Selected WTHR is not owned by CLMT 0x{Climate.FormId:X8}: " +
+                $"0x{weatherFormId:X8}");
+        if (!_weather.TryGetValue(weatherFormId, out var current))
             throw new InvalidOperationException(
                 $"Default CLMT weather is absent from the owned master: " +
-                $"0x{defaults[0].WeatherFormId:X8}");
+                $"0x{weatherFormId:X8}");
         if (current.SampleCount != WeatherSampleCount)
             throw new InvalidOperationException(
                 "Default CLMT weather lacks its exact six-sample color tables.");
 
-        var gameHour = Climate.SunriseEndHour;
         var blend = Blend(gameHour, Climate);
-        if (blend.Primary != DaySample || blend.Secondary != DaySample ||
-            blend.PrimaryStrength != 1.0f)
-            throw new InvalidOperationException(
-                "Configured clear-day CLMT selection did not resolve to the exact day sample.");
         var colors = current.Colors.ToDictionary(
             value => value.Key,
             value => Interpolate(value.Value, blend),
@@ -506,7 +514,7 @@ internal sealed class RetailExteriorEnvironment
                 channels[0] / (float)byte.MaxValue,
                 channels[1] / (float)byte.MaxValue,
                 channels[2] / (float)byte.MaxValue,
-                1.0f);
+                channels[3] / (float)byte.MaxValue);
         }).ToArray();
         if (result.Length != expected)
             throw new InvalidOperationException(

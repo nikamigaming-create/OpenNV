@@ -12,6 +12,7 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from exterior_scene import (  # noqa: E402
+    climate_night_sky_model,
     environment_sky_models,
     loaded_grid_coordinates,
     reference_grid,
@@ -23,6 +24,14 @@ from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class PrepareExteriorCellTest(unittest.TestCase):
+    def test_climate_night_sky_model_is_owned_nif_contract(self) -> None:
+        self.assertEqual(
+            climate_night_sky_model("/Sky/Stars.NIF"),
+            {"path": "sky\\stars.nif", "surfaceSemantic": "night-sky"},
+        )
+        with self.assertRaisesRegex(ValueError, "owned NIF"):
+            climate_night_sky_model("sky/stars.dds")
+
     def test_route_exterior_positions_select_only_owned_persistent_references(self) -> None:
         positions = route_exterior_positions(
             {

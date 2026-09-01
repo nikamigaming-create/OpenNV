@@ -33,6 +33,43 @@ class FnvExteriorSpatialContractTest(unittest.TestCase):
         self.assertIn("var margin = bounds.Size.Length();", renderer)
         self.assertNotIn("CustomAabb", renderer)
 
+    def test_night_sky_uses_owned_texture_and_projection_safe_geometry(self):
+        renderer = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "Presentation"
+            / "Rendering"
+            / "RetailEnvironmentRenderer.cs"
+        ).read_text(encoding="utf-8")
+
+        night = renderer[renderer.index("private const string NightSkyShaderSource") :]
+        night = night[: night.index("internal static Application")]
+        self.assertIn("uniform sampler2D star_map", night)
+        self.assertIn("POSITION = PROJECTION_MATRIX", night)
+        self.assertIn("uniform vec4 stars_encoded", night)
+        self.assertIn('environment.SkyModels["nightSky"]', renderer)
+        self.assertNotIn("Goodsprings", night)
+
+    def test_climate_weather_selection_is_source_member_and_explicit_hour(self):
+        source = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "Presentation"
+            / "Rendering"
+            / "RetailExteriorEnvironment.cs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "ResolveClimateWeather(uint weatherFormId, float gameHour)", source
+        )
+        self.assertIn(
+            "Climate.WeatherEntries.Any(entry => entry.WeatherFormId == weatherFormId)",
+            source,
+        )
+        self.assertNotIn("Goodsprings", source)
+
     def test_road_collision_consumes_compiler_face_selection_not_editor_ids(self):
         loader = (
             ROOT / "runtime" / "src" / "World" / "Cells" / "CellContentLoader.cs"
