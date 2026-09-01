@@ -68,6 +68,8 @@ internal sealed class Fo2ArvillagPresentationCatalog
     internal const int MapIndex = 4;
     internal const int Elevation = 0;
     internal const int DefaultFloorTileId = 1;
+    private const int ClassicWallObjectType = 3;
+    private const uint ClassicObjectNoBlockFlag = 0x10;
     private const string CacheSchema = "opennv-fo2-arvillag-presentation-cache/v1";
     private const string SourceSchema = "opennv-fo2-owned-map-slice/v1";
     private const string ReliefSchema = "opennv-fo2-arvillag-object-relief-cache/v1";
@@ -103,6 +105,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
         int arrivalRotation,
         int firstActionTile,
         IReadOnlySet<int> admittedArrivalTiles,
+        IReadOnlySet<int> walkableTiles,
         float sideRoughness)
     {
         ManifestPath = manifestPath;
@@ -130,6 +133,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
         ArrivalRotation = arrivalRotation;
         FirstActionTile = firstActionTile;
         AdmittedArrivalTiles = admittedArrivalTiles;
+        WalkableTiles = walkableTiles;
         SideRoughness = sideRoughness;
     }
 
@@ -160,6 +164,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
     internal int ArrivalRotation { get; }
     internal int FirstActionTile { get; }
     internal IReadOnlySet<int> AdmittedArrivalTiles { get; }
+    internal IReadOnlySet<int> WalkableTiles { get; }
     internal float SideRoughness { get; }
 
     internal static Fo2ArvillagPresentationCatalog Load(
@@ -466,6 +471,15 @@ internal sealed class Fo2ArvillagPresentationCatalog
             !artifacts.Values.All(artifact => resourceIdentities.Contains(
                 $"{artifact.LogicalPath}|{artifact.SourceSha256}")))
             throw new InvalidOperationException("Fallout 2 ARVILLAG resource closure drifted.");
+        var walkableTiles = BuildSourceWalkableTiles(tileEntries, objectPlacements);
+        var walkableMask = Enumerable.Range(0, Fo1HexMath.Width * Fo1HexMath.Height)
+            .Select(walkableTiles.Contains).ToArray();
+        if (walkableTiles.Count != route.VillageArrival.WalkableHexes ||
+            Fo2TempleMovementConsumer.MaskSha256(walkableMask) !=
+                route.VillageArrival.WalkMaskSha256 ||
+            !legalNeighbors.Append(arrivalTile).All(walkableTiles.Contains))
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG source walk topology drifted.");
         var sideRoughness = relief.GetProperty("sideRoughness").GetSingle();
         if (!float.IsFinite(sideRoughness) || sideRoughness is < 0.0f or > 1.0f)
             throw new InvalidOperationException("Fallout 2 ARVILLAG relief roughness drifted.");
@@ -496,7 +510,30 @@ internal sealed class Fo2ArvillagPresentationCatalog
             arrivalRotation,
             action.GetProperty("toTile").GetInt32(),
             legalNeighbors.Append(arrivalTile).ToHashSet(),
+            walkableTiles,
             sideRoughness);
+    }
+
+    private static IReadOnlySet<int> BuildSourceWalkableTiles(
+        IReadOnlyList<uint> tileEntries,
+        IReadOnlyList<Fo2MapObjectPlacement> objectPlacements)
+    {
+        var blocked = objectPlacements.Where(row =>
+                row.TopLevel && row.Elevation == Elevation && row.Tile >= 0 &&
+                row.ObjectType != ClassicWallObjectType &&
+                row.Blocking(ClassicObjectNoBlockFlag))
+            .Select(row => row.Tile)
+            .ToHashSet();
+        var result = new HashSet<int>();
+        for (var tile = 0; tile < Fo1HexMath.Width * Fo1HexMath.Height; tile++)
+        {
+            var floorIndex = (tile / Fo1HexMath.Width / 2) * Fo1HexMath.FloorWidth +
+                Fo1HexMath.FloorWidth - 1 - (tile % Fo1HexMath.Width / 2);
+            if ((tileEntries[floorIndex] & 0x0fff) != DefaultFloorTileId &&
+                !blocked.Contains(tile))
+                result.Add(tile);
+        }
+        return result;
     }
 
     private static Fo2ArvillagIntRole LoadIntRole(

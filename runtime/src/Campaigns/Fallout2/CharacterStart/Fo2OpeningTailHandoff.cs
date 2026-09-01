@@ -284,9 +284,12 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
 
     private async Task WaitPostDraw()
     {
-        await ToSignal(
-            RenderingServer.Singleton,
-            RenderingServer.SignalName.FramePostDraw);
+        if (DisplayServer.GetName() == "headless")
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        else
+            await ToSignal(
+                RenderingServer.Singleton,
+                RenderingServer.SignalName.FramePostDraw);
     }
 
     private async Task<string> Capture(string proofRoot, string filename)

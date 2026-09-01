@@ -166,7 +166,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     _temple,
                     _transition,
                     runtimeProfile,
-                    _trialRoute);
+                    _trialRoute,
+                    _village);
                 StartArroyo(state.Character, state);
                 RestoredFromSave = true;
                 CurrentSave = state;
@@ -783,7 +784,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 TempleExitRuntime?.Applied,
                 _transition,
                 TrialRuntime?.State,
-                _trialRoute)
+                _trialRoute,
+                _village)
             .Write();
         if (Runtime.Player.CurrentMapIndex == Fo2ArvillagPresentationCatalog.MapIndex &&
             VillageIntRuntime is not null)

@@ -470,6 +470,8 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         CurrentTile = destinationTile;
         CompletedTileTransitions++;
         _presentation.SetDirection(direction);
+        _villageHumanoid?.SetDirection(direction);
+        GroundVillageHumanoid(CurrentTile);
         SetMeta("current_tile", CurrentTile);
         SetMeta("last_tactical_step_source_bound", true);
         return true;
@@ -634,7 +636,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             throw new InvalidOperationException(
                 "Fallout 2 ARVILLAG presentation/arrival identity is invalid.");
         Reparent(destination.Root, keepGlobalTransform: false);
-        _arrivalComponent = destination.AdmittedArrivalTiles.ToHashSet();
+        _arrivalComponent = destination.WalkableTiles.ToHashSet();
         _villageFloorHeightByTile = destination.MoldedFloorHeightByTile;
         CurrentMapIndex = arrival.MapIndex;
         CurrentElevation = arrival.Elevation;
