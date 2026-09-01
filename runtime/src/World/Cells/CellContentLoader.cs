@@ -462,24 +462,37 @@ internal static class CellContentLoader
                 else if (baseRecordType == "MSTT")
                 {
                     var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
-                    if (dynamicBodies.Count != 1)
-                        throw new InvalidOperationException(
-                            $"Moving static requires one authored dynamic body: {referenceFormId}");
-                    var movingStatic = new MovingStaticInstance();
-                    movingStatic.Configure(
-                        referenceFormId,
-                        dynamicBodies[0],
-                        configuration.Pickup);
-                    movingStatic.Freeze = !buildCollision;
-                    if (!buildCollision)
+                    if (dynamicBodies.Count == 1)
                     {
-                        movingStatic.CollisionLayer = 0u;
-                        movingStatic.CollisionMask = 0u;
+                        var movingStatic = new MovingStaticInstance();
+                        movingStatic.Configure(
+                            referenceFormId,
+                            dynamicBodies[0],
+                            configuration.Pickup);
+                        movingStatic.Freeze = !buildCollision;
+                        if (!buildCollision)
+                        {
+                            movingStatic.CollisionLayer = 0u;
+                            movingStatic.CollisionMask = 0u;
+                        }
+                        placement = movingStatic;
+                        if (buildCollision)
+                            collisionMeshes += dynamicBodies[0].Hulls.Count +
+                                dynamicBodies[0].Spheres.Count;
                     }
-                    placement = movingStatic;
-                    if (buildCollision)
-                        collisionMeshes += dynamicBodies[0].Hulls.Count +
-                            dynamicBodies[0].Spheres.Count;
+                    else
+                    {
+                        placement = new Node3D
+                        {
+                            Name = $"MSTT_UNSUPPORTED_PHYSICS_{referenceFormId}",
+                            Basis = new Basis(rotation),
+                        };
+                        GD.PushWarning(
+                            "OPENNV_OWNED_MSTT_PHYSICS_UNSUPPORTED " +
+                            $"reference={referenceFormId} asset={assetId} " +
+                            $"dynamicBodies={dynamicBodies.Count} " +
+                            "disposition=visual-only-no-collision");
+                    }
                 }
                 else
                 {
