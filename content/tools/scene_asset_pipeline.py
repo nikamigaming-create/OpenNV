@@ -652,7 +652,7 @@ def prepare_scene_assets(
             "physics": {
                 "enabled": bool(sidecar["coverage"]["dynamicPhysicsExported"]),
                 "source": (
-                    "NIF-authored-bhk-convex-rigid-body"
+                    "NIF-authored-bhk-dynamic-rigid-body"
                     if sidecar["coverage"]["dynamicPhysicsExported"]
                     else "unsupported-or-absent"
                 ),

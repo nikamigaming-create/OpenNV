@@ -284,6 +284,7 @@ internal static class CellContentLoader
                         $"Controller articulation is attached to a non-door reference: {referenceFormId}");
                 var referencePosition = ReadVector(reference.GetProperty("positionGodotUnits"));
                 var referenceScale = reference.GetProperty("scale").GetSingle();
+                var baseRecordType = reference.GetProperty("baseRecordType").GetString()!;
                 var baseEditorId = reference.GetProperty("baseEditorId").GetString()!;
                 if (poolManifest is not null &&
                     poolManifest.BallRoles.TryGetValue(referenceFormId, out var ballRole))
@@ -448,6 +449,28 @@ internal static class CellContentLoader
                     containers.Add(referenceFormId, container);
                     placement = container;
                 }
+                else if (baseRecordType == "MSTT")
+                {
+                    var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
+                    if (dynamicBodies.Count != 1)
+                        throw new InvalidOperationException(
+                            $"Moving static requires one authored dynamic body: {referenceFormId}");
+                    var movingStatic = new MovingStaticInstance();
+                    movingStatic.Configure(
+                        referenceFormId,
+                        dynamicBodies[0],
+                        configuration.Pickup);
+                    movingStatic.Freeze = !buildCollision;
+                    if (!buildCollision)
+                    {
+                        movingStatic.CollisionLayer = 0u;
+                        movingStatic.CollisionMask = 0u;
+                    }
+                    placement = movingStatic;
+                    if (buildCollision)
+                        collisionMeshes += dynamicBodies[0].Hulls.Count +
+                            dynamicBodies[0].Spheres.Count;
+                }
                 else
                 {
                     placement = new Node3D
@@ -564,7 +587,8 @@ internal static class CellContentLoader
                         doorArticulation.Close.ToRuntimeSequence());
                     articulatedDoor.RestoreOpenState(session.IsDoorOpen(referenceFormId));
                 }
-                else if (buildCollision && prototypes[assetId].CollisionScene is Node3D collisionPrototype)
+                else if (buildCollision && placement is not MovingStaticInstance &&
+                    prototypes[assetId].CollisionScene is Node3D collisionPrototype)
                 {
                     var collisionInstance = collisionPrototype.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
                         ?? throw new InvalidOperationException($"Could not duplicate authored collision: {assetId}");
@@ -589,7 +613,7 @@ internal static class CellContentLoader
                 else if (buildCollision &&
                     (collisionAssets.Contains(assetId) ||
                         interactionType is not null and not "pool-table" and not "pool-component") &&
-                    placement is not PickupInstance { CanGrab: true })
+                    placement is not PickupInstance { CanGrab: true } and not MovingStaticInstance)
                 {
                     foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(instance))
                     {

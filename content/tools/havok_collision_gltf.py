@@ -218,6 +218,20 @@ def _box_hull_contract(
     }
 
 
+def _sphere_contract(
+    shape: object,
+    block_index: dict[int, int],
+) -> dict[str, object] | None:
+    radius = float(shape.radius)
+    if not math.isfinite(radius) or radius <= 0.0:
+        return None
+    return {
+        "shapeBlock": block_index[id(shape)],
+        "radiusHavokUnits": radius,
+        "radiusGameUnits": radius * HAVOK_TO_GAME_UNITS,
+    }
+
+
 def dynamic_physics_contract(
     blocks: list[object],
     block_index: dict[int, int],
@@ -236,6 +250,7 @@ def dynamic_physics_contract(
         if float(body.mass) <= 0.0:
             continue
         root_shape = body.shape
+        spheres: list[dict[str, object]] = []
         if isinstance(root_shape, NifFormat.bhkConvexVerticesShape):
             shape_candidates = [root_shape]
             shape_type = "convex-hull"
@@ -248,6 +263,15 @@ def dynamic_physics_contract(
             shape_candidates = list(root_shape.sub_shapes)
             shape_type = "compound-convex-hulls"
             hull_reader = _convex_hull_contract
+        elif isinstance(root_shape, NifFormat.bhkSphereShape):
+            sphere = _sphere_contract(root_shape, block_index)
+            if sphere is None:
+                unsupported.append("unsupported-sphere-radius")
+                continue
+            shape_candidates = []
+            shape_type = "sphere"
+            hull_reader = _convex_hull_contract
+            spheres = [sphere]
         else:
             unsupported.append(f"unsupported-root-shape:{type(root_shape).__name__}")
             continue
@@ -256,7 +280,7 @@ def dynamic_physics_contract(
             for shape in shape_candidates
             if (hull := hull_reader(shape, block_index)) is not None
         ]
-        if len(hulls) != len(shape_candidates) or not hulls:
+        if len(hulls) != len(shape_candidates) or (not hulls and not spheres):
             unsupported.append(f"unsupported-convex-child:{type(root_shape).__name__}")
             continue
         translation = body.translation
@@ -291,6 +315,7 @@ def dynamic_physics_contract(
                 "flagsAndPartNumber": int(body.havok_col_filter.flags_and_part_number),
                 "unknownShort": int(body.havok_col_filter.unknown_short),
                 "hulls": hulls,
+                "spheres": spheres,
             }
         )
     return bodies, sorted(set(unsupported))

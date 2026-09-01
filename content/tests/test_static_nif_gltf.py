@@ -645,6 +645,50 @@ class StaticNifGltfTest(unittest.TestCase):
             ],
         )
 
+    def test_dynamic_sphere_body_retains_exact_owned_radius_and_body_values(self) -> None:
+        root = NifFormat.NiNode()
+        root.name = "Root"
+        target = NifFormat.NiNode()
+        target.name = "MovingStatic"
+        root.add_child(target)
+        collision = NifFormat.bhkCollisionObject()
+        collision.target = target
+        target.collision_object = collision
+        body = NifFormat.bhkRigidBody()
+        collision.body = body
+        body.mass = 2.5
+        body.friction = 0.75
+        body.restitution = 0.2
+        body.linear_damping = 0.15
+        body.angular_damping = 0.35
+        body.havok_col_filter.layer = 4
+        sphere = NifFormat.bhkSphereShape()
+        sphere.radius = 1.25
+        body.shape = sphere
+        blocks = [root, target, collision, body, sphere]
+
+        bodies, unsupported = dynamic_physics_contract(
+            blocks,
+            {id(block): index for index, block in enumerate(blocks)},
+        )
+
+        self.assertEqual(unsupported, [])
+        self.assertEqual(len(bodies), 1)
+        exported = bodies[0]
+        self.assertEqual(exported["shapeType"], "sphere")
+        self.assertEqual(exported["hulls"], [])
+        self.assertEqual(exported["spheres"], [{
+            "shapeBlock": 4,
+            "radiusHavokUnits": 1.25,
+            "radiusGameUnits": 8.75,
+        }])
+        self.assertEqual(exported["mass"], 2.5)
+        self.assertEqual(exported["friction"], 0.75)
+        self.assertAlmostEqual(exported["restitution"], 0.2)
+        self.assertAlmostEqual(exported["linearDamping"], 0.15)
+        self.assertAlmostEqual(exported["angularDamping"], 0.35)
+        self.assertEqual(exported["layer"], 4)
+
     def test_compiler_source_hash_accounts_for_every_owned_module(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.py"

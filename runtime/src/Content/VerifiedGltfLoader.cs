@@ -321,27 +321,82 @@ internal static class VerifiedGltfLoader
         var coverage = root.GetProperty("coverage");
         if (!coverage.TryGetProperty("dynamicPhysicsBodies", out var bodies))
             return Array.Empty<DynamicBodyContract>();
-        return bodies.EnumerateArray().Select(body => new DynamicBodyContract(
+        return bodies.EnumerateArray().Select(ReadDynamicBody).ToArray();
+    }
+
+    private static DynamicBodyContract ReadDynamicBody(JsonElement body)
+    {
+        var shapeType = body.GetProperty("shapeType").GetString()!;
+        var mass = body.GetProperty("mass").GetSingle();
+        var friction = body.GetProperty("friction").GetSingle();
+        var restitution = body.GetProperty("restitution").GetSingle();
+        var linearDamping = body.GetProperty("linearDamping").GetSingle();
+        var angularDamping = body.GetProperty("angularDamping").GetSingle();
+        var hulls = body.GetProperty("hulls").EnumerateArray()
+            .Select(hull => new ConvexHullContract(
+                hull.GetProperty("radiusGameUnits").GetSingle(),
+                hull.GetProperty("pointsGodotGameUnits").EnumerateArray()
+                    .Select(ReadFiniteVector3)
+                    .ToArray()))
+            .ToArray();
+        var spheres = body.TryGetProperty("spheres", out var sphereRows)
+            ? sphereRows.EnumerateArray().Select(sphere => new SphereContract(
+                sphere.GetProperty("shapeBlock").GetInt32(),
+                sphere.GetProperty("radiusHavokUnits").GetSingle(),
+                sphere.GetProperty("radiusGameUnits").GetSingle()))
+                .ToArray()
+            : Array.Empty<SphereContract>();
+        var supportedHullShape = shapeType is "convex-hull" or "box" or
+            "compound-convex-hulls";
+        var hullsComplete = hulls.All(hull =>
+            float.IsFinite(hull.RadiusGameUnits) && hull.RadiusGameUnits >= 0.0f &&
+            hull.PointsGodotGameUnits.Count >= 4 && HasVolume(hull.PointsGodotGameUnits));
+        var sourceBodyRotation = ReadQuaternion(body.GetProperty("sourceBodyRotation"));
+        if (string.IsNullOrWhiteSpace(body.GetProperty("targetName").GetString()) ||
+            body.GetProperty("shapeTransformPolicy").GetString() !=
+                "reference-transform-authoritative;body-pose-retained-as-source-evidence" ||
+            !float.IsFinite(mass) || mass <= 0.0f ||
+            !AreFiniteNonNegative(friction, restitution, linearDamping, angularDamping) ||
+            body.GetProperty("motionSystem").GetInt32() < 0 ||
+            body.GetProperty("qualityType").GetInt32() < 0 ||
+            body.GetProperty("layer").GetInt32() < 0 ||
+            body.GetProperty("flagsAndPartNumber").GetInt32() < 0 ||
+            body.GetProperty("unknownShort").GetInt32() < 0 ||
+            !float.IsFinite(sourceBodyRotation.X) ||
+            !float.IsFinite(sourceBodyRotation.Y) ||
+            !float.IsFinite(sourceBodyRotation.Z) ||
+            !float.IsFinite(sourceBodyRotation.W) ||
+            shapeType == "sphere" &&
+                (hulls.Length != 0 || spheres.Length != 1 ||
+                    spheres[0].ShapeBlock < 0 ||
+                    !float.IsFinite(spheres[0].RadiusHavokUnits) ||
+                    spheres[0].RadiusHavokUnits <= 0.0f ||
+                    !float.IsFinite(spheres[0].RadiusGameUnits) ||
+                    spheres[0].RadiusGameUnits <= 0.0f ||
+                    !Mathf.IsEqualApprox(
+                        spheres[0].RadiusGameUnits,
+                        spheres[0].RadiusHavokUnits * HavokToGameUnits)) ||
+            shapeType != "sphere" &&
+                (!supportedHullShape || hulls.Length == 0 || !hullsComplete || spheres.Length != 0))
+            throw new InvalidOperationException("Unsupported or incomplete dynamic physics body.");
+        return new DynamicBodyContract(
             body.GetProperty("targetName").GetString()!,
-            body.GetProperty("shapeType").GetString()!,
+            shapeType,
             body.GetProperty("shapeTransformPolicy").GetString()!,
-            ReadVector3(body.GetProperty("sourceBodyTranslationHavokUnits")),
-            ReadQuaternion(body.GetProperty("sourceBodyRotation")),
-            body.GetProperty("mass").GetSingle(),
-            body.GetProperty("friction").GetSingle(),
-            body.GetProperty("restitution").GetSingle(),
-            body.GetProperty("linearDamping").GetSingle(),
-            body.GetProperty("angularDamping").GetSingle(),
+            ReadFiniteVector3(body.GetProperty("sourceBodyTranslationHavokUnits")),
+            sourceBodyRotation,
+            mass,
+            friction,
+            restitution,
+            linearDamping,
+            angularDamping,
             body.GetProperty("motionSystem").GetInt32(),
             body.GetProperty("qualityType").GetInt32(),
             body.GetProperty("layer").GetInt32(),
-            body.GetProperty("hulls").EnumerateArray().Select(hull => new ConvexHullContract(
-                hull.GetProperty("radiusGameUnits").GetSingle(),
-                hull.GetProperty("pointsGodotGameUnits").EnumerateArray()
-                    .Select(ReadVector3)
-                    .ToArray()))
-                .ToArray()))
-            .ToArray();
+            body.GetProperty("flagsAndPartNumber").GetInt32(),
+            body.GetProperty("unknownShort").GetInt32(),
+            hulls,
+            spheres);
     }
 
     private static Vector3 ReadVector3(JsonElement source)
@@ -442,9 +497,17 @@ internal static class VerifiedGltfLoader
         int MotionSystem,
         int QualityType,
         int Layer,
-        IReadOnlyList<ConvexHullContract> Hulls);
+        int FlagsAndPartNumber,
+        int UnknownShort,
+        IReadOnlyList<ConvexHullContract> Hulls,
+        IReadOnlyList<SphereContract> Spheres);
 
     internal readonly record struct ConvexHullContract(
         float RadiusGameUnits,
         IReadOnlyList<Vector3> PointsGodotGameUnits);
+
+    internal readonly record struct SphereContract(
+        int ShapeBlock,
+        float RadiusHavokUnits,
+        float RadiusGameUnits);
 }
