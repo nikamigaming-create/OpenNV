@@ -73,6 +73,12 @@ FO3_CG00_EARLY_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src"
 FO3_CG01_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
     "Campaigns/Fallout3/Fo3OpeningFlow.Cg01.cs"
 )
+FO3_CG02_PICTURE_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg02Picture.cs"
+)
+FO3_CG02_BIRTHDAY_ACTORS = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg02BirthdayActors.cs"
+)
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -536,6 +542,16 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("0002935b", gift["bbAmmoFormId"])
         self.assertEqual("000306cd", gift["radroachReferenceFormId"])
         self.assertEqual("000306cc", gift["radroachBaseFormId"])
+        self.assertEqual([90, 95], [gift["pictureStage"], gift["pictureTimerStage"]])
+        self.assertEqual(
+            ["000306d4", "000306d5"],
+            [gift["dadPicturePackageFormId"],
+             gift["jonasPicturePackageFormId"]],
+        )
+        self.assertEqual(
+            ["00060c81", "000c6de2"],
+            gift["playerPictureTriggerReferenceFormIds"],
+        )
         source = read_csharp_source_module(FO3_CG01_RUNTIME)
         self.assertIn("postIntercom.StageResults[stage]", source)
         self.assertIn("reactorGift.StageResults[stage]", source)
@@ -544,9 +560,15 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertIn("ConfigureSourceHitscan", source)
         self.assertIn("Cg02TargetHitFormIds", source)
         self.assertIn("GamebryoRangedCombat.ApplyHit", source)
-        self.assertIn("Cg02GreetingStagePriority", source)
+        birthday_source = read_csharp_source_module(FO3_CG02_BIRTHDAY_ACTORS)
+        self.assertIn("Cg02GreetingStagePriority", birthday_source)
         self.assertIn("CombatHealthByReferenceFormId", source)
         self.assertNotIn('InfoFormId.Equals("00031d3c"', source)
+        picture_source = read_csharp_source_module(FO3_CG02_PICTURE_RUNTIME)
+        self.assertIn("GamebryoPackageTravel.Start", picture_source)
+        self.assertIn("MinimumHeadingDegrees", picture_source)
+        self.assertIn("triggerSource.DimensionsGameUnits", picture_source)
+        self.assertNotIn("ArriveAtSourceTarget(\n                package.FormId", source)
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(

@@ -720,170 +720,6 @@ internal partial class Fo3OpeningFlow
         }
     }
 
-    private void StartCg02BirthdayInteraction(
-        Fo3Cg02BirthdayParticipant participant,
-        Fo3Cg01ToddlerPlayer player,
-        Action<string, int?> completed)
-    {
-        var actor = EnsureCg02BirthdayActor(participant);
-        var engineSex = (_selectedSex ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 birthday player sex is absent.")).EngineSex;
-        var greetingCandidates = participant.GreetingInfoFormIds
-            .Select(formId => participant.Nodes[formId])
-            .Where(node => (node.EngineSex is null || node.EngineSex == engineSex) &&
-                Cg02BirthdayConditionsMatch(node, actor, player)).ToArray();
-        var greetingPriority = greetingCandidates
-            .Select(Cg02GreetingStagePriority).Max();
-        var greeting = greetingCandidates.Single(node =>
-            Cg02GreetingStagePriority(node) == greetingPriority);
-        var subtitle = AddVaultDialogueOverlay(
-            $"FO3_CG02_BIRTHDAY_{participant.ReferenceFormId}");
-        var menu = subtitle.GetParent() as OwnedGamebryoDialogueMenuRuntime ??
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday DialogueMenu owner is absent.");
-        player.SetMenuInputHandler(_ => false);
-        PlayNode(greeting);
-
-        void PlayNode(Fo3Cg02BirthdayDialogueNode node)
-        {
-            var responses = node.ResponseIndexes
-                .Select(index => participant.Lines[$"{node.InfoFormId}:{index}"])
-                .ToArray();
-            GamebryoDialoguePlayback.ValidateOrderedLines(
-                responses.Select(response => new SourceDialogueLine(
-                    node.InfoFormId, response.Index, participant.BaseFormId,
-                    response.Text,
-                    new SourceDialogueAsset(response.Voice.LogicalPath,
-                        response.Voice.SourcePath, response.Voice.Sha256),
-                    new SourceDialogueAsset(response.Lip.LogicalPath,
-                        response.Lip.SourcePath, response.Lip.Sha256))).ToArray());
-            PlayLine(0);
-
-            void PlayLine(int index)
-            {
-                if (index == responses.Length)
-                {
-                    var targetStage = node.Effects
-                        .Where(effect => effect.Kind == "setStage")
-                        .Select(effect => (int?)effect.Stage)
-                        .SingleOrDefault();
-                    foreach (var effect in node.Effects)
-                    {
-                        if (effect.Kind == "setTimer")
-                            player.SetMeta("opennv_cg02_timer", effect.Seconds);
-                        else if (effect.Kind == "setQuestVariable")
-                        {
-                            player.SetMeta(
-                                $"opennv_cg02_{effect.Variable.ToLowerInvariant()}",
-                                effect.Value);
-                            player.SetMeta(
-                                $"opennv_cg02_quest_variable_{effect.Variable}",
-                                effect.Value);
-                        }
-                        else if (effect.Kind == "setActorVariable")
-                            _cg02IntroActors[effect.ReferenceFormId].Placement.SetMeta(
-                                $"opennv_{effect.Variable.ToLowerInvariant()}",
-                                effect.Value);
-                        else if (effect.Kind == "removeItem")
-                        {
-                            var key = $"opennv_cg02_item_{effect.FormId}";
-                            var remaining = player.GetMeta(key, 0).AsInt32() - effect.Count;
-                            if (remaining < 0)
-                                throw new InvalidOperationException(
-                                    "Fallout 3 CG02 removed item count differs.");
-                            player.SetMeta(key, remaining);
-                        }
-                        else if (effect.Kind == "startCombat")
-                        {
-                            actor.Placement.SetMeta("opennv_combat_target", effect.Target);
-                            (_cg02IntroActors.TryGetValue(effect.ReferenceFormId,
-                                out var responder) ? responder.Placement :
-                                Cg01WorldReference(effect.ReferenceFormId))
-                                .SetMeta("opennv_evaluate_package", 1);
-                            player.SetMeta("opennv_cg02_combat_runtime_blocker",
-                                "fo3-cg02-butch-combat-runtime-not-implemented");
-                        }
-                    }
-                    completed(node.InfoFormId, targetStage);
-                    if (node.LinkedTopicFormIds.Count == 0)
-                    {
-                        menu.HideMenu();
-                        player.SetMenuInputHandler(null);
-                        menu.QueueFree();
-                        _vaultPreviewOverlay = null;
-                        return;
-                    }
-                    menu.ShowTopics(
-                        participant.DisplayName,
-                        node.LinkedTopicFormIds.SelectMany(topicFormId =>
-                        {
-                            var topic = participant.Topics[topicFormId];
-                            var candidates = participant.Nodes.Values.Where(value =>
-                                value.TopicFormId.Equals(topicFormId,
-                                    StringComparison.OrdinalIgnoreCase) &&
-                                (value.EngineSex is null || value.EngineSex == engineSex) &&
-                                Cg02BirthdayConditionsMatch(value, actor, player)).ToArray();
-                            return candidates.Select(next =>
-                                (topic.FormId, topic.Text, (Action)(() => PlayNode(next))));
-                        }).ToArray());
-                    return;
-                }
-                var response = responses[index];
-                menu.ShowLine(participant.DisplayName, response.Text, () => { });
-                var voice = new AudioStreamPlayer
-                {
-                    Name = $"Fallout3Cg02BirthdayVoice{node.InfoFormId}_{response.Index}",
-                };
-                AddChild(voice);
-                var dialogue = new GamebryoDialoguePlayback(
-                    voice, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-                _cg02IntroDialogue.Add(dialogue);
-                dialogue.Start(
-                    new SourceDialogueLine(
-                        node.InfoFormId, response.Index, participant.BaseFormId,
-                        response.Text,
-                        new SourceDialogueAsset(response.Voice.LogicalPath,
-                            response.Voice.SourcePath, response.Voice.Sha256),
-                        new SourceDialogueAsset(response.Lip.LogicalPath,
-                            response.Lip.SourcePath, response.Lip.Sha256)),
-                    new FaceGenMorphController(actor.Actor,
-                        _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-                    () => PlayLine(index + 1));
-            }
-        }
-    }
-
-    private CellActorLoader.PlacedActor EnsureCg02CakeAndy(
-        Fo3Cg02CakeRuntime cake)
-    {
-        if (_cg02IntroActors.TryGetValue(cake.AndyReferenceFormId, out var existing))
-            return existing;
-        using var stream = File.OpenRead(cake.AndyActorScenePath);
-        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!actual.Equals(cake.AndyActorSceneSha256,
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Andy actor scene hash differs.");
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 cake world is absent.");
-        var actor = CellActorLoader.Load(
-                cake.AndyActorScenePath,
-                new HashSet<string>([coverage.Contract.CellFormId],
-                    StringComparer.OrdinalIgnoreCase),
-                coverage.CellRoot,
-                coverage.Contract.EntryPositionGameUnits,
-                _runtimeConfiguration,
-                proofEnableInitiallyDisabled: false,
-                materializeInitiallyDisabled: true)
-            ?? throw new InvalidOperationException("Fallout 3 CG02 Andy is absent.");
-        if (actor.ReferenceFormId != cake.AndyReferenceFormId ||
-            actor.BaseFormId != cake.AndyBaseFormId)
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Andy actor identity differs.");
-        _cg02IntroActors.Add(actor.ReferenceFormId, actor);
-        return actor;
-    }
-
     private void BeginCg01DadDialogue(
         Fo3Cg01Stage0State stage5,
         Fo3Cg01RuntimeContext context,
@@ -2073,7 +1909,7 @@ internal partial class Fo3OpeningFlow
         }
         var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
             "Fallout 3 CG01 stage-20 restore has no toddler world.");
-        if (!world.Player.MovementEnabled ||
+        if (world.Player.MovementEnabled != state.PlayerMovementEnabled ||
             _vaultDialogueVoice is not null ||
             _activeCg01DadLip is not null)
             throw new InvalidOperationException(
@@ -2117,6 +1953,7 @@ internal partial class Fo3OpeningFlow
             var reactorGift = postIntercom.ReactorGiftRuntime ??
                 throw new InvalidOperationException(
                     "Fallout 3 CG02 reactor-gift runtime is absent.");
+            var picture = reactorGift.PictureRuntime;
             var jonasGift = reactorGift.Participants.Single(value =>
                 value.ReferenceFormId.Equals(postIntercom.JonasReferenceFormId,
                     StringComparison.OrdinalIgnoreCase));
@@ -2505,15 +2342,24 @@ internal partial class Fo3OpeningFlow
                         .Select(value => value.ObjectiveIndex)
                         .DefaultIfEmpty(current.DisplayedObjectiveIndex).Last(),
                     AccountedCommandCount = current.AccountedCommandCount +
-                        commands.Count + 1,
+                        commands.Count + 1 + (stage == reactorGift.CompletionStage
+                            ? picture.SourceStageCommandCount : 0),
                     AppliedCommandCount = current.AppliedCommandCount +
-                        commands.Count + 1,
+                        commands.Count + 1 + (stage == reactorGift.CompletionStage
+                            ? picture.SourceStageCommandCount : 0),
                     NextBoundary = new Fo3Cg01Stage12Boundary(false,
                         stage == reactorGift.CompletionStage
                             ? reactorGift.NextBoundaryBlocker
                             : postIntercom.NextBoundaryBlocker),
                 };
                 player.SetMeta("opennv_cg02_stage", stage);
+                if (stage == reactorGift.CompletionStage)
+                {
+                    player.SetMeta("opennv_cg02_objective_displayed",
+                        picture.ObjectiveIndex);
+                    player.SetMeta($"opennv_quest_stage_{current.ActiveQuestFormId}",
+                        stage);
+                }
                 if (stage == reactorGift.CombatStage &&
                     !current.CombatHealthByReferenceFormId.ContainsKey(
                         reactorGift.Combatant.ReferenceFormId))
@@ -2556,12 +2402,123 @@ internal partial class Fo3OpeningFlow
                         {
                             AppliedInfoFormIds = current.AppliedInfoFormIds
                                 .Append(infoFormId).ToArray(),
+                            AccountedCommandCount = current.AccountedCommandCount +
+                                participant.Nodes[infoFormId].Effects.Count(value =>
+                                    value.Kind != "setStage"),
+                            AppliedCommandCount = current.AppliedCommandCount +
+                                participant.Nodes[infoFormId].Effects.Count(value =>
+                                    value.Kind != "setStage"),
                         };
                         if (targetStage is { } stage)
                             ApplyReactorGiftStage(stage);
                         else
                             Persist();
                     });
+            }
+
+            void StartPictureJonas()
+            {
+                if (current.AppliedInfoFormIds.Contains(
+                        picture.JonasInfoFormId, StringComparer.OrdinalIgnoreCase))
+                    return;
+                StartCg02BirthdayInteraction(jonasGift, player,
+                    (infoFormId, targetStage) =>
+                    {
+                        if (targetStage is not null || !infoFormId.Equals(
+                                picture.JonasInfoFormId,
+                                StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException(
+                                "Fallout 3 CG02 picture Jonas result differs.");
+                        current = current with
+                        {
+                            ActiveStage = picture.TimerStage,
+                            AppliedInfoFormIds = current.AppliedInfoFormIds
+                                .Append(infoFormId).ToArray(),
+                            AccountedCommandCount = current.AccountedCommandCount + 1,
+                            AppliedCommandCount = current.AppliedCommandCount + 1,
+                            NextBoundary = new Fo3Cg01Stage12Boundary(
+                                false, picture.NextBoundaryBlocker),
+                        };
+                        player.SetMeta("opennv_cg02_stage", picture.TimerStage);
+                        player.SetMeta(
+                            $"opennv_quest_stage_{current.ActiveQuestFormId}",
+                            picture.TimerStage);
+                        Persist();
+                    });
+            }
+
+            void ApplyPictureStage()
+            {
+                if (current.ActiveStage != picture.SourceStage)
+                    return;
+                player.StopAtAuthoredTrigger();
+                _vaultBirthCoverage!.Cg01DadActor.Placement.SetMeta(
+                    "opennv_dotalk", picture.PictureDadTalkValue);
+                current = current with
+                {
+                    ActiveStage = picture.PictureStage,
+                    PlayerMovementEnabled = false,
+                    DisplayedObjectiveIndex = picture.ObjectiveIndex,
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        picture.PictureStageCommandCount,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        picture.PictureStageCommandCount,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(
+                        false, picture.NextBoundaryBlocker),
+                };
+                player.SetMeta("opennv_cg02_objective_completed",
+                    picture.ObjectiveIndex);
+                player.SetMeta("opennv_cg02_stage", picture.PictureStage);
+                player.SetMeta($"opennv_quest_stage_{current.ActiveQuestFormId}",
+                    picture.PictureStage);
+                Persist();
+                StartPictureJonas();
+            }
+
+            void PicturePackageCompleted(string packageFormId)
+            {
+                if (current.AppliedPackageFormIds.Contains(
+                        packageFormId, StringComparer.OrdinalIgnoreCase))
+                    return;
+                var package = picture.Packages.Single(value =>
+                    value.FormId.Equals(packageFormId,
+                        StringComparison.OrdinalIgnoreCase));
+                var actor = package.ActorReferenceFormId.Equals(
+                        postIntercom.DadReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? _vaultBirthCoverage!.Cg01DadActor.Placement
+                    : EnsureJonas().Placement;
+                actor.SetMeta("opennv_picture_ready", 1);
+                if (package.ActorReferenceFormId.Equals(
+                        postIntercom.DadReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    actor.SetMeta("opennv_dotalk", picture.DadTalkValue);
+                    actor.SetMeta("opennv_timer", picture.DadTimerSeconds);
+                }
+                current = current with
+                {
+                    AppliedPackageFormIds = current.AppliedPackageFormIds
+                        .Append(package.FormId).ToArray(),
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        package.CompletionCommandCount,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        package.CompletionCommandCount,
+                };
+                Persist();
+            }
+
+            void StartPicturePositioning()
+            {
+                var dad = _vaultBirthCoverage!.Cg01DadActor;
+                var jonas = EnsureJonas();
+                StartCg02PicturePositioning(
+                    picture, interaction.TimerTransition.DadLead, player,
+                    dad, jonas, () => current.AppliedPackageFormIds,
+                    PicturePackageCompleted, ApplyPictureStage);
+                if (!current.AppliedInfoFormIds.Contains(
+                        picture.DadInfoFormId, StringComparer.OrdinalIgnoreCase))
+                    StartReactorGiftParticipant(dadGift);
             }
 
             void ApplyTargetHit(string targetReferenceFormId)
@@ -2812,6 +2769,11 @@ internal partial class Fo3OpeningFlow
                 else if (effect.Kind == "setActorVariable")
                     _cg02IntroActors[effect.ReferenceFormId].Placement.SetMeta(
                         $"opennv_{effect.Variable.ToLowerInvariant()}", effect.Value);
+                else if (effect.Kind == "evaluatePackage")
+                    (_cg02IntroActors.TryGetValue(effect.ReferenceFormId,
+                        out var packageActor) ? packageActor.Placement :
+                        Cg01WorldReference(effect.ReferenceFormId))
+                        .SetMeta("opennv_evaluate_package", 1);
                 else if (effect.Kind == "startCombat")
                 {
                     EnsureCg02BirthdayActor(birthday.Participants.Single(value =>
@@ -2999,6 +2961,13 @@ internal partial class Fo3OpeningFlow
                 ExecuteReactorGiftStageCommands(reactorGift.CombatStage);
             if (current.ActiveStage >= reactorGift.DeathStage)
                 ExecuteReactorGiftStageCommands(reactorGift.DeathStage);
+            if (current.ActiveStage == picture.SourceStage)
+                StartPicturePositioning();
+            else if (current.ActiveStage == picture.PictureStage)
+            {
+                StartPicturePositioning();
+                StartPictureJonas();
+            }
             foreach (var targetReferenceFormId in current.Cg02TargetHitFormIds.Distinct(
                 StringComparer.OrdinalIgnoreCase))
                 Cg01WorldReference(targetReferenceFormId).SetMeta(
@@ -3475,6 +3444,8 @@ internal partial class Fo3OpeningFlow
             .DadSpeechRuntime?.OverseerSpeechRuntime;
         var restoredParty = restoredOverseer?.DadPartyRuntime;
         var restoredBirthday = restoredParty?.BirthdayInteractionsRuntime;
+        var restoredPost = restoredBirthday?.ButchRuntime?.PostIntercomRuntime;
+        var restoredGift = restoredPost?.ReactorGiftRuntime;
         if (current.ActiveQuestFormId.Equals(
                 restoredCompletion.NextQuestFormId, StringComparison.OrdinalIgnoreCase) &&
             (current.ActiveStage == restoredCompletion.Cg02Stage0.TargetStage ||
@@ -3492,7 +3463,21 @@ internal partial class Fo3OpeningFlow
              restoredBirthday?.ButchRuntime is { } restoredButch &&
                  (current.ActiveStage == restoredButch.SceneDoneStage ||
                   current.ActiveStage == restoredButch.AggregateStage ||
-                  current.ActiveStage == restoredButch.IntercomStage)))
+                  current.ActiveStage == restoredButch.IntercomStage) ||
+             restoredPost is not null &&
+                 (current.ActiveStage == restoredPost.AnswerStage ||
+                  current.ActiveStage == restoredPost.GoodbyeStage ||
+                  current.ActiveStage == restoredPost.TargetStage) ||
+             restoredGift is not null &&
+                 (current.ActiveStage == restoredGift.JonasStage ||
+                  current.ActiveStage == restoredGift.TargetStage ||
+                  current.ActiveStage == restoredGift.RangeStage ||
+                  current.ActiveStage == restoredGift.HitStage ||
+                  current.ActiveStage == restoredGift.CombatStage ||
+                  current.ActiveStage == restoredGift.DeathStage ||
+                  current.ActiveStage == restoredGift.CompletionStage ||
+                  current.ActiveStage == restoredGift.PictureRuntime.PictureStage ||
+                  current.ActiveStage == restoredGift.PictureRuntime.TimerStage)))
         {
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 restored completion player is absent."))
@@ -3643,7 +3628,21 @@ internal partial class Fo3OpeningFlow
                  restoredBirthday.ButchRuntime is { } butch &&
                     (current.ActiveStage == butch.SceneDoneStage ||
                      current.ActiveStage == butch.AggregateStage ||
-                     current.ActiveStage == butch.IntercomStage)))
+                     current.ActiveStage == butch.IntercomStage) ||
+                 restoredPost is not null &&
+                    (current.ActiveStage == restoredPost.AnswerStage ||
+                     current.ActiveStage == restoredPost.GoodbyeStage ||
+                     current.ActiveStage == restoredPost.TargetStage) ||
+                 restoredGift is not null &&
+                    (current.ActiveStage == restoredGift.JonasStage ||
+                     current.ActiveStage == restoredGift.TargetStage ||
+                     current.ActiveStage == restoredGift.RangeStage ||
+                     current.ActiveStage == restoredGift.HitStage ||
+                     current.ActiveStage == restoredGift.CombatStage ||
+                     current.ActiveStage == restoredGift.DeathStage ||
+                     current.ActiveStage == restoredGift.CompletionStage ||
+                     current.ActiveStage == restoredGift.PictureRuntime.PictureStage ||
+                     current.ActiveStage == restoredGift.PictureRuntime.TimerStage)))
             {
                 InstallBirthday(restoredBirthday, restoredPlayer);
             }

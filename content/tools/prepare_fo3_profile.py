@@ -4514,15 +4514,26 @@ def _compile_cg02_reactor_gift_runtime(
             for command in [command for source in _text_values(info, "SCTX")
                             for command in _source_commands(source)]:
                 match = SET_STAGE_PATTERN.fullmatch(command)
-                if match is None or int(match.group("stage")) not in {
-                    jonas_stage, target_stage, range_stage, combat_stage,
-                    completion_stage,
-                }:
+                package_match = re.fullmatch(
+                    r"(?P<subject>\w+)\.evp", command, re.IGNORECASE)
+                if match is not None and int(match.group("stage")) in {
+                        jonas_stage, target_stage, range_stage, combat_stage,
+                        completion_stage}:
+                    effects.append({"kind": "setStage",
+                                    "stage": int(match.group("stage"))})
+                    continue
+                if package_match is not None:
+                    effects.append({"kind": "evaluatePackage",
+                                    "referenceFormId": _form_id(by_editor[
+                                        package_match.group("subject").casefold()].form_id)})
+                    continue
+                if match is None:
                     raise ValueError(
                         f"Fallout 3 CG02 reactor gift INFO result differs: "
                         f"{_form_id(info.form_id)} {command}")
-                effects.append({"kind": "setStage",
-                                "stage": int(match.group("stage"))})
+                raise ValueError(
+                    f"Fallout 3 CG02 reactor gift INFO stage differs: "
+                    f"{_form_id(info.form_id)} {command}")
             response_rows = []
             response_index = None
             for row in iter_subrecords(info):
@@ -4669,6 +4680,150 @@ def _compile_cg02_reactor_gift_runtime(
     clip_size = weapon_data[WEAPON_CLIP_SIZE_OFFSET]
     if weapon_damage <= 0 or clip_size <= 0:
         raise ValueError("Fallout 3 CG02 BB-gun damage contract differs")
+    picture_stage = int(config["pictureStage"])
+    picture_timer_stage = int(config["pictureTimerStage"])
+    picture_source_commands = [command for source in stage_sources.get(
+        completion_stage, []) for command in _source_commands(source)]
+    picture_stage_commands = [command for source in stage_sources.get(
+        picture_stage, []) for command in _source_commands(source)]
+    objective_match = next((re.fullmatch(
+        r"setObjectiveDisplayed\s+CG02\s+(?P<objective>\d+)\s+1",
+        command, re.IGNORECASE) for command in picture_source_commands
+        if command.casefold().startswith("setobjectivedisplayed")), None)
+    dad_say = next((re.fullmatch(
+        r"CG02DadREF\.SayTo\s+CG02JonasREF\s+CG02DadSpeech\s+1",
+        command, re.IGNORECASE) for command in picture_source_commands
+        if ".sayto" in command.casefold()), None)
+    objective_done = next((re.fullmatch(
+        r"setObjectiveCompleted\s+CG02\s+(?P<objective>\d+)\s+1",
+        command, re.IGNORECASE) for command in picture_stage_commands
+        if command.casefold().startswith("setobjectivecompleted")), None)
+    disable_controls = any(re.fullmatch(
+        r"DisablePlayerControls", command, re.IGNORECASE)
+        for command in picture_stage_commands)
+    dad_talk = next((re.fullmatch(
+        r"set\s+CG02DadREF\.doTalk\s+to\s+(?P<value>\d+)",
+        command, re.IGNORECASE) for command in picture_stage_commands
+        if ".dotalk" in command.casefold()), None)
+    jonas_say = next((re.fullmatch(
+        r"CG02JonasREF\.SayTo\s+player\s+CG02JonasSpeech\s+1",
+        command, re.IGNORECASE) for command in picture_stage_commands
+        if ".sayto" in command.casefold()), None)
+    if objective_match is None or dad_say is None or objective_done is None or \
+            not disable_controls or dad_talk is None or jonas_say is None or \
+            objective_match.group("objective") != objective_done.group("objective"):
+        raise ValueError("Fallout 3 CG02 picture stage results differ")
+    picture_packages = []
+    for package_name, marker_name, actor_index in (
+            ("dadPicturePackageFormId", "dadPictureMarkerFormId", 1),
+            ("jonasPicturePackageFormId", "jonasPictureMarkerFormId", 0)):
+        package = exact(package_name, PACKAGE_RECORD)
+        marker = exact(marker_name, PLACED_REFERENCE_RECORD)
+        actor_base = participant_specs[actor_index][1]
+        actor_packages = {struct.unpack("<I", row.data)[0]
+                          for row in iter_subrecords(actor_base)
+                          if row.signature == "PKID" and
+                          len(row.data) == FORM_ID_BYTES}
+        if package.form_id not in actor_packages:
+            raise ValueError("Fallout 3 CG02 picture package ownership differs")
+        location_targets = [struct.unpack("<IiI", row.data)
+                            for row in iter_subrecords(package)
+                            if row.signature == "PLDT" and
+                            len(row.data) == struct.calcsize("<IiI")]
+        matched_targets = [(form_id, radius) for kind, form_id, radius
+                           in location_targets
+                           if kind == 0 and form_id == marker.form_id]
+        if len(matched_targets) != 1:
+            raise ValueError("Fallout 3 CG02 picture package target differs")
+        picture_packages.append({
+            "formId": _form_id(package.form_id),
+            "actorReferenceFormId": _form_id(participant_specs[actor_index][0].form_id),
+            "targetMarkerFormId": _form_id(marker.form_id),
+            "targetTransform": _reference_transform_contract(marker),
+            "radiusGameUnits": matched_targets[0][1],
+        })
+    dad_script = exact("dadScriptFormId", SCRIPT_RECORD)
+    jonas_script = exact("jonasScriptFormId", SCRIPT_RECORD)
+    dad_package = int(str(config["dadPicturePackageFormId"]), FORM_ID_RADIX)
+    jonas_package = int(str(config["jonasPicturePackageFormId"]), FORM_ID_RADIX)
+    dad_source = _script_source(dad_script)
+    jonas_source = _script_source(jonas_script)
+    dad_package_block = re.search(
+        rf"begin\s+OnPackageDone\s+{re.escape(_editor_id(by_form[dad_package]) or '')}"
+        r"(?P<body>.*?)\bend\b", dad_source, re.IGNORECASE | re.DOTALL)
+    jonas_package_block = re.search(
+        rf"begin\s+OnPackageDone\s+{re.escape(_editor_id(by_form[jonas_package]) or '')}"
+        r"(?P<body>.*?)\bend\b", jonas_source, re.IGNORECASE | re.DOTALL)
+    dad_ready = re.search(
+        rf"begin\s+OnPackageDone\s+{re.escape(_editor_id(by_form[dad_package]) or '')}"
+        rf".*?set\s+CG02\.DadReady\s+to\s+(?P<ready>\d+)"
+        rf".*?set\s+doTalk\s+to\s+(?P<talk>\d+)"
+        rf".*?set\s+timer\s+to\s+(?P<timer>[\d.]+)",
+        dad_source, re.IGNORECASE | re.DOTALL)
+    jonas_ready = re.search(
+        rf"begin\s+OnPackageDone\s+{re.escape(_editor_id(by_form[jonas_package]) or '')}"
+        rf".*?set\s+CG02\.JonasReady\s+to\s+(?P<ready>\d+)",
+        jonas_source, re.IGNORECASE | re.DOTALL)
+    jonas_info = int(str(config["jonasPictureInfoFormId"]), FORM_ID_RADIX)
+    jonas_topic = next((group.label_u32 for group in by_form[jonas_info].groups
+                        if group.group_type == DIALOGUE_CHILD_GROUP_TYPE), 0)
+    jonas_say_done = re.search(
+        rf"begin\s+SayToDone\s+{re.escape(_editor_id(by_form[jonas_topic]) or '')}"
+        rf".*?getStage\s+CG02\s*==\s*(?P<stage>\d+)"
+        rf".*?setstage\s+CG02\s+(?P<target>\d+)",
+        jonas_source, re.IGNORECASE | re.DOTALL)
+    if dad_package_block is None or jonas_package_block is None or \
+            dad_ready is None or jonas_ready is None or jonas_say_done is None or \
+            int(dad_ready.group("ready")) != 1 or \
+            int(dad_ready.group("talk")) != 1 or \
+            float(dad_ready.group("timer")) <= 0 or \
+            int(jonas_ready.group("ready")) != 1 or \
+            int(jonas_say_done.group("stage")) != picture_stage or \
+            int(jonas_say_done.group("target")) != picture_timer_stage:
+        raise ValueError("Fallout 3 CG02 picture package result differs")
+    picture_packages[0]["completionCommandCount"] = len(re.findall(
+        r"\bset\s+", dad_package_block.group("body"), re.IGNORECASE))
+    picture_packages[1]["completionCommandCount"] = len(re.findall(
+        r"\bset\s+", jonas_package_block.group("body"), re.IGNORECASE))
+    if any(int(value["completionCommandCount"]) <= 0
+           for value in picture_packages):
+        raise ValueError("Fallout 3 CG02 picture package command inventory differs")
+    trigger_base = exact("playerPictureTriggerBaseFormId", ACTIVATOR_RECORD)
+    trigger_script = exact("playerPictureTriggerScriptFormId", SCRIPT_RECORD)
+    if struct.unpack("<I", _single_subrecord(trigger_base, "SCRI"))[0] != \
+            trigger_script.form_id:
+        raise ValueError("Fallout 3 CG02 picture trigger script join differs")
+    trigger_source = _script_source(trigger_script)
+    trigger_match = re.search(
+        r"getHeadingAngle\s+CG02JonasREF.*?angle\s*>=\s*(?P<minimum>-?\d+)"
+        r"\s*&&\s*angle\s*<=\s*(?P<maximum>-?\d+).*?"
+        r"set\s+CG02\.PlayerReady\s+to\s+(?P<ready>\d+).*?"
+        r"begin\s+OnTriggerLeave\s+player.*?"
+        r"set\s+CG02\.PlayerReady\s+to\s+(?P<leave>\d+)",
+        trigger_source, re.IGNORECASE | re.DOTALL)
+    if trigger_match is None or int(trigger_match.group("ready")) != 1 or \
+            int(trigger_match.group("leave")) != 0:
+        raise ValueError("Fallout 3 CG02 picture trigger result differs")
+    picture_triggers = []
+    for value in config["playerPictureTriggerReferenceFormIds"]:
+        reference = by_form.get(int(str(value), FORM_ID_RADIX))
+        if reference is None or reference.signature != PLACED_REFERENCE_RECORD or \
+                struct.unpack("<I", _single_subrecord(reference, "NAME"))[0] != \
+                trigger_base.form_id:
+            raise ValueError("Fallout 3 CG02 picture trigger identity differs")
+        primitive_data = _single_subrecord(reference, "XPRM")
+        if len(primitive_data) != TRIGGER_PRIMITIVE_BYTES:
+            raise ValueError("Fallout 3 CG02 picture trigger primitive differs")
+        primitive = struct.unpack(f"<{TRIGGER_PRIMITIVE_FLOATS}fI", primitive_data)
+        if not all(math.isfinite(component) and component > 0
+                   for component in primitive[:3]):
+            raise ValueError("Fallout 3 CG02 picture trigger dimensions differ")
+        picture_triggers.append({
+            "referenceFormId": _form_id(reference.form_id),
+            "sourceTransform": _reference_transform_contract(reference),
+            "dimensionsGameUnits": {"x": primitive[0], "y": primitive[1],
+                                    "z": primitive[2]},
+        })
     resolved_stages = {}
     for stage in (jonas_stage, target_stage, range_stage, hit_stage,
                   combat_stage, death_stage):
@@ -4743,8 +4898,31 @@ def _compile_cg02_reactor_gift_runtime(
                        "weaponDamage": weapon_damage,
                        "clipSize": clip_size,
                        "deathStage": death_stage},
+            "pictureRuntime": {
+                "schema": "opennv-fo3-cg02-stage-80-picture-runtime/v1",
+                "sourceStage": completion_stage,
+                "pictureStage": picture_stage,
+                "timerStage": picture_timer_stage,
+                "dadInfoFormId": str(config["dadPictureInfoFormId"]),
+                "jonasInfoFormId": str(config["jonasPictureInfoFormId"]),
+                "packages": picture_packages,
+                "triggers": picture_triggers,
+                "minimumHeadingDegrees": int(trigger_match.group("minimum")),
+                "maximumHeadingDegrees": int(trigger_match.group("maximum")),
+                "dadReadyValue": int(dad_ready.group("ready")),
+                "jonasReadyValue": int(jonas_ready.group("ready")),
+                "playerReadyValue": int(trigger_match.group("ready")),
+                "dadTalkValue": int(dad_ready.group("talk")),
+                "dadTimerSeconds": float(dad_ready.group("timer")),
+                "objectiveIndex": int(objective_match.group("objective")),
+                "pictureDadTalkValue": int(dad_talk.group("value")),
+                "sourceStageCommandCount": len(picture_source_commands),
+                "pictureStageCommandCount": len(picture_stage_commands),
+                "nextBoundary": {"applied": False,
+                                 "blocker": "fo3-cg02-stage-95-result-runtime-not-implemented"},
+            },
             "nextBoundary": {"applied": False,
-                             "blocker": "fo3-cg02-stage-80-picture-runtime-not-implemented"}}
+                             "blocker": "fo3-cg02-stage-95-result-runtime-not-implemented"}}
 
 
 def _compile_cg02_cake_runtime(

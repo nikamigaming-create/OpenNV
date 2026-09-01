@@ -360,11 +360,11 @@
                 "jonasBaseFormId": "000300e7",
                 "jonasGreetPackageFormId": "00063aa6",
                 "jonasMarkerFormId": "00075335",
-                "jonasGreetingInfoFormIds": ["00063a9e", "00063a9f"],
+                "jonasGreetingInfoFormIds": ["00063a9e", "00063a9f", "000306c9"],
                 "dadReferenceFormId": "000300ef",
                 "dadBaseFormId": "0002fdcf",
                 "dadGreetPackageFormId": "000304e1",
-                "dadGreetingInfoFormIds": ["0001f9cb", "0001f9c9", "000555ff", "0001f9c6"],
+                "dadGreetingInfoFormIds": ["0001f9cb", "0001f9c9", "000555ff", "0001f9c6", "0001f9c1"],
                 "dadMoveMarkerFormId": "00063aa7",
                 "reactorStairDoorFormId": "000744b8",
                 "targetRangeDoorFormId": "000297bb",
@@ -386,7 +386,20 @@
                 "radroachBaseFormId": "000306cc",
                 "radroachScriptFormId": "000306ce",
                 "radroachGuardPackageFormId": "000a4e63",
-                "radroachGuardMarkerFormId": "0009dec9"
+                "radroachGuardMarkerFormId": "0009dec9",
+                "pictureStage": 90,
+                "pictureTimerStage": 95,
+                "dadPictureInfoFormId": "0001f9c1",
+                "jonasPictureInfoFormId": "000306c9",
+                "dadPicturePackageFormId": "000306d4",
+                "jonasPicturePackageFormId": "000306d5",
+        "dadPictureMarkerFormId": "000306d1",
+        "jonasPictureMarkerFormId": "000306d2",
+        "dadScriptFormId": "000304da",
+        "jonasScriptFormId": "000306d8",
+        "playerPictureTriggerBaseFormId": "000c6de1",
+                "playerPictureTriggerScriptFormId": "000c6de0",
+                "playerPictureTriggerReferenceFormIds": ["00060c81", "000c6de2"]
               }
             }
           }

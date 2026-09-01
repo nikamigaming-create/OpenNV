@@ -77,6 +77,7 @@ internal sealed record Fo3Cg02ReactorGiftRuntime(
     int TutorialHitStage,
     string RequiredWeaponFormId,
     Fo3Cg02Combatant Combatant,
+    Fo3Cg02PictureRuntime PictureRuntime,
     IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02ReactorGiftCommand>> StageResults,
     string NextBoundaryBlocker);
 
