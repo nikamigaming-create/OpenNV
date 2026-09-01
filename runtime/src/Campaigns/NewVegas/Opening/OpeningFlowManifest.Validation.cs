@@ -65,13 +65,23 @@ internal sealed partial record OpeningNewGameFlow
         foreach (var actor in flow.OrdinaryActors)
         {
             var actorCommands = actor.Topics.Values.SelectMany(topic =>
-                topic.Infos.SelectMany(info => info.Commands)).ToArray();
+                    topic.Infos.SelectMany(info => info.Commands))
+                .Concat(actor.Packages.Values.SelectMany(package =>
+                    package.EventCommands.Values.SelectMany(commands => commands)))
+                .ToArray();
             if (!flow.SceneRoles.TryGetValue(actor.Role, out var role) ||
                 !role.ReferenceFormId.Equals(
                     actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
                 !role.BaseFormId.Equals(actor.BaseFormId, StringComparison.OrdinalIgnoreCase) ||
                 actor.PackagePriority.Count == 0 ||
                 actor.PackagePriority.Any(formId => !actor.Packages.ContainsKey(formId)) ||
+                actor.Packages.Values.Any(package =>
+                    package.EventCommands.Keys.Any(eventName =>
+                        eventName is not ("begin" or "end" or "change"))) ||
+                actor.Packages.Values.Any(package =>
+                    package.EventCommands.Any(eventCommands =>
+                        eventCommands.Key is not "end" &&
+                        eventCommands.Value.Count != 0)) ||
                 !actor.Topics.ContainsKey(actor.ActivationTopicFormId) ||
                 !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase) ||
                 actor.ArrivalTransitions.Any(value =>
@@ -91,7 +101,12 @@ internal sealed partial record OpeningNewGameFlow
                     value.BoundsGameUnits.Z <= 0 ||
                     !actor.Topics.ContainsKey(value.TopicFormId) ||
                     !flow.OrdinaryQuests.TryGetValue(value.QuestFormId, out var triggerQuest) ||
-                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)))
+                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)) ||
+                actor.AutomaticPackageDialogues.Any(value =>
+                    !actor.Packages.TryGetValue(value.PackageFormId, out var package) ||
+                    !package.PackageTypeName.Equals(
+                        "dialogue", StringComparison.OrdinalIgnoreCase) ||
+                    !actor.Topics.ContainsKey(value.GreetingTopicFormId)))
                 throw new InvalidOperationException(
                     "Owned ordinary actor dialogue handoff is incomplete.");
             ValidateCommandContract(actor.CommandContract, actorCommands);
@@ -122,6 +137,36 @@ internal sealed partial record OpeningNewGameFlow
                         StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException(
                     "Owned hit-target set is incomplete.");
+        }
+        foreach (var encounter in flow.CombatEncounters)
+        {
+            if (string.IsNullOrWhiteSpace(encounter.DeathScriptFormId) ||
+                string.IsNullOrWhiteSpace(encounter.DeathScriptEditorId) ||
+                !flow.OrdinaryQuests.TryGetValue(
+                    encounter.QuestFormId, out var combatQuest) ||
+                !combatQuest.Variables.TryGetValue(
+                    checked((uint)encounter.QuestVariableIndex), out var counterName) ||
+                !counterName.Equals(
+                    encounter.QuestVariableName, StringComparison.OrdinalIgnoreCase) ||
+                !combatQuest.Objectives.ContainsKey(encounter.ObjectiveIndex) ||
+                !combatQuest.Stages.ContainsKey(encounter.MinimumCombatStage) ||
+                !combatQuest.Stages.ContainsKey(encounter.CompletionStage) ||
+                encounter.CounterIncrement <= 0 || encounter.Threshold <= 0 ||
+                encounter.Targets.Count != encounter.Threshold ||
+                encounter.Targets.Select(value => value.ReferenceFormId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    encounter.Targets.Count ||
+                encounter.Targets.Any(value =>
+                    value.MaximumHealth <= 0 || value.AttackDamage <= 0 ||
+                    value.PackageFormIds.Count == 0 ||
+                    value.PackageFormIds.Distinct(
+                        StringComparer.OrdinalIgnoreCase).Count() !=
+                    value.PackageFormIds.Count) ||
+                !flow.OrdinaryActors.Any(actor => actor.ReferenceFormId.Equals(
+                    encounter.ResetActorReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "Owned ordinary combat encounter is incomplete.");
         }
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)

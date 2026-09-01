@@ -1,11 +1,44 @@
+using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow
 {
+    private CellActorLoader.PlacedActor EnsureCg02CakeAndy(
+        Fo3Cg02CakeRuntime cake)
+    {
+        if (_cg02IntroActors.TryGetValue(cake.AndyReferenceFormId, out var existing))
+            return existing;
+        using var stream = File.OpenRead(cake.AndyActorScenePath);
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!actual.Equals(cake.AndyActorSceneSha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Andy actor scene hash differs.");
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG02 cake world is absent.");
+        var actor = CellActorLoader.Load(
+                cake.AndyActorScenePath,
+                new HashSet<string>([coverage.Contract.CellFormId],
+                    StringComparer.OrdinalIgnoreCase),
+                coverage.CellRoot,
+                coverage.Contract.EntryPositionGameUnits,
+                _runtimeConfiguration,
+                proofEnableInitiallyDisabled: false,
+                materializeInitiallyDisabled: true)
+            ?? throw new InvalidOperationException("Fallout 3 CG02 Andy is absent.");
+        if (actor.ReferenceFormId != cake.AndyReferenceFormId ||
+            actor.BaseFormId != cake.AndyBaseFormId)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Andy actor identity differs.");
+        _cg02IntroActors.Add(actor.ReferenceFormId, actor);
+        return actor;
+    }
+
     private void StartCg02CakeRuntime(
         Fo3Cg02CakeRuntime cake,
         Fo3Cg01ToddlerPlayer player,

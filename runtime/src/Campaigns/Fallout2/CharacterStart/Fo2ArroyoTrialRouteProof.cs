@@ -40,17 +40,15 @@ internal static class Fo2ArroyoTrialRouteProof
             if (selected.Character is null)
                 throw new InvalidOperationException(
                     "Fallout 2 owned premades contain no exact tagged-Speech trial route.");
+            await HoldCaptureStage(host, "character-picker", CaptureHoldFrames());
             host.Picker.Select(selected.Index);
-            var editor = host.Picker.OpenCustom();
-            editor.SetCharacterName("Mara");
-            editor.SetTaggedSkills(selected.Character.Profile.TaggedSkills);
-            editor.SetTraits(selected.Character.Profile.Traits);
-            editor.Confirm();
+            host.Picker.ChooseCurrent();
             var handoff = host.OpeningHandoff ?? throw new InvalidOperationException(
                 "Fallout 2 paired gate did not start its owned opening-tail handoff.");
             handoff.RequestSkip();
             if (host.OpeningHandoffTask is not null)
                 await host.OpeningHandoffTask;
+            await HoldCaptureStage(host, "arroyo-opening-handoff", CaptureHoldFrames());
             var runtime = host.TrialRuntime ?? throw new InvalidOperationException(
                 "Fallout 2 trial runtime was not created.");
             runtime.TraverseApproach();
@@ -73,6 +71,7 @@ internal static class Fo2ArroyoTrialRouteProof
             var gate = NodeTraversal.Descendants<Sprite3D>(temple.Root).Single(row =>
                 row.HasMeta("map_serial") && row.GetMeta("map_serial").AsInt32() ==
                     host.TrialRoute.KlintGate.GateSerial);
+            await HoldCaptureStage(host, "temple-gate", CaptureHoldFrames());
             runtime.TraverseVillageRoute();
             var applied = host.EnterVillageAfterTrial();
             var player = host.Runtime?.Player ?? throw new InvalidOperationException(
@@ -97,11 +96,10 @@ internal static class Fo2ArroyoTrialRouteProof
                     host,
                     host.VillageArrivalCaptureRoot);
             }
+            await HoldCaptureStage(host, "arvillag-arrival", CaptureHoldFrames());
             for (var frame = 0; frame < PairedGateNeutralFrames; frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
-            await host.ToSignal(
-                RenderingServer.Singleton,
-                RenderingServer.SignalName.FramePostDraw);
+            await WaitForPresentationFrame(host);
             var beforeControl = CapturePairedGateFrame(
                 host,
                 output,
@@ -120,13 +118,13 @@ internal static class Fo2ArroyoTrialRouteProof
             pressedAction = null;
             for (var frame = 0; frame < PairedGateSettleFrames; frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
-            await host.ToSignal(
-                RenderingServer.Singleton,
-                RenderingServer.SignalName.FramePostDraw);
+            await WaitForPresentationFrame(host);
             var afterAction = CapturePairedGateFrame(
                 host,
                 output,
                 "fo2-arvillag-after-first-action.png");
+            var firstActionTile = player.CurrentTile;
+            var elder = await ExecuteElderArrivalInteraction(host, player);
             var saved = host.PersistCurrentState();
             var passed = runtime.State.Stage ==
                     Fo2ArroyoTrialProgressState.VillageFirstActionStage &&
@@ -136,11 +134,13 @@ internal static class Fo2ArroyoTrialRouteProof
                     host.TrialRoute.KlintGate.DestinationTile &&
                 saved.TrialProgress == runtime.State &&
                 saved.TempleExitTransition == applied && saved.MapIndex == 4 &&
-                saved.CurrentTile == host.TrialRoute.VillageArrival.FirstActionToTile &&
+                saved.CurrentTile == player.CurrentTile &&
                 player.GetMeta("destination_presentation_loaded").AsBool() &&
                 player.GetMeta("first_legal_destination_input_driven").AsBool() &&
                 actionStartTile == host.TrialRoute.VillageArrival.FirstActionFromTile &&
-                player.CurrentTile == host.TrialRoute.VillageArrival.FirstActionToTile &&
+                firstActionTile == host.TrialRoute.VillageArrival.FirstActionToTile &&
+                Fo1HexMath.AreNeighbors(player.CurrentTile, elder.ActorTile) &&
+                elder.TalkStarted && elder.RewardCompleted &&
                 movementFrames > 0 && movementFrames < PairedGateMovementFrames &&
                 villageHumanoid.UsesOwnedDonor && !player.Presentation.Visible &&
                 player.ControlsEnabled && host.VillageScene is not null &&
@@ -154,7 +154,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 ? "spear-equipped"
                 : "unarmed";
             var identityAndOutfitPassed =
-                selectedIdentity.Mode == Fo2CharacterSelection.CreateMode &&
+                selectedIdentity.Mode == Fo2CharacterSelection.PremadeMode &&
                 villageHumanoid.CharacterId == selectedIdentity.Id &&
                 villageHumanoid.OwnedIdentitySha256 == selectedIdentity.GcdSha256 &&
                 villageHumanoid.GetMeta("character_sex").AsString() ==
@@ -163,7 +163,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 villageHumanoid.GetMeta("equipment_state").AsString() ==
                     expectedEquipmentState &&
                 villageHumanoid.GetMeta("molded_floor_height_tile").AsInt32() ==
-                    host.TrialRoute.VillageArrival.FirstActionToTile;
+                    player.CurrentTile;
             passed = passed && identityAndOutfitPassed;
             WriteReport(
                 System.IO.Path.Combine(output, "fo2-arvillag-paired-handoff-report.json"),
@@ -222,6 +222,7 @@ internal static class Fo2ArroyoTrialRouteProof
                         foregroundInputInjected = false,
                         trialState = runtime.State.Stage,
                     },
+                    elder,
                     frames = new { beforeControl, afterAction },
                     save = new
                     {
@@ -248,8 +249,8 @@ internal static class Fo2ArroyoTrialRouteProof
                 {
                     schema = "opennv-fo2-arroyo-trial-write-proof/v1",
                     status = passed
-                        ? "pass-owned-cameron-gate-arvillag-arrival-first-action-save"
-                        : "fail-owned-cameron-gate-arvillag-arrival-first-action-save",
+                        ? "pass-owned-cameron-gate-arvillag-elder-reward-save"
+                        : "fail-owned-cameron-gate-arvillag-elder-reward-save",
                     route = new
                     {
                         host.TrialRoute.Path,
@@ -309,6 +310,7 @@ internal static class Fo2ArroyoTrialRouteProof
                         host.TrialRoute.VillageArrival.FirstActionFromTile,
                         host.TrialRoute.VillageArrival.FirstActionToTile,
                         host.TrialRoute.VillageArrival.FirstActionRotation,
+                        firstActionTile,
                         currentTile = player.CurrentTile,
                         presentationLoaded = player.GetMeta(
                             "destination_presentation_loaded").AsBool(),
@@ -361,6 +363,7 @@ internal static class Fo2ArroyoTrialRouteProof
                         saved.WalkMaskSha256,
                         saved.TrialProgress,
                     },
+                    elder,
                     limitations = new[]
                     {
                         "wall-edge and multihex collision parity is not implemented",
@@ -372,7 +375,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 });
             if (!passed)
                 throw new InvalidOperationException(
-                    "Fallout 2 owned Cameron-to-village write proof did not pass.");
+                    "Fallout 2 owned Cameron-to-Elder write proof did not pass.");
             GD.Print(
                 $"OPENNV_FO2_ARROYO_TRIAL_WRITE_PASS report={output} save={saved.Path} " +
                 $"saveSha256={saved.Sha256}");
@@ -421,6 +424,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 save.TempleConfrontation?.SpearEquipped == true
                     ? "spear-equipped"
                     : "unarmed";
+            var restoredElderReward = HasRestoredElderReward(host);
             var restoredIdentityAndOutfit =
                 restoredSelection == save.Character &&
                 restoredHumanoid.CharacterId == save.Character.Id &&
@@ -442,7 +446,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 host.Runtime?.Player.CurrentMapIndex ==
                     host.TrialRoute.VillageArrival.MapIndex &&
                 host.Runtime.Player.CurrentTile ==
-                    host.TrialRoute.VillageArrival.FirstActionToTile &&
+                    save.CurrentTile &&
                 host.Runtime.Player.CurrentWalkMaskSha256 ==
                     host.TrialRoute.VillageArrival.WalkMaskSha256 &&
                 host.TempleExitRuntime?.Applied == save.TempleExitTransition &&
@@ -452,6 +456,7 @@ internal static class Fo2ArroyoTrialRouteProof
                 host.Runtime.Player.VillageHumanoid.MeshInstances > 0 &&
                 host.Runtime.Player.VillageHumanoid.LitMaterials > 0 &&
                 restoredIdentityAndOutfit &&
+                restoredElderReward &&
                 !host.Runtime.Player.Presentation.Visible &&
                 host.VillageScene is not null && host.VillageScene.Root.Visible;
             WriteReport(
@@ -460,8 +465,8 @@ internal static class Fo2ArroyoTrialRouteProof
                 {
                     schema = "opennv-fo2-arroyo-trial-restore-proof/v1",
                     status = passed
-                        ? "pass-owned-cameron-gate-arvillag-first-action-cold-restore"
-                        : "fail-owned-cameron-gate-arvillag-first-action-cold-restore",
+                        ? "pass-owned-cameron-gate-arvillag-elder-reward-cold-restore"
+                        : "fail-owned-cameron-gate-arvillag-elder-reward-cold-restore",
                     routeSha256 = host.TrialRoute.Sha256,
                     save = new { save.Path, save.Sha256, save.TrialProgress },
                     restored = new
@@ -493,12 +498,13 @@ internal static class Fo2ArroyoTrialRouteProof
                                 "molded_floor_height_tile").AsInt32(),
                             restoredIdentityAndOutfit,
                         },
+                        restoredElderReward,
                     },
                     passed,
                 });
             if (!passed)
                 throw new InvalidOperationException(
-                    "Fallout 2 owned Cameron-to-village cold restore did not pass.");
+                    "Fallout 2 owned Cameron-to-Elder cold restore did not pass.");
             GD.Print(
                 $"OPENNV_FO2_ARROYO_TRIAL_RESTORE_PASS report={output} " +
                 $"saveSha256={save.Sha256}");
@@ -538,11 +544,200 @@ internal static class Fo2ArroyoTrialRouteProof
             "Fallout 2 ARVILLAG has no configured input for its exact first action.");
     }
 
+    private static bool HasRestoredElderReward(Fo2CharacterStartHost host)
+    {
+        var scripts = host.VillageIntRuntime;
+        if (scripts is null || !scripts.Roles.TryGetValue("elder", out var elder))
+            return false;
+        var currencyPid = host.Village.InventoryContract.CurrencyPid;
+        var sourceCurrency = host.Village.IntRoles["elder"].InitialInventory
+            .Where(row => row.Pid == currencyPid).Sum(row => row.Quantity);
+        var playerCurrency = elder.WorldState.Inventory
+            .Where(row => row.OwnerHandle == elder.PlayerHandle &&
+                elder.WorldState.Objects[row.ObjectHandle].Pid == currencyPid)
+            .Sum(row => row.Quantity);
+        return playerCurrency == sourceCurrency &&
+            elder.WorldState.Inventory.Any(row => row.OwnerHandle == elder.PlayerHandle &&
+                elder.WorldState.CreatedObjects.ContainsKey(row.ObjectHandle));
+    }
+
+    private static async Task<ElderInteractionEvidence> ExecuteElderArrivalInteraction(
+        Fo2CharacterStartHost host,
+        Fo2ArroyoCavesPlayerBody player)
+    {
+        var scripts = host.VillageIntRuntime ?? throw new InvalidOperationException(
+            "Fallout 2 ARVILLAG source INT runtime is absent.");
+        var interaction = host.VillageInteraction ?? throw new InvalidOperationException(
+            "Fallout 2 ARVILLAG source interaction runtime is absent.");
+        if (!scripts.Roles.TryGetValue("elder", out var initialElder) ||
+            !host.Village.IntRoles.TryGetValue("elder", out var elderCatalog))
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG source Elder role is absent.");
+        var elderObject = initialElder.WorldState.Objects[initialElder.ActorHandle];
+        var path = FindPathAdjacentToActor(player, elderObject.Tile);
+        foreach (var tile in path)
+        {
+            if (!player.TryTacticalStep(tile))
+                throw new InvalidOperationException(
+                    $"Fallout 2 ARVILLAG source path could not enter tile {tile}.");
+        }
+        var direction = Enumerable.Range(0, Fo1HexMath.DirectionCount).Single(value =>
+            Fo1HexMath.TileInDirection(player.CurrentTile, value) == elderObject.Tile);
+        player.Presentation.SetDirection(direction);
+        player.VillageHumanoid?.SetDirection(direction);
+
+        var currencyPid = host.Village.InventoryContract.CurrencyPid;
+        var sourceCurrency = initialElder.WorldState.Inventory
+            .Where(row => row.OwnerHandle == initialElder.ActorHandle &&
+                initialElder.WorldState.Objects[row.ObjectHandle].Pid == currencyPid)
+            .Sum(row => row.Quantity);
+        if (sourceCurrency <= 0 || !interaction.Talk())
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG source Elder talk could not start.");
+        await HoldCaptureStage(host, "elder-dialogue", CaptureHoldFrames());
+
+        var rewardProcedures = elderCatalog.ObjectCreations
+            .Select(row => row.Procedure)
+            .ToHashSet(StringComparer.Ordinal);
+        string? completedProcedure = null;
+        string? selectedRewardProcedure = null;
+        var choices = new List<int>();
+        for (var step = 0;
+             step < elderCatalog.Program.ExecutableProgram.ProcedureOrder.Count;
+             step++)
+        {
+            var current = scripts.Roles["elder"];
+            var playerCurrency = current.WorldState.Inventory
+                .Where(row => row.OwnerHandle == current.PlayerHandle &&
+                    current.WorldState.Objects[row.ObjectHandle].Pid == currencyPid)
+                .Sum(row => row.Quantity);
+            var createdReward = current.WorldState.CreatedObjects.Values
+                .FirstOrDefault(created =>
+                    current.WorldState.Inventory.Any(row =>
+                        row.OwnerHandle == current.PlayerHandle &&
+                        row.ObjectHandle == created.ObjectHandle && row.Quantity > 0));
+            if (playerCurrency == sourceCurrency && createdReward is not null)
+            {
+                completedProcedure = selectedRewardProcedure;
+                break;
+            }
+            var options = interaction.AvailableOptions;
+            if (options.Count == 0)
+                break;
+            var selected = options.FirstOrDefault(option => rewardProcedures.Contains(
+                    elderCatalog.Program.ExecutableProgram.ProcedureOrder[
+                        option.TargetProcedureIndex].Name)) ??
+                options[0];
+            var targetProcedure = elderCatalog.Program.ExecutableProgram.ProcedureOrder[
+                selected.TargetProcedureIndex].Name;
+            if (rewardProcedures.Contains(targetProcedure))
+                selectedRewardProcedure = targetProcedure;
+            choices.Add(selected.MessageId);
+            if (!interaction.Choose(selected.MessageId))
+                throw new InvalidOperationException(
+                    "Fallout 2 ARVILLAG source Elder option could not execute.");
+        }
+        var finalElder = scripts.Roles["elder"];
+        var finalPlayerCurrency = finalElder.WorldState.Inventory
+            .Where(row => row.OwnerHandle == finalElder.PlayerHandle &&
+                finalElder.WorldState.Objects[row.ObjectHandle].Pid == currencyPid)
+            .Sum(row => row.Quantity);
+        var finalElderCurrency = finalElder.WorldState.Inventory
+            .Where(row => row.OwnerHandle == finalElder.ActorHandle &&
+                finalElder.WorldState.Objects[row.ObjectHandle].Pid == currencyPid)
+            .Sum(row => row.Quantity);
+        var playerReward = finalElder.WorldState.CreatedObjects.Values.SingleOrDefault(created =>
+            finalElder.WorldState.Inventory.Any(row =>
+                row.OwnerHandle == finalElder.PlayerHandle &&
+                row.ObjectHandle == created.ObjectHandle && row.Quantity > 0));
+        var completed = finalPlayerCurrency == sourceCurrency &&
+            finalElderCurrency == 0 && playerReward is not null;
+        await HoldCaptureStage(host, "elder-reward", CaptureHoldFrames());
+        interaction.Close();
+        return new ElderInteractionEvidence(
+            elderObject.Tile,
+            path.Count,
+            true,
+            choices,
+            completed,
+            currencyPid,
+            sourceCurrency,
+            finalPlayerCurrency,
+            finalElderCurrency,
+            playerReward?.Source.Pid,
+            completedProcedure);
+    }
+
+    private static int CaptureHoldFrames()
+    {
+        var environment = System.Environment.GetEnvironmentVariable(
+            "OPENNV_FO2_ROUTE_CAPTURE_HOLD_FRAMES");
+        if (int.TryParse(environment, out var environmentFrames) && environmentFrames > 0)
+            return environmentFrames;
+        var options = Fo2ArroyoCavesProofOptions.Parse(OS.GetCmdlineUserArgs());
+        return options.TryGetValue("fo2-route-capture-hold-frames", out var source) &&
+            int.TryParse(source, out var frames) && frames > 0
+                ? frames
+                : 0;
+    }
+
+    private static async Task HoldCaptureStage(
+        Fo2CharacterStartHost host,
+        string stage,
+        int frames)
+    {
+        if (frames == 0)
+            return;
+        GD.Print($"OPENNV_FO2_CAPTURE_MARKER stage={stage} phase=start " +
+            $"frame={Engine.GetProcessFrames()}");
+        for (var frame = 0; frame < frames; frame++)
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print($"OPENNV_FO2_CAPTURE_MARKER stage={stage} phase=end " +
+            $"frame={Engine.GetProcessFrames()}");
+    }
+
+    private static IReadOnlyList<int> FindPathAdjacentToActor(
+        Fo2ArroyoCavesPlayerBody player,
+        int actorTile)
+    {
+        var frontier = new Queue<int>();
+        var previous = new Dictionary<int, int?> { [player.CurrentTile] = null };
+        frontier.Enqueue(player.CurrentTile);
+        int? destination = null;
+        while (frontier.Count > 0)
+        {
+            var current = frontier.Dequeue();
+            if (Fo1HexMath.AreNeighbors(current, actorTile))
+            {
+                destination = current;
+                break;
+            }
+            foreach (var neighbor in Fo1HexMath.Neighbors(current))
+            {
+                if (previous.ContainsKey(neighbor) || !player.CanOccupy(neighbor))
+                    continue;
+                previous.Add(neighbor, current);
+                frontier.Enqueue(neighbor);
+            }
+        }
+        if (destination is null)
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG source Elder has no reachable adjacent hex.");
+        var path = new List<int>();
+        for (var tile = destination; previous[tile.Value] is int prior; tile = prior)
+            path.Add(tile.Value);
+        path.Reverse();
+        return path;
+    }
+
     private static PairedGateFrameEvidence CapturePairedGateFrame(
         Fo2CharacterStartHost host,
         string output,
         string filename)
     {
+        if (DisplayServer.GetName() == "headless")
+            return new PairedGateFrameEvidence(
+                "headless-logic-gate-no-frame", 0, 0, 0, "");
         var path = System.IO.Path.Combine(output, filename);
         var image = host.GetViewport().GetTexture().GetImage();
         if (image.IsEmpty() || image.GetWidth() <= 0 || image.GetHeight() <= 0 ||
@@ -556,6 +751,16 @@ internal static class Fo2ArroyoTrialRouteProof
             image.GetWidth(),
             image.GetHeight(),
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+    }
+
+    private static async Task WaitForPresentationFrame(Fo2CharacterStartHost host)
+    {
+        if (DisplayServer.GetName() == "headless")
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        else
+            await host.ToSignal(
+                RenderingServer.Singleton,
+                RenderingServer.SignalName.FramePostDraw);
     }
 
     private static async Task<(string Path, string Sha256)> CaptureVillageArrival(
@@ -718,4 +923,17 @@ internal static class Fo2ArroyoTrialRouteProof
         int Width,
         int Height,
         string Sha256);
+
+    private sealed record ElderInteractionEvidence(
+        int ActorTile,
+        int MovementSteps,
+        bool TalkStarted,
+        IReadOnlyList<int> ChosenMessageIds,
+        bool RewardCompleted,
+        int CurrencyPid,
+        int SourceCurrency,
+        int PlayerCurrency,
+        int ElderCurrency,
+        int? RewardPid,
+        string? CompletedProcedure);
 }

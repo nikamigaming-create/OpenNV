@@ -11,8 +11,10 @@ TOOLS = ROOT / "content" / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from opening_catalog import (
+    _compile_combat_encounters,
     _compile_ordinary_quests,
     _compile_hit_target_sets,
+    _compile_package_dialogue_closure,
     _compile_topic_closure,
     _resolve_command_record_identities,
     _script_commands,
@@ -43,6 +45,103 @@ def record(
 
 
 class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
+    def test_compiles_package_selected_greeting_and_linked_choice(self) -> None:
+        greeting = record("DIAL", "000000c8", "GREETING")
+        greeting["text"].append({"signature": "FULL", "value": "GREETING"})
+        choice = record("DIAL", "0010a1de", "VCG02GSSunnySmilesTopic000")
+        choice["text"].append({"signature": "FULL", "value": "Okay, I'm in."})
+        greeting_info = record(
+            "INFO",
+            "0010a1ec",
+            "",
+            links=[
+                {"signature": "QSTI", "formId": "0010a214"},
+                {"signature": "TCLT", "formId": "0010a1de"},
+            ],
+            source="set VCG02.bShootingTutorialActive to 0",
+        )
+        greeting_info.update({
+            "sourceOrder": 10,
+            "groups": [{"type": 7, "label": "000000c8"}],
+            "conditions": [
+                {"function": 420, "parameter1": "0010a214", "parameter2": 10,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+                {"function": 72, "parameter1": "00104e84", "parameter2": 0,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+            ],
+            "dialogueData": {"flags": 0, "responseType": 0},
+        })
+        choice_info = record(
+            "INFO", "0010a1e5", "", source="SetStage VCG02 25"
+        )
+        choice_info.update({
+            "sourceOrder": 11,
+            "groups": [{"type": 7, "label": "0010a1de"}],
+            "conditions": [],
+            "dialogueData": {"flags": 1, "responseType": 0},
+        })
+
+        topics, root = _compile_package_dialogue_closure(
+            [greeting, choice, greeting_info, choice_info],
+            {
+                "editorId": "VCG02SunnySmilesDialogueStart",
+                "conditions": [{
+                    "functionName": "getStageDone",
+                    "parameter1": "0010a214",
+                    "parameter2": 10,
+                    "comparisonValue": 1.0,
+                    "operatorFlags": 0,
+                }],
+            },
+            "00104e84",
+            {"formId": "0010a214", "editorId": "VCG02"},
+            {},
+            {"58": "getStage", "72": "getIsId", "420": "getStageDone",
+             "421": "getObjectiveCompleted"},
+        )
+
+        self.assertEqual("000000c8", root)
+        self.assertEqual(["000000c8", "0010a1de"], [topic["formId"] for topic in topics])
+        self.assertEqual("setQuestVariable", topics[0]["infos"][0]["commands"][0]["kind"])
+        self.assertEqual("setStage", topics[1]["infos"][0]["commands"][0]["kind"])
+
+        sneak_info = record(
+            "INFO", "0010a1ed", "",
+            links=[{"signature": "QSTI", "formId": "0010a214"}],
+            source="SetStage VCG02 35"
+        )
+        sneak_info.update({
+            "sourceOrder": 12,
+            "groups": [{"type": 7, "label": "000000c8"}],
+            "conditions": [
+                {"function": 58, "parameter1": "0010a214", "parameter2": 0,
+                 "comparisonValue": 30.0, "operatorFlags": 0},
+                {"function": 72, "parameter1": "00104e84", "parameter2": 0,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+            ],
+            "dialogueData": {"flags": 1, "responseType": 0},
+        })
+        sneak_topics, _ = _compile_package_dialogue_closure(
+            [greeting, sneak_info],
+            {
+                "editorId": "VCG02SunnySmilesDialogueSneakStart",
+                "conditions": [{
+                    "functionName": "getStage",
+                    "parameter1": "0010a214",
+                    "parameter2": 0,
+                    "comparisonValue": 30.0,
+                    "operatorFlags": 0,
+                }],
+            },
+            "00104e84",
+            {"formId": "0010a214", "editorId": "VCG02"},
+            {},
+            {"58": "getStage", "72": "getIsId", "420": "getStageDone",
+             "421": "getObjectiveCompleted"},
+        )
+        self.assertEqual("0010a1ed", sneak_topics[0]["infos"][0]["formId"])
+        self.assertEqual("setStage", sneak_topics[0]["infos"][0]["commands"][0]["kind"])
+
     def test_compiles_source_hit_target_set_without_target_specific_runtime_ids(self) -> None:
         records = [
             record(
@@ -109,6 +208,68 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         self.assertEqual(1, result["questVariableIndex"])
         self.assertEqual(3, result["threshold"])
         self.assertEqual(62, result["tutorialStage"])
+
+    def test_compiles_creature_health_ai_and_on_death_counter(self) -> None:
+        death_source = """
+        BEGIN OnDeath
+          set VCG02.nGeckosKilled to VCG02.nGeckosKilled + 1
+          if (GetObjectiveDisplayed VCG02 30 == 0 && GetStage VCG02 < 45)
+            SetStage VCG02 45
+          endif
+          if (VCG02.nGeckosKilled == 2 && GetObjectiveCompleted VCG02 30 == 0)
+            SetStage VCG02 50
+            SunnyREF.ResetAI
+          endif
+        END
+        """
+        creature = record(
+            "CREA",
+            "0010a1f7",
+            "VCG02CrGecko",
+            links=[
+                {"signature": "SCRI", "formId": "0010a1f2"},
+                {"signature": "PKID", "formId": "00025482"},
+            ],
+        )
+        creature["creature"] = {"maximumHealth": 20, "attackDamage": 5}
+        records = [
+            record("SCPT", "0010a1f2", "VCG02GeckoDeathSCRIPT", source=death_source),
+            creature,
+            record("PACK", "00025482", "DefaultPatrolCasual"),
+            record(
+                "ACRE",
+                "0010a1fe",
+                "VCG02Gecko1REF",
+                links=[{"signature": "NAME", "formId": "0010a1f7"}],
+            ),
+            record(
+                "ACRE",
+                "0010a1fd",
+                "VCG02Gecko2REF",
+                links=[{"signature": "NAME", "formId": "0010a1f7"}],
+            ),
+            record("ACHR", "00104e85", "SunnyREF"),
+        ]
+        quests = [{
+            "formId": "0010a214",
+            "editorId": "VCG02",
+            "variables": [{"index": 3, "name": "nGeckosKilled"}],
+        }]
+
+        encounter = _compile_combat_encounters(
+            records,
+            [{
+                "deathScriptEditorId": "VCG02GeckoDeathSCRIPT",
+                "referenceEditorIds": ["VCG02Gecko1REF", "VCG02Gecko2REF"],
+            }],
+            quests,
+        )[0]
+
+        self.assertEqual(45, encounter["minimumCombatStage"])
+        self.assertEqual(50, encounter["completionStage"])
+        self.assertEqual(2, encounter["threshold"])
+        self.assertEqual(20, encounter["targets"][0]["maximumHealth"])
+        self.assertEqual(5, encounter["targets"][0]["attackDamage"])
 
     def test_preserves_source_result_guards_and_resolves_leveled_grant(self) -> None:
         commands = _script_commands(
@@ -216,6 +377,20 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         )
         self.assertEqual(
             "VCG02", recipe["newGameFlow"]["ordinaryActors"][0]["questEditorId"]
+        )
+        self.assertIn(
+            "VCG02SunnySneakCloserToWell",
+            recipe["newGameFlow"]["ordinaryActors"][0]["packageEditorIds"],
+        )
+        self.assertIn(
+            "VCG02SunnySmilesDialogueSneakEnd",
+            recipe["newGameFlow"]["ordinaryActors"][0]["packageEditorIds"],
+        )
+        self.assertIn(
+            {"packageEditorId": "VCG02SunnySmilesDialogueSneakEnd"},
+            recipe["newGameFlow"]["ordinaryActors"][0][
+                "automaticPackageDialogues"
+            ],
         )
 
     def test_compiles_ordered_activation_topic_info_and_source_results(self) -> None:

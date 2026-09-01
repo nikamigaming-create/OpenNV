@@ -848,11 +848,16 @@ def load_runtime_configuration() -> RuntimeConfiguration:
         or not str(humanoid_profile.get("path", "")).strip()
     ):
         raise ValueError("OpenNV NPC_ animation profile is invalid")
-    if set(creature_profile) != {"mode", "fileName"} or (
+    if set(creature_profile) != {"mode", "fileName", "roles"} or (
         creature_profile.get("mode") != "skeleton-directory"
         or not str(creature_profile.get("fileName", "")).strip()
     ):
         raise ValueError("OpenNV CREA animation profile is invalid")
+    creature_roles = _object(creature_profile, "roles")
+    if set(creature_roles) != {"locomotion", "melee", "hit"} or any(
+        not str(value).strip() for value in creature_roles.values()
+    ):
+        raise ValueError("OpenNV CREA animation roles are invalid")
     rigid_attachment = _object(actor_compiler, "rigidAttachment")
     rigid_provenance = _object(rigid_attachment, "provenance")
     for field in ("classification", "status", "source", "evidence"):

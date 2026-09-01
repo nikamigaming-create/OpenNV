@@ -9,6 +9,27 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Fo2ArvillagPresentationTest(unittest.TestCase):
+    def test_inventory_contract_keeps_currency_source_owned(self) -> None:
+        contract = json.loads(
+            (
+                ROOT
+                / "content/recipes/classic-inventory-fo2.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            contract["schema"], "opennv-classic-inventory-contract/v1"
+        )
+        self.assertEqual(contract["campaign"], "Fallout2")
+        self.assertEqual(contract["retailBuild"], "1.02")
+        self.assertEqual(
+            contract["currency"]["accounting"],
+            "owned-inventory-stack-quantity",
+        )
+        self.assertEqual(
+            contract["currency"]["adjustment"],
+            "signed-existing-stack-reassignment",
+        )
+
     def test_recipe_is_exact_map_bound_and_fail_closed_on_roofs(self) -> None:
         recipe = json.loads(
             (ROOT / "content/recipes/fo2-arvillag-relief-v1.json").read_text(
@@ -50,6 +71,14 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
             ROOT
             / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs"
         ).read_text(encoding="utf-8")
+        int_runtime = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagIntRuntime.cs"
+        ).read_text(encoding="utf-8")
+        interaction = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagInteractionRuntime.cs"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("placement_serials | transparent != set(top_level)", compiler)
         self.assertIn("derive_relief(", compiler)
@@ -57,6 +86,14 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("expected_floor_ids", compiler)
         self.assertIn("roofCutawayBoundary", source)
         self.assertIn("arrivalWalkContract", source)
+        self.assertIn("compile_map_int_initialization", source)
+        self.assertIn('"villageIntRoles": village_int_roles', source)
+        self.assertIn('"initialGlobalVariables"', source)
+        self.assertIn('"critterStats"', source)
+        self.assertIn('"initialInventory"', source)
+        self.assertIn('"objectCreations"', source)
+        self.assertIn('"classicInventoryContract"', source)
+        self.assertIn('"mapEnterMetarules"', source)
         self.assertIn('"sha256": file_sha256(route_path)', source)
         self.assertIn("visibleSerials.Union(transparent)", catalog)
         self.assertIn("allowOwnedRoofCutaway: true", scene)
@@ -82,6 +119,14 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("_presentation.Visible = false", player)
         self.assertIn("destination_presentation_loaded", player)
         self.assertIn("ApplyVillageFirstAction", player)
+        self.assertIn("ClassicIntEventDispatcher.Execute", int_runtime)
+        self.assertIn("catalog.IntInitialization.ScriptSlots", int_runtime)
+        self.assertIn("readRandomState", int_runtime)
+        self.assertIn("commitRandomState", int_runtime)
+        self.assertIn("InventoryContract: _catalog.InventoryContract", int_runtime)
+        self.assertIn("Fo1HexMath.TileInDirection", interaction)
+        self.assertIn("_scripts.Talk(role)", interaction)
+        self.assertIn("_scripts.Choose(_activeRole", interaction)
         self.assertNotIn("proxy", scene.casefold())
         self.assertNotIn("capsule", scene.casefold())
 

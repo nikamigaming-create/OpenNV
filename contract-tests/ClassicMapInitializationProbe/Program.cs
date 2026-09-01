@@ -33,7 +33,7 @@ using var document = JsonDocument.Parse("""
                 "serial": 3,
                 "elevation": 0,
                 "sid": "ffffffff",
-                "scriptIndex": -1,
+                "scriptIndex": 23,
                 "inventory": []
               }
             ]
@@ -209,6 +209,44 @@ using var randomDocument = JsonDocument.Parse(File.ReadAllBytes(
     Path.Combine("runtime", "config", "classic-retail-random-fo2-1.02-v1.json")));
 var randomContract = ClassicRetailRandomContract.Parse(randomDocument.RootElement);
 var randomState = ClassicRetailRandomLifecycle.Initialize(1, randomContract);
+using var timerDocument = JsonDocument.Parse(File.ReadAllBytes(
+    Path.Combine("runtime", "config", "classic-int-time-v1.json")));
+var timerContract = ClassicIntTimerContract.Parse(timerDocument.RootElement);
+var timerState = ClassicIntTimerOwner.Schedule(
+    ClassicIntTimerState.Initial,
+    200,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2),
+    7);
+timerState = ClassicIntTimerOwner.Schedule(
+    timerState,
+    200,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2),
+    8);
+var timerWorld = new ClassicIntWorldObjectState(
+    false,
+    new Dictionary<int, ClassicIntDoorObjectState>())
+{
+    Objects = new Dictionary<int, ClassicIntWorldObject>
+    {
+        [200] = new(200, 1, 100, 0, true),
+    },
+    Timers = timerState,
+};
+var restoredTimerWorld = ClassicIntWorldObjectState.Restore(
+    JsonSerializer.SerializeToElement(timerWorld.Save()));
+var firstTimer = ClassicIntTimerOwner.TakeNextDue(
+    restoredTimerWorld.Timers,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2));
+var secondTimer = ClassicIntTimerOwner.TakeNextDue(
+    firstTimer.State,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2));
+if (firstTimer.Event.FixedParameter != 7 ||
+    secondTimer.Event.FixedParameter != 8 ||
+    secondTimer.State.Pending.Count != 0 ||
+    secondTimer.State.CurrentTick !=
+        ClassicIntTimerOwner.GameTicks(timerContract, 2))
+    throw new InvalidOperationException(
+        "Classic INT timer ordering or save state drifted.");
 var messageHandles = Enumerable.Range(100, 24).ToDictionary(
     messageId => (MessageList: 344, MessageId: messageId),
     messageId => 9000 + messageId);
@@ -365,6 +403,188 @@ foreach (var path in args)
             var ownedMap = ClassicMapInitializationOwner.Parse(ownedMapSource);
             var parsedInitialization = ClassicMapIntInitializationOwner.Parse(
                 ownedScripts, ownedMap);
+            if (ownedDocument.RootElement.TryGetProperty(
+                    "villageIntRoles", out var villageRoles))
+            {
+                foreach (var roleSource in villageRoles.EnumerateObject())
+                {
+                    var actor = roleSource.Value.GetProperty("actor");
+                    var scriptIndex = actor.GetProperty("scriptIndex").GetInt32();
+                    var program = parsedInitialization.ScriptSlots.Single(row =>
+                        row.ScriptIndex == scriptIndex).Program;
+                    var globalVariables = roleSource.Value
+                        .GetProperty("initialGlobalVariables").EnumerateObject()
+                        .ToDictionary(
+                            row => int.Parse(row.Name),
+                            row => row.Value.GetProperty("initialValue").GetInt32());
+                    var metarules = roleSource.Value.GetProperty("mapEnterMetarules")
+                        .EnumerateObject().ToDictionary(
+                            row => (
+                                row.Value.GetProperty("rule").GetInt32(),
+                                row.Value.GetProperty("argument").GetInt32()),
+                            _ => 0);
+                    var state = new ClassicIntProcedureState(
+                        new Dictionary<int, int>(), new Dictionary<int, int>(),
+                        new Dictionary<int, int>(), new Dictionary<int, int>(),
+                        globalVariables, [], randomState);
+                    var roleContext = gameContext with
+                    {
+                        GlobalVariables = globalVariables,
+                        MetaruleValues = metarules,
+                        CurrentMapIndex = 4,
+                    };
+                    var budget = program.ExecutableProgram
+                        .Procedures["map_enter_p_proc"].Instructions.Count;
+                    var roleWorld = new ClassicIntWorldObjectState(
+                        false,
+                        new Dictionary<int, ClassicIntDoorObjectState>())
+                    {
+                        Objects = new Dictionary<int, ClassicIntWorldObject>
+                        {
+                            [gameContext.SelfObject] = new(
+                                gameContext.SelfObject,
+                                null,
+                                actor.GetProperty("tile").GetInt32(),
+                                actor.GetProperty("elevation").GetInt32(),
+                                true),
+                        },
+                    };
+                    var entered = ClassicIntEventDispatcher.Execute(
+                        program, "map_enter_p_proc", state, roleContext,
+                        roleWorld, randomContract, budget);
+                    if (entered.ExecutedInstructions <= 0 ||
+                        entered.ExecutedInstructions > budget ||
+                        entered.State.ValueStack.Count != 0 ||
+                        entered.WorldObjects.TraitAssignments.Count != 2 ||
+                        entered.WorldObjects.TraitAssignments.Any(row =>
+                            row.ObjectHandle != gameContext.SelfObject))
+                        throw new InvalidOperationException(
+                            $"Owned ARVILLAG {roleSource.Name} map-enter drifted: " +
+                            $"executed={entered.ExecutedInstructions}/{budget}; " +
+                            $"stack={entered.State.ValueStack.Count}; " +
+                            $"traits={entered.WorldObjects.TraitAssignments.Count}.");
+                    var restored = ClassicIntWorldObjectState.Restore(
+                        JsonSerializer.SerializeToElement(
+                            entered.WorldObjects.Save()));
+                    if (!restored.TraitAssignments.SequenceEqual(
+                            entered.WorldObjects.TraitAssignments))
+                        throw new InvalidOperationException(
+                            $"Owned ARVILLAG {roleSource.Name} save state drifted.");
+                    Console.WriteLine(
+                        $"{Path.GetFileName(path)}|{program.Program}|" +
+                        $"map_enter_p_proc|{entered.ExecutedInstructions}");
+                    if (roleSource.Name == "elder")
+                    {
+                        var critterStats = roleSource.Value.GetProperty("critterStats")
+                            .EnumerateArray().Select(row => row.GetInt32()).ToArray();
+                        var dialogueMessages = roleSource.Value
+                            .GetProperty("messageCatalog");
+                        var messageList = dialogueMessages
+                            .GetProperty("messageListId").GetInt32();
+                        var dialogueStats = critterStats.Select((value, index) =>
+                                (Key: (gameContext.SelfObject, index), Value: value))
+                            .ToDictionary(row => row.Key, row => row.Value);
+                        dialogueStats[(gameContext.DudeObject, 3)] = 5;
+                        dialogueStats[(gameContext.DudeObject, 4)] = 5;
+                        dialogueStats[(gameContext.DudeObject, 34)] = 0;
+                        var talkContext = roleContext with
+                        {
+                            CritterStats = dialogueStats,
+                            Traits = new Dictionary<(int, int, int), int>(),
+                            GameTime = ClassicIntTimerState.Initial.CurrentTick,
+                            MessageHandles = dialogueMessages.GetProperty("messages")
+                                .EnumerateObject().ToDictionary(
+                                    row => (messageList, int.Parse(row.Name)),
+                                    row => int.Parse(row.Name)),
+                        };
+                        var talkBudget = program.ExecutableProgram.Procedures.Values
+                            .Sum(row => row.Instructions.Count);
+                        var looked = ClassicIntEventDispatcher.Execute(
+                            program, "look_at_p_proc", entered.State, talkContext,
+                            entered.WorldObjects, randomContract, talkBudget);
+                        if (!looked.WorldObjects.ScriptOverrides ||
+                            looked.MessageEffects is not [{ MessageList: var lookList,
+                                MessageId: var lookMessage }] ||
+                            lookList != messageList ||
+                            !dialogueMessages.GetProperty("messages")
+                                .TryGetProperty(lookMessage.ToString(), out _))
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder look dispatch drifted.");
+                        var talked = ClassicIntEventDispatcher.Execute(
+                            program, "talk_p_proc", entered.State, talkContext,
+                            entered.WorldObjects, randomContract, talkBudget);
+                        var optionSummary = string.Join(",", talked.WorldObjects
+                            .DialogueOptions.Select(row =>
+                                $"{row.MessageId}:{row.TargetProcedureIndex}"));
+                        var globalDelta = string.Join(",", talked.State.GlobalVariables
+                            .Where(row => !entered.State.GlobalVariables.TryGetValue(
+                                row.Key, out var before) || before != row.Value)
+                            .Select(row => $"{row.Key}:{row.Value}"));
+                        var localDelta = string.Join(",", talked.State.LocalVariables
+                            .Where(row => !entered.State.LocalVariables.TryGetValue(
+                                row.Key, out var before) || before != row.Value)
+                            .Select(row => $"{row.Key}:{row.Value}"));
+                        var programDelta = string.Join(",", talked.State.ProgramVariables
+                            .Where(row => !entered.State.ProgramVariables.TryGetValue(
+                                row.Key, out var before) || before != row.Value)
+                            .Select(row => $"{row.Key}:{row.Value}"));
+                        if (!talked.WorldObjects.DialogueReady ||
+                            talked.WorldObjects.DialogueStart is null ||
+                            talked.WorldObjects.DialogueReplies.Count != 1 ||
+                            talked.WorldObjects.DialogueReplies[0].MessageId != 103 ||
+                            !talked.WorldObjects.DialogueOptions.Select(row =>
+                                    (row.MessageId, row.TargetProcedureIndex))
+                                .SequenceEqual([(104, 21), (105, 31), (106, 24)]) ||
+                            talked.State.GlobalVariables[41] != 1 ||
+                            talked.State.GlobalVariables[531] != 1 ||
+                            talked.State.ProgramVariables[21] != 1)
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder normal-arrival dialogue drifted: " +
+                                $"reply={string.Join(',', talked.WorldObjects.DialogueReplies.Select(row => row.MessageId))}; " +
+                                $"options={optionSummary}; " +
+                                $"globals={globalDelta}; locals={localDelta}; " +
+                                $"program={programDelta}.");
+                        var restoredTalkState = ClassicIntProcedureState.Restore(
+                            JsonSerializer.SerializeToElement(talked.State.Save()),
+                            randomContract);
+                        var restoredTalkWorld = ClassicIntWorldObjectState.Restore(
+                            JsonSerializer.SerializeToElement(
+                                talked.WorldObjects.Save()));
+                        if (!restoredTalkState.GlobalVariables.SequenceEqual(
+                                talked.State.GlobalVariables) ||
+                            !restoredTalkState.LocalVariables.SequenceEqual(
+                                talked.State.LocalVariables) ||
+                            !restoredTalkWorld.DialogueOptions.SequenceEqual(
+                                talked.WorldObjects.DialogueOptions))
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder dialogue save state drifted.");
+                        var selectedWorld = talked.WorldObjects with
+                        {
+                            DialogueReplies = [],
+                            DialogueOptions = [],
+                            DialogueReady = true,
+                        };
+                        var selected = ClassicIntEventDispatcher.Execute(
+                            program,
+                            program.ExecutableProgram.ProcedureOrder[21].Name,
+                            talked.State,
+                            talkContext,
+                            selectedWorld,
+                            randomContract,
+                            talkBudget);
+                        if (!selected.WorldObjects.DialogueReady ||
+                            selected.WorldObjects.DialogueStart is null ||
+                            selected.WorldObjects.DialogueReplies.Count == 0 ||
+                            selected.WorldObjects.DialogueOptions.Count == 0)
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder option result drifted.");
+                        Console.WriteLine(
+                            $"{Path.GetFileName(path)}|{program.Program}|" +
+                            $"talk_p_proc|{talked.ExecutedInstructions}|" +
+                            $"globals={globalDelta}|program={programDelta}");
+                    }
+                }
+            }
             if (parsedInitialization.HeaderProgram is { } header &&
                 string.Equals(header.Program, "ArCaves.int",
                     StringComparison.OrdinalIgnoreCase) &&
@@ -532,11 +752,75 @@ foreach (var path in args)
                     actorHandles.Require(guardianActor) != guardianHandle)
                     throw new InvalidOperationException(
                         "Classic live actor handle registration drifted.");
+                var gateHandle = actorHandles.Register(new object());
                 var guardianContext = gameContext with
                 {
                     DudeObject = playerHandle,
                     SelfObject = guardianHandle,
                 };
+                var mapEnterState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int> { [10] = 2 }, [], randomState);
+                var mapEnterWorld = new ClassicIntWorldObjectState(
+                    false, new Dictionary<int, ClassicIntDoorObjectState>())
+                {
+                    Objects = new Dictionary<int, ClassicIntWorldObject>
+                    {
+                        [playerHandle] = new(playerHandle, null, 20118, 0, true),
+                        [guardianHandle] = new(
+                            guardianHandle, 0x01000003, 21101, 0, true),
+                        [gateHandle] = new(
+                            gateHandle, 0x020003ae, 21303, 0, true),
+                    },
+                };
+                var mapEnterBudget = lintGuardian.Program.ExecutableProgram
+                    .Procedures["map_enter_p_proc"].Instructions.Count;
+                var gateMoved = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "map_enter_p_proc", mapEnterState,
+                    guardianContext, mapEnterWorld, randomContract,
+                    mapEnterBudget);
+                if (gateMoved.WorldObjects.Objects[gateHandle] is not
+                    { Tile: 19698, Elevation: 0 } ||
+                    gateMoved.WorldObjects.Movements is not
+                        [
+                        {
+                            ObjectHandle: var movedHandle, SourceTile: 21303,
+                            DestinationTile: 19698, DestinationElevation: 0
+                        }] ||
+                    movedHandle != gateHandle ||
+                    !gateMoved.WorldObjects.TraitAssignments.SequenceEqual(
+                        new[]
+                        {
+                            new ClassicIntTraitAssignment(guardianHandle, 1, 6, 1),
+                            new ClassicIntTraitAssignment(guardianHandle, 1, 5, 1),
+                        }) ||
+                    gateMoved.State.ValueStack.Count != 0 ||
+                    gateMoved.State.RandomState != randomState)
+                    throw new InvalidOperationException(
+                        "Owned ACKlint map-enter gate result drifted.");
+                var restoredMapEnter = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(
+                        gateMoved.WorldObjects.Save()));
+                if (restoredMapEnter.Objects[gateHandle].Tile != 19698 ||
+                    !restoredMapEnter.TraitAssignments.SequenceEqual(
+                        gateMoved.WorldObjects.TraitAssignments))
+                    throw new InvalidOperationException(
+                        "Owned ACKlint map-enter save state drifted.");
+                var closedGate = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "map_enter_p_proc",
+                    mapEnterState with
+                    {
+                        GlobalVariables = new Dictionary<int, int> { [10] = 0 },
+                    },
+                    guardianContext, mapEnterWorld, randomContract,
+                    mapEnterBudget);
+                if (closedGate.WorldObjects.Objects[gateHandle].Tile != 21303 ||
+                    closedGate.WorldObjects.Movements.Count != 0 ||
+                    !closedGate.WorldObjects.TraitAssignments.SequenceEqual(
+                        gateMoved.WorldObjects.TraitAssignments))
+                    throw new InvalidOperationException(
+                        "Owned ACKlint closed-gate map-enter branch drifted.");
                 var guardianState = new ClassicIntProcedureState(
                     new Dictionary<int, int>(), new Dictionary<int, int>(),
                     new Dictionary<int, int> { [5] = 0 },
@@ -619,6 +903,296 @@ foreach (var path in args)
                     $"{Path.GetFileName(path)}|{lintGuardian.Program.Program}|" +
                     $"pickup_p_proc+critter_p_proc|" +
                     $"{playerPickup.ExecutedInstructions + attackStarted.ExecutedInstructions}");
+            }
+            var elder = parsedInitialization.ScriptSlots.SingleOrDefault(row =>
+                string.Equals(row.Program.Program, "AHElder.int",
+                    StringComparison.OrdinalIgnoreCase));
+            if (elder is not null && ownedDocument.RootElement.TryGetProperty(
+                    "villageIntRoles", out var elderRoles))
+            {
+                var sourceRole = elderRoles.GetProperty("elder");
+                var sourceActor = sourceRole.GetProperty("actor");
+                const int playerHandle = 1;
+                var actorHandle = sourceActor.GetProperty("serial").GetInt32();
+                var objects = new Dictionary<int, ClassicIntWorldObject>
+                {
+                    [playerHandle] = new(playerHandle, null, 0, 0, true),
+                    [actorHandle] = new(
+                        actorHandle,
+                        Convert.ToInt32(sourceActor.GetProperty("pid").GetString(), 16),
+                        sourceActor.GetProperty("tile").GetInt32(),
+                        sourceActor.GetProperty("elevation").GetInt32(),
+                        true),
+                };
+                var inventory = new List<ClassicIntInventoryEntry>();
+                foreach (var item in sourceRole.GetProperty("initialInventory")
+                             .EnumerateArray())
+                {
+                    var handle = item.GetProperty("serial").GetInt32();
+                    objects.Add(handle, new ClassicIntWorldObject(
+                        handle,
+                        item.GetProperty("pid").GetInt32(),
+                        item.GetProperty("tile").GetInt32(),
+                        item.GetProperty("elevation").GetInt32(),
+                        false));
+                    inventory.Add(new ClassicIntInventoryEntry(
+                        actorHandle, handle,
+                        item.GetProperty("quantity").GetInt32()));
+                }
+                var creation = sourceRole.GetProperty("objectCreations")
+                    .EnumerateArray().Single(row =>
+                        row.GetProperty("procedure").GetString() == "Node015");
+                var creationSource = new ClassicIntObjectCreation(
+                    creation.GetProperty("pid").GetInt32(),
+                    creation.GetProperty("tile").GetInt32(),
+                    creation.GetProperty("elevation").GetInt32(),
+                    creation.GetProperty("scriptId").GetInt32());
+                var createdHandle = objects.Keys.Max() + 1;
+                var creationRequest = new ClassicIntObjectCreationRequest(
+                    elder.Program.Program,
+                    "Node015",
+                    creation.GetProperty("offset").GetInt32(),
+                    creationSource);
+                var contractSource = ownedDocument.RootElement.GetProperty(
+                    "classicInventoryContract");
+                var inventoryContract = new ClassicIntInventoryContract(
+                    contractSource.GetProperty("id").GetString()!,
+                    contractSource.GetProperty("currency").GetProperty("pid")
+                        .GetInt32());
+                var sourceInventoryCount = inventory.Count;
+                var expectedCaps = inventory.Where(row =>
+                        objects[row.ObjectHandle].Pid == inventoryContract.CurrencyPid)
+                    .Sum(row => row.Quantity);
+                var globals = sourceRole.GetProperty("initialGlobalVariables")
+                    .EnumerateObject().ToDictionary(
+                        row => int.Parse(row.Name),
+                        row => row.Value.GetProperty("initialValue").GetInt32());
+                var sourceState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    globals, [], randomState);
+                var dialogueWorld = new ClassicIntWorldObjectState(
+                    false, new Dictionary<int, ClassicIntDoorObjectState>())
+                {
+                    Objects = objects,
+                    Inventory = inventory,
+                    DialogueSystemEntered = true,
+                    DialogueStart = new ClassicIntDialogueStart(
+                        sourceRole.GetProperty("messageCatalog")
+                            .GetProperty("messageListId").GetInt32(),
+                        actorHandle, 0, -1, -1),
+                };
+                var context = gameContext with
+                {
+                    DudeObject = playerHandle,
+                    SelfObject = actorHandle,
+                    ObjectFactory = new ClassicIntObjectHandleTable(
+                        new Dictionary<ClassicIntObjectCreation, int>())
+                    {
+                        Requests = new Dictionary<ClassicIntObjectCreationRequest, int>
+                        {
+                            [creationRequest] = createdHandle,
+                        },
+                    },
+                    InventoryContract = inventoryContract,
+                };
+                var budget = elder.Program.ExecutableProgram.Procedures["Node015"]
+                    .Instructions.Count;
+                var completed = ClassicIntEventDispatcher.Execute(
+                    elder.Program, "Node015", sourceState, context, dialogueWorld,
+                    randomContract, budget);
+                var playerCaps = completed.WorldObjects.Inventory.Where(row =>
+                        row.OwnerHandle == playerHandle &&
+                        completed.WorldObjects.Objects[row.ObjectHandle].Pid ==
+                            inventoryContract.CurrencyPid)
+                    .Sum(row => row.Quantity);
+                if (playerCaps != expectedCaps ||
+                    completed.WorldObjects.Inventory.Any(row =>
+                        row.OwnerHandle == actorHandle &&
+                        completed.WorldObjects.Objects[row.ObjectHandle].Pid ==
+                            inventoryContract.CurrencyPid) ||
+                    completed.WorldObjects.Inventory.Count != sourceInventoryCount + 1 ||
+                    completed.WorldObjects.Inventory.Single(row =>
+                        row.ObjectHandle == createdHandle) is not
+                        { OwnerHandle: playerHandle, Quantity: 1 } ||
+                    completed.WorldObjects.Objects[createdHandle].Pid !=
+                        creationSource.Pid ||
+                    completed.WorldObjects.DialogueReplies is not
+                        [{ MessageId: 159 }] ||
+                    !completed.WorldObjects.DialogueOptions.Select(row => row.MessageId)
+                        .SequenceEqual([160, 161, 162]))
+                    throw new InvalidOperationException(
+                        "Owned Elder Node015 inventory transfer drifted.");
+                var restored = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(completed.WorldObjects.Save()));
+                if (!restored.Inventory.OrderBy(row => row.OwnerHandle)
+                        .ThenBy(row => row.ObjectHandle).SequenceEqual(
+                            completed.WorldObjects.Inventory
+                                .OrderBy(row => row.OwnerHandle)
+                                .ThenBy(row => row.ObjectHandle)) ||
+                    restored.Objects[createdHandle].Pid != creationSource.Pid)
+                    throw new InvalidOperationException(
+                        "Owned Elder Node015 inventory save state drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{elder.Program.Program}|Node015|" +
+                    $"caps={playerCaps}|created={creationSource.Pid}");
+            }
+            var cameron = parsedInitialization.ScriptSlots.SingleOrDefault(row =>
+                string.Equals(row.Program.Program, "ACTemVil.int",
+                    StringComparison.OrdinalIgnoreCase));
+            if (cameron is not null)
+            {
+                const string terminalTaggedSpeechProcedure = "Node015a";
+                var sourceState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), [], randomState);
+                var instructionBudget = cameron.Program.ExecutableProgram
+                    .Procedures[terminalTaggedSpeechProcedure].Instructions.Count;
+                var completed = ClassicIntEventDispatcher.Execute(
+                    cameron.Program,
+                    terminalTaggedSpeechProcedure,
+                    sourceState,
+                    gameContext,
+                    ClassicIntWorldObjectState.Empty,
+                    randomContract,
+                    instructionBudget);
+                if (completed.ExecutedInstructions != instructionBudget ||
+                    completed.State.ScriptLocalVariables.Count != 2 ||
+                    completed.State.ScriptLocalVariables[12] != 1 ||
+                    completed.State.ScriptLocalVariables[13] != 2 ||
+                    completed.State.MapVariables is not { Count: 1 } ||
+                    completed.State.MapVariables[20] != 2 ||
+                    completed.State.GlobalVariables is not { Count: 1 } ||
+                    completed.State.GlobalVariables[10] != 2 ||
+                    completed.State.ValueStack.Count != 0 ||
+                    completed.State.RandomState != randomState)
+                    throw new InvalidOperationException(
+                        "Owned Cameron tagged-Speech result drifted.");
+                var restored = ClassicIntProcedureState.Restore(
+                    JsonSerializer.SerializeToElement(completed.State.Save()),
+                    randomContract);
+                if (restored.ScriptLocalVariables[12] != 1 ||
+                    restored.ScriptLocalVariables[13] != 2 ||
+                    restored.MapVariables[20] != 2 ||
+                    restored.GlobalVariables[10] != 2 ||
+                    restored.ValueStack.Count != 0 ||
+                    restored.RandomState.SeedState !=
+                        completed.State.RandomState.SeedState ||
+                    restored.RandomState.RandomState.Seed !=
+                        completed.State.RandomState.RandomState.Seed ||
+                    restored.RandomState.RandomState.Selector !=
+                        completed.State.RandomState.RandomState.Selector ||
+                    !restored.RandomState.RandomState.Shuffle.SequenceEqual(
+                        completed.State.RandomState.RandomState.Shuffle) ||
+                    restored.RandomState.Events.Count !=
+                        completed.State.RandomState.Events.Count)
+                    throw new InvalidOperationException(
+                        "Owned Cameron dialogue result save state drifted.");
+                const int playerHandle = 1;
+                const int cameronHandle = 2;
+                const int doorHandle = 3;
+                var releaseContext = gameContext with
+                {
+                    DudeObject = playerHandle,
+                    SelfObject = cameronHandle,
+                    ActorQueries = new ClassicIntActorQueryTable(
+                        new Dictionary<(int, int), bool>
+                        {
+                            [(cameronHandle, playerHandle)] = true,
+                        }),
+                    TimerContract = timerContract,
+                    CurrentMapIndex = 3,
+                };
+                var releaseWorld = new ClassicIntWorldObjectState(
+                    false,
+                    new Dictionary<int, ClassicIntDoorObjectState>
+                    {
+                        [doorHandle] = new(false, true),
+                    })
+                {
+                    Objects = new Dictionary<int, ClassicIntWorldObject>
+                    {
+                        [playerHandle] = new(playerHandle, null, 13729, 2, true),
+                        [cameronHandle] = new(
+                            cameronHandle, 0x01000112, 13728, 2, true),
+                        [doorHandle] = new(
+                            doorHandle, 0x020003A6, 19928, 2, true),
+                    },
+                };
+                ClassicIntProcedureResult RunCameron(
+                    string procedure,
+                    ClassicIntProcedureState state,
+                    ClassicIntExpressionContext context,
+                    ClassicIntWorldObjectState world) =>
+                    ClassicIntEventDispatcher.Execute(
+                        cameron.Program,
+                        procedure,
+                        state,
+                        context with
+                        {
+                            ProgramVariables = state.ProgramVariables,
+                            LocalVariables = state.LocalVariables,
+                            ScriptLocalVariables = state.ScriptLocalVariables,
+                            MapVariables = state.MapVariables,
+                            GlobalVariables = state.GlobalVariables,
+                        },
+                        world,
+                        randomContract,
+                        cameron.Program.ExecutableProgram.Procedures[procedure]
+                            .Instructions.Count);
+                var released = RunCameron(
+                    "critter_p_proc", completed.State, releaseContext, releaseWorld);
+                released = RunCameron(
+                    "critter_p_proc", released.State, releaseContext,
+                    released.WorldObjects);
+                if (released.WorldObjects.Timers.Pending is not [{ } sourceTimer])
+                    throw new InvalidOperationException(
+                        "Owned Cameron release timer was not scheduled.");
+                var sourceDelivery = ClassicIntTimerOwner.TakeNextDue(
+                    released.WorldObjects.Timers, sourceTimer.DueTick);
+                released = RunCameron(
+                    "timed_event_p_proc",
+                    released.State,
+                    releaseContext with
+                    {
+                        FixedParameter = sourceDelivery.Event.FixedParameter,
+                    },
+                    released.WorldObjects with { Timers = sourceDelivery.State });
+                var releaseBudget = cameron.Program.ExecutableProgram
+                    .Procedures["critter_p_proc"].Instructions.Count;
+                while (released.WorldObjects.Objects[cameronHandle].Visible &&
+                    releaseBudget-- > 0)
+                    released = RunCameron(
+                        "critter_p_proc", released.State, releaseContext,
+                        released.WorldObjects);
+                if (!released.WorldObjects.Movements.Select(row => row.DestinationTile)
+                        .SequenceEqual([19728, 22712, 28715]) ||
+                    released.WorldObjects.Objects[cameronHandle] is not
+                    { Tile: 28715, Visible: false } ||
+                    released.WorldObjects.Doors[doorHandle] is not
+                    { Open: true, Locked: false } ||
+                    released.WorldObjects.Timers.Pending.Count != 0 ||
+                    released.WorldObjects.Timers.CurrentTick !=
+                        ClassicIntTimerOwner.GameTicks(timerContract, 2) ||
+                    released.State.ScriptLocalVariables[14] != 4)
+                    throw new InvalidOperationException(
+                        "Owned Cameron critter/timer release chain drifted.");
+                var restoredRelease = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(
+                        released.WorldObjects.Save()));
+                if (restoredRelease.Objects[cameronHandle] is not
+                    { Tile: 28715, Visible: false } ||
+                    restoredRelease.Doors[doorHandle] is not
+                    { Open: true, Locked: false } ||
+                    restoredRelease.Timers.CurrentTick !=
+                        released.WorldObjects.Timers.CurrentTick)
+                    throw new InvalidOperationException(
+                        "Owned Cameron release world save state drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{cameron.Program.Program}|" +
+                    $"{terminalTaggedSpeechProcedure}+critter/timer-release|" +
+                    $"{completed.ExecutedInstructions + released.ExecutedInstructions}");
             }
         }
         var jasmine = programs.FirstOrDefault(row => string.Equals(

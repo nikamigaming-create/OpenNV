@@ -251,6 +251,11 @@ internal partial class OpeningQuestRuntime
                     condition.Parameter1,
                     StringComparison.OrdinalIgnoreCase)) ? 1.0f : 0.0f,
             GetQuestVariableConditionFunction => _docReaction,
+            GetStageConditionFunction when _quests.TryGetValue(
+                condition.Parameter1, out var stageQuest) => stageQuest.Stage,
+            GetStageDoneConditionFunction when _quests.TryGetValue(
+                condition.Parameter1, out var quest) =>
+                quest.Stage >= checked((int)condition.Parameter2) ? 1.0f : 0.0f,
             _ => throw new InvalidOperationException(
                 $"Owned dialogue condition function is unsupported: {condition.Function}"),
         };
@@ -355,7 +360,12 @@ internal partial class OpeningQuestRuntime
         if (!quest.Stages.TryGetValue(stage, out var program))
             throw new InvalidOperationException(
                 $"Owned ordinary quest stage is absent: {quest.EditorId} {stage}");
-        var commands = program.Commands.Select((command, sourceIndex) =>
+        ExecuteOrdinaryCommands(program.Commands);
+    }
+
+    private void ExecuteOrdinaryCommands(IReadOnlyList<OpeningFlowCommand> sourceCommands)
+    {
+        var commands = sourceCommands.Select((command, sourceIndex) =>
             new SourceGamebryoStageCommand<OpeningFlowCommand>(
                 sourceIndex,
                 StageCommandKind(command.Kind),
@@ -367,6 +377,33 @@ internal partial class OpeningQuestRuntime
                 var source = sourceCommand.Value;
                 switch (source.Kind)
                 {
+                    case "sayTo":
+                        {
+                            var speaker = _flow.OrdinaryActors.SingleOrDefault(actor =>
+                                _flow.SceneRoles[actor.Role].EditorId.Equals(
+                                    source.SpeakerEditorId,
+                                    StringComparison.OrdinalIgnoreCase) &&
+                                actor.Topics.Values.Any(topic => topic.EditorId.Equals(
+                                    source.TopicEditorId,
+                                    StringComparison.OrdinalIgnoreCase)));
+                            if (source.TopicEditorId is null || speaker is null ||
+                                index != commands.Length - 1)
+                                throw new InvalidOperationException(
+                                    "Owned ordinary SayTo command must terminate its stage program.");
+                            _generation++;
+                            var generation = _generation;
+                            PlayTopicEditor(
+                                source.TopicEditorId,
+                                () =>
+                                {
+                                    if (generation != _generation)
+                                        return;
+                                    _loaded.Session.StoreOpeningState(CaptureState(true));
+                                    EvaluateOrdinaryActorPackages();
+                                },
+                                generation);
+                            break;
+                        }
                     case "objective":
                         ApplyObjective(source);
                         break;
@@ -385,6 +422,8 @@ internal partial class OpeningQuestRuntime
                 }
                 return true;
             });
+            if (sourceCommands[index].Kind == "sayTo")
+                return;
         }
     }
 
@@ -603,6 +642,29 @@ internal partial class OpeningQuestRuntime
                     value.ReferenceFormId,
                     StringComparison.OrdinalIgnoreCase)).Placement),
             StringComparer.OrdinalIgnoreCase),
+        CombatHealthByReferenceFormId = _combatHealthByReferenceFormId
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => value.Value,
+                StringComparer.OrdinalIgnoreCase),
+        CombatActorAnimations = _combatActorAnimations
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => new OpeningActorAnimationState(
+                    value.Value.Role,
+                    value.Value.PositionSeconds),
+                StringComparer.OrdinalIgnoreCase),
+        CombatActorAi = _combatActorAi
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => new OpeningCombatAiState(
+                    value.Value.State.Phase.ToString(),
+                    value.Value.State.MeleeClockSeconds,
+                    value.Value.State.HitApplied),
+                StringComparer.OrdinalIgnoreCase),
     };
 
     internal static bool MatchesFlow(
@@ -694,6 +756,27 @@ internal partial class OpeningQuestRuntime
                     flow.OrdinaryActors.Select(value => value.ReferenceFormId)))
             throw new InvalidOperationException(
                 "Saved ordinary actor transforms do not match the owned flow.");
+        var combatTargets = flow.CombatEncounters.SelectMany(value => value.Targets)
+            .ToDictionary(
+                value => value.ReferenceFormId,
+                StringComparer.OrdinalIgnoreCase);
+        if (state.CombatHealthByReferenceFormId.Count != 0 &&
+            (!state.CombatHealthByReferenceFormId.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys) ||
+             state.CombatHealthByReferenceFormId.Any(value =>
+                 value.Value > combatTargets[value.Key].MaximumHealth)))
+            throw new InvalidOperationException(
+                "Saved ordinary combat health does not match the owned flow.");
+        if (state.CombatActorAnimations.Count != 0 &&
+            !state.CombatActorAnimations.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys))
+            throw new InvalidOperationException(
+                "Saved combat actor animations do not match the owned flow.");
+        if (state.CombatActorAi.Count != 0 &&
+            !state.CombatActorAi.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys))
+            throw new InvalidOperationException(
+                "Saved combat actor AI does not match the owned flow.");
         if (state.Completed)
             ValidateCompletedState(flow, state);
     }
@@ -923,6 +1006,62 @@ internal partial class OpeningQuestRuntime
         Replace(_inventory, state.Inventory, value => value.FormId);
         Replace(_equippedItemFormIds, state.EquippedItemFormIds);
         _equippedWeaponState = state.EquippedWeapon;
+        if (state.CombatHealthByReferenceFormId.Count != 0)
+            Replace(
+                _combatHealthByReferenceFormId,
+                state.CombatHealthByReferenceFormId);
+        if (state.CombatActorAnimations.Count != 0)
+        {
+            if (!state.CombatActorAnimations.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    _combatActorAnimations.Keys))
+                throw new InvalidOperationException(
+                    "Saved combat actor animation identities differ.");
+            foreach (var saved in state.CombatActorAnimations)
+            {
+                var actor = _flow.CombatEncounters.SelectMany(value => value.Targets)
+                    .Single(value => value.ReferenceFormId.Equals(
+                        saved.Key, StringComparison.OrdinalIgnoreCase));
+                _combatActorAnimations[saved.Key] =
+                    GamebryoCreatureAnimationPlayback.Start(
+                        CombatActor(actor).Actor,
+                        saved.Value.Role,
+                        saved.Value.PositionSeconds);
+            }
+        }
+        if (state.CombatActorAi.Count != 0)
+        {
+            if (!state.CombatActorAi.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    _combatActorAi.Keys))
+                throw new InvalidOperationException(
+                    "Saved combat actor AI identities differ.");
+            foreach (var saved in state.CombatActorAi)
+            {
+                var target = _flow.CombatEncounters.SelectMany(value => value.Targets)
+                    .Single(value => value.ReferenceFormId.Equals(
+                        saved.Key, StringComparison.OrdinalIgnoreCase));
+                var actor = CombatActor(target);
+                var animation = _combatActorAnimations[saved.Key];
+                var contract = GamebryoCreatureCombatAi.Contract(
+                    animation,
+                    Math.Max(actor.Actor.Bounds.Size.X, actor.Actor.Bounds.Size.Z) /
+                        _loaded.UnitsToMeters * BoundsToHalfExtents +
+                        _configuration.Player.CapsuleRadiusMeters /
+                        _loaded.UnitsToMeters,
+                    target.AttackDamage);
+                if (!Enum.TryParse<GamebryoCreatureCombatPhase>(
+                        saved.Value.Phase, out var phase))
+                    throw new InvalidOperationException(
+                        "Saved combat actor AI phase differs.");
+                _combatActorAi[saved.Key] = GamebryoCreatureCombatAi.Restore(
+                    contract,
+                    new GamebryoCreatureCombatState(
+                        phase,
+                        saved.Value.MeleeClockSeconds,
+                        saved.Value.HitApplied));
+            }
+        }
         Replace(_destroyedReferences, state.DestroyedReferenceFormIds);
         Replace(_referenceEnabledStates, state.ReferenceEnabledStates);
         _autoDisplayObjectives = state.AutoDisplayObjectives;
@@ -949,6 +1088,7 @@ internal partial class OpeningQuestRuntime
                     target.ReferenceFormId.Equals(
                         reference, StringComparison.OrdinalIgnoreCase))))
                 SetReferenceVisibility(reference, false, false);
+        PublishCombatActors();
     }
 
     private static void Replace<T>(HashSet<T> target, IEnumerable<T> source)

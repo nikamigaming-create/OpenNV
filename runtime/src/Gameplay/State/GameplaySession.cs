@@ -98,6 +98,7 @@ internal partial class GameplaySession : Node
         !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? SandboxObjectiveStage.TakeAid :
         !_doorStates.GetValueOrDefault(_entryDoorFormId) ? SandboxObjectiveStage.OpenEntryDoor :
         SandboxObjectiveStage.Complete;
+    internal int? PlayerHitPoints => _vitals?.HitPoints;
 
     internal static bool CanContinueOpening(
         string savePath,
@@ -515,7 +516,7 @@ internal partial class GameplaySession : Node
                 StringComparer.OrdinalIgnoreCase);
         _inventory.Clear();
         _openingState = state;
-        if (_vitalsContract is not null)
+        if (_vitalsContract is not null && (_vitals is null || !state.Completed))
             _vitals = _vitalsContract.CreateInitial(state);
         foreach (var item in state.Inventory)
         {
@@ -781,6 +782,19 @@ internal partial class GameplaySession : Node
             WriteIndented = true,
         }) + System.Environment.NewLine);
         File.Move(temporary, _savePath, true);
+    }
+
+    internal int ApplySourceDamage(int damage)
+    {
+        if (damage <= 0 || _vitals is null || _vitals.HitPoints <= 0)
+            throw new InvalidOperationException(
+                "Source damage cannot be applied to the current gameplay vitals.");
+        var hitPoints = Math.Max(0, _vitals.HitPoints - damage);
+        _vitals = _vitals with { HitPoints = hitPoints };
+        _vitals.Validate();
+        Save();
+        RefreshHud($"Hit points: {hitPoints}/{_vitals.MaximumHitPoints}");
+        return hitPoints;
     }
 
     internal object Report() => new

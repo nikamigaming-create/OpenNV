@@ -63,6 +63,9 @@ internal partial class OpeningQuestRuntime
             placed.Placement.SetMeta("opennv_package_target_form_id",
                 selected.Target.ReferenceFormId ?? "");
             placed.Placement.SetMeta("opennv_package_target_kind", selected.Target.Kind);
+            placed.Placement.SetMeta(
+                "opennv_package_dialogue_target_form_id",
+                selected.Value.Target?.FormId ?? "");
             if (changed && selected.Target.Placement is not null)
                 BeginOrdinaryActorTravel(actor, placed, selected);
         }
@@ -89,15 +92,17 @@ internal partial class OpeningQuestRuntime
         OpeningGuidePackage package,
         CellActorLoader.PlacedActor actor)
     {
-        if (package.Target is { TypeName: "reference" } target)
-            return new GamebryoPackageTarget(
-                "actorReference", target.FormId, null);
         if (package.Location is not
             {
                 TypeName: "nearReference",
                 Reference: { } reference,
             })
+        {
+            if (package.Target is { TypeName: "reference" } target)
+                return new GamebryoPackageTarget(
+                    "actorReference", target.FormId, null);
             return PackageTargetWithoutPlacement(package);
+        }
         return new GamebryoPackageTarget(
             package.Location.TypeName,
             reference.FormId,
@@ -130,6 +135,10 @@ internal partial class OpeningQuestRuntime
             .Select(_loaded.GameToCellUnits)
             .Select(position => GameplayActorGrounding.ApplyGroundOffset(placed, position))
             .ToArray();
+        if (path.Length == 0 && placed.Placement.Position.DistanceTo(
+                target.SourceTransform.Origin) <=
+            GamebryoPackageTravel.ExactArrivalToleranceCellUnits)
+            path = [target.SourceTransform.Origin];
         if (path.Length == 0)
             throw new InvalidOperationException(
                 "Owned ordinary package navigation returned no waypoints.");
@@ -172,6 +181,24 @@ internal partial class OpeningQuestRuntime
             _ordinaryActorLocomotion[actor.ReferenceFormId].Stop();
             _ordinaryActorLocomotion.Remove(actor.ReferenceFormId);
             _ordinaryActorTravel.Remove(actor.ReferenceFormId);
+            var completedPackage = _ordinaryActorPackages[actor.ReferenceFormId];
+            if (completedPackage.EventCommands.TryGetValue(
+                    "end", out var endCommands) && endCommands.Count > 0)
+            {
+                ExecuteOrdinaryCommands(endCommands);
+                _loaded.Session.StoreOpeningState(CaptureState(true));
+                EvaluateOrdinaryActorPackages();
+                continue;
+            }
+            var packageDialogue = actor.AutomaticPackageDialogues.SingleOrDefault(value =>
+                value.PackageFormId.Equals(
+                    completedPackage.FormId,
+                    StringComparison.OrdinalIgnoreCase));
+            if (packageDialogue is not null)
+            {
+                BeginAutomaticPackageDialogue(actor, packageDialogue);
+                continue;
+            }
             var transition = actor.ArrivalTransitions.SingleOrDefault(value =>
                 value.PackageFormId.Equals(
                     _ordinaryActorPackages[actor.ReferenceFormId].FormId,
@@ -187,6 +214,30 @@ internal partial class OpeningQuestRuntime
             _loaded.Session.StoreOpeningState(CaptureState(true));
             EvaluateOrdinaryActorPackages();
         }
+    }
+
+    private void BeginAutomaticPackageDialogue(
+        OpeningOrdinaryActor actor,
+        OpeningOrdinaryPackageDialogue dialogue)
+    {
+        if (_ordinaryAutomaticDialogueActive || _activeModal is not null ||
+            _dialogueVoice.Playing)
+            throw new InvalidOperationException(
+                "Owned automatic package dialogue overlapped active dialogue.");
+        _ordinaryAutomaticDialogueActive = true;
+        _generation++;
+        var generation = _generation;
+        PlayTopicForm(
+            dialogue.GreetingTopicFormId,
+            () =>
+            {
+                if (generation != _generation)
+                    return;
+                _ordinaryAutomaticDialogueActive = false;
+                _loaded.Session.StoreOpeningState(CaptureState(true));
+                EvaluateOrdinaryActorPackages();
+            },
+            generation);
     }
 
     private static GamebryoPackageTarget PackageTargetWithoutPlacement(

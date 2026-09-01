@@ -125,6 +125,25 @@ if (objectiveSelected?.Value != "completed")
     throw new InvalidOperationException(
         "Source package objective-completion condition differs.");
 
+var stageDoneSelected = GamebryoPackageSelector.SelectFirst(
+    [new GamebryoPackageCandidate<string>(
+        "00000066",
+        [new GamebryoPackageCondition(
+            "getStageDone",
+            GamebryoPackageComparison.Equal,
+            1.0,
+            quest,
+            10,
+            0,
+            "")],
+        GamebryoPackageTarget.None,
+        null,
+        "stage-done")],
+    state,
+    requireMatch: true);
+if (stageDoneSelected?.Value != "stage-done")
+    throw new InvalidOperationException("Source package stage-done condition differs.");
+
 var tutorialState = new GamebryoPackageState(
     new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [quest] = 10 },
     new HashSet<string>(StringComparer.OrdinalIgnoreCase),

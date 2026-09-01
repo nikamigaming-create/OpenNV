@@ -14,6 +14,7 @@ internal sealed partial record OpeningNewGameFlow(
     IReadOnlyDictionary<string, OpeningOrdinaryQuest> OrdinaryQuests,
     IReadOnlyList<OpeningOrdinaryActor> OrdinaryActors,
     IReadOnlyList<OpeningHitTargetSet> HitTargetSets,
+    IReadOnlyList<OpeningCombatEncounter> CombatEncounters,
     int CompletionStage,
     int PsychologyStartStage,
     int OutroStartStage,
@@ -237,6 +238,9 @@ internal sealed partial record OpeningNewGameFlow(
             source.GetProperty("hitTargetSets").EnumerateArray()
                 .Select(ParseHitTargetSet)
                 .ToArray(),
+            source.GetProperty("combatEncounters").EnumerateArray()
+                .Select(ParseCombatEncounter)
+                .ToArray(),
             quest.GetProperty("completionStage").GetInt32(),
             dialogue.GetProperty("psychologyStartStage").GetInt32(),
             dialogue.GetProperty("outroStartStage").GetInt32(),
@@ -325,6 +329,11 @@ internal sealed partial record OpeningNewGameFlow(
                     value.GetProperty("objectiveIndex").GetInt32(),
                     value.GetProperty("topicFormId").GetString()!))
                 .ToArray(),
+            source.GetProperty("automaticPackageDialogues").EnumerateArray()
+                .Select(value => new OpeningOrdinaryPackageDialogue(
+                    value.GetProperty("packageFormId").GetString()!,
+                    value.GetProperty("greetingTopicFormId").GetString()!))
+                .ToArray(),
             ParseCommandContract(source.GetProperty("commandContract")));
     }
 
@@ -349,6 +358,29 @@ internal sealed partial record OpeningNewGameFlow(
         source.GetProperty("tutorialStage").GetInt32(),
         source.GetProperty("threshold").GetInt32(),
         source.GetProperty("objectiveIndex").GetInt32());
+
+    private static OpeningCombatEncounter ParseCombatEncounter(JsonElement source) => new(
+        source.GetProperty("deathScriptFormId").GetString()!,
+        source.GetProperty("deathScriptEditorId").GetString()!,
+        source.GetProperty("questFormId").GetString()!,
+        source.GetProperty("questVariableIndex").GetInt32(),
+        source.GetProperty("questVariableName").GetString()!,
+        source.GetProperty("counterIncrement").GetInt32(),
+        source.GetProperty("threshold").GetInt32(),
+        source.GetProperty("objectiveIndex").GetInt32(),
+        source.GetProperty("minimumCombatStage").GetInt32(),
+        source.GetProperty("completionStage").GetInt32(),
+        source.GetProperty("resetActorReferenceFormId").GetString()!,
+        source.GetProperty("targets").EnumerateArray()
+            .Select(value => new OpeningCombatTarget(
+                value.GetProperty("referenceFormId").GetString()!,
+                value.GetProperty("baseFormId").GetString()!,
+                value.GetProperty("maximumHealth").GetInt32(),
+                value.GetProperty("attackDamage").GetInt32(),
+                value.GetProperty("packageFormIds").EnumerateArray()
+                    .Select(package => package.GetString()!)
+                    .ToArray()))
+            .ToArray());
 
     private static OpeningCommandContract ParseCommandContract(JsonElement source) => new(
         source.GetProperty("schema").GetString()!,
@@ -1594,7 +1626,15 @@ internal sealed partial record OpeningNewGameFlow(
             .ToArray(),
         source.GetProperty("idleAnimationLogicalPaths").EnumerateArray()
             .Select(value => value.GetString()!)
-            .ToArray());
+            .ToArray(),
+        source.GetProperty("eventCommands").EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => (IReadOnlyList<OpeningFlowCommand>)value.Value
+                    .EnumerateArray()
+                    .Select(ParseCommand)
+                    .ToArray(),
+                StringComparer.OrdinalIgnoreCase));
 
     private static OpeningGuideLocation ParseGuideLocation(JsonElement source) => new(
         source.GetProperty("type").GetInt32(),

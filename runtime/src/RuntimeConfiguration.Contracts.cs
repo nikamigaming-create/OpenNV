@@ -1307,9 +1307,15 @@ internal sealed record ActorAnimationProfilesConfiguration(
         if (NPC_.Mode != "exact-owned-member" ||
             string.IsNullOrWhiteSpace(NPC_.Path) ||
             NPC_.FileName is not null ||
+            NPC_.Roles is not null ||
             CREA.Mode != "skeleton-directory" ||
             CREA.Path is not null ||
-            string.IsNullOrWhiteSpace(CREA.FileName))
+            string.IsNullOrWhiteSpace(CREA.FileName) ||
+            CREA.Roles is null ||
+            CREA.Roles.Count != 3 ||
+            !CREA.Roles.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
+                new[] { "locomotion", "melee", "hit" }) ||
+            CREA.Roles.Values.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException(
                 "Actor animation profiles do not declare complete owned-member resolvers.");
     }
@@ -1318,7 +1324,8 @@ internal sealed record ActorAnimationProfilesConfiguration(
 internal sealed record ActorAnimationProfileConfiguration(
     string Mode,
     string? Path,
-    string? FileName);
+    string? FileName,
+    IReadOnlyDictionary<string, string>? Roles);
 
 internal sealed record FaceGenMaterialConfiguration(
     string Schema,

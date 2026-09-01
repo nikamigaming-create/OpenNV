@@ -27,6 +27,12 @@ internal sealed record ClassicIntObjectCreation(
     int Elevation,
     int ScriptId);
 
+internal sealed record ClassicIntObjectCreationRequest(
+    string ProgramIdentity,
+    string Procedure,
+    int InstructionOffset,
+    ClassicIntObjectCreation Source);
+
 internal sealed record ClassicIntCreatedObject(
     int ObjectHandle,
     ClassicIntObjectCreation Source);
@@ -46,6 +52,42 @@ internal sealed record ClassicIntAttackRequest(
     int ActorHandle,
     int TargetHandle,
     IReadOnlyList<int> SourceArguments);
+
+internal sealed record ClassicIntWorldObject(
+    int Handle,
+    int? Pid,
+    int Tile,
+    int Elevation,
+    bool Visible);
+
+internal sealed record ClassicIntMovement(
+    int ObjectHandle,
+    int SourceTile,
+    int DestinationTile,
+    int? Speed,
+    int? DestinationElevation = null);
+
+internal sealed record ClassicIntTraitAssignment(
+    int ObjectHandle,
+    int TraitType,
+    int Trait,
+    int Amount);
+
+internal sealed record ClassicIntDialogueStart(
+    int MessageList,
+    int ObjectHandle,
+    int Mood,
+    int Head,
+    int Background);
+
+internal sealed record ClassicIntDialogueReply(int MessageList, int MessageId);
+
+internal sealed record ClassicIntDialogueOption(
+    int Intelligence,
+    int MessageList,
+    int MessageId,
+    int TargetProcedureIndex,
+    int Reaction);
 
 internal interface IClassicIntActorQueries
 {
@@ -89,19 +131,28 @@ internal sealed class ClassicIntActorHandleTable
 
 internal interface IClassicIntObjectFactory
 {
-    int Create(ClassicIntObjectCreation source);
+    int Create(ClassicIntObjectCreationRequest request);
 }
 
 internal sealed record ClassicIntObjectHandleTable(
     IReadOnlyDictionary<ClassicIntObjectCreation, int> Handles) :
     IClassicIntObjectFactory
 {
-    public int Create(ClassicIntObjectCreation source) =>
-        Handles.TryGetValue(source, out var handle)
+    internal IReadOnlyDictionary<ClassicIntObjectCreationRequest, int> Requests
+    { get; init; } = new Dictionary<ClassicIntObjectCreationRequest, int>();
+
+    public int Create(ClassicIntObjectCreationRequest request) =>
+        Requests.TryGetValue(request, out var requestedHandle)
+            ? requestedHandle
+            : Handles.TryGetValue(request.Source, out var handle)
             ? handle
             : throw new InvalidOperationException(
-                $"Classic INT object creation is not admitted: {source}.");
+                $"Classic INT object creation is not admitted: {request}.");
 }
+
+internal sealed record ClassicIntInventoryContract(
+    string Identity,
+    int CurrencyPid);
 
 internal interface IClassicIntWorldObjectState
 {
@@ -112,6 +163,15 @@ internal interface IClassicIntWorldObjectState
     IReadOnlyList<ClassicIntInventoryEntry> Inventory { get; }
     ClassicIntMapStartOverride? MapStartOverride { get; }
     IReadOnlyList<ClassicIntAttackRequest> AttackRequests { get; }
+    IReadOnlyDictionary<int, ClassicIntWorldObject> Objects { get; }
+    IReadOnlyList<ClassicIntMovement> Movements { get; }
+    IReadOnlyList<ClassicIntTraitAssignment> TraitAssignments { get; }
+    ClassicIntTimerState Timers { get; }
+    bool DialogueSystemEntered { get; }
+    ClassicIntDialogueStart? DialogueStart { get; }
+    IReadOnlyList<ClassicIntDialogueReply> DialogueReplies { get; }
+    IReadOnlyList<ClassicIntDialogueOption> DialogueOptions { get; }
+    bool DialogueReady { get; }
 }
 
 internal sealed record ClassicIntWorldObjectState(
@@ -130,6 +190,30 @@ internal sealed record ClassicIntWorldObjectState(
 
     public IReadOnlyList<ClassicIntAttackRequest> AttackRequests
     { get; init; } = [];
+
+    public IReadOnlyDictionary<int, ClassicIntWorldObject> Objects
+    { get; init; } = new Dictionary<int, ClassicIntWorldObject>();
+
+    public IReadOnlyList<ClassicIntMovement> Movements
+    { get; init; } = [];
+
+    public IReadOnlyList<ClassicIntTraitAssignment> TraitAssignments
+    { get; init; } = [];
+
+    public ClassicIntTimerState Timers
+    { get; init; } = ClassicIntTimerState.Initial;
+
+    public bool DialogueSystemEntered { get; init; }
+
+    public ClassicIntDialogueStart? DialogueStart { get; init; }
+
+    public IReadOnlyList<ClassicIntDialogueReply> DialogueReplies
+    { get; init; } = [];
+
+    public IReadOnlyList<ClassicIntDialogueOption> DialogueOptions
+    { get; init; } = [];
+
+    public bool DialogueReady { get; init; }
 
     internal static ClassicIntWorldObjectState Empty { get; } = new(
         false, new Dictionary<int, ClassicIntDoorObjectState>());
@@ -156,6 +240,15 @@ internal sealed record ClassicIntWorldObjectState(
             .ThenBy(row => row.ObjectHandle).ToArray(),
         MapStartOverride,
         AttackRequests,
+        Objects = Objects.OrderBy(row => row.Key).Select(row => row.Value).ToArray(),
+        Movements,
+        TraitAssignments,
+        Timers,
+        DialogueSystemEntered,
+        DialogueStart,
+        DialogueReplies,
+        DialogueOptions,
+        DialogueReady,
     };
 
     internal static ClassicIntWorldObjectState Restore(JsonElement source)
@@ -183,7 +276,7 @@ internal sealed record ClassicIntWorldObjectState(
             lightLevel.ValueKind != JsonValueKind.Null
                 ? lightLevel.GetInt32()
                 : null);
-        return result with
+        var restored = result with
         {
             CreatedObjects = source.TryGetProperty("CreatedObjects", out var objects)
                 ? objects.EnumerateArray().ToDictionary(
@@ -213,7 +306,75 @@ internal sealed record ClassicIntWorldObjectState(
                         mapStart.GetProperty("Rotation").GetInt32())
                     : null,
             AttackRequests = attackRequests,
+            Objects = source.TryGetProperty("Objects", out var worldObjects)
+                ? worldObjects.EnumerateArray().ToDictionary(
+                    row => row.GetProperty("Handle").GetInt32(),
+                    row => new ClassicIntWorldObject(
+                        row.GetProperty("Handle").GetInt32(),
+                        row.GetProperty("Pid").ValueKind == JsonValueKind.Null
+                            ? null
+                            : row.GetProperty("Pid").GetInt32(),
+                        row.GetProperty("Tile").GetInt32(),
+                        row.GetProperty("Elevation").GetInt32(),
+                        row.GetProperty("Visible").GetBoolean()))
+                : new Dictionary<int, ClassicIntWorldObject>(),
+            Movements = source.TryGetProperty("Movements", out var movements)
+                ? movements.Deserialize<ClassicIntMovement[]>() ?? []
+                : [],
+            TraitAssignments = source.TryGetProperty(
+                    "TraitAssignments", out var traitAssignments)
+                ? traitAssignments.Deserialize<ClassicIntTraitAssignment[]>() ?? []
+                : [],
+            Timers = source.TryGetProperty("Timers", out var timers)
+                ? timers.Deserialize<ClassicIntTimerState>() ??
+                    throw new InvalidOperationException(
+                        "Classic INT saved timer state is invalid.")
+                : ClassicIntTimerState.Initial,
+            DialogueSystemEntered = source.TryGetProperty(
+                "DialogueSystemEntered", out var entered) && entered.GetBoolean(),
+            DialogueStart = source.TryGetProperty("DialogueStart", out var dialogueStart) &&
+                dialogueStart.ValueKind != JsonValueKind.Null
+                    ? dialogueStart.Deserialize<ClassicIntDialogueStart>()
+                    : null,
+            DialogueReplies = source.TryGetProperty(
+                    "DialogueReplies", out var dialogueReplies)
+                ? dialogueReplies.Deserialize<ClassicIntDialogueReply[]>() ?? []
+                : [],
+            DialogueOptions = source.TryGetProperty(
+                    "DialogueOptions", out var dialogueOptions)
+                ? dialogueOptions.Deserialize<ClassicIntDialogueOption[]>() ?? []
+                : [],
+            DialogueReady = source.TryGetProperty(
+                "DialogueReady", out var dialogueReady) && dialogueReady.GetBoolean(),
         };
+        restored.Timers.Validate();
+        if (restored.Objects.Any(row => row.Key == 0 || row.Key != row.Value.Handle) ||
+            restored.Movements.Any(row =>
+                !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.Inventory.Any(row =>
+                row.Quantity <= 0 ||
+                !restored.Objects.ContainsKey(row.OwnerHandle) ||
+                !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.Inventory.Select(row => row.ObjectHandle).Distinct().Count() !=
+                restored.Inventory.Count ||
+            restored.TraitAssignments.Any(row =>
+                !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.TraitAssignments.Select(row =>
+                    (row.ObjectHandle, row.TraitType, row.Trait)).Distinct().Count() !=
+                restored.TraitAssignments.Count ||
+            restored.DialogueStart is { } savedDialogue &&
+                !restored.Objects.ContainsKey(savedDialogue.ObjectHandle) ||
+            restored.DialogueReplies.Any(row =>
+                row.MessageList < 0 || row.MessageId < 0) ||
+            restored.DialogueOptions.Any(row =>
+                row.MessageList < 0 || row.MessageId < 0 ||
+                row.TargetProcedureIndex < 0) ||
+            restored.DialogueReady &&
+                (restored.DialogueStart is null ||
+                    restored.DialogueReplies.Count == 0))
+            throw new InvalidOperationException(
+                "Classic INT saved world object state is invalid.");
+        return restored;
     }
 }
 
@@ -296,10 +457,13 @@ internal static class ClassicIntProcedureVm
     private const ushort Not = 0x8045;
     private const ushort Negate = 0x8046;
     private const ushort Random = 0x80B4;
+    private const ushort TileContainsPidObject = 0x80A7;
+    private const ushort MoveTo = 0x80B6;
     private const ushort CreateObject = 0x80B7;
     private const ushort OverrideMapStart = 0x80A9;
     private const ushort DisplayMessage = 0x80B8;
     private const ushort ScriptOverrides = 0x80B9;
+    private const ushort TileContainsObjectPid = 0x80BB;
     private const ushort SelfObject = 0x80BC;
     private const ushort SourceObject = 0x80BD;
     private const ushort DudeObject = 0x80BF;
@@ -309,8 +473,12 @@ internal static class ClassicIntProcedureVm
     private const ushort SetMapVariable = 0x80C4;
     private const ushort GlobalVariable = 0x80C5;
     private const ushort SetGlobalVariable = 0x80C6;
+    private const ushort AnimateMoveObjectToTile = 0x80CE;
     private const ushort Attack = 0x80D0;
+    private const ushort TileDistanceObjects = 0x80D3;
+    private const ushort TileNumber = 0x80D4;
     private const ushort ObjectCanSeeObject = 0x80DC;
+    private const ushort SetObjectVisibility = 0x80E3;
     private const ushort CritterStat = 0x80CA;
     private const ushort Metarule = 0x810B;
     private const ushort MessageString = 0x8105;
@@ -318,14 +486,32 @@ internal static class ClassicIntProcedureVm
     private const ushort GetMonth = 0x8118;
     private const ushort FloatMessage = 0x810A;
     private const ushort PlaySound = 0x80A3;
+    private const ushort HasTrait = 0x80F3;
     private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
     private const ushort GameTimeHour = 0x80F6;
+    private const ushort AddTimerEvent = 0x80F0;
+    private const ushort GameTicks = 0x80F2;
+    private const ushort FixedParameter = 0x80F7;
+    private const ushort DialogueSystemEnter = 0x80F9;
+    private const ushort ObjectPid = 0x8100;
+    private const ushort CurrentMapIndex = 0x8101;
+    private const ushort CritterAddTrait = 0x8102;
     private const ushort DoorLock = 0x812E;
     private const ushort DoorUnlock = 0x812F;
     private const ushort DoorIsOpen = 0x8130;
     private const ushort DoorOpen = 0x8131;
     private const ushort DoorClose = 0x8132;
+    private const ushort StartGameDialogue = 0x80DE;
+    private const ushort EndDialogue = 0x80DF;
+    private const ushort GsayStart = 0x811C;
+    private const ushort GsayEnd = 0x811D;
+    private const ushort GsayReply = 0x811E;
+    private const ushort GsayMessage = 0x8120;
+    private const ushort GiqOption = 0x8121;
+    private const ushort ItemCapsTotal = 0x8138;
+    private const ushort ItemCapsAdjust = 0x8139;
+    private const ushort DebugMessage = 0x8154;
     private const ushort DifficultyLevel = 0x812A;
     private const ushort CombatDifficulty = 0x814F;
     private const ushort SfallArrayLength = 0x8231;
@@ -423,6 +609,18 @@ internal static class ClassicIntProcedureVm
         var inventory = sourceWorldObjects.Inventory.ToList();
         var mapStartOverride = sourceWorldObjects.MapStartOverride;
         var attackRequests = sourceWorldObjects.AttackRequests.ToList();
+        var objects = new Dictionary<int, ClassicIntWorldObject>(
+            sourceWorldObjects.Objects);
+        var movements = sourceWorldObjects.Movements.ToList();
+        var traitAssignments = sourceWorldObjects.TraitAssignments.ToDictionary(
+            row => (row.ObjectHandle, row.TraitType, row.Trait));
+        var timers = sourceWorldObjects.Timers;
+        timers.Validate();
+        var dialogueSystemEntered = sourceWorldObjects.DialogueSystemEntered;
+        var dialogueStart = sourceWorldObjects.DialogueStart;
+        var dialogueReplies = sourceWorldObjects.DialogueReplies.ToList();
+        var dialogueOptions = sourceWorldObjects.DialogueOptions.ToList();
+        var dialogueReady = sourceWorldObjects.DialogueReady;
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -483,7 +681,9 @@ internal static class ClassicIntProcedureVm
                     stack.Add(addressValue);
                     break;
                 case FetchProgram:
-                    stack.Add(Read(programVariables, Pop(stack, program, procedure, offset),
+                    stack.Add(ReadOrInitialize(
+                        programVariables,
+                        Pop(stack, program, procedure, offset),
                         program, procedure, offset, "program-variable"));
                     break;
                 case StoreProgram:
@@ -499,16 +699,28 @@ internal static class ClassicIntProcedureVm
                         break;
                     }
                 case FetchLocal:
-                    stack.Add(Read(locals, Pop(stack, program, procedure, offset),
+                    stack.Add(ReadOrInitialize(
+                        locals,
+                        Pop(stack, program, procedure, offset),
                         program, procedure, offset, "procedure-local"));
                     break;
                 case StoreLocal:
                     Store(locals, stack, program, procedure, offset, true);
                     break;
                 case ScriptLocal:
-                    stack.Add(Read(scriptLocals, Pop(stack, program, procedure, offset),
-                        program, procedure, offset, "script-local"));
-                    break;
+                    {
+                        var variableIndex = Pop(stack, program, procedure, offset);
+                        if (variableIndex < 0)
+                            throw Failure(program, procedure, offset,
+                                "script-local-index");
+                        if (!scriptLocals.TryGetValue(variableIndex, out var value))
+                        {
+                            value = 0;
+                            scriptLocals.Add(variableIndex, value);
+                        }
+                        stack.Add(value);
+                        break;
+                    }
                 case SetScriptLocal:
                     Store(scriptLocals, stack, program, procedure, offset, false);
                     break;
@@ -612,13 +824,49 @@ internal static class ClassicIntProcedureVm
                         var pid = Pop(stack, program, procedure, offset);
                         var creation = new ClassicIntObjectCreation(
                             pid, tile, elevation, scriptId);
-                        var handle = game.ObjectFactory.Create(creation);
-                        if (createdObjects.ContainsKey(handle))
+                        var handle = game.ObjectFactory.Create(
+                            new ClassicIntObjectCreationRequest(
+                                program.Identity, procedure, offset, creation));
+                        if (createdObjects.ContainsKey(handle) ||
+                            objects.ContainsKey(handle))
                             throw Failure(program, procedure, offset,
                                 "duplicate-created-object-handle");
                         createdObjects.Add(handle,
                             new ClassicIntCreatedObject(handle, creation));
+                        objects.Add(handle, new ClassicIntWorldObject(
+                            handle, pid, tile, elevation, true));
                         stack.Add(handle);
+                        break;
+                    }
+                case TileContainsPidObject:
+                case TileContainsObjectPid:
+                    {
+                        var pid = Pop(stack, program, procedure, offset);
+                        var elevation = Pop(stack, program, procedure, offset);
+                        var tile = Pop(stack, program, procedure, offset);
+                        var matches = objects.Values.Where(row =>
+                            row.Pid == pid && row.Tile == tile &&
+                            row.Elevation == elevation).Take(2).ToArray();
+                        if (matches.Length != 1)
+                            throw Failure(program, procedure, offset,
+                                "tile-pid-object-lookup");
+                        stack.Add(matches[0].Handle);
+                        break;
+                    }
+                case MoveTo:
+                    {
+                        var elevation = Pop(stack, program, procedure, offset);
+                        var destination = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var worldObject = WorldObject(handle);
+                        movements.Add(new ClassicIntMovement(
+                            handle, worldObject.Tile, destination, null, elevation));
+                        objects[handle] = worldObject with
+                        {
+                            Tile = destination,
+                            Elevation = elevation,
+                        };
+                        next = DiscardUnobservedResult(next);
                         break;
                     }
                 case ScriptOverrides:
@@ -631,6 +879,9 @@ internal static class ClassicIntProcedureVm
                             program, procedure, offset, "string-reference"));
                         break;
                     }
+                case DebugMessage:
+                    _ = Pop(stack, program, procedure, offset);
+                    break;
                 case GameTime:
                     stack.Add(game.GameTime ?? throw Failure(
                         program, procedure, offset, "missing-game-time"));
@@ -639,6 +890,45 @@ internal static class ClassicIntProcedureVm
                     stack.Add(game.GameTimeHour ?? throw Failure(
                         program, procedure, offset, "missing-game-time-hour"));
                     break;
+                case GameTicks:
+                    stack.Add(ClassicIntTimerOwner.GameTicks(
+                        game.TimerContract ?? throw Failure(
+                            program, procedure, offset, "missing-timer-contract"),
+                        Pop(stack, program, procedure, offset)));
+                    break;
+                case AddTimerEvent:
+                    {
+                        var fixedParameter = Pop(stack, program, procedure, offset);
+                        var delay = Pop(stack, program, procedure, offset);
+                        var target = Pop(stack, program, procedure, offset);
+                        if (!objects.ContainsKey(target))
+                            throw Failure(program, procedure, offset,
+                                "missing-timer-target");
+                        timers = ClassicIntTimerOwner.Schedule(
+                            timers, target, delay, fixedParameter);
+                        break;
+                    }
+                case FixedParameter:
+                    stack.Add(game.FixedParameter ?? throw Failure(
+                        program, procedure, offset, "missing-fixed-parameter"));
+                    break;
+                case CurrentMapIndex:
+                    stack.Add(game.CurrentMapIndex ?? throw Failure(
+                        program, procedure, offset, "missing-current-map"));
+                    break;
+                case CritterAddTrait:
+                    {
+                        var amount = Pop(stack, program, procedure, offset);
+                        var trait = Pop(stack, program, procedure, offset);
+                        var traitType = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(handle);
+                        traitAssignments[(handle, traitType, trait)] =
+                            new ClassicIntTraitAssignment(
+                                handle, traitType, trait, amount);
+                        next = DiscardUnobservedResult(next);
+                        break;
+                    }
                 case GetMonth:
                     stack.Add(game.Month ?? throw Failure(
                         program, procedure, offset, "missing-month"));
@@ -680,6 +970,140 @@ internal static class ClassicIntProcedureVm
                 case DoorUnlock:
                     SetDoor(Pop(stack, program, procedure, offset), locked: false);
                     break;
+                case TileNumber:
+                    stack.Add(WorldObject(
+                        Pop(stack, program, procedure, offset)).Tile);
+                    break;
+                case TileDistanceObjects:
+                    {
+                        var target = WorldObject(
+                            Pop(stack, program, procedure, offset));
+                        var sourceObject = WorldObject(
+                            Pop(stack, program, procedure, offset));
+                        if (sourceObject.Elevation != target.Elevation)
+                            throw Failure(program, procedure, offset,
+                                "cross-elevation-tile-distance");
+                        stack.Add(Fallout1.Fo1HexMath.Distance(
+                            sourceObject.Tile, target.Tile));
+                        break;
+                    }
+                case AnimateMoveObjectToTile:
+                    {
+                        var speed = Pop(stack, program, procedure, offset);
+                        var destination = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var worldObject = WorldObject(handle);
+                        movements.Add(new ClassicIntMovement(
+                            handle, worldObject.Tile, destination, speed));
+                        objects[handle] = worldObject with { Tile = destination };
+                        break;
+                    }
+                case SetObjectVisibility:
+                    {
+                        var invisible = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var worldObject = WorldObject(handle);
+                        if (invisible is not (0 or 1))
+                            throw Failure(program, procedure, offset,
+                                "object-visibility-flag");
+                        objects[handle] = worldObject with { Visible = invisible == 0 };
+                        break;
+                    }
+                case DialogueSystemEnter:
+                    dialogueSystemEntered = true;
+                    break;
+                case ObjectPid:
+                    stack.Add(WorldObject(
+                        Pop(stack, program, procedure, offset)).Pid ?? throw Failure(
+                            program, procedure, offset, "missing-object-pid"));
+                    break;
+                case HasTrait:
+                    {
+                        var trait = Pop(stack, program, procedure, offset);
+                        var obj = Pop(stack, program, procedure, offset);
+                        var traitType = Pop(stack, program, procedure, offset);
+                        var traits = game.Traits ?? throw Failure(
+                            program, procedure, offset, "missing-trait-provider");
+                        stack.Add(traits.TryGetValue(
+                            (traitType, obj, trait), out var traitValue)
+                                ? traitValue
+                                : 0);
+                        break;
+                    }
+                case StartGameDialogue:
+                    {
+                        var background = Pop(stack, program, procedure, offset);
+                        var head = Pop(stack, program, procedure, offset);
+                        var mood = Pop(stack, program, procedure, offset);
+                        var obj = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(obj);
+                        if (dialogueStart is not null || dialogueReplies.Count != 0 ||
+                            dialogueOptions.Count != 0)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-already-started");
+                        dialogueStart = new ClassicIntDialogueStart(
+                            messageList, obj, mood, head, background);
+                        dialogueReady = false;
+                        break;
+                    }
+                case GsayStart:
+                    if (dialogueStart is null || dialogueReady)
+                        throw Failure(program, procedure, offset,
+                            "dialogue-sequence-start");
+                    break;
+                case GsayReply:
+                    {
+                        if (dialogueStart is null)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-reply-before-start");
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        dialogueReplies.Add(new ClassicIntDialogueReply(
+                            messageList, messageId));
+                        break;
+                    }
+                case GiqOption:
+                    {
+                        if (dialogueStart is null)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-option-before-start");
+                        var reaction = Pop(stack, program, procedure, offset);
+                        var target = Pop(stack, program, procedure, offset);
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        var intelligence = Pop(stack, program, procedure, offset);
+                        if (target < 0 || target >= program.ProcedureOrder.Count)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-option-target");
+                        dialogueOptions.Add(new ClassicIntDialogueOption(
+                            intelligence, messageList, messageId, target, reaction));
+                        break;
+                    }
+                case GsayMessage:
+                    {
+                        if (dialogueStart is null)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-message-before-start");
+                        _ = Pop(stack, program, procedure, offset);
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        dialogueReplies.Add(new ClassicIntDialogueReply(
+                            messageList, messageId));
+                        dialogueReady = true;
+                        break;
+                    }
+                case GsayEnd:
+                    if (dialogueStart is null || dialogueReplies.Count == 0)
+                        throw Failure(program, procedure, offset,
+                            "dialogue-sequence-end");
+                    dialogueReady = true;
+                    break;
+                case EndDialogue:
+                    if (!dialogueReady)
+                        throw Failure(program, procedure, offset,
+                            "dialogue-end-before-ready");
+                    break;
                 case DisplayMessage:
                     {
                         var handle = Pop(stack, program, procedure, offset);
@@ -700,12 +1124,33 @@ internal static class ClassicIntProcedureVm
                         var quantity = Pop(stack, program, procedure, offset);
                         var objectHandle = Pop(stack, program, procedure, offset);
                         var ownerHandle = Pop(stack, program, procedure, offset);
-                        if (quantity <= 0 || !createdObjects.ContainsKey(objectHandle) ||
+                        if (quantity <= 0 || !objects.ContainsKey(ownerHandle) ||
+                            !createdObjects.ContainsKey(objectHandle) ||
                             inventory.Any(row => row.ObjectHandle == objectHandle))
                             throw Failure(program, procedure, offset,
                                 "inventory-transfer");
                         inventory.Add(new ClassicIntInventoryEntry(
                             ownerHandle, objectHandle, quantity));
+                        objects[objectHandle] = objects[objectHandle] with
+                        {
+                            Visible = false,
+                        };
+                        break;
+                    }
+                case ItemCapsTotal:
+                    {
+                        var ownerHandle = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(ownerHandle);
+                        stack.Add(CurrencyTotal(ownerHandle));
+                        break;
+                    }
+                case ItemCapsAdjust:
+                    {
+                        var amount = Pop(stack, program, procedure, offset);
+                        var ownerHandle = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(ownerHandle);
+                        AdjustCurrency(ownerHandle, amount);
+                        next = DiscardUnobservedResult(next);
                         break;
                     }
                 case Attack:
@@ -779,12 +1224,83 @@ internal static class ClassicIntProcedureVm
                 Inventory = inventory,
                 MapStartOverride = mapStartOverride,
                 AttackRequests = attackRequests,
+                Objects = objects,
+                Movements = movements,
+                TraitAssignments = traitAssignments.Values.ToArray(),
+                Timers = timers,
+                DialogueSystemEntered = dialogueSystemEntered,
+                DialogueStart = dialogueStart,
+                DialogueReplies = dialogueReplies,
+                DialogueOptions = dialogueOptions,
+                DialogueReady = dialogueReady,
             });
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
             doors.TryGetValue(objectHandle, out var door)
                 ? door
                 : throw Failure(program, procedure, offset, "missing-door-object");
+
+        ClassicIntWorldObject WorldObject(int objectHandle) =>
+            objects.TryGetValue(objectHandle, out var worldObject)
+                ? worldObject
+                : throw Failure(program, procedure, offset,
+                    "missing-world-object");
+
+        int CurrencyTotal(int ownerHandle)
+        {
+            var contract = game.InventoryContract ?? throw Failure(
+                program, procedure, offset, "missing-inventory-contract");
+            return inventory.Where(row =>
+                    row.OwnerHandle == ownerHandle &&
+                    WorldObject(row.ObjectHandle).Pid == contract.CurrencyPid)
+                .Sum(row => row.Quantity);
+        }
+
+        void AdjustCurrency(int ownerHandle, int amount)
+        {
+            if (amount == 0)
+                return;
+            var contract = game.InventoryContract ?? throw Failure(
+                program, procedure, offset, "missing-inventory-contract");
+            var owned = inventory.Where(row =>
+                    row.OwnerHandle == ownerHandle &&
+                    WorldObject(row.ObjectHandle).Pid == contract.CurrencyPid)
+                .ToArray();
+            if (amount < 0)
+            {
+                var remaining = checked(-amount);
+                foreach (var entry in owned)
+                {
+                    var removed = Math.Min(remaining, entry.Quantity);
+                    inventory.Remove(entry);
+                    if (entry.Quantity != removed)
+                        inventory.Add(entry with { Quantity = entry.Quantity - removed });
+                    remaining -= removed;
+                    if (remaining == 0)
+                        break;
+                }
+                if (remaining != 0)
+                    throw Failure(program, procedure, offset,
+                        "insufficient-currency-balance");
+                return;
+            }
+            if (owned.Length > 0)
+            {
+                var entry = owned[0];
+                inventory.Remove(entry);
+                inventory.Add(entry with { Quantity = checked(entry.Quantity + amount) });
+                return;
+            }
+            var detached = objects.Values.Where(row =>
+                    row.Pid == contract.CurrencyPid &&
+                    inventory.All(entry => entry.ObjectHandle != row.Handle))
+                .Take(2).ToArray();
+            if (detached.Length != 1)
+                throw Failure(program, procedure, offset,
+                    "detached-currency-stack");
+            inventory.Add(new ClassicIntInventoryEntry(
+                ownerHandle, detached[0].Handle, amount));
+        }
 
         void SetDoor(int objectHandle, bool? open = null, bool? locked = null)
         {
@@ -794,6 +1310,20 @@ internal static class ClassicIntProcedureVm
                 Open = open ?? door.Open,
                 Locked = locked ?? door.Locked,
             };
+        }
+
+        int DiscardUnobservedResult(int resultConsumerOffset)
+        {
+            if (!program.Instructions.TryGetValue(
+                    resultConsumerOffset, out var consumer) ||
+                !current.Instructions.Any(row => row.Offset == resultConsumerOffset) ||
+                consumer.Opcode != PopOpcode)
+                throw Failure(program, procedure, offset,
+                    "opcode-result-is-observed");
+            if (++executed > instructionBudget)
+                throw Failure(program, procedure, resultConsumerOffset,
+                    "instruction-budget");
+            return NextOffset(current, resultConsumerOffset);
         }
 
         ClassicIntMessageEffect MessageEffect(
@@ -894,6 +1424,21 @@ internal static class ClassicIntProcedureVm
         values.TryGetValue(key, out var value)
             ? value
             : throw Failure(program, procedure, offset, $"missing-{kind}");
+
+    private static int ReadOrInitialize(
+        IDictionary<int, int> values,
+        int index,
+        ClassicIntProgram program,
+        string procedure,
+        int offset,
+        string kind)
+    {
+        if (index < 0)
+            throw Failure(program, procedure, offset, $"invalid-{kind}");
+        if (!values.TryGetValue(index, out var value))
+            values.Add(index, value);
+        return value;
+    }
 
     private static void Binary(
         List<int> stack,

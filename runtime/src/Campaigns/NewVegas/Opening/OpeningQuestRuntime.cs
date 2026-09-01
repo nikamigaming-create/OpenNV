@@ -20,6 +20,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private const int GetIsSexConditionFunction = 70;
     private const int GetIsIdConditionFunction = 72;
     private const int GetQuestVariableConditionFunction = 79;
+    private const int GetStageConditionFunction = 58;
+    private const int GetStageDoneConditionFunction = 420;
     private const int ConditionOperatorMask = 0xe0;
     private const int ConditionEqual = 0x00;
     private const int ConditionNotEqual = 0x20;
@@ -73,6 +75,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private readonly Dictionary<string, OpeningObjectiveState> _objectives =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _referenceEnabledStates =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _combatHealthByReferenceFormId =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> _faceGeometryControlValues =
         new(StringComparer.Ordinal);
@@ -864,6 +868,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
         _loaded.Session.SetHitscanHitHandler(HandleHitscanHit);
+        InitializeCombatActors();
         foreach (var activator in _loaded.MainContent.PlacedReferences
                      .Select(reference => reference.Placement)
                      .OfType<ScriptedActivatorInstance>())
@@ -938,6 +943,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         {
             UpdateDialogueVoice();
             UpdateOrdinaryActorTravel(delta);
+            UpdateCombatActors(delta);
             EvaluateOrdinaryDialogueTriggers();
             return;
         }

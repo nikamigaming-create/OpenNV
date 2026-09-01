@@ -1,0 +1,14 @@
+{
+  "schema": "opennv-classic-inventory-contract/v1",
+  "id": "classic-inventory-fo2-1.02-v1",
+  "campaign": "Fallout2",
+  "retailBuild": "1.02",
+  "currency": {
+    "pid": 41,
+    "accounting": "owned-inventory-stack-quantity",
+    "adjustment": "signed-existing-stack-reassignment"
+  },
+  "unsupported": [
+    "positive-adjustment-without-an-owned-or-detached-currency-stack"
+  ]
+}

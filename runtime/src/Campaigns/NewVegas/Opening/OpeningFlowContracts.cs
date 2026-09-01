@@ -339,7 +339,12 @@ internal sealed record OpeningOrdinaryActor(
     OpeningDialogueVoice Voice,
     IReadOnlyList<OpeningOrdinaryPackageArrival> ArrivalTransitions,
     IReadOnlyList<OpeningOrdinaryDialogueTrigger> AutomaticDialogueTriggers,
+    IReadOnlyList<OpeningOrdinaryPackageDialogue> AutomaticPackageDialogues,
     OpeningCommandContract CommandContract);
+
+internal sealed record OpeningOrdinaryPackageDialogue(
+    string PackageFormId,
+    string GreetingTopicFormId);
 
 internal sealed record OpeningOrdinaryPackageArrival(
     string PackageFormId,
@@ -381,6 +386,27 @@ internal sealed record OpeningHitTargetSet(
     int ObjectiveIndex);
 
 internal sealed record OpeningHitTarget(string ReferenceFormId, string BaseFormId);
+
+internal sealed record OpeningCombatEncounter(
+    string DeathScriptFormId,
+    string DeathScriptEditorId,
+    string QuestFormId,
+    int QuestVariableIndex,
+    string QuestVariableName,
+    int CounterIncrement,
+    int Threshold,
+    int ObjectiveIndex,
+    int MinimumCombatStage,
+    int CompletionStage,
+    string ResetActorReferenceFormId,
+    IReadOnlyList<OpeningCombatTarget> Targets);
+
+internal sealed record OpeningCombatTarget(
+    string ReferenceFormId,
+    string BaseFormId,
+    int MaximumHealth,
+    int AttackDamage,
+    IReadOnlyList<string> PackageFormIds);
 
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
@@ -666,7 +692,8 @@ internal sealed record OpeningGuidePackage(
     OpeningGuideLocation? Location,
     OpeningGuideTarget? Target,
     IReadOnlyList<string> IdleAnimationFormIds,
-    IReadOnlyList<string> IdleAnimationLogicalPaths);
+    IReadOnlyList<string> IdleAnimationLogicalPaths,
+    IReadOnlyDictionary<string, IReadOnlyList<OpeningFlowCommand>> EventCommands);
 
 internal sealed record OpeningGuideCondition(
     int OperatorFlags,

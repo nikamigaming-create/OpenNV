@@ -37,11 +37,19 @@ internal sealed record OpeningCampaignState(
 {
     internal const string ExpectedSchema = "opennv-opening-campaign-state/v7";
 
-    internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
-    internal OpeningGuidePackageState? GuidePackage { get; init; }
-    internal IReadOnlyDictionary<string, OpeningTransformState> OrdinaryActorTransforms
+    public OpeningEquippedWeaponState? EquippedWeapon { get; init; }
+    public OpeningGuidePackageState? GuidePackage { get; init; }
+    public IReadOnlyDictionary<string, OpeningTransformState> OrdinaryActorTransforms
     { get; init; } = new Dictionary<string, OpeningTransformState>(
             StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, int> CombatHealthByReferenceFormId
+    { get; init; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, OpeningActorAnimationState> CombatActorAnimations
+    { get; init; } = new Dictionary<string, OpeningActorAnimationState>(
+        StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, OpeningCombatAiState> CombatActorAi
+    { get; init; } = new Dictionary<string, OpeningCombatAiState>(
+        StringComparer.OrdinalIgnoreCase);
 
     internal static OpeningCampaignState Parse(JsonElement source)
     {
@@ -90,8 +98,10 @@ internal sealed record OpeningCampaignState(
                 weapon.ValueKind == JsonValueKind.Object
                 ? OpeningEquippedWeaponState.Parse(weapon)
                 : null,
-            GuidePackage = OpeningGuidePackageState.Parse(
-                source.GetProperty(nameof(GuidePackage))),
+            GuidePackage = source.TryGetProperty(
+                    nameof(GuidePackage), out var guidePackage)
+                ? OpeningGuidePackageState.Parse(guidePackage)
+                : null,
             OrdinaryActorTransforms = source.TryGetProperty(
                     nameof(OrdinaryActorTransforms), out var ordinaryTransforms)
                 ? ordinaryTransforms.EnumerateObject().ToDictionary(
@@ -99,6 +109,26 @@ internal sealed record OpeningCampaignState(
                     value => OpeningTransformState.Parse(value.Value),
                     StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, OpeningTransformState>(
+                    StringComparer.OrdinalIgnoreCase),
+            CombatHealthByReferenceFormId = source.TryGetProperty(
+                    nameof(CombatHealthByReferenceFormId), out var combatHealth)
+                ? ReadIntDictionary(combatHealth)
+                : new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+            CombatActorAnimations = source.TryGetProperty(
+                    nameof(CombatActorAnimations), out var combatAnimations)
+                ? combatAnimations.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => OpeningActorAnimationState.Parse(value.Value),
+                    StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, OpeningActorAnimationState>(
+                    StringComparer.OrdinalIgnoreCase),
+            CombatActorAi = source.TryGetProperty(
+                    nameof(CombatActorAi), out var combatAi)
+                ? combatAi.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => OpeningCombatAiState.Parse(value.Value),
+                    StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, OpeningCombatAiState>(
                     StringComparer.OrdinalIgnoreCase),
         };
         result.Validate();
@@ -152,6 +182,20 @@ internal sealed record OpeningCampaignState(
                 "Saved ordinary actor transform identity is invalid.");
         foreach (var transform in OrdinaryActorTransforms.Values)
             transform.Validate();
+        if (CombatHealthByReferenceFormId.Any(value =>
+                FalloutFormId.Normalize(value.Key) != value.Key || value.Value < 0))
+            throw new InvalidOperationException(
+                "Saved ordinary combat health is invalid.");
+        if (CombatActorAnimations.Keys.Any(value =>
+                FalloutFormId.Normalize(value) != value))
+            throw new InvalidOperationException(
+                "Saved combat animation identity is invalid.");
+        foreach (var animation in CombatActorAnimations.Values)
+            animation.Validate();
+        if (CombatActorAi.Keys.Any(value => FalloutFormId.Normalize(value) != value))
+            throw new InvalidOperationException("Saved combat AI identity is invalid.");
+        foreach (var ai in CombatActorAi.Values)
+            ai.Validate();
         if (EquippedWeapon is { } weapon &&
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>
@@ -190,6 +234,42 @@ internal sealed record OpeningCampaignState(
 
     private static IReadOnlyList<string> ReadStrings(JsonElement source) =>
         source.EnumerateArray().Select(value => value.GetString()!).ToArray();
+}
+
+internal sealed record OpeningActorAnimationState(
+    string Role,
+    double PositionSeconds)
+{
+    internal static OpeningActorAnimationState Parse(JsonElement source) => new(
+        source.GetProperty(nameof(Role)).GetString()!,
+        source.GetProperty(nameof(PositionSeconds)).GetDouble());
+
+    internal void Validate()
+    {
+        if (Role is not ("idle" or "locomotion" or "melee" or "hit") ||
+            !double.IsFinite(PositionSeconds) || PositionSeconds < 0.0)
+            throw new InvalidOperationException(
+                "Saved combat actor animation state is invalid.");
+    }
+}
+
+internal sealed record OpeningCombatAiState(
+    string Phase,
+    float MeleeClockSeconds,
+    bool HitApplied)
+{
+    internal static OpeningCombatAiState Parse(JsonElement source) => new(
+        source.GetProperty(nameof(Phase)).GetString()!,
+        source.GetProperty(nameof(MeleeClockSeconds)).GetSingle(),
+        source.GetProperty(nameof(HitApplied)).GetBoolean());
+
+    internal void Validate()
+    {
+        if (Phase is not ("Chase" or "Melee" or "Dead") ||
+            !float.IsFinite(MeleeClockSeconds) || MeleeClockSeconds < 0.0f ||
+            Phase != "Melee" && MeleeClockSeconds != 0.0f)
+            throw new InvalidOperationException("Saved combat AI state is invalid.");
+    }
 }
 
 internal sealed record OpeningGuidePackageState(

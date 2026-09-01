@@ -1058,9 +1058,7 @@ internal static partial class Fo1NewGameFlow
         var showcase = loaded.RuntimeProfile.Showcase;
         var hpBefore = rat.HitPoints;
         var attacksBefore = loaded.Session.Attacks;
-        for (var attempt = 0;
-             attempt < showcase.MaximumTacticalAttacks && rat.Alive;
-             attempt++)
+        while (rat.Alive && loaded.Session.MagazineRounds > 0)
         {
             if (loaded.Session.ActionPoints < loaded.Session.WeaponActionPointCost)
             {
@@ -1075,11 +1073,16 @@ internal static partial class Fo1NewGameFlow
             await WaitFrames(host, showcase.TacticalTargetHoldFrames);
             loaded.Camera.FocusTileAtHeight(rat.Tile, Fo1NewGameFlowNumericContracts.PresentationFloat4Point2f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point46f);
             await WaitFrames(host, showcase.TacticalFrameHoldFrames);
-            loaded.Session.AttackSelectedRanged();
+            var result = loaded.Session.AttackSelectedRanged();
+            if (!result.Attempted)
+                throw new InvalidOperationException(
+                    "Fallout tactical ranged showcase attack was rejected by live gameplay state.");
             await WaitFrames(host, showcase.TacticalAttackHoldFrames);
         }
         if (rat.Alive)
-            throw new InvalidOperationException("Fallout tactical ranged showcase did not kill its rat.");
+            throw new InvalidOperationException(
+                $"Fallout tactical ranged showcase exhausted its source magazine before the rat died: " +
+                $"hp={rat.HitPoints} rounds={loaded.Session.MagazineRounds}.");
         await host.ToSignal(
             host.GetTree().CreateTimer(showcase.TacticalAttackSettleSeconds),
             SceneTreeTimer.SignalName.Timeout);

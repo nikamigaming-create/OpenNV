@@ -23,6 +23,7 @@ from prepare_fo1_hex_scene import (  # noqa: E402
     floor_patch_center,
     hex_center,
     load_runtime_profile_recipe,
+    load_classic_humanoid_donor,
     parse_item_pro,
     parse_pid_header,
     parse_starting_inventory,
@@ -34,6 +35,78 @@ from render_fo1_source_map import paste_clipped  # noqa: E402
 
 
 class Fo1HexSceneTest(unittest.TestCase):
+    def test_v4_classic_humanoid_donor_joins_its_hash_bound_v3_base(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            roles = ("body", "left-hand", "right-hand")
+            sources: dict[str, list[dict[str, object]]] = {}
+            previews: list[dict[str, object]] = []
+            for sex in ("male", "female"):
+                model = root / f"{sex}.gltf"
+                sidecar = root / f"{sex}.opennv.json"
+                model.write_text("{}", encoding="utf-8")
+                sidecar.write_text(
+                    json.dumps(
+                        {
+                            "schema": "opennv-actor-gltf/v4",
+                            "status": "skinned-animated",
+                            "surfaces": [{"role": role} for role in roles],
+                            "textures": [],
+                            "animations": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                sources[sex] = [
+                    {"role": role, "retainedSurfaceCount": 1} for role in roles
+                ]
+                previews.append(
+                    {
+                        "sex": sex,
+                        "outputs": {
+                            "gltf": str(model),
+                            "sidecar": str(sidecar),
+                            "gltfSha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+                            "sidecarSha256": hashlib.sha256(
+                                sidecar.read_bytes()
+                            ).hexdigest(),
+                        },
+                    }
+                )
+            base_document = {
+                "schema": "opennv-owned-player-facegen-preview-set/v3",
+                "status": "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-all-native-geometry-controls-runtime-bound",
+                "fullBody": True,
+                "bodyComponentRoles": list(roles),
+                "playerFormId": "00000014",
+                "bodyComponentSourcesBySex": sources,
+                "previews": previews,
+            }
+            base = root / "base.json"
+            base.write_text(json.dumps(base_document), encoding="utf-8")
+            wrapper_document = {
+                **base_document,
+                "schema": "opennv-owned-player-facegen-preview-set/v4",
+                "status": "compiled-default-custom-and-six-classic-premade-full-body-analogs-runtime-bound",
+                "basePreviewSet": {
+                    "path": str(base),
+                    "sha256": hashlib.sha256(base.read_bytes()).hexdigest(),
+                },
+            }
+            wrapper = root / "wrapper.json"
+            wrapper.write_text(json.dumps(wrapper_document), encoding="utf-8")
+
+            joined = load_classic_humanoid_donor(wrapper)
+
+            self.assertEqual(Path(str(joined["previewSet"])), base.resolve())
+            self.assertEqual(
+                joined["previewSetSha256"], hashlib.sha256(base.read_bytes()).hexdigest()
+            )
+            wrapper_document["basePreviewSet"]["sha256"] = "0" * 64
+            wrapper.write_text(json.dumps(wrapper_document), encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "base preview hash drift"):
+                load_classic_humanoid_donor(wrapper)
+
     def test_runtime_profile_is_external_hash_pinned_and_provenance_labelled(self) -> None:
         recipes = Path(__file__).resolve().parents[1] / "recipes"
         scene_recipe_path = recipes / "fo1-v13ent-hex-slice-v1.json"

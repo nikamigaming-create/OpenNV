@@ -1,5 +1,13 @@
 namespace OpenNV.Runtime.Campaigns.Classic;
 
+internal static class ClassicIntGameIdentifiers
+{
+    internal const int CharismaStat = 3;
+    internal const int IntelligenceStat = 4;
+    internal const int GenderStat = 34;
+    internal const int CharacterTraitType = 2;
+}
+
 internal sealed record ClassicIntExpression(
     string Kind,
     int Offset,
@@ -26,7 +34,12 @@ internal sealed record ClassicIntExpressionContext(
     int? Month,
     IClassicIntObjectFactory ObjectFactory,
     int? SourceObject = null,
-    IClassicIntActorQueries? ActorQueries = null);
+    IClassicIntActorQueries? ActorQueries = null,
+    ClassicIntTimerContract? TimerContract = null,
+    int? FixedParameter = null,
+    int? CurrentMapIndex = null,
+    IReadOnlyDictionary<(int TraitType, int Object, int Trait), int>? Traits = null,
+    ClassicIntInventoryContract? InventoryContract = null);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,

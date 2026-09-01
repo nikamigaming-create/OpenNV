@@ -15,10 +15,19 @@
     "VGenericTimer",
     "SunnyRef",
     "VCG02SunnyTravelOutside",
+    "VCG02SunnySmilesDialogueStart",
+    "VCG02SunnyTravelToWell1",
+    "VCG02SunnySmilesDialogueSneakStart",
+    "VCG02SunnySneakCloserToWell",
+    "VCG02SunnySmilesDialogueSneakEnd",
     "VCG02SunnyPatrolTriggerSCRIPT",
     "VCG02SunnyPatrolTriggerREF",
     "VCG02SunnyBark",
     "VCG02SunnyShotReaction",
+    "VCG02GeckoDeathSCRIPT",
+    "VCG02CrGecko",
+    "VCG02Gecko1REF",
+    "VCG02Gecko2REF",
     "VCG02BottleMarkerREF",
     "VCG02TargetSCRIPT",
     "CondNVVarmintRifleLoot",
@@ -362,8 +371,10 @@
       },
       "conditionFunctionNames": {
         "58": "getStage",
+        "72": "getIsId",
         "79": "getQuestVariable",
         "421": "getObjectiveCompleted",
+        "420": "getStageDone",
         "546": "getQuestCompleted"
       },
       "locationTypeNames": {
@@ -401,7 +412,12 @@
         "questEditorId": "VCG02",
         "packageEditorIds": [
           "SunnyMeetPlayerDialoguePackage",
-          "VCG02SunnyTravelOutside"
+          "VCG02SunnyTravelOutside",
+          "VCG02SunnySmilesDialogueStart",
+          "VCG02SunnyTravelToWell1",
+          "VCG02SunnySmilesDialogueSneakStart",
+          "VCG02SunnySneakCloserToWell",
+          "VCG02SunnySmilesDialogueSneakEnd"
         ],
         "arrivalTransitions": [
           {
@@ -417,6 +433,17 @@
             "topicEditorId": "VCG02SunnyBark"
           }
         ],
+        "automaticPackageDialogues": [
+          {
+            "packageEditorId": "VCG02SunnySmilesDialogueStart"
+          },
+          {
+            "packageEditorId": "VCG02SunnySmilesDialogueSneakStart"
+          },
+          {
+            "packageEditorId": "VCG02SunnySmilesDialogueSneakEnd"
+          }
+        ],
         "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"
       }
     ],
@@ -425,6 +452,12 @@
         "scriptEditorId": "VCG02TargetSCRIPT",
         "enableParentEditorId": "VCG02BottleMarkerREF",
         "reactionTopicEditorId": "VCG02SunnyShotReaction"
+      }
+    ],
+    "combatEncounters": [
+      {
+        "deathScriptEditorId": "VCG02GeckoDeathSCRIPT",
+        "referenceEditorIds": ["VCG02Gecko1REF", "VCG02Gecko2REF"]
       }
     ],
     "menus": {

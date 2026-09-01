@@ -69,7 +69,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2TempleAppliedTransition? templeExitTransition,
         Fo2TempleTransitionCatalog transitions,
         Fo2ArroyoTrialProgressState? trialProgress,
-        Fo2ArroyoTrialRouteContract? trialRoute)
+        Fo2ArroyoTrialRouteContract? trialRoute,
+        Fo2ArvillagPresentationCatalog? village)
     {
         character.Validate(characterStart);
         if (characterStart.SourceProfileId != arroyo.SourceProfileId ||
@@ -118,7 +119,8 @@ internal sealed record Fo2CharacterStartSaveState(
             player.CurrentMapIndex,
             player.CurrentTile,
             trialProgress,
-            trialRoute);
+            trialRoute,
+            village);
         return new Fo2CharacterStartSaveState(
             ResolvePath(configuredPath),
             "",
@@ -343,7 +345,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2TemplePresentationCatalog temple,
         Fo2TempleTransitionCatalog transitions,
         Fo2ArroyoPlayerProfile runtimeProfile,
-        Fo2ArroyoTrialRouteContract? trialRoute = null)
+        Fo2ArroyoTrialRouteContract? trialRoute = null,
+        Fo2ArvillagPresentationCatalog? village = null)
     {
         var path = ResolvePath(configuredPath);
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
@@ -432,7 +435,8 @@ internal sealed record Fo2CharacterStartSaveState(
             currentTile,
             transitions,
             trialProgress,
-            trialRoute);
+            trialRoute,
+            village);
         var tileInRange = currentTile is >= 0 and < Fo1HexMath.Width * Fo1HexMath.Height;
         var mapIdentityValid = mapIndex switch
         {
@@ -462,7 +466,10 @@ internal sealed record Fo2CharacterStartSaveState(
                     trialRoute.VillageArrival.MapSha256 &&
                 RequiredString(world, "walkMaskSha256") ==
                     trialRoute.VillageArrival.WalkMaskSha256 &&
-                currentTile == trialRoute.VillageArrival.FirstActionToTile &&
+                village is not null &&
+                village.MapSha256 == trialRoute.VillageArrival.MapSha256 &&
+                village.WalkMaskSha256 == trialRoute.VillageArrival.WalkMaskSha256 &&
+                village.WalkableTiles.Contains(currentTile) &&
                 lastTransition == arroyo.LiveExit,
             _ => false,
         };
@@ -518,7 +525,8 @@ internal sealed record Fo2CharacterStartSaveState(
         int currentTile,
         Fo2TempleTransitionCatalog transitions,
         Fo2ArroyoTrialProgressState? trialProgress,
-        Fo2ArroyoTrialRouteContract? trialRoute)
+        Fo2ArroyoTrialRouteContract? trialRoute,
+        Fo2ArvillagPresentationCatalog? village)
     {
         if (schema is not (Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema))
         {
@@ -549,7 +557,8 @@ internal sealed record Fo2CharacterStartSaveState(
             mapIndex,
             currentTile,
             trialProgress,
-            trialRoute);
+            trialRoute,
+            village);
         return applied;
     }
 
@@ -559,7 +568,8 @@ internal sealed record Fo2CharacterStartSaveState(
         int mapIndex,
         int currentTile,
         Fo2ArroyoTrialProgressState? trialProgress,
-        Fo2ArroyoTrialRouteContract? trialRoute)
+        Fo2ArroyoTrialRouteContract? trialRoute,
+        Fo2ArvillagPresentationCatalog? village)
     {
         if (applied is null)
             return;
@@ -578,7 +588,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 exit.TargetElevation,
                 exit.TargetRotation) ||
             mapIndex != trialRoute?.VillageArrival.MapIndex ||
-            currentTile != trialRoute?.VillageArrival.FirstActionToTile ||
+            village is null || !village.WalkableTiles.Contains(currentTile) ||
             applied.TargetMapIndex != 4 || trialProgress is null || trialRoute is null ||
             trialProgress.Stage != Fo2ArroyoTrialProgressState.VillageFirstActionStage ||
             !trialProgress.VillageRouteCompleted || trialProgress.GlobalVariable10 !=
