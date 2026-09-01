@@ -77,7 +77,6 @@ internal sealed record Fo3Cg02DadSpeechRuntime(
     int FinalCommandCount,
     Fo3Cg02OverseerSpeechRuntime? OverseerSpeechRuntime,
     string NextBoundaryBlocker);
-
 internal sealed record Fo3Cg02OverseerCommand(
     int Index,
     string Kind,
@@ -216,4 +215,3 @@ internal sealed record Fo3Cg01Stage90Completion(
     int NextQuestStage,
     Fo3Cg02Stage0Transition Cg02Stage0,
     string NextBoundaryBlocker);
-
