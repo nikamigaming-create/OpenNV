@@ -49,7 +49,7 @@ internal static class CellContentLoader
         var collisionAssets = new HashSet<string>(StringComparer.Ordinal);
         var landscapeCollisionAssets = new HashSet<string>(StringComparer.Ordinal);
         var collisionFaceSelections = new Dictionary<string, string>(StringComparer.Ordinal);
-        var controllerPlaybacks = new Dictionary<string, string>(StringComparer.Ordinal);
+        var controllerPlaybacks = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var doorArticulations = new Dictionary<string, DoorArticulationContract>(StringComparer.Ordinal);
         try
         {
@@ -101,16 +101,23 @@ internal static class CellContentLoader
                 if (asset.TryGetProperty("controllerPlayback", out var playback) &&
                     playback.ValueKind != JsonValueKind.Null)
                 {
+                    var animations = playback.GetProperty("animations")
+                        .EnumerateArray()
+                        .ToArray();
                     if (playback.GetProperty("status").GetString() !=
-                            "source-looping-transform-complete" ||
-                        playback.GetProperty("channels").GetInt32() <= 0 ||
-                        playback.GetProperty("stopSeconds").GetSingle() <=
-                            playback.GetProperty("startSeconds").GetSingle())
+                            "source-looping-controller-complete" ||
+                        animations.Length == 0 ||
+                        animations.Any(animation =>
+                            animation.GetProperty("channels").GetInt32() <= 0 ||
+                            animation.GetProperty("stopSeconds").GetSingle() <=
+                                animation.GetProperty("startSeconds").GetSingle() ||
+                            animation.GetProperty("frequency").GetSingle() <= 0.0f))
                         throw new InvalidOperationException(
                             $"Unsupported source controller playback contract: {assetId}");
                     controllerPlaybacks.Add(
                         assetId,
-                        playback.GetProperty("sequence").GetString()!);
+                        animations.Select(animation =>
+                            animation.GetProperty("name").GetString()!).ToArray());
                 }
                 var collision = asset.GetProperty("collision");
                 var faceSelection = collision.GetProperty("faceSelection").GetString()!;
@@ -512,8 +519,8 @@ internal static class CellContentLoader
                         doorArticulation);
                     visual = presentationRoot;
                 }
-                if (controllerPlaybacks.TryGetValue(assetId, out var sourceSequence))
-                    StartSourceControllerPlayback(instance, sourceSequence);
+                if (controllerPlaybacks.TryGetValue(assetId, out var sourceSequences))
+                    StartSourceControllerPlayback(instance, sourceSequences);
                 SetRenderLayer(visual, renderLayer);
                 CountGeometry(visual, ref surfaces, ref vertices, ref triangles);
                 placedReferences.Add(new PlacedReference(
@@ -1614,16 +1621,36 @@ internal static class CellContentLoader
             shape.BackfaceCollision = true;
     }
 
-    private static void StartSourceControllerPlayback(Node3D instance, string sequence)
+    private static void StartSourceControllerPlayback(Node3D instance, string[] sequences)
     {
         var players = NodeTraversal.SelfAndDescendants<AnimationPlayer>(instance).ToArray();
-        if (players.Length != 1 || !players[0].HasAnimation(sequence))
+        if (players.Length != 1 || sequences.Length == 0 ||
+            sequences.Any(sequence => !players[0].HasAnimation(sequence)))
             throw new InvalidOperationException(
-                $"Owned source animation {sequence} is absent or ambiguous.");
-        var animation = players[0].GetAnimation(sequence) ??
-            throw new InvalidOperationException($"Owned source animation is missing: {sequence}");
-        animation.LoopMode = Animation.LoopModeEnum.Linear;
-        players[0].Play(sequence);
+                "Owned source controller animations are absent or ambiguous.");
+        for (var index = 0; index < sequences.Length; index++)
+        {
+            var sequence = sequences[index];
+            var animation = players[0].GetAnimation(sequence) ??
+                throw new InvalidOperationException($"Owned source animation is missing: {sequence}");
+            animation.LoopMode = Animation.LoopModeEnum.Linear;
+            if (index == 0)
+            {
+                players[0].Play(sequence);
+                continue;
+            }
+            var libraryName = new StringName($"opennv_source_controller_{index}");
+            var library = new AnimationLibrary();
+            library.AddAnimation(sequence, animation);
+            var player = new AnimationPlayer
+            {
+                Name = $"SOURCE_CONTROLLER_PLAYER_{index}",
+                RootNode = players[0].RootNode,
+            };
+            players[0].GetParent().AddChild(player);
+            player.AddAnimationLibrary(libraryName, library);
+            player.Play(new StringName($"{libraryName}/{sequence}"));
+        }
     }
 
     private static int BuildWalkableRoadCollision(

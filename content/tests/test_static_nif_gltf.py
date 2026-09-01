@@ -815,8 +815,93 @@ class StaticNifGltfTest(unittest.TestCase):
                 for block in document.get_global_iterator()
                 if isinstance(block, NifFormat.NiControllerManager)
             )
+            manager.flags = 76
+            manager.frequency = 1.0
+            manager.phase = 0.0
             manager.num_controller_sequences = 1
             manager.controller_sequences.update_size()
+            sequence = manager.controller_sequences[0]
+            source_controlled = sequence.controlled_blocks[0]
+            source_controlled.interpolator.data.translations.interpolation = (
+                NifFormat.KeyType.LINEARKEY
+            )
+            source_controlled.interpolator.data.translations.num_keys = 2
+            source_controlled.interpolator.data.translations.keys.update_size()
+            for key_index, value in enumerate((0.0, 1.0)):
+                key = source_controlled.interpolator.data.translations.keys[key_index]
+                key.time = value
+                key.value.x = value
+            frame = NifFormat.NiNode()
+            frame.name = "Frame"
+            identity_transform(frame)
+            document.roots[0].add_child(frame)
+            sequence.num_controlled_blocks = 2
+            sequence.controlled_blocks.update_size()
+            empty_controlled = sequence.controlled_blocks[1]
+            empty_controlled.node_name = "Frame"
+            empty_controlled.controller_type = "NiTransformController"
+            empty_controlled.controller = source_controlled.controller
+            empty_controlled.interpolator = NifFormat.NiTransformInterpolator()
+            morph_shape = next(
+                block
+                for block in document.get_global_iterator()
+                if isinstance(block, NifFormat.NiTriShape) and block.name == b"BGate:0"
+            )
+            morpher = NifFormat.NiGeomMorpherController()
+            morpher.flags = 76
+            morpher.frequency = 1.0
+            morpher.phase = 0.0
+            morpher.start_time = 0.0
+            morpher.stop_time = 1.0
+            morpher.target = morph_shape
+            morph_shape.controller = morpher
+            morph_data = NifFormat.NiMorphData()
+            morpher.data = morph_data
+            morph_data.num_morphs = 2
+            morph_data.num_vertices = len(morph_shape.data.vertices)
+            morph_data.relative_targets = 1
+            morph_data.morphs.update_size()
+            for index, morph in enumerate(morph_data.morphs):
+                morph.arg = morph_data.num_vertices
+                morph.frame_name = "Base" if index == 0 else "SourceTarget"
+                morph.vectors.update_size()
+                for target, source_vertex in zip(
+                    morph.vectors,
+                    morph_shape.data.vertices,
+                    strict=True,
+                ):
+                    if index == 0:
+                        target.x, target.y, target.z = (
+                            source_vertex.x,
+                            source_vertex.y,
+                            source_vertex.z,
+                        )
+                    else:
+                        target.z = 0.25
+            morpher.num_interpolators = 2
+            morpher.interpolator_weights.update_size()
+            for index, weight in enumerate(morpher.interpolator_weights):
+                interpolator = NifFormat.NiFloatInterpolator()
+                weight.interpolator = interpolator
+                float_data = NifFormat.NiFloatData()
+                interpolator.data = float_data
+                group = float_data.data
+                group.interpolation = NifFormat.KeyType.LINEARKEY
+                group.num_keys = 2
+                group.keys.update_size()
+                for key_index, value in enumerate((0.0, float(index))):
+                    group.keys[key_index].time = float(key_index)
+                    group.keys[key_index].value = value
+            self.assertEqual(
+                (
+                    int(morpher.flags),
+                    len(morpher.interpolator_weights),
+                    len(morpher.data.morphs),
+                    bool(morpher.data.relative_targets),
+                    type(morpher.target).__name__,
+                ),
+                (76, 2, 2, True, "NiTriShape"),
+            )
             decoded = SimpleNamespace(
                 document=document,
                 evidence=lambda: {"status": "synthetic-in-memory-contract"},
@@ -832,17 +917,48 @@ class StaticNifGltfTest(unittest.TestCase):
                 )
 
             playback = result["coverage"]["sourceControllerPlayback"]
-            self.assertEqual(playback["status"], "source-looping-transform-complete")
-            self.assertEqual(playback["sequence"], "Open")
-            self.assertEqual(playback["channels"], 1)
+            self.assertEqual(playback["status"], "source-looping-controller-complete")
+            self.assertEqual(
+                playback["animations"],
+                [
+                    {
+                        "name": "Open",
+                        "sourceType": "NiControllerSequence",
+                        "startSeconds": 0.0,
+                        "stopSeconds": 1.0,
+                        "frequency": 1.0,
+                        "phase": 0.0,
+                        "channels": 2,
+                    },
+                    {
+                        "name": "NiGeomMorpherController",
+                        "sourceType": "NiGeomMorpherController",
+                        "startSeconds": 0.0,
+                        "stopSeconds": 1.0,
+                        "frequency": 1.0,
+                        "phase": 0.0,
+                        "channels": 1,
+                    },
+                ],
+            )
             gltf = json.loads((directory / "source-loop.gltf").read_text())
-            self.assertEqual(len(gltf["animations"]), 1)
+            self.assertEqual(len(gltf["animations"]), 2)
             self.assertEqual(gltf["animations"][0]["name"], "Open")
+            self.assertEqual(gltf["animations"][1]["name"], "NiGeomMorpherController")
+            self.assertEqual(len(gltf["animations"][1]["channels"]), 1)
+            self.assertEqual(
+                [len(mesh.get("weights", [])) for mesh in gltf["meshes"]],
+                [1, 0],
+            )
             controlled = next(
                 node for node in gltf["nodes"] if node["name"] == "BGate"
             )
             self.assertTrue(controlled["children"])
-            self.assertEqual(len(gltf["animations"][0]["channels"]), 1)
+            self.assertEqual(len(gltf["animations"][0]["channels"]), 2)
+            self.assertEqual(
+                sorted(channel["target"]["path"] for channel in gltf["animations"][0]["channels"]),
+                ["rotation", "translation"],
+            )
 
     def test_controller_door_groups_only_authored_target_visual_and_collision(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:

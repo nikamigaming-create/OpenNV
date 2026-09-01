@@ -58,6 +58,9 @@ SUPPORTED_SHAPE_PROPERTIES = {
 ATTACHMENT_MARKER_NAMES = {"ProjectileNode", "ShellCasingNode"}
 NORMALIZATION_EPSILON = 1.0e-12
 NON_PRESENTATION_SCHEMA = "opennv-nif-non-presentation/v1"
+CONTROLLER_CYCLE_TYPE_MASK = 0x0006
+CONTROLLER_CYCLE_LOOP = 0x0004
+CONTROLLER_ACTIVE = 0x0008
 
 
 class NoStaticPresentationGeometryError(ValueError):
@@ -412,12 +415,59 @@ def _source_looping_transform_sequence(
         return None
     if len(managers) != 1 or managers[0].target is not root:
         return None
-    sequences = list(managers[0].controller_sequences)
+    manager = managers[0]
+    manager_flags = int(manager.flags)
+    if (
+        manager_flags & CONTROLLER_ACTIVE == 0
+        or manager_flags & CONTROLLER_CYCLE_TYPE_MASK != CONTROLLER_CYCLE_LOOP
+        or float(manager.frequency) != 1.0
+        or float(manager.phase) != 0.0
+    ):
+        return None
+    sequences = list(manager.controller_sequences)
     if len(sequences) != 1 or not isinstance(sequences[0], NifFormat.NiControllerSequence):
         return None
-    supported = (NifFormat.NiControllerManager, NifFormat.NiMultiTargetTransformController)
+    morphers = [
+        controller
+        for controller in controllers
+        if isinstance(controller, NifFormat.NiGeomMorpherController)
+    ]
+    passthrough_transforms = [
+        controller
+        for controller in controllers
+        if isinstance(controller, NifFormat.NiTransformController)
+    ]
+    supported = (
+        NifFormat.NiControllerManager,
+        NifFormat.NiMultiTargetTransformController,
+        NifFormat.NiGeomMorpherController,
+        NifFormat.NiTransformController,
+    )
     if any(not isinstance(controller, supported) for controller in controllers):
         return None
+    for controller in passthrough_transforms:
+        interpolator = controller.interpolator
+        if (
+            not isinstance(interpolator, NifFormat.NiTransformInterpolator)
+            or interpolator.data is not None
+            or float(controller.start_time) != float(controller.stop_time)
+        ):
+            return None
+    for controller in morphers:
+        flags = int(controller.flags)
+        if (
+            flags & CONTROLLER_ACTIVE == 0
+            or flags & CONTROLLER_CYCLE_TYPE_MASK != CONTROLLER_CYCLE_LOOP
+            or not isinstance(controller.target, (NifFormat.NiTriShape, NifFormat.NiTriStrips))
+            or not isinstance(controller.data, NifFormat.NiMorphData)
+            or not bool(controller.data.relative_targets)
+            or len(controller.interpolator_weights) != len(controller.data.morphs)
+            or not math.isfinite(float(controller.frequency))
+            or float(controller.frequency) <= 0.0
+            or not math.isfinite(float(controller.phase))
+            or float(controller.stop_time) <= float(controller.start_time)
+        ):
+            return None
     sequence = sequences[0]
     if int(sequence.cycle_type) != int(NifFormat.CycleType.CYCLELOOP):
         return None
@@ -442,10 +492,12 @@ def _source_looping_transform_sequence(
         return None
     return {
         "sequence": sequence,
+        "manager": manager,
         "controlled": controlled,
         "nodes": nodes,
         "start": start,
         "stop": stop,
+        "morphers": morphers,
     }
 
 
@@ -482,6 +534,49 @@ def _sample_scalar_group(group: object, time_seconds: float) -> float:
     raise ValueError("Source transform animation scalar interval was not found")
 
 
+def _sample_vector_group(group: object, time_seconds: float) -> tuple[float, float, float]:
+    keys = list(group.keys)
+    if not keys:
+        raise ValueError("Source transform animation vector channel has no keys")
+    if time_seconds <= float(keys[0].time):
+        value = keys[0].value
+        return float(value.x), float(value.z), -float(value.y)
+    if time_seconds >= float(keys[-1].time):
+        value = keys[-1].value
+        return float(value.x), float(value.z), -float(value.y)
+    for first, second in zip(keys, keys[1:], strict=False):
+        first_time = float(first.time)
+        second_time = float(second.time)
+        if first_time <= time_seconds <= second_time:
+            amount = (time_seconds - first_time) / (second_time - first_time)
+            interpolation = int(group.interpolation)
+            first_value = tuple(float(getattr(first.value, axis)) for axis in "xyz")
+            second_value = tuple(float(getattr(second.value, axis)) for axis in "xyz")
+            if interpolation == int(NifFormat.KeyType.LINEARKEY):
+                source = tuple(
+                    first_value[index] + amount * (second_value[index] - first_value[index])
+                    for index in range(3)
+                )
+            elif interpolation == int(NifFormat.KeyType.QUADRATICKEY):
+                squared = amount * amount
+                cubed = squared * amount
+                first_tangent = tuple(float(getattr(first.backward, axis)) for axis in "xyz")
+                second_tangent = tuple(float(getattr(second.forward, axis)) for axis in "xyz")
+                source = tuple(
+                    first_value[index] * (2.0 * cubed - 3.0 * squared + 1.0)
+                    + second_value[index] * (-2.0 * cubed + 3.0 * squared)
+                    + first_tangent[index] * (cubed - 2.0 * squared + amount)
+                    + second_tangent[index] * (cubed - squared)
+                    for index in range(3)
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported source transform vector interpolation: {interpolation}"
+                )
+            return source[0], source[2], -source[1]
+    raise ValueError("Source transform animation vector interval was not found")
+
+
 def _sample_xyz_rotation(groups: object, time_seconds: float) -> list[float]:
     channels = list(groups)
     if len(channels) != 3:
@@ -493,6 +588,46 @@ def _sample_xyz_rotation(groups: object, time_seconds: float) -> list[float]:
             )
         )
     )
+
+
+def _sample_linear_quaternion_keys(keys: list[object], time_seconds: float) -> list[float]:
+    if not keys:
+        raise ValueError("Source quaternion transform animation has no keys")
+    if time_seconds <= float(keys[0].time):
+        value = keys[0].value
+        return list(_converted_nif_quaternion((float(value.w), float(value.x), float(value.y), float(value.z))))
+    if time_seconds >= float(keys[-1].time):
+        value = keys[-1].value
+        return list(_converted_nif_quaternion((float(value.w), float(value.x), float(value.y), float(value.z))))
+    for first, second in zip(keys, keys[1:], strict=False):
+        first_time = float(first.time)
+        second_time = float(second.time)
+        if first_time <= time_seconds <= second_time:
+            amount = (time_seconds - first_time) / (second_time - first_time)
+            first_value = tuple(float(getattr(first.value, axis)) for axis in "wxyz")
+            second_value = tuple(float(getattr(second.value, axis)) for axis in "wxyz")
+            dot = sum(left * right for left, right in zip(first_value, second_value, strict=True))
+            if dot < 0.0:
+                second_value = tuple(-value for value in second_value)
+                dot = -dot
+            angle = math.acos(max(-1.0, min(1.0, dot)))
+            sine = math.sin(angle)
+            if abs(sine) <= NORMALIZATION_EPSILON:
+                source = tuple(
+                    first_value[index] + amount * (second_value[index] - first_value[index])
+                    for index in range(4)
+                )
+                length = math.sqrt(sum(value * value for value in source))
+                source = tuple(value / length for value in source)
+            else:
+                first_weight = math.sin((1.0 - amount) * angle) / sine
+                second_weight = math.sin(amount * angle) / sine
+                source = tuple(
+                    first_weight * first_value[index] + second_weight * second_value[index]
+                    for index in range(4)
+                )
+            return list(_converted_nif_quaternion(source))
+    raise ValueError("Source quaternion transform interval was not found")
 
 
 def _append_source_transform_animation(
@@ -517,56 +652,184 @@ def _append_source_transform_animation(
     )
     samplers = []
     channels = []
-    for controlled in source["controlled"]:
-        node_name = decode_text(controlled.get_node_name())
-        data = controlled.interpolator.data
-        if not isinstance(data, NifFormat.NiTransformData) or int(data.rotation_type) != int(
-            NifFormat.KeyType.XYZROTATIONKEY
-        ):
-            raise ValueError(
-                f"Source transform animation requires XYZ rotation data on {node_name}"
-            )
-        if list(data.translations.keys):
-            raise ValueError(
-                f"Source transform animation translation is not admitted on {node_name}"
-            )
-        scale_keys = list(data.scales.keys)
-        if scale_keys and any(
-            not math.isclose(float(key.value), float(scale_keys[0].value))
-            for key in scale_keys[1:]
-        ):
-            raise ValueError(
-                f"Source transform animation scale is not constant on {node_name}"
-            )
-        if scale_keys and not math.isclose(
-            float(scale_keys[0].value),
-            float(source["nodes"][node_name].scale),
-        ):
-            raise ValueError(
-                f"Source transform animation constant scale differs on {node_name}"
-            )
-        rotations = [_sample_xyz_rotation(data.xyz_rotations, value) for value in times]
-        for index in range(1, len(rotations)):
-            if sum(
-                previous * current
-                for previous, current in zip(rotations[index - 1], rotations[index], strict=True)
-            ) < 0.0:
-                rotations[index] = [-value for value in rotations[index]]
+    def append_channel(node_name: str, path: str, values: list[tuple[float, ...] | list[float]], value_type: str) -> None:
         output = builder.add(
-            pack_floats(rotations),
+            pack_floats(values),
             component_type=GL_FLOAT,
-            count=len(rotations),
-            value_type="VEC4",
+            count=len(values),
+            value_type=value_type,
             target=None,
         )
         sampler = len(samplers)
         samplers.append({"input": time_accessor, "output": output, "interpolation": "LINEAR"})
         channels.append(
-            {"sampler": sampler, "target": {"node": node_by_name[node_name], "path": "rotation"}}
+            {"sampler": sampler, "target": {"node": node_by_name[node_name], "path": path}}
         )
+
+    for controlled in source["controlled"]:
+        node_name = decode_text(controlled.get_node_name())
+        data = controlled.interpolator.data
+        if data is None:
+            continue
+        if not isinstance(data, NifFormat.NiTransformData):
+            raise ValueError(
+                f"Source transform animation has no transform data on {node_name}"
+            )
+        if int(data.num_rotation_keys) == 0:
+            rotations = []
+        elif int(data.rotation_type) == int(NifFormat.KeyType.XYZROTATIONKEY):
+            rotations = [_sample_xyz_rotation(data.xyz_rotations, value) for value in times]
+        elif int(data.rotation_type) == int(NifFormat.KeyType.LINEARKEY):
+            rotations = [
+                _sample_linear_quaternion_keys(list(data.quaternion_keys), value)
+                for value in times
+            ]
+        else:
+            raise ValueError(
+                f"Unsupported source transform rotation interpolation on {node_name}: "
+                f"{int(data.rotation_type)}"
+            )
+        if rotations:
+            for index in range(1, len(rotations)):
+                if sum(
+                    previous * current
+                    for previous, current in zip(rotations[index - 1], rotations[index], strict=True)
+                ) < 0.0:
+                    rotations[index] = [-value for value in rotations[index]]
+            append_channel(node_name, "rotation", rotations, "VEC4")
+        if list(data.translations.keys):
+            append_channel(
+                node_name,
+                "translation",
+                [_sample_vector_group(data.translations, value) for value in times],
+                "VEC3",
+            )
+        scale_keys = list(data.scales.keys)
+        if scale_keys and not all(
+            math.isclose(float(key.value), float(scale_keys[0].value))
+            for key in scale_keys[1:]
+        ):
+            append_channel(
+                node_name,
+                "scale",
+                [(_sample_scalar_group(data.scales, value),) * 3 for value in times],
+                "VEC3",
+            )
+        elif scale_keys and not math.isclose(
+            float(scale_keys[0].value), float(source["nodes"][node_name].scale)
+        ):
+            raise ValueError(f"Source constant scale differs on {node_name}")
+    if not channels:
+        raise ValueError("Source transform sequence contains no authored runtime channels")
     sequence = source["sequence"]
     return {
         "name": decode_text(sequence.name),
+        "samplers": samplers,
+        "channels": channels,
+    }
+
+
+def _source_pose_morph_deltas(
+    shape: object,
+    morph: object,
+) -> list[tuple[float, float, float]]:
+    mesh = shape.data
+    if len(morph.vectors) != len(mesh.vertices):
+        raise ValueError("Source morph vertex topology differs from its target surface")
+    original = [(float(row.x), float(row.y), float(row.z)) for row in mesh.vertices]
+    base_positions = shape.get_skin_deformation()[0] if shape.skin_instance is not None else original
+    try:
+        for vertex, source, delta in zip(mesh.vertices, original, morph.vectors, strict=True):
+            vertex.x = source[0] + float(delta.x)
+            vertex.y = source[1] + float(delta.y)
+            vertex.z = source[2] + float(delta.z)
+        morphed_positions = (
+            shape.get_skin_deformation()[0]
+            if shape.skin_instance is not None
+            else [(float(row.x), float(row.y), float(row.z)) for row in mesh.vertices]
+        )
+    finally:
+        for vertex, source in zip(mesh.vertices, original, strict=True):
+            vertex.x, vertex.y, vertex.z = source
+    return [
+        (
+            float(morphed.x if hasattr(morphed, "x") else morphed[0])
+            - float(base.x if hasattr(base, "x") else base[0]),
+            float(morphed.z if hasattr(morphed, "z") else morphed[2])
+            - float(base.z if hasattr(base, "z") else base[2]),
+            -float(morphed.y if hasattr(morphed, "y") else morphed[1])
+            + float(base.y if hasattr(base, "y") else base[1]),
+        )
+        for base, morphed in zip(base_positions, morphed_positions, strict=True)
+    ]
+
+
+def _append_source_morph_animation(
+    morphers: list[object],
+    node_by_shape: dict[int, int],
+    builder: BufferBuilder,
+    samples_per_second: float,
+) -> dict[str, object] | None:
+    if not morphers:
+        return None
+    first = morphers[0]
+    start = float(first.start_time)
+    stop = float(first.stop_time)
+    frequency = float(first.frequency)
+    phase = float(first.phase)
+    for controller in morphers[1:]:
+        if (
+            float(controller.start_time) != start
+            or float(controller.stop_time) != stop
+            or float(controller.frequency) != frequency
+            or float(controller.phase) != phase
+        ):
+            raise ValueError("Source morph controllers do not share one exact clock")
+    duration = (stop - start) / frequency
+    frame_count = round(duration * samples_per_second) + 1
+    times = [frame / samples_per_second for frame in range(frame_count)]
+    times[-1] = duration
+    time_accessor = builder.add(
+        struct.pack(f"<{len(times)}f", *times),
+        component_type=GL_FLOAT,
+        count=len(times),
+        value_type="SCALAR",
+        target=None,
+        minimum=[0.0],
+        maximum=[duration],
+    )
+    samplers = []
+    channels = []
+    for controller in morphers:
+        weights = list(controller.interpolator_weights)[1:]
+        sampled = []
+        for output_time in times:
+            source_time = phase + output_time * frequency
+            while source_time < start:
+                source_time += stop - start
+            while source_time > stop:
+                source_time -= stop - start
+            sampled.extend(
+                _sample_scalar_group(weight.interpolator.data.data, source_time)
+                for weight in weights
+            )
+        output = builder.add(
+            struct.pack(f"<{len(sampled)}f", *sampled),
+            component_type=GL_FLOAT,
+            count=len(sampled),
+            value_type="SCALAR",
+            target=None,
+        )
+        sampler = len(samplers)
+        samplers.append({"input": time_accessor, "output": output, "interpolation": "LINEAR"})
+        channels.append(
+            {
+                "sampler": sampler,
+                "target": {"node": node_by_shape[id(controller.target)], "path": "weights"},
+            }
+        )
+    return {
+        "name": "NiGeomMorpherController",
         "samplers": samplers,
         "channels": channels,
     }
@@ -1287,6 +1550,14 @@ def export_static_nif(
         if articulation is None and presentation_clip is None
         else None
     )
+    source_morpher_by_target = {
+        id(controller.target): controller
+        for controller in (
+            source_transform_animation["morphers"]
+            if source_transform_animation is not None
+            else []
+        )
+    }
     all_shapes = [
         block
         for block in blocks
@@ -1561,6 +1832,35 @@ def export_static_nif(
             gltf_material["emissiveFactor"] = emissive
         materials.append(gltf_material)
         primitive = {"attributes": attributes, "indices": index_accessor, "material": material_index}
+        morph_target_names: list[str] = []
+        if id(shape) in source_morpher_by_target:
+            controller = source_morpher_by_target[id(shape)]
+            morph_data = controller.data
+            base_morph = morph_data.morphs[0]
+            if len(base_morph.vectors) != len(mesh.vertices) or any(
+                (float(base.x), float(base.y), float(base.z))
+                != (float(vertex.x), float(vertex.y), float(vertex.z))
+                for base, vertex in zip(base_morph.vectors, mesh.vertices, strict=True)
+            ):
+                raise ValueError("Source relative morph base differs from target geometry")
+            morph_targets = []
+            for morph in list(morph_data.morphs)[1:]:
+                deltas = _source_pose_morph_deltas(shape, morph)
+                morph_targets.append(
+                    {
+                        "POSITION": builder.add(
+                            pack_floats(deltas),
+                            component_type=GL_FLOAT,
+                            count=len(deltas),
+                            value_type="VEC3",
+                            target=GL_ARRAY_BUFFER,
+                        )
+                    }
+                )
+                morph_target_names.append(decode_text(morph.frame_name))
+            if not morph_targets:
+                raise ValueError("Source morph controller has no non-base targets")
+            primitive["targets"] = morph_targets
         primitives.append(primitive)
         primitive_rows.append(
             {
@@ -1568,6 +1868,7 @@ def export_static_nif(
                 "stableId": stable_id,
                 "articulationTargetId": articulation_target_id,
                 "sourceShape": shape,
+                "morphTargetNames": morph_target_names,
             }
         )
         surface_rows.append({
@@ -1657,6 +1958,12 @@ def export_static_nif(
             if child is not None
         }
         required_nodes = {id(root): root}
+        for controlled_node in source_transform_animation["nodes"].values():
+            current = controlled_node
+            required_nodes[id(current)] = current
+            while id(current) in parent_by_child:
+                current = parent_by_child[id(current)]
+                required_nodes[id(current)] = current
         for row in primitive_rows:
             current = row["sourceShape"]
             while id(current) in parent_by_child:
@@ -1690,7 +1997,11 @@ def export_static_nif(
         for row in primitive_rows:
             shape = row["sourceShape"]
             mesh_index = len(meshes)
-            meshes.append({"name": decode_text(shape.name), "primitives": [row["primitive"]]})
+            mesh_document = {"name": decode_text(shape.name), "primitives": [row["primitive"]]}
+            if row["morphTargetNames"]:
+                mesh_document["weights"] = [0.0] * len(row["morphTargetNames"])
+                mesh_document["extras"] = {"targetNames": row["morphTargetNames"]}
+            meshes.append(mesh_document)
             transform = _node_local_transform(shape)
             mesh_node_index = len(nodes)
             nodes.append(
@@ -1707,6 +2018,7 @@ def export_static_nif(
                 scene_nodes.append(mesh_node_index)
             else:
                 nodes[node_index_by_id[id(parent)]]["children"].append(mesh_node_index)
+            row["sourceNodeIndex"] = mesh_node_index
         node_by_name = {
             decode_text(node.name): node_index_by_id[id(node)]
             for node in source_transform_animation["nodes"].values()
@@ -1719,6 +2031,18 @@ def export_static_nif(
                 compiler.animation_samples_per_second,
             )
         )
+        source_morph_animation = _append_source_morph_animation(
+            source_transform_animation["morphers"],
+            {
+                id(row["sourceShape"]): int(row["sourceNodeIndex"])
+                for row in primitive_rows
+                if row["morphTargetNames"]
+            },
+            builder,
+            compiler.animation_samples_per_second,
+        )
+        if source_morph_animation is not None:
+            animations.append(source_morph_animation)
     elif articulation_contract is None:
         meshes.append({"name": Path(logical_path).stem, "primitives": primitives})
         nodes.append({"name": Path(logical_path).stem, "mesh": 0})
@@ -1872,12 +2196,34 @@ def export_static_nif(
             "controllers": sorted(set(controllers)),
             "sourceControllerPlayback": (
                 {
-                    "status": "source-looping-transform-complete",
-                    "sequence": decode_text(source_transform_animation["sequence"].name),
-                    "startSeconds": source_transform_animation["start"],
-                    "stopSeconds": source_transform_animation["stop"],
+                    "status": "source-looping-controller-complete",
                     "samplesPerSecond": compiler.animation_samples_per_second,
-                    "channels": len(source_transform_animation["controlled"]),
+                    "animations": [
+                        {
+                            "name": decode_text(source_transform_animation["sequence"].name),
+                            "sourceType": "NiControllerSequence",
+                            "startSeconds": source_transform_animation["start"],
+                            "stopSeconds": source_transform_animation["stop"],
+                            "frequency": float(source_transform_animation["manager"].frequency),
+                            "phase": float(source_transform_animation["manager"].phase),
+                            "channels": len(animations[0]["channels"]),
+                        },
+                        *(
+                            [
+                                {
+                                    "name": "NiGeomMorpherController",
+                                    "sourceType": "NiGeomMorpherController",
+                                    "startSeconds": float(source_transform_animation["morphers"][0].start_time),
+                                    "stopSeconds": float(source_transform_animation["morphers"][0].stop_time),
+                                    "frequency": float(source_transform_animation["morphers"][0].frequency),
+                                    "phase": float(source_transform_animation["morphers"][0].phase),
+                                    "channels": len(source_transform_animation["morphers"]),
+                                }
+                            ]
+                            if source_transform_animation["morphers"]
+                            else []
+                        ),
+                    ],
                 }
                 if source_transform_animation is not None
                 else None
