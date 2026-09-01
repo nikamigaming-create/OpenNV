@@ -22,6 +22,7 @@ public partial class RuntimeCoordinator
             scenePath,
             this,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
+            _settings,
             Fo2HumanoidDonorContract.RequireFromOptions(options),
             options.TryGetValue("fo1-exit-grid-transition", out var exitGridTransitionPath)
                 ? Fo1ExitGridTransitionContract.Load(exitGridTransitionPath)

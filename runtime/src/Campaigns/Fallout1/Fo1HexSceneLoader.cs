@@ -10,6 +10,7 @@ using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Gameplay.Settings;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -36,6 +37,7 @@ internal static class Fo1HexSceneLoader
         string scenePath,
         Node3D parent,
         string? savePath,
+        RuntimeSettingsState settings,
         Fo2HumanoidDonorContract classicHumanoidDonor,
         Fo1ExitGridTransitionContract? exitGridTransition,
         string? destinationPresentationPath,
@@ -407,7 +409,8 @@ internal static class Fo1HexSceneLoader
             cameraSource.GetProperty("homeSizeMeters").GetSingle(),
             Mathf.DegToRad(cameraSource.GetProperty("yawDegrees").GetSingle()),
             Mathf.DegToRad(cameraSource.GetProperty("pitchDegrees").GetSingle()),
-            runtimeProfile.Camera);
+            runtimeProfile.Camera,
+            settings);
         parent.AddChild(camera);
         session.AttachCamera(camera);
         if (session.LoadedDestinationPresentation is { } restoredDestination)
@@ -475,7 +478,8 @@ internal static class Fo1HexSceneLoader
             atmosphere,
             ownedCave,
             caveCutaway,
-            runtimeProfile);
+            runtimeProfile,
+            settings);
     }
 
     private static int BuildFloor(
@@ -1185,7 +1189,8 @@ internal static class Fo1HexSceneLoader
         CaveAtmosphere Atmosphere,
         Fo1OwnedCaveKit.Coverage OwnedCave,
         Fo1CaveCutaway CaveCutaway,
-        Fo1RuntimeProfile RuntimeProfile);
+        Fo1RuntimeProfile RuntimeProfile,
+        RuntimeSettingsState Settings);
 
     internal readonly record struct PlayerPresentationSource(
         string DonorKey,

@@ -11,6 +11,8 @@ using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Gameplay.Settings;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -62,7 +64,9 @@ internal partial class Fo1TacticalSession
         return presentation;
     }
 
-    internal void AttachClassicInterface(Fo1CharacterStartContract contract)
+    internal void AttachClassicInterface(
+        Fo1CharacterStartContract contract,
+        RuntimeSettingsState settings)
     {
         if (_classicHud is not null)
             throw new InvalidOperationException(
@@ -93,12 +97,27 @@ internal partial class Fo1TacticalSession
             contract.InterfaceHud,
             TogglePipBoy,
             ToggleInventory,
+            () => OpenRuntimeSettings(settings),
             SwapEquippedWeapon);
         Hud.AddChild(classicHud);
         Hud.MoveChild(classicInventory, Hud.GetChildCount() - 1);
         _classicHud = classicHud;
         _debugHudRoot.Visible = false;
         RefreshHud();
+    }
+
+    private void OpenRuntimeSettings(RuntimeSettingsState settings)
+    {
+        if (FindChild("OpenNVRuntimeSettings", recursive: false, owned: false) is not null)
+            return;
+        if (_classicInventory?.IsOpen == true)
+            _classicInventory.Close();
+        if (_pipBoy?.IsOpen == true)
+            _pipBoy.SetOpen(false);
+        var view = new RuntimeSettingsView();
+        view.Configure(settings, _runtimeProfile.Camera.Tactical.OrbitRadiansPerPixel);
+        view.CloseRequested += () => view.QueueFree();
+        AddChild(view);
     }
 
     internal void TogglePipBoy()

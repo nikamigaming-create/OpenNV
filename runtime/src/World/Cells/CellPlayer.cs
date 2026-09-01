@@ -8,6 +8,7 @@ using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.Settings;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -41,6 +42,7 @@ internal partial class CellPlayer : CharacterBody3D
     private const float StepForwardClearanceRadii = 1.1f;
 
     private RuntimeConfiguration _configuration = null!;
+    private RuntimeSettingsState? _settings;
     private Camera3D _camera = null!;
     private GameplaySession? _session;
     private XROrigin3D? _xrOrigin;
@@ -236,12 +238,14 @@ internal partial class CellPlayer : CharacterBody3D
         GameplaySession session,
         RuntimeConfiguration configuration,
         bool useXr = false,
-        bool useClassicDiorama = false)
+        bool useClassicDiorama = false,
+        RuntimeSettingsState? settings = null)
     {
         if (useXr && useClassicDiorama)
             throw new ArgumentException(
                 "Classic Diorama and OpenXR require separate presentation adapters.");
         _configuration = configuration;
+        _settings = settings;
         _session = session;
         _useXr = useXr;
         _useClassicDiorama = useClassicDiorama;
@@ -643,10 +647,13 @@ internal partial class CellPlayer : CharacterBody3D
             inputEvent is InputEventMouseMotion motion &&
             Input.MouseMode == Input.MouseModeEnum.Captured)
         {
-            RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);
+            var sensitivity = _settings?.ApplyMouseSensitivity(
+                _configuration.Player.MouseSensitivityRadiansPerPixel) ??
+                _configuration.Player.MouseSensitivityRadiansPerPixel;
+            RotateY(-motion.Relative.X * sensitivity);
             var cameraRotation = _camera.Rotation;
             cameraRotation.X = Math.Clamp(
-                cameraRotation.X - motion.Relative.Y * _configuration.Player.MouseSensitivityRadiansPerPixel,
+                cameraRotation.X - motion.Relative.Y * sensitivity,
                 -_configuration.Player.VerticalLookLimitRadians,
                 _configuration.Player.VerticalLookLimitRadians);
             _camera.Rotation = cameraRotation;

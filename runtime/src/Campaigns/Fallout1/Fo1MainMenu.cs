@@ -40,6 +40,7 @@ internal partial class Fo1MainMenu : CanvasLayer
 
     internal event Action? ContinueRequested;
     internal event Action? NewGameRequested;
+    internal event Action? OptionsRequested;
     internal event Action? ExitRequested;
 
     internal void Configure(string startPresentation, bool continueAvailable)
@@ -116,6 +117,11 @@ internal partial class Fo1MainMenu : CanvasLayer
         var newGame = BuildMenuButton("NEW GAME");
         newGame.Pressed += () => NewGameRequested?.Invoke();
         stack.AddChild(newGame);
+
+        var options = BuildMenuButton("OPTIONS");
+        options.Name = "OpenNVOptionsButton";
+        options.Pressed += () => OptionsRequested?.Invoke();
+        stack.AddChild(options);
 
         var route = BuildLabel(
             _startPresentation == "hex-tactical"

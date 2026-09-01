@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
+using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Gameplay.Settings;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -126,11 +128,37 @@ internal static partial class Fo1NewGameFlow
             menu.QueueFree();
             ShowCharacterSelection(host, loaded, contract, startPresentation);
         };
+        menu.OptionsRequested += () =>
+        {
+            if (selected)
+                return;
+            selected = true;
+            menu.QueueFree();
+            ShowSettings(host, loaded, contract, startPresentation);
+        };
         menu.ExitRequested += () => host.GetTree().Quit(0);
         host.AddChild(menu);
         if (continueMenuProof)
             _ = RunContinueMenuProof(host, menu);
         GD.Print($"OPENNV_FO1_FRONTEND_READY presentation={startPresentation}");
+    }
+
+    private static void ShowSettings(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string startPresentation)
+    {
+        var settings = new RuntimeSettingsView();
+        settings.Configure(
+            loaded.Settings,
+            loaded.RuntimeProfile.Camera.Tactical.OrbitRadiansPerPixel);
+        settings.CloseRequested += () =>
+        {
+            settings.QueueFree();
+            ShowMainMenu(host, loaded, contract, startPresentation);
+        };
+        host.AddChild(settings);
     }
 
     private static async Task ResumeInteractive(
@@ -146,7 +174,7 @@ internal static partial class Fo1NewGameFlow
             var profile = loaded.Session.RequireRestoredCharacterForContinue();
             var camera = loaded.Session.RequireRestoredCameraForContinue();
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             if (loaded.Session.LoadedDestinationPresentation is { } destination)
                 await RevealRestoredDestination(
                     host,
@@ -240,7 +268,7 @@ internal static partial class Fo1NewGameFlow
             GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE v13ent-handoff");
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             if (nativeFirstBeatHeadlessProof)
             {
                 await RunCombatShowcase(
@@ -305,7 +333,7 @@ internal static partial class Fo1NewGameFlow
                 loaded.RuntimeProfile.Showcase);
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             await RevealWorld(host, loaded, profile, opening, "hex-tactical");
             await WaitFrames(host, Fo1NewGameFlowNumericContracts.PresentationInt120);
             GD.Print($"OPENNV_FO1_CHARACTER_VIDEO_COMPLETE character={character}");
@@ -338,7 +366,7 @@ internal static partial class Fo1NewGameFlow
                 loaded.RuntimeProfile.Showcase);
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             await RevealWorld(host, loaded, profile, opening, startPresentation);
         }
         catch (Exception exception)
@@ -817,6 +845,34 @@ internal static partial class Fo1NewGameFlow
             $"{profile.Name}  •  V13ENT  •  exact tile {loaded.EntryTile}  •  " +
             "I opens Inventory • P opens Pip-Boy 2000");
         await WaitFrames(host, showcase.LandingHoldFrames);
+        var optionsButton = loaded.Session.ClassicHud?.FindChild(
+            "OwnedIfaceOptionsButton",
+            recursive: true,
+            owned: false) as Button ?? throw new InvalidOperationException(
+                "Fallout classic HUD has no shared-options activation control.");
+        optionsButton.EmitSignal(Button.SignalName.Pressed);
+        await WaitFrames(host, 1);
+        var settingsView = loaded.Session.FindChild(
+            "OpenNVRuntimeSettings",
+            recursive: false,
+            owned: false) as RuntimeSettingsView ?? throw new InvalidOperationException(
+                "Fallout classic HUD did not open the shared runtime settings view.");
+        var exercisedScale = RuntimeSettingsState.NeutralMouseSensitivityScale +
+            RuntimeSettingsState.NeutralMouseSensitivityScale;
+        settingsView.ApplyMouseSensitivityForProof(exercisedScale);
+        var restoredSettings = RuntimeSettingsState.Load(
+            loaded.Settings.Path);
+        if (!Mathf.IsEqualApprox(restoredSettings.MouseSensitivityScale, exercisedScale) ||
+            !Mathf.IsEqualApprox(
+                loaded.Camera.EffectiveOrbitRadiansPerPixel,
+                loaded.RuntimeProfile.Camera.Tactical.OrbitRadiansPerPixel * exercisedScale))
+            throw new InvalidOperationException(
+                "Shared runtime settings did not persist or affect the live Fallout camera.");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE shared-options-applied");
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        settingsView.CloseForProof();
+        await WaitFrames(host, 1);
         var inventoryBefore = loaded.Session.InventorySnapshot();
         var inventorySaveSha256Before = FileSha256(loaded.Session.SavePath);
         loaded.Camera._UnhandledInput(new InputEventKey

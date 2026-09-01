@@ -19,6 +19,7 @@ using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout3;
 using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Gameplay.Settings;
 
 namespace OpenNV.Runtime;
 
@@ -60,6 +61,7 @@ public partial class RuntimeCoordinator : Node3D
 
     private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
     private RuntimeConfiguration _configuration = null!;
+    private RuntimeSettingsState _settings = null!;
     private LegalAssetSetupView? _setupView;
     private XRInterface? _openXr;
     private LoadingScreen? _loadingScreen;
@@ -91,13 +93,17 @@ public partial class RuntimeCoordinator : Node3D
         try
         {
             _configuration = RuntimeConfiguration.Load();
+            _options = ParseOptions(OS.GetCmdlineUserArgs());
+            _settings = RuntimeSettingsState.Load(
+                _options.TryGetValue("settings-path", out var settingsPath)
+                    ? settingsPath
+                    : null);
             DesktopInputMap.Configure(_configuration.Player.DesktopInput);
             GetWindow().Size = new Vector2I(
                 _configuration.Capture.ExpectedWidthPixels,
                 _configuration.Capture.ExpectedHeightPixels);
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
-            _options = ParseOptions(OS.GetCmdlineUserArgs());
             var launch = RuntimeLaunchRequest.Create(_options);
             var performanceReportPath = _options.TryGetValue(
                 "perf-report",
@@ -582,6 +588,7 @@ public partial class RuntimeCoordinator : Node3D
             scenePath,
             this,
             _configuration,
+            _settings,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,

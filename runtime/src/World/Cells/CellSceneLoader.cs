@@ -13,6 +13,7 @@ using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Gameplay.Settings;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -37,6 +38,7 @@ internal static class CellSceneLoader
         string scenePath,
         Node3D parent,
         RuntimeConfiguration configuration,
+        RuntimeSettingsState settings,
         bool openProofDoor,
         string? proofDoorOverride = null,
         string? savePath = null,
@@ -236,6 +238,7 @@ internal static class CellSceneLoader
             main,
             session,
             configuration,
+            settings,
             useXr,
             applyCellEnvironment,
             useClassicDiorama,
@@ -366,6 +369,7 @@ internal static class CellSceneLoader
         CellContentLoader.LoadedContent main,
         GameplaySession session,
         RuntimeConfiguration configuration,
+        RuntimeSettingsState settings,
         bool useXr,
         bool applyCellEnvironment,
         bool useClassicDiorama,
@@ -400,7 +404,13 @@ internal static class CellSceneLoader
         }
         lights = AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
         var player = new CellPlayer();
-        player.Configure(yaw, session, configuration, useXr, useClassicDiorama);
+        player.Configure(
+            yaw,
+            session,
+            configuration,
+            useXr,
+            useClassicDiorama,
+            settings);
         parent.AddChild(player);
         if (useClassicDiorama)
         {
