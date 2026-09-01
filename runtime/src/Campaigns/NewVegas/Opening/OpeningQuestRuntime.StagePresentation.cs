@@ -133,7 +133,10 @@ internal partial class OpeningQuestRuntime
 
     private void ApplyPlayerControls(OpeningFlowCommand command)
     {
-        if (command.Operation is null || command.ControlValues.Count > PlayerControlCount ||
+        if (command.Operation is null ||
+            !OpeningPlayerControlContract.Matches(
+                command.ControlArguments,
+                command.ControlValues) ||
             command.ControlValues.Any(value =>
                 value is not DisabledControlValue and not EnabledControlValue))
             throw new InvalidOperationException("Owned player-control command is invalid.");
@@ -151,12 +154,12 @@ internal partial class OpeningQuestRuntime
         GD.Print(
             $"OPENNV_NEW_GAME_CONTROLS operation={command.Operation} " +
             $"movement={_playerControls[MovementControlIndex]} " +
+            $"pipBoy={_playerControls[PipBoyControlIndex]} " +
             $"fighting={_playerControls[FightingControlIndex]} " +
             $"pov={_playerControls[PointOfViewControlIndex]} " +
             $"looking={_playerControls[LookingControlIndex]} " +
             $"sneaking={_playerControls[SneakingControlIndex]} " +
-            $"menu={_playerControls[MenuControlIndex]} " +
-            $"activation={_playerControls[ActivationControlIndex]}");
+            $"rolloverText={_playerControls[RolloverTextControlIndex]}");
     }
 
     private void ApplyScriptPackage(OpeningFlowCommand command)

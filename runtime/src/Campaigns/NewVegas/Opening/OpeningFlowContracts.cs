@@ -520,6 +520,7 @@ internal sealed record OpeningFlowCommand(
     bool? Enabled,
     bool? Destroyed,
     bool? CrossFade,
+    IReadOnlyList<string> ControlArguments,
     IReadOnlyList<int> ControlValues,
     string? ItemFormId,
     string? ItemRecordType,
@@ -535,6 +536,29 @@ internal sealed record OpeningFlowCommand(
     OpeningCommandGuard? Guard,
     OpeningCommandWeapon? Weapon,
     IReadOnlyList<string> EnableParentChildFormIds);
+
+internal static class OpeningPlayerControlContract
+{
+    internal static readonly IReadOnlyList<string> Arguments =
+    [
+        "movement",
+        "pipBoy",
+        "fighting",
+        "pointOfView",
+        "looking",
+        "rolloverText",
+        "sneaking",
+    ];
+
+    internal static bool Matches(
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<int> values) =>
+        arguments.Count == values.Count &&
+        arguments.Count <= Arguments.Count &&
+        arguments.SequenceEqual(
+            Arguments.Take(arguments.Count),
+            StringComparer.Ordinal);
+}
 
 internal sealed record OpeningCommandGuard(
     string Kind,

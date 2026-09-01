@@ -877,7 +877,7 @@ internal partial class OpeningQuestRuntime
 
     internal static bool GameplayUiEnabled(OpeningCampaignState state) =>
         state.PlayerControls.Count == PlayerControlCount &&
-        state.PlayerControls[MenuControlIndex] == EnabledControlValue;
+        state.PlayerControls[RolloverTextControlIndex] == EnabledControlValue;
 
     internal static void ApplyPlayerControlPolicy(
         CellPlayer player,
@@ -891,7 +891,7 @@ internal partial class OpeningQuestRuntime
         player.SetControlPolicy(
             Enabled(MovementControlIndex),
             Enabled(LookingControlIndex),
-            Enabled(ActivationControlIndex),
+            Enabled(MovementControlIndex),
             Enabled(FightingControlIndex),
             saveEnabled);
     }
@@ -1599,10 +1599,12 @@ internal partial class OpeningQuestRuntime
         _raceSexShowFace = null;
         if (_activeModal is not null)
         {
+            GetViewport().GuiReleaseFocus();
             _activeModal.Visible = false;
             _activeModal.QueueFree();
             _activeModal = null;
         }
+        _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
         if (restoreControls)
             ApplyStageControlPolicy();
         if (_openingQuestCompleted && _activeModal is null)
@@ -1620,15 +1622,20 @@ internal partial class OpeningQuestRuntime
             _loaded.Player.SetControlPolicy(false, false, false, false, false);
             return;
         }
-        _loaded.Session.SetGameplayUiVisible(_playerControls[MenuControlIndex]);
+        _loaded.Session.SetGameplayUiVisible(_playerControls[RolloverTextControlIndex]);
         ApplyPlayerControlPolicy(
             _loaded.Player,
             _playerControls
                 .Select(value => value ? EnabledControlValue : DisabledControlValue)
                 .ToArray(),
             _stage == _flow.CompletionStage);
-        if (!_loaded.Player.UsesXr && DisplayServer.GetName() != "headless")
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+        Callable.From(CaptureDesktopPointerAfterUiDispatch).CallDeferred();
+    }
+
+    private void CaptureDesktopPointerAfterUiDispatch()
+    {
+        if (_activeModal is null && _playerControls[LookingControlIndex])
+            _loaded.Player.CaptureDesktopPointer();
     }
 
     private void ScaleReferenceCanvas()

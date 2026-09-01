@@ -157,6 +157,14 @@ internal partial class CellPlayer : CharacterBody3D
     internal void SetSyntheticMouseMotionPolicy(bool enabled) =>
         _acceptSyntheticMouseMotion = enabled;
 
+    internal void CaptureDesktopPointer()
+    {
+        if (_useXr || _useClassicDiorama || DisplayServer.GetName() == "headless")
+            return;
+        Input.WarpMouse(GetViewport().GetVisibleRect().GetCenter());
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+    }
+
     internal void ConfigureJamJvsSprint(JamJvsSprintContract sprint)
     {
         if (_useXr || _useClassicDiorama)
@@ -286,8 +294,8 @@ internal partial class CellPlayer : CharacterBody3D
 
     public override void _Ready()
     {
-        if (!_useXr && !_useClassicDiorama && DisplayServer.GetName() != "headless")
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (!_useXr && !_useClassicDiorama)
+            CaptureDesktopPointer();
         else if (_useClassicDiorama)
             Input.MouseMode = Input.MouseModeEnum.Visible;
     }
@@ -1070,7 +1078,7 @@ internal partial class CellPlayer : CharacterBody3D
             Input.MouseMode = Input.MouseModeEnum.Visible;
         }
         if (_lookEnabled && Input.IsActionJustPressed(input.CaptureMouse.Action))
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+            CaptureDesktopPointer();
         if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerUp.Action))
             _activePool.CycleFlatPower(1);
         if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerDown.Action))

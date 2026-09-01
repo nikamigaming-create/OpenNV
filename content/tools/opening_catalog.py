@@ -225,12 +225,12 @@ CONDITION_OPERATOR_EQUAL = 0x00
 CONDITION_OPERATOR_GREATER_OR_EQUAL = 0x60
 PLAYER_CONTROL_ARGUMENTS = (
     "movement",
+    "pipBoy",
     "fighting",
     "pointOfView",
     "looking",
+    "rolloverText",
     "sneaking",
-    "menu",
-    "activation",
 )
 OPENING_COMMAND_CONTRACT_SCHEMA = "opennv-owned-opening-command-contract/v1"
 OPENING_COMMAND_KINDS = frozenset(

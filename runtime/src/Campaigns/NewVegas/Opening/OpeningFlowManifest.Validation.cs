@@ -819,6 +819,12 @@ internal sealed partial record OpeningNewGameFlow
             !DictionaryMatches(contract.RecordIdentityCounts, identityCounts) ||
             commands.Any(command => !RuntimeCommandKinds.Contains(command.Kind)) ||
             commands.Any(command =>
+                command.Kind == "playerControls" &&
+                (!OpeningPlayerControlContract.Matches(
+                    command.ControlArguments,
+                    command.ControlValues) ||
+                 command.ControlValues.Any(value => value is not 0 and not 1))) ||
+            commands.Any(command =>
                 !ValidIdentity(command.ItemEditorId, command.ItemFormId, command.ItemRecordType) ||
                 !ValidIdentity(
                     command.QuestEditorId,

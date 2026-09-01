@@ -678,12 +678,12 @@ class OpeningCatalogTest(unittest.TestCase):
             commands[5]["arguments"],
             [
                 "movement",
+                "pipBoy",
                 "fighting",
                 "pointOfView",
                 "looking",
+                "rolloverText",
                 "sneaking",
-                "menu",
-                "activation",
             ],
         )
 

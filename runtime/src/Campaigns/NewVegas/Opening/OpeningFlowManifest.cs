@@ -1396,6 +1396,10 @@ internal sealed partial record OpeningNewGameFlow(
         OptionalBool(value, "enabled"),
         OptionalBool(value, "destroyed"),
         OptionalBool(value, "crossFade"),
+        value.TryGetProperty("arguments", out var controlArguments) &&
+        controlArguments.ValueKind == JsonValueKind.Array
+            ? controlArguments.EnumerateArray().Select(argument => argument.GetString()!).ToArray()
+            : Array.Empty<string>(),
         value.TryGetProperty("values", out var controls) &&
         controls.ValueKind == JsonValueKind.Array
             ? controls.EnumerateArray().Select(control => control.GetInt32()).ToArray()
