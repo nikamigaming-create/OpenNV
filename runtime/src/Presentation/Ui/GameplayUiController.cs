@@ -325,7 +325,7 @@ internal partial class GameplayUiController : CanvasLayer
         crosshair.Text = "+";
         crosshair.HorizontalAlignment = HorizontalAlignment.Center;
         crosshair.VerticalAlignment = VerticalAlignment.Center;
-        PlaceOwnedCanvasRect(crosshair, hud.Layout["ReticleCenter"]);
+        PlaceOwnedCanvasCenterRect(crosshair, hud.Layout["ReticleCenter"]);
         canvas.AddChild(crosshair);
     }
 
@@ -987,6 +987,13 @@ internal partial class GameplayUiController : CanvasLayer
         var scale = Mathf.Min(viewport.Size.X / authoredSize.X, viewport.Size.Y / authoredSize.Y);
         canvas.Scale = Vector2.One * scale;
         canvas.Position = (viewport.Size - authoredSize * scale) * OwnedUiTheme.CenteringFactor;
+    }
+
+    private static void PlaceOwnedCanvasCenterRect(Control control, Rect2 authoredRect)
+    {
+        control.SetAnchorsPreset(Control.LayoutPreset.Center);
+        control.Position = -authoredRect.Size * OwnedUiTheme.CenteringFactor;
+        control.Size = authoredRect.Size;
     }
 
     private void BuildDesktopHud()
