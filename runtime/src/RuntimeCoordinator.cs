@@ -232,13 +232,15 @@ public partial class RuntimeCoordinator : Node3D
             allowedActiveCellFormIds,
             manifest.NewGameFlow.Character.Vitals,
             state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
+        var gameplayPrewarm = PreparedGameplayPrewarm.Start(prepared);
+        GD.Print("OPENNV_OWNED_GAMEPLAY_PREWARM_STARTED source=prepared-cache-closure");
         var opening = new RetailOpening();
         AddChild(opening);
         opening.Configure(
             manifest,
             canContinue,
             _configuration.Player.DesktopInput.Cancel.Action,
-            () =>
+            async () =>
             {
                 if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
                 {
@@ -252,9 +254,10 @@ public partial class RuntimeCoordinator : Node3D
                     pair => pair.Value,
                     StringComparer.OrdinalIgnoreCase);
                 newGameOptions["new-game"] = "";
+                await CompleteGameplayPrewarm(gameplayPrewarm);
                 LoadPreparedGameplay(prepared, newGameOptions, useOpeningCampaign: true);
             },
-            action =>
+            async action =>
             {
                 if (action is "continue" or "load")
                 {
@@ -265,11 +268,12 @@ public partial class RuntimeCoordinator : Node3D
                                 $"Owned main-menu acceptance dispatched {action}, expected {acceptedAction}.");
                         _acceptedOpeningMenuAction = action;
                     }
-                    opening.QueueFree();
+                    await CompleteGameplayPrewarm(gameplayPrewarm);
                     LoadPreparedGameplay(prepared, options, useOpeningCampaign: true);
                     return;
                 }
                 GD.Print($"OPENNV_OWNED_MENU_ACTION action={action} status=ui-route-pending");
+                await Task.CompletedTask;
             });
         GD.Print(
             $"OPENNV_OWNED_OPENING_READY campaign={manifest.Campaign} " +
@@ -284,6 +288,15 @@ public partial class RuntimeCoordinator : Node3D
         }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
+    }
+
+    private static async Task CompleteGameplayPrewarm(
+        PreparedGameplayPrewarm gameplayPrewarm)
+    {
+        var result = await gameplayPrewarm.WaitAsync();
+        GD.Print(
+            $"OPENNV_OWNED_GAMEPLAY_PREWARM_READY files={result.FileCount} " +
+            $"bytes={result.ByteCount} elapsedMs={result.ElapsedMilliseconds}");
     }
 
     private async Task RunOwnedOpeningMenuAcceptance(RetailOpening opening, string action)
