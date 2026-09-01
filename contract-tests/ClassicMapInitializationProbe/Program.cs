@@ -904,6 +904,139 @@ foreach (var path in args)
                     $"pickup_p_proc+critter_p_proc|" +
                     $"{playerPickup.ExecutedInstructions + attackStarted.ExecutedInstructions}");
             }
+            var elder = parsedInitialization.ScriptSlots.SingleOrDefault(row =>
+                string.Equals(row.Program.Program, "AHElder.int",
+                    StringComparison.OrdinalIgnoreCase));
+            if (elder is not null && ownedDocument.RootElement.TryGetProperty(
+                    "villageIntRoles", out var elderRoles))
+            {
+                var sourceRole = elderRoles.GetProperty("elder");
+                var sourceActor = sourceRole.GetProperty("actor");
+                const int playerHandle = 1;
+                var actorHandle = sourceActor.GetProperty("serial").GetInt32();
+                var objects = new Dictionary<int, ClassicIntWorldObject>
+                {
+                    [playerHandle] = new(playerHandle, null, 0, 0, true),
+                    [actorHandle] = new(
+                        actorHandle,
+                        Convert.ToInt32(sourceActor.GetProperty("pid").GetString(), 16),
+                        sourceActor.GetProperty("tile").GetInt32(),
+                        sourceActor.GetProperty("elevation").GetInt32(),
+                        true),
+                };
+                var inventory = new List<ClassicIntInventoryEntry>();
+                foreach (var item in sourceRole.GetProperty("initialInventory")
+                             .EnumerateArray())
+                {
+                    var handle = item.GetProperty("serial").GetInt32();
+                    objects.Add(handle, new ClassicIntWorldObject(
+                        handle,
+                        item.GetProperty("pid").GetInt32(),
+                        item.GetProperty("tile").GetInt32(),
+                        item.GetProperty("elevation").GetInt32(),
+                        false));
+                    inventory.Add(new ClassicIntInventoryEntry(
+                        actorHandle, handle,
+                        item.GetProperty("quantity").GetInt32()));
+                }
+                var creation = sourceRole.GetProperty("objectCreations")
+                    .EnumerateArray().Single(row =>
+                        row.GetProperty("procedure").GetString() == "Node015");
+                var creationSource = new ClassicIntObjectCreation(
+                    creation.GetProperty("pid").GetInt32(),
+                    creation.GetProperty("tile").GetInt32(),
+                    creation.GetProperty("elevation").GetInt32(),
+                    creation.GetProperty("scriptId").GetInt32());
+                var createdHandle = objects.Keys.Max() + 1;
+                var creationRequest = new ClassicIntObjectCreationRequest(
+                    elder.Program.Program,
+                    "Node015",
+                    creation.GetProperty("offset").GetInt32(),
+                    creationSource);
+                var contractSource = ownedDocument.RootElement.GetProperty(
+                    "classicInventoryContract");
+                var inventoryContract = new ClassicIntInventoryContract(
+                    contractSource.GetProperty("id").GetString()!,
+                    contractSource.GetProperty("currency").GetProperty("pid")
+                        .GetInt32());
+                var sourceInventoryCount = inventory.Count;
+                var expectedCaps = inventory.Where(row =>
+                        objects[row.ObjectHandle].Pid == inventoryContract.CurrencyPid)
+                    .Sum(row => row.Quantity);
+                var globals = sourceRole.GetProperty("initialGlobalVariables")
+                    .EnumerateObject().ToDictionary(
+                        row => int.Parse(row.Name),
+                        row => row.Value.GetProperty("initialValue").GetInt32());
+                var sourceState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    globals, [], randomState);
+                var dialogueWorld = new ClassicIntWorldObjectState(
+                    false, new Dictionary<int, ClassicIntDoorObjectState>())
+                {
+                    Objects = objects,
+                    Inventory = inventory,
+                    DialogueSystemEntered = true,
+                    DialogueStart = new ClassicIntDialogueStart(
+                        sourceRole.GetProperty("messageCatalog")
+                            .GetProperty("messageListId").GetInt32(),
+                        actorHandle, 0, -1, -1),
+                };
+                var context = gameContext with
+                {
+                    DudeObject = playerHandle,
+                    SelfObject = actorHandle,
+                    ObjectFactory = new ClassicIntObjectHandleTable(
+                        new Dictionary<ClassicIntObjectCreation, int>())
+                    {
+                        Requests = new Dictionary<ClassicIntObjectCreationRequest, int>
+                        {
+                            [creationRequest] = createdHandle,
+                        },
+                    },
+                    InventoryContract = inventoryContract,
+                };
+                var budget = elder.Program.ExecutableProgram.Procedures["Node015"]
+                    .Instructions.Count;
+                var completed = ClassicIntEventDispatcher.Execute(
+                    elder.Program, "Node015", sourceState, context, dialogueWorld,
+                    randomContract, budget);
+                var playerCaps = completed.WorldObjects.Inventory.Where(row =>
+                        row.OwnerHandle == playerHandle &&
+                        completed.WorldObjects.Objects[row.ObjectHandle].Pid ==
+                            inventoryContract.CurrencyPid)
+                    .Sum(row => row.Quantity);
+                if (playerCaps != expectedCaps ||
+                    completed.WorldObjects.Inventory.Any(row =>
+                        row.OwnerHandle == actorHandle &&
+                        completed.WorldObjects.Objects[row.ObjectHandle].Pid ==
+                            inventoryContract.CurrencyPid) ||
+                    completed.WorldObjects.Inventory.Count != sourceInventoryCount + 1 ||
+                    completed.WorldObjects.Inventory.Single(row =>
+                        row.ObjectHandle == createdHandle) is not
+                        { OwnerHandle: playerHandle, Quantity: 1 } ||
+                    completed.WorldObjects.Objects[createdHandle].Pid !=
+                        creationSource.Pid ||
+                    completed.WorldObjects.DialogueReplies is not
+                        [{ MessageId: 159 }] ||
+                    !completed.WorldObjects.DialogueOptions.Select(row => row.MessageId)
+                        .SequenceEqual([160, 161, 162]))
+                    throw new InvalidOperationException(
+                        "Owned Elder Node015 inventory transfer drifted.");
+                var restored = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(completed.WorldObjects.Save()));
+                if (!restored.Inventory.OrderBy(row => row.OwnerHandle)
+                        .ThenBy(row => row.ObjectHandle).SequenceEqual(
+                            completed.WorldObjects.Inventory
+                                .OrderBy(row => row.OwnerHandle)
+                                .ThenBy(row => row.ObjectHandle)) ||
+                    restored.Objects[createdHandle].Pid != creationSource.Pid)
+                    throw new InvalidOperationException(
+                        "Owned Elder Node015 inventory save state drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{elder.Program.Program}|Node015|" +
+                    $"caps={playerCaps}|created={creationSource.Pid}");
+            }
             var cameron = parsedInitialization.ScriptSlots.SingleOrDefault(row =>
                 string.Equals(row.Program.Program, "ACTemVil.int",
                     StringComparison.OrdinalIgnoreCase));

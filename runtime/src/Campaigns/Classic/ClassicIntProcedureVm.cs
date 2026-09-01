@@ -27,6 +27,12 @@ internal sealed record ClassicIntObjectCreation(
     int Elevation,
     int ScriptId);
 
+internal sealed record ClassicIntObjectCreationRequest(
+    string ProgramIdentity,
+    string Procedure,
+    int InstructionOffset,
+    ClassicIntObjectCreation Source);
+
 internal sealed record ClassicIntCreatedObject(
     int ObjectHandle,
     ClassicIntObjectCreation Source);
@@ -125,19 +131,28 @@ internal sealed class ClassicIntActorHandleTable
 
 internal interface IClassicIntObjectFactory
 {
-    int Create(ClassicIntObjectCreation source);
+    int Create(ClassicIntObjectCreationRequest request);
 }
 
 internal sealed record ClassicIntObjectHandleTable(
     IReadOnlyDictionary<ClassicIntObjectCreation, int> Handles) :
     IClassicIntObjectFactory
 {
-    public int Create(ClassicIntObjectCreation source) =>
-        Handles.TryGetValue(source, out var handle)
+    internal IReadOnlyDictionary<ClassicIntObjectCreationRequest, int> Requests
+    { get; init; } = new Dictionary<ClassicIntObjectCreationRequest, int>();
+
+    public int Create(ClassicIntObjectCreationRequest request) =>
+        Requests.TryGetValue(request, out var requestedHandle)
+            ? requestedHandle
+            : Handles.TryGetValue(request.Source, out var handle)
             ? handle
             : throw new InvalidOperationException(
-                $"Classic INT object creation is not admitted: {source}.");
+                $"Classic INT object creation is not admitted: {request}.");
 }
+
+internal sealed record ClassicIntInventoryContract(
+    string Identity,
+    int CurrencyPid);
 
 internal interface IClassicIntWorldObjectState
 {
@@ -336,6 +351,12 @@ internal sealed record ClassicIntWorldObjectState(
         if (restored.Objects.Any(row => row.Key == 0 || row.Key != row.Value.Handle) ||
             restored.Movements.Any(row =>
                 !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.Inventory.Any(row =>
+                row.Quantity <= 0 ||
+                !restored.Objects.ContainsKey(row.OwnerHandle) ||
+                !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.Inventory.Select(row => row.ObjectHandle).Distinct().Count() !=
+                restored.Inventory.Count ||
             restored.TraitAssignments.Any(row =>
                 !restored.Objects.ContainsKey(row.ObjectHandle)) ||
             restored.TraitAssignments.Select(row =>
@@ -488,6 +509,8 @@ internal static class ClassicIntProcedureVm
     private const ushort GsayReply = 0x811E;
     private const ushort GsayMessage = 0x8120;
     private const ushort GiqOption = 0x8121;
+    private const ushort ItemCapsTotal = 0x8138;
+    private const ushort ItemCapsAdjust = 0x8139;
     private const ushort DebugMessage = 0x8154;
     private const ushort DifficultyLevel = 0x812A;
     private const ushort CombatDifficulty = 0x814F;
@@ -801,12 +824,17 @@ internal static class ClassicIntProcedureVm
                         var pid = Pop(stack, program, procedure, offset);
                         var creation = new ClassicIntObjectCreation(
                             pid, tile, elevation, scriptId);
-                        var handle = game.ObjectFactory.Create(creation);
-                        if (createdObjects.ContainsKey(handle))
+                        var handle = game.ObjectFactory.Create(
+                            new ClassicIntObjectCreationRequest(
+                                program.Identity, procedure, offset, creation));
+                        if (createdObjects.ContainsKey(handle) ||
+                            objects.ContainsKey(handle))
                             throw Failure(program, procedure, offset,
                                 "duplicate-created-object-handle");
                         createdObjects.Add(handle,
                             new ClassicIntCreatedObject(handle, creation));
+                        objects.Add(handle, new ClassicIntWorldObject(
+                            handle, pid, tile, elevation, true));
                         stack.Add(handle);
                         break;
                     }
@@ -1096,12 +1124,33 @@ internal static class ClassicIntProcedureVm
                         var quantity = Pop(stack, program, procedure, offset);
                         var objectHandle = Pop(stack, program, procedure, offset);
                         var ownerHandle = Pop(stack, program, procedure, offset);
-                        if (quantity <= 0 || !createdObjects.ContainsKey(objectHandle) ||
+                        if (quantity <= 0 || !objects.ContainsKey(ownerHandle) ||
+                            !createdObjects.ContainsKey(objectHandle) ||
                             inventory.Any(row => row.ObjectHandle == objectHandle))
                             throw Failure(program, procedure, offset,
                                 "inventory-transfer");
                         inventory.Add(new ClassicIntInventoryEntry(
                             ownerHandle, objectHandle, quantity));
+                        objects[objectHandle] = objects[objectHandle] with
+                        {
+                            Visible = false,
+                        };
+                        break;
+                    }
+                case ItemCapsTotal:
+                    {
+                        var ownerHandle = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(ownerHandle);
+                        stack.Add(CurrencyTotal(ownerHandle));
+                        break;
+                    }
+                case ItemCapsAdjust:
+                    {
+                        var amount = Pop(stack, program, procedure, offset);
+                        var ownerHandle = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(ownerHandle);
+                        AdjustCurrency(ownerHandle, amount);
+                        next = DiscardUnobservedResult(next);
                         break;
                     }
                 case Attack:
@@ -1196,6 +1245,62 @@ internal static class ClassicIntProcedureVm
                 ? worldObject
                 : throw Failure(program, procedure, offset,
                     "missing-world-object");
+
+        int CurrencyTotal(int ownerHandle)
+        {
+            var contract = game.InventoryContract ?? throw Failure(
+                program, procedure, offset, "missing-inventory-contract");
+            return inventory.Where(row =>
+                    row.OwnerHandle == ownerHandle &&
+                    WorldObject(row.ObjectHandle).Pid == contract.CurrencyPid)
+                .Sum(row => row.Quantity);
+        }
+
+        void AdjustCurrency(int ownerHandle, int amount)
+        {
+            if (amount == 0)
+                return;
+            var contract = game.InventoryContract ?? throw Failure(
+                program, procedure, offset, "missing-inventory-contract");
+            var owned = inventory.Where(row =>
+                    row.OwnerHandle == ownerHandle &&
+                    WorldObject(row.ObjectHandle).Pid == contract.CurrencyPid)
+                .ToArray();
+            if (amount < 0)
+            {
+                var remaining = checked(-amount);
+                foreach (var entry in owned)
+                {
+                    var removed = Math.Min(remaining, entry.Quantity);
+                    inventory.Remove(entry);
+                    if (entry.Quantity != removed)
+                        inventory.Add(entry with { Quantity = entry.Quantity - removed });
+                    remaining -= removed;
+                    if (remaining == 0)
+                        break;
+                }
+                if (remaining != 0)
+                    throw Failure(program, procedure, offset,
+                        "insufficient-currency-balance");
+                return;
+            }
+            if (owned.Length > 0)
+            {
+                var entry = owned[0];
+                inventory.Remove(entry);
+                inventory.Add(entry with { Quantity = checked(entry.Quantity + amount) });
+                return;
+            }
+            var detached = objects.Values.Where(row =>
+                    row.Pid == contract.CurrencyPid &&
+                    inventory.All(entry => entry.ObjectHandle != row.Handle))
+                .Take(2).ToArray();
+            if (detached.Length != 1)
+                throw Failure(program, procedure, offset,
+                    "detached-currency-stack");
+            inventory.Add(new ClassicIntInventoryEntry(
+                ownerHandle, detached[0].Handle, amount));
+        }
 
         void SetDoor(int objectHandle, bool? open = null, bool? locked = null)
         {

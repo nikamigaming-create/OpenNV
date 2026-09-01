@@ -44,6 +44,54 @@ ROUTE_SCHEMA = "opennv-fo2-arroyo-trial-route/v1"
 MAP_INDEX = 4
 MAP_NAME = "ARVILLAG.MAP"
 MAP_LOGICAL_PATH = "maps\\arvillag.map"
+INVENTORY_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "recipes"
+    / "classic-inventory-fo2.json"
+)
+
+
+def _literal_expression_before(
+    instructions: list[dict[str, Any]], end: int
+) -> tuple[int, int]:
+    if end < 0:
+        raise Fo1ProfileError("Fallout 2 ARVILLAG literal expression is truncated")
+    instruction = instructions[end]
+    if instruction["opcode"] == "c001":
+        return int(instruction["operand"]), end
+    if instruction["opcode"] == "8046":
+        value, start = _literal_expression_before(instructions, end - 1)
+        return -value, start
+    raise Fo1ProfileError(
+        "Fallout 2 ARVILLAG object creation has a non-literal source argument"
+    )
+
+
+def _object_creations(program: dict[str, Any]) -> list[dict[str, Any]]:
+    result = []
+    for procedure in program["inventory"]["procedures"]:
+        instructions = procedure["instructions"]
+        for index, instruction in enumerate(instructions):
+            if instruction["opcode"] != "80b7":
+                continue
+            end = index - 1
+            reversed_arguments = []
+            for _ in range(4):
+                value, start = _literal_expression_before(instructions, end)
+                reversed_arguments.append(value)
+                end = start - 1
+            pid, tile, elevation, script_id = reversed(reversed_arguments)
+            result.append(
+                {
+                    "procedure": procedure["name"],
+                    "offset": int(instruction["offset"]),
+                    "pid": pid,
+                    "tile": tile,
+                    "elevation": elevation,
+                    "scriptId": script_id,
+                }
+            )
+    return result
 
 
 def compile_fo2_arvillag_slice(
@@ -54,6 +102,20 @@ def compile_fo2_arvillag_slice(
     route_path = route_path.resolve()
     profile = _load_json(profile_path)
     route = _load_json(route_path)
+    inventory_contract = _load_json(INVENTORY_CONTRACT_PATH)
+    if (
+        inventory_contract.get("schema")
+        != "opennv-classic-inventory-contract/v1"
+        or not inventory_contract.get("id")
+        or inventory_contract.get("campaign") != "Fallout2"
+        or inventory_contract.get("retailBuild") != "1.02"
+        or inventory_contract.get("currency", {}).get("accounting")
+        != "owned-inventory-stack-quantity"
+        or inventory_contract.get("currency", {}).get("adjustment")
+        != "signed-existing-stack-reassignment"
+    ):
+        raise Fo1ProfileError("Fallout 2 classic inventory contract drifted")
+    caps_pid = int(inventory_contract["currency"]["pid"])
     if (
         route.get("schema") != ROUTE_SCHEMA
         or route.get("status") != "compiled-owned-bounded-trial-route"
@@ -291,7 +353,28 @@ def compile_fo2_arvillag_slice(
                         "proto\\critters\\" + actor["prototype"]["filename"]
                     ).data
                 )["statValues"],
+                "initialInventory": [
+                    {
+                        "serial": int(entry["object"]["serial"]),
+                        "pid": int(entry["object"]["pid"], FORM_ID_RADIX),
+                        "tile": int(entry["object"]["tile"]),
+                        "elevation": int(entry["object"]["elevation"]),
+                        "quantity": int(entry["quantity"]),
+                    }
+                    for entry in actor["inventory"]
+                ],
+                "objectCreations": _object_creations(program),
             }
+        caps_entries = [
+            item
+            for role in village_int_roles.values()
+            for item in role["initialInventory"]
+            if int(item["pid"]) == caps_pid
+        ]
+        if len(caps_entries) != 1 or int(caps_entries[0]["quantity"]) <= 0:
+            raise Fo1ProfileError(
+                "Fallout 2 ARVILLAG owned currency stack is ambiguous"
+            )
         prototypes: dict[str, dict[str, Any]] = {}
         frm_placements: dict[str, list[dict[str, Any]]] = {}
         for obj in flat_objects:
@@ -408,6 +491,11 @@ def compile_fo2_arvillag_slice(
             "allObjectCount": len(flat_objects),
         },
         "initializationScripts": initialization_scripts,
+        "classicInventoryContract": {
+            "file": str(INVENTORY_CONTRACT_PATH),
+            "sha256": file_sha256(INVENTORY_CONTRACT_PATH),
+            **inventory_contract,
+        },
         "villageIntRoles": village_int_roles,
         "arrivalWalkContract": {
             "semantics": (

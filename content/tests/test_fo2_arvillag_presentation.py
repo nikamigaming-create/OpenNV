@@ -9,6 +9,27 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Fo2ArvillagPresentationTest(unittest.TestCase):
+    def test_inventory_contract_keeps_currency_source_owned(self) -> None:
+        contract = json.loads(
+            (
+                ROOT
+                / "content/recipes/classic-inventory-fo2.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            contract["schema"], "opennv-classic-inventory-contract/v1"
+        )
+        self.assertEqual(contract["campaign"], "Fallout2")
+        self.assertEqual(contract["retailBuild"], "1.02")
+        self.assertEqual(
+            contract["currency"]["accounting"],
+            "owned-inventory-stack-quantity",
+        )
+        self.assertEqual(
+            contract["currency"]["adjustment"],
+            "signed-existing-stack-reassignment",
+        )
+
     def test_recipe_is_exact_map_bound_and_fail_closed_on_roofs(self) -> None:
         recipe = json.loads(
             (ROOT / "content/recipes/fo2-arvillag-relief-v1.json").read_text(
@@ -69,6 +90,9 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn('"villageIntRoles": village_int_roles', source)
         self.assertIn('"initialGlobalVariables"', source)
         self.assertIn('"critterStats"', source)
+        self.assertIn('"initialInventory"', source)
+        self.assertIn('"objectCreations"', source)
+        self.assertIn('"classicInventoryContract"', source)
         self.assertIn('"mapEnterMetarules"', source)
         self.assertIn('"sha256": file_sha256(route_path)', source)
         self.assertIn("visibleSerials.Union(transparent)", catalog)
@@ -99,6 +123,7 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("catalog.IntInitialization.ScriptSlots", int_runtime)
         self.assertIn("readRandomState", int_runtime)
         self.assertIn("commitRandomState", int_runtime)
+        self.assertIn("InventoryContract: _catalog.InventoryContract", int_runtime)
         self.assertIn("Fo1HexMath.TileInDirection", interaction)
         self.assertIn("_scripts.Talk(role)", interaction)
         self.assertIn("_scripts.Choose(_activeRole", interaction)

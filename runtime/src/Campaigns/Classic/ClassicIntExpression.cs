@@ -38,7 +38,8 @@ internal sealed record ClassicIntExpressionContext(
     ClassicIntTimerContract? TimerContract = null,
     int? FixedParameter = null,
     int? CurrentMapIndex = null,
-    IReadOnlyDictionary<(int TraitType, int Object, int Trait), int>? Traits = null);
+    IReadOnlyDictionary<(int TraitType, int Object, int Trait), int>? Traits = null,
+    ClassicIntInventoryContract? InventoryContract = null);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,

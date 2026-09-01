@@ -9,9 +9,11 @@ namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2ArvillagIntRoleState(
     string Role,
+    int PlayerHandle,
     int ActorHandle,
     ClassicIntProcedureState ProcedureState,
-    ClassicIntWorldObjectState WorldState);
+    ClassicIntWorldObjectState WorldState,
+    IClassicIntObjectFactory ObjectFactory);
 
 internal sealed class Fo2ArvillagIntRuntime
 {
@@ -98,6 +100,63 @@ internal sealed class Fo2ArvillagIntRuntime
             var handles = new ClassicIntActorHandleTable();
             var playerHandle = handles.Register(player);
             var actorHandle = handles.Register(actor);
+            var objects = new Dictionary<int, ClassicIntWorldObject>
+            {
+                [playerHandle] = new(
+                    playerHandle,
+                    null,
+                    player.CurrentTile,
+                    player.CurrentElevation,
+                    true),
+                [actorHandle] = new(
+                    actorHandle,
+                    ParsePid(role.ActorPid),
+                    role.ActorTile,
+                    role.ActorElevation,
+                    actor.Visible),
+            };
+            var inventory = new List<ClassicIntInventoryEntry>();
+            var reservedHandles = objects.Keys.ToHashSet();
+            var nextHandle = 1;
+            int AllocateHandle()
+            {
+                while (reservedHandles.Contains(nextHandle))
+                    nextHandle++;
+                var result = nextHandle++;
+                reservedHandles.Add(result);
+                return result;
+            }
+            foreach (var item in role.InitialInventory.OrderBy(row => row.Serial))
+            {
+                var objectHandle = AllocateHandle();
+                objects.Add(objectHandle, new ClassicIntWorldObject(
+                    objectHandle,
+                    item.Pid,
+                    item.Tile,
+                    item.Elevation,
+                    false));
+                inventory.Add(new ClassicIntInventoryEntry(
+                    actorHandle, objectHandle, item.Quantity));
+            }
+            var creationRequests = new Dictionary<ClassicIntObjectCreationRequest, int>();
+            foreach (var creation in role.ObjectCreations
+                         .OrderBy(row => row.Procedure, StringComparer.Ordinal)
+                         .ThenBy(row => row.Offset))
+            {
+                var request = new ClassicIntObjectCreationRequest(
+                    role.Program.Program,
+                    creation.Procedure,
+                    creation.Offset,
+                    creation.Source);
+                if (!creationRequests.TryAdd(request, AllocateHandle()))
+                    throw new InvalidOperationException(
+                        $"Fallout 2 ARVILLAG {role.Role} object creation is duplicated.");
+            }
+            var objectFactory = new ClassicIntObjectHandleTable(
+                new Dictionary<ClassicIntObjectCreation, int>())
+            {
+                Requests = creationRequests,
+            };
             var procedureState = new ClassicIntProcedureState(
                 new Dictionary<int, int>(),
                 new Dictionary<int, int>(),
@@ -133,32 +192,19 @@ internal sealed class Fo2ArvillagIntRuntime
                 null,
                 null,
                 null,
-                new ClassicIntObjectHandleTable(
-                    new Dictionary<ClassicIntObjectCreation, int>()),
+                objectFactory,
                 null,
                 null,
                 null,
                 null,
-                Fo2ArvillagPresentationCatalog.MapIndex);
+                Fo2ArvillagPresentationCatalog.MapIndex,
+                InventoryContract: catalog.InventoryContract);
             var world = new ClassicIntWorldObjectState(
                 false,
                 new Dictionary<int, ClassicIntDoorObjectState>())
             {
-                Objects = new Dictionary<int, ClassicIntWorldObject>
-                {
-                    [playerHandle] = new(
-                        playerHandle,
-                        null,
-                        player.CurrentTile,
-                        player.CurrentElevation,
-                        true),
-                    [actorHandle] = new(
-                        actorHandle,
-                        ParsePid(role.ActorPid),
-                        role.ActorTile,
-                        role.ActorElevation,
-                        actor.Visible),
-                },
+                Objects = objects,
+                Inventory = inventory,
             };
             var executable = role.Program.ExecutableProgram
                 .Procedures["map_enter_p_proc"];
@@ -192,9 +238,11 @@ internal sealed class Fo2ArvillagIntRuntime
             sharedMapVariables = result.State.MapVariables;
             results.Add(role.Role, new Fo2ArvillagIntRoleState(
                 role.Role,
+                playerHandle,
                 actorHandle,
                 result.State,
-                result.WorldObjects));
+                result.WorldObjects,
+                objectFactory));
             actors.Add(role.Role, actor);
         }
         foreach (var roleName in results.Keys.ToArray())
@@ -223,6 +271,7 @@ internal sealed class Fo2ArvillagIntRuntime
         {
             role = row.Key,
             programSha256 = _catalog.IntRoles[row.Key].Program.Sha256,
+            playerHandle = row.Value.PlayerHandle,
             actorHandle = row.Value.ActorHandle,
             procedureState = row.Value.ProcedureState.Save(),
             worldState = row.Value.WorldState.Save(),
@@ -248,6 +297,7 @@ internal sealed class Fo2ArvillagIntRuntime
             if (!_roles.TryGetValue(roleName, out var active) ||
                 saved.GetProperty("programSha256").GetString() !=
                     _catalog.IntRoles[roleName].Program.Sha256 ||
+                saved.GetProperty("playerHandle").GetInt32() != active.PlayerHandle ||
                 saved.GetProperty("actorHandle").GetInt32() != active.ActorHandle)
                 throw new InvalidOperationException(
                     "Fallout 2 ARVILLAG INT saved role identity drifted.");
@@ -337,10 +387,8 @@ internal sealed class Fo2ArvillagIntRuntime
                 (Key: (source.ActorHandle, index), Value: value))
             .ToDictionary(row => row.Key, row => row.Value);
         for (var index = 0; index < _character.Profile.Special.Count; index++)
-            stats[(source.WorldState.Objects.Keys.Single(row =>
-                row != source.ActorHandle), index)] = _character.Profile.Special[index];
-        var playerHandle = source.WorldState.Objects.Keys.Single(row =>
-            row != source.ActorHandle);
+            stats[(source.PlayerHandle, index)] = _character.Profile.Special[index];
+        var playerHandle = source.PlayerHandle;
         stats[(playerHandle, ClassicIntGameIdentifiers.GenderStat)] =
             string.Equals(_character.Profile.Sex, "Female", StringComparison.Ordinal)
                 ? 1
@@ -387,10 +435,10 @@ internal sealed class Fo2ArvillagIntRuntime
             ClassicIntTimerState.Initial.CurrentTick,
             null,
             null,
-            new ClassicIntObjectHandleTable(
-                new Dictionary<ClassicIntObjectCreation, int>()),
+            source.ObjectFactory,
             CurrentMapIndex: Fo2ArvillagPresentationCatalog.MapIndex,
-            Traits: traits);
+            Traits: traits,
+            InventoryContract: _catalog.InventoryContract);
         var budget = role.Program.ExecutableProgram.Procedures.Values
             .Sum(row => row.Instructions.Count);
         var result = ClassicIntEventDispatcher.Execute(

@@ -30,6 +30,18 @@ internal sealed record Fo2ArvillagIntMetarule(
     int Rule,
     int Argument);
 
+internal sealed record Fo2ArvillagIntInventoryItem(
+    int Serial,
+    int Pid,
+    int Tile,
+    int Elevation,
+    int Quantity);
+
+internal sealed record Fo2ArvillagIntObjectCreation(
+    string Procedure,
+    int Offset,
+    ClassicIntObjectCreation Source);
+
 internal sealed record Fo2ArvillagIntRole(
     string Role,
     int ActorSerial,
@@ -47,7 +59,9 @@ internal sealed record Fo2ArvillagIntRole(
     IReadOnlyDictionary<int, string> Messages,
     IReadOnlyDictionary<int, int> InitialGlobalVariables,
     IReadOnlyList<Fo2ArvillagIntMetarule> MapEnterMetarules,
-    IReadOnlyList<int> CritterStats);
+    IReadOnlyList<int> CritterStats,
+    IReadOnlyList<Fo2ArvillagIntInventoryItem> InitialInventory,
+    IReadOnlyList<Fo2ArvillagIntObjectCreation> ObjectCreations);
 
 internal sealed class Fo2ArvillagPresentationCatalog
 {
@@ -75,6 +89,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
         ClassicMapIntInitialization intInitialization,
+        ClassicIntInventoryContract inventoryContract,
         IReadOnlyDictionary<string, Fo2ArvillagIntRole> intRoles,
         IReadOnlyList<Fo2ArvillagReliefPlacement> reliefPlacements,
         IReadOnlyDictionary<int, Fo2ArvillagFloorMaterialDepth> floorMaterialDepth,
@@ -101,6 +116,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
         IntInitialization = intInitialization;
+        InventoryContract = inventoryContract;
         IntRoles = intRoles;
         ReliefPlacements = reliefPlacements;
         FloorMaterialDepth = floorMaterialDepth;
@@ -128,6 +144,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
     internal ClassicMapIntInitialization IntInitialization { get; }
+    internal ClassicIntInventoryContract InventoryContract { get; }
     internal IReadOnlyDictionary<string, Fo2ArvillagIntRole> IntRoles { get; }
     internal IReadOnlyList<Fo2ArvillagReliefPlacement> ReliefPlacements { get; }
     internal IReadOnlyDictionary<int, Fo2ArvillagFloorMaterialDepth>
@@ -269,6 +286,24 @@ internal sealed class Fo2ArvillagPresentationCatalog
         var initialization = ClassicMapInitializationOwner.Parse(map);
         var intInitialization = ClassicMapIntInitializationOwner.Parse(
             source.GetProperty("initializationScripts"), initialization);
+        var inventorySource = source.GetProperty("classicInventoryContract");
+        var currency = inventorySource.GetProperty("currency");
+        if (Fo2TemplePresentationCatalog.RequiredString(inventorySource, "schema") !=
+                "opennv-classic-inventory-contract/v1" ||
+            Fo2TemplePresentationCatalog.RequiredString(inventorySource, "campaign") !=
+                "Fallout2" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                inventorySource, "retailBuild") != "1.02" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                currency, "accounting") != "owned-inventory-stack-quantity" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                currency, "adjustment") !=
+                    "signed-existing-stack-reassignment")
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG classic inventory contract drifted.");
+        var inventoryContract = new ClassicIntInventoryContract(
+            Fo2TemplePresentationCatalog.RequiredString(inventorySource, "id"),
+            currency.GetProperty("pid").GetInt32());
         var objectPlacements = Fo2TemplePresentationCatalog.LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
             source.GetProperty("frms"),
@@ -447,6 +482,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
             tileBindings,
             objectPlacements,
             intInitialization,
+            inventoryContract,
             intRoles,
             reliefPlacements,
             floorMaterialDepth,
@@ -522,6 +558,22 @@ internal sealed class Fo2ArvillagPresentationCatalog
             initialGlobals,
             metarules,
             source.GetProperty("critterStats").EnumerateArray()
-                .Select(row => row.GetInt32()).ToArray());
+                .Select(row => row.GetInt32()).ToArray(),
+            source.GetProperty("initialInventory").EnumerateArray().Select(row =>
+                new Fo2ArvillagIntInventoryItem(
+                    row.GetProperty("serial").GetInt32(),
+                    row.GetProperty("pid").GetInt32(),
+                    row.GetProperty("tile").GetInt32(),
+                    row.GetProperty("elevation").GetInt32(),
+                    row.GetProperty("quantity").GetInt32())).ToArray(),
+            source.GetProperty("objectCreations").EnumerateArray().Select(row =>
+                new Fo2ArvillagIntObjectCreation(
+                    Fo2TemplePresentationCatalog.RequiredString(row, "procedure"),
+                    row.GetProperty("offset").GetInt32(),
+                    new ClassicIntObjectCreation(
+                        row.GetProperty("pid").GetInt32(),
+                        row.GetProperty("tile").GetInt32(),
+                        row.GetProperty("elevation").GetInt32(),
+                        row.GetProperty("scriptId").GetInt32()))).ToArray());
     }
 }
