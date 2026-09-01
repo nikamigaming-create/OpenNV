@@ -135,6 +135,10 @@ internal partial class OpeningQuestRuntime
             .Select(_loaded.GameToCellUnits)
             .Select(position => GameplayActorGrounding.ApplyGroundOffset(placed, position))
             .ToArray();
+        if (path.Length == 0 && placed.Placement.Position.DistanceTo(
+                target.SourceTransform.Origin) <=
+            GamebryoPackageTravel.ExactArrivalToleranceCellUnits)
+            path = [target.SourceTransform.Origin];
         if (path.Length == 0)
             throw new InvalidOperationException(
                 "Owned ordinary package navigation returned no waypoints.");
@@ -177,9 +181,18 @@ internal partial class OpeningQuestRuntime
             _ordinaryActorLocomotion[actor.ReferenceFormId].Stop();
             _ordinaryActorLocomotion.Remove(actor.ReferenceFormId);
             _ordinaryActorTravel.Remove(actor.ReferenceFormId);
+            var completedPackage = _ordinaryActorPackages[actor.ReferenceFormId];
+            if (completedPackage.EventCommands.TryGetValue(
+                    "end", out var endCommands) && endCommands.Count > 0)
+            {
+                ExecuteOrdinaryCommands(endCommands);
+                _loaded.Session.StoreOpeningState(CaptureState(true));
+                EvaluateOrdinaryActorPackages();
+                continue;
+            }
             var packageDialogue = actor.AutomaticPackageDialogues.SingleOrDefault(value =>
                 value.PackageFormId.Equals(
-                    _ordinaryActorPackages[actor.ReferenceFormId].FormId,
+                    completedPackage.FormId,
                     StringComparison.OrdinalIgnoreCase));
             if (packageDialogue is not null)
             {

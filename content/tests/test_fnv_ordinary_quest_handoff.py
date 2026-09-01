@@ -95,7 +95,7 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
             "00104e84",
             {"formId": "0010a214", "editorId": "VCG02"},
             {},
-            {"72": "getIsId", "420": "getStageDone",
+            {"58": "getStage", "72": "getIsId", "420": "getStageDone",
              "421": "getObjectiveCompleted"},
         )
 
@@ -103,6 +103,43 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         self.assertEqual(["000000c8", "0010a1de"], [topic["formId"] for topic in topics])
         self.assertEqual("setQuestVariable", topics[0]["infos"][0]["commands"][0]["kind"])
         self.assertEqual("setStage", topics[1]["infos"][0]["commands"][0]["kind"])
+
+        sneak_info = record(
+            "INFO", "0010a1ed", "",
+            links=[{"signature": "QSTI", "formId": "0010a214"}],
+            source="SetStage VCG02 35"
+        )
+        sneak_info.update({
+            "sourceOrder": 12,
+            "groups": [{"type": 7, "label": "000000c8"}],
+            "conditions": [
+                {"function": 58, "parameter1": "0010a214", "parameter2": 0,
+                 "comparisonValue": 30.0, "operatorFlags": 0},
+                {"function": 72, "parameter1": "00104e84", "parameter2": 0,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+            ],
+            "dialogueData": {"flags": 1, "responseType": 0},
+        })
+        sneak_topics, _ = _compile_package_dialogue_closure(
+            [greeting, sneak_info],
+            {
+                "editorId": "VCG02SunnySmilesDialogueSneakStart",
+                "conditions": [{
+                    "functionName": "getStage",
+                    "parameter1": "0010a214",
+                    "parameter2": 0,
+                    "comparisonValue": 30.0,
+                    "operatorFlags": 0,
+                }],
+            },
+            "00104e84",
+            {"formId": "0010a214", "editorId": "VCG02"},
+            {},
+            {"58": "getStage", "72": "getIsId", "420": "getStageDone",
+             "421": "getObjectiveCompleted"},
+        )
+        self.assertEqual("0010a1ed", sneak_topics[0]["infos"][0]["formId"])
+        self.assertEqual("setStage", sneak_topics[0]["infos"][0]["commands"][0]["kind"])
 
     def test_compiles_source_hit_target_set_without_target_specific_runtime_ids(self) -> None:
         records = [

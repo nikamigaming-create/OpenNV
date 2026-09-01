@@ -251,6 +251,8 @@ internal partial class OpeningQuestRuntime
                     condition.Parameter1,
                     StringComparison.OrdinalIgnoreCase)) ? 1.0f : 0.0f,
             GetQuestVariableConditionFunction => _docReaction,
+            GetStageConditionFunction when _quests.TryGetValue(
+                condition.Parameter1, out var stageQuest) => stageQuest.Stage,
             GetStageDoneConditionFunction when _quests.TryGetValue(
                 condition.Parameter1, out var quest) =>
                 quest.Stage >= checked((int)condition.Parameter2) ? 1.0f : 0.0f,
@@ -358,7 +360,12 @@ internal partial class OpeningQuestRuntime
         if (!quest.Stages.TryGetValue(stage, out var program))
             throw new InvalidOperationException(
                 $"Owned ordinary quest stage is absent: {quest.EditorId} {stage}");
-        var commands = program.Commands.Select((command, sourceIndex) =>
+        ExecuteOrdinaryCommands(program.Commands);
+    }
+
+    private void ExecuteOrdinaryCommands(IReadOnlyList<OpeningFlowCommand> sourceCommands)
+    {
+        var commands = sourceCommands.Select((command, sourceIndex) =>
             new SourceGamebryoStageCommand<OpeningFlowCommand>(
                 sourceIndex,
                 StageCommandKind(command.Kind),

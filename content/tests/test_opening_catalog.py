@@ -733,6 +733,8 @@ class OpeningCatalogTest(unittest.TestCase):
                 ),
                 subrecord("IDLC", bytes((1,))),
                 subrecord("IDLA", struct.pack("<I", SYNTHETIC_IDLE_BEGIN_FORM)),
+                subrecord("POEA", b""),
+                subrecord("SCTX", b"SetStage SyntheticQuest 30\0"),
             )
         )
         record = Record("PACK", SYNTHETIC_PACKAGE_FORM, 0, payload, ())
@@ -781,6 +783,10 @@ class OpeningCatalogTest(unittest.TestCase):
             "SyntheticMarker",
         )
         self.assertEqual(idle_paths, ("meshes\\synthetic-idle.kf",))
+        self.assertEqual(
+            [{"kind": "setStage", "questEditorId": "SyntheticQuest", "stage": 30}],
+            result["eventCommands"]["end"],
+        )
 
     def test_guide_animation_object_joins_idle_anio_nif_and_attachment(self):
         animation_object_form = 0x35

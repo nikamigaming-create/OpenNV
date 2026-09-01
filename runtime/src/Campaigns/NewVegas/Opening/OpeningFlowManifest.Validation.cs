@@ -65,13 +65,23 @@ internal sealed partial record OpeningNewGameFlow
         foreach (var actor in flow.OrdinaryActors)
         {
             var actorCommands = actor.Topics.Values.SelectMany(topic =>
-                topic.Infos.SelectMany(info => info.Commands)).ToArray();
+                    topic.Infos.SelectMany(info => info.Commands))
+                .Concat(actor.Packages.Values.SelectMany(package =>
+                    package.EventCommands.Values.SelectMany(commands => commands)))
+                .ToArray();
             if (!flow.SceneRoles.TryGetValue(actor.Role, out var role) ||
                 !role.ReferenceFormId.Equals(
                     actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
                 !role.BaseFormId.Equals(actor.BaseFormId, StringComparison.OrdinalIgnoreCase) ||
                 actor.PackagePriority.Count == 0 ||
                 actor.PackagePriority.Any(formId => !actor.Packages.ContainsKey(formId)) ||
+                actor.Packages.Values.Any(package =>
+                    package.EventCommands.Keys.Any(eventName =>
+                        eventName is not ("begin" or "end" or "change"))) ||
+                actor.Packages.Values.Any(package =>
+                    package.EventCommands.Any(eventCommands =>
+                        eventCommands.Key is not "end" &&
+                        eventCommands.Value.Count != 0)) ||
                 !actor.Topics.ContainsKey(actor.ActivationTopicFormId) ||
                 !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase) ||
                 actor.ArrivalTransitions.Any(value =>

@@ -16,6 +16,8 @@
     "SunnyRef",
     "VCG02SunnyTravelOutside",
     "VCG02SunnySmilesDialogueStart",
+    "VCG02SunnyTravelToWell1",
+    "VCG02SunnySmilesDialogueSneakStart",
     "VCG02SunnyPatrolTriggerSCRIPT",
     "VCG02SunnyPatrolTriggerREF",
     "VCG02SunnyBark",
@@ -405,7 +407,9 @@
         "packageEditorIds": [
           "SunnyMeetPlayerDialoguePackage",
           "VCG02SunnyTravelOutside",
-          "VCG02SunnySmilesDialogueStart"
+          "VCG02SunnySmilesDialogueStart",
+          "VCG02SunnyTravelToWell1",
+          "VCG02SunnySmilesDialogueSneakStart"
         ],
         "arrivalTransitions": [
           {
@@ -424,6 +428,9 @@
         "automaticPackageDialogues": [
           {
             "packageEditorId": "VCG02SunnySmilesDialogueStart"
+          },
+          {
+            "packageEditorId": "VCG02SunnySmilesDialogueSneakStart"
           }
         ],
         "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"

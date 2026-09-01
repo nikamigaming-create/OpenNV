@@ -1599,7 +1599,15 @@ internal sealed partial record OpeningNewGameFlow(
             .ToArray(),
         source.GetProperty("idleAnimationLogicalPaths").EnumerateArray()
             .Select(value => value.GetString()!)
-            .ToArray());
+            .ToArray(),
+        source.GetProperty("eventCommands").EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => (IReadOnlyList<OpeningFlowCommand>)value.Value
+                    .EnumerateArray()
+                    .Select(ParseCommand)
+                    .ToArray(),
+                StringComparer.OrdinalIgnoreCase));
 
     private static OpeningGuideLocation ParseGuideLocation(JsonElement source) => new(
         source.GetProperty("type").GetInt32(),

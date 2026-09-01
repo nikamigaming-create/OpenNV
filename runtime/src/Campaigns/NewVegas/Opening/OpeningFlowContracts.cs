@@ -671,7 +671,8 @@ internal sealed record OpeningGuidePackage(
     OpeningGuideLocation? Location,
     OpeningGuideTarget? Target,
     IReadOnlyList<string> IdleAnimationFormIds,
-    IReadOnlyList<string> IdleAnimationLogicalPaths);
+    IReadOnlyList<string> IdleAnimationLogicalPaths,
+    IReadOnlyDictionary<string, IReadOnlyList<OpeningFlowCommand>> EventCommands);
 
 internal sealed record OpeningGuideCondition(
     int OperatorFlags,

@@ -5270,21 +5270,32 @@ def _compile_package_dialogue_closure(
         str(name).casefold(): int(form_id)
         for form_id, name in condition_function_names.items()
     }
-    required_functions = {"getobjectivecompleted", "getstagedone", "getisid"}
+    required_functions = {
+        "getobjectivecompleted", "getstage", "getstagedone", "getisid"
+    }
     if not required_functions.issubset(function_ids):
         raise ValueError("Owned package-dialogue condition functions are absent")
     stage_conditions = [
         condition
         for condition in package["conditions"]
-        if str(condition["functionName"]).casefold() == "getstagedone"
+        if str(condition["functionName"]).casefold() in {"getstage", "getstagedone"}
         and str(condition["parameter1"]).casefold()
         == str(quest["formId"]).casefold()
         and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
-        and float(condition["comparisonValue"]) == 1.0
+        and (
+            str(condition["functionName"]).casefold() == "getstage"
+            or float(condition["comparisonValue"]) == 1.0
+        )
     ]
     if len(stage_conditions) != 1:
         raise ValueError("Owned package dialogue has no unique completed stage")
-    source_stage = int(stage_conditions[0]["parameter2"])
+    source_function_name = str(stage_conditions[0]["functionName"]).casefold()
+    source_function = function_ids[source_function_name]
+    source_stage = (
+        int(stage_conditions[0]["comparisonValue"])
+        if source_function_name == "getstage"
+        else int(stage_conditions[0]["parameter2"])
+    )
     greeting = _unique_manifest_record(records, "GREETING", "DIAL")
     greeting_form_id = str(greeting["formId"])
     greeting_infos = []
@@ -5303,11 +5314,15 @@ def _compile_package_dialogue_closure(
             continue
         conditions = record["conditions"]
         if not any(
-            int(condition["function"]) == function_ids["getstagedone"]
+            int(condition["function"]) == source_function
             and str(condition["parameter1"]).casefold()
             == str(quest["formId"]).casefold()
-            and int(condition["parameter2"]) == source_stage
-            and float(condition["comparisonValue"]) == 1.0
+            and (
+                float(condition["comparisonValue"]) == float(source_stage)
+                if source_function_name == "getstage"
+                else int(condition["parameter2"]) == source_stage
+                and float(condition["comparisonValue"]) == 1.0
+            )
             for condition in conditions
         ) or not any(
             int(condition["function"]) == function_ids["getisid"]
@@ -6045,6 +6060,14 @@ def _compile_guide_package(
     values: dict[str, list[bytes]] = defaultdict(list)
     for subrecord in subrecords:
         values[subrecord.signature].append(subrecord.data)
+    event_names = {"POBA": "begin", "POEA": "end", "POCA": "change"}
+    event_sources: dict[str, list[str]] = defaultdict(list)
+    current_event = None
+    for subrecord in subrecords:
+        if subrecord.signature in event_names:
+            current_event = event_names[subrecord.signature]
+        elif subrecord.signature == "SCTX" and current_event is not None:
+            event_sources[current_event].append(zstring(subrecord.data))
     editor_id = _catalog_text(subrecords, "EDID")
     if editor_id is None:
         raise ValueError(f"Owned guide PACK {record.form_id:08x} has no editor ID")
@@ -6170,6 +6193,14 @@ def _compile_guide_package(
             "target": target,
             "idleAnimationFormIds": [form_id_text(value) for value in idle_forms],
             "idleAnimationLogicalPaths": idle_paths,
+            "eventCommands": {
+                event: [
+                    command
+                    for source in event_sources.get(event, [])
+                    for command in _script_commands(source)
+                ]
+                for event in event_names.values()
+            },
         },
         tuple(idle_paths),
     )
@@ -7427,11 +7458,30 @@ def compile_new_game_flow(
             )
             for topic in topic_rows:
                 existing = topics_by_form.get(str(topic["formId"]))
-                if existing is not None and existing != topic:
+                if existing is None:
+                    topics_by_form[str(topic["formId"])] = topic
+                    continue
+                if (
+                    existing["editorId"] != topic["editorId"]
+                    or existing["prompt"] != topic["prompt"]
+                ):
                     raise ValueError(
                         f"Owned ordinary dialogue topic differs: {topic['formId']}"
                     )
-                topics_by_form[str(topic["formId"])] = topic
+                infos_by_form = {
+                    str(info["formId"]): info for info in existing["infos"]
+                }
+                for info in topic["infos"]:
+                    previous = infos_by_form.get(str(info["formId"]))
+                    if previous is not None and previous != info:
+                        raise ValueError(
+                            f"Owned ordinary dialogue INFO differs: {info['formId']}"
+                        )
+                    infos_by_form[str(info["formId"])] = info
+                existing["infos"] = sorted(
+                    infos_by_form.values(),
+                    key=lambda value: int(value["sourceOrder"]),
+                )
             package_dialogues.append({
                 "packageFormId": package["formId"],
                 "greetingTopicFormId": greeting_topic_form_id,
@@ -7457,6 +7507,12 @@ def compile_new_game_flow(
             for info in topic["infos"]
             for command in info["commands"]
         ]
+        commands.extend(
+            command
+            for package in packages
+            for event_commands in package["eventCommands"].values()
+            for command in event_commands
+        )
         arrivals = []
         for transition_source in actor_contract.get("arrivalTransitions", []):
             transition = dict(transition_source)
