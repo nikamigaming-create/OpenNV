@@ -69,6 +69,7 @@ WEATHER_COLOR_BYTES = 4
 WEATHER_FOG_VALUE_COUNT = 6
 WEATHER_FOG_BYTES = WEATHER_FOG_VALUE_COUNT * struct.calcsize("<f")
 WEATHER_DATA_MINIMUM_BYTES = 15
+WEATHER_WIND_SPEED_DATA_OFFSET = 0
 WEATHER_IMAGE_SPACE_FLOAT_COUNT = 76
 WEATHER_IMAGE_SPACE_BYTES = WEATHER_IMAGE_SPACE_FLOAT_COUNT * struct.calcsize("<f")
 WEATHER_MAX_CLOUD_LAYERS_BYTES = 4
@@ -472,6 +473,10 @@ class Weather:
     def sample_count(self) -> int:
         return len(self.colors[0])
 
+    @property
+    def wind_speed_byte(self) -> int:
+        return self.data[WEATHER_WIND_SPEED_DATA_OFFSET]
+
     def record_manifest(self) -> dict[str, object]:
         return {
             "formId": _form_id(self.form_id),
@@ -495,6 +500,13 @@ class Weather:
             "fogDistances": list(self.fog_distances),
             "weatherImageSpaceValues": list(self.weather_image_space_values),
             "weatherImageSpaceStatus": "preserved-unresolved",
+            "physicsWind": {
+                "sourceSubrecord": "DATA",
+                "sourceByteOffset": WEATHER_WIND_SPEED_DATA_OFFSET,
+                "storage": "uint8",
+                "magnitudeByte": self.wind_speed_byte,
+                "worldForceStatus": "unsupported-missing-observed-listener-equation",
+            },
             "data": list(self.data),
         }
 

@@ -8,7 +8,8 @@ internal partial class MovingStaticInstance : RigidBody3D
 {
     internal string ReferenceFormId { get; private set; } = "";
     internal string PhysicsSource { get; private set; } = "unsupported";
-    internal string WorldForceSource { get; private set; } = "unsupported-no-owned-force-contract";
+    internal string WorldForceSource { get; private set; } =
+        "unsupported-owned-denominator-force-equation-unresolved";
 
     internal void Configure(
         string referenceFormId,
