@@ -82,6 +82,20 @@ class FnvExteriorSpatialContractTest(unittest.TestCase):
         )
         self.assertNotIn('baseEditorId.StartsWith(\n                            "WastelandRoad"', loader)
 
+    def test_landscape_assets_publish_required_collision_face_selection(self):
+        exporter = (
+            ROOT / "content" / "tools" / "landscape_gltf.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            'LANDSCAPE_COLLISION_FACE_SELECTION = "all-source-faces"',
+            exporter,
+        )
+        self.assertIn(
+            '"faceSelection": LANDSCAPE_COLLISION_FACE_SELECTION',
+            exporter,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
