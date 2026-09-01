@@ -336,6 +336,11 @@ GET_IS_CURRENT_PACKAGE_FUNCTION = 161
 DIALOGUE_CHILD_GROUP_TYPE = 7
 DIALOGUE_RESPONSE_METADATA_BYTES = frozenset((16, 20, 24))
 DIALOGUE_RESPONSE_NUMBER_OFFSET = 12
+CREATURE_DATA_BYTES = 17
+CREATURE_HEALTH_OFFSET = 4
+WEAPON_DATA_BYTES = 15
+WEAPON_DAMAGE_OFFSET = 12
+WEAPON_CLIP_SIZE_OFFSET = 14
 DIALOGUE_INFO_DATA_BYTES = 4
 DIALOGUE_INFO_SAY_ONCE_FLAG = 0x0004
 INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
@@ -4455,6 +4460,9 @@ def _compile_cg02_reactor_gift_runtime(
         int(config[name]) for name in ("sourceStage", "jonasStage", "targetStage"))
     range_stage = int(config["rangeStage"])
     hit_stage = int(config["hitStage"])
+    combat_stage = int(config["combatStage"])
+    death_stage = int(config["deathStage"])
+    completion_stage = int(config["completionStage"])
     participant_specs = (
         (exact("jonasReferenceFormId", ACTOR_REFERENCE_RECORD),
          exact("jonasBaseFormId", NPC_RECORD),
@@ -4507,7 +4515,8 @@ def _compile_cg02_reactor_gift_runtime(
                             for command in _source_commands(source)]:
                 match = SET_STAGE_PATTERN.fullmatch(command)
                 if match is None or int(match.group("stage")) not in {
-                    jonas_stage, target_stage, range_stage
+                    jonas_stage, target_stage, range_stage, combat_stage,
+                    completion_stage,
                 }:
                     raise ValueError(
                         f"Fallout 3 CG02 reactor gift INFO result differs: "
@@ -4616,8 +4625,53 @@ def _compile_cg02_reactor_gift_runtime(
             raise ValueError("Fallout 3 CG02 target reference differs")
         target_references.append({"referenceFormId": _form_id(reference.form_id),
                                   "sourceTransform": _reference_transform_contract(reference)})
+    radroach_reference = exact("radroachReferenceFormId", CREATURE_REFERENCE_RECORD)
+    radroach_base = exact("radroachBaseFormId", "CREA")
+    radroach_script = exact("radroachScriptFormId", SCRIPT_RECORD)
+    radroach_package = exact("radroachGuardPackageFormId", PACKAGE_RECORD)
+    radroach_guard_marker = exact("radroachGuardMarkerFormId",
+                                  PLACED_REFERENCE_RECORD)
+    if struct.unpack("<I", _single_subrecord(radroach_reference, "NAME"))[0] != \
+            radroach_base.form_id or \
+            struct.unpack("<I", _single_subrecord(radroach_base, "SCRI"))[0] != \
+            radroach_script.form_id:
+        raise ValueError("Fallout 3 CG02 Radroach identity differs")
+    creature_data = _single_subrecord(radroach_base, "DATA")
+    if len(creature_data) != CREATURE_DATA_BYTES:
+        raise ValueError("Fallout 3 CG02 Radroach DATA layout differs")
+    base_health = struct.unpack_from("<H", creature_data, CREATURE_HEALTH_OFFSET)[0]
+    if base_health <= 0:
+        raise ValueError("Fallout 3 CG02 Radroach health differs")
+    if radroach_package.form_id not in {
+            struct.unpack("<I", row.data)[0] for row in iter_subrecords(radroach_base)
+            if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES}:
+        raise ValueError("Fallout 3 CG02 Radroach package ownership differs")
+    package_locations = [
+        struct.unpack("<IiI", row.data) for row in iter_subrecords(radroach_package)
+        if row.signature == "PLDT" and len(row.data) == struct.calcsize("<IiI")]
+    if not any(kind == 0 and target == radroach_guard_marker.form_id and radius > 0
+               for kind, target, radius in package_locations):
+        raise ValueError("Fallout 3 CG02 Radroach guard target differs")
+    guard_radius = next(radius for kind, target, radius in package_locations
+                        if kind == 0 and target == radroach_guard_marker.form_id)
+    death_match = re.search(
+        r"begin\s+OnDeath.*?setstage\s+CG02\s+(?P<stage>\d+)",
+        _script_source(radroach_script), re.IGNORECASE | re.DOTALL)
+    if death_match is None or int(death_match.group("stage")) != death_stage:
+        raise ValueError("Fallout 3 CG02 Radroach death result differs")
+    weapon = exact("bbGunFormId", "WEAP")
+    ammo = exact("bbAmmoFormId", "AMMO")
+    weapon_data = _single_subrecord(weapon, "DATA")
+    if len(weapon_data) != WEAPON_DATA_BYTES or \
+            struct.unpack("<I", _single_subrecord(weapon, "NAM0"))[0] != ammo.form_id:
+        raise ValueError("Fallout 3 CG02 BB-gun combat data differs")
+    weapon_damage = struct.unpack_from("<H", weapon_data, WEAPON_DAMAGE_OFFSET)[0]
+    clip_size = weapon_data[WEAPON_CLIP_SIZE_OFFSET]
+    if weapon_damage <= 0 or clip_size <= 0:
+        raise ValueError("Fallout 3 CG02 BB-gun damage contract differs")
     resolved_stages = {}
-    for stage in (jonas_stage, target_stage, range_stage, hit_stage):
+    for stage in (jonas_stage, target_stage, range_stage, hit_stage,
+                  combat_stage, death_stage):
         rows = []
         for index, command in enumerate(command for source in stage_sources.get(stage, [])
                                         for command in _source_commands(source)):
@@ -4653,6 +4707,10 @@ def _compile_cg02_reactor_gift_runtime(
                 row.update(kind="enable", referenceFormId=_form_id(by_editor[match.group("subject").casefold()].form_id))
             elif match := re.fullmatch(r"(?P<subject>\w+)\.evp", command, re.IGNORECASE):
                 row.update(kind="evaluatePackage", referenceFormId=_form_id(by_editor[match.group("subject").casefold()].form_id))
+            elif match := re.fullmatch(r"SetQuestObject\s+(?P<item>\w+)\s+(?P<value>\d+)", command, re.IGNORECASE):
+                row.update(kind="setQuestObject",
+                           itemFormId=_form_id(by_editor[match.group("item").casefold()].form_id),
+                           value=int(match.group("value")))
             else:
                 raise ValueError(f"Fallout 3 CG02 reactor gift stage result differs: {command}")
             rows.append(row)
@@ -4660,7 +4718,9 @@ def _compile_cg02_reactor_gift_runtime(
     return {"schema": "opennv-fo3-cg02-stage-40-reactor-gift-runtime/v1",
             "sourceStage": source_stage, "jonasStage": jonas_stage,
             "targetStage": target_stage, "rangeStage": range_stage,
-            "hitStage": hit_stage, "participants": participants,
+            "hitStage": hit_stage, "combatStage": combat_stage,
+            "deathStage": death_stage, "completionStage": completion_stage,
+            "participants": participants,
             "packages": packages, "stageResults": resolved_stages,
             "targets": {"baseFormId": _form_id(target_base.form_id),
                         "scriptFormId": _form_id(target_script.form_id),
@@ -4670,8 +4730,21 @@ def _compile_cg02_reactor_gift_runtime(
                         "animationGroup": hit_match.group("group"),
                         "requiredHitCount": int(hit_match.group("count")),
                         "tutorialStage": int(hit_match.group("tutorial"))},
+            "combat": {"referenceFormId": _form_id(radroach_reference.form_id),
+                       "playerReferenceFormId": _form_id(player_form_id),
+                       "baseFormId": _form_id(radroach_base.form_id),
+                       "scriptFormId": _form_id(radroach_script.form_id),
+                       "packageFormId": _form_id(radroach_package.form_id),
+                       "packageTargetFormId": _form_id(radroach_guard_marker.form_id),
+                       "packageRadiusGameUnits": guard_radius,
+                       "maximumHealth": base_health,
+                       "weaponFormId": _form_id(weapon.form_id),
+                       "ammunitionFormId": _form_id(ammo.form_id),
+                       "weaponDamage": weapon_damage,
+                       "clipSize": clip_size,
+                       "deathStage": death_stage},
             "nextBoundary": {"applied": False,
-                             "blocker": "fo3-cg02-stage-55-radroach-combat-runtime-not-implemented"}}
+                             "blocker": "fo3-cg02-stage-80-picture-runtime-not-implemented"}}
 
 
 def _compile_cg02_cake_runtime(

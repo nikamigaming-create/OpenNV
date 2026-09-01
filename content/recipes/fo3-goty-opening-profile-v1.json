@@ -364,7 +364,7 @@
                 "dadReferenceFormId": "000300ef",
                 "dadBaseFormId": "0002fdcf",
                 "dadGreetPackageFormId": "000304e1",
-                "dadGreetingInfoFormIds": ["0001f9cb", "0001f9c9"],
+                "dadGreetingInfoFormIds": ["0001f9cb", "0001f9c9", "000555ff", "0001f9c6"],
                 "dadMoveMarkerFormId": "00063aa7",
                 "reactorStairDoorFormId": "000744b8",
                 "targetRangeDoorFormId": "000297bb",
@@ -373,12 +373,20 @@
                 "bbAmmoFormId": "0002935b",
                 "rangeStage": 50,
                 "hitStage": 55,
+                "combatStage": 60,
+                "deathStage": 70,
+                "completionStage": 80,
                 "targetBaseFormId": "000304db",
                 "targetScriptFormId": "000304d8",
                 "targetReferenceFormIds": ["000304eb", "0007674b", "00076746"],
                 "dadToRangePackageFormId": "000304e2",
                 "dadWaitPackageFormId": "000304e4",
-                "jonasWaitPackageFormId": "000306d6"
+                "jonasWaitPackageFormId": "000306d6",
+                "radroachReferenceFormId": "000306cd",
+                "radroachBaseFormId": "000306cc",
+                "radroachScriptFormId": "000306ce",
+                "radroachGuardPackageFormId": "000a4e63",
+                "radroachGuardMarkerFormId": "0009dec9"
               }
             }
           }

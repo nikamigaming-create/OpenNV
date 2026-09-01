@@ -524,15 +524,18 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("000300e8", post["jonasReferenceFormId"])
         self.assertEqual("00031d48", post["intercomReferenceFormId"])
         gift = post["reactorGift"]
-        self.assertEqual([40, 42, 44, 50, 55], [
+        self.assertEqual([40, 42, 44, 50, 55, 60, 70, 80], [
             gift["sourceStage"], gift["jonasStage"], gift["targetStage"],
-            gift["rangeStage"], gift["hitStage"]])
+            gift["rangeStage"], gift["hitStage"], gift["combatStage"],
+            gift["deathStage"], gift["completionStage"]])
         self.assertEqual(
             ["000304eb", "0007674b", "00076746"],
             gift["targetReferenceFormIds"],
         )
         self.assertEqual("000c0327", gift["bbGunFormId"])
         self.assertEqual("0002935b", gift["bbAmmoFormId"])
+        self.assertEqual("000306cd", gift["radroachReferenceFormId"])
+        self.assertEqual("000306cc", gift["radroachBaseFormId"])
         source = read_csharp_source_module(FO3_CG01_RUNTIME)
         self.assertIn("postIntercom.StageResults[stage]", source)
         self.assertIn("reactorGift.StageResults[stage]", source)
@@ -540,6 +543,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertIn("ConfigureSourceFormActivations(activations)", source)
         self.assertIn("ConfigureSourceHitscan", source)
         self.assertIn("Cg02TargetHitFormIds", source)
+        self.assertIn("GamebryoRangedCombat.ApplyHit", source)
+        self.assertIn("Cg02GreetingStagePriority", source)
+        self.assertIn("CombatHealthByReferenceFormId", source)
         self.assertNotIn('InfoFormId.Equals("00031d3c"', source)
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
