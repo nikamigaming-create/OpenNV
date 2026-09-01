@@ -522,8 +522,21 @@ foreach (var path in args)
                     StringComparison.OrdinalIgnoreCase));
             if (lintGuardian is not null)
             {
-                const int playerHandle = 100;
-                const int guardianHandle = 750;
+                var playerActor = new object();
+                var guardianActor = new object();
+                var actorHandles = new ClassicIntActorHandleTable();
+                var playerHandle = actorHandles.Register(playerActor);
+                var guardianHandle = actorHandles.Register(guardianActor);
+                if (playerHandle == guardianHandle ||
+                    actorHandles.Register(playerActor) != playerHandle ||
+                    actorHandles.Require(guardianActor) != guardianHandle)
+                    throw new InvalidOperationException(
+                        "Classic live actor handle registration drifted.");
+                var guardianContext = gameContext with
+                {
+                    DudeObject = playerHandle,
+                    SelfObject = guardianHandle,
+                };
                 var guardianState = new ClassicIntProcedureState(
                     new Dictionary<int, int>(), new Dictionary<int, int>(),
                     new Dictionary<int, int> { [5] = 0 },
@@ -533,7 +546,7 @@ foreach (var path in args)
                     .Procedures["pickup_p_proc"].Instructions.Count;
                 var ignoredPickup = ClassicIntEventDispatcher.Execute(
                     lintGuardian.Program, "pickup_p_proc", guardianState,
-                    gameContext with { SourceObject = guardianHandle },
+                    guardianContext with { SourceObject = guardianHandle },
                     ClassicIntWorldObjectState.Empty, randomContract, pickupBudget);
                 if (ignoredPickup.State.ScriptLocalVariables[5] != 0 ||
                     ignoredPickup.WorldObjects.AttackRequests.Count != 0)
@@ -542,7 +555,7 @@ foreach (var path in args)
 
                 var playerPickup = ClassicIntEventDispatcher.Execute(
                     lintGuardian.Program, "pickup_p_proc", guardianState,
-                    gameContext with { SourceObject = playerHandle },
+                    guardianContext with { SourceObject = playerHandle },
                     ClassicIntWorldObjectState.Empty, randomContract, pickupBudget);
                 if (playerPickup.State.ScriptLocalVariables[5] != 2 ||
                     playerPickup.WorldObjects.AttackRequests.Count != 0)
@@ -555,7 +568,7 @@ foreach (var path in args)
                     .Procedures["critter_p_proc"].Instructions.Count;
                 var hiddenPlayer = ClassicIntEventDispatcher.Execute(
                     lintGuardian.Program, "critter_p_proc", restoredGuardianState,
-                    gameContext with
+                    guardianContext with
                     {
                         SelfObject = guardianHandle,
                         ActorQueries = new ClassicIntActorQueryTable(
@@ -572,7 +585,7 @@ foreach (var path in args)
 
                 var attackStarted = ClassicIntEventDispatcher.Execute(
                     lintGuardian.Program, "critter_p_proc", restoredGuardianState,
-                    gameContext with
+                    guardianContext with
                     {
                         SelfObject = guardianHandle,
                         ActorQueries = new ClassicIntActorQueryTable(
@@ -584,7 +597,9 @@ foreach (var path in args)
                     playerPickup.WorldObjects, randomContract, critterBudget);
                 if (attackStarted.State.ScriptLocalVariables[5] != 1 ||
                     attackStarted.WorldObjects.AttackRequests is not
-                    [{ ActorHandle: guardianHandle, TargetHandle: playerHandle } attack] ||
+                    [{ } attack] ||
+                    attack.ActorHandle != guardianHandle ||
+                    attack.TargetHandle != playerHandle ||
                     !attack.SourceArguments.SequenceEqual(
                         new[] { 0, 1, 0, 0, 30000, 0, 0 }))
                     throw new InvalidOperationException(
@@ -593,8 +608,9 @@ foreach (var path in args)
                     JsonSerializer.SerializeToElement(
                         attackStarted.WorldObjects.Save()));
                 if (restoredCombat.AttackRequests is not
-                    [{ ActorHandle: guardianHandle, TargetHandle: playerHandle }
-                        restoredAttack] ||
+                    [{ } restoredAttack] ||
+                    restoredAttack.ActorHandle != guardianHandle ||
+                    restoredAttack.TargetHandle != playerHandle ||
                     !restoredAttack.SourceArguments.SequenceEqual(
                         attack.SourceArguments))
                     throw new InvalidOperationException(

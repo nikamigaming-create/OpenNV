@@ -192,7 +192,8 @@ internal sealed record Fo2TempleConfrontationState(
     bool CombatActive,
     bool SpearLooted,
     bool SpearEquipped,
-    ClassicScriptState ScriptState)
+    ClassicScriptState ScriptState,
+    ClassicIntWorldObjectState IntWorldState)
 {
     internal void Validate(
         Fo2TempleConfrontationContract contract,
@@ -215,7 +216,7 @@ internal sealed record Fo2TempleConfrontationState(
                  LastTargetPath.CurrentTile != contract.Critter.Tile ||
                  LastTargetPath.ActionPoints != TargetActionPoints) ||
             CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0 ||
-            SpearEquipped && !SpearLooted)
+            SpearEquipped && !SpearLooted || IntWorldState is null)
             throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation save state is invalid.");
     }
@@ -260,6 +261,14 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     private readonly Fo2TempleInventoryScreen _inventory;
     private readonly Fo2TempleGuardianDialogue _dialogue;
     private readonly Fo2TempleTransitionRuntime _transition;
+    private readonly ClassicMapIntProgram _guardianIntProgram;
+    private readonly ClassicRetailRandomContract _randomContract;
+    private readonly Func<ClassicRetailRandomLifecycleState> _readRandomState;
+    private readonly Action<ClassicRetailRandomLifecycleState,
+        ClassicRetailRandomLifecycleState> _commitRandomState;
+    private readonly ClassicIntActorHandleTable _actorHandles = new();
+    private readonly int _playerIntHandle;
+    private readonly int _guardianIntHandle;
     private Fo2TempleConfrontationState _state;
 
     internal event Action? StateChanged;
@@ -334,6 +343,11 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2CharacterSelection character,
         Fo2CharacterStartAsset inventorySource,
         Fo2TempleTransitionRuntime transition,
+        ClassicMapIntProgram guardianIntProgram,
+        ClassicRetailRandomContract randomContract,
+        Func<ClassicRetailRandomLifecycleState> readRandomState,
+        Action<ClassicRetailRandomLifecycleState,
+            ClassicRetailRandomLifecycleState> commitRandomState,
         Fo2TempleConfrontationState? restored)
     {
         _contract = contract;
@@ -342,6 +356,12 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         _topology = topology;
         _targetSprite = targetSprite;
         _transition = transition;
+        _guardianIntProgram = guardianIntProgram;
+        _randomContract = randomContract;
+        _readRandomState = readRandomState;
+        _commitRandomState = commitRandomState;
+        _playerIntHandle = _actorHandles.Register(player);
+        _guardianIntHandle = _actorHandles.Register(targetSprite);
         _maximumPlayerHitPoints = MaximumHitPoints(character);
         _maximumPlayerActionPoints = MaximumActionPoints(character);
         _playerMeleeDamage = MeleeDamage(character);
@@ -356,8 +376,16 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             false,
             false,
             false,
-            new ClassicScriptState());
+            new ClassicScriptState(),
+            ClassicIntWorldObjectState.Empty);
         _state.Validate(contract, _maximumPlayerActionPoints);
+        if (_actorHandles.Require(player) != _playerIntHandle ||
+            _actorHandles.Require(targetSprite) != _guardianIntHandle ||
+            _state.IntWorldState.AttackRequests.Any(request =>
+                request.ActorHandle != _guardianIntHandle ||
+                request.TargetHandle != _playerIntHandle))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple restored INT actor handles are invalid.");
         if (_state.LastTargetPath is { } restoredPath)
         {
             var expectedPath = ClassicTargetPathOwner.Plan(
@@ -422,6 +450,10 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2CharacterSelection character,
         Fo2CharacterStartAsset inventorySource,
         Fo2TempleTransitionRuntime transition,
+        ClassicRetailRandomContract randomContract,
+        Func<ClassicRetailRandomLifecycleState> readRandomState,
+        Action<ClassicRetailRandomLifecycleState,
+            ClassicRetailRandomLifecycleState> commitRandomState,
         Fo2TempleConfrontationState? restored = null)
     {
         if (player.CurrentMapIndex != Fo2TemplePresentationCatalog.MapIndex ||
@@ -450,6 +482,9 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             targets[0].GetMeta("source_sha256").AsString() != targetArtifact.SourceSha256)
             throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation target sprite identity is absent.");
+        var guardianIntProgram = catalog.IntInitialization.ScriptSlots.Single(row =>
+            row.ScriptIndex == catalog.Confrontation.Critter.ScriptIndex &&
+            row.Sid == catalog.Confrontation.Critter.Sid).Program;
         var runtime = new Fo2TempleConfrontationRuntime(
             catalog.Confrontation,
             profile,
@@ -459,6 +494,10 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             character,
             inventorySource,
             transition,
+            guardianIntProgram,
+            randomContract,
+            readRandomState,
+            commitRandomState,
             restored);
         if (!runtime.TargetPlacementExact || runtime.TargetSourceSha256.Length != 64)
             throw new InvalidOperationException(
@@ -719,7 +758,9 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             _contract.Critter.Stats.ActionPoints,
             _contract.Critter.RuntimeAiPacket,
             _contract.Critter.RuntimeTeam,
-            _state.ScriptState.Flag("attack-player-requested"),
+            _state.IntWorldState.AttackRequests.Any(request =>
+                request.ActorHandle == _guardianIntHandle &&
+                request.TargetHandle == _playerIntHandle),
             _contract.Critter.Tile,
             _player.CurrentTile,
             Fo1HexMath.Neighbors(_contract.Critter.Tile).ToHashSet());
@@ -753,12 +794,14 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             LastTargetAttack = targetAttack,
             LastTargetPath = targetPath,
         };
+        var randomState = _readRandomState();
+        var randomBoundary = randomState.Boundary ?? randomState.Phase.ToString();
         SetStatus(targetTurn.Action switch
         {
             ClassicTargetTurnAction.AdjacentAttackRequired =>
                 $"Source-equipped {_contract.DefeatLoot.DisplayName} attack is in range and " +
                 $"costs {_contract.Critter.EquippedAttack.ActionPointCost} AP; " +
-                "retail hit/RNG resolution is unavailable, so damage remains fail-closed.",
+                $"retail hit/RNG resolution remains fail-closed at {randomBoundary}.",
             ClassicTargetTurnAction.MovementRequired =>
                 targetPath?.Boundary switch
                 {
@@ -779,25 +822,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     {
         if (_state.TargetHitPoints > 0 && !_state.SpearLooted && Adjacent())
         {
-            var script = _contract.GuardianScript;
-            var pickupExecuted = script.EffectProgram.Execute(
-                "pickup_proc",
-                _state.ScriptState,
-                new ClassicScriptContext(
-                    SourceIsPlayer: true,
-                    CanSeePlayer: true,
-                    GameTime: default));
-            var critterExecuted = script.EffectProgram.Execute(
-                "critter_proc",
-                _state.ScriptState,
-                new ClassicScriptContext(
-                    SourceIsPlayer: false,
-                    CanSeePlayer: Adjacent(),
-                    GameTime: default));
-            if (!pickupExecuted || !critterExecuted ||
-                !_state.ScriptState.Flag("attack-player-requested"))
-                throw new InvalidOperationException(
-                    "Fallout 2 guardian pickup script did not request combat.");
+            ExecuteGuardianPickupAndCritter();
             _state = _state with { CombatActive = true };
             SetStatus(
                 $"{_contract.Critter.DisplayName} becomes hostile and engages combat.");

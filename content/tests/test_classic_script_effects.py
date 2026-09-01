@@ -45,12 +45,16 @@ class ClassicScriptEffectsTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         fo2 = (
             ROOT
-            / "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.cs"
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.Int.cs"
         ).read_text(encoding="utf-8")
         self.assertIn("ClassicScriptContext", fo1)
         self.assertIn("flare.Program.Execute", fo1)
-        self.assertIn('EffectProgram.Execute(\n                "pickup_proc"', fo2)
-        self.assertIn('EffectProgram.Execute(\n                "critter_proc"', fo2)
+        self.assertIn("ClassicIntEventDispatcher.Execute", fo2)
+        self.assertIn('"pickup_p_proc"', fo2)
+        self.assertIn('"critter_p_proc"', fo2)
+        self.assertIn("_readRandomState()", fo2)
+        self.assertIn("IntWorldState = critter.WorldObjects", fo2)
+        self.assertNotIn("EffectProgram.Execute", fo2)
         self.assertNotIn("TakeDamage", fo2)
 
 

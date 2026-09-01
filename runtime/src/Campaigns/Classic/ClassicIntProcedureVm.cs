@@ -64,6 +64,29 @@ internal sealed record ClassicIntActorQueryTable(
                 $"{observerHandle}->{targetHandle}.");
 }
 
+internal sealed class ClassicIntActorHandleTable
+{
+    private const int NullObjectHandle = 0;
+    private readonly Dictionary<object, int> _handles =
+        new(ReferenceEqualityComparer.Instance);
+
+    internal int Register(object actor)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        if (_handles.TryGetValue(actor, out var handle))
+            return handle;
+        handle = checked(NullObjectHandle + _handles.Count + 1);
+        _handles.Add(actor, handle);
+        return handle;
+    }
+
+    internal int Require(object actor) =>
+        _handles.TryGetValue(actor, out var handle)
+            ? handle
+            : throw new InvalidOperationException(
+                "Classic INT live actor handle is not registered.");
+}
+
 internal interface IClassicIntObjectFactory
 {
     int Create(ClassicIntObjectCreation source);
@@ -523,10 +546,12 @@ internal static class ClassicIntProcedureVm
                         break;
                     }
                 case CombatDifficulty:
-                    stack.Add(game.CombatDifficulty);
+                    stack.Add(game.CombatDifficulty ?? throw Failure(
+                        program, procedure, offset, "missing-combat-difficulty"));
                     break;
                 case DifficultyLevel:
-                    stack.Add(game.DifficultyLevel);
+                    stack.Add(game.DifficultyLevel ?? throw Failure(
+                        program, procedure, offset, "missing-difficulty-level"));
                     break;
                 case CritterStat:
                     {
@@ -607,13 +632,16 @@ internal static class ClassicIntProcedureVm
                         break;
                     }
                 case GameTime:
-                    stack.Add(game.GameTime);
+                    stack.Add(game.GameTime ?? throw Failure(
+                        program, procedure, offset, "missing-game-time"));
                     break;
                 case GameTimeHour:
-                    stack.Add(game.GameTimeHour);
+                    stack.Add(game.GameTimeHour ?? throw Failure(
+                        program, procedure, offset, "missing-game-time-hour"));
                     break;
                 case GetMonth:
-                    stack.Add(game.Month);
+                    stack.Add(game.Month ?? throw Failure(
+                        program, procedure, offset, "missing-month"));
                     break;
                 case SetLightLevel:
                     lightLevel = Pop(stack, program, procedure, offset);

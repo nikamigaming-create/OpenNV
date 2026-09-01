@@ -278,7 +278,7 @@ internal static class Fo2TempleConfrontationProof
                 throw new InvalidOperationException(
                     "Fallout 2 ACKlint dialogue did not converge through the owned terminal branch.");
             if (confrontation.Loot() || !confrontation.State.CombatActive ||
-                !confrontation.State.ScriptState.Flag("attack-player-requested"))
+                confrontation.State.IntWorldState.AttackRequests.Count != 1)
                 throw new InvalidOperationException(
                     "Fallout 2 ACKlint pickup procedure did not enter hostile combat.");
             var attempts = 0;
@@ -1052,7 +1052,10 @@ internal static class Fo2TempleConfrontationProof
         left.LastTargetAttack == right.LastTargetAttack &&
         SameTargetPath(left.LastTargetPath, right.LastTargetPath) &&
         left.CombatActive == right.CombatActive &&
-        left.SpearLooted == right.SpearLooted;
+        left.SpearLooted == right.SpearLooted &&
+        left.ScriptState.Equals(right.ScriptState) &&
+        JsonSerializer.Serialize(left.IntWorldState.Save()) ==
+            JsonSerializer.Serialize(right.IntWorldState.Save());
 
     private static bool SameTargetPath(
         ClassicTargetPathState? left,

@@ -14,16 +14,16 @@ internal sealed record ClassicIntExpressionContext(
     IReadOnlyDictionary<int, int> GlobalVariables,
     int DudeObject,
     int SelfObject,
-    int CombatDifficulty,
-    int DifficultyLevel,
+    int? CombatDifficulty,
+    int? DifficultyLevel,
     IReadOnlyDictionary<(int Object, int Stat), int> CritterStats,
     IReadOnlyDictionary<(int Rule, int Argument), int> MetaruleValues,
     IReadOnlyDictionary<int, int> SfallArrayLengths,
     IReadOnlyDictionary<(int MessageList, int MessageId), int> MessageHandles,
     IReadOnlyDictionary<string, int> ExternalVariables,
-    int GameTime,
-    int GameTimeHour,
-    int Month,
+    int? GameTime,
+    int? GameTimeHour,
+    int? Month,
     IClassicIntObjectFactory ObjectFactory,
     int? SourceObject = null,
     IClassicIntActorQueries? ActorQueries = null);
@@ -88,8 +88,10 @@ internal static class ClassicIntExpressionOwner
                 context.GlobalVariables, arguments, expression, site),
             "dude-object" when arguments.Count == 0 => context.DudeObject,
             "self-object" when arguments.Count == 0 => context.SelfObject,
-            "combat-difficulty" when arguments.Count == 0 => context.CombatDifficulty,
-            "difficulty-level" when arguments.Count == 0 => context.DifficultyLevel,
+            "combat-difficulty" when arguments.Count == 0 => RequiredContext(
+                context.CombatDifficulty, expression, site),
+            "difficulty-level" when arguments.Count == 0 => RequiredContext(
+                context.DifficultyLevel, expression, site),
             "critter-stat" => RequiredGameValue(
                 context.CritterStats,
                 arguments,
@@ -178,4 +180,10 @@ internal static class ClassicIntExpressionOwner
             $"0x{expression.Offset:x}:{expression.Kind}.");
 
     private static int Boolean(bool value) => value ? 1 : 0;
+
+    private static int RequiredContext(
+        int? value,
+        ClassicIntExpression expression,
+        ClassicMapIntRandomSite site) =>
+        value ?? throw Unsupported(expression, site);
 }

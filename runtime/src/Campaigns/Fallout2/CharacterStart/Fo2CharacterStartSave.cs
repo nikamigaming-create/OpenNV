@@ -284,6 +284,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
                     scriptState = TempleConfrontation.ScriptState.Save(),
+                    intWorldState = TempleConfrontation.IntWorldState.Save(),
                 },
                 templeExitTransition = TempleExitTransition is null ? null : new
                 {
@@ -717,7 +718,10 @@ internal sealed record Fo2CharacterStartSaveState(
                 equipped.GetBoolean(),
             schema == Schema
                 ? ClassicScriptState.Restore(value.GetProperty("scriptState"))
-                : new ClassicScriptState());
+                : new ClassicScriptState(),
+            value.TryGetProperty("intWorldState", out var intWorldState)
+                ? ClassicIntWorldObjectState.Restore(intWorldState)
+                : ClassicIntWorldObjectState.Empty);
         state.Validate(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));

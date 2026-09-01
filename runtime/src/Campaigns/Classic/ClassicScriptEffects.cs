@@ -52,6 +52,15 @@ internal sealed class ClassicScriptState : IEquatable<ClassicScriptState>
         _locals[index] = value;
     }
 
+    internal void ReplaceLocals(IReadOnlyDictionary<int, int> locals)
+    {
+        if (locals.Keys.Any(index => index < 0))
+            throw new InvalidOperationException("Classic script locals are invalid.");
+        _locals.Clear();
+        foreach (var row in locals.OrderBy(row => row.Key))
+            _locals.Add(row.Key, row.Value);
+    }
+
     internal void SetFlag(string name)
     {
         if (string.IsNullOrWhiteSpace(name))

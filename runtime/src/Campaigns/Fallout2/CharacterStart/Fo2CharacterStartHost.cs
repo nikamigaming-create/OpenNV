@@ -628,6 +628,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 "Fallout 2 Temple confrontation has no selected character."),
             _characterStart.Inventory,
             TempleExitRuntime,
+            _retailRandomContract,
+            () => _retailRandomLifecycle,
+            CommitRetailRandomLifecycle,
             restoredConfrontation);
         if (_persistenceEnabled)
             TempleConfrontation.StateChanged += OnTempleConfrontationStateChanged;
@@ -638,6 +641,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             $"source={exit.SourceMapIndex}:{exit.SourceTile} " +
             $"target={exit.TargetMapIndex}:{exit.TargetTile} " +
             $"elevation={exit.TargetElevation} rotation={exit.TargetRotation}");
+    }
+
+    private void CommitRetailRandomLifecycle(
+        ClassicRetailRandomLifecycleState source,
+        ClassicRetailRandomLifecycleState result)
+    {
+        if (_retailRandomLifecycle != source)
+            throw new InvalidOperationException(
+                "Fallout 2 retail random lifecycle changed during INT dispatch.");
+        result.Validate(_retailRandomContract);
+        _retailRandomLifecycle = result;
     }
 
     internal void EnterTempleAfterTrial()
