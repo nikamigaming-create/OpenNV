@@ -75,6 +75,25 @@ class FnvPlayerControlClosureTest(unittest.TestCase):
         self.assertIn("_activeSet.Activate(target.CellFormId);", portal)
         self.assertIn("_environmentSet?.Activate(target.CellFormId);", portal)
 
+    def test_owned_pipboy_reset_publishes_inventory_and_control_state(self):
+        state = (OPENING / "OpeningQuestRuntime.State.cs").read_text(encoding="utf-8")
+        session = (
+            ROOT / "runtime" / "src" / "Gameplay" / "State" / "GameplaySession.cs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('case "resetPipBoyManager":', state)
+        self.assertIn(
+            "_loaded.Session.PublishOpeningState(CaptureState(false));",
+            state,
+        )
+        self.assertIn(
+            "_loaded.Session.SetPipBoyControlEnabled(_playerControls[PipBoyControlIndex]);",
+            state,
+        )
+        self.assertIn("_loaded.Session.SetPipBoyControlEnabled(false);", state)
+        self.assertIn("internal void PublishOpeningState(OpeningCampaignState state)", session)
+        self.assertIn("if (_pipBoyControlEnabled)", session)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -249,6 +249,7 @@ OPENING_COMMAND_KINDS = frozenset(
         "playerControls",
         "playIdle",
         "referenceEnabled",
+        "resetPipBoyManager",
         "removeitem",
         "removeScriptPackage",
         "sayTo",
@@ -3912,6 +3913,9 @@ def _script_commands_unconditional(source: str) -> list[dict[str, object]]:
                     "count": 1 if match[3] is None else int(match[3]),
                 }
             )
+            continue
+        if re.fullmatch(r"ResetPipBoyManager", line, re.IGNORECASE):
+            commands.append({"kind": "resetPipBoyManager"})
             continue
         match = re.fullmatch(
             r"(\w+)\.(ResetAI|EVP|StopLook|Look)\s*(\w+)?",

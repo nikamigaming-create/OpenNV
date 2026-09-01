@@ -101,6 +101,9 @@ internal partial class OpeningQuestRuntime
             case "referenceEnabled":
                 ApplyReferenceEnabled(command);
                 break;
+            case "resetPipBoyManager":
+                _loaded.Session.PublishOpeningState(CaptureState(false));
+                break;
             case "actorIntent":
                 ApplyActorIntent(command);
                 break;
@@ -212,6 +215,7 @@ internal partial class OpeningQuestRuntime
         "removeScriptPackage" => GamebryoResultCommandKind.RemoveScriptPackage,
         "imageSpaceModifier" => GamebryoResultCommandKind.ImageSpaceModifier,
         "referenceEnabled" => GamebryoResultCommandKind.ReferenceEnabled,
+        "resetPipBoyManager" => GamebryoResultCommandKind.ResetPipBoyManager,
         "actorIntent" => GamebryoResultCommandKind.ActorIntent,
         "objective" => GamebryoResultCommandKind.Objective,
         "startQuest" => GamebryoResultCommandKind.StartQuest,
@@ -1620,10 +1624,12 @@ internal partial class OpeningQuestRuntime
         if (_activeModal is not null)
         {
             _loaded.Session.SetGameplayUiVisible(false);
+            _loaded.Session.SetPipBoyControlEnabled(false);
             _loaded.Player.SetControlPolicy(false, false, false, false, false);
             return;
         }
         _loaded.Session.SetGameplayUiVisible(_playerControls[RolloverTextControlIndex]);
+        _loaded.Session.SetPipBoyControlEnabled(_playerControls[PipBoyControlIndex]);
         ApplyPlayerControlPolicy(
             _loaded.Player,
             _playerControls

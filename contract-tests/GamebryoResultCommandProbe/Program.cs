@@ -6,7 +6,8 @@ var commands = new[]
     Command(0, GamebryoResultCommandKind.SetQuestVariable, false, "reaction"),
     Command(1, GamebryoResultCommandKind.ReferenceEnabled, false, "doctor"),
     Command(2, GamebryoResultCommandKind.PlayerControls, false, "controls"),
-    Command(3, GamebryoResultCommandKind.SetStage, true, "stage"),
+    Command(3, GamebryoResultCommandKind.ResetPipBoyManager, false, "pipboy"),
+    Command(4, GamebryoResultCommandKind.SetStage, true, "stage"),
 };
 var execution = GamebryoResultCommandExecutor.Execute(
     commands,
@@ -17,7 +18,7 @@ var execution = GamebryoResultCommandExecutor.Execute(
         return true;
     });
 if (!execution.Terminal || execution.AppliedCount != commands.Length ||
-    !applied.SequenceEqual(["reaction", "doctor", "controls", "stage"]))
+    !applied.SequenceEqual(["reaction", "doctor", "controls", "pipboy", "stage"]))
     throw new InvalidOperationException("Ordered result execution differs.");
 
 if (!Rejects(() => GamebryoResultCommandExecutor.Execute(

@@ -144,6 +144,7 @@ internal sealed partial record OpeningNewGameFlow(
             "playerControls",
             "playIdle",
             "referenceEnabled",
+            "resetPipBoyManager",
             "removeitem",
             "removeScriptPackage",
             "sayTo",

@@ -72,6 +72,7 @@ internal partial class GameplaySession : Node
     private OpeningGameplayVitalsContract? _vitalsContract;
     private GameplayVitals? _vitals;
     private Func<GamebryoHitscanHit, bool>? _hitscanHitHandler;
+    private bool _pipBoyControlEnabled = true;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -252,9 +253,20 @@ internal partial class GameplaySession : Node
         _uiController?.Refresh();
     }
 
-    internal void TogglePipBoy() => _uiController?.TogglePipBoy();
+    internal void TogglePipBoy()
+    {
+        if (_pipBoyControlEnabled)
+            _uiController?.TogglePipBoy();
+    }
 
     internal void ClosePipBoy() => _uiController?.ClosePipBoy();
+
+    internal void SetPipBoyControlEnabled(bool enabled)
+    {
+        _pipBoyControlEnabled = enabled;
+        if (!enabled)
+            ClosePipBoy();
+    }
 
     internal void SetGameplayUiVisible(bool visible)
     {
@@ -523,6 +535,18 @@ internal partial class GameplaySession : Node
 
     internal void StoreOpeningState(OpeningCampaignState state)
     {
+        ApplyOpeningState(state);
+        Save();
+    }
+
+    internal void PublishOpeningState(OpeningCampaignState state)
+    {
+        ApplyOpeningState(state);
+        _uiController?.Refresh();
+    }
+
+    private void ApplyOpeningState(OpeningCampaignState state)
+    {
         state.Validate();
         var knownDefinitions = _inventory.Values
             .ToDictionary(
@@ -562,7 +586,6 @@ internal partial class GameplaySession : Node
         else
             ClearEquippedWeapon();
         SynchronizeHeldWeaponPresentation();
-        Save();
     }
 
     private void ClearEquippedWeapon()

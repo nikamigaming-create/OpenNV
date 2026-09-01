@@ -687,6 +687,24 @@ class OpeningCatalogTest(unittest.TestCase):
             ],
         )
 
+    def test_script_commands_preserve_pipboy_inventory_publication_boundary(self):
+        commands = _script_commands(
+            "\n".join(
+                (
+                    "player.additem pipboy 1",
+                    "player.additem pipboyglove 1",
+                    "player.equipitem pipboy",
+                    "player.equipitem pipboyglove",
+                    "ResetPipBoyManager",
+                )
+            )
+        )
+
+        self.assertEqual(
+            [command["kind"] for command in commands],
+            ["additem", "additem", "equipitem", "equipitem", "resetPipBoyManager"],
+        )
+
     def test_player_package_resolves_event_and_idle_semantics(self):
         package_data = struct.pack("<IBBHHH", 4, 6, 0, 2, 3, 0)
         payload = b"".join(

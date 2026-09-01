@@ -60,6 +60,7 @@ internal enum GamebryoResultCommandKind
     RemoveScriptPackage,
     ImageSpaceModifier,
     ReferenceEnabled,
+    ResetPipBoyManager,
     ActorIntent,
     Objective,
     StartQuest,
