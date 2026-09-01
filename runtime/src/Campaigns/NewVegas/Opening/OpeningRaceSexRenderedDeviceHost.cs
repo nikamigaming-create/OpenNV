@@ -307,7 +307,8 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         {
             Name = "OwnedRaceSexDirectional",
             Basis = RetailLighting.DirectionalLightBasis(surfaceToLight),
-            LightColor = lighting.DirectionalColor,
+            LightColor = RetailLighting.GodotLightColor(
+                lighting.DirectionalColor),
             LightEnergy = lighting.DirectionalFade *
                 configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,

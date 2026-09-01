@@ -198,7 +198,7 @@ internal static class RetailEnvironmentRenderer
         var directionalLight = new DirectionalLight3D
         {
             Name = $"WTHR_{resolved.WeatherFormId:X8}_Sunlight",
-            LightColor = sunlight,
+            LightColor = RetailLighting.GodotLightColor(sunlight),
             LightEnergy = configuration.Renderer.DirectionalEnergyScale *
                 resolved.ImageSpace.Traits[sunlightDimmerIndex],
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,

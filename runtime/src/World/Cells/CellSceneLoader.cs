@@ -574,7 +574,8 @@ internal static class CellSceneLoader
                 Transform = new Transform3D(
                     RetailLighting.DirectionalLightBasis(surfaceToLight),
                     Vector3.Zero),
-                LightColor = lighting.DirectionalColor,
+                LightColor = RetailLighting.GodotLightColor(
+                    lighting.DirectionalColor),
                 LightEnergy = lighting.DirectionalFade *
                     configuration.Renderer.DirectionalEnergyScale,
                 ShadowEnabled = configuration.ActorReview.DirectionalShadows,
@@ -591,7 +592,7 @@ internal static class CellSceneLoader
             {
                 Name = $"LIGH_{light.FormId}_{light.EditorId}",
                 Position = content.Root.ToGlobal(light.PositionGodotUnits),
-                LightColor = light.Color,
+                LightColor = RetailLighting.GodotLightColor(light.Color),
                 LightEnergy = MathF.Max(
                     configuration.Renderer.MinimumPointLightEnergy,
                     light.Intensity * configuration.Renderer.PointLightEnergyScale),

@@ -338,7 +338,7 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
             Transform = new Transform3D(
                 RetailLighting.DirectionalLightBasis(surfaceToLight),
                 Vector3.Zero),
-            LightColor = menuDiffuse,
+            LightColor = RetailLighting.GodotLightColor(menuDiffuse),
             LightEnergy = configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,
         });
