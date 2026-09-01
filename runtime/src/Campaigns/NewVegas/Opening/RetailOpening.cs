@@ -175,6 +175,7 @@ internal partial class RetailOpening : CanvasLayer
         }
         catch (Exception exception)
         {
+            RestoreOwnedFailureCover();
             GD.PushError($"OPENNV_OWNED_MENU_TRANSITION_FAIL {exception}");
             GetTree().Quit(1);
         }
@@ -216,9 +217,21 @@ internal partial class RetailOpening : CanvasLayer
         }
         catch (Exception exception)
         {
+            RestoreOwnedFailureCover();
             GD.PushError($"OPENNV_OWNED_INTRO_TRANSITION_FAIL {exception}");
             GetTree().Quit(1);
         }
+    }
+
+    private void RestoreOwnedFailureCover()
+    {
+        if (_video is not null)
+        {
+            _video.Stop();
+            _video.Visible = false;
+        }
+        _canvas.Visible = true;
+        Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 
     private void SetButtonsDisabled()

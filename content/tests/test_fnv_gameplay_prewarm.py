@@ -24,10 +24,11 @@ class FnvGameplayPrewarmTest(unittest.TestCase):
             'newGameOptions["new-game"] = "";',
             coordinator,
         )
-        self.assertIn(
-            "LoadPreparedGameplay(prepared, options, useOpeningCampaign: true);",
-            coordinator,
+        self.assertEqual(
+            coordinator.count("await LoadPreparedGameplay("),
+            2,
         )
+        self.assertIn("return loaded.InitialAdjacentReady;", coordinator)
 
     def test_prewarm_is_read_only_and_bounded_to_the_prepared_cache_closure(self):
         prewarm = (
@@ -38,6 +39,9 @@ class FnvGameplayPrewarmTest(unittest.TestCase):
         self.assertIn("IsWithinCache(candidate, cacheRoot)", prewarm)
         self.assertIn("File.OpenRead(resolved)", prewarm)
         self.assertIn('property.NameEquals("linkedCells")', prewarm)
+        self.assertIn('property.NameEquals("uri")', prewarm)
+        self.assertIn("pending.Push(required)", prewarm)
+        self.assertIn('value.StartsWith("data:"', prewarm)
         self.assertNotIn("File.Write", prewarm)
         self.assertNotIn("Directory.Create", prewarm)
 
@@ -57,6 +61,9 @@ class FnvGameplayPrewarmTest(unittest.TestCase):
         self.assertGreater(opening.index("QueueFree();", continue_wait), continue_wait)
         self.assertGreater(opening.index("QueueFree();", intro_wait), intro_wait)
         self.assertIn("if (_introCompleted || _transitionStarted)", opening)
+        self.assertEqual(opening.count("RestoreOwnedFailureCover();"), 2)
+        self.assertIn("_video.Visible = false;", opening)
+        self.assertIn("_canvas.Visible = true;", opening)
 
 
 if __name__ == "__main__":

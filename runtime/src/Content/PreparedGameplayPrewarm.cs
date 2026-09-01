@@ -92,6 +92,16 @@ internal sealed class PreparedGameplayPrewarm
                 {
                     if (property.NameEquals("linkedCells"))
                         continue;
+                    if (property.NameEquals("uri") &&
+                        property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        var required = ResolveCandidate(
+                            property.Value.GetString(),
+                            containingDirectory);
+                        if (required is not null && IsWithinCache(required, cacheRoot))
+                            pending.Push(required);
+                        continue;
+                    }
                     EnqueueFileReferences(
                         property.Value,
                         containingDirectory,
@@ -116,7 +126,8 @@ internal sealed class PreparedGameplayPrewarm
     private static string? ResolveCandidate(string? value, string containingDirectory)
     {
         if (string.IsNullOrWhiteSpace(value) ||
-            value.Contains("://", StringComparison.Ordinal))
+            value.Contains("://", StringComparison.Ordinal) ||
+            value.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             return null;
         try
         {
