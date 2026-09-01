@@ -94,6 +94,18 @@ class FnvPlayerControlClosureTest(unittest.TestCase):
         self.assertIn("internal void PublishOpeningState(OpeningCampaignState state)", session)
         self.assertIn("if (_pipBoyControlEnabled)", session)
 
+    def test_completed_opening_rederives_vitals_once_and_migrates_untouched_saves(self):
+        session = (
+            ROOT / "runtime" / "src" / "Gameplay" / "State" / "GameplaySession.cs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("var openingWasCompleted = _openingState?.Completed == true;", session)
+        self.assertIn("!state.Completed || !openingWasCompleted", session)
+        self.assertIn("_openingState.Completed &&", session)
+        self.assertIn("_vitals.HitPoints == _vitals.MaximumHitPoints", session)
+        self.assertIn("_vitals.ActionPoints == _vitals.MaximumActionPoints", session)
+        self.assertIn("_vitals = expected;", session)
+
 
 if __name__ == "__main__":
     unittest.main()

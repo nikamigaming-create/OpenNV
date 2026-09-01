@@ -141,8 +141,9 @@ internal partial class GameplaySession : Node
                 acceptsOpeningState(probe._openingState) &&
                 probe.HasConsistentOpeningGameplayState();
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            GD.PushWarning($"Owned opening Continue rejected: {exception.Message}");
             return false;
         }
         finally
@@ -548,6 +549,7 @@ internal partial class GameplaySession : Node
     private void ApplyOpeningState(OpeningCampaignState state)
     {
         state.Validate();
+        var openingWasCompleted = _openingState?.Completed == true;
         var knownDefinitions = _inventory.Values
             .ToDictionary(
                 item => item.ItemFormId,
@@ -555,7 +557,8 @@ internal partial class GameplaySession : Node
                 StringComparer.OrdinalIgnoreCase);
         _inventory.Clear();
         _openingState = state;
-        if (_vitalsContract is not null && (_vitals is null || !state.Completed))
+        if (_vitalsContract is not null &&
+            (_vitals is null || !state.Completed || !openingWasCompleted))
             _vitals = _vitalsContract.CreateInitial(state);
         foreach (var item in state.Inventory)
         {
@@ -1158,8 +1161,19 @@ internal partial class GameplaySession : Node
             _vitals.MaximumHitPoints != expected.MaximumHitPoints ||
             _vitals.MaximumActionPoints != expected.MaximumActionPoints ||
             _vitals.NextLevelExperiencePoints != expected.NextLevelExperiencePoints)
+        {
+            if (_openingState.Completed &&
+                _vitals.Level == expected.Level &&
+                _vitals.HitPoints == _vitals.MaximumHitPoints &&
+                _vitals.ActionPoints == _vitals.MaximumActionPoints &&
+                _vitals.ExperiencePoints == expected.ExperiencePoints)
+            {
+                _vitals = expected;
+                return;
+            }
             throw new InvalidOperationException(
                 "Saved gameplay vitals do not match the owned opening derivation contract.");
+        }
     }
 
     private static GameplayVitals ParseVitals(JsonElement source)
