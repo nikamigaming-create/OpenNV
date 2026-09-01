@@ -633,7 +633,7 @@ internal partial class OpeningQuestRuntime
         if (!_guideMoving)
         {
             if (_guideLookAtPlayer)
-                FaceGuideToward(_loaded.Player.GlobalPosition);
+                FaceGuideToward(GuidePlayerLookTarget());
             return;
         }
         if (_activeGuideLocomotion is not { } locomotion)
@@ -682,7 +682,7 @@ internal partial class OpeningQuestRuntime
             travel.Publish(_guideActor.Placement);
         }
         if (_guideLookAtPlayer)
-            FaceGuideToward(_loaded.Player.GlobalPosition);
+            FaceGuideToward(GuidePlayerLookTarget());
         if (_activeGuidePackage is { } package)
             PlayGuidePackageIdle(package);
         GD.Print(
@@ -916,6 +916,19 @@ internal partial class OpeningQuestRuntime
         _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
     }
 
+    private Vector3 GuidePlayerLookTarget()
+    {
+        // The owned first-person package animates Camera1st independently of the
+        // controller root while the player is on Doc's patient bed. Gamebryo's
+        // Look Player therefore resolves to the presented player viewpoint, not
+        // the unchanged navigation root elsewhere in the room.
+        var target = _loaded.Player.Camera.GlobalPosition;
+        if (!target.IsFinite())
+            throw new InvalidOperationException(
+                "Owned player look target is not finite.");
+        return target;
+    }
+
     private void RunWhenGuideReady(Action continuation, int generation)
     {
         _guideLookAtPlayer = true;
@@ -926,7 +939,7 @@ internal partial class OpeningQuestRuntime
             return;
         }
         if (!_guideFurnitureOccupied)
-            FaceGuideToward(_loaded.Player.GlobalPosition);
+            FaceGuideToward(GuidePlayerLookTarget());
         continuation();
     }
 

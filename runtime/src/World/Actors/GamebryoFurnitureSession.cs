@@ -60,7 +60,13 @@ internal sealed class GamebryoFurnitureSession
     {
         Validate(source);
         RequirePhase(source.Loop, loopPositionSeconds, allowStop: false);
-        _ = ActorAnimationPlayback.Resolve(actor.Actor, source.Loop);
+        // Publish the source furniture pose before moving the actor onto its marker.
+        // Otherwise the previously active standing pose can be exposed at the seated
+        // root until the package layer starts its first update.
+        _ = ActorAnimationPlayback.Start(
+            actor.Actor,
+            source.Loop,
+            loopPositionSeconds);
         RequirePackagePhase(source, packagePositionSeconds);
         if (source.PackageLoop is not null)
             _ = ActorAnimationPlayback.Resolve(actor.Actor, source.PackageLoop);

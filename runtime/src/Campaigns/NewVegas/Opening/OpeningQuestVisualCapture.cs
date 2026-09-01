@@ -804,7 +804,7 @@ internal partial class OpeningQuestRuntime
 
             var actorBounds = ActorModelSlice.PosedWorldBounds(host._guideActor.Actor);
             var actorOrigin = host._guideActor.Placement.GlobalPosition;
-            var playerOffset = host._loaded.Player.GlobalPosition - actorOrigin;
+            var playerOffset = host.GuidePlayerLookTarget() - actorOrigin;
             playerOffset.Y = 0.0f;
             var actorForward = -host._guideActor.Placement.GlobalBasis.Z;
             actorForward.Y = 0.0f;

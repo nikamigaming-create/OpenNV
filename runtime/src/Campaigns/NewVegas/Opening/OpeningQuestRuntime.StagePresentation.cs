@@ -58,7 +58,7 @@ internal partial class OpeningQuestRuntime
         {
             _guideLookAtPlayer = true;
             if (!_guideMoving && !_guideFurnitureOccupied && !_guideFurnitureExiting)
-                FaceGuideToward(_loaded.Player.GlobalPosition);
+                FaceGuideToward(GuidePlayerLookTarget());
         }
         else if (command.Operation.Equals("stoplook", StringComparison.OrdinalIgnoreCase))
         {
