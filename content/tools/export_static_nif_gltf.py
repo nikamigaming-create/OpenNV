@@ -54,6 +54,7 @@ SUPPORTED_SHAPE_PROPERTIES = {
     "BSShaderPPLightingProperty",
     "NiMaterialProperty",
     "NiStencilProperty",
+    "SkyShaderProperty",
 }
 ATTACHMENT_MARKER_NAMES = {"ProjectileNode", "ShellCasingNode"}
 NORMALIZATION_EPSILON = 1.0e-12
@@ -1218,7 +1219,10 @@ def texture_paths(shape: object) -> list[str]:
         if texture_set is not None:
             return [canonical_asset_path(value) for value in texture_set.textures]
     for prop in properties:
-        if isinstance(prop, NifFormat.BSShaderNoLightingProperty):
+        if isinstance(
+            prop,
+            (NifFormat.BSShaderNoLightingProperty, NifFormat.SkyShaderProperty),
+        ):
             path = canonical_asset_path(prop.file_name)
             if path:
                 return [path]

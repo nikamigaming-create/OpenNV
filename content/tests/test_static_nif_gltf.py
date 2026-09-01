@@ -1457,6 +1457,14 @@ class StaticNifGltfTest(unittest.TestCase):
         self.assertEqual(metadata["baseColor"], [1.0, 1.0, 1.0])
         self.assertEqual(metadata["alpha"], 0.75)
 
+    def test_sky_shader_authored_texture_survives(self) -> None:
+        shape = NifFormat.NiTriShape()
+        shader = NifFormat.SkyShaderProperty()
+        shader.file_name = r"Textures\Sky\SkyStars.dds"
+        shape.add_property(shader)
+
+        self.assertEqual(texture_paths(shape), [r"textures\sky\skystars.dds"])
+
     def test_self_illum_requires_the_material_color_controller(self) -> None:
         shape = NifFormat.NiTriShape()
         material = NifFormat.NiMaterialProperty()
