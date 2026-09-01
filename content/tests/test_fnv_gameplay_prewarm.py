@@ -15,9 +15,10 @@ class FnvGameplayPrewarmTest(unittest.TestCase):
             coordinator.count("PreparedGameplayPrewarm.Start(prepared)"),
             1,
         )
-        self.assertEqual(
-            coordinator.count("await CompleteGameplayPrewarm(gameplayPrewarm);"),
-            2,
+        self.assertEqual(coordinator.count("await CompleteGameplayPrewarm("), 1)
+        self.assertIn(
+            "() => gameplayPrewarm ??= StartGameplayPrewarm(prepared)",
+            coordinator,
         )
         self.assertIn(
             'newGameOptions["new-game"] = "";',
@@ -36,6 +37,7 @@ class FnvGameplayPrewarmTest(unittest.TestCase):
         self.assertIn("Task.Run(() => ReadDependencyClosure", prewarm)
         self.assertIn("IsWithinCache(candidate, cacheRoot)", prewarm)
         self.assertIn("File.OpenRead(resolved)", prewarm)
+        self.assertIn('property.NameEquals("linkedCells")', prewarm)
         self.assertNotIn("File.Write", prewarm)
         self.assertNotIn("Directory.Create", prewarm)
 

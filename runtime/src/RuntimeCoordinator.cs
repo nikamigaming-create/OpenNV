@@ -232,14 +232,16 @@ public partial class RuntimeCoordinator : Node3D
             allowedActiveCellFormIds,
             manifest.NewGameFlow.Character.Vitals,
             state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
-        var gameplayPrewarm = PreparedGameplayPrewarm.Start(prepared);
-        GD.Print("OPENNV_OWNED_GAMEPLAY_PREWARM_STARTED source=prepared-cache-closure");
+        PreparedGameplayPrewarm? gameplayPrewarm = null;
+        if (!canContinue)
+            gameplayPrewarm = StartGameplayPrewarm(prepared);
         var opening = new RetailOpening();
         AddChild(opening);
         opening.Configure(
             manifest,
             canContinue,
             _configuration.Player.DesktopInput.Cancel.Action,
+            () => gameplayPrewarm ??= StartGameplayPrewarm(prepared),
             async () =>
             {
                 if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
@@ -254,7 +256,9 @@ public partial class RuntimeCoordinator : Node3D
                     pair => pair.Value,
                     StringComparer.OrdinalIgnoreCase);
                 newGameOptions["new-game"] = "";
-                await CompleteGameplayPrewarm(gameplayPrewarm);
+                await CompleteGameplayPrewarm(gameplayPrewarm
+                    ?? throw new InvalidOperationException(
+                        "New Game intro did not start its prepared CELL prewarm."));
                 LoadPreparedGameplay(prepared, newGameOptions, useOpeningCampaign: true);
             },
             async action =>
@@ -268,7 +272,6 @@ public partial class RuntimeCoordinator : Node3D
                                 $"Owned main-menu acceptance dispatched {action}, expected {acceptedAction}.");
                         _acceptedOpeningMenuAction = action;
                     }
-                    await CompleteGameplayPrewarm(gameplayPrewarm);
                     LoadPreparedGameplay(prepared, options, useOpeningCampaign: true);
                     return;
                 }
@@ -288,6 +291,13 @@ public partial class RuntimeCoordinator : Node3D
         }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
+    }
+
+    private static PreparedGameplayPrewarm StartGameplayPrewarm(
+        LegalAssetPreparer.PreparedContent prepared)
+    {
+        GD.Print("OPENNV_OWNED_GAMEPLAY_PREWARM_STARTED source=initial-cell-closure");
+        return PreparedGameplayPrewarm.Start(prepared);
     }
 
     private static async Task CompleteGameplayPrewarm(
@@ -624,7 +634,11 @@ public partial class RuntimeCoordinator : Node3D
             true,
             options.ContainsKey("classic-diorama"),
             openingManifest?.GameplayUi,
-            openingManifest?.NewGameFlow.Character.Vitals);
+            openingManifest?.NewGameFlow.Character.Vitals,
+            usesCampaignState &&
+            !options.ContainsKey("opening-proof") &&
+            !options.ContainsKey("opening-character-video") &&
+            !options.ContainsKey("capture-root"));
         if (options.TryGetValue("jam-profile", out var jamProfilePath))
         {
             var jamProfile = JamProfileContract.Load(jamProfilePath);
@@ -673,11 +687,21 @@ public partial class RuntimeCoordinator : Node3D
                     "Opening campaign state requires an owned opening manifest.");
             openingFlow = new OpeningQuestRuntime();
             AddChild(openingFlow);
-            openingFlow.Configure(
-                openingManifest,
-                loaded,
-                _configuration,
-                restoredOpening);
+            if (loaded.InitialAdjacentReady.IsCompletedSuccessfully)
+                openingFlow.Configure(
+                    openingManifest,
+                    loaded,
+                    _configuration,
+                    restoredOpening);
+            else
+            {
+                openingFlow.ProcessMode = ProcessModeEnum.Disabled;
+                _ = ConfigureOpeningAfterInitialAdjacent(
+                    openingFlow,
+                    openingManifest,
+                    loaded,
+                    restoredOpening);
+            }
         }
         if (options.TryGetValue("opening-proof", out var openingProof))
         {
@@ -780,6 +804,29 @@ public partial class RuntimeCoordinator : Node3D
         CompleteCellLoad(loaded, scenePath, options, null);
     }
 
+    private async Task ConfigureOpeningAfterInitialAdjacent(
+        OpeningQuestRuntime openingFlow,
+        OpeningManifest openingManifest,
+        CellSceneLoader.LoadedCell loaded,
+        OpeningCampaignState? restoredOpening)
+    {
+        try
+        {
+            await loaded.InitialAdjacentReady;
+            openingFlow.Configure(
+                openingManifest,
+                loaded,
+                _configuration,
+                restoredOpening);
+            openingFlow.ProcessMode = ProcessModeEnum.Inherit;
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_LAZY_CELL_INITIAL_PREFETCH_FAIL {exception}");
+            GetTree().Quit(1);
+        }
+    }
+
     private void CompleteCellLoad(
         CellSceneLoader.LoadedCell loaded,
         string scenePath,
@@ -851,7 +898,11 @@ public partial class RuntimeCoordinator : Node3D
             }).ToArray(),
             activeSet = new
             {
-                policy = "authoritative-current-cell-only-linked-cells-preloaded",
+                policy = loaded.LazyLinkedCells
+                    ? "authoritative-current-cell-first-adjacent-demand-materialization"
+                    : "authoritative-current-cell-only-linked-cells-preloaded",
+                preparedRouteCellCount = loaded.PreparedRouteCellCount,
+                materializedCellCount = loaded.LinkedCells.Count + 1,
                 currentCellFormId = loaded.Session.ActiveCellFormId,
                 activeCellFormIds = loaded.ActiveSet.ActiveCellFormIds
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase),

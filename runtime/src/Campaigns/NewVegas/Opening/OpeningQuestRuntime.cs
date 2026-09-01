@@ -1470,12 +1470,16 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
         foreach (var value in _flow.Character.SpecialValues)
             _specialValues[value.FormId] = _flow.Character.SpecialInitial;
-        ResolveSceneRoles();
-        ResolveGuideActor();
-        ResolveGuideAnimationObjects();
-        _dialogueFace = new FaceGenMorphController(
-            _guideActor.Actor,
-            configuration.ActorCompiler.FaceGenAnimation.Lip);
+        var completedRestore = restoredState is { Completed: true };
+        if (!completedRestore)
+        {
+            ResolveSceneRoles();
+            ResolveGuideActor();
+            ResolveGuideAnimationObjects();
+            _dialogueFace = new FaceGenMorphController(
+                _guideActor.Actor,
+                configuration.ActorCompiler.FaceGenAnimation.Lip);
+        }
         foreach (var actor in _flow.OrdinaryActors)
         {
             var placed = _loaded.Actors.Single(value =>
@@ -1495,7 +1499,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
         _loaded.Session.SetHitscanHitHandler(HandleHitscanHit);
         InitializeCombatActors();
-        foreach (var activator in _loaded.MainContent.PlacedReferences
+        foreach (var activator in AllLoadedContent()
+                     .SelectMany(content => content.PlacedReferences)
                      .Select(reference => reference.Placement)
                      .OfType<ScriptedActivatorInstance>())
             activator.Bind(AuthorizeScriptedActivatorEvent, ApplyScriptedActivatorEvent);

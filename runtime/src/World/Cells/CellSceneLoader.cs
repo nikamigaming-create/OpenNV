@@ -53,7 +53,8 @@ internal static class CellSceneLoader
         bool showGameplayHud = true,
         bool useClassicDiorama = false,
         OwnedGameplayUiPresentation? gameplayUi = null,
-        OpeningGameplayVitalsContract? gameplayVitals = null)
+        OpeningGameplayVitalsContract? gameplayVitals = null,
+        bool lazyLinkedCells = false)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -85,6 +86,29 @@ internal static class CellSceneLoader
             gameplayUi,
             gameplayVitals);
         parent.AddChild(session);
+        if (lazyLinkedCells)
+        {
+            if (useClassicDiorama)
+                throw new InvalidOperationException(
+                    "Classic Diorama does not support lazy linked CELL materialization.");
+            return LazyLinkedCellRoute.Load(
+                resolvedScenePath,
+                source,
+                parent,
+                session,
+                configuration,
+                settings,
+                gameplayVitals,
+                openProofDoor,
+                proofDoorOverride,
+                useXr,
+                enableFirstPersonPresentation,
+                actorScenePath,
+                actorScenesManifestPath,
+                proofEnableActor,
+                buildCollision,
+                applyCellEnvironment);
+        }
         var textureCache = new RuntimeMaterialLoader.TextureCache();
         var main = CellContentLoader.Load(
             resolvedScenePath,
@@ -250,6 +274,7 @@ internal static class CellSceneLoader
             useClassicDiorama,
             renderBounds,
             gameplayVitals,
+            1u,
             out var mainLights,
             out var worldEnvironment);
         session.ConfigureWorldContext(
@@ -367,10 +392,13 @@ internal static class CellSceneLoader
             activeSet,
             environmentSet,
             actorGrounding,
-            main);
+            main,
+            Task.CompletedTask,
+            false,
+            linkedCells.Count + 1);
     }
 
-    private static CellPlayer BuildView(
+    internal static CellPlayer BuildView(
         Node3D parent,
         float yaw,
         CellContentLoader.LoadedContent main,
@@ -382,6 +410,7 @@ internal static class CellSceneLoader
         bool useClassicDiorama,
         Aabb? renderBounds,
         OpeningGameplayVitalsContract? gameplayVitals,
+        uint renderLayer,
         out IReadOnlyList<Light3D> lights,
         out WorldEnvironment? worldEnvironment)
     {
@@ -410,7 +439,13 @@ internal static class CellSceneLoader
             worldEnvironment = new WorldEnvironment { Environment = environment };
             parent.AddChild(worldEnvironment);
         }
-        lights = AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
+        lights = AddCellLights(
+            parent,
+            main,
+            configuration,
+            renderLayer,
+            true,
+            applyCellEnvironment);
         var player = new CellPlayer();
         player.Configure(
             yaw,
@@ -480,7 +515,7 @@ internal static class CellSceneLoader
         return new Aabb(minimum, maximum - minimum);
     }
 
-    private static IReadOnlyList<Node3D> ActivityRoots(
+    internal static IReadOnlyList<Node3D> ActivityRoots(
         CellContentLoader.LoadedContent content) =>
         new[] { content.Root }
             .Concat(content.PlacedReferences
@@ -491,7 +526,7 @@ internal static class CellSceneLoader
             .Distinct()
             .ToArray();
 
-    private static IReadOnlyList<Light3D> AddCellLights(
+    internal static IReadOnlyList<Light3D> AddCellLights(
         Node3D parent,
         CellContentLoader.LoadedContent content,
         RuntimeConfiguration configuration,
@@ -606,7 +641,7 @@ internal static class CellSceneLoader
             normal);
     }
 
-    private static Vector3 HorizontalDoorNormal(DoorRay frame)
+    internal static Vector3 HorizontalDoorNormal(DoorRay frame)
     {
         var normal = frame.To - frame.From;
         normal.Y = 0.0f;
@@ -695,7 +730,10 @@ internal static class CellSceneLoader
         CellActiveSet ActiveSet,
         CellEnvironmentSet? EnvironmentSet,
         GameplayActorGrounding ActorGrounding,
-        CellContentLoader.LoadedContent MainContent)
+        CellContentLoader.LoadedContent MainContent,
+        Task InitialAdjacentReady,
+        bool LazyLinkedCells,
+        int PreparedRouteCellCount)
     {
         internal Vector3 GameToCellUnits(Vector3 position) => new(
             position.X - OriginGameUnits.X,

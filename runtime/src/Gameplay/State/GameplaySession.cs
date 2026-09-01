@@ -254,6 +254,38 @@ internal partial class GameplaySession : Node
         _uiController?.Refresh();
     }
 
+    internal void AddWorldContent(
+        CellContentLoader.LoadedContent content,
+        string adjacentCellFormId)
+    {
+        var spaces = _worldSpaces.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+        if (!spaces.TryAdd(
+                content.FormId,
+                new WorldSpace(content.FormId, content.EditorId)))
+            throw new InvalidOperationException(
+                $"Gameplay world already contains CELL: {content.FormId}");
+        var edges = _portalEdges.ToHashSet();
+        if (!edges.Add(PortalEdge.Create(adjacentCellFormId, content.FormId)))
+            throw new InvalidOperationException(
+                $"Gameplay world already contains portal edge: " +
+                $"{adjacentCellFormId} -> {content.FormId}");
+        _worldSpaces = spaces;
+        _portalEdges = edges;
+        _mapMarkers = _mapMarkers
+            .Concat(content.PlacedReferences
+                .Where(reference => !IsReferenceRemoved(reference.FormId))
+                .Select(reference => new GameplayUiMapMarker(
+                    reference.FormId,
+                    reference.BaseEditorId,
+                    reference.Placement.GlobalPosition)))
+            .OrderBy(marker => marker.FormId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _uiController?.Refresh();
+    }
+
     internal void TogglePipBoy()
     {
         if (_pipBoyControlEnabled)

@@ -15,7 +15,15 @@ internal sealed class PreparedGameplayPrewarm
     internal static PreparedGameplayPrewarm Start(
         LegalAssetPreparer.PreparedContent prepared)
     {
-        var roots = new[]
+        var roots = new[] { prepared.CellScenePath }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => VerifiedGltfLoader.ResolvePath(path!))
+            .Distinct(PathComparer)
+            .ToArray();
+        if (roots.Length == 0)
+            throw new InvalidOperationException(
+                "Prepared gameplay prewarm requires a compiled content root.");
+        var cacheBoundaryPaths = new[]
             {
                 prepared.CellScenePath,
                 prepared.ActorScenesPath,
@@ -25,10 +33,7 @@ internal sealed class PreparedGameplayPrewarm
             .Select(path => VerifiedGltfLoader.ResolvePath(path!))
             .Distinct(PathComparer)
             .ToArray();
-        if (roots.Length == 0)
-            throw new InvalidOperationException(
-                "Prepared gameplay prewarm requires a compiled content root.");
-        var cacheRoot = FindCommonDirectory(roots);
+        var cacheRoot = FindCommonDirectory(cacheBoundaryPaths);
         return new PreparedGameplayPrewarm(
             Task.Run(() => ReadDependencyClosure(roots, cacheRoot)));
     }
@@ -84,11 +89,15 @@ internal sealed class PreparedGameplayPrewarm
         {
             case JsonValueKind.Object:
                 foreach (var property in value.EnumerateObject())
+                {
+                    if (property.NameEquals("linkedCells"))
+                        continue;
                     EnqueueFileReferences(
                         property.Value,
                         containingDirectory,
                         cacheRoot,
                         pending);
+                }
                 break;
             case JsonValueKind.Array:
                 foreach (var item in value.EnumerateArray())

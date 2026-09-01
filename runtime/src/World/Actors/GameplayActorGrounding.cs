@@ -13,7 +13,7 @@ internal sealed partial class GameplayActorGrounding : Node3D
 
     private RuntimeConfiguration _configuration = null!;
     private CellActiveSet _activeSet = null!;
-    private IReadOnlyList<Space> _spaces = Array.Empty<Space>();
+    private readonly List<Space> _spaces = [];
     private readonly HashSet<string> _groundedReferences =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Result> _results = [];
@@ -31,10 +31,21 @@ internal sealed partial class GameplayActorGrounding : Node3D
             Name = "GameplayActorGrounding",
             _configuration = configuration,
             _activeSet = activeSet,
-            _spaces = spaces,
         };
+        grounding._spaces.AddRange(spaces);
         parent.AddChild(grounding);
         return grounding;
+    }
+
+    internal void AddSpace(Space space)
+    {
+        if (_spaces.Any(candidate => candidate.CellFormId.Equals(
+                space.CellFormId,
+                StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                $"Actor grounding already contains CELL: {space.CellFormId}");
+        _spaces.Add(space);
+        SetPhysicsProcess(true);
     }
 
     internal static Vector3 ApplyGroundOffset(

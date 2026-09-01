@@ -19,6 +19,7 @@ internal partial class RetailOpening : CanvasLayer
     private VideoStreamPlayer? _video;
     private Func<Task>? _introFinished;
     private Func<string, Task>? _menuActionRequested;
+    private Action? _newGameStarted;
     private string _cancelAction = "";
     private bool _introCompleted;
     private bool _transitionStarted;
@@ -29,12 +30,14 @@ internal partial class RetailOpening : CanvasLayer
         OpeningManifest manifest,
         bool hasSave,
         string cancelAction,
+        Action newGameStarted,
         Func<Task> introFinished,
         Func<string, Task> menuActionRequested)
     {
         _manifest = manifest;
         _introFinished = introFinished;
         _menuActionRequested = menuActionRequested;
+        _newGameStarted = newGameStarted;
         _cancelAction = cancelAction;
         Name = "RetailOpening";
 
@@ -181,6 +184,7 @@ internal partial class RetailOpening : CanvasLayer
     {
         if (_video is not null)
             return;
+        _newGameStarted?.Invoke();
         _music.Stop();
         _canvas.Visible = false;
         _video = new VideoStreamPlayer
