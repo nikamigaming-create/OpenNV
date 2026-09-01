@@ -54,6 +54,9 @@ class NifParticleEffectTests(unittest.TestCase):
             sidecar = export_particle_nif(source, paths[0], root / "effect.gltf",
                                           root / "effect.opennv.json")
             self.assertEqual(sidecar["coverage"]["surfaces"], 0)
+            self.assertEqual(sidecar["coverage"]["sourcePoseBakedSkinSurfaces"], 0)
+            self.assertEqual(sidecar["coverage"]["excludedEditorMarkerSurfaces"], [])
+            self.assertEqual(sidecar["coverage"]["excludedNonPresentationSurfaces"], [])
             self.assertEqual(sidecar["particleEffect"]["systems"][0]["texturePath"],
                              r"textures\effects\fxwisps02.dds")
 
