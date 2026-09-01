@@ -56,6 +56,64 @@ class FnvDocPresentationContractTest(unittest.TestCase):
         self.assertNotIn('Contains("bed"', exact_resolution)
         self.assertNotIn("OrderBy", exact_resolution)
 
+    def test_doc_package_travel_advances_the_owned_locomotion_clip(self) -> None:
+        source = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "Campaigns"
+            / "NewVegas"
+            / "Opening"
+            / "OpeningQuestRuntime.Guide.cs"
+        ).read_text(encoding="utf-8")
+        start = source[source.index("private void StartGuideLocomotionAnimation") :]
+        update = source[source.index("private void UpdateGuideActor") : source.index(
+            "private static SourceActorAnimation", source.index("private void UpdateGuideActor")
+        )]
+        finish = source[source.index("private void FinishGuideTravel") : source.index(
+            "private void PlayGuidePackageIdle", source.index("private void FinishGuideTravel")
+        )]
+
+        self.assertIn("ActorAnimationPlayback.Start(", start)
+        self.assertIn("locomotion.LogicalPath", start)
+        self.assertIn("locomotion.Sha256", start)
+        self.assertIn("rootMotion.SequenceName", start)
+        self.assertLess(update.index("playback.Advance(delta)"), update.index("travel.Advance(delta)"))
+        self.assertIn("_guideLocomotionPlayback?.Stop()", finish)
+        self.assertIn("AnimationCallbackModeProcess.Idle", source)
+
+    def test_furniture_session_publishes_the_owned_seated_pose_before_placement(self) -> None:
+        source = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "World"
+            / "Actors"
+            / "GamebryoFurnitureSession.cs"
+        ).read_text(encoding="utf-8")
+        occupy = source[source.index("internal static GamebryoFurnitureSession Occupy") :]
+
+        start = occupy.index("ActorAnimationPlayback.Start(")
+        placement = occupy.index("GamebryoPackagePlacement.Publish(actor, placement)")
+        self.assertLess(start, placement)
+        self.assertIn("source.Loop", occupy[start:placement])
+        self.assertIn("loopPositionSeconds", occupy[start:placement])
+
+    def test_doc_look_player_uses_the_owned_presented_player_viewpoint(self) -> None:
+        opening = ROOT / "runtime" / "src" / "Campaigns" / "NewVegas" / "Opening"
+        guide = (opening / "OpeningQuestRuntime.Guide.cs").read_text(encoding="utf-8")
+        stages = (opening / "OpeningQuestRuntime.StagePresentation.cs").read_text(
+            encoding="utf-8"
+        )
+        visual_acceptance = (opening / "OpeningQuestVisualCapture.cs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("_loaded.Player.Camera.GlobalPosition", guide)
+        self.assertNotIn("FaceGuideToward(_loaded.Player.GlobalPosition)", guide)
+        self.assertNotIn("FaceGuideToward(_loaded.Player.GlobalPosition)", stages)
+        self.assertIn("host.GuidePlayerLookTarget() - actorOrigin", visual_acceptance)
+
 
 if __name__ == "__main__":
     unittest.main()

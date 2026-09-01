@@ -17,6 +17,25 @@ internal static class RetailLighting
     internal static float PointShaderRadius(float authoredRadius) =>
         authoredRadius * Mathf.Sqrt(2.0f);
 
+    internal static Color GodotLightColor(Color sourceShaderColor)
+    {
+        if (!float.IsFinite(sourceShaderColor.R) ||
+            !float.IsFinite(sourceShaderColor.G) ||
+            !float.IsFinite(sourceShaderColor.B) ||
+            !float.IsFinite(sourceShaderColor.A))
+            throw new InvalidOperationException(
+                "Retail shader light color must be finite.");
+
+        // Light3D.LightColor is an sRGB property which Godot converts to the
+        // linear LIGHT_COLOR value consumed by spatial light() functions.
+        // Fallout's WTHR/XCLL/LIGH colors are already the normalized numeric
+        // constants observed at the retail shader boundary. Encode that
+        // constant for Godot's property boundary so the custom SLS processor
+        // receives it unchanged instead of applying an accidental second
+        // encoded-to-linear transfer.
+        return sourceShaderColor.LinearToSrgb();
+    }
+
     internal static Vector3 SurfaceToLightFromXcllDegrees(
         float rotationYDegrees,
         float rotationZDegrees)

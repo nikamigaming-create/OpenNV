@@ -129,6 +129,42 @@ def environment_sky_models(recipe: dict[str, object]) -> dict[str, dict[str, obj
     return result
 
 
+def climate_night_sky_model(authored_path: str) -> dict[str, object]:
+    path = authored_path.replace("/", "\\").lstrip("\\").lower()
+    if not path.endswith(".nif"):
+        raise ValueError("CLMT night sky model must be an owned NIF path")
+    return {
+        "path": path,
+        "surfaceSemantic": "night-sky",
+    }
+
+
+def night_sky_surface_contracts(
+    surfaces: list[dict[str, object]],
+    materials: list[dict[str, object]],
+    semantic: str,
+) -> list[dict[str, object]]:
+    if len(materials) != len(surfaces):
+        raise ValueError("Owned CLMT night sky surfaces and materials differ")
+    result = []
+    for index, (surface, material) in enumerate(zip(surfaces, materials, strict=True)):
+        if int(material["surfaceIndex"]) != index:
+            raise ValueError("Owned CLMT night sky material order differs from its surfaces")
+        texture_id = material.get("diffuseTextureId")
+        if not isinstance(texture_id, str) or not texture_id:
+            raise ValueError("Owned CLMT night sky surface lacks an authored diffuse texture")
+        result.append(
+            {
+                "index": index,
+                "name": surface["name"],
+                "attributes": surface["attributes"],
+                "semantic": semantic,
+                "diffuseTextureId": texture_id,
+            }
+        )
+    return result
+
+
 def unique_texture_manifests(
     manifests: list[dict[str, object]],
 ) -> list[dict[str, object]]:
@@ -182,6 +218,9 @@ def prepare_exterior_scene(
     retail_grass_render_state_observation: Path | None = None,
     owned_archives: OwnedArchiveStack | None = None,
     family_compiler: dict[str, str] | None = None,
+    required_route_positions_game_units: tuple[
+        tuple[float, float, float], ...
+    ] = (),
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
     scene_archives = owned_archives if owned_archives is not None else BsaArchive(meshes_path)
@@ -238,6 +277,17 @@ def prepare_exterior_scene(
         raise ValueError("Exterior recipe requires one declared streaming contract")
     loaded_grid_diameter = int(streaming["loadedGridDiameter"])
     requested_grids = loaded_grid_coordinates(cell.coordinates, loaded_grid_diameter)
+    requested_grids = tuple(
+        sorted(
+            {
+                *requested_grids,
+                *(
+                    reference_grid(position, exterior_cell_size_game_units)
+                    for position in required_route_positions_game_units
+                ),
+            }
+        )
+    )
     cells_by_grid = {
         candidate.coordinates: candidate
         for candidate in catalog.cells.values()
@@ -343,6 +393,7 @@ def prepare_exterior_scene(
         raise ValueError("Exterior recipe selected duplicate references across CELL ownership")
 
     selected: list[tuple[PlacedReference, BaseObject]] = []
+    particle_effect_model_paths: set[str] = set()
     excluded_references: list[dict[str, str]] = []
     for reference in candidates:
         base = catalog.base_objects.get(reference.base_form_id)
@@ -353,6 +404,10 @@ def prepare_exterior_scene(
             recipe,
             configuration.content_compiler,
         )
+        if selection_reason == "special-effect-shader-required" and base.model_path:
+            selected.append((reference, base))
+            particle_effect_model_paths.add(base.model_path)
+            continue
         if selection_reason != "selected":
             if base.model_path:
                 excluded_references.append(
@@ -368,8 +423,15 @@ def prepare_exterior_scene(
     if entry_door not in {reference.form_id for reference, _base in selected}:
         raise ValueError(f"Exterior scene did not select its entry door {entry_door:08x}")
 
+    environment_catalog = scan_environment_catalog(master_path)
+    environment_manifest = environment_catalog.exterior_manifest(worldspace_form_id)
+    climate = environment_catalog.climates[
+        environment_catalog.worldspaces[worldspace_form_id].climate_form_id
+    ]
     sky_models = environment_sky_models(recipe)
+    night_sky_model = climate_night_sky_model(climate.night_sky_model)
     sky_model_paths = {str(value["path"]) for value in sky_models.values()}
+    sky_model_paths.add(str(night_sky_model["path"]))
     loaded_grid_clip = {
         "mode": "retain-outside-source-xy-rectangle",
         "minXGameUnits": min(grid[0] for grid in requested_grids)
@@ -502,6 +564,7 @@ def prepare_exterior_scene(
         sky_model_paths | {block.model_path for block in lod_blocks},
         partial_lod_clips,
         fully_clipped_lod_model_paths,
+        particle_effect_model_paths=particle_effect_model_paths,
         owned_archives=owned_archives,
     )
     retained_selected = []
@@ -596,11 +659,6 @@ def prepare_exterior_scene(
         raise ValueError(
             "Retail grass placement and render-state observations must be supplied together"
         )
-    environment_catalog = scan_environment_catalog(master_path)
-    environment_manifest = environment_catalog.exterior_manifest(worldspace_form_id)
-    climate = environment_catalog.climates[
-        environment_catalog.worldspaces[worldspace_form_id].climate_form_id
-    ]
     environment_texture_paths = {
         path
         for weather in environment_catalog.weather.values()
@@ -661,6 +719,21 @@ def prepare_exterior_scene(
                 for index, surface in enumerate(surfaces)
             ],
         }
+    night_path = str(night_sky_model["path"])
+    night_surfaces = asset_sidecars[night_path]["surfaces"]
+    if not night_surfaces:
+        raise ValueError("Owned CLMT night sky model has no presentation surfaces")
+    environment_manifest["skyModels"]["nightSky"] = {
+        "authoredPath": night_path,
+        "assetId": assets[night_path]["id"],
+        "model": assets[night_path]["model"],
+        "sidecar": assets[night_path]["sidecar"],
+        "surfaces": night_sky_surface_contracts(
+            night_surfaces,
+            assets[night_path]["materials"],
+            str(night_sky_model["surfaceSemantic"]),
+        ),
+    }
     terrain_rows = []
     non_geometric_terrain_rows = []
     for loaded_cell in loaded_cells:
@@ -1007,7 +1080,7 @@ def prepare_exterior_scene(
                 "decodedSkyTextures": len(environment_textures),
                 "authoredSkyTextures": len(environment_texture_paths),
                 "missingSkyTextures": missing_environment_textures,
-                "nightSkyModel": "authored-uncompiled",
+                "nightSkyModel": "owned-clmt-nif-compiled",
                 "weatherImageSpaceValues": "preserved-unresolved",
             },
             "lod": {

@@ -391,6 +391,7 @@ def prepare_cell_scene(
         raise ValueError(f"Cell recipe requires XCLL lighting: {cell.editor_id}")
 
     selected: list[tuple[PlacedReference, BaseObject]] = []
+    particle_effect_model_paths: set[str] = set()
     excluded_references: list[dict[str, str]] = []
     for reference in catalog.references_for(cell_form_id):
         base = catalog.base_objects.get(reference.base_form_id)
@@ -401,6 +402,10 @@ def prepare_cell_scene(
             recipe,
             configuration.content_compiler,
         )
+        if selection_reason == "special-effect-shader-required" and base.model_path:
+            selected.append((reference, base))
+            particle_effect_model_paths.add(base.model_path)
+            continue
         if selection_reason != "selected":
             if base.model_path:
                 excluded_references.append(
@@ -437,6 +442,7 @@ def prepare_cell_scene(
         selected,
         configuration.content_compiler,
         extra_model_paths,
+        particle_effect_model_paths=particle_effect_model_paths,
         owned_archives=owned_archives,
     )
     retained_selected = []

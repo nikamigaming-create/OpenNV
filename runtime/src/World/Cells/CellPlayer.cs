@@ -8,6 +8,8 @@ using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.Settings;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -41,6 +43,7 @@ internal partial class CellPlayer : CharacterBody3D
     private const float StepForwardClearanceRadii = 1.1f;
 
     private RuntimeConfiguration _configuration = null!;
+    private RuntimeSettingsState? _settings;
     private Camera3D _camera = null!;
     private GameplaySession? _session;
     private XROrigin3D? _xrOrigin;
@@ -73,6 +76,7 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _xrFirePressed;
     private bool _xrSavePressed;
     private bool _xrReloadPressed;
+    private bool _xrJumpPressed;
     private bool _xrSnapTurnReady = true;
     private bool _xrEyeHeightCalibrated;
     private int _xrTrackedFrames;
@@ -84,6 +88,7 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _activationEnabled = true;
     private bool _combatEnabled = true;
     private bool _saveEnabled = true;
+    private bool _acceptSyntheticMouseMotion;
     private CellNavigationGraph? _navigation;
     private Node3D? _navigationRoot;
     private Vector3 _navigationOriginGameUnits;
@@ -92,6 +97,8 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _jamBulletTimeActive;
     private CellPortalTravel? _portalTravel;
     private Vector3? _lastFloorTangentOrigin;
+    private float? _jumpHeightMeters;
+    private bool _jumping;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -122,6 +129,10 @@ internal partial class CellPlayer : CharacterBody3D
     internal string LastActivationCollider { get; private set; } = "none";
     internal string LastActivationDoorFormId { get; private set; } = "none";
     internal int DesktopActivationEdges { get; private set; }
+    internal bool MovementEnabled => _movementEnabled;
+    internal bool LookEnabled => _lookEnabled;
+    internal bool ActivationEnabled => _activationEnabled;
+    internal bool AcceptsSyntheticMouseMotion => _acceptSyntheticMouseMotion;
     internal Vector3 LastBlockingNormal { get; private set; }
     internal Node? LastBlockingCollider { get; private set; }
     internal Vector3? LastBlockingPosition { get; private set; }
@@ -146,6 +157,17 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void SetExternalActivationHandler(Func<Node?, bool>? handler) =>
         _externalActivationHandler = handler;
+
+    internal void SetSyntheticMouseMotionPolicy(bool enabled) =>
+        _acceptSyntheticMouseMotion = enabled;
+
+    internal void CaptureDesktopPointer()
+    {
+        if (_useXr || _useClassicDiorama || DisplayServer.GetName() == "headless")
+            return;
+        Input.WarpMouse(GetViewport().GetVisibleRect().GetCenter());
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+    }
 
     internal void ConfigureJamJvsSprint(JamJvsSprintContract sprint)
     {
@@ -231,20 +253,37 @@ internal partial class CellPlayer : CharacterBody3D
         _camera.Transform = transformFromFloor;
     }
 
+    internal void ReleaseAuthoredCameraPresentation()
+    {
+        if (_useXr || _useClassicDiorama)
+            return;
+        _camera.Transform = new Transform3D(
+            Basis.Identity,
+            _configuration.Player.DesktopCameraOffsetMeters.Vector3());
+    }
+
     internal void Configure(
         float yaw,
         GameplaySession session,
         RuntimeConfiguration configuration,
         bool useXr = false,
-        bool useClassicDiorama = false)
+        bool useClassicDiorama = false,
+        RuntimeSettingsState? settings = null,
+        OpeningGameplayVitalsContract? gameplayVitals = null)
     {
         if (useXr && useClassicDiorama)
             throw new ArgumentException(
                 "Classic Diorama and OpenXR require separate presentation adapters.");
         _configuration = configuration;
+        _settings = settings;
         _session = session;
         _useXr = useXr;
         _useClassicDiorama = useClassicDiorama;
+        _jumpHeightMeters = gameplayVitals is null
+            ? null
+            : checked((float)(
+                gameplayVitals.JumpHeightGameUnits *
+                configuration.World.GameUnitsToMeters));
         Name = "Player";
         Position = Vector3.Up * (useClassicDiorama
             ? 0.0f
@@ -274,8 +313,8 @@ internal partial class CellPlayer : CharacterBody3D
 
     public override void _Ready()
     {
-        if (!_useXr && !_useClassicDiorama && DisplayServer.GetName() != "headless")
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (!_useXr && !_useClassicDiorama)
+            CaptureDesktopPointer();
         else if (_useClassicDiorama)
             Input.MouseMode = Input.MouseModeEnum.Visible;
     }
@@ -329,6 +368,7 @@ internal partial class CellPlayer : CharacterBody3D
         if (_jamJbtBulletTime is not null &&
             Input.IsActionJustPressed(JamJbtBulletTimeContract.InputAction))
             SetJamBulletTime(!_jamBulletTimeActive);
+        PollJump();
         var input = ReadMovement();
         var forward = -_camera.GlobalBasis.Z;
         var right = _camera.GlobalBasis.X;
@@ -348,10 +388,12 @@ internal partial class CellPlayer : CharacterBody3D
         var horizontalVelocity = direction * movementSpeed;
         if (!_movementEnabled)
             Velocity = Vector3.Zero;
-        else if (_navigation is not null)
+        else if (_navigation is not null && !_jumping)
             MoveOnOwnedNavigation(horizontalVelocity, (float)delta);
         else
             MoveWithPhysics(horizontalVelocity, (float)delta);
+        if (_jumping && IsOnFloor() && Velocity.Y <= 0.0f)
+            _jumping = false;
         UpdateWeaponFeedback((float)delta);
         if (_useXr)
         {
@@ -411,8 +453,8 @@ internal partial class CellPlayer : CharacterBody3D
         var velocity = Velocity;
         velocity.X = horizontalVelocity.X;
         velocity.Z = horizontalVelocity.Z;
-        velocity.Y = IsOnFloor()
-            ? MathF.Min(velocity.Y, 0.0f)
+        velocity.Y = IsOnFloor() && velocity.Y <= 0.0f
+            ? 0.0f
             : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * delta;
         Velocity = velocity;
         MoveAndSlide();
@@ -468,6 +510,27 @@ internal partial class CellPlayer : CharacterBody3D
             if (!expectedHorizontalMotion.IsZeroApprox())
                 ClearBlockingCollision();
         }
+    }
+
+    private void PollJump()
+    {
+        var requested = _useXr
+            ? _leftGrip!.IsButtonPressed("jump")
+            : Input.IsActionJustPressed(_configuration.Player.DesktopInput.Jump.Action);
+        var pressed = requested && (!_useXr || !_xrJumpPressed);
+        _xrJumpPressed = _useXr && requested;
+        if (!pressed || !_movementEnabled || _jumpHeightMeters is not { } height ||
+            _jumping || (_navigation is null && !IsOnFloor()))
+            return;
+        Velocity = new Vector3(
+            Velocity.X,
+            MathF.Sqrt(
+                2.0f *
+                _configuration.Simulation.GravityMetersPerSecondSquared *
+                height),
+            Velocity.Z);
+        _jumping = true;
+        GD.Print($"OPENNV_PLAYER_JUMP heightMeters={height:F4} useXr={_useXr}");
     }
 
     private bool TryFloorTangentMotion(Vector3 horizontalMotion, float delta)
@@ -553,12 +616,17 @@ internal partial class CellPlayer : CharacterBody3D
                 safeMargin: 0.0f,
                 recoveryAsCollision: false))
         {
-            RecordBlockingCollision(forwardCollision);
-            LastStepAttempt =
-                $"forward-blocked:normal={forwardCollision.GetNormal()}:" +
-                $"travel={forwardCollision.GetTravel()}:" +
-                $"collider={forwardCollision.GetCollider()}";
-            return false;
+            var forwardNormal = forwardCollision.GetNormal();
+            if (forwardNormal.Dot(Vector3.Up) < MathF.Cos(FloorMaxAngle))
+            {
+                RecordBlockingCollision(forwardCollision);
+                LastStepAttempt =
+                    $"forward-blocked:normal={forwardNormal}:" +
+                    $"travel={forwardCollision.GetTravel()}:" +
+                    $"collider={forwardCollision.GetCollider()}";
+                return false;
+            }
+            horizontalMotion = forwardCollision.GetTravel();
         }
         var advanced = raised;
         advanced.Origin += horizontalMotion;
@@ -641,12 +709,16 @@ internal partial class CellPlayer : CharacterBody3D
         }
         if (_lookEnabled &&
             inputEvent is InputEventMouseMotion motion &&
-            Input.MouseMode == Input.MouseModeEnum.Captured)
+            (Input.MouseMode == Input.MouseModeEnum.Captured ||
+             _acceptSyntheticMouseMotion))
         {
-            RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);
+            var sensitivity = _settings?.ApplyMouseSensitivity(
+                _configuration.Player.MouseSensitivityRadiansPerPixel) ??
+                _configuration.Player.MouseSensitivityRadiansPerPixel;
+            RotateY(-motion.Relative.X * sensitivity);
             var cameraRotation = _camera.Rotation;
             cameraRotation.X = Math.Clamp(
-                cameraRotation.X - motion.Relative.Y * _configuration.Player.MouseSensitivityRadiansPerPixel,
+                cameraRotation.X - motion.Relative.Y * sensitivity,
                 -_configuration.Player.VerticalLookLimitRadians,
                 _configuration.Player.VerticalLookLimitRadians);
             _camera.Rotation = cameraRotation;
@@ -706,8 +778,7 @@ internal partial class CellPlayer : CharacterBody3D
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
         {
-            if (collider is null &&
-                _portalTravel?.TryActivateFacing(
+            if (_portalTravel?.TryActivateFacing(
                     aimSource,
                     this,
                     _configuration.Player.ActivationDistanceMeters,
@@ -1050,7 +1121,7 @@ internal partial class CellPlayer : CharacterBody3D
             Input.MouseMode = Input.MouseModeEnum.Visible;
         }
         if (_lookEnabled && Input.IsActionJustPressed(input.CaptureMouse.Action))
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+            CaptureDesktopPointer();
         if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerUp.Action))
             _activePool.CycleFlatPower(1);
         if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerDown.Action))

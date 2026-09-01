@@ -1,0 +1,10 @@
+{
+  "schema": "opennv-classic-int-time/v1",
+  "timeUnit": "retail-decisecond-tick",
+  "ticksPerSecond": 10,
+  "delayBasis": "current-authoritative-tick",
+  "dueOrdering": [
+    "due-tick-ascending",
+    "insertion-sequence-ascending"
+  ]
+}

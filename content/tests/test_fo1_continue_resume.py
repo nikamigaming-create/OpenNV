@@ -18,8 +18,10 @@ class Fo1ContinueResumeTest(unittest.TestCase):
         self.assertIn("internal event Action? ContinueRequested;", menu)
         self.assertIn("if (_continueAvailable)", menu)
         self.assertIn('BuildMenuButton("CONTINUE")', menu)
+        self.assertIn("menu.Configure(", flow)
+        self.assertIn("loaded.Session.CanContinue,", flow)
         self.assertIn(
-            "menu.Configure(startPresentation, loaded.Session.CanContinue);", flow
+            "loaded.Session.CreateSaveSlotCatalog().ReadSlots().Count > 0", flow
         )
         self.assertIn(
             "var profile = loaded.Session.RequireRestoredCharacterForContinue();",
@@ -36,7 +38,7 @@ class Fo1ContinueResumeTest(unittest.TestCase):
         self.assertNotIn("PlayOpening(", resume)
         self.assertNotIn("ShowCharacterSelection(", resume)
         self.assertIn("AttachPipBoy(contract, profile);", resume)
-        self.assertIn("AttachClassicInterface(contract);", resume)
+        self.assertIn("AttachClassicInterface(contract, loaded.Settings);", resume)
         self.assertIn("RevealRestoredWorld", resume)
 
         reveal_start = flow.index("private static async Task RevealRestoredWorld(")

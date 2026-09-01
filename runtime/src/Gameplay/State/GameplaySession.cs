@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.SceneGraph;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Gameplay.Containers;
 using OpenNV.Runtime.Gameplay.Crafting;
@@ -70,6 +72,7 @@ internal partial class GameplaySession : Node
     private OpeningGameplayVitalsContract? _vitalsContract;
     private GameplayVitals? _vitals;
     private Func<GamebryoHitscanHit, bool>? _hitscanHitHandler;
+    private bool _pipBoyControlEnabled = true;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -98,6 +101,20 @@ internal partial class GameplaySession : Node
         !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? SandboxObjectiveStage.TakeAid :
         !_doorStates.GetValueOrDefault(_entryDoorFormId) ? SandboxObjectiveStage.OpenEntryDoor :
         SandboxObjectiveStage.Complete;
+    internal int? PlayerHitPoints => _vitals?.HitPoints;
+
+    internal OpeningEquippedWeaponState? CaptureOpeningEquippedWeaponState() =>
+        _equippedWeaponFormId is null
+            ? null
+            : new OpeningEquippedWeaponState(
+                _equippedWeaponFormId,
+                _weaponAmmoFormId,
+                _weaponDamage,
+                _weaponClipSize,
+                _ammoInMagazine)
+            {
+                AnimationType = _weaponAnimationType,
+            };
 
     internal static bool CanContinueOpening(
         string savePath,
@@ -124,8 +141,9 @@ internal partial class GameplaySession : Node
                 acceptsOpeningState(probe._openingState) &&
                 probe.HasConsistentOpeningGameplayState();
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            GD.PushWarning($"Owned opening Continue rejected: {exception.Message}");
             return false;
         }
         finally
@@ -236,9 +254,52 @@ internal partial class GameplaySession : Node
         _uiController?.Refresh();
     }
 
-    internal void TogglePipBoy() => _uiController?.TogglePipBoy();
+    internal void AddWorldContent(
+        CellContentLoader.LoadedContent content,
+        string adjacentCellFormId)
+    {
+        var spaces = _worldSpaces.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+        if (!spaces.TryAdd(
+                content.FormId,
+                new WorldSpace(content.FormId, content.EditorId)))
+            throw new InvalidOperationException(
+                $"Gameplay world already contains CELL: {content.FormId}");
+        var edges = _portalEdges.ToHashSet();
+        if (!edges.Add(PortalEdge.Create(adjacentCellFormId, content.FormId)))
+            throw new InvalidOperationException(
+                $"Gameplay world already contains portal edge: " +
+                $"{adjacentCellFormId} -> {content.FormId}");
+        _worldSpaces = spaces;
+        _portalEdges = edges;
+        _mapMarkers = _mapMarkers
+            .Concat(content.PlacedReferences
+                .Where(reference => !IsReferenceRemoved(reference.FormId))
+                .Select(reference => new GameplayUiMapMarker(
+                    reference.FormId,
+                    reference.BaseEditorId,
+                    reference.Placement.GlobalPosition)))
+            .OrderBy(marker => marker.FormId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _uiController?.Refresh();
+    }
+
+    internal void TogglePipBoy()
+    {
+        if (_pipBoyControlEnabled)
+            _uiController?.TogglePipBoy();
+    }
 
     internal void ClosePipBoy() => _uiController?.ClosePipBoy();
+
+    internal void SetPipBoyControlEnabled(bool enabled)
+    {
+        _pipBoyControlEnabled = enabled;
+        if (!enabled)
+            ClosePipBoy();
+    }
 
     internal void SetGameplayUiVisible(bool visible)
     {
@@ -507,7 +568,20 @@ internal partial class GameplaySession : Node
 
     internal void StoreOpeningState(OpeningCampaignState state)
     {
+        ApplyOpeningState(state);
+        Save();
+    }
+
+    internal void PublishOpeningState(OpeningCampaignState state)
+    {
+        ApplyOpeningState(state);
+        _uiController?.Refresh();
+    }
+
+    private void ApplyOpeningState(OpeningCampaignState state)
+    {
         state.Validate();
+        var openingWasCompleted = _openingState?.Completed == true;
         var knownDefinitions = _inventory.Values
             .ToDictionary(
                 item => item.ItemFormId,
@@ -515,7 +589,8 @@ internal partial class GameplaySession : Node
                 StringComparer.OrdinalIgnoreCase);
         _inventory.Clear();
         _openingState = state;
-        if (_vitalsContract is not null)
+        if (_vitalsContract is not null &&
+            (_vitals is null || !state.Completed || !openingWasCompleted))
             _vitals = _vitalsContract.CreateInitial(state);
         foreach (var item in state.Inventory)
         {
@@ -546,7 +621,6 @@ internal partial class GameplaySession : Node
         else
             ClearEquippedWeapon();
         SynchronizeHeldWeaponPresentation();
-        Save();
     }
 
     private void ClearEquippedWeapon()
@@ -638,23 +712,92 @@ internal partial class GameplaySession : Node
         _shotsFired++;
         var from = aimSource.GlobalPosition;
         var to = from - aimSource.GlobalBasis.Z * _configuration.Player.FireRayDistanceMeters;
-        var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, collisionMask));
-        if (hit.Count != 0 && hit["collider"].AsGodotObject() is Node collider)
+        var query = PhysicsRayQueryParameters3D.Create(from, to, collisionMask);
+        query.CollideWithAreas = false;
+        var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var worldHitDistance = hit.Count == 0
+            ? float.PositiveInfinity
+            : from.DistanceTo(hit["position"].AsVector3());
+        var actorCandidates = NodeTraversal.Descendants<GamebryoActorCollision>(
+                aimSource.GetTree().Root)
+            .Where(candidate => (candidate.CollisionLayer & collisionMask) != 0u)
+            .Select(candidate => new
+            {
+                Collision = candidate,
+                Intersects = candidate.IntersectsSegment(from, to, out var distance),
+                Distance = distance,
+            })
+            .ToArray();
+        var actorHit = actorCandidates
+            .Where(candidate => candidate.Intersects)
+            .OrderBy(candidate => candidate.Distance)
+            .FirstOrDefault();
+        Node? collider = actorHit is not null && actorHit.Distance < worldHitDistance
+            ? actorHit.Collision
+            : hit.Count != 0
+                ? hit["collider"].AsGodotObject() as Node
+                : null;
+        var gameplayHit = collider is not null &&
             _hitscanHitHandler?.Invoke(new GamebryoHitscanHit(
                 _equippedWeaponFormId,
                 _weaponAnimationType,
-                collider));
+                collider)) == true;
         Save();
         RefreshHud(
-            hit.Count == 0
+            collider is null
                 ? $"{WeaponLabel} fired ({_weaponDamage} damage profile) • miss"
-                : $"{WeaponLabel} fired ({_weaponDamage} damage profile) • hit {hit["collider"].AsGodotObject()}");
+                : $"{WeaponLabel} fired ({_weaponDamage} damage profile) • hit {collider}");
         return true;
+    }
+
+    internal bool CanHitscanReach(
+        Node3D aimSource,
+        uint collisionMask,
+        Node3D target) => CanHitscanReach(
+            aimSource.GlobalPosition,
+            aimSource.GlobalPosition +
+                -aimSource.GlobalBasis.Z * _configuration.Player.FireRayDistanceMeters,
+            collisionMask,
+            target);
+
+    internal bool CanHitscanReach(
+        Vector3 from,
+        Vector3 aimTarget,
+        uint collisionMask,
+        Node3D target)
+    {
+        if (_equippedWeaponFormId is null || _ammoInMagazine <= 0)
+            return false;
+        var offset = aimTarget - from;
+        if (offset.Length() > _configuration.Player.FireRayDistanceMeters)
+            return false;
+        var to = from + offset.Normalized() * _configuration.Player.FireRayDistanceMeters;
+        var actorCollision = NodeTraversal.Descendants<GamebryoActorCollision>(target)
+            .SingleOrDefault();
+        if (actorCollision is null ||
+            !actorCollision.IntersectsSegment(from, to, out var actorDistance))
+            return false;
+        var query = PhysicsRayQueryParameters3D.Create(from, to, collisionMask);
+        query.CollideWithAreas = false;
+        var hit = target.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count == 0)
+            return true;
+        return from.DistanceTo(hit["position"].AsVector3()) >= actorDistance;
     }
 
     internal void SetHitscanHitHandler(Func<GamebryoHitscanHit, bool>? handler) =>
         _hitscanHitHandler = handler;
+
+    internal static bool WorldLineIsClear(
+        Node3D worldOwner,
+        Vector3 from,
+        Vector3 to,
+        uint collisionMask)
+    {
+        var query = PhysicsRayQueryParameters3D.Create(from, to, collisionMask);
+        query.CollideWithAreas = false;
+        return worldOwner.GetWorld3D().DirectSpaceState.IntersectRay(query).Count == 0;
+    }
 
     internal bool Reload()
     {
@@ -775,12 +918,51 @@ internal partial class GameplaySession : Node
                     }),
                 }),
         };
-        var temporary = _savePath + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(document, new JsonSerializerOptions
+        var temporary = $"{_savePath}.{Guid.NewGuid():N}.tmp";
+        try
         {
-            WriteIndented = true,
-        }) + System.Environment.NewLine);
-        File.Move(temporary, _savePath, true);
+            File.WriteAllText(
+                temporary,
+                JsonSerializer.Serialize(document, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                }) + System.Environment.NewLine);
+            for (var attempt = 1;
+                 attempt <= _configuration.Persistence.AtomicReplaceAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    File.Move(temporary, _savePath, true);
+                    break;
+                }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException &&
+                    attempt < _configuration.Persistence.AtomicReplaceAttempts)
+                {
+                    Thread.Sleep(
+                        _configuration.Persistence.AtomicReplaceRetryMilliseconds);
+                }
+            }
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
+    }
+
+    internal int ApplySourceDamage(int damage)
+    {
+        if (damage <= 0 || _vitals is null || _vitals.HitPoints <= 0)
+            throw new InvalidOperationException(
+                "Source damage cannot be applied to the current gameplay vitals.");
+        var hitPoints = Math.Max(0, _vitals.HitPoints - damage);
+        _vitals = _vitals with { HitPoints = hitPoints };
+        _vitals.Validate();
+        Save();
+        RefreshHud($"Hit points: {hitPoints}/{_vitals.MaximumHitPoints}");
+        return hitPoints;
     }
 
     internal object Report() => new
@@ -1011,8 +1193,19 @@ internal partial class GameplaySession : Node
             _vitals.MaximumHitPoints != expected.MaximumHitPoints ||
             _vitals.MaximumActionPoints != expected.MaximumActionPoints ||
             _vitals.NextLevelExperiencePoints != expected.NextLevelExperiencePoints)
+        {
+            if (_openingState.Completed &&
+                _vitals.Level == expected.Level &&
+                _vitals.HitPoints == _vitals.MaximumHitPoints &&
+                _vitals.ActionPoints == _vitals.MaximumActionPoints &&
+                _vitals.ExperiencePoints == expected.ExperiencePoints)
+            {
+                _vitals = expected;
+                return;
+            }
             throw new InvalidOperationException(
                 "Saved gameplay vitals do not match the owned opening derivation contract.");
+        }
     }
 
     private static GameplayVitals ParseVitals(JsonElement source)

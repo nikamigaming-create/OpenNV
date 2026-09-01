@@ -17,7 +17,12 @@ from cell_catalog import (
     ScriptSource,
 )
 from crafting_catalog import recipe_menu_category_editor_id
+from compiler_provenance import compiler_provenance
 from export_static_nif_gltf import NoStaticPresentationGeometryError, export_static_nif
+from export_nif_particle_effect import (
+    UnsupportedParticleEffectError,
+    export_particle_nif,
+)
 from material_contract import (
     material_bindings,
     texture_binding_requests,
@@ -316,6 +321,26 @@ def authored_collision_source(coverage: dict[str, object]) -> str:
     return "unsupported-or-absent"
 
 
+def authored_collision_face_selection(
+    logical_path: str,
+    collision_source: str,
+) -> str:
+    """Select the source collision face family without reference-name heuristics."""
+
+    canonical_path = logical_path.replace("/", "\\").lower()
+    is_owned_road = canonical_path.startswith("meshes\\landscape\\roads\\") or (
+        canonical_path.startswith("meshes\\scol\\")
+        and canonical_path.rsplit("\\", 1)[-1].startswith("scolroad")
+    )
+    if is_owned_road:
+        if collision_source != "NIF-authored-bhk-packed-triangles":
+            raise ValueError(
+                "Owned road collision requires its packed-triangle source contract"
+            )
+        return "source-upward-walkable-deck"
+    return "all-source-faces"
+
+
 def reference_selection_reason(
     base: BaseObject,
     recipe: dict[str, object],
@@ -477,6 +502,7 @@ def prepare_scene_assets(
     extra_model_paths: set[str] | None = None,
     presentation_clips: dict[str, dict[str, object]] | None = None,
     fully_clipped_model_paths: set[str] | None = None,
+    particle_effect_model_paths: set[str] | None = None,
     owned_archives: OwnedArchiveStack | None = None,
 ) -> tuple[
     dict[str, dict[str, object]],
@@ -554,16 +580,50 @@ def prepare_scene_assets(
                     compiler_configuration,
                 )
             else:
-                sidecar = export_static_nif(
-                    source_path,
-                    member.logical_path,
-                    gltf_path,
-                    sidecar_path,
-                    compiler_configuration,
-                    strict=bool(recipe["exportStrict"]),
-                    presentation_clip=presentation_clip,
-                    require_door_articulation=model_path in door_model_paths,
-                )
+                if model_path in (particle_effect_model_paths or set()):
+                    sidecar = export_particle_nif(
+                        source_path,
+                        member.logical_path,
+                        gltf_path,
+                        sidecar_path,
+                    )
+                else:
+                    sidecar = export_static_nif(
+                        source_path,
+                        member.logical_path,
+                        gltf_path,
+                        sidecar_path,
+                        compiler_configuration,
+                        strict=bool(recipe["exportStrict"]),
+                        presentation_clip=presentation_clip,
+                        require_door_articulation=model_path in door_model_paths,
+                    )
+        except UnsupportedParticleEffectError as error:
+            evidence = {
+                "schema": "opennv-nif-non-presentation/v1",
+                "status": "owned-nif-particle-presentation-unsupported",
+                "source": {
+                    "logicalPath": member.logical_path,
+                    "sha256": member.sha256,
+                },
+                "compiler": compiler_provenance("static"),
+                "classification": {
+                    "source": "owned-NIF-particle-graph",
+                    "reason": str(error),
+                    "disposition": "exclude-reference-from-presentation",
+                },
+            }
+            _atomic_json(sidecar_path, evidence)
+            non_presentation_assets[model_path] = {
+                "logicalPath": member.logical_path,
+                "sourceSha256": member.sha256,
+                "sourceArchive": getattr(member, "source_archive", None),
+                "sourceArchiveSha256": getattr(member, "source_archive_sha256", None),
+                "sidecar": str(sidecar_path.resolve()),
+                "compiler": evidence["compiler"],
+                "classification": evidence["classification"],
+            }
+            continue
         except NoStaticPresentationGeometryError as error:
             if model_path in (extra_model_paths or set()):
                 raise ValueError(
@@ -604,6 +664,10 @@ def prepare_scene_assets(
             raise ValueError("Cell assets were produced by different compilers")
         collision_exported = bool(sidecar["coverage"]["collisionExported"])
         collision_source = authored_collision_source(sidecar["coverage"])
+        collision_face_selection = authored_collision_face_selection(
+            member.logical_path,
+            collision_source,
+        )
         assets[model_path] = {
             "id": asset_id,
             "logicalPath": member.logical_path,
@@ -615,16 +679,20 @@ def prepare_scene_assets(
             "surfaces": sidecar["coverage"]["surfaces"],
             "compiler": sidecar["compiler"],
             "presentationClip": sidecar["coverage"].get("presentationClip"),
+            "controllerPlayback": sidecar["coverage"].get(
+                "sourceControllerPlayback"
+            ),
             "collision": {
                 "enabled": collision_exported,
                 "source": collision_source,
+                "faceSelection": collision_face_selection,
                 "blockTypes": sidecar["coverage"]["collisionBlockTypes"],
                 "unsupportedReason": sidecar["coverage"]["collisionUnsupportedReason"],
             },
             "physics": {
                 "enabled": bool(sidecar["coverage"]["dynamicPhysicsExported"]),
                 "source": (
-                    "NIF-authored-bhk-convex-rigid-body"
+                    "NIF-authored-bhk-dynamic-rigid-body"
                     if sidecar["coverage"]["dynamicPhysicsExported"]
                     else "unsupported-or-absent"
                 ),
@@ -636,6 +704,8 @@ def prepare_scene_assets(
         }
         if sidecar.get("articulation") is not None:
             assets[model_path]["articulation"] = sidecar["articulation"]
+        if sidecar.get("particleEffect") is not None:
+            assets[model_path]["particleEffect"] = sidecar["particleEffect"]
         asset_sidecars[model_path] = sidecar
 
     binding_uses: dict[str, list[dict[str, object]]] = {}
@@ -649,6 +719,19 @@ def prepare_scene_assets(
                         "surfaceName": surface["name"],
                         "role": request["role"],
                         "missingOwnedMember": request["missingOwnedMember"],
+                    }
+                )
+        particle_effect = sidecar.get("particleEffect")
+        if isinstance(particle_effect, dict):
+            for system_index, system in enumerate(particle_effect["systems"]):
+                requested = str(system["texturePath"])
+                binding_uses.setdefault(requested, []).append(
+                    {
+                        "modelPath": model_path,
+                        "surfaceIndex": system_index,
+                        "surfaceName": str(system["name"]),
+                        "role": "particle-base-color",
+                        "missingOwnedMember": "fail-closed",
                     }
                 )
     texture_aliases = {
@@ -712,6 +795,9 @@ def prepare_scene_assets(
             texture_ids,
             compiler_configuration,
         )
+        if "particleEffect" in asset:
+            for system in asset["particleEffect"]["systems"]:
+                system["textureAssetId"] = texture_ids[str(system["texturePath"])]
     if compiler is None:
         raise ValueError(f"Cell recipe exported no asset compiler: {recipe['id']}")
     return (

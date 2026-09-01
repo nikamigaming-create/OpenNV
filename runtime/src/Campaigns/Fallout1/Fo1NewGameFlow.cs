@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
+using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Gameplay.Settings;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -82,6 +84,55 @@ internal static class Fo1NewGameFlowNumericContracts
 
 internal static partial class Fo1NewGameFlow
 {
+    private const string SaveLoadSelectionMarkerSuffix = ".save-load-selection";
+
+    internal static bool HasSaveLoadSelectionMarker(string savePath) =>
+        File.Exists(SaveLoadSelectionMarker(savePath));
+
+    internal static async Task RunSaveLoadColdRestoreProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string reportPath)
+    {
+        try
+        {
+            var marker = SaveLoadSelectionMarker(loaded.Session.SavePath);
+            var selectedSlot = File.ReadAllText(marker).Trim();
+            if (!loaded.Session.CanContinue ||
+                !loaded.Session.CreateSaveSlotCatalog().ReadSlots().Any(slot => slot.Id == selectedSlot))
+                throw new InvalidOperationException(
+                    "Selected save slot did not cold-restore through the canonical Continue state.");
+            HideWorld(loaded);
+            await ResumeInteractive(host, loaded, contract, null, false, false);
+            await WaitFrames(host, loaded.RuntimeProfile.Showcase.LandingHoldFrames);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(reportPath))!);
+            File.WriteAllText(
+                Path.GetFullPath(reportPath),
+                JsonSerializer.Serialize(new
+                {
+                    schema = "opennv-shared-save-load-proof/v1",
+                    status = "pass",
+                    selectedSlot,
+                    canonicalSave = loaded.Session.SavePath,
+                    continueCompatible = loaded.Session.CanContinue,
+                    restoredCharacter = loaded.Session.RequireRestoredCharacterForContinue().Name,
+                    restoredCamera = loaded.Session.RequireRestoredCameraForContinue().SaveState(),
+                }, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+            File.Delete(marker);
+            GD.Print($"OPENNV_SHARED_SAVE_LOAD_PASS selected={selectedSlot} coldRestore=1");
+            host.GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_SHARED_SAVE_LOAD_FAIL {exception.Message}");
+            host.GetTree().Quit(1);
+        }
+    }
+
+    private static string SaveLoadSelectionMarker(string savePath) =>
+        Path.GetFullPath(savePath) + SaveLoadSelectionMarkerSuffix;
+
     internal static void StartInteractive(
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
@@ -108,7 +159,10 @@ internal static partial class Fo1NewGameFlow
         bool continueGenericDoorProof = false)
     {
         var menu = new Fo1MainMenu();
-        menu.Configure(startPresentation, loaded.Session.CanContinue);
+        menu.Configure(
+            startPresentation,
+            loaded.Session.CanContinue,
+            loaded.Session.CreateSaveSlotCatalog().ReadSlots().Count > 0);
         var selected = false;
         menu.ContinueRequested += () =>
         {
@@ -126,11 +180,68 @@ internal static partial class Fo1NewGameFlow
             menu.QueueFree();
             ShowCharacterSelection(host, loaded, contract, startPresentation);
         };
+        menu.LoadGameRequested += () =>
+        {
+            if (selected)
+                return;
+            selected = true;
+            menu.QueueFree();
+            ShowSaveLoad(host, loaded, contract, startPresentation);
+        };
+        menu.OptionsRequested += () =>
+        {
+            if (selected)
+                return;
+            selected = true;
+            menu.QueueFree();
+            ShowSettings(host, loaded, contract, startPresentation);
+        };
         menu.ExitRequested += () => host.GetTree().Quit(0);
         host.AddChild(menu);
         if (continueMenuProof)
             _ = RunContinueMenuProof(host, menu);
         GD.Print($"OPENNV_FO1_FRONTEND_READY presentation={startPresentation}");
+    }
+
+    private static void ShowSaveLoad(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string startPresentation)
+    {
+        var view = new RuntimeSaveLoadView();
+        view.Configure(loaded.Session.CreateSaveSlotCatalog(), save: null);
+        view.CloseRequested += () =>
+        {
+            view.QueueFree();
+            ShowMainMenu(host, loaded, contract, startPresentation);
+        };
+        view.LoadRequested += _ =>
+        {
+            view.QueueFree();
+            var error = host.GetTree().ReloadCurrentScene();
+            if (error != Error.Ok)
+                throw new InvalidOperationException($"Fallout save reload failed: {error}.");
+        };
+        host.AddChild(view);
+    }
+
+    private static void ShowSettings(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string startPresentation)
+    {
+        var settings = new RuntimeSettingsView();
+        settings.Configure(
+            loaded.Settings,
+            loaded.RuntimeProfile.Camera.Tactical.OrbitRadiansPerPixel);
+        settings.CloseRequested += () =>
+        {
+            settings.QueueFree();
+            ShowMainMenu(host, loaded, contract, startPresentation);
+        };
+        host.AddChild(settings);
     }
 
     private static async Task ResumeInteractive(
@@ -146,7 +257,7 @@ internal static partial class Fo1NewGameFlow
             var profile = loaded.Session.RequireRestoredCharacterForContinue();
             var camera = loaded.Session.RequireRestoredCameraForContinue();
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             if (loaded.Session.LoadedDestinationPresentation is { } destination)
                 await RevealRestoredDestination(
                     host,
@@ -211,7 +322,8 @@ internal static partial class Fo1NewGameFlow
         bool accelerateOpening,
         bool skipOpening,
         string? captureRoot,
-        bool nativeFirstBeatHeadlessProof)
+        bool nativeFirstBeatHeadlessProof,
+        bool saveLoadProof)
     {
         try
         {
@@ -240,7 +352,7 @@ internal static partial class Fo1NewGameFlow
             GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE v13ent-handoff");
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             if (nativeFirstBeatHeadlessProof)
             {
                 await RunCombatShowcase(
@@ -253,7 +365,8 @@ internal static partial class Fo1NewGameFlow
                     default,
                     premadePlayerPreview,
                     captureRoot,
-                    nativeFirstBeatHeadlessProof);
+                    nativeFirstBeatHeadlessProof,
+                    saveLoadProof);
                 return;
             }
             var landing = await RevealWorld(host, loaded, profile, opening, "first-person");
@@ -267,7 +380,8 @@ internal static partial class Fo1NewGameFlow
                 landing,
                 premadePlayerPreview,
                 captureRoot,
-                nativeFirstBeatHeadlessProof);
+                nativeFirstBeatHeadlessProof,
+                saveLoadProof);
         }
         catch (Exception exception)
         {
@@ -305,7 +419,7 @@ internal static partial class Fo1NewGameFlow
                 loaded.RuntimeProfile.Showcase);
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             await RevealWorld(host, loaded, profile, opening, "hex-tactical");
             await WaitFrames(host, Fo1NewGameFlowNumericContracts.PresentationInt120);
             GD.Print($"OPENNV_FO1_CHARACTER_VIDEO_COMPLETE character={character}");
@@ -338,7 +452,7 @@ internal static partial class Fo1NewGameFlow
                 loaded.RuntimeProfile.Showcase);
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
-            loaded.Session.AttachClassicInterface(contract);
+            loaded.Session.AttachClassicInterface(contract, loaded.Settings);
             await RevealWorld(host, loaded, profile, opening, startPresentation);
         }
         catch (Exception exception)
@@ -796,7 +910,8 @@ internal static partial class Fo1NewGameFlow
         LandingPlayback landing,
         object premadePlayerPreview,
         string? captureRoot,
-        bool nativeFirstBeatHeadlessProof)
+        bool nativeFirstBeatHeadlessProof,
+        bool saveLoadProof)
     {
         var showcase = loaded.RuntimeProfile.Showcase;
         var reportFullPath = Path.GetFullPath(reportPath);
@@ -817,6 +932,54 @@ internal static partial class Fo1NewGameFlow
             $"{profile.Name}  •  V13ENT  •  exact tile {loaded.EntryTile}  •  " +
             "I opens Inventory • P opens Pip-Boy 2000");
         await WaitFrames(host, showcase.LandingHoldFrames);
+        var optionsButton = loaded.Session.ClassicHud?.FindChild(
+            "OwnedIfaceOptionsButton",
+            recursive: true,
+            owned: false) as Button ?? throw new InvalidOperationException(
+                "Fallout classic HUD has no shared-options activation control.");
+        optionsButton.EmitSignal(Button.SignalName.Pressed);
+        await WaitFrames(host, 1);
+        var settingsView = loaded.Session.FindChild(
+            "OpenNVRuntimeSettings",
+            recursive: false,
+            owned: false) as RuntimeSettingsView ?? throw new InvalidOperationException(
+                "Fallout classic HUD did not open the shared runtime settings view.");
+        var exercisedScale = RuntimeSettingsState.NeutralMouseSensitivityScale +
+            RuntimeSettingsState.NeutralMouseSensitivityScale;
+        settingsView.ApplyMouseSensitivityForProof(exercisedScale);
+        var restoredSettings = RuntimeSettingsState.Load(
+            loaded.Settings.Path);
+        if (!Mathf.IsEqualApprox(restoredSettings.MouseSensitivityScale, exercisedScale) ||
+            !Mathf.IsEqualApprox(
+                loaded.Camera.EffectiveOrbitRadiansPerPixel,
+                loaded.RuntimeProfile.Camera.Tactical.OrbitRadiansPerPixel * exercisedScale))
+            throw new InvalidOperationException(
+                "Shared runtime settings did not persist or affect the live Fallout camera.");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE shared-options-applied");
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        settingsView.CloseForProof();
+        await WaitFrames(host, 1);
+        if (saveLoadProof)
+        {
+            loaded.Session.OpenSaveLoad();
+            await WaitFrames(host, 1);
+            var saveLoad = loaded.Session.FindChild(
+                "OpenNVSaveLoad",
+                recursive: false,
+                owned: false) as RuntimeSaveLoadView ?? throw new InvalidOperationException(
+                    "Fallout session did not open the shared save/load view.");
+            var slot = saveLoad.CreateForProof();
+            if (!File.Exists(slot.Path))
+                throw new InvalidOperationException(
+                    "Shared save/load view did not create an authoritative slot.");
+            GD.Print($"OPENNV_FO1_NEW_GAME_DEMO_PHASE save-slot-selected id={slot.Id}");
+            await WaitFrames(host, showcase.LandingHoldFrames);
+            await WaitFrames(host, showcase.LandingHoldFrames);
+            File.WriteAllText(SaveLoadSelectionMarker(loaded.Session.SavePath), slot.Id);
+            saveLoad.LoadSelectedForProof();
+            return;
+        }
         var inventoryBefore = loaded.Session.InventorySnapshot();
         var inventorySaveSha256Before = FileSha256(loaded.Session.SavePath);
         loaded.Camera._UnhandledInput(new InputEventKey
@@ -832,6 +995,9 @@ internal static partial class Fo1NewGameFlow
             string.IsNullOrWhiteSpace(inventory.SelectedSymbol))
             throw new InvalidOperationException(
                 "Fallout classic inventory failed to open from its configured input.");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE inventory-open");
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        await WaitFrames(host, showcase.LandingHoldFrames);
         var rangedSymbolBeforeInventory = loaded.Session.EquippedWeaponSymbol;
         object? inventoryCapture = null;
         var requiresMeleeInventorySelection =
@@ -850,6 +1016,9 @@ internal static partial class Fo1NewGameFlow
                 inventory.EquipmentChangedCount != 1)
                 throw new InvalidOperationException(
                     "Fallout classic inventory melee active-hand control did not mutate equipment state.");
+            GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE inventory-equipped-melee");
+            await WaitFrames(host, showcase.LandingHoldFrames);
+            await WaitFrames(host, showcase.LandingHoldFrames);
             if (captureFullPath is not null)
                 inventoryCapture = SaveNativeCapture(
                     host,
@@ -926,6 +1095,13 @@ internal static partial class Fo1NewGameFlow
             return;
         }
         loaded.Session.TogglePipBoy();
+        loaded.Session.PipBoy!.ShowPage("STATUS");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE pipboy-status");
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        loaded.Session.PipBoy.ShowPage("ARCHIVES");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE pipboy-archives");
+        await WaitFrames(host, showcase.LandingHoldFrames);
         await WaitFrames(host, showcase.LandingHoldFrames);
         loaded.Session.TogglePipBoy();
 

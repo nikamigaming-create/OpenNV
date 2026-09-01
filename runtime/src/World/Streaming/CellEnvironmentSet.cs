@@ -9,7 +9,7 @@ namespace OpenNV.Runtime.World.Streaming;
 internal sealed class CellEnvironmentSet
 {
     private readonly WorldEnvironment _world;
-    private readonly IReadOnlyDictionary<string, State> _states;
+    private readonly Dictionary<string, State> _states;
     private readonly List<Update> _updates = new();
     private string _activeCellFormId = "";
 
@@ -18,12 +18,27 @@ internal sealed class CellEnvironmentSet
         IReadOnlyDictionary<string, State> states)
     {
         _world = world;
-        _states = states;
+        _states = states.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     internal string ActiveCellFormId => _activeCellFormId;
 
     internal IReadOnlyList<Update> Updates => _updates;
+
+    internal void AddContent(
+        CellContentLoader.LoadedContent content,
+        RuntimeConfiguration configuration)
+    {
+        var state = content.Interior
+            ? BuildInterior(content, configuration)
+            : BuildExterior(content, configuration);
+        if (!_states.TryAdd(state.CellFormId, state))
+            throw new InvalidOperationException(
+                $"CELL environment set already contains CELL: {state.CellFormId}");
+    }
 
     internal static CellEnvironmentSet Create(
         WorldEnvironment world,
@@ -111,6 +126,7 @@ internal sealed class CellEnvironmentSet
             content.Root,
             catalog,
             resolved,
+            content.TextureAssets,
             configuration);
         return new State(
             content.FormId,

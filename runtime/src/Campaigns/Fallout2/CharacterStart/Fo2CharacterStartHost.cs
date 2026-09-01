@@ -11,6 +11,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
 {
     private const string RetailRandomContractResource =
         "res://config/classic-retail-random-fo2-1.02-v1.json";
+    private const string ClassicIntTimeContractResource =
+        "res://config/classic-int-time-v1.json";
     private Fo2ArroyoCavesPresentationCatalog _arroyo = null!;
     private Fo2TemplePresentationCatalog _temple = null!;
     private Fo2TempleTransitionCatalog _transition = null!;
@@ -25,6 +27,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private string? _villageArrivalCaptureRoot;
     private string _savePath = "";
     private ClassicRetailRandomContract _retailRandomContract = null!;
+    private ClassicIntTimerContract _classicIntTimerContract = null!;
     private ClassicRetailRandomLifecycleState _retailRandomLifecycle = null!;
     private bool _persistenceEnabled;
     private IReadOnlyList<Fo2AdjacentMapSession> _adjacentSessions =
@@ -36,6 +39,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2ArroyoCavesSceneCoverage? Scene { get; private set; }
     internal Fo2TempleSceneCoverage? TempleScene { get; private set; }
     internal Fo2ArvillagSceneCoverage? VillageScene { get; private set; }
+    internal Fo2ArvillagIntRuntime? VillageIntRuntime { get; private set; }
+    internal Fo2ArvillagInteractionRuntime? VillageInteraction { get; private set; }
     internal Fo2MapSceneBuildCoverage? AdjacentScene { get; private set; }
     internal Fo2ArroyoClassicGameplayHud? VillageHud { get; private set; }
     internal Fo2TempleConfrontationRuntime? TempleConfrontation { get; private set; }
@@ -59,6 +64,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         {
             var runtimeConfiguration = RuntimeConfiguration.Load();
             _retailRandomContract = LoadRetailRandomContract();
+            _classicIntTimerContract = LoadClassicIntTimerContract();
             _retailRandomLifecycle =
                 ClassicRetailRandomLifecycle.InitializeFromExactBuildClock(
                     _retailRandomContract);
@@ -160,7 +166,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     _temple,
                     _transition,
                     runtimeProfile,
-                    _trialRoute);
+                    _trialRoute,
+                    _village);
                 StartArroyo(state.Character, state);
                 RestoredFromSave = true;
                 CurrentSave = state;
@@ -324,6 +331,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 Scene,
                 player,
                 this,
+                _retailRandomContract,
+                _classicIntTimerContract,
+                () => _retailRandomLifecycle,
+                CommitRetailRandomLifecycle,
                 restoredState?.TrialProgress);
         if (restoredState is not null)
         {
@@ -350,7 +361,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                             route.Village);
                     var village = BuildVillageScene();
                     player.EnterVillage(village, route.VillageArrival);
-                    ActivateVillagePresentation();
+                    ActivateVillagePresentation(isLoadingGame: true);
                 }
             }
             if (restoredState.MapSha256 != player.CurrentMapSha256 ||
@@ -439,6 +450,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         return ClassicRetailRandomContract.Parse(document.RootElement);
     }
 
+    private static ClassicIntTimerContract LoadClassicIntTimerContract()
+    {
+        var bytes = Godot.FileAccess.GetFileAsBytes(ClassicIntTimeContractResource);
+        if (bytes.Length == 0)
+            throw new FileNotFoundException(
+                "Classic INT time contract is missing.",
+                ClassicIntTimeContractResource);
+        using var document = JsonDocument.Parse(bytes);
+        return ClassicIntTimerContract.Parse(document.RootElement);
+    }
+
     private async Task RunOpeningTail(
         Fo2OpeningTailHandoff handoff,
         Fo2OpeningTailContract contract,
@@ -520,6 +542,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     }
 
     private string AdjacentSavePath => _savePath + ".adjacent-map.json";
+    private string VillageIntSavePath => _savePath + ".arvillag-int.json";
 
     private IReadOnlySet<int> VillageWalkable()
     {
@@ -619,7 +642,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 Fo2ArroyoTrialProgressState.GateMovedStage or
                 Fo2ArroyoTrialProgressState.VillageArrivalStage or
                 Fo2ArroyoTrialProgressState.VillageFirstActionStage)
-            TrialRuntime.ApplyKlintMapEnter(TempleScene, Runtime.Player);
+            TrialRuntime.ApplyKlintMapEnter(_temple, TempleScene, Runtime.Player);
         TempleConfrontation = Fo2TempleConfrontationRuntime.Build(
             _temple,
             TempleScene,
@@ -672,7 +695,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             "Fallout 2 village entry has no active Temple transition runtime.");
         var village = BuildVillageScene();
         var applied = runtime.ApplyVillageExit(transition, village);
-        ActivateVillagePresentation();
+        ActivateVillagePresentation(isLoadingGame: false);
         return applied;
     }
 
@@ -693,7 +716,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         return VillageScene;
     }
 
-    private void ActivateVillagePresentation()
+    private void ActivateVillagePresentation(bool isLoadingGame)
     {
         if (VillageScene is null || Runtime is null || SelectedCharacter is null ||
             Runtime.Player.GetParent() != VillageScene.Root)
@@ -703,7 +726,39 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         if (TempleScene is not null)
             TempleScene.Root.Visible = false;
         if (TempleConfrontation is not null)
+        {
             TempleConfrontation.Visible = false;
+            TempleConfrontation.SetProcess(false);
+        }
+        VillageIntRuntime = Fo2ArvillagIntRuntime.Enter(
+            _village ?? throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG INT runtime has no source catalog."),
+            VillageScene,
+            Runtime.Player,
+            SelectedCharacter,
+            isLoadingGame,
+            _retailRandomContract,
+            () => _retailRandomLifecycle,
+            CommitRetailRandomLifecycle);
+        if (isLoadingGame && File.Exists(VillageIntSavePath))
+        {
+            using var savedVillage = JsonDocument.Parse(
+                File.ReadAllBytes(VillageIntSavePath));
+            VillageIntRuntime.Restore(savedVillage.RootElement);
+        }
+        else if (!isLoadingGame && File.Exists(VillageIntSavePath))
+            File.Delete(VillageIntSavePath);
+        VillageInteraction = Fo2ArvillagInteractionRuntime.Build(
+            VillageScene.Root,
+            _village,
+            VillageIntRuntime,
+            Runtime.Player,
+            TempleConfrontation?.LookAction ?? throw new InvalidOperationException(
+                "Fallout 2 village look input is unavailable."),
+            TempleConfrontation.TalkAction,
+            TempleConfrontation.DialogueWidthPixels,
+            TempleConfrontation.DialogueFontSizePixels,
+            () => PersistCurrentState());
         VillageHud = Fo2ArroyoClassicGameplayHud.Build(VillageScene.Root, _arroyo);
         VillageHud.BindCharacter(SelectedCharacter);
         GD.Print(
@@ -729,8 +784,20 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 TempleExitRuntime?.Applied,
                 _transition,
                 TrialRuntime?.State,
-                _trialRoute)
+                _trialRoute,
+                _village)
             .Write();
+        if (Runtime.Player.CurrentMapIndex == Fo2ArvillagPresentationCatalog.MapIndex &&
+            VillageIntRuntime is not null)
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(
+                VillageIntRuntime.Save(),
+                new JsonSerializerOptions { WriteIndented = true });
+            var temporary = VillageIntSavePath + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(VillageIntSavePath)!);
+            File.WriteAllBytes(temporary, bytes);
+            File.Move(temporary, VillageIntSavePath, true);
+        }
         return CurrentSave;
     }
 

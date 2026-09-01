@@ -243,7 +243,7 @@ internal static class FlatControlsAcceptance
         Input.FlushBufferedEvents();
     }
 
-    internal static async Task WaitPhysicsFrames(RuntimeCoordinator host, int frameCount)
+    internal static async Task WaitPhysicsFrames(Node host, int frameCount)
     {
         for (var frame = 0; frame < frameCount; frame++)
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);

@@ -9,6 +9,11 @@ internal static class RuntimeLaunchValidator
     internal static void ValidatePreflight(IReadOnlyDictionary<string, string> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (options.ContainsKey("bounded-default-profile") &&
+            (!options.ContainsKey("opening-menu") || options.ContainsKey("opening-proof")))
+            throw new ArgumentException(
+                "--bounded-default-profile requires the interactive --opening-menu path " +
+                "and cannot be combined with an opening proof.");
         if (options.ContainsKey("xr-simulator-proof") &&
             (!options.ContainsKey("vr") || !options.ContainsKey("report")))
             throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");
@@ -37,12 +42,16 @@ internal static class RuntimeLaunchValidator
             if (!options.ContainsKey("report") || !options.ContainsKey("save-path") ||
                 !options.ContainsKey("opening-proof-name") ||
                 !options.ContainsKey("opening-proof-timeout-seconds") ||
-                openingProofMode is not "checkpoint" and not "creator" and not "resume" ||
-                (openingProofMode is "checkpoint" or "creator") !=
+                openingProofMode is not "checkpoint" and not "creator" and not "resume" and
+                    not "route-stage50" and not "route-stage50-resume" ||
+                (openingProofMode is "checkpoint" or "creator" or "route-stage50") !=
+                    (options.ContainsKey("new-game") || startsFromMenuNewGame) ||
+                openingProofMode == "route-stage50-resume" &&
                     (options.ContainsKey("new-game") || startsFromMenuNewGame))
                 throw new ArgumentException(
-                    "--opening-proof requires mode checkpoint or creator with --new-game or the owned " +
-                    "menu new-game route, or mode resume without either, plus --report, " +
+                    "--opening-proof requires mode checkpoint, creator, or route-stage50 with " +
+                    "--new-game or the owned " +
+                    "menu new-game route, or mode resume/route-stage50-resume without either, plus --report, " +
                     "--save-path, --opening-proof-name, and --opening-proof-timeout-seconds.");
         }
         if (options.ContainsKey("opening-character-video") &&
@@ -219,6 +228,10 @@ internal static class RuntimeLaunchValidator
             !options.ContainsKey("fo1-new-game-demo"))
             throw new ArgumentException(
                 "--fo1-native-first-beat-proof requires --fo1-new-game-demo.");
+        if (options.ContainsKey("fo1-save-load-proof") &&
+            !options.ContainsKey("fo1-new-game-demo"))
+            throw new ArgumentException(
+                "--fo1-save-load-proof requires --fo1-new-game-demo.");
         if (options.ContainsKey("fo1-native-first-beat-proof") &&
             options.ContainsKey("capture-root"))
             throw new ArgumentException(

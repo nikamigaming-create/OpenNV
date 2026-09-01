@@ -11,6 +11,8 @@ using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Gameplay.Settings;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -18,7 +20,7 @@ internal partial class Fo1TacticalSession
 {
     private string ControlsText() => _firstPersonModeActive
         ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • I inventory • P Pip-Boy • Esc mouse"
-        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save";
+        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save/load";
 
     private void RefreshMobReadability()
     {
@@ -62,7 +64,9 @@ internal partial class Fo1TacticalSession
         return presentation;
     }
 
-    internal void AttachClassicInterface(Fo1CharacterStartContract contract)
+    internal void AttachClassicInterface(
+        Fo1CharacterStartContract contract,
+        RuntimeSettingsState settings)
     {
         if (_classicHud is not null)
             throw new InvalidOperationException(
@@ -93,12 +97,48 @@ internal partial class Fo1TacticalSession
             contract.InterfaceHud,
             TogglePipBoy,
             ToggleInventory,
+            () => OpenRuntimeSettings(settings),
             SwapEquippedWeapon);
         Hud.AddChild(classicHud);
         Hud.MoveChild(classicInventory, Hud.GetChildCount() - 1);
         _classicHud = classicHud;
         _debugHudRoot.Visible = false;
         RefreshHud();
+    }
+
+    private void OpenRuntimeSettings(RuntimeSettingsState settings)
+    {
+        if (FindChild("OpenNVRuntimeSettings", recursive: false, owned: false) is not null)
+            return;
+        if (_classicInventory?.IsOpen == true)
+            _classicInventory.Close();
+        if (_pipBoy?.IsOpen == true)
+            _pipBoy.SetOpen(false);
+        var view = new RuntimeSettingsView();
+        view.Configure(settings, _runtimeProfile.Camera.Tactical.OrbitRadiansPerPixel);
+        view.CloseRequested += () => view.QueueFree();
+        AddChild(view);
+    }
+
+    internal void OpenSaveLoad()
+    {
+        if (FindChild("OpenNVSaveLoad", recursive: false, owned: false) is not null)
+            return;
+        if (_classicInventory?.IsOpen == true)
+            _classicInventory.Close();
+        if (_pipBoy?.IsOpen == true)
+            _pipBoy.SetOpen(false);
+        var view = new RuntimeSaveLoadView();
+        view.Configure(CreateSaveSlotCatalog(), Save);
+        view.CloseRequested += () => view.QueueFree();
+        view.LoadRequested += _ =>
+        {
+            view.QueueFree();
+            var error = GetTree().ReloadCurrentScene();
+            if (error != Error.Ok)
+                throw new InvalidOperationException($"Fallout save reload failed: {error}.");
+        };
+        AddChild(view);
     }
 
     internal void TogglePipBoy()

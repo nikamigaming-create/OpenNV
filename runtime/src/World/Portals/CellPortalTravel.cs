@@ -15,19 +15,28 @@ internal sealed class CellPortalTravel
     private readonly GameplaySession _session;
     private readonly CellActiveSet _activeSet;
     private readonly CellEnvironmentSet? _environmentSet;
-    private readonly IReadOnlyList<Passage> _passages;
+    private readonly List<Passage> _passages;
+    private readonly Action<string>? _materializeAdjacent;
     private readonly List<Transition> _transitions = new();
 
     internal CellPortalTravel(
         IEnumerable<CellSceneLoader.PortalLink> links,
         GameplaySession session,
         CellActiveSet activeSet,
-        CellEnvironmentSet? environmentSet)
+        CellEnvironmentSet? environmentSet,
+        Action<string>? materializeAdjacent = null)
     {
         _session = session;
         _activeSet = activeSet;
         _environmentSet = environmentSet;
-        _passages = links.Select(link => new Passage(
+        _passages = links.Select(BuildPassage).ToList();
+        _materializeAdjacent = materializeAdjacent;
+    }
+
+    internal void AddLink(CellSceneLoader.PortalLink link) =>
+        _passages.Add(BuildPassage(link));
+
+    private static Passage BuildPassage(CellSceneLoader.PortalLink link) => new(
             Endpoint.Create(
                 link.FromCellFormId,
                 link.FromCellEditorId,
@@ -43,13 +52,13 @@ internal sealed class CellPortalTravel
                 link.ToOriginGameUnits,
                 link.ToCollisionLayer,
                 (link.ToFrame.From + link.ToFrame.To) / 2.0f,
-                link.ToDoor))).ToArray();
-    }
+                link.ToDoor));
 
     internal IReadOnlyList<Transition> Transitions => _transitions;
 
     internal bool TryActivate(DoorInstance collidedDoor, CellPlayer player)
     {
+        _materializeAdjacent?.Invoke(_session.ActiveCellFormId);
         foreach (var passage in _passages.Where(value =>
                      value.From.Door == collidedDoor || value.To.Door == collidedDoor))
         {
@@ -68,6 +77,7 @@ internal sealed class CellPortalTravel
         out string activatedDoorFormId)
     {
         activatedDoorFormId = "none";
+        _materializeAdjacent?.Invoke(_session.ActiveCellFormId);
         var forward = -aimSource.GlobalBasis.Z.Normalized();
         (Passage Passage, Endpoint Source)? match = null;
         foreach (var passage in _passages)
@@ -99,20 +109,21 @@ internal sealed class CellPortalTravel
             ?? throw new InvalidOperationException(
                 $"Portal XTEL destination is missing: {source.Door.ReferenceFormId}");
         source.Door.SetOpen(true);
+        _activeSet.Activate(target.CellFormId);
+        _environmentSet?.Activate(target.CellFormId);
+        player.CollisionMask = target.CollisionLayer;
         player.ApplyPortalArrival(
             target.Root,
             target.OriginGameUnits,
             destination);
-        player.CollisionMask = target.CollisionLayer;
         _session.CrossPortal(source.CellFormId, target.CellFormId, source.Door);
-        _activeSet.Activate(target.CellFormId);
-        _environmentSet?.Activate(target.CellFormId);
         _transitions.Add(new Transition(
             source.CellFormId,
             target.CellFormId,
             source.Door.ReferenceFormId,
             target.Door.ReferenceFormId,
             player.GlobalPosition));
+        _materializeAdjacent?.Invoke(target.CellFormId);
         return true;
     }
 

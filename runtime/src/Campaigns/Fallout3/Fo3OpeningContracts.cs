@@ -48,7 +48,14 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const int FaceGenSymmetricTextureFloats = 50;
     internal const int AabbCornerCount = 8;
     internal const int DialogueConditionEqual = 0;
+    internal const int DialogueConditionGreaterThan = 64;
+    internal const int DialogueConditionGreaterThanOrEqual = 96;
+    internal const int DialogueConditionLessThan = 128;
+    internal const int DialogueConditionLessThanOrEqual = 160;
+    internal const int DialogueConditionGetDistance = 1;
     internal const int DialogueConditionGetItemCount = 47;
+    internal const int DialogueConditionGetStage = 58;
+    internal const int DialogueConditionGetIsId = 72;
     internal const int DialogueConditionGetQuestVariable = 79;
     internal const int DialogueConditionGetIsCurrentPackage = 161;
     internal const float FaceGenPreviewNormalizedMorphWeightScale = 1.0f;
@@ -1269,4 +1276,5 @@ internal enum Fo3OwnedVideoMode
     Intro,
     Cg01Transition,
     Cg02Transition,
+    Cg03Transition,
 }

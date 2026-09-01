@@ -111,6 +111,7 @@ internal sealed class Fo2ArroyoTrialRouteContract
         string arroyoSourceSha256,
         string templeTransitionSha256,
         string globalCatalogSha256,
+        int globalVariableIndex,
         Fo2TrialCameron cameron,
         Fo2TrialRoutePath approach,
         Fo2TrialRoutePath returnToTemple,
@@ -125,6 +126,7 @@ internal sealed class Fo2ArroyoTrialRouteContract
         ArroyoSourceSha256 = arroyoSourceSha256;
         TempleTransitionSha256 = templeTransitionSha256;
         GlobalCatalogSha256 = globalCatalogSha256;
+        GlobalVariableIndex = globalVariableIndex;
         Cameron = cameron;
         ApproachCameron = approach;
         ReturnToTemple = returnToTemple;
@@ -140,6 +142,7 @@ internal sealed class Fo2ArroyoTrialRouteContract
     internal string ArroyoSourceSha256 { get; }
     internal string TempleTransitionSha256 { get; }
     internal string GlobalCatalogSha256 { get; }
+    internal int GlobalVariableIndex { get; }
     internal Fo2TrialCameron Cameron { get; }
     internal Fo2TrialRoutePath ApproachCameron { get; }
     internal Fo2TrialRoutePath ReturnToTemple { get; }
@@ -177,8 +180,9 @@ internal sealed class Fo2ArroyoTrialRouteContract
                 "Fallout 2 trial-route map or transition provenance drifted.");
 
         var global = root.GetProperty("globalState");
+        var globalVariableIndex = global.GetProperty("index").GetInt32();
         if (RequiredString(global, "name") != "GVAR_START_ARROYO_TRIAL" ||
-            global.GetProperty("index").GetInt32() != 10 ||
+            globalVariableIndex < 0 ||
             global.GetProperty("initialValue").GetInt32() != 0)
             throw new InvalidOperationException("Fallout 2 trial global identity drifted.");
         var cameron = LoadCameron(root.GetProperty("cameron"));
@@ -222,6 +226,7 @@ internal sealed class Fo2ArroyoTrialRouteContract
             arroyo.SourceManifestSha256,
             transitions.ManifestSha256,
             RequiredHash(global, "sha256"),
+            globalVariableIndex,
             cameron,
             approach,
             returnToTemple,

@@ -106,7 +106,7 @@ internal sealed record Fo2ArroyoTrialProgressState(
     }
 }
 
-internal sealed class Fo2ArroyoTrialRuntime
+internal sealed partial class Fo2ArroyoTrialRuntime
 {
     private readonly Fo2ArroyoTrialRouteContract _contract;
     private readonly Fo2ArroyoCavesPresentationCatalog _catalog;
@@ -119,6 +119,12 @@ internal sealed class Fo2ArroyoTrialRuntime
     private int _dialogueIndex;
     private int _villageIndex;
     private readonly ClassicDoorSession _cameronDoor;
+    private readonly ClassicMapIntProgram _cameronProgram;
+    private readonly ClassicRetailRandomContract _randomContract;
+    private readonly ClassicIntTimerContract _timerContract;
+    private readonly Func<ClassicRetailRandomLifecycleState> _readRandomState;
+    private readonly Action<ClassicRetailRandomLifecycleState,
+        ClassicRetailRandomLifecycleState> _commitRandomState;
     private ClassicDoorPlayback? _cameronDoorPlayback;
 
     private Fo2ArroyoTrialRuntime(
@@ -127,12 +133,28 @@ internal sealed class Fo2ArroyoTrialRuntime
         Fo2ArroyoCavesSceneCoverage scene,
         Fo2ArroyoCavesPlayerBody player,
         Node3D worldParent,
-        Fo2ArroyoTrialProgressState state)
+        Fo2ArroyoTrialProgressState state,
+        ClassicRetailRandomContract randomContract,
+        ClassicIntTimerContract timerContract,
+        Func<ClassicRetailRandomLifecycleState> readRandomState,
+        Action<ClassicRetailRandomLifecycleState,
+            ClassicRetailRandomLifecycleState> commitRandomState)
     {
         _contract = contract;
         _catalog = catalog;
         _player = player;
         _worldParent = worldParent;
+        _randomContract = randomContract;
+        _timerContract = timerContract;
+        _readRandomState = readRandomState;
+        _commitRandomState = commitRandomState;
+        _cameronProgram = catalog.IntInitialization.ScriptSlots.Single(row =>
+            row.Sid == contract.Cameron.Sid &&
+            row.ScriptIndex == contract.Cameron.ScriptIndex &&
+            row.Program.LogicalPath.Equals(
+                contract.Cameron.ProgramLogicalPath,
+                StringComparison.OrdinalIgnoreCase) &&
+            row.Program.Sha256 == contract.Cameron.ProgramSha256).Program;
         _elevationRoots = new Dictionary<int, Node3D> { [0] = scene.Root };
         _admittedTiles = Enumerable.Range(0, 3).ToDictionary(
             elevation => elevation,
@@ -165,6 +187,11 @@ internal sealed class Fo2ArroyoTrialRuntime
         Fo2ArroyoCavesSceneCoverage scene,
         Fo2ArroyoCavesPlayerBody player,
         Node3D worldParent,
+        ClassicRetailRandomContract randomContract,
+        ClassicIntTimerContract timerContract,
+        Func<ClassicRetailRandomLifecycleState> readRandomState,
+        Action<ClassicRetailRandomLifecycleState,
+            ClassicRetailRandomLifecycleState> commitRandomState,
         Fo2ArroyoTrialProgressState? restored = null)
     {
         if (contract.SourceProfileId != catalog.SourceProfileId ||
@@ -178,7 +205,11 @@ internal sealed class Fo2ArroyoTrialRuntime
             scene,
             player,
             worldParent,
-            restored ?? Fo2ArroyoTrialProgressState.Initial(contract));
+            restored ?? Fo2ArroyoTrialProgressState.Initial(contract),
+            randomContract,
+            timerContract,
+            readRandomState,
+            commitRandomState);
     }
 
     internal void TraverseApproach()
@@ -228,6 +259,7 @@ internal sealed class Fo2ArroyoTrialRuntime
     }
 
     internal void ApplyKlintMapEnter(
+        Fo2TemplePresentationCatalog catalog,
         Fo2TempleSceneCoverage scene,
         Fo2ArroyoCavesPlayerBody player)
     {
@@ -244,10 +276,6 @@ internal sealed class Fo2ArroyoTrialRuntime
         if (gate.GetMeta("source_pid").AsString() != _contract.KlintGate.GatePid ||
             gate.GetMeta("map_tile").AsInt32() != _contract.KlintGate.SourceTile)
             throw new InvalidOperationException("Fallout 2 Klint gate source identity drifted.");
-        gate.Position = Fo1HexMath.Center(_contract.KlintGate.DestinationTile);
-        gate.SetMeta("map_tile", _contract.KlintGate.DestinationTile);
-        gate.SetMeta("acklint_map_enter_applied", true);
-        gate.SetMeta("required_global_10", _contract.KlintGate.RequiredGlobalVariable10);
         var klint = NodeTraversal.Descendants<Sprite3D>(scene.Root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.KlintGate.ActorSerial) ??
@@ -256,6 +284,16 @@ internal sealed class Fo2ArroyoTrialRuntime
                 _contract.KlintGate.ActorScriptIndex)
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint map_enter may not remove or replace Klint.");
+        var sourceResult = ExecuteKlintMapEnter(catalog, klint, gate);
+        var sourceGate = sourceResult.WorldObjects.Objects[sourceResult.GateHandle];
+        gate.Position = Fo1HexMath.Center(sourceGate.Tile);
+        gate.SetMeta("map_tile", sourceGate.Tile);
+        gate.SetMeta("acklint_map_enter_applied", true);
+        gate.SetMeta("required_global_10", State.GlobalVariable10);
+        foreach (var assignment in sourceResult.WorldObjects.TraitAssignments)
+            klint.SetMeta(
+                $"classic_int_trait_{assignment.TraitType}_{assignment.Trait}",
+                assignment.Amount);
         player.AdmitPostTrialTempleRoute(
             _contract.Village.Path.Steps.Select(row => row.Tile).ToArray(),
             _contract.KlintGate.PostMoveWalkMaskSha256);
@@ -266,7 +304,7 @@ internal sealed class Fo2ArroyoTrialRuntime
                 Fo2ArroyoTrialProgressState.VillageFirstActionStage
                 ? State.Stage
                 : Fo2ArroyoTrialProgressState.GateMovedStage,
-            KlintGateTile = _contract.KlintGate.DestinationTile,
+            KlintGateTile = sourceGate.Tile,
         };
         State.Validate(_contract);
         StateChanged?.Invoke();
@@ -394,6 +432,7 @@ internal sealed class Fo2ArroyoTrialRuntime
     private void CompleteNegotiation()
     {
         var branch = _contract.Cameron.TaggedSpeechBranch;
+        var decodedState = ExecuteTaggedSpeechResult(branch);
         var root = ElevationRoot(_contract.Cameron.Elevation, _contract.Cameron.Tile, 0);
         var actor = NodeTraversal.Descendants<Sprite3D>(root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
@@ -403,39 +442,120 @@ internal sealed class Fo2ArroyoTrialRuntime
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.Cameron.ReleaseDoorSerial) ??
             throw new InvalidOperationException("Fallout 2 Cameron door sprite is absent.");
-        foreach (var tile in _contract.Cameron.ReleaseActorTiles)
+        var release = ExecuteCameronRelease(decodedState, actor, door);
+        foreach (var movement in release.WorldState.Movements)
         {
-            actor.Position = Fo1HexMath.Center(tile);
-            actor.SetMeta("map_tile", tile);
+            if (movement.ObjectHandle != release.ActorHandle)
+                throw new InvalidOperationException(
+                    "Fallout 2 Cameron source moved an unbound object.");
+            actor.Position = Fo1HexMath.Center(movement.DestinationTile);
+            actor.SetMeta("map_tile", movement.DestinationTile);
         }
-        actor.Visible = _contract.Cameron.ReleaseFinalVisible;
+        var actorState = release.WorldState.Objects[release.ActorHandle];
+        actor.Visible = actorState.Visible;
         actor.SetMeta("actemvil_release_applied", true);
         _cameronDoorPlayback = new ClassicDoorPlayback(
             _cameronDoor,
             door,
             state => ApplyCameronDoorPlaybackState(door, state));
         door.AddChild(_cameronDoorPlayback);
-        var doorState = _cameronDoorPlayback.BeginOpening();
-        if (doorState.Open != _contract.Cameron.ReleaseDoorOpened)
+        var sourceDoor = release.WorldState.Doors[release.DoorHandle];
+        var doorState = sourceDoor.Open
+            ? _cameronDoorPlayback.BeginOpening()
+            : _cameronDoor.State;
+        if (doorState.Open != sourceDoor.Open)
             throw new InvalidOperationException(
                 "Fallout 2 Cameron door source presentation disagrees with decoded release state.");
-        door.SetMeta("source_door_unlocked", _contract.Cameron.ReleaseDoorUnlocked);
+        door.SetMeta("source_door_unlocked", !sourceDoor.Locked);
         State = State with
         {
             Stage = Fo2ArroyoTrialProgressState.NegotiatedStage,
-            GlobalVariable10 = branch.GlobalVariable10,
-            CameronLocalVariable12 = branch.LocalVariable12,
-            CameronLocalVariable13 = branch.LocalVariable13,
-            CameronMapVariable20 = branch.MapVariable20,
+            GlobalVariable10 = decodedState.GlobalVariables.Single().Value,
+            CameronLocalVariable12 = decodedState.ScriptLocalVariables
+                .Single(row => row.Value == branch.LocalVariable12).Value,
+            CameronLocalVariable13 = decodedState.ScriptLocalVariables
+                .Single(row => row.Value == branch.LocalVariable13).Value,
+            CameronMapVariable20 = decodedState.MapVariables.Single().Value,
             CameronDialogueSelections = _dialogueIndex,
-            CameronTile = _contract.Cameron.ReleaseActorTiles[^1],
-            CameronVisible = _contract.Cameron.ReleaseFinalVisible,
+            CameronTile = actorState.Tile,
+            CameronVisible = actorState.Visible,
             CameronDoorOpened = doorState.Open,
-            CameronDoorUnlocked = _contract.Cameron.ReleaseDoorUnlocked,
+            CameronDoorUnlocked = !sourceDoor.Locked,
             CameronDoorPlaybackState = doorState,
         };
         State.Validate(_contract);
         StateChanged?.Invoke();
+    }
+
+    private ClassicIntProcedureState ExecuteTaggedSpeechResult(
+        Fo2TrialDialogueBranch branch)
+    {
+        var procedure = branch.VisitedNodes[^1];
+        var random = _readRandomState();
+        var source = new ClassicIntProcedureState(
+            new Dictionary<int, int>(),
+            new Dictionary<int, int>(),
+            new Dictionary<int, int>(),
+            new Dictionary<int, int>(),
+            new Dictionary<int, int>(),
+            [],
+            random);
+        var context = new ClassicIntExpressionContext(
+            source.ProgramVariables,
+            source.LocalVariables,
+            source.ScriptLocalVariables,
+            source.MapVariables,
+            source.GlobalVariables,
+            0,
+            0,
+            null,
+            null,
+            new Dictionary<(int, int), int>(),
+            new Dictionary<(int, int), int>(),
+            new Dictionary<int, int>(),
+            new Dictionary<(int, int), int>(),
+            new Dictionary<string, int>(),
+            null,
+            null,
+            null,
+            new ClassicIntObjectHandleTable(
+                new Dictionary<ClassicIntObjectCreation, int>()));
+        var executable = _cameronProgram.ExecutableProgram.Procedures[procedure];
+        var result = ClassicIntEventDispatcher.Execute(
+            _cameronProgram,
+            procedure,
+            source,
+            context,
+            ClassicIntWorldObjectState.Empty,
+            _randomContract,
+            executable.Instructions.Count);
+        if (result.ExecutedInstructions != executable.Instructions.Count ||
+            result.State.ProgramVariables.Count != 0 ||
+            result.State.LocalVariables.Count != 0 ||
+            result.State.ValueStack.Count != 0 ||
+            result.State.ScriptLocalVariables.Count != 2 ||
+            !result.State.ScriptLocalVariables.Values.Order()
+                .SequenceEqual(new[]
+                {
+                    branch.LocalVariable12,
+                    branch.LocalVariable13,
+                }.Order()) ||
+            result.State.MapVariables.Count != 1 ||
+            result.State.MapVariables.Values.Single() != branch.MapVariable20 ||
+            result.State.GlobalVariables.Count != 1 ||
+            result.State.GlobalVariables.Values.Single() != branch.GlobalVariable10 ||
+            result.MessageEffects.Count != 0 || result.SoundEffects.Count != 0 ||
+            result.WorldObjects.ScriptOverrides ||
+            result.WorldObjects.Doors.Count != 0 ||
+            result.WorldObjects.LightLevel is not null ||
+            result.WorldObjects.CreatedObjects.Count != 0 ||
+            result.WorldObjects.Inventory.Count != 0 ||
+            result.WorldObjects.MapStartOverride is not null ||
+            result.WorldObjects.AttackRequests.Count != 0)
+            throw new InvalidOperationException(
+                "Fallout 2 Cameron owned dialogue result drifted.");
+        _commitRandomState(random, result.State.RandomState);
+        return result.State;
     }
 
     private void BindRestoredCameronDoorPlayback()

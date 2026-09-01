@@ -26,6 +26,9 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
     private MeshInstance3D? _deviceMesh;
     private Camera3D? _deviceCamera;
     private RenderedDeviceFrame? _deviceFrame;
+    private int _screenSurface = -1;
+    private bool _screenPointerInside;
+    private Vector2 _lastScreenPointerPosition;
     private int _creatorButtonSurface = -1;
     private int _creatorGlowSurface = -1;
     private int _sourceSexButtonSurface = -1;
@@ -104,6 +107,15 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         host.AddChild(deviceTexture);
+
+        var screenInput = new Control
+        {
+            Name = "OwnedRaceSexScreenInput",
+            Size = canvasSize,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        screenInput.GuiInput += ForwardScreenInput;
+        host.AddChild(screenInput);
     }
 
     internal void SetActiveList(string activeList)
@@ -215,6 +227,7 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             throw new InvalidOperationException(
                 "Owned Reflectron creator-button source surfaces are not one modeled device.");
         _deviceMesh = screen.Mesh;
+        _screenSurface = screen.Surface;
         _creatorButtonSurface = creatorButton.Surface;
         _creatorGlowSurface = creatorGlow.Surface;
         _sourceSexButtonSurface = sourceSexButton.Surface;
@@ -294,7 +307,8 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         {
             Name = "OwnedRaceSexDirectional",
             Basis = RetailLighting.DirectionalLightBasis(surfaceToLight),
-            LightColor = lighting.DirectionalColor,
+            LightColor = RetailLighting.GodotLightColor(
+                lighting.DirectionalColor),
             LightEnergy = lighting.DirectionalFade *
                 configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,
@@ -973,6 +987,93 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
         button.Pressed += action;
         _host.AddChild(button);
         return button;
+    }
+
+    private void ForwardScreenInput(InputEvent input)
+    {
+        if (input is not InputEventMouse mouse)
+            return;
+        if (!TryMapScreenPointer(mouse.Position, out var screenPosition))
+        {
+            if (_screenPointerInside && input is InputEventMouseButton { Pressed: false })
+                PushScreenMouse(input, _lastScreenPointerPosition);
+            if (_screenPointerInside)
+                ScreenViewport.NotifyMouseExited();
+            _screenPointerInside = false;
+            return;
+        }
+        if (!_screenPointerInside)
+            ScreenViewport.NotifyMouseEntered();
+        _screenPointerInside = true;
+        _lastScreenPointerPosition = screenPosition;
+        PushScreenMouse(input, screenPosition);
+    }
+
+    private void PushScreenMouse(InputEvent input, Vector2 screenPosition)
+    {
+        var forwarded = (InputEventMouse)input.Duplicate();
+        forwarded.Position = screenPosition;
+        forwarded.GlobalPosition = screenPosition;
+        ScreenViewport.PushInput(forwarded, true);
+    }
+
+    private bool TryMapScreenPointer(Vector2 hostPosition, out Vector2 screenPosition)
+    {
+        screenPosition = default;
+        if (_deviceMesh?.Mesh is not { } mesh ||
+            _deviceCamera is not { } camera ||
+            _screenSurface < 0)
+            return false;
+        var arrays = mesh.SurfaceGetArrays(_screenSurface);
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var textureCoordinates = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+        var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+        if (vertices.Length != textureCoordinates.Length || indices.Length % 3 != 0)
+            throw new InvalidOperationException(
+                "Owned Reflectron screen input topology is incomplete.");
+        var transform = LocalTreeTransform(_deviceMesh);
+        var translation = _source.Framing.Alignment.DeviceTranslationCanvasUnits;
+        for (var offset = 0; offset < indices.Length; offset += 3)
+        {
+            var first = indices[offset];
+            var second = indices[offset + 1];
+            var third = indices[offset + 2];
+            var a = camera.UnprojectPosition(transform * vertices[first]) + translation;
+            var b = camera.UnprojectPosition(transform * vertices[second]) + translation;
+            var c = camera.UnprojectPosition(transform * vertices[third]) + translation;
+            if (!TryBarycentric(hostPosition, a, b, c, out var weights))
+                continue;
+            var uv = textureCoordinates[first] * weights.X +
+                textureCoordinates[second] * weights.Y +
+                textureCoordinates[third] * weights.Z;
+            screenPosition = uv * new Vector2(ScreenViewport.Size.X, ScreenViewport.Size.Y);
+            return screenPosition.IsFinite() &&
+                screenPosition.X >= 0.0f && screenPosition.Y >= 0.0f &&
+                screenPosition.X <= ScreenViewport.Size.X &&
+                screenPosition.Y <= ScreenViewport.Size.Y;
+        }
+        return false;
+    }
+
+    private static bool TryBarycentric(
+        Vector2 point,
+        Vector2 a,
+        Vector2 b,
+        Vector2 c,
+        out Vector3 weights)
+    {
+        weights = default;
+        var v0 = b - a;
+        var v1 = c - a;
+        var v2 = point - a;
+        var denominator = v0.X * v1.Y - v1.X * v0.Y;
+        if (!float.IsFinite(denominator) || Mathf.IsZeroApprox(denominator))
+            return false;
+        var second = (v2.X * v1.Y - v1.X * v2.Y) / denominator;
+        var third = (v0.X * v2.Y - v2.X * v0.Y) / denominator;
+        var first = 1.0f - second - third;
+        weights = new Vector3(first, second, third);
+        return first >= 0.0f && second >= 0.0f && third >= 0.0f;
     }
 
     private static Vector3 SurfaceCenter(MeshInstance3D mesh, int surface)

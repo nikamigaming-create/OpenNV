@@ -232,9 +232,21 @@ internal static class ActorModelSlice
                     value => value.Value.GetInt32(),
                     StringComparer.Ordinal)
             : new Dictionary<string, int>(StringComparer.Ordinal);
+        var textKeys = source.TryGetProperty("textKeys", out var textKeySource)
+            ? textKeySource.EnumerateArray().Select(value => new LoadedTextKey(
+                value.GetProperty("timeSeconds").GetSingle(),
+                RequireAnimationText(value, "value", sidecarPath))).ToArray()
+            : Array.Empty<LoadedTextKey>();
         if (priorities.Any(value => value.Value < 0))
             throw new InvalidOperationException(
                 $"Actor animation {logicalPath} has invalid transform priorities " +
+                $"in {sidecarPath}.");
+        if (textKeys.Any(value => !float.IsFinite(value.TimeSeconds) ||
+                value.TimeSeconds < startSeconds || value.TimeSeconds > stopSeconds) ||
+            textKeys.Select(value => value.TimeSeconds).SequenceEqual(
+                textKeys.Select(value => value.TimeSeconds).Order()) is false)
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has invalid source text keys " +
                 $"in {sidecarPath}.");
         return new LoadedAnimation(
             logicalPath,
@@ -247,7 +259,39 @@ internal static class ActorModelSlice
             cycleType,
             priorities,
             runtime.Name,
-            runtime.Player);
+            runtime.Player,
+            source.TryGetProperty("role", out var roleSource) &&
+                roleSource.ValueKind == JsonValueKind.String
+                ? roleSource.GetString()
+                : null,
+            source.TryGetProperty("rootMotion", out var rootMotionSource) &&
+                rootMotionSource.ValueKind == JsonValueKind.Object
+                ? ParseAnimationRootMotion(rootMotionSource, logicalPath, sidecarPath)
+                : null,
+            textKeys);
+    }
+
+    private static LoadedRootMotion ParseAnimationRootMotion(
+        JsonElement source,
+        string logicalPath,
+        string sidecarPath)
+    {
+        var displacement = source.GetProperty("displacementGodotGameUnits")
+            .EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        var result = new LoadedRootMotion(
+            RequireAnimationText(source, "targetNode", sidecarPath),
+            displacement.Length == 3
+                ? new Vector3(displacement[0], displacement[1], displacement[2])
+                : Vector3.Inf,
+            source.GetProperty("speedGameUnitsPerSecond").GetSingle());
+        if (!result.DisplacementGodotGameUnits.IsFinite() ||
+            result.DisplacementGodotGameUnits.IsZeroApprox() ||
+            !float.IsFinite(result.SpeedGameUnitsPerSecond) ||
+            result.SpeedGameUnitsPerSecond <= 0.0f)
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has invalid source root motion " +
+                $"in {sidecarPath}.");
+        return result;
     }
 
     private static string RequireAnimationText(
@@ -879,7 +923,19 @@ internal static class ActorModelSlice
         int CycleType,
         IReadOnlyDictionary<string, int> TransformPrioritiesByNode,
         string RuntimeName,
-        AnimationPlayer Player);
+        AnimationPlayer Player,
+        string? Role = null,
+        LoadedRootMotion? RootMotion = null,
+        IReadOnlyList<LoadedTextKey>? TextKeys = null);
+
+    internal readonly record struct LoadedRootMotion(
+        string TargetNode,
+        Vector3 DisplacementGodotGameUnits,
+        float SpeedGameUnitsPerSecond);
+
+    internal readonly record struct LoadedTextKey(
+        float TimeSeconds,
+        string Value);
 
     internal readonly record struct PosedTriangle(Vector3 A, Vector3 B, Vector3 C);
 

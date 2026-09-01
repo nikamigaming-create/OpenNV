@@ -20,7 +20,7 @@ internal static class CellRouteTravelAcceptance
     private const float ObstacleBoundaryOutwardBias = 0.25f;
     private const int StalledFrameLimit = 180;
     private const int MinimumWaypointFrameBudget = 240;
-    private const int MaximumOwnedNavigationReplans = 3;
+    internal const int MaximumOwnedNavigationReplans = 3;
 
     internal static async Task Run(
         RuntimeCoordinator host,
@@ -439,7 +439,7 @@ internal static class CellRouteTravelAcceptance
     }
 
     private static async Task<bool> WalkToWaypoint(
-        RuntimeCoordinator host,
+        Node host,
         CellPlayer player,
         Vector3 target,
         DesktopInputConfiguration input,
@@ -486,8 +486,8 @@ internal static class CellRouteTravelAcceptance
         return false;
     }
 
-    private static async Task<bool> RecoverAroundObstacle(
-        RuntimeCoordinator host,
+    internal static async Task<bool> RecoverAroundObstacle(
+        Node host,
         CellPlayer player,
         Vector3 target,
         DesktopInputConfiguration input,
@@ -495,12 +495,45 @@ internal static class CellRouteTravelAcceptance
         float toleranceMeters,
         bool requireDirectSweep)
     {
+        if (await WithdrawFromObstacle(
+                host,
+                player,
+                input,
+                configuration) &&
+            await WalkToWaypoint(
+                host,
+                player,
+                target,
+                input,
+                configuration,
+                toleranceMeters,
+                requireDirectSweep))
+            return true;
+
         if (await FollowObstacleBoundary(
                 host,
                 player,
                 target,
                 input,
-                configuration) &&
+                configuration,
+                reverse: false) &&
+            await WalkToWaypoint(
+                host,
+                player,
+                target,
+                input,
+                configuration,
+                toleranceMeters,
+                requireDirectSweep))
+            return true;
+
+        if (await FollowObstacleBoundary(
+                host,
+                player,
+                target,
+                input,
+                configuration,
+                reverse: true) &&
             await WalkToWaypoint(
                 host,
                 player,
@@ -552,12 +585,57 @@ internal static class CellRouteTravelAcceptance
         return false;
     }
 
+    private static async Task<bool> WithdrawFromObstacle(
+        Node host,
+        CellPlayer player,
+        DesktopInputConfiguration input,
+        RuntimeConfiguration configuration)
+    {
+        var normal = player.LastBlockingNormal;
+        normal.Y = 0.0f;
+        if (normal.IsZeroApprox())
+            return false;
+        normal = normal.Normalized();
+        var frames = Math.Max(
+            input.Acceptance.SettleFrames,
+            (int)MathF.Ceiling(
+                configuration.Player.CapsuleRadiusMeters *
+                ObstacleRecoveryClearanceRadii /
+                configuration.Player.MoveSpeedMetersPerSecond *
+                configuration.Simulation.PhysicsTicksPerSecond));
+        var start = player.GlobalPosition;
+        Input.ParseInputEvent(DesktopInputMap.CreateEvent(input.MoveForward, true));
+        try
+        {
+            for (var frame = 0; frame < frames; frame++)
+            {
+                FlatControlsAcceptance.ApplyMouseYaw(
+                    player,
+                    player.GlobalPosition + normal,
+                    configuration.Player);
+                await FlatControlsAcceptance.WaitPhysicsFrames(host, 1);
+                if (HorizontalDistance(start, player.GlobalPosition) >=
+                    configuration.Player.CapsuleRadiusMeters)
+                    return true;
+            }
+        }
+        finally
+        {
+            Input.ParseInputEvent(DesktopInputMap.CreateEvent(input.MoveForward, false));
+            await FlatControlsAcceptance.WaitPhysicsFrames(
+                host,
+                input.Acceptance.SettleFrames);
+        }
+        return false;
+    }
+
     private static async Task<bool> FollowObstacleBoundary(
-        RuntimeCoordinator host,
+        Node host,
         CellPlayer player,
         Vector3 target,
         DesktopInputConfiguration input,
-        RuntimeConfiguration configuration)
+        RuntimeConfiguration configuration,
+        bool reverse)
     {
         var normal = player.LastBlockingNormal;
         normal.Y = 0.0f;
@@ -575,11 +653,12 @@ internal static class CellRouteTravelAcceptance
             return true;
         targetDirection = targetDirection.Normalized();
         var first = new Vector3(normal.Z, 0.0f, -normal.X);
-        var second = -first;
-        var tangent = first.Dot(targetDirection) >= second.Dot(targetDirection)
-            ? first
-            : second;
-        tangent = (tangent + normal * ObstacleBoundaryOutwardBias).Normalized();
+        var boundaryDirection = first.Dot(targetDirection) >=
+            (-first).Dot(targetDirection)
+                ? 1.0f
+                : -1.0f;
+        if (reverse)
+            boundaryDirection = -boundaryDirection;
         var frames = Math.Max(
             input.Acceptance.SettleFrames,
             (int)MathF.Ceiling(
@@ -587,22 +666,35 @@ internal static class CellRouteTravelAcceptance
                 configuration.Player.MoveSpeedMetersPerSecond *
                 configuration.Simulation.PhysicsTicksPerSecond));
         var start = player.GlobalPosition;
-        var targetSweepClear = false;
+        var localAdvanceClear = false;
         Input.ParseInputEvent(DesktopInputMap.CreateEvent(input.MoveForward, true));
         try
         {
             for (var frame = 0; frame < frames; frame++)
             {
+                var currentNormal = player.LastBlockingNormal;
+                currentNormal.Y = 0.0f;
+                if (!currentNormal.IsZeroApprox())
+                    normal = currentNormal.Normalized();
+                var tangent = new Vector3(normal.Z, 0.0f, -normal.X) *
+                    boundaryDirection;
+                tangent = (tangent + normal * ObstacleBoundaryOutwardBias).Normalized();
                 FlatControlsAcceptance.ApplyMouseYaw(
                     player,
                     player.GlobalPosition + tangent,
                     configuration.Player);
                 await FlatControlsAcceptance.WaitPhysicsFrames(host, 1);
+                var forward = target - player.GlobalPosition;
+                forward.Y = 0.0f;
+                var localAdvance = forward.IsZeroApprox()
+                    ? player.GlobalPosition
+                    : player.GlobalPosition + forward.Normalized() *
+                        configuration.Player.CapsuleRadiusMeters;
                 if (HorizontalDistance(start, player.GlobalPosition) >=
                         configuration.Player.CapsuleRadiusMeters &&
-                    CanAdvanceCapsule(player, target))
+                    CanAdvanceCapsule(player, localAdvance))
                 {
-                    targetSweepClear = true;
+                    localAdvanceClear = true;
                     break;
                 }
             }
@@ -614,7 +706,7 @@ internal static class CellRouteTravelAcceptance
                 host,
                 input.Acceptance.SettleFrames);
         }
-        return targetSweepClear;
+        return localAdvanceClear;
     }
 
     private static CellContentLoader.LoadedContent ContentFor(
@@ -647,7 +739,7 @@ internal static class CellRouteTravelAcceptance
     private static float VerticalDistance(Vector3 first, Vector3 second) =>
         MathF.Abs(second.Y - first.Y);
 
-    private static bool CanAdvanceCapsule(CellPlayer player, Vector3 target)
+    internal static bool CanAdvanceCapsule(CellPlayer player, Vector3 target)
     {
         var collision = CapsuleSweep(player, target);
         if (collision is null)

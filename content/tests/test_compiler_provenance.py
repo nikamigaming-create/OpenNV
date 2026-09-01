@@ -283,6 +283,27 @@ class CompilerProvenanceTest(unittest.TestCase):
                 plan,
                 {"static": True, "cell": True, "opening": False, "actor": False},
             )
+            prior_profile = copy.deepcopy(prior)
+            prior_profile["install"]["request"] = {
+                "playerFaceGenProfile": "source-default-route-validation"
+            }
+            current_install = copy.deepcopy(prior_profile["install"])
+            current_install["request"]["playerFaceGenProfile"] = (
+                "all-source-valid-selections"
+            )
+            self.assertEqual(
+                reusable_families(
+                    prior_profile,
+                    current_install,
+                    identities,
+                    require_cell=True,
+                    require_actor=True,
+                    cell_recipe_id="primary",
+                    linked_recipe_ids=("linked",),
+                    actor_recipe_ids=("actor",),
+                ),
+                {"static": True, "cell": True, "opening": False, "actor": True},
+            )
             legacy = copy.deepcopy(prior)
             legacy.pop("compilerFamilies")
             self.assertFalse(

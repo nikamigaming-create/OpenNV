@@ -40,6 +40,7 @@ from bsa_archive import ExtractedMember  # noqa: E402
 from player_facegen_preview import (  # noqa: E402
     PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
     PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
+    PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS,
 )
 from plugin_records import Record  # noqa: E402
 
@@ -183,6 +184,20 @@ class OpeningCatalogTest(unittest.TestCase):
             emit_player_facegen_preview_set(
                 Path(temporary),
                 {"schema": PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA},
+            )
+
+    def test_route_preview_projection_is_an_explicit_v5_contract(self):
+        preview_set = {
+            "schema": PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
+            "status": PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS,
+            "selectionScope": "source-default-player-identity-route-validation",
+            "previews": [{"sex": "male"}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            emitted = emit_player_facegen_preview_set(Path(temporary), preview_set)
+            self.assertEqual(
+                json.loads(Path(emitted["path"]).read_text(encoding="utf-8")),
+                preview_set,
             )
 
     def test_texture_atlas_entry_resolves_exact_owned_sprite_region(self):
@@ -569,12 +584,16 @@ class OpeningCatalogTest(unittest.TestCase):
         self.assertEqual(contract["initialExperiencePoints"], 0)
         self.assertEqual(
             {value["editorId"]: value["value"] for value in contract["gameSettings"]},
-            {**setting_values, "iXPBase": 200},
+            {**setting_values, "iXPBase": 200, "fJumpHeightMin": 64.0},
         )
         self.assertEqual(len(contract["actorValues"]), 5)
         self.assertEqual(
-            contract["gameSettings"][-1]["evidenceId"],
+            contract["gameSettings"][-2]["evidenceId"],
             "fnv-1.4.0.525-gmst-ixpbase-v1",
+        )
+        self.assertEqual(
+            contract["gameSettings"][-1]["evidenceId"],
+            "fnv-1.4.0.525-gmst-fjumpheightmin-retail-oracle-v1",
         )
 
     def test_command_contract_resolves_owned_record_identities(self):
@@ -659,7 +678,36 @@ class OpeningCatalogTest(unittest.TestCase):
             ],
         )
         self.assertTrue(commands[3]["crossFade"])
-        self.assertEqual(commands[5]["arguments"][-1], "sneaking")
+        self.assertEqual(
+            commands[5]["arguments"],
+            [
+                "movement",
+                "pipBoy",
+                "fighting",
+                "pointOfView",
+                "looking",
+                "rolloverText",
+                "sneaking",
+            ],
+        )
+
+    def test_script_commands_preserve_pipboy_inventory_publication_boundary(self):
+        commands = _script_commands(
+            "\n".join(
+                (
+                    "player.additem pipboy 1",
+                    "player.additem pipboyglove 1",
+                    "player.equipitem pipboy",
+                    "player.equipitem pipboyglove",
+                    "ResetPipBoyManager",
+                )
+            )
+        )
+
+        self.assertEqual(
+            [command["kind"] for command in commands],
+            ["additem", "additem", "equipitem", "equipitem", "resetPipBoyManager"],
+        )
 
     def test_player_package_resolves_event_and_idle_semantics(self):
         package_data = struct.pack("<IBBHHH", 4, 6, 0, 2, 3, 0)
@@ -733,6 +781,8 @@ class OpeningCatalogTest(unittest.TestCase):
                 ),
                 subrecord("IDLC", bytes((1,))),
                 subrecord("IDLA", struct.pack("<I", SYNTHETIC_IDLE_BEGIN_FORM)),
+                subrecord("POEA", b""),
+                subrecord("SCTX", b"SetStage SyntheticQuest 30\0"),
             )
         )
         record = Record("PACK", SYNTHETIC_PACKAGE_FORM, 0, payload, ())
@@ -781,6 +831,10 @@ class OpeningCatalogTest(unittest.TestCase):
             "SyntheticMarker",
         )
         self.assertEqual(idle_paths, ("meshes\\synthetic-idle.kf",))
+        self.assertEqual(
+            [{"kind": "setStage", "questEditorId": "SyntheticQuest", "stage": 30}],
+            result["eventCommands"]["end"],
+        )
 
     def test_guide_animation_object_joins_idle_anio_nif_and_attachment(self):
         animation_object_form = 0x35
@@ -957,8 +1011,8 @@ class OpeningCatalogTest(unittest.TestCase):
                     "REFR",
                     (1.0, 2.0, 3.0),
                     (0.0, 0.0, 0.0),
-                    furniture_base,
-                    "furniture-reference-record-sha256",
+                    base_form_id=furniture_base,
+                    record_sha256="furniture-reference-record-sha256",
                 ),
                 patient_bed_reference: ReferenceTransformSource(
                     patient_bed_reference,
@@ -966,8 +1020,8 @@ class OpeningCatalogTest(unittest.TestCase):
                     "REFR",
                     (4.0, 5.0, 6.0),
                     (0.0, 0.0, 0.0),
-                    patient_bed_base,
-                    "patient-bed-reference-record-sha256",
+                    base_form_id=patient_bed_base,
+                    record_sha256="patient-bed-reference-record-sha256",
                 ),
             },
             image_space_modifiers_by_editor={},

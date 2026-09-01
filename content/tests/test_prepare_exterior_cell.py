@@ -12,16 +12,79 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from exterior_scene import (  # noqa: E402
+    climate_night_sky_model,
     environment_sky_models,
     loaded_grid_coordinates,
+    night_sky_surface_contracts,
     reference_grid,
     single_master_landscape_identity,
 )
 from prepare_exterior_cell import _verified_recipe_file, _verified_streaming  # noqa: E402
+from prepare_legal_assets import route_exterior_positions  # noqa: E402
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class PrepareExteriorCellTest(unittest.TestCase):
+    def test_climate_night_sky_model_is_owned_nif_contract(self) -> None:
+        self.assertEqual(
+            climate_night_sky_model("/Sky/Stars.NIF"),
+            {"path": "sky\\stars.nif", "surfaceSemantic": "night-sky"},
+        )
+        with self.assertRaisesRegex(ValueError, "owned NIF"):
+            climate_night_sky_model("sky/stars.dds")
+
+    def test_night_sky_surface_joins_its_authored_texture_identity(self) -> None:
+        surfaces = [{"name": "Stars:0", "attributes": ["POSITION", "TEXCOORD_0"]}]
+        materials = [{"surfaceIndex": 0, "diffuseTextureId": "owned-stars"}]
+
+        self.assertEqual(
+            night_sky_surface_contracts(surfaces, materials, "night-sky"),
+            [
+                {
+                    "index": 0,
+                    "name": "Stars:0",
+                    "attributes": ["POSITION", "TEXCOORD_0"],
+                    "semantic": "night-sky",
+                    "diffuseTextureId": "owned-stars",
+                }
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "authored diffuse texture"):
+            night_sky_surface_contracts(
+                surfaces,
+                [{"surfaceIndex": 0, "diffuseTextureId": None}],
+                "night-sky",
+            )
+
+    def test_route_exterior_positions_select_only_owned_persistent_references(self) -> None:
+        positions = route_exterior_positions(
+            {
+                "newGameFlow": {
+                    "ordinaryActors": [
+                        {
+                            "location": {
+                                "reference": {
+                                    "cellFormId": "00000020",
+                                    "positionGameUnits": [-1.0, -4097.0, 5.0],
+                                }
+                            }
+                        },
+                        {
+                            "location": {
+                                "reference": {
+                                    "cellFormId": "00000030",
+                                    "positionGameUnits": [99.0, 99.0, 99.0],
+                                }
+                            }
+                        },
+                    ]
+                }
+            },
+            "00000020",
+        )
+
+        self.assertEqual(positions, ((-1.0, -4097.0, 5.0),))
+
     def test_cloud_layers_reuse_the_authored_cloud_dome_geometry(self) -> None:
         models = environment_sky_models(
             {

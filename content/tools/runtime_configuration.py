@@ -9,7 +9,7 @@ import re
 import sys
 from dataclasses import dataclass
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import MappingProxyType
 from typing import Mapping
 
@@ -51,6 +51,7 @@ CONFIGURATION_SECTIONS = (
     "pool",
     "pickup",
     "door",
+    "persistence",
     "hud",
     "capture",
     "proof",
@@ -569,6 +570,11 @@ def load_runtime_configuration() -> RuntimeConfiguration:
         or float(sample_interval) <= 0.0
     ):
         raise ValueError("OpenNV performance sample interval must be positive and finite")
+    persistence = _object(document, "persistence")
+    for field in ("atomicReplaceAttempts", "atomicReplaceRetryMilliseconds"):
+        value = persistence.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"OpenNV persistence.{field} must be a positive integer")
     tooling_recipes = _object(_object(document, "tooling"), "recipeFiles")
     if (
         not tooling_recipes
@@ -848,11 +854,27 @@ def load_runtime_configuration() -> RuntimeConfiguration:
         or not str(humanoid_profile.get("path", "")).strip()
     ):
         raise ValueError("OpenNV NPC_ animation profile is invalid")
-    if set(creature_profile) != {"mode", "fileName"} or (
+    if set(creature_profile) != {"mode", "fileName", "roles"} or (
         creature_profile.get("mode") != "skeleton-directory"
         or not str(creature_profile.get("fileName", "")).strip()
     ):
         raise ValueError("OpenNV CREA animation profile is invalid")
+    creature_roles = _object(creature_profile, "roles")
+    if set(creature_roles) != {"locomotion", "melee", "hit"}:
+        raise ValueError("OpenNV CREA animation roles are invalid")
+    for candidates in creature_roles.values():
+        if (
+            not isinstance(candidates, list)
+            or not candidates
+            or len(set(str(value).casefold() for value in candidates)) != len(candidates)
+            or any(
+                not str(value).strip()
+                or PureWindowsPath(str(value)).is_absolute()
+                or PureWindowsPath(str(value)).suffix.casefold() != ".kf"
+                for value in candidates
+            )
+        ):
+            raise ValueError("OpenNV CREA animation role candidates are invalid")
     rigid_attachment = _object(actor_compiler, "rigidAttachment")
     rigid_provenance = _object(rigid_attachment, "provenance")
     for field in ("classification", "status", "source", "evidence"):

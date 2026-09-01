@@ -143,7 +143,7 @@ internal partial class Fo3OpeningFlow
         UpdateCg00ActorPackages(delta);
         UpdateCg00PlayerCamera(delta);
         UpdateCg00ImageSpace(delta);
-        _cg00EarlyDialogue?.Update();
+        _cg00EarlyDialogue?.Update(delta);
         if (_cg00EarlyTimerTargetStage is null)
             return;
         _cg00EarlyTimerSeconds = Math.Max(0.0, _cg00EarlyTimerSeconds - delta);

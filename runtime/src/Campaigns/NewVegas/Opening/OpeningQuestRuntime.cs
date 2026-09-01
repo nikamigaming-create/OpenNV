@@ -7,10 +7,12 @@ using OpenNV.Runtime.SceneGraph;
 
 
 using OpenNV.Runtime.InputSystem;
+using OpenNV.Runtime.Diagnostics.Acceptance;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Interactions;
+using OpenNV.Runtime.World.Portals;
 using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
@@ -20,6 +22,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private const int GetIsSexConditionFunction = 70;
     private const int GetIsIdConditionFunction = 72;
     private const int GetQuestVariableConditionFunction = 79;
+    private const int GetStageConditionFunction = 58;
+    private const int GetStageDoneConditionFunction = 420;
     private const int ConditionOperatorMask = 0xe0;
     private const int ConditionEqual = 0x00;
     private const int ConditionNotEqual = 0x20;
@@ -55,6 +59,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> _questVariables =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, float> _referenceVariables =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _psychologyScores =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _specialValues =
@@ -73,6 +79,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private readonly Dictionary<string, OpeningObjectiveState> _objectives =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _referenceEnabledStates =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _combatHealthByReferenceFormId =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> _faceGeometryControlValues =
         new(StringComparer.Ordinal);
@@ -132,6 +140,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private GamebryoPackageTarget _activeGuidePackageTarget =
         GamebryoPackageTarget.None;
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
+    private ActorAnimationPlayback? _guideLocomotionPlayback;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;
     private OpeningGuidePriorityAnimation.LayeredPlayback?
@@ -181,10 +190,16 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         var stopAtCheckpoint = mode.Equals("checkpoint", StringComparison.OrdinalIgnoreCase);
         var stopAfterCreator = mode.Equals("creator", StringComparison.OrdinalIgnoreCase);
         var completeAfterResume = mode.Equals("resume", StringComparison.OrdinalIgnoreCase);
-        if ((!stopAtCheckpoint && !stopAfterCreator && !completeAfterResume) ||
+        var completeAtFirstEncounter = mode is "route-stage50" or "route-stage50-resume";
+        var resumeToFirstEncounter = mode == "route-stage50-resume";
+        if ((!stopAtCheckpoint && !stopAfterCreator && !completeAfterResume &&
+                !completeAtFirstEncounter) ||
             string.IsNullOrWhiteSpace(playerName) || timeoutSeconds <= 0.0)
             throw new ArgumentException("Opening acceptance arguments are invalid.");
         var initialState = _loaded.Session.OpeningState;
+        if (resumeToFirstEncounter && initialState is null)
+            throw new InvalidOperationException(
+                "FNV route resume acceptance requires saved campaign state.");
         if (completeAfterResume && initialState is not { Completed: false })
             throw new InvalidOperationException(
                 "Opening resume acceptance requires an incomplete saved opening.");
@@ -192,9 +207,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         var proveFirstPlayerAction = completeAfterResume &&
             initialState!.Stage == checkpointStage;
         var startMilliseconds = Time.GetTicksMsec();
-        var navigationStage = int.MinValue;
+        var navigationKey = string.Empty;
+        var navigationEvent = string.Empty;
+        Vector3? navigationTarget = null;
         IReadOnlyList<Vector3> navigationPath = Array.Empty<Vector3>();
         var navigationIndex = 0;
+        var obstacleRecoveryFailures = new Dictionary<string, int>(
+            StringComparer.Ordinal);
+        var rejectedFiringDestinations = new HashSet<Vector3>();
+        var lastRouteProgressSecond = -1;
         DesktopKeyBindingConfiguration? movementHeld = null;
         DesktopKeyBindingConfiguration? firstPlayerAction = null;
         Vector3? firstPlayerActionOrigin = null;
@@ -210,6 +231,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             mode,
             playerName);
         _visualCaptureActive = visualCapture is not null;
+        _loaded.Player.SetSyntheticMouseMotionPolicy(true);
         var activateHeld = false;
         try
         {
@@ -237,6 +259,17 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     return creatorState;
                 }
                 var saved = _loaded.Session.OpeningState;
+                if (completeAtFirstEncounter && saved is { Completed: true } &&
+                    FirstEncounterCompleted())
+                {
+                    _loaded.Session.StoreOpeningState(CaptureState(true));
+                    GD.Print(
+                        "OPENNV_FNV_ROUTE_STAGE50_PASS " +
+                        $"activeCell={_loaded.Session.ActiveCellFormId} " +
+                        $"destroyedTargets={_destroyedReferences.Count} " +
+                        $"combatDeaths={_combatHealthByReferenceFormId.Values.Count(value => value == 0)}");
+                    return CaptureState(true);
+                }
                 if (stopAtCheckpoint && saved is { Completed: false })
                 {
                     ValidateCheckpointState(saved);
@@ -259,6 +292,25 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 }
                 var elapsedSeconds =
                     (Time.GetTicksMsec() - startMilliseconds) / MillisecondsPerSecond;
+                var routeProgressSecond = (int)elapsedSeconds;
+                if (routeProgressSecond != lastRouteProgressSecond &&
+                    routeProgressSecond % 5 == 0)
+                {
+                    lastRouteProgressSecond = routeProgressSecond;
+                    GD.Print(
+                        $"OPENNV_OPENING_ACCEPTANCE_PROGRESS stage={_stage} " +
+                        $"cell={_loaded.Session.ActiveCellFormId} " +
+                        $"player={_loaded.Player.GlobalPosition} " +
+                        $"movement={_loaded.Player.MovementEnabled} " +
+                        $"look={_loaded.Player.LookEnabled} " +
+                        $"activation={_loaded.Player.ActivationEnabled} " +
+                        $"pipBoy={_loaded.Session.IsPipBoyOpen} " +
+                        $"movementAction={movementHeld?.Action ?? "none"} " +
+                        $"movementPressed={movementHeld is not null && Input.IsActionPressed(movementHeld.Action)} " +
+                        $"movementState={_loaded.Player.LastMovementState} " +
+                        $"movementCollision={_loaded.Player.LastMovementCollision} " +
+                        $"navigationIndex={navigationIndex}/{navigationPath.Count}");
+                }
                 if (elapsedSeconds > timeoutSeconds)
                     throw new TimeoutException(
                         $"Opening acceptance timed out at stage {_stage} after {elapsedSeconds:F1}s.");
@@ -320,6 +372,169 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 if (visualCapture is not null &&
                     await visualCapture.ObserveCheckpointState(this))
                     continue;
+                if (movementHeld is not null &&
+                    _loaded.Player.LastBlockingCollider is not null &&
+                    Ancestor<DoorInstance>(_loaded.Player.LastBlockingCollider) is null &&
+                    navigationPath.Count > 0)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    var recoveryWaypoint = navigationPath[
+                        Math.Min(navigationIndex, navigationPath.Count - 1)];
+                    var recoveryOrigin = _loaded.Player.GlobalPosition;
+                    var recoveryDistance = HorizontalDistance(
+                        recoveryOrigin,
+                        recoveryWaypoint);
+                    var blockerPath = _loaded.Player.LastBlockingCollider.GetPath()
+                        .ToString();
+                    var recovered = await CellRouteTravelAcceptance.RecoverAroundObstacle(
+                        this,
+                        _loaded.Player,
+                        recoveryWaypoint,
+                        _configuration.Player.DesktopInput,
+                        _configuration,
+                        _configuration.Player.CapsuleRadiusMeters,
+                        requireDirectSweep: false);
+                    if (!recovered && navigationIndex + 1 < navigationPath.Count)
+                    {
+                        var lookaheadWaypoint = navigationPath[navigationIndex + 1];
+                        recovered = await CellRouteTravelAcceptance.RecoverAroundObstacle(
+                            this,
+                            _loaded.Player,
+                            lookaheadWaypoint,
+                            _configuration.Player.DesktopInput,
+                            _configuration,
+                            _configuration.Player.CapsuleRadiusMeters,
+                            requireDirectSweep: false);
+                        if (recovered)
+                            navigationIndex++;
+                    }
+                    var progress = recoveryDistance - HorizontalDistance(
+                        _loaded.Player.GlobalPosition,
+                        recoveryWaypoint);
+                    var recoveryKey = $"{navigationKey}:{blockerPath}";
+                    if (recovered)
+                    {
+                        obstacleRecoveryFailures.Remove(recoveryKey);
+                        continue;
+                    }
+                    if (progress < _configuration.Player.CapsuleRadiusMeters)
+                    {
+                        var failures = obstacleRecoveryFailures.GetValueOrDefault(
+                            recoveryKey) + 1;
+                        obstacleRecoveryFailures[recoveryKey] = failures;
+                        if (failures >= CellRouteTravelAcceptance
+                                .MaximumOwnedNavigationReplans)
+                        {
+                            if (navigationEvent.Equals("fire", StringComparison.OrdinalIgnoreCase) &&
+                                navigationPath.Count > 0)
+                            {
+                                rejectedFiringDestinations.Add(navigationPath[^1]);
+                                obstacleRecoveryFailures.Remove(recoveryKey);
+                            }
+                            else
+                                throw new InvalidOperationException(
+                                    "Configured route could not clear authored CELL collision " +
+                                    $"after {failures} owned navigation replans: {blockerPath}; " +
+                                    $"step={_loaded.Player.LastStepAttempt}; " +
+                                    $"movement={_loaded.Player.LastMovementState}");
+                        }
+                    }
+                    navigationKey = string.Empty;
+                    navigationTarget = null;
+                    navigationPath = Array.Empty<Vector3>();
+                    navigationIndex = 0;
+                    continue;
+                }
+                if (AcceptanceOpenBlockingDoor() is { } openBlockingDoor &&
+                    navigationPath.Count > 0)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    var recoveryWaypoint = navigationPath[
+                        Math.Min(navigationIndex, navigationPath.Count - 1)];
+                    var recoveryOrigin = _loaded.Player.GlobalPosition;
+                    var recovered = await CellRouteTravelAcceptance.RecoverAroundObstacle(
+                            this,
+                            _loaded.Player,
+                            recoveryWaypoint,
+                            _configuration.Player.DesktopInput,
+                            _configuration,
+                            _configuration.Player.CapsuleRadiusMeters,
+                            requireDirectSweep: false);
+                    if (!recovered && HorizontalDistance(
+                            recoveryOrigin,
+                            _loaded.Player.GlobalPosition) <
+                        _configuration.Player.CapsuleRadiusMeters)
+                        throw new InvalidOperationException(
+                            "Configured route could not clear the opened source door: " +
+                            openBlockingDoor.ReferenceFormId);
+                    navigationKey = string.Empty;
+                    navigationTarget = null;
+                    navigationPath = Array.Empty<Vector3>();
+                    navigationIndex = 0;
+                    continue;
+                }
+                if (AcceptanceBlockingDoor() is { } blockingDoor)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    FlatControlsAcceptance.ApplyMouseLook(
+                        _loaded.Player,
+                        blockingDoor.Position,
+                        _configuration.Player);
+                    var settleFrames =
+                        _configuration.Player.DesktopInput.Acceptance.SettleFrames;
+                    for (var settle = 0; settle < settleFrames; settle++)
+                        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                        _configuration.Player.DesktopInput.Activate,
+                        true));
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                        _configuration.Player.DesktopInput.Activate,
+                        false));
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    for (var settle = 0; settle < settleFrames; settle++)
+                        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    if (!blockingDoor.Door.IsOpen)
+                        throw new InvalidOperationException(
+                            "Configured route activation did not open its source door: " +
+                            blockingDoor.Door.ReferenceFormId);
+                    await blockingDoor.Door.WaitForArticulation();
+                    if (blockingDoor.Door.HasSourceArticulation &&
+                        !blockingDoor.Door.SourceOpenTerminalApplied)
+                        throw new InvalidOperationException(
+                            "Configured route source door did not reach its open terminal: " +
+                            blockingDoor.Door.ReferenceFormId);
+                    if (navigationPath.Count > 0)
+                    {
+                        var recoveryWaypoint = navigationPath[
+                            Math.Min(navigationIndex, navigationPath.Count - 1)];
+                        var recoveryOrigin = _loaded.Player.GlobalPosition;
+                        var recovered = await CellRouteTravelAcceptance.RecoverAroundObstacle(
+                                this,
+                                _loaded.Player,
+                                recoveryWaypoint,
+                                _configuration.Player.DesktopInput,
+                                _configuration,
+                                _configuration.Player.CapsuleRadiusMeters,
+                                requireDirectSweep: false);
+                        if (!recovered && HorizontalDistance(
+                                recoveryOrigin,
+                                _loaded.Player.GlobalPosition) <
+                            _configuration.Player.CapsuleRadiusMeters)
+                            throw new InvalidOperationException(
+                                "Configured route could not clear the opened source door: " +
+                                blockingDoor.Door.ReferenceFormId);
+                        navigationKey = string.Empty;
+                        navigationTarget = null;
+                        navigationPath = Array.Empty<Vector3>();
+                        navigationIndex = 0;
+                    }
+                    GD.Print(
+                        "OPENNV_OPENING_ACCEPTANCE_BLOCKING_DOOR_OPEN " +
+                        $"form={blockingDoor.Door.ReferenceFormId} " +
+                        $"cell={_loaded.Session.ActiveCellFormId}");
+                    continue;
+                }
                 if (_activeModal is not null)
                 {
                     SetAcceptanceMovement(null, ref movementHeld);
@@ -347,50 +562,216 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     }
                     AdvanceAcceptanceModal(
                         playerName,
-                        showcaseCreatorControls: appearancePresentationHoldFrames > 0);
+                        showcaseCreatorControls: appearancePresentationHoldFrames > 0,
+                        exerciseSourceSelections: !completeAtFirstEncounter);
                     continue;
                 }
 
-                var interaction = _flow.Interactions.SingleOrDefault(value =>
-                    value.FromStage == _stage);
-                if (interaction is null)
+                var routeAction = completeAtFirstEncounter && saved is { Completed: true }
+                    ? FirstEncounterAction()
+                    : null;
+                var combatActive = _flow.CombatEncounters.Any(encounter =>
+                    _quests.TryGetValue(encounter.QuestFormId, out var quest) &&
+                    quest.Stage >= encounter.MinimumCombatStage &&
+                    encounter.Targets.Any(target =>
+                        _combatHealthByReferenceFormId[target.ReferenceFormId] > 0));
+                if (combatActive && _loaded.Session.AmmoInMagazine == 0 &&
+                    _loaded.Session.ReserveAmmo > 0)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                        _configuration.Player.DesktopInput.Reload,
+                        true));
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                        _configuration.Player.DesktopInput.Reload,
+                        false));
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    continue;
+                }
+                var interaction = routeAction is null
+                    ? _flow.Interactions.SingleOrDefault(value => value.FromStage == _stage)
+                    : null;
+                if (interaction is null && routeAction is null)
                 {
                     SetAcceptanceMovement(null, ref movementHeld);
                     continue;
                 }
-                if (!_roleNodes.TryGetValue(interaction.TargetRole, out var target))
-                    throw new InvalidOperationException(
-                        $"Opening acceptance target role is absent: {interaction.TargetRole}");
-                var distance = _loaded.Player.GlobalPosition.DistanceTo(
-                    target.GlobalPosition);
-                if (distance <= _configuration.Player.ActivationDistanceMeters)
+                Node3D target;
+                string eventName;
+                string currentNavigationKey;
+                if (routeAction is not null)
+                {
+                    target = routeAction.Target;
+                    eventName = routeAction.Event;
+                    currentNavigationKey = routeAction.Key;
+                }
+                else
+                {
+                    if (!_roleNodes.TryGetValue(interaction!.TargetRole, out target!))
+                        throw new InvalidOperationException(
+                            $"Opening acceptance target role is absent: {interaction.TargetRole}");
+                    eventName = interaction.Event;
+                    currentNavigationKey =
+                        $"opening:{_stage}:{interaction.Event}:{interaction.TargetRole}";
+                }
+                var interactionPosition = routeAction?.AimTarget ?? target.GlobalPosition;
+                var distanceOrigin = eventName.Equals(
+                        "activate",
+                        StringComparison.OrdinalIgnoreCase)
+                    ? _loaded.Player.Camera.GlobalPosition
+                    : _loaded.Player.GlobalPosition;
+                var distance = distanceOrigin.DistanceTo(interactionPosition);
+                var fireReady = false;
+                if (eventName.Equals("fire", StringComparison.OrdinalIgnoreCase) &&
+                    distance <= _configuration.Player.FireRayDistanceMeters)
+                {
+                    FlatControlsAcceptance.ApplyMouseLook(
+                        _loaded.Player,
+                        interactionPosition,
+                        _configuration.Player);
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    fireReady = _loaded.Session.CanHitscanReach(
+                        _loaded.Player.Camera,
+                        _loaded.Player.CollisionMask,
+                        target);
+                }
+                if (distance <= _configuration.Player.ActivationDistanceMeters || fireReady)
                 {
                     SetAcceptanceMovement(null, ref movementHeld);
-                    if (interaction.Event.Equals("activate", StringComparison.OrdinalIgnoreCase))
+                    if (fireReady)
                     {
+                        var settleFrames =
+                            _configuration.Player.DesktopInput.Acceptance.SettleFrames;
+                        for (var settle = 0; settle < settleFrames; settle++)
+                        {
+                            var collision = target.GetChildren()
+                                .OfType<GamebryoActorCollision>()
+                                .SingleOrDefault();
+                            interactionPosition = collision?.GlobalPosition ??
+                                routeAction?.AimTarget ?? target.GlobalPosition;
+                            FlatControlsAcceptance.ApplyMouseLook(
+                                _loaded.Player,
+                                interactionPosition,
+                                _configuration.Player);
+                            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                            if (!_loaded.Session.CanHitscanReach(
+                                    _loaded.Player.Camera,
+                                    _loaded.Player.CollisionMask,
+                                    target))
+                            {
+                                fireReady = false;
+                                break;
+                            }
+                        }
+                        if (!fireReady)
+                            continue;
+                    }
+                    if (eventName.Equals("activate", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var settleFrames =
+                            _configuration.Player.DesktopInput.Acceptance.SettleFrames;
+                        FlatControlsAcceptance.ApplyMouseLook(
+                            _loaded.Player,
+                            interactionPosition,
+                            _configuration.Player);
+                        for (var settle = 0;
+                             settle < settleFrames;
+                             settle++)
+                            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                         Input.ParseInputEvent(DesktopInputMap.CreateEvent(
                             _configuration.Player.DesktopInput.Activate,
                             true));
                         activateHeld = true;
+                        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                        Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                            _configuration.Player.DesktopInput.Activate,
+                            false));
+                        activateHeld = false;
+                        if (!navigationKey.Equals(
+                                currentNavigationKey,
+                                StringComparison.Ordinal))
+                        {
+                            navigationKey = currentNavigationKey;
+                            var activationOffset = interactionPosition -
+                                _loaded.Player.Camera.GlobalPosition;
+                            var facingDot = -_loaded.Player.Camera.GlobalBasis.Z.Normalized()
+                                .Dot(activationOffset.Normalized());
+                            GD.Print(
+                                $"OPENNV_OPENING_ACCEPTANCE_ACTIVATION " +
+                                $"key={currentNavigationKey} " +
+                                $"player={_loaded.Player.GlobalPosition} " +
+                                $"camera={_loaded.Player.Camera.GlobalPosition} " +
+                                $"aim={interactionPosition} " +
+                                $"distance={activationOffset.Length():F3} " +
+                                $"facingDot={facingDot:F6} " +
+                                $"collider={_loaded.Player.LastActivationCollider} " +
+                                $"door={_loaded.Player.LastActivationDoorFormId}");
+                        }
+                    }
+                    else if (eventName.Equals("fire", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                            _configuration.Player.DesktopInput.Fire,
+                            true));
+                        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                        Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                            _configuration.Player.DesktopInput.Fire,
+                            false));
                     }
                     continue;
                 }
 
-                if (navigationStage != _stage)
+                var movingTargetChanged = eventName.Equals(
+                        "follow", StringComparison.OrdinalIgnoreCase) &&
+                    navigationPath.Count > 0 &&
+                    navigationIndex >= navigationPath.Count - 1 &&
+                    navigationTarget is { } previousNavigationTarget &&
+                    HorizontalDistance(previousNavigationTarget, interactionPosition) >
+                        _configuration.Player.CapsuleRadiusMeters;
+                if (!navigationKey.Equals(currentNavigationKey, StringComparison.Ordinal) ||
+                    movingTargetChanged)
                 {
-                    navigationStage = _stage;
+                    navigationKey = currentNavigationKey;
+                    navigationEvent = eventName;
+                    navigationTarget = interactionPosition;
                     navigationIndex = 0;
-                    var startGameUnits = _loaded.CellToGameUnits(
-                        _loaded.Root.ToLocal(_loaded.Player.GlobalPosition));
-                    navigationPath = _loaded.MainContent.Navigation.FindPath(
-                            startGameUnits,
-                            _loaded.CellToGameUnits(_loaded.Root.ToLocal(target.GlobalPosition)))
-                        .Select(_loaded.GameToWorld)
-                        .ToArray();
+                    var content = ActiveAcceptanceContent();
+                    var playerFoot = _loaded.Player.GlobalPosition - Vector3.Up *
+                        _configuration.Player.SpawnCenterHeightMeters;
+                    navigationPath = eventName.Equals(
+                            "fire",
+                            StringComparison.OrdinalIgnoreCase)
+                        ? FindAcceptanceFiringPath(
+                            content,
+                            playerFoot,
+                            interactionPosition,
+                            target,
+                            rejectedFiringDestinations)
+                        : content.Navigation.FindPath(
+                                content.WorldToGame(playerFoot),
+                                content.WorldToGame(interactionPosition))
+                            .Select(content.GameToWorld)
+                            .ToArray();
+                    if (navigationPath.Count == 0)
+                    {
+                        if (eventName.Equals("fire", StringComparison.OrdinalIgnoreCase))
+                        {
+                            SetAcceptanceMovement(null, ref movementHeld);
+                            continue;
+                        }
+                        throw new InvalidOperationException(
+                            $"Owned route target has no authored navigation path: {currentNavigationKey}");
+                    }
                     GD.Print(
-                        $"OPENNV_OPENING_ACCEPTANCE_PATH stage={_stage} " +
-                        $"event={interaction.Event} distance={distance:F3} " +
+                        $"OPENNV_OPENING_ACCEPTANCE_PATH key={currentNavigationKey} " +
+                        $"event={eventName} distance={distance:F3} " +
                         $"waypoints={navigationPath.Count}");
+                }
+                if (navigationPath.Count == 0)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    continue;
                 }
                 while (navigationIndex < navigationPath.Count - 1 &&
                     HorizontalDistance(
@@ -399,8 +780,52 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     _configuration.Player.CapsuleRadiusMeters)
                     navigationIndex++;
                 var waypoint = navigationPath[Math.Min(navigationIndex, navigationPath.Count - 1)];
+                if (navigationIndex == navigationPath.Count - 1 &&
+                    HorizontalDistance(_loaded.Player.GlobalPosition, waypoint) <=
+                        _configuration.Player.CapsuleRadiusMeters &&
+                    HorizontalDistance(_loaded.Player.GlobalPosition, interactionPosition) >
+                        _configuration.Player.ActivationDistanceMeters)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    var recovered = await CellRouteTravelAcceptance.RecoverAroundObstacle(
+                        this,
+                        _loaded.Player,
+                        interactionPosition,
+                        _configuration.Player.DesktopInput,
+                        _configuration,
+                        _configuration.Player.CapsuleRadiusMeters,
+                        requireDirectSweep: false);
+                    var recoveryKey = $"{currentNavigationKey}:projected-endpoint";
+                    if (!recovered)
+                    {
+                        var failures = obstacleRecoveryFailures.GetValueOrDefault(
+                            recoveryKey) + 1;
+                        obstacleRecoveryFailures[recoveryKey] = failures;
+                        if (failures >= CellRouteTravelAcceptance
+                                .MaximumOwnedNavigationReplans)
+                            throw new InvalidOperationException(
+                                "Configured route could not continue from its authored " +
+                                "NAVM projection over owned CELL collision after " +
+                                $"{failures} bounded recoveries: {currentNavigationKey}.");
+                    }
+                    else
+                    {
+                        obstacleRecoveryFailures.Remove(recoveryKey);
+                    }
+                    navigationKey = string.Empty;
+                    navigationTarget = null;
+                    navigationPath = Array.Empty<Vector3>();
+                    navigationIndex = 0;
+                    continue;
+                }
                 FaceAcceptanceWaypoint(waypoint);
-                var requestedMovement = SelectAcceptanceMovementBinding(waypoint);
+                // FaceAcceptanceWaypoint publishes the exact yaw through the configured
+                // mouse input.  That input is consumed on the next physics frame, so
+                // selecting a movement direction from the current camera basis here can
+                // alternate forward/backward at a boundary.  Movement is relative to the
+                // requested facing, and therefore always uses the configured forward
+                // binding.
+                var requestedMovement = _configuration.Player.DesktopInput.MoveForward;
                 if (proveFirstPlayerAction && firstPlayerAction is null)
                 {
                     var currentControls = _playerControls
@@ -430,6 +855,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         finally
         {
             _visualCaptureActive = false;
+            _loaded.Player.SetSyntheticMouseMotionPolicy(false);
             SetAcceptanceMovement(null, ref movementHeld);
             if (activateHeld)
                 Input.ParseInputEvent(DesktopInputMap.CreateEvent(
@@ -438,12 +864,188 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         }
     }
 
+    private bool FirstEncounterCompleted()
+    {
+        if (_flow.CombatEncounters.Count == 0)
+            throw new InvalidOperationException(
+                "Owned FNV route has no first combat encounter.");
+        var completionStages = _flow.CombatEncounters
+            .Select(value => (value.QuestFormId, value.CompletionStage))
+            .Distinct().ToArray();
+        if (completionStages.Length != 1)
+            throw new InvalidOperationException(
+                "Owned FNV first-encounter completion is ambiguous.");
+        var completion = completionStages[0];
+        return _quests.TryGetValue(completion.QuestFormId, out var quest) &&
+            quest.Stage >= completion.CompletionStage;
+    }
+
+    private OpeningRouteAcceptanceAction FirstEncounterAction()
+    {
+        var actor = _flow.OrdinaryActors.Single();
+        var placedActor = _loaded.Actors.Single(value =>
+            value.ReferenceFormId.Equals(
+                actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase));
+        string? packageTargetCellFormId = null;
+        if (_ordinaryActorPackages.TryGetValue(
+                actor.ReferenceFormId, out var selectedPackage) &&
+            selectedPackage.Location?.Reference is { } packageTarget)
+        {
+            packageTargetCellFormId = ContentOwningReference(packageTarget).FormId;
+            if (!_loaded.Session.ActiveCellFormId.Equals(
+                    packageTargetCellFormId, StringComparison.OrdinalIgnoreCase))
+                return PortalActionToward(packageTargetCellFormId);
+        }
+        var actorCellFormId = packageTargetCellFormId ??
+            ContentOwningActor(placedActor).FormId;
+        if (!_loaded.Session.ActiveCellFormId.Equals(
+                actorCellFormId,
+                StringComparison.OrdinalIgnoreCase))
+            return PortalActionToward(actorCellFormId);
+
+        foreach (var encounter in _flow.CombatEncounters)
+        {
+            if (!_quests.TryGetValue(encounter.QuestFormId, out var quest) ||
+                quest.Stage < encounter.MinimumCombatStage)
+                continue;
+            foreach (var target in encounter.Targets)
+            {
+                if (_combatHealthByReferenceFormId[target.ReferenceFormId] == 0 ||
+                    !_referenceEnabledStates.GetValueOrDefault(
+                        target.ReferenceFormId, true))
+                    continue;
+                var combatActor = CombatActor(target);
+                GamebryoActorCollision.Synchronize(combatActor.Placement);
+                return new OpeningRouteAcceptanceAction(
+                    combatActor.Placement,
+                    "fire",
+                    $"combat:{target.ReferenceFormId}",
+                    combatActor.Placement.GlobalTransform *
+                        combatActor.LocalBounds.GetCenter());
+            }
+        }
+
+        foreach (var targetSet in _flow.HitTargetSets)
+        {
+            foreach (var target in targetSet.Targets)
+            {
+                if (_destroyedReferences.Contains(target.ReferenceFormId) ||
+                    !_referenceEnabledStates.GetValueOrDefault(target.ReferenceFormId))
+                    continue;
+                var placed = FindPlacedReference(target.ReferenceFormId) ??
+                    throw new InvalidOperationException(
+                        "Owned enabled shooting target is absent.");
+                return new OpeningRouteAcceptanceAction(
+                    placed,
+                    "fire",
+                    $"target:{target.ReferenceFormId}");
+            }
+        }
+
+        var ordinaryQuest = _flow.OrdinaryQuests.Values.Single();
+        _quests.TryGetValue(ordinaryQuest.FormId, out var questState);
+        var activate = questState?.Stage == ordinaryQuest.EntryStage;
+        return new OpeningRouteAcceptanceAction(
+            placedActor.Placement,
+            activate ? "activate" : "follow",
+            $"actor:{actor.ReferenceFormId}:{questState?.Stage ?? -1}");
+    }
+
+    private OpeningRouteAcceptanceAction PortalActionToward(string targetCellFormId)
+    {
+        var activeCellFormId = _loaded.Session.ActiveCellFormId;
+        var candidates = new List<(
+            string Next,
+            DoorInstance Door,
+            CellSceneLoader.DoorRay Frame)>();
+        foreach (var link in _loaded.PortalLinks)
+        {
+            if (link.FromCellFormId.Equals(
+                    activeCellFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                candidates.Add((link.ToCellFormId, link.FromDoor, link.FromFrame));
+            else if (link.ToCellFormId.Equals(
+                    activeCellFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                candidates.Add((link.FromCellFormId, link.ToDoor, link.ToFrame));
+        }
+        candidates = candidates.Where(value =>
+            CellRouteExists(value.Next, targetCellFormId, activeCellFormId)).ToList();
+        if (candidates.Count != 1)
+            throw new InvalidOperationException(
+                "Owned route portal path is absent or ambiguous: " +
+                $"{activeCellFormId} -> {targetCellFormId}");
+        var selected = candidates[0];
+        return new OpeningRouteAcceptanceAction(
+            selected.Door,
+            "activate",
+            $"portal:{selected.Door.ReferenceFormId}",
+            (selected.Frame.From + selected.Frame.To) / 2.0f);
+    }
+
+    private bool CellRouteExists(
+        string startCellFormId,
+        string targetCellFormId,
+        string excludedCellFormId)
+    {
+        var visited = new HashSet<string>(
+            [excludedCellFormId],
+            StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<string>();
+        pending.Enqueue(startCellFormId);
+        while (pending.TryDequeue(out var cellFormId))
+        {
+            if (!visited.Add(cellFormId))
+                continue;
+            if (cellFormId.Equals(targetCellFormId, StringComparison.OrdinalIgnoreCase))
+                return true;
+            foreach (var link in _loaded.PortalLinks)
+            {
+                if (link.FromCellFormId.Equals(
+                        cellFormId,
+                        StringComparison.OrdinalIgnoreCase))
+                    pending.Enqueue(link.ToCellFormId);
+                else if (link.ToCellFormId.Equals(
+                             cellFormId,
+                             StringComparison.OrdinalIgnoreCase))
+                    pending.Enqueue(link.FromCellFormId);
+            }
+        }
+        return false;
+    }
+
+    private CellContentLoader.LoadedContent ActiveAcceptanceContent()
+    {
+        if (_loaded.Session.ActiveCellFormId.Equals(
+                _loaded.FormId, StringComparison.OrdinalIgnoreCase))
+            return _loaded.MainContent;
+        return _loaded.LinkedCells.Single(value => value.Content.FormId.Equals(
+            _loaded.Session.ActiveCellFormId,
+            StringComparison.OrdinalIgnoreCase)).Content;
+    }
+
+    private sealed record OpeningRouteAcceptanceAction(
+        Node3D Target,
+        string Event,
+        string Key,
+        Vector3? AimTarget = null);
+
     private void AdvanceAcceptanceModal(
         string playerName,
-        bool showcaseCreatorControls)
+        bool showcaseCreatorControls,
+        bool exerciseSourceSelections)
     {
-        if (_activeModal is null || _dialogueVoice.Playing)
+        if (_activeModal is null || _dialoguePlayback.ActiveLine is not null)
             return;
+        if (!_activeModal.HasMeta("opennv_acceptance_inspected"))
+        {
+            _activeModal.SetMeta("opennv_acceptance_inspected", true);
+            var allButtons = NodeTraversal.Descendants<Button>(_activeModal).ToArray();
+            GD.Print(
+                $"OPENNV_OPENING_ACCEPTANCE_MODAL buttons={allButtons.Length} " +
+                $"enabled={allButtons.Count(button => !button.Disabled)} " +
+                $"visible={allButtons.Count(button => button.IsVisibleInTree())}");
+        }
         var lineEdit = NodeTraversal.Descendants<LineEdit>(_activeModal).FirstOrDefault();
         var buttons = NodeTraversal.Descendants<Button>(_activeModal)
             .Where(button => !button.Disabled && button.IsVisibleInTree())
@@ -560,6 +1162,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 return;
             }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.SelectSex &&
+                exerciseSourceSelections &&
                 _flow.Character.SexChoices.Count > 1)
             {
                 var targetSex = (_sexIndex + 1) % _flow.Character.SexChoices.Count;
@@ -623,7 +1226,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             PressAcceptanceButton(accept);
             return;
         }
-        PressAcceptanceButton(buttons.FirstOrDefault());
+        PressAcceptanceButton(
+            buttons.FirstOrDefault(button => button.HasFocus()) ??
+            buttons.FirstOrDefault());
     }
 
     private int AuthoredAppearanceReturnStage()
@@ -668,25 +1273,6 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         });
     }
 
-    private DesktopKeyBindingConfiguration SelectAcceptanceMovementBinding(Vector3 waypoint)
-    {
-        var direction = waypoint - _loaded.Player.GlobalPosition;
-        direction.Y = 0.0f;
-        direction = direction.Normalized();
-        var forward = -_loaded.Player.Camera.GlobalBasis.Z;
-        var right = _loaded.Player.Camera.GlobalBasis.X;
-        forward.Y = 0.0f;
-        right.Y = 0.0f;
-        forward = forward.Normalized();
-        right = right.Normalized();
-        var forwardAmount = direction.Dot(forward);
-        var rightAmount = direction.Dot(right);
-        var input = _configuration.Player.DesktopInput;
-        return MathF.Abs(rightAmount) > MathF.Abs(forwardAmount)
-            ? rightAmount >= 0.0f ? input.MoveRight : input.MoveLeft
-            : forwardAmount >= 0.0f ? input.MoveForward : input.MoveBackward;
-    }
-
     private static void SetAcceptanceMovement(
         DesktopKeyBindingConfiguration? requested,
         ref DesktopKeyBindingConfiguration? held)
@@ -698,6 +1284,50 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         held = requested;
         if (held is not null)
             Input.ParseInputEvent(DesktopInputMap.CreateEvent(held, true));
+    }
+
+    private (DoorInstance Door, Vector3 Position)? AcceptanceBlockingDoor()
+    {
+        var door = Ancestor<DoorInstance>(_loaded.Player.LastBlockingCollider);
+        if (door is null || door.IsOpen || door.Destination is not null ||
+            door.LinkedDoor is not null ||
+            _loaded.Player.LastBlockingPosition is not { } blockingPosition)
+            return null;
+        var content = ActiveAcceptanceContent();
+        if (!content.Doors.TryGetValue(door.ReferenceFormId, out var activeDoor) ||
+            !ReferenceEquals(activeDoor, door))
+            throw new InvalidOperationException(
+                "Configured route was blocked by a door outside the active CELL.");
+        return _loaded.Player.Camera.GlobalPosition.DistanceTo(blockingPosition) <=
+            _configuration.Player.ActivationDistanceMeters
+                ? (door, blockingPosition)
+                : null;
+    }
+
+    private DoorInstance? AcceptanceOpenBlockingDoor()
+    {
+        var door = Ancestor<DoorInstance>(_loaded.Player.LastBlockingCollider);
+        if (door is null || !door.IsOpen || door.Destination is not null ||
+            door.LinkedDoor is not null)
+            return null;
+        var content = ActiveAcceptanceContent();
+        if (!content.Doors.TryGetValue(door.ReferenceFormId, out var activeDoor) ||
+            !ReferenceEquals(activeDoor, door))
+            throw new InvalidOperationException(
+                "Configured route was blocked by an open door outside the active CELL.");
+        return door;
+    }
+
+    private static T? Ancestor<T>(Node? node)
+        where T : Node
+    {
+        while (node is not null)
+        {
+            if (node is T typed)
+                return typed;
+            node = node.GetParent();
+        }
+        return null;
     }
 
     private static float HorizontalDistance(Vector3 first, Vector3 second)
@@ -840,12 +1470,16 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
         foreach (var value in _flow.Character.SpecialValues)
             _specialValues[value.FormId] = _flow.Character.SpecialInitial;
-        ResolveSceneRoles();
-        ResolveGuideActor();
-        ResolveGuideAnimationObjects();
-        _dialogueFace = new FaceGenMorphController(
-            _guideActor.Actor,
-            configuration.ActorCompiler.FaceGenAnimation.Lip);
+        var completedRestore = restoredState is { Completed: true };
+        if (!completedRestore)
+        {
+            ResolveSceneRoles();
+            ResolveGuideActor();
+            ResolveGuideAnimationObjects();
+            _dialogueFace = new FaceGenMorphController(
+                _guideActor.Actor,
+                configuration.ActorCompiler.FaceGenAnimation.Lip);
+        }
         foreach (var actor in _flow.OrdinaryActors)
         {
             var placed = _loaded.Actors.Single(value =>
@@ -864,7 +1498,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
         _loaded.Session.SetHitscanHitHandler(HandleHitscanHit);
-        foreach (var activator in _loaded.MainContent.PlacedReferences
+        InitializeCombatActors();
+        foreach (var activator in AllLoadedContent()
+                     .SelectMany(content => content.PlacedReferences)
                      .Select(reference => reference.Placement)
                      .OfType<ScriptedActivatorInstance>())
             activator.Bind(AuthorizeScriptedActivatorEvent, ApplyScriptedActivatorEvent);
@@ -921,6 +1557,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 _stage = restoredState.Stage;
                 _viewport.Visible = false;
                 _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
+                ApplyStageControlPolicy();
+                _loaded.Player.ClearOwnedNavigation();
                 EvaluateOrdinaryActorPackages();
             }
             else
@@ -936,8 +1574,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         if (_openingQuestCompleted)
         {
-            UpdateDialogueVoice();
+            UpdateDialogueVoice(delta);
             UpdateOrdinaryActorTravel(delta);
+            UpdateCombatActors(delta);
             EvaluateOrdinaryDialogueTriggers();
             return;
         }
@@ -946,7 +1585,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         UpdateGuideActor(delta);
         UpdateGuideAnimationObjectLifecycle();
         _guideCigaretteSmokePresentation?.Update(delta);
-        UpdateDialogueVoice();
+        UpdateDialogueVoice(delta);
         if (_activeModal is not null)
             return;
         if (_timerTargetStage is { } timerTarget)
@@ -1098,6 +1737,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     ApplyQuestVariable(command);
                     Next();
                     return true;
+                case "setReferenceVariable":
+                    ApplyReferenceVariable(command);
+                    Next();
+                    return true;
                 case "setStage":
                     if (command.QuestFormId?.Equals(
                             _flow.QuestFormId,
@@ -1217,6 +1860,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         "setTimer" => GamebryoStageCommandKind.SetTimer,
         "setQuestVariable" => GamebryoStageCommandKind.SetQuestVariable,
+        "setReferenceVariable" => GamebryoStageCommandKind.SetReferenceVariable,
         "setStage" => GamebryoStageCommandKind.SetStage,
         "sayTo" => GamebryoStageCommandKind.Dialogue,
         "showMenu" => GamebryoStageCommandKind.ShowMenu,
@@ -1336,458 +1980,5 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             $"OPENNV_NEW_GAME_REFERENCE reference={command.ReferenceFormId} " +
             $"enabled={command.Enabled.Value} loadedNodes={loadedNodes}");
     }
-
-    private int SetReferenceVisibility(
-        string referenceFormId,
-        bool enabled,
-        bool requireLoaded)
-    {
-        var nodes = _flow.SceneRoles.Values
-            .Where(role => role.ReferenceFormId.Equals(
-                referenceFormId,
-                StringComparison.OrdinalIgnoreCase))
-            .Select(role => _roleNodes.GetValueOrDefault(role.Role))
-            .Concat(_loaded.Actors
-                .Where(actor => actor.ReferenceFormId.Equals(
-                    referenceFormId,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(actor => actor.Placement))
-            .Concat(_loaded.MainContent.PlacedReferences
-                .Where(reference => reference.FormId.Equals(
-                    referenceFormId,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(reference => reference.Placement))
-            .Concat(_loaded.LinkedCells
-                .SelectMany(cell => cell.Content.PlacedReferences)
-                .Where(reference => reference.FormId.Equals(
-                    referenceFormId,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(reference => reference.Placement))
-            .Where(node => node is not null)
-            .Cast<Node3D>()
-            .Distinct()
-            .ToArray();
-        if (requireLoaded && nodes.Length == 0)
-            throw new InvalidOperationException(
-                $"Owned enabled reference is absent from the loaded world: {referenceFormId}");
-        foreach (var node in nodes)
-            GamebryoReferenceEnableRuntime.Apply(node, enabled);
-        return nodes.Length;
-    }
-
-    private void ApplyActorIntent(OpeningFlowCommand command)
-    {
-        if (command.ReferenceEditorId is not { } reference ||
-            command.ReferenceFormId is not { } referenceForm ||
-            command.Operation is null ||
-            !_flow.SceneRoles.TryGetValue(_flow.GuideActorAi.Role, out var role) ||
-            !role.EditorId.Equals(reference, StringComparison.OrdinalIgnoreCase) ||
-            !role.ReferenceFormId.Equals(referenceForm, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Owned opening actor intent target is unsupported.");
-        if (command.Operation.Equals("look", StringComparison.OrdinalIgnoreCase))
-        {
-            _guideLookAtPlayer = true;
-            if (!_guideMoving && !_guideFurnitureOccupied && !_guideFurnitureExiting)
-                FaceGuideToward(_loaded.Player.GlobalPosition);
-        }
-        else if (command.Operation.Equals("stoplook", StringComparison.OrdinalIgnoreCase))
-        {
-            _guideLookAtPlayer = false;
-            if (!_guideMoving && !_guideFurnitureOccupied && !_guideFurnitureExiting &&
-                _guideDestinationReference is { } destination)
-                _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
-        }
-        else if (command.Operation.Equals("evp", StringComparison.OrdinalIgnoreCase) ||
-            command.Operation.Equals("resetai", StringComparison.OrdinalIgnoreCase))
-            EvaluateGuidePackage(force: true);
-        else
-            throw new InvalidOperationException(
-                $"Owned opening actor intent operation is unsupported: {command.Operation}");
-        GD.Print(
-            $"OPENNV_NEW_GAME_ACTOR_INTENT reference={command.ReferenceEditorId} " +
-            $"operation={command.Operation} target={command.TargetEditorId}");
-    }
-
-    private void ApplyIdle(OpeningFlowCommand command)
-    {
-        if (command.ReferenceEditorId is null || command.ReferenceFormId is null ||
-            command.IdleEditorId is null ||
-            command.IdleFormId is null || command.IdleRecordType != "IDLE" ||
-            command.AnimationLogicalPath is null)
-            throw new InvalidOperationException("Owned opening idle command is incomplete.");
-        var actors = _loaded.Actors.Where(value =>
-            _flow.SceneRoles.Values.Any(role =>
-                role.EditorId.Equals(command.ReferenceEditorId, StringComparison.OrdinalIgnoreCase) &&
-                role.ReferenceFormId.Equals(
-                    command.ReferenceFormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                role.ReferenceFormId.Equals(
-                    value.ReferenceFormId,
-                    StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-        if (actors.Length != 1)
-            throw new InvalidOperationException(
-                $"Owned opening idle actor is ambiguous: {command.ReferenceEditorId}");
-        var actor = actors[0];
-        var expected = ActorModelSlice.NormalizeAnimationPath(command.AnimationLogicalPath);
-        var animations = actor.Actor.LoadedAnimations.Where(animation =>
-                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath).Equals(
-                    expected,
-                    StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (animations.Length != 1)
-            throw new InvalidOperationException(
-                $"Owned opening idle animation is absent from the actor: {command.AnimationLogicalPath}");
-        var animation = animations[0];
-        if (actor.ReferenceFormId.Equals(
-            _flow.GuideActorAi.ReferenceFormId,
-            StringComparison.OrdinalIgnoreCase))
-        {
-            PlayGuideAnimation(
-                command.AnimationLogicalPath,
-                expectedSha256: null,
-                restart: true,
-                idleAnimationFormId: command.IdleFormId);
-            _activeGuideIdleAnimation = _activeGuideAnimation;
-            _activeGuideAnimation = null;
-        }
-        else
-        {
-            animation.Player.Play(animation.RuntimeName);
-            animation.Player.Advance(0.0);
-        }
-        GD.Print(
-            $"OPENNV_NEW_GAME_IDLE source={command.ReferenceEditorId} " +
-            $"authored={command.IdleEditorId} runtime={animation.RuntimeName}");
-    }
-
-    private void ApplyPlayerControls(OpeningFlowCommand command)
-    {
-        if (command.Operation is null || command.ControlValues.Count > PlayerControlCount ||
-            command.ControlValues.Any(value =>
-                value is not DisabledControlValue and not EnabledControlValue))
-            throw new InvalidOperationException("Owned player-control command is invalid.");
-        var enabled = command.Operation.Equals("enable", StringComparison.OrdinalIgnoreCase);
-        var disabled = command.Operation.Equals("disable", StringComparison.OrdinalIgnoreCase);
-        if (!enabled && !disabled)
-            throw new InvalidOperationException(
-                $"Owned player-control operation is unsupported: {command.Operation}");
-        for (var index = 0; index < command.ControlValues.Count; index++)
-        {
-            if (command.ControlValues[index] == EnabledControlValue)
-                _playerControls[index] = enabled;
-        }
-        ApplyStageControlPolicy();
-        GD.Print(
-            $"OPENNV_NEW_GAME_CONTROLS operation={command.Operation} " +
-            $"movement={_playerControls[MovementControlIndex]} " +
-            $"pipboy={_playerControls[PipBoyControlIndex]} " +
-            $"fighting={_playerControls[FightingControlIndex]} " +
-            $"pov={_playerControls[PointOfViewControlIndex]} " +
-            $"looking={_playerControls[LookingControlIndex]} " +
-            $"rollover={_playerControls[RolloverTextControlIndex]} " +
-            $"sneaking={_playerControls[SneakingControlIndex]}");
-    }
-
-    private void ApplyScriptPackage(OpeningFlowCommand command)
-    {
-        if (command.Kind == "removeScriptPackage")
-        {
-            _activePlayerPackage = null;
-            _activePlayerAnimation = null;
-            _packageIdleWaitSeconds = 0.0;
-            GD.Print("OPENNV_NEW_GAME_PLAYER_PACKAGE operation=remove");
-            return;
-        }
-        if (command.PackageEditorId is null ||
-            !_flow.PlayerAnimation.Packages.TryGetValue(
-                command.PackageEditorId,
-                out var package))
-            throw new InvalidOperationException(
-                $"Owned player package is absent: {command.PackageEditorId}");
-        var eventName = _activePlayerPackage?.EditorId.Equals(
-            package.EditorId,
-            StringComparison.OrdinalIgnoreCase) == true
-            ? "change"
-            : "begin";
-        _activePlayerPackage = package;
-        _packageIdleCursor = 0;
-        _packageIdleSequenceComplete = false;
-        _packageIdleWaitSeconds = 0.0;
-        if (package.EventAnimationFormIds.TryGetValue(eventName, out var formId) &&
-            formId is not null)
-        {
-            var idleIndex = package.IdleAnimationFormIds
-                .Select((value, index) => (value, index))
-                .FirstOrDefault(value => value.value.Equals(
-                    formId,
-                    StringComparison.OrdinalIgnoreCase));
-            if (idleIndex.value is not null)
-                _packageIdleCursor = idleIndex.index + 1;
-            StartPlayerAnimation(formId, true);
-        }
-        else
-            StartNextPackageIdle();
-        GD.Print(
-            $"OPENNV_NEW_GAME_PLAYER_PACKAGE operation=add " +
-            $"package={package.EditorId} event={eventName}");
-    }
-
-    private void StartNextPackageIdle()
-    {
-        var package = _activePlayerPackage;
-        if (package is null || package.IdleAnimationFormIds.Count == 0 ||
-            _packageIdleSequenceComplete)
-            return;
-        if (!package.RunInSequence && package.IdleAnimationFormIds.Count > 1)
-            throw new InvalidOperationException(
-                "Owned opening package random idle selection requires a retail RNG state.");
-        if (_packageIdleCursor >= package.IdleAnimationFormIds.Count)
-            _packageIdleCursor = 0;
-        var formId = package.IdleAnimationFormIds[_packageIdleCursor++];
-        StartPlayerAnimation(formId, false);
-    }
-
-    private void StartPlayerAnimation(string formId, bool packageEvent)
-    {
-        if (!_flow.PlayerAnimation.Animations.TryGetValue(formId, out var animation))
-            throw new InvalidOperationException(
-                $"Owned player animation is absent: {formId}");
-        _activePlayerAnimation = animation;
-        _activeAnimationIsPackageEvent = packageEvent;
-        _playerAnimationElapsedSeconds = 0.0;
-        _playerAnimationSampleIndex = 0;
-        ApplyPlayerAnimationSample(animation.Track.StartSeconds);
-        GD.Print(
-            $"OPENNV_NEW_GAME_PLAYER_ANIMATION form={animation.FormId} " +
-            $"authored={animation.EditorId} seconds={animation.Track.StopSeconds:F6}");
-    }
-
-    private void UpdatePlayerAnimation(double delta)
-    {
-        if (_activePlayerAnimation is null)
-        {
-            if (_activePlayerPackage is null || _packageIdleWaitSeconds <= 0.0)
-                return;
-            _packageIdleWaitSeconds -= delta;
-            if (_packageIdleWaitSeconds <= 0.0)
-                StartNextPackageIdle();
-            return;
-        }
-        _playerAnimationElapsedSeconds += delta;
-        var track = _activePlayerAnimation.Track;
-        var time = MathF.Min(
-            track.StopSeconds,
-            track.StartSeconds + (float)_playerAnimationElapsedSeconds);
-        ApplyPlayerAnimationSample(time);
-        if (time < track.StopSeconds)
-            return;
-
-        _activePlayerAnimation = null;
-        var package = _activePlayerPackage;
-        if (package is null)
-            return;
-        if (_activeAnimationIsPackageEvent)
-        {
-            _activeAnimationIsPackageEvent = false;
-            StartNextPackageIdle();
-            return;
-        }
-        if (package.RunInSequence && _packageIdleCursor < package.IdleAnimationFormIds.Count)
-        {
-            StartNextPackageIdle();
-            return;
-        }
-        if (package.DoOnce)
-        {
-            _packageIdleSequenceComplete = true;
-            return;
-        }
-        _packageIdleCursor = 0;
-        _packageIdleWaitSeconds = package.IdleTimerSeconds;
-        if (_packageIdleWaitSeconds <= 0.0)
-            StartNextPackageIdle();
-    }
-
-    private void ApplyPlayerAnimationSample(float time)
-    {
-        var animation = _activePlayerAnimation ??
-            throw new InvalidOperationException("Owned player animation is not active.");
-        var track = animation.Track;
-        while (_playerAnimationSampleIndex + 1 < track.Samples.Count &&
-            track.Samples[_playerAnimationSampleIndex + 1].TimeSeconds <= time)
-            _playerAnimationSampleIndex++;
-        var first = track.Samples[_playerAnimationSampleIndex];
-        var second = track.Samples[Math.Min(
-            _playerAnimationSampleIndex + 1,
-            track.Samples.Count - 1)];
-        var amount = second.TimeSeconds <= first.TimeSeconds
-            ? 0.0f
-            : (time - first.TimeSeconds) / (second.TimeSeconds - first.TimeSeconds);
-        var translation = first.TranslationGodotGameUnits.Lerp(
-            second.TranslationGodotGameUnits,
-            amount);
-        var rotation = first.Rotation.Slerp(second.Rotation, amount).Normalized();
-        var parentTransform = Transform3D.Identity;
-        foreach (var parent in track.ParentChain)
-        {
-            parentTransform *= new Transform3D(
-                new Basis(parent.Rotation).Scaled(parent.Scale),
-                parent.TranslationGodotGameUnits * _loaded.UnitsToMeters);
-        }
-        var result = parentTransform * new Transform3D(
-            new Basis(rotation),
-            translation * _loaded.UnitsToMeters);
-        _loaded.Player.ApplyAuthoredCameraTransform(
-            new Transform3D(result.Basis.Orthonormalized(), result.Origin));
-        _lastAppliedPlayerCameraAnimation = animation;
-        _lastAppliedPlayerCameraTime = time;
-    }
-
-    private void ApplyImageSpaceModifier(OpeningFlowCommand command)
-    {
-        if (command.ModifierEditorId is null || command.Operation is null ||
-            !_flow.ImageSpaceModifiers.TryGetValue(
-                command.ModifierEditorId,
-                out var modifier))
-            throw new InvalidOperationException(
-                $"Owned image-space modifier is absent: {command.ModifierEditorId}");
-        if (command.Operation.Equals("remove", StringComparison.OrdinalIgnoreCase))
-            _activeImageSpaceModifiers.Remove(modifier.EditorId);
-        else if (command.Operation.Equals("apply", StringComparison.OrdinalIgnoreCase))
-            _activeImageSpaceModifiers[modifier.EditorId] =
-                new ActiveImageSpaceModifier(modifier);
-        else
-            throw new InvalidOperationException(
-                $"Owned image-space operation is unsupported: {command.Operation}");
-        UpdateImageSpaceFade();
-        GD.Print(
-            $"OPENNV_NEW_GAME_IMAGE_SPACE operation={command.Operation} " +
-            $"modifier={modifier.EditorId} crossFade={command.CrossFade == true}");
-    }
-
-    private void UpdateImageSpaceModifiers(double delta)
-    {
-        foreach (var active in _activeImageSpaceModifiers.Values)
-            active.ElapsedSeconds += delta;
-        foreach (var editorId in _activeImageSpaceModifiers
-            .Where(value => value.Value.ElapsedSeconds >= value.Value.Modifier.DurationSeconds)
-            .Select(value => value.Key)
-            .ToArray())
-            _activeImageSpaceModifiers.Remove(editorId);
-        UpdateImageSpaceFade();
-    }
-
-    private void UpdateImageSpaceFade()
-    {
-        var colorNumerator = Vector3.Zero;
-        var colorWeight = 0.0f;
-        var strongestAlpha = TransparentAlpha;
-        foreach (var active in _activeImageSpaceModifiers.Values)
-        {
-            var modifier = active.Modifier;
-            var normalizedTime = modifier.DurationSeconds <= 0.0f
-                ? 1.0f
-                : Mathf.Clamp(
-                    (float)(active.ElapsedSeconds / modifier.DurationSeconds),
-                    0.0f,
-                    1.0f);
-            var fade = EvaluateFade(modifier.Fade, normalizedTime);
-            var weight = MathF.Max(TransparentAlpha, fade.A);
-            colorNumerator += new Vector3(fade.R, fade.G, fade.B) * weight;
-            colorWeight += weight;
-            strongestAlpha = MathF.Max(strongestAlpha, weight);
-        }
-        _imageSpaceFade.Color = colorWeight <= TransparentAlpha
-            ? Colors.Transparent
-            : new Color(
-                colorNumerator.X / colorWeight,
-                colorNumerator.Y / colorWeight,
-                colorNumerator.Z / colorWeight,
-                strongestAlpha);
-    }
-
-    private static Color EvaluateFade(
-        IReadOnlyList<OpeningImageSpaceFadeKey> keys,
-        float time)
-    {
-        if (keys.Count == 0)
-            return Colors.Transparent;
-        if (time <= keys[0].Time)
-            return keys[0].Color;
-        if (time >= keys[^1].Time)
-            return keys[^1].Color;
-        foreach (var pair in keys.Zip(keys.Skip(1)))
-        {
-            if (time < pair.First.Time || time > pair.Second.Time)
-                continue;
-            var amount = (time - pair.First.Time) / (pair.Second.Time - pair.First.Time);
-            return pair.First.Color.Lerp(pair.Second.Color, amount);
-        }
-        throw new InvalidOperationException("Owned image-space fade interval is absent.");
-    }
-
-    private void ApplyInventoryCommand(OpeningFlowCommand command)
-    {
-        if (command.ItemEditorId is null || command.ItemFormId is null ||
-            command.ItemRecordType is null)
-            throw new InvalidOperationException("Owned opening inventory command is incomplete.");
-        var count = command.Count ?? 1;
-        if (count <= 0)
-            throw new InvalidOperationException("Owned opening inventory count is invalid.");
-        if (command.Kind == "removeitem")
-        {
-            var remaining = _inventory.GetValueOrDefault(command.ItemFormId)?.Count - count ?? 0;
-            if (remaining > 0)
-                _inventory[command.ItemFormId] = new OpeningInventoryState(
-                    command.ItemFormId,
-                    command.ItemEditorId,
-                    command.ItemRecordType,
-                    remaining);
-            else
-            {
-                _inventory.Remove(command.ItemFormId);
-                _equippedItemFormIds.Remove(command.ItemFormId);
-            }
-            return;
-        }
-        if (command.Kind == "additem")
-        {
-            var current = _inventory.GetValueOrDefault(command.ItemFormId)?.Count ?? 0;
-            _inventory[command.ItemFormId] = new OpeningInventoryState(
-                command.ItemFormId,
-                command.ItemEditorId,
-                command.ItemRecordType,
-                current + count);
-            return;
-        }
-        if (command.Kind == "equipitem")
-        {
-            if (!_inventory.ContainsKey(command.ItemFormId))
-                throw new InvalidOperationException(
-                    $"Owned opening equip item is absent from inventory: {command.ItemFormId}");
-            _equippedItemFormIds.Add(command.ItemFormId);
-            if (command.ItemRecordType == "WEAP")
-            {
-                if (command.Weapon is null || command.Weapon.Damage <= 0 ||
-                    command.Weapon.ClipSize <= 0)
-                    throw new InvalidOperationException(
-                        "Owned equipped weapon source contract is incomplete.");
-                _equippedWeaponState = new OpeningEquippedWeaponState(
-                    command.ItemFormId,
-                    command.Weapon.AmmoFormId,
-                    command.Weapon.Damage,
-                    command.Weapon.ClipSize,
-                    command.Weapon.ClipSize)
-                {
-                    AnimationType = command.Weapon.AnimationType,
-                };
-            }
-            return;
-        }
-        throw new InvalidOperationException(
-            $"Owned opening inventory operation is unsupported: {command.Kind}");
-    }
-
 
 }

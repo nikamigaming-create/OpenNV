@@ -355,6 +355,7 @@ def _parse_critter_pro(data: bytes) -> dict[str, int]:
         f">{CRITTER_PRO_HEADER_FIELD_COUNT}i", data, CRITTER_PRO_HEADER_OFFSET
     )
     return {
+        "statValues": list(stats),
         "headFid": head_fid,
         "aiPacket": ai_packet,
         "team": team,

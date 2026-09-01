@@ -106,6 +106,23 @@ internal static class GamebryoPackagePlacement
         return adjusted;
     }
 
+    internal static Transform3D AtSupportHeight(
+        Transform3D source,
+        float supportHeightCellUnits)
+    {
+        if (!float.IsFinite(supportHeightCellUnits))
+            throw new InvalidOperationException(
+                "Package placement support height is invalid.");
+        var adjusted = new Transform3D(
+            source.Basis,
+            new Vector3(
+                source.Origin.X,
+                supportHeightCellUnits,
+                source.Origin.Z));
+        RequireSupportHeightOnly(source, adjusted);
+        return adjusted;
+    }
+
     internal static void RequireSupportHeightOnly(
         Transform3D source,
         Transform3D adjusted)

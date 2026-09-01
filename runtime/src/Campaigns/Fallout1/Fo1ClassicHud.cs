@@ -43,6 +43,7 @@ internal partial class Fo1ClassicHud : Control
         Fo1ClassicInterfaceAssets assets,
         Action openPipBoy,
         Action openInventory,
+        Action openOptions,
         Action swapWeapon)
     {
         _assets = assets;
@@ -99,6 +100,24 @@ internal partial class Fo1ClassicHud : Control
                 assets.InventoryButton.Height));
         inventoryButton.Pressed += openInventory;
         _surface.AddChild(inventoryButton);
+
+        var optionsButton = new Button
+        {
+            Name = "OwnedIfaceOptionsButton",
+            Flat = true,
+            FocusMode = FocusModeEnum.None,
+            MouseDefaultCursorShape = CursorShape.PointingHand,
+            TooltipText = "Open OpenNV options",
+        };
+        PlaceOnSurface(
+            optionsButton,
+            new Fo1HudRect(
+                _layout.Buttons.Options.X,
+                _layout.Buttons.Options.Y,
+                assets.OptionsButton.Width,
+                assets.OptionsButton.Height));
+        optionsButton.Pressed += openOptions;
+        _surface.AddChild(optionsButton);
 
         var swapButton = new Button
         {
@@ -189,6 +208,7 @@ internal partial class Fo1ClassicHud : Control
         swapHandsAccess = "exact retail swap-hands red-button rectangle",
         inventoryAccess = "I key or exact retail INV control rectangle",
         pipBoyAccess = "P key or exact retail PIP control rectangle",
+        optionsAccess = "exact retail OPT control rectangle opens engine-owned shared settings",
     };
 
     private void LayoutSurface()

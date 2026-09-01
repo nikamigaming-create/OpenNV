@@ -7,6 +7,8 @@ namespace OpenNV.Runtime.Content;
 internal static class LegalAssetPreparer
 {
     private const string CacheSchema = "opennv-legal-asset-cache/v1";
+    private const string RouteValidationFaceGenProfile =
+        "source-default-route-validation";
 
     internal static PreparedContent Prepare(
         string selectedDataRoot,
@@ -32,6 +34,12 @@ internal static class LegalAssetPreparer
             "--cell-recipe",
             cellRecipe,
         };
+        if (options.TryGetValue("opening-proof", out var openingProof) &&
+            openingProof is "route-stage50" or "route-stage50-resume")
+        {
+            arguments.Add("--player-facegen-profile");
+            arguments.Add(RouteValidationFaceGenProfile);
+        }
         var (exitCode, output) = ExecuteContentTool(contentTool, arguments);
         if (exitCode != 0)
         {

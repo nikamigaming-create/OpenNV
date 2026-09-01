@@ -813,6 +813,16 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         _sourceHits = sourceHits;
     }
 
+    internal void ClearSourceHitscan()
+    {
+        if (_sourceHits is null)
+            throw new InvalidOperationException(
+                "Fallout 3 source hitscan lifecycle differs.");
+        _fireAction = null;
+        _requiredEquippedItemFormId = null;
+        _sourceHits = null;
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         var input = Input.GetVector(

@@ -76,6 +76,7 @@
       "moveRight": { "action": "flat_move_right", "physicalKey": "D" },
       "moveForward": { "action": "flat_move_forward", "physicalKey": "W" },
       "moveBackward": { "action": "flat_move_backward", "physicalKey": "S" },
+      "jump": { "action": "flat_jump", "physicalKey": "Space" },
       "activate": { "action": "flat_activate", "physicalKey": "E" },
       "grab": { "action": "flat_grab", "physicalKey": "Z" },
       "reload": { "action": "flat_reload", "physicalKey": "R" },
@@ -159,7 +160,7 @@
       },
       "actionMapResourcePath": "res://openxr_action_map.tres",
       "expectedActionSetCount": 1,
-      "actionNames": ["activate", "aim", "fire", "grab", "grip", "haptic", "move", "reload", "save", "turn"],
+      "actionNames": ["activate", "aim", "fire", "grab", "grip", "haptic", "jump", "move", "reload", "save", "turn"],
       "interactionProfilePaths": [
         "/interaction_profiles/khr/generic_controller",
         "/interaction_profiles/oculus/touch_controller"
@@ -248,6 +249,16 @@
       "evidence": "docs/evidence/fnv-goodsprings-linked-world-contract.md"
     },
     "openAngleDegrees": 90.0
+  },
+  "persistence": {
+    "provenance": {
+      "classification": "OpenNV host policy",
+      "status": "implemented",
+      "source": ".NET atomic file replacement semantics",
+      "evidence": "runtime/src/Gameplay/State/GameplaySession.cs"
+    },
+    "atomicReplaceAttempts": 4,
+    "atomicReplaceRetryMilliseconds": 10
   },
   "hud": {
     "provenance": {
@@ -1172,7 +1183,12 @@
       },
       "CREA": {
         "mode": "skeleton-directory",
-        "fileName": "mtidle.kf"
+        "fileName": "mtidle.kf",
+        "roles": {
+          "locomotion": ["locomotion\\mtfastforward.kf"],
+          "melee": ["h2hattackforwardpower.kf"],
+          "hit": ["idleanims\\hitreaction_torso.kf", "h2hrecoil.kf"]
+        }
       }
     },
     "rigidAttachment": {

@@ -59,6 +59,24 @@ class ActorArtifactConfigurationTest(unittest.TestCase):
         changed["contentCompiler"]["landscapeQuadrantPixels"] += 1
         self.assertEqual(baseline, self.identity(changed))
 
+    def test_creature_animation_roles_are_skeleton_relative(self):
+        profile = self.document["actorCompiler"]["animationProfiles"]["CREA"]
+
+        self.assertEqual(profile["mode"], "skeleton-directory")
+        self.assertEqual(
+            set(profile["roles"]),
+            {"locomotion", "melee", "hit"},
+        )
+        self.assertTrue(all(
+            isinstance(candidates, list) and
+            candidates and
+            all(
+                not Path(value).is_absolute() and value.casefold().endswith(".kf")
+                for value in candidates
+            )
+            for candidates in profile["roles"].values()
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()

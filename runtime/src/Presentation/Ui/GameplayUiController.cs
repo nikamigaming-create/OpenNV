@@ -53,6 +53,7 @@ internal partial class GameplayUiController : CanvasLayer
     private readonly Dictionary<int, Label> _ownedStatusValues = new();
     private readonly Dictionary<int, OwnedPipBoyStringSource> _ownedStatusSources = new();
     private readonly Dictionary<GameplayUiPanel, PipBoyGlowSurface> _ownedButtonGlows = new();
+    private ProjectedSurfaceInputRouter? _ownedPipBoyInput;
     private Label? _xrContent;
     private ColorRect? _xrCursor;
     private Sprite3D? _xrScreen;
@@ -325,7 +326,7 @@ internal partial class GameplayUiController : CanvasLayer
         crosshair.Text = "+";
         crosshair.HorizontalAlignment = HorizontalAlignment.Center;
         crosshair.VerticalAlignment = VerticalAlignment.Center;
-        PlaceOwnedCanvasRect(crosshair, hud.Layout["ReticleCenter"]);
+        PlaceOwnedCanvasCenterRect(crosshair, hud.Layout["ReticleCenter"]);
         canvas.AddChild(crosshair);
     }
 
@@ -458,6 +459,14 @@ internal partial class GameplayUiController : CanvasLayer
             deviceViewport,
             crtViewport.GetTexture(),
             presentation);
+        var screenInput = new Control
+        {
+            Name = "OwnedPipBoyProjectedScreenInput",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        screenInput.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        screenInput.GuiInput += input => _ownedPipBoyInput?.Forward(input);
+        _pipBoyPanel.AddChild(screenInput);
     }
 
     private void BuildOwnedPhysicalPipBoy(
@@ -520,7 +529,9 @@ internal partial class GameplayUiController : CanvasLayer
             {
                 ResourceName = "OpenNV_OwnedPipBoyDynamicCrt",
                 AlbedoTexture = crtTexture,
-                AlbedoTextureForceSrgb = true,
+                // SubViewport output is already in the renderer's working color space.
+                // Decoding it as an sRGB source a second time washes out the live CRT.
+                AlbedoTextureForceSrgb = false,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             });
@@ -606,6 +617,11 @@ internal partial class GameplayUiController : CanvasLayer
         };
         viewport.AddChild(camera);
         camera.LookAt(frame.Target, frame.Up);
+        _ownedPipBoyInput = new ProjectedSurfaceInputRouter(
+            screenMatches[0].Mesh,
+            screenMatches[0].Surface,
+            camera,
+            (SubViewport)_ownedPipBoyCanvas!.GetViewport());
         GD.Print(
             $"OPENNV_OWNED_PIPBOY_PHYSICAL_READY source={contract.LogicalPath} " +
             $"surfaces={contract.Surfaces} vertices={contract.Vertices} " +
@@ -987,6 +1003,13 @@ internal partial class GameplayUiController : CanvasLayer
         var scale = Mathf.Min(viewport.Size.X / authoredSize.X, viewport.Size.Y / authoredSize.Y);
         canvas.Scale = Vector2.One * scale;
         canvas.Position = (viewport.Size - authoredSize * scale) * OwnedUiTheme.CenteringFactor;
+    }
+
+    private static void PlaceOwnedCanvasCenterRect(Control control, Rect2 authoredRect)
+    {
+        control.SetAnchorsPreset(Control.LayoutPreset.Center);
+        control.Position = -authoredRect.Size * OwnedUiTheme.CenteringFactor;
+        control.Size = authoredRect.Size;
     }
 
     private void BuildDesktopHud()

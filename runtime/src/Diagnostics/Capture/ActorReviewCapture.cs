@@ -539,7 +539,8 @@ internal static class ActorReviewCapture
         host.AddChild(new DirectionalLight3D
         {
             RotationDegrees = configuration.ActorReview.DirectionalRotationDegrees.Vector3(),
-            LightColor = contract.Environment.DirectionalColor,
+            LightColor = RetailLighting.GodotLightColor(
+                contract.Environment.DirectionalColor),
             LightEnergy = configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,
         });

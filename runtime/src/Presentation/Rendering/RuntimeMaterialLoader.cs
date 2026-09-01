@@ -94,18 +94,21 @@ internal static class RuntimeMaterialLoader
 
     internal static LoadedTextures LoadTextures(
         JsonElement scene,
-        RendererConfiguration configuration) =>
+        RendererConfiguration configuration,
+        TextureCache? cache = null) =>
         LoadTextures(
             scene.GetProperty("textures").EnumerateArray(),
             configuration,
             "id",
-            null);
+            null,
+            cache);
 
     internal static LoadedTextures LoadTextures(
         IEnumerable<JsonElement> textureRows,
         RendererConfiguration configuration,
         string idProperty,
-        string? baseDirectory)
+        string? baseDirectory,
+        TextureCache? cache = null)
     {
         var textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
         var cubemaps = new Dictionary<string, Cubemap>(StringComparer.Ordinal);
@@ -116,6 +119,23 @@ internal static class RuntimeMaterialLoader
         foreach (var texture in textureRows)
         {
             var id = texture.GetProperty(idProperty).GetString()!;
+            var contract = texture.GetRawText();
+            if (cache?.TryGet(id, contract, out var cached) == true)
+            {
+                textures.Add(id, cached.Texture);
+                if (cached.Cubemap is not null)
+                    cubemaps.Add(id, cached.Cubemap);
+                authoredDdsTextures += cached.AuthoredDdsTextures;
+                authoredDdsMipChainTextures += cached.AuthoredDdsMipChainTextures;
+                decodedAuthoredBc1AlphaMipChainTextures +=
+                    cached.DecodedAuthoredBc1AlphaMipChainTextures;
+                runtimeGeneratedMipTextures += cached.RuntimeGeneratedMipTextures;
+                continue;
+            }
+            var authoredDdsBefore = authoredDdsTextures;
+            var authoredDdsMipBefore = authoredDdsMipChainTextures;
+            var decodedMipBefore = decodedAuthoredBc1AlphaMipChainTextures;
+            var generatedMipBefore = runtimeGeneratedMipTextures;
             var path = ResolveContentPath(
                 texture.GetProperty("png").GetString()!,
                 baseDirectory);
@@ -245,36 +265,49 @@ internal static class RuntimeMaterialLoader
                     loadedTexturePath)
                     ? 1
                     : 0;
-            textures.Add(id, ImageTexture.CreateFromImage(image));
+            var loadedTexture = ImageTexture.CreateFromImage(image);
+            textures.Add(id, loadedTexture);
+            Cubemap? loadedCubemap = null;
             if (texture.TryGetProperty("cubeFaces", out var cubeFaces))
             {
                 var rows = cubeFaces.EnumerateArray().ToArray();
-                if (rows.Length == 0)
-                    continue;
-                if (rows.Length != configuration.CubemapFaceCount)
-                    throw new InvalidOperationException($"Prepared cubemap must contain six faces: {id}");
-                var images = new Godot.Collections.Array<Image>();
-                foreach (var face in rows)
+                if (rows.Length > 0)
                 {
-                    var facePath = ResolveContentPath(
-                        face.GetProperty("png").GetString()!,
-                        baseDirectory);
-                    VerifiedGltfLoader.VerifyHash(facePath, face.GetProperty("pngSha256").GetString()!);
-                    var faceImage = Image.LoadFromFile(facePath);
-                    if (faceImage is null || faceImage.IsEmpty() ||
-                        faceImage.GetWidth() != image.GetWidth() ||
-                        faceImage.GetHeight() != image.GetHeight())
-                        throw new InvalidOperationException($"Prepared cubemap face is invalid: {facePath}");
-                    faceImage.Convert(Image.Format.Rgba8);
-                    GenerateRuntimeMipmaps(faceImage, false, facePath);
-                    images.Add(faceImage);
+                    if (rows.Length != configuration.CubemapFaceCount)
+                        throw new InvalidOperationException($"Prepared cubemap must contain six faces: {id}");
+                    var images = new Godot.Collections.Array<Image>();
+                    foreach (var face in rows)
+                    {
+                        var facePath = ResolveContentPath(
+                            face.GetProperty("png").GetString()!,
+                            baseDirectory);
+                        VerifiedGltfLoader.VerifyHash(facePath, face.GetProperty("pngSha256").GetString()!);
+                        var faceImage = Image.LoadFromFile(facePath);
+                        if (faceImage is null || faceImage.IsEmpty() ||
+                            faceImage.GetWidth() != image.GetWidth() ||
+                            faceImage.GetHeight() != image.GetHeight())
+                            throw new InvalidOperationException($"Prepared cubemap face is invalid: {facePath}");
+                        faceImage.Convert(Image.Format.Rgba8);
+                        GenerateRuntimeMipmaps(faceImage, false, facePath);
+                        images.Add(faceImage);
+                    }
+                    loadedCubemap = new Cubemap();
+                    var error = loadedCubemap.CreateFromImages(images);
+                    if (error != Error.Ok)
+                        throw new InvalidOperationException($"Godot rejected prepared cubemap {id}: {error}");
+                    cubemaps.Add(id, loadedCubemap);
                 }
-                var cubemap = new Cubemap();
-                var error = cubemap.CreateFromImages(images);
-                if (error != Error.Ok)
-                    throw new InvalidOperationException($"Godot rejected prepared cubemap {id}: {error}");
-                cubemaps.Add(id, cubemap);
             }
+            cache?.Add(
+                id,
+                contract,
+                new CachedTexture(
+                    loadedTexture,
+                    loadedCubemap,
+                    authoredDdsTextures - authoredDdsBefore,
+                    authoredDdsMipChainTextures - authoredDdsMipBefore,
+                    decodedAuthoredBc1AlphaMipChainTextures - decodedMipBefore,
+                    runtimeGeneratedMipTextures - generatedMipBefore));
         }
         var neutralNormalImage = Image.CreateEmpty(
             configuration.NeutralNormalTextureSizePixels[0],
@@ -1355,6 +1388,45 @@ internal static class RuntimeMaterialLoader
         IReadOnlyDictionary<string, Texture2D> TwoDimensional,
         IReadOnlyDictionary<string, Cubemap> Cubemaps,
         Texture2D NeutralNormal,
+        int AuthoredDdsTextures,
+        int AuthoredDdsMipChainTextures,
+        int DecodedAuthoredBc1AlphaMipChainTextures,
+        int RuntimeGeneratedMipTextures);
+
+    internal sealed class TextureCache
+    {
+        private readonly Dictionary<string, (string Contract, CachedTexture Texture)> _entries =
+            new(StringComparer.Ordinal);
+
+        internal int UniqueTextures => _entries.Count;
+        internal int ReusedTextures { get; private set; }
+
+        internal bool TryGet(string id, string contract, out CachedTexture texture)
+        {
+            if (!_entries.TryGetValue(id, out var entry))
+            {
+                texture = default;
+                return false;
+            }
+            if (!entry.Contract.Equals(contract, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Prepared texture identity {id} has conflicting contracts.");
+            ReusedTextures++;
+            texture = entry.Texture;
+            return true;
+        }
+
+        internal void Add(string id, string contract, CachedTexture texture)
+        {
+            if (!_entries.TryAdd(id, (contract, texture)))
+                throw new InvalidOperationException(
+                    $"Prepared texture identity {id} was cached twice.");
+        }
+    }
+
+    internal readonly record struct CachedTexture(
+        Texture2D Texture,
+        Cubemap? Cubemap,
         int AuthoredDdsTextures,
         int AuthoredDdsMipChainTextures,
         int DecodedAuthoredBc1AlphaMipChainTextures,

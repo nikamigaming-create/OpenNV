@@ -50,6 +50,7 @@ LANDSCAPE_WEIGHT_STORAGE = "generated-17x17-rgba32f-vertex-lookup"
 LANDSCAPE_RETAIL_WEIGHT_SEMANTICS = ("TEXCOORD1", "TEXCOORD2")
 LANDSCAPE_RETAIL_WEIGHT_TYPE = "float4"
 LANDSCAPE_CONTRACT_SOURCE = "matched-live-land-shader-package"
+LANDSCAPE_COLLISION_FACE_SELECTION = "all-source-faces"
 LAND_QUADRANT_VERTEX_SIDE = 17
 LAND_QUADRANT_LAST_VERTEX = LAND_QUADRANT_VERTEX_SIDE - 1
 BYTE_CHANNEL_MAXIMUM = 255.0
@@ -774,6 +775,7 @@ def export_landscape_gltf(
         "collision": {
             "enabled": True,
             "source": "LAND-height-grid",
+            "faceSelection": LANDSCAPE_COLLISION_FACE_SELECTION,
             "blockTypes": ["LAND"],
         },
         "textureBindings": [

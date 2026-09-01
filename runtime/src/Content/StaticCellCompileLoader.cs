@@ -314,7 +314,8 @@ internal static class StaticCellCompileLoader
         parent.AddChild(new OmniLight3D
         {
             Name = $"LIGH_{placement.GetProperty("childRuntimeFormId").GetString()}",
-            LightColor = ReadByteColor(light.GetProperty("colorRgb")),
+            LightColor = RetailLighting.GodotLightColor(
+                ReadByteColor(light.GetProperty("colorRgb"))),
             LightEnergy = MathF.Max(
                 configuration.Renderer.MinimumPointLightEnergy,
                 light.GetProperty("intensity").GetSingle() *
@@ -371,7 +372,8 @@ internal static class StaticCellCompileLoader
             Transform = new Transform3D(
                 RetailLighting.DirectionalLightBasis(surfaceToLight),
                 Vector3.Zero),
-            LightColor = ReadByteColor(lighting.GetProperty("directional_rgb")),
+            LightColor = RetailLighting.GodotLightColor(
+                ReadByteColor(lighting.GetProperty("directional_rgb"))),
             LightEnergy = lighting.GetProperty("directional_fade").GetSingle() *
                 configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,

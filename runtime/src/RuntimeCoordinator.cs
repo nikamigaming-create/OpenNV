@@ -19,6 +19,7 @@ using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout3;
 using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Gameplay.Settings;
 
 namespace OpenNV.Runtime;
 
@@ -60,6 +61,7 @@ public partial class RuntimeCoordinator : Node3D
 
     private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
     private RuntimeConfiguration _configuration = null!;
+    private RuntimeSettingsState _settings = null!;
     private LegalAssetSetupView? _setupView;
     private XRInterface? _openXr;
     private LoadingScreen? _loadingScreen;
@@ -91,13 +93,17 @@ public partial class RuntimeCoordinator : Node3D
         try
         {
             _configuration = RuntimeConfiguration.Load();
+            _options = ParseOptions(OS.GetCmdlineUserArgs());
+            _settings = RuntimeSettingsState.Load(
+                _options.TryGetValue("settings-path", out var settingsPath)
+                    ? settingsPath
+                    : null);
             DesktopInputMap.Configure(_configuration.Player.DesktopInput);
             GetWindow().Size = new Vector2I(
                 _configuration.Capture.ExpectedWidthPixels,
                 _configuration.Capture.ExpectedHeightPixels);
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
-            _options = ParseOptions(OS.GetCmdlineUserArgs());
             var launch = RuntimeLaunchRequest.Create(_options);
             var performanceReportPath = _options.TryGetValue(
                 "perf-report",
@@ -201,7 +207,7 @@ public partial class RuntimeCoordinator : Node3D
             ShowOpening(prepared, options);
             return;
         }
-        LoadPreparedGameplay(
+        _ = LoadPreparedGameplay(
             prepared,
             options,
             options.ContainsKey("new-game") || options.ContainsKey("opening-proof"));
@@ -211,7 +217,10 @@ public partial class RuntimeCoordinator : Node3D
         LegalAssetPreparer.PreparedContent prepared,
         IReadOnlyDictionary<string, string> options)
     {
-        var manifest = OpeningManifest.Load(prepared.OpeningManifestPath, _configuration);
+        var manifest = OpeningManifest.Load(
+            prepared.OpeningManifestPath,
+            _configuration,
+            options.ContainsKey("bounded-default-profile"));
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)
             ? ResolveRuntimePath(configuredSavePath)
             : ResolveRuntimePath(DefaultNewVegasOpeningSavePath);
@@ -223,13 +232,17 @@ public partial class RuntimeCoordinator : Node3D
             allowedActiveCellFormIds,
             manifest.NewGameFlow.Character.Vitals,
             state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
+        PreparedGameplayPrewarm? gameplayPrewarm = null;
+        if (!canContinue)
+            gameplayPrewarm = StartGameplayPrewarm(prepared);
         var opening = new RetailOpening();
         AddChild(opening);
         opening.Configure(
             manifest,
             canContinue,
             _configuration.Player.DesktopInput.Cancel.Action,
-            () =>
+            () => gameplayPrewarm ??= StartGameplayPrewarm(prepared),
+            async () =>
             {
                 if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
                 {
@@ -243,9 +256,15 @@ public partial class RuntimeCoordinator : Node3D
                     pair => pair.Value,
                     StringComparer.OrdinalIgnoreCase);
                 newGameOptions["new-game"] = "";
-                LoadPreparedGameplay(prepared, newGameOptions, useOpeningCampaign: true);
+                await CompleteGameplayPrewarm(gameplayPrewarm
+                    ?? throw new InvalidOperationException(
+                        "New Game intro did not start its prepared CELL prewarm."));
+                await LoadPreparedGameplay(
+                    prepared,
+                    newGameOptions,
+                    useOpeningCampaign: true);
             },
-            action =>
+            async action =>
             {
                 if (action is "continue" or "load")
                 {
@@ -256,11 +275,14 @@ public partial class RuntimeCoordinator : Node3D
                                 $"Owned main-menu acceptance dispatched {action}, expected {acceptedAction}.");
                         _acceptedOpeningMenuAction = action;
                     }
-                    opening.QueueFree();
-                    LoadPreparedGameplay(prepared, options, useOpeningCampaign: true);
+                    await LoadPreparedGameplay(
+                        prepared,
+                        options,
+                        useOpeningCampaign: true);
                     return;
                 }
                 GD.Print($"OPENNV_OWNED_MENU_ACTION action={action} status=ui-route-pending");
+                await Task.CompletedTask;
             });
         GD.Print(
             $"OPENNV_OWNED_OPENING_READY campaign={manifest.Campaign} " +
@@ -275,6 +297,22 @@ public partial class RuntimeCoordinator : Node3D
         }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
+    }
+
+    private static PreparedGameplayPrewarm StartGameplayPrewarm(
+        LegalAssetPreparer.PreparedContent prepared)
+    {
+        GD.Print("OPENNV_OWNED_GAMEPLAY_PREWARM_STARTED source=initial-cell-closure");
+        return PreparedGameplayPrewarm.Start(prepared);
+    }
+
+    private static async Task CompleteGameplayPrewarm(
+        PreparedGameplayPrewarm gameplayPrewarm)
+    {
+        var result = await gameplayPrewarm.WaitAsync();
+        GD.Print(
+            $"OPENNV_OWNED_GAMEPLAY_PREWARM_READY files={result.FileCount} " +
+            $"bytes={result.ByteCount} elapsedMs={result.ElapsedMilliseconds}");
     }
 
     private async Task RunOwnedOpeningMenuAcceptance(RetailOpening opening, string action)
@@ -303,7 +341,7 @@ public partial class RuntimeCoordinator : Node3D
         }
     }
 
-    private void LoadPreparedGameplay(
+    private Task LoadPreparedGameplay(
         LegalAssetPreparer.PreparedContent prepared,
         IReadOnlyDictionary<string, string> options,
         bool useOpeningCampaign)
@@ -322,10 +360,10 @@ public partial class RuntimeCoordinator : Node3D
                 preparedOptions["opening-manifest"] = prepared.OpeningManifestPath;
             if (useOpeningCampaign && !preparedOptions.ContainsKey("save-path"))
                 preparedOptions["save-path"] = DefaultNewVegasOpeningSavePath;
-            LoadCellScene(prepared.CellScenePath, preparedOptions);
+            return LoadCellScene(prepared.CellScenePath, preparedOptions);
         }
-        else
-            LoadModel(prepared.ModelPath, prepared.SidecarPath, options);
+        LoadModel(prepared.ModelPath, prepared.SidecarPath, options);
+        return Task.CompletedTask;
     }
 
     private static bool ShouldShowOpening(IReadOnlyDictionary<string, string> options) =>
@@ -562,7 +600,7 @@ public partial class RuntimeCoordinator : Node3D
         _ = Fo2TempleBuildProof.Run(this, coverage, reportPath, transitions);
     }
 
-    private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
+    private Task LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
         var runTraversalProof = options.ContainsKey("portal-proof");
         var useXrLayout = options.ContainsKey("vr") || options.ContainsKey("vr-layout-proof");
@@ -573,7 +611,10 @@ public partial class RuntimeCoordinator : Node3D
         var openingManifest = usesCampaignState
             ? OpeningManifest.Load(
                 RequireOption(options, "opening-manifest"),
-                _configuration)
+                _configuration,
+                options.ContainsKey("bounded-default-profile") ||
+                options.TryGetValue("opening-proof", out var openingProofMode) &&
+                    openingProofMode is "route-stage50" or "route-stage50-resume")
             : null;
         var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
         if (galleryContract is not null)
@@ -582,6 +623,7 @@ public partial class RuntimeCoordinator : Node3D
             scenePath,
             this,
             _configuration,
+            _settings,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
@@ -598,7 +640,11 @@ public partial class RuntimeCoordinator : Node3D
             true,
             options.ContainsKey("classic-diorama"),
             openingManifest?.GameplayUi,
-            openingManifest?.NewGameFlow.Character.Vitals);
+            openingManifest?.NewGameFlow.Character.Vitals,
+            usesCampaignState &&
+            !options.ContainsKey("opening-proof") &&
+            !options.ContainsKey("opening-character-video") &&
+            !options.ContainsKey("capture-root"));
         if (options.TryGetValue("jam-profile", out var jamProfilePath))
         {
             var jamProfile = JamProfileContract.Load(jamProfilePath);
@@ -647,11 +693,21 @@ public partial class RuntimeCoordinator : Node3D
                     "Opening campaign state requires an owned opening manifest.");
             openingFlow = new OpeningQuestRuntime();
             AddChild(openingFlow);
-            openingFlow.Configure(
-                openingManifest,
-                loaded,
-                _configuration,
-                restoredOpening);
+            if (loaded.InitialAdjacentReady.IsCompletedSuccessfully)
+                openingFlow.Configure(
+                    openingManifest,
+                    loaded,
+                    _configuration,
+                    restoredOpening);
+            else
+            {
+                openingFlow.ProcessMode = ProcessModeEnum.Disabled;
+                _ = ConfigureOpeningAfterInitialAdjacent(
+                    openingFlow,
+                    openingManifest,
+                    loaded,
+                    restoredOpening);
+            }
         }
         if (options.TryGetValue("opening-proof", out var openingProof))
         {
@@ -664,7 +720,7 @@ public partial class RuntimeCoordinator : Node3D
                 scenePath,
                 openingProof,
                 options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("opening-character-video"))
         {
@@ -672,7 +728,7 @@ public partial class RuntimeCoordinator : Node3D
                 throw new InvalidOperationException(
                     "Opening character video did not create an active New Vegas opening flow.");
             _ = RunOpeningCharacterVideo(openingFlow, loaded);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.TryGetValue("route-travel-proof", out var routeTravelMode))
         {
@@ -681,24 +737,24 @@ public partial class RuntimeCoordinator : Node3D
                 scenePath,
                 routeTravelMode,
                 options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (galleryContract is not null)
             GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-complete");
         if (options.ContainsKey("xr-simulator-proof"))
         {
             _ = RunXrSimulatorAcceptance(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("pipboy-visual-proof"))
         {
             _ = RunPipBoyVisualAcceptance(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("flat-controls-proof"))
         {
             _ = RunFlatControlsAcceptance(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.TryGetValue("capture-root", out var captureRoot))
         {
@@ -719,12 +775,12 @@ public partial class RuntimeCoordinator : Node3D
                     $"stage=capture-task-created status={captureTask.Status}");
             if (captureTask.IsCompleted)
                 captureTask.GetAwaiter().GetResult();
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("pool-proof"))
         {
             _ = RunPoolProof(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("world-interaction-proof"))
         {
@@ -734,24 +790,48 @@ public partial class RuntimeCoordinator : Node3D
                 _configuration,
                 scenePath,
                 options.TryGetValue("report", out var worldReport) ? worldReport : null);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("gameplay-proof"))
         {
             _ = RunGameplayProof(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (options.ContainsKey("gameplay-reload-proof"))
         {
             CompleteGameplayReloadProof(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         if (runTraversalProof)
         {
             _ = RunDoorTraversalProof(loaded, scenePath, options);
-            return;
+            return loaded.InitialAdjacentReady;
         }
         CompleteCellLoad(loaded, scenePath, options, null);
+        return loaded.InitialAdjacentReady;
+    }
+
+    private async Task ConfigureOpeningAfterInitialAdjacent(
+        OpeningQuestRuntime openingFlow,
+        OpeningManifest openingManifest,
+        CellSceneLoader.LoadedCell loaded,
+        OpeningCampaignState? restoredOpening)
+    {
+        try
+        {
+            await loaded.InitialAdjacentReady;
+            openingFlow.Configure(
+                openingManifest,
+                loaded,
+                _configuration,
+                restoredOpening);
+            openingFlow.ProcessMode = ProcessModeEnum.Inherit;
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_LAZY_CELL_INITIAL_PREFETCH_FAIL {exception}");
+            GetTree().Quit(1);
+        }
     }
 
     private void CompleteCellLoad(
@@ -825,7 +905,11 @@ public partial class RuntimeCoordinator : Node3D
             }).ToArray(),
             activeSet = new
             {
-                policy = "authoritative-current-cell-only-linked-cells-preloaded",
+                policy = loaded.LazyLinkedCells
+                    ? "authoritative-current-cell-first-adjacent-demand-materialization"
+                    : "authoritative-current-cell-only-linked-cells-preloaded",
+                preparedRouteCellCount = loaded.PreparedRouteCellCount,
+                materializedCellCount = loaded.LinkedCells.Count + 1,
                 currentCellFormId = loaded.Session.ActiveCellFormId,
                 activeCellFormIds = loaded.ActiveSet.ActiveCellFormIds
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase),

@@ -104,11 +104,15 @@ RECIPE_SCHEMA = "opennv-fo1-hex-recipe/v1"
 RUNTIME_PROFILE_RECIPE_SCHEMA = "opennv-fo1-runtime-profile-recipe/v1"
 SCENE_SCHEMA = "opennv-fo1-hex-scene/v1"
 CACHE_SCHEMA = "opennv-fo1-hex-cache/v1"
-CLASSIC_HUMANOID_DONOR_SCHEMA = "opennv-owned-player-facegen-preview-set/v3"
-CLASSIC_HUMANOID_DONOR_STATUS = (
-    "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-"
-    "all-native-geometry-controls-runtime-bound"
-)
+CLASSIC_HUMANOID_DONOR_STATUSES = {
+    "opennv-owned-player-facegen-preview-set/v3": (
+        "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-"
+        "all-native-geometry-controls-runtime-bound"
+    ),
+    "opennv-owned-player-facegen-preview-set/v4": (
+        "compiled-default-custom-and-six-classic-premade-full-body-analogs-runtime-bound"
+    ),
+}
 CLASSIC_HUMANOID_DONOR_ROLES = ("body", "left-hand", "right-hand")
 
 
@@ -127,9 +131,11 @@ def write_json(path: Path, document: object) -> None:
 def load_classic_humanoid_donor(path: Path) -> dict[str, object]:
     resolved_path = path.resolve()
     donor = read_json(resolved_path)
+    schema = str(donor.get("schema", ""))
+    expected_status = CLASSIC_HUMANOID_DONOR_STATUSES.get(schema)
     if (
-        donor.get("schema") != CLASSIC_HUMANOID_DONOR_SCHEMA
-        or donor.get("status") != CLASSIC_HUMANOID_DONOR_STATUS
+        expected_status is None
+        or donor.get("status") != expected_status
         or donor.get("fullBody") is not True
         or tuple(donor.get("bodyComponentRoles", ())) != CLASSIC_HUMANOID_DONOR_ROLES
     ):
@@ -199,10 +205,36 @@ def load_classic_humanoid_donor(path: Path) -> dict[str, object]:
                 "animations": len(animations),
             }
         )
+    joined_path = resolved_path
+    joined_sha256 = sha256_path(resolved_path)
+    if schema == "opennv-owned-player-facegen-preview-set/v4":
+        base_reference = donor.get("basePreviewSet")
+        if not isinstance(base_reference, dict):
+            raise Fo1ProfileError("shared classic humanoid donor has no base preview join")
+        joined_path = Path(str(base_reference.get("path", ""))).resolve()
+        joined_sha256 = str(base_reference.get("sha256", "")).lower()
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", joined_sha256)
+            or not joined_path.is_file()
+            or sha256_path(joined_path) != joined_sha256
+        ):
+            raise Fo1ProfileError("shared classic humanoid donor base preview hash drift")
+        base_donor = read_json(joined_path)
+        if (
+            base_donor.get("schema") != "opennv-owned-player-facegen-preview-set/v3"
+            or base_donor.get("status")
+            != CLASSIC_HUMANOID_DONOR_STATUSES[
+                "opennv-owned-player-facegen-preview-set/v3"
+            ]
+            or base_donor.get("playerFormId") != donor.get("playerFormId")
+            or base_donor.get("bodyComponentSourcesBySex") != sources
+            or base_donor.get("previews") != previews
+        ):
+            raise Fo1ProfileError("shared classic humanoid donor base preview join drift")
     return {
         "schema": "opennv-fo1-classic-humanoid-donor-join/v1",
-        "previewSet": str(resolved_path),
-        "previewSetSha256": sha256_path(resolved_path),
+        "previewSet": str(joined_path),
+        "previewSetSha256": joined_sha256,
         "playerFormId": player_form_id,
         "variants": variants,
     }

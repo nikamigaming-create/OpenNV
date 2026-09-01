@@ -99,6 +99,26 @@ internal static class RetailEnvironmentRenderer
         }
         """;
 
+    private const string NightSkyShaderSource = """
+        shader_type spatial;
+        render_mode unshaded, blend_mix, cull_back, depth_draw_never, fog_disabled;
+
+        uniform sampler2D star_map : source_color, filter_linear_mipmap_anisotropic;
+        uniform vec4 stars_encoded;
+
+        void vertex() {
+            vec3 world_direction = normalize(mat3(MODEL_MATRIX) * VERTEX);
+            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 1.0);
+            POSITION.z = 0.0;
+        }
+
+        void fragment() {
+            vec4 source = texture(star_map, UV);
+            ALBEDO = source.rgb * stars_encoded.rgb;
+            ALPHA = source.a * stars_encoded.a;
+        }
+        """;
+
     internal static Application Apply(
         Node3D host,
         ActorReviewContract.EnvironmentState captured,
@@ -178,7 +198,7 @@ internal static class RetailEnvironmentRenderer
         var directionalLight = new DirectionalLight3D
         {
             Name = $"WTHR_{resolved.WeatherFormId:X8}_Sunlight",
-            LightColor = sunlight,
+            LightColor = RetailLighting.GodotLightColor(sunlight),
             LightEnergy = configuration.Renderer.DirectionalEnergyScale *
                 resolved.ImageSpace.Traits[sunlightDimmerIndex],
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,
@@ -230,6 +250,11 @@ internal static class RetailEnvironmentRenderer
 
         var atmosphere = AddAtmosphere(host, environmentCatalog, resolved, configuration);
         var clouds = AddClouds(host, environmentCatalog, resolved, configuration);
+        var nightSky = AddNightSky(
+            host,
+            environmentCatalog,
+            resolved,
+            content.TextureAssets);
         var imageSpace = RetailImageSpaceRenderer.Apply(
             worldEnvironment,
             resolved.ImageSpace,
@@ -240,6 +265,7 @@ internal static class RetailEnvironmentRenderer
             resolved,
             atmosphere.SourceSha256,
             clouds.SourceSha256,
+            nightSky.SourceSha256,
             clouds.Layers,
             imageSpace,
             true,
@@ -264,14 +290,55 @@ internal static class RetailEnvironmentRenderer
         Node3D host,
         RetailExteriorEnvironment environment,
         RetailExteriorEnvironment.ResolvedEnvironment resolved,
+        IReadOnlyDictionary<string, Texture2D> textureAssets,
         RuntimeConfiguration configuration)
     {
         var atmosphere = AddAtmosphere(host, environment, resolved, configuration);
         var clouds = AddClouds(host, environment, resolved, configuration);
+        var nightSky = AddNightSky(host, environment, resolved, textureAssets);
         return new SkyApplication(
             atmosphere.SourceSha256,
             clouds.SourceSha256,
+            nightSky.SourceSha256,
             clouds.Layers);
+    }
+
+    private static VerifiedGltfLoader.LoadedGltf AddNightSky(
+        Node3D host,
+        RetailExteriorEnvironment environment,
+        RetailExteriorEnvironment.ResolvedEnvironment resolved,
+        IReadOnlyDictionary<string, Texture2D> textureAssets)
+    {
+        var evidence = environment.SkyModels["nightSky"];
+        var loaded = VerifiedGltfLoader.Load(evidence.ModelPath, evidence.SidecarPath);
+        var meshes = NodeTraversal.Descendants<MeshInstance3D>(loaded.Scene).ToArray();
+        if (meshes.Length != 1 || meshes[0].Mesh is null ||
+            meshes[0].Mesh!.GetSurfaceCount() != evidence.Surfaces.Count)
+            throw new InvalidOperationException(
+                "Owned CLMT night-sky glTF differs from its compiled surface contract.");
+        var mesh = meshes[0];
+        foreach (var surface in evidence.Surfaces)
+        {
+            if (surface.Semantic != "night-sky" ||
+                mesh.Mesh.SurfaceGetMaterial(surface.Index) is not StandardMaterial3D material ||
+                string.IsNullOrEmpty(surface.DiffuseTextureId) ||
+                !textureAssets.TryGetValue(surface.DiffuseTextureId, out var starTexture))
+                throw new InvalidOperationException(
+                    "Owned CLMT night-sky surface lacks its authored star texture.");
+            var shader = new ShaderMaterial
+            {
+                Shader = new Shader { Code = NightSkyShaderSource },
+                RenderPriority = material.RenderPriority,
+            };
+            shader.SetShaderParameter("star_map", starTexture);
+            shader.SetShaderParameter("stars_encoded", resolved.StarsEncoded);
+            mesh.SetSurfaceOverrideMaterial(surface.Index, shader);
+        }
+        mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        mesh.ExtraCullMargin = SourceGeometryCullMargin(mesh.Mesh);
+        loaded.Scene.Name = $"CLMT_{environment.Climate.FormId:X8}_NightSky";
+        host.AddChild(loaded.Scene);
+        return loaded;
     }
 
     private static VerifiedGltfLoader.LoadedGltf AddAtmosphere(
@@ -361,6 +428,7 @@ internal static class RetailEnvironmentRenderer
                 Name = $"WTHR_{resolved.WeatherFormId:X8}_CloudLayer_{layer}",
                 Mesh = mesh.Mesh,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                ExtraCullMargin = SourceGeometryCullMargin(mesh.Mesh),
             };
             foreach (var surface in evidence.Surfaces)
                 layerMesh.SetSurfaceOverrideMaterial(surface.Index, InvisibleMaterial());
@@ -375,6 +443,17 @@ internal static class RetailEnvironmentRenderer
         loaded.Scene.Free();
         host.AddChild(cloudRoot);
         return new CloudApplication(loaded.SourceSha256, layers);
+    }
+
+    private static float SourceGeometryCullMargin(Mesh mesh)
+    {
+        var bounds = mesh.GetAabb();
+        var margin = bounds.Size.Length();
+        if (!bounds.Position.IsFinite() || !bounds.Size.IsFinite() ||
+            !float.IsFinite(margin) || margin <= 0.0f)
+            throw new InvalidOperationException(
+                "Owned sky geometry has no finite culling extent.");
+        return margin;
     }
 
     private static ShaderMaterial InvisibleMaterial() => new()
@@ -422,6 +501,7 @@ internal static class RetailEnvironmentRenderer
         RetailExteriorEnvironment.ResolvedEnvironment Environment,
         string AtmosphereSourceSha256,
         string CloudsSourceSha256,
+        string NightSkySourceSha256,
         IReadOnlyList<CloudLayerApplication> CloudLayers,
         RetailImageSpaceRenderer.Application ImageSpace,
         bool WeatherRecordApplied,
@@ -448,6 +528,7 @@ internal static class RetailEnvironmentRenderer
     internal readonly record struct SkyApplication(
         string AtmosphereSourceSha256,
         string CloudsSourceSha256,
+        string NightSkySourceSha256,
         IReadOnlyList<CloudLayerApplication> CloudLayers);
 
     internal readonly record struct CloudLayerApplication(

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Gameplay.Settings;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -71,6 +72,7 @@ internal partial class Fo1TacticalCamera : Node3D
     private float _tacticalYawBeforeExploration;
     private float _tacticalPitchBeforeExploration;
     private Fo1CaveCutaway? _caveCutaway;
+    private RuntimeSettingsState _settings = null!;
 
     internal Camera3D Camera => _camera;
     internal Node3D YawPivot => _yawPivot;
@@ -87,6 +89,8 @@ internal partial class Fo1TacticalCamera : Node3D
     internal float FirstPersonEyeHeightMeters => _profile.FirstPerson.EyeHeightMeters;
     internal float FirstPersonFovDegrees => _profile.FirstPerson.FovDegrees;
     internal float FirstPersonMoveSpeedMetersPerSecond => _profile.FirstPerson.MoveSpeedMetersPerSecond;
+    internal float EffectiveOrbitRadiansPerPixel => _settings.ApplyMouseSensitivity(
+        _profile.Tactical.OrbitRadiansPerPixel);
 
     internal Fo1CameraSaveState CaptureSaveState()
     {
@@ -181,10 +185,12 @@ internal partial class Fo1TacticalCamera : Node3D
         float homeSize,
         float yawRadians,
         float pitchRadians,
-        Fo1CameraProfile profile)
+        Fo1CameraProfile profile,
+        RuntimeSettingsState settings)
     {
         _session = session;
         _profile = profile;
+        _settings = settings;
         ValidateProfile(profile);
         Name = "Fo1TacticalCameraRig";
         _homeFocus = homeFocus;
@@ -328,7 +334,7 @@ internal partial class Fo1TacticalCamera : Node3D
             else if (key.PhysicalKeycode == Key.Space)
                 _session.EndTurn();
             else if (key.PhysicalKeycode == Key.F5)
-                _session.SaveAndNotify();
+                _session.OpenSaveLoad();
             else if (key.PhysicalKeycode == Key.X)
                 _session.AttackSelected();
             else if (key.PhysicalKeycode == Key.Z)
@@ -467,8 +473,9 @@ internal partial class Fo1TacticalCamera : Node3D
 
     private void ApplyLookMotion(Vector2 relative)
     {
-        _targetYaw -= relative.X * _profile.Tactical.OrbitRadiansPerPixel;
-        var verticalDelta = relative.Y * _profile.Tactical.OrbitRadiansPerPixel;
+        var sensitivity = EffectiveOrbitRadiansPerPixel;
+        _targetYaw -= relative.X * sensitivity;
+        var verticalDelta = relative.Y * sensitivity;
         if (_firstPersonMode)
             verticalDelta = -verticalDelta;
         _targetPitch = Math.Clamp(

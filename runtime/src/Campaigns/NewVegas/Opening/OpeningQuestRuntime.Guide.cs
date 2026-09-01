@@ -194,22 +194,24 @@ internal partial class OpeningQuestRuntime
 
     private GamebryoPackageTarget PackageTarget(OpeningGuidePackage package)
     {
-        if (package.Target is not null)
-            return new GamebryoPackageTarget(
-                $"packageTarget:{package.Target.TypeName}",
-                package.Target.FormId,
-                null);
-        if (package.Location is null)
-            return GamebryoPackageTarget.None;
         if (package.Location is not
             {
                 TypeName: "nearReference",
                 Reference: { } reference,
             })
-            return new GamebryoPackageTarget(
-                package.Location.TypeName,
-                package.Location.Reference?.FormId,
-                null);
+        {
+            if (package.Target is not null)
+                return new GamebryoPackageTarget(
+                    package.Target.TypeName,
+                    package.Target.FormId,
+                    null);
+            return package.Location is null
+                ? GamebryoPackageTarget.None
+                : new GamebryoPackageTarget(
+                    package.Location.TypeName,
+                    package.Location.Reference?.FormId,
+                    null);
+        }
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
         var placement = reference.FormId.Equals(
                 furniture.ReferenceFormId,
@@ -308,6 +310,7 @@ internal partial class OpeningQuestRuntime
             _guideMoving = false;
             _guidePackageTravel = null;
             _activeGuideLocomotion = null;
+            _guideLocomotionPlayback = null;
             PlayGuidePackageIdle(package);
             return;
         }
@@ -375,10 +378,7 @@ internal partial class OpeningQuestRuntime
             _activeGuideLocomotion.RootMotion.SpeedGameUnitsPerSecond,
             GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
         _guideMoving = true;
-        PlayGuideAnimation(
-            _activeGuideLocomotion.LogicalPath,
-            _activeGuideLocomotion.Sha256,
-            restart: true);
+        StartGuideLocomotionAnimation();
         RestoreGuideLocomotionAnimation(package);
     }
 
@@ -540,6 +540,7 @@ internal partial class OpeningQuestRuntime
         _guideMoving = false;
         _guidePackageTravel = null;
         _activeGuideLocomotion = null;
+        _guideLocomotionPlayback = null;
         if (_activeGuidePackageAnimation is null)
             throw new InvalidOperationException(
                 "Owned furniture-exit package has no selected source animation.");
@@ -632,19 +633,21 @@ internal partial class OpeningQuestRuntime
         if (!_guideMoving)
         {
             if (_guideLookAtPlayer)
-                FaceGuideToward(_loaded.Player.GlobalPosition);
+                FaceGuideToward(GuidePlayerLookTarget());
             return;
         }
         if (_activeGuideLocomotion is not { } locomotion)
             throw new InvalidOperationException(
                 "Owned opening guide is moving without locomotion data.");
-        if (_activeGuideAnimation is not { } animation || !animation.Player.IsPlaying())
-            PlayGuideAnimation(
-                locomotion.LogicalPath,
-                locomotion.Sha256,
-                restart: true);
+        var playback = _guideLocomotionPlayback ??
+            throw new InvalidOperationException(
+                "Owned opening guide is moving without locomotion playback.");
+        if (_activeGuideAnimation != playback.Animation)
+            throw new InvalidOperationException(
+                "Owned opening guide locomotion presentation differs.");
         var travel = _guidePackageTravel ?? throw new InvalidOperationException(
             "Owned opening guide is moving without source package travel state.");
+        playback.Advance(delta);
         var arrived = travel.Advance(delta);
         travel.Publish(_guideActor.Placement);
         if (travel.NextWaypoint is { } nextWaypoint)
@@ -667,6 +670,8 @@ internal partial class OpeningQuestRuntime
     private void FinishGuideTravel()
     {
         _guideMoving = false;
+        _guideLocomotionPlayback?.Stop();
+        _guideLocomotionPlayback = null;
         _activeGuideLocomotion = null;
         var travel = _guidePackageTravel;
         if (_guideDestinationReference is not null)
@@ -677,7 +682,7 @@ internal partial class OpeningQuestRuntime
             travel.Publish(_guideActor.Placement);
         }
         if (_guideLookAtPlayer)
-            FaceGuideToward(_loaded.Player.GlobalPosition);
+            FaceGuideToward(GuidePlayerLookTarget());
         if (_activeGuidePackage is { } package)
             PlayGuidePackageIdle(package);
         GD.Print(
@@ -751,8 +756,9 @@ internal partial class OpeningQuestRuntime
             return;
         var state = _restoredGuidePackageState ?? throw new InvalidOperationException(
             "Saved opening checkpoint has no guide package state.");
-        var animation = _activeGuideAnimation ?? throw new InvalidOperationException(
+        var playback = _guideLocomotionPlayback ?? throw new InvalidOperationException(
             "Saved opening guide travel has no resolved animation.");
+        var animation = playback.Animation;
         if (state.Arrived ||
             !state.PackageFormId.Equals(package.FormId, StringComparison.OrdinalIgnoreCase) ||
             !ActorModelSlice.NormalizeAnimationPath(state.AnimationLogicalPath).Equals(
@@ -762,8 +768,30 @@ internal partial class OpeningQuestRuntime
             state.AnimationPositionSeconds > animation.StopSeconds)
             throw new InvalidOperationException(
                 "Saved opening guide travel state differs from its owned package.");
-        animation.Player.Seek(state.AnimationPositionSeconds, update: true);
+        playback.PublishPhase(state.AnimationPositionSeconds);
         _restoredGuidePackageState = null;
+    }
+
+    private void StartGuideLocomotionAnimation()
+    {
+        var locomotion = _activeGuideLocomotion ??
+            throw new InvalidOperationException(
+                "Owned opening guide locomotion contract is absent.");
+        var rootMotion = locomotion.RootMotion;
+        _guideLocomotionPlayback = ActorAnimationPlayback.Start(
+            _guideActor.Actor,
+            new SourceActorAnimation(
+                locomotion.LogicalPath,
+                locomotion.Sha256,
+                rootMotion.SequenceName,
+                rootMotion.StartSeconds,
+                rootMotion.StopSeconds,
+                rootMotion.CycleType,
+                ZeroedAccumulationRootTranslation),
+            rootMotion.StartSeconds);
+        _activeGuideIdleAnimation = null;
+        SetGuideAnimationObjects(null);
+        _activeGuideAnimation = _guideLocomotionPlayback.Animation;
     }
 
     private void PlayGuideAnimation(
@@ -791,6 +819,13 @@ internal partial class OpeningQuestRuntime
                 animation.RuntimeName,
                 StringComparison.Ordinal))
         {
+            foreach (var player in _guideActor.Actor.LoadedAnimations
+                         .Select(value => value.Player).Distinct())
+            {
+                player.Stop();
+                player.CallbackModeProcess =
+                    AnimationMixer.AnimationCallbackModeProcess.Idle;
+            }
             animation.Player.Play(animation.RuntimeName);
             animation.Player.Advance(0.0);
         }
@@ -876,9 +911,22 @@ internal partial class OpeningQuestRuntime
     {
         var origin = _guideActor.Placement.GlobalPosition;
         var levelTarget = new Vector3(globalTarget.X, origin.Y, globalTarget.Z);
-        if (levelTarget.IsEqualApprox(origin))
+        if ((levelTarget - origin).LengthSquared() <= Mathf.Epsilon)
             return;
         _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
+    }
+
+    private Vector3 GuidePlayerLookTarget()
+    {
+        // The owned first-person package animates Camera1st independently of the
+        // controller root while the player is on Doc's patient bed. Gamebryo's
+        // Look Player therefore resolves to the presented player viewpoint, not
+        // the unchanged navigation root elsewhere in the room.
+        var target = _loaded.Player.Camera.GlobalPosition;
+        if (!target.IsFinite())
+            throw new InvalidOperationException(
+                "Owned player look target is not finite.");
+        return target;
     }
 
     private void RunWhenGuideReady(Action continuation, int generation)
@@ -891,7 +939,7 @@ internal partial class OpeningQuestRuntime
             return;
         }
         if (!_guideFurnitureOccupied)
-            FaceGuideToward(_loaded.Player.GlobalPosition);
+            FaceGuideToward(GuidePlayerLookTarget());
         continuation();
     }
 

@@ -10,6 +10,7 @@ using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Interactions;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -228,1120 +229,6 @@ internal partial class Fo3OpeningFlow
             $"OPENNV_FO3_CG01_TRANSITION_MOVIE_COMPLETE " +
             $"mode={(skipped ? "skipped" : "watched")} stage={state.ActiveStage} " +
             $"nextApplied=0 blocker={state.NextBoundary.Blocker}");
-    }
-
-    private void StartCg02TransitionMovie(Fo3Cg01OwnedMovie movie)
-    {
-        if (_video is not null || _ownedVideoMode != Fo3OwnedVideoMode.None)
-            throw new InvalidOperationException("Fallout 3 CG02 transition movie is already active.");
-        _ownedVideoMode = Fo3OwnedVideoMode.Cg02Transition;
-        _introLayer = new Control { Name = "Fallout3OwnedCg02Transition" };
-        _introLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        AddChild(_introLayer);
-        var black = new ColorRect { Color = Colors.Black };
-        black.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        _introLayer.AddChild(black);
-        _video = new VideoStreamPlayer
-        {
-            Name = "Fallout3OwnedCg02TransitionVideo",
-            Stream = new VideoStreamTheora { File = movie.RuntimeOutput },
-            Expand = true,
-            Loop = false,
-            Visible = false,
-        };
-        _video.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        _video.Finished += () => CompleteOwnedVideo(false);
-        _introLayer.AddChild(_video);
-        var skip = Button("SKIP  •  ESC");
-        skip.Name = "SkipFallout3OwnedCg02Transition";
-        skip.SetAnchorsPreset(Control.LayoutPreset.TopRight);
-        skip.Position = new Vector2(
-            Fo3OpeningFlowNumericContracts.SkipButtonOffsetXPixels,
-            Fo3OpeningFlowNumericContracts.SkipButtonOffsetYPixels);
-        skip.Size = new Vector2(
-            Fo3OpeningFlowNumericContracts.SkipButtonWidthPixels,
-            Fo3OpeningFlowNumericContracts.ButtonMinimumHeightPixels);
-        skip.Pressed += () => CompleteOwnedVideo(true);
-        _introLayer.AddChild(skip);
-        BeginOwnedVideoSurfaceGate();
-        _video.Play();
-    }
-
-    private void CompleteCg02TransitionMovie(bool skipped)
-    {
-        if (_ownedVideoMode != Fo3OwnedVideoMode.Cg02Transition)
-            return;
-        ClearOwnedVideo();
-        var begin = _cg02IntroBegin ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 intro runtime is absent.");
-        _cg02IntroBegin = null;
-        begin();
-        GD.Print(
-            $"OPENNV_FO3_CG02_TRANSITION_MOVIE_COMPLETE " +
-            $"mode={(skipped ? "skipped" : "watched")} " +
-            $"blocker={_profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition.DadLead.Completion.Cg02Stage0.NextBoundaryBlocker}");
-    }
-
-    private void StartCg02IntroRuntime(
-        Fo3Cg02Stage0Transition transition,
-        Fo3Cg01ToddlerPlayer player,
-        Action completed,
-        double? restoredSeconds = null)
-    {
-        var intro = transition.IntroRuntime ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 intro contract is absent.");
-        if (_cg02IntroTimerTick is not null || _cg02IntroDialogue.Count != 0)
-            throw new InvalidOperationException("Fallout 3 CG02 intro is already active.");
-        EnsureCg02IntroActors(intro, player);
-        var remaining = restoredSeconds ?? intro.InitialSeconds;
-        if (!double.IsFinite(remaining) || remaining <= 0.0 || remaining > intro.InitialSeconds)
-            throw new InvalidOperationException("Fallout 3 CG02 restored timer differs.");
-        player.SetMeta("opennv_cg02_timer", remaining);
-        _cg02IntroTimerTick = delta =>
-        {
-            remaining = Math.Max(0.0, remaining - delta);
-            player.SetMeta("opennv_cg02_timer", remaining);
-            if (remaining > 0.0)
-                return;
-            _cg02IntroTimerTick = null;
-            player.SetMeta("opennv_cg02_run_timer", 0);
-            PlayCg02IntroSayTo(intro, player, 0, completed);
-        };
-    }
-
-    private void EnsureCg02IntroActors(
-        Fo3Cg02IntroRuntime intro,
-        Fo3Cg01ToddlerPlayer player)
-    {
-        if (_cg02IntroActors.Count != 0)
-            return;
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 intro world is absent.");
-        foreach (var participant in intro.Participants
-            .GroupBy(value => value.ReferenceFormId, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First()))
-        {
-            using var stream = File.OpenRead(participant.ActorScenePath);
-            var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            if (!actual.Equals(participant.ActorSceneSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    $"Fallout 3 CG02 actor scene hash differs: {participant.ReferenceFormId}");
-            var actor = CellActorLoader.Load(
-                    participant.ActorScenePath,
-                    new HashSet<string>([coverage.Contract.CellFormId], StringComparer.OrdinalIgnoreCase),
-                    coverage.CellRoot,
-                    coverage.Contract.EntryPositionGameUnits,
-                    _runtimeConfiguration,
-                    proofEnableInitiallyDisabled: false,
-                    materializeInitiallyDisabled: true)
-                ?? throw new InvalidOperationException(
-                    $"Fallout 3 CG02 actor is disabled: {participant.ReferenceFormId}");
-            if (actor.ReferenceFormId != participant.ReferenceFormId ||
-                actor.BaseFormId != participant.BaseFormId)
-                throw new InvalidOperationException(
-                    $"Fallout 3 CG02 actor identity differs: {participant.ReferenceFormId}");
-            if (!actor.InitiallyDisabled)
-                actor.Placement.LookAt(player.GlobalPosition, Vector3.Up);
-            actor.Placement.SetMeta("opennv_looks_at_player", 1);
-            _cg02IntroActors.Add(participant.ReferenceFormId, actor);
-        }
-        var overseer = intro.DadSpeechRuntime?.OverseerSpeechRuntime;
-        if (overseer is not null && !_cg02IntroActors.ContainsKey(
-                overseer.OverseerReferenceFormId))
-        {
-            using var stream = File.OpenRead(overseer.ActorScenePath);
-            var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            if (!actual.Equals(overseer.ActorSceneSha256,
-                    StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    "Fallout 3 CG02 Overseer actor scene hash differs.");
-            var actor = CellActorLoader.Load(
-                    overseer.ActorScenePath,
-                    new HashSet<string>([coverage.Contract.CellFormId],
-                        StringComparer.OrdinalIgnoreCase),
-                    coverage.CellRoot,
-                    coverage.Contract.EntryPositionGameUnits,
-                    _runtimeConfiguration,
-                    proofEnableInitiallyDisabled: false,
-                    materializeInitiallyDisabled: true)
-                ?? throw new InvalidOperationException(
-                    "Fallout 3 CG02 Overseer actor is disabled.");
-            if (actor.ReferenceFormId != overseer.OverseerReferenceFormId ||
-                actor.BaseFormId != overseer.OverseerBaseFormId)
-                throw new InvalidOperationException(
-                    "Fallout 3 CG02 Overseer actor identity differs.");
-            actor.Placement.LookAt(player.GlobalPosition, Vector3.Up);
-            actor.Placement.SetMeta("opennv_looks_at_player", 1);
-            _cg02IntroActors.Add(overseer.OverseerReferenceFormId, actor);
-        }
-    }
-
-    private void PlayCg02IntroSayTo(
-        Fo3Cg02IntroRuntime intro,
-        Fo3Cg01ToddlerPlayer player,
-        int phase,
-        Action completed)
-    {
-        foreach (var sound in intro.Sounds.Where(value => value.Phase == phase))
-        {
-            var stream = AudioStreamWav.LoadFromFile(sound.SourcePath)
-                ?? throw new InvalidOperationException(
-                    $"Fallout 3 CG02 sound could not be decoded: {sound.FormId}");
-            var source = new AudioStreamPlayer
-            {
-                Name = $"Fallout3Cg02IntroSound{sound.Sequence}",
-                Stream = stream,
-            };
-            source.SetMeta("opennv_source_form_id", sound.FormId);
-            source.Finished += source.QueueFree;
-            AddChild(source);
-            _cg02IntroSounds.Add(source);
-            source.Play();
-        }
-        foreach (var participant in intro.Participants
-            .Where(value => value.Phase == phase &&
-                (value.EngineSex is null || value.EngineSex ==
-                    (_selectedSex ?? throw new InvalidOperationException(
-                        "Fallout 3 CG02 player sex is absent.")).EngineSex))
-            .OrderBy(value => value.SequenceInPhase))
-        {
-            var actor = _cg02IntroActors[participant.ReferenceFormId];
-            if (participant.SpeakerIdleLogicalPath is not null)
-            {
-                var animation = actor.Actor.LoadedAnimations.Single(value =>
-                    ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                        ActorModelSlice.NormalizeAnimationPath(
-                            participant.SpeakerIdleLogicalPath),
-                        StringComparison.OrdinalIgnoreCase));
-                _cg02IntroAnimations[participant.ReferenceFormId] =
-                    ActorAnimationPlayback.Start(actor.Actor, animation);
-            }
-            var voice = new AudioStreamPlayer
-            {
-                Name = $"Fallout3Cg02IntroVoice{participant.Sequence}",
-            };
-            AddChild(voice);
-            var dialogue = new GamebryoDialoguePlayback(
-                voice,
-                _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-            _cg02IntroDialogue.Add(dialogue);
-            dialogue.Start(
-                new SourceDialogueLine(
-                    participant.InfoFormId,
-                    participant.Response.Index,
-                    participant.ReferenceFormId,
-                    participant.Response.Text,
-                    new SourceDialogueAsset(
-                        participant.Response.Voice.LogicalPath,
-                        participant.Response.Voice.SourcePath,
-                        participant.Response.Voice.Sha256),
-                    new SourceDialogueAsset(
-                        participant.Response.Lip.LogicalPath,
-                        participant.Response.Lip.SourcePath,
-                        participant.Response.Lip.Sha256)),
-                new FaceGenMorphController(
-                    actor.Actor,
-                    _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-                () =>
-                {
-                    if (participant.QuestVariableEffects.Count == 0)
-                        return;
-                    foreach (var (variable, value) in participant.QuestVariableEffects)
-                        player.SetMeta(
-                            variable.Equals("runTimer", StringComparison.OrdinalIgnoreCase)
-                                ? "opennv_cg02_run_timer"
-                                : $"opennv_cg02_{variable.ToLowerInvariant()}",
-                            value);
-                    if (participant.ResultEffectCount > participant.QuestVariableEffects.Count)
-                    {
-                        actor.Placement.SetMeta("opennv_variable01", 1);
-                        actor.Placement.SetMeta("opennv_evaluate_package", 1);
-                    }
-                    if (phase < intro.Participants.Max(value => value.Phase))
-                    {
-                        Callable.From(() => PlayCg02IntroSayTo(
-                            intro, player, phase + 1, completed)).CallDeferred();
-                        return;
-                    }
-                    player.SetMeta("opennv_cg02_stage", intro.TargetStage);
-                    player.SetMeta("opennv_cg02_intro", 0);
-                    player.SetMeta("opennv_cg02_run_timer", 0);
-                    foreach (var command in intro.Stage6Commands)
-                    {
-                        if (command.Kind == "setOpenState")
-                        {
-                            SetCg01WorldReferenceOpen(
-                                command.ReferenceFormId, command.Value != 0);
-                            continue;
-                        }
-                        var placement = _cg02IntroActors.TryGetValue(
-                            command.ReferenceFormId, out var loadedActor)
-                            ? loadedActor.Placement
-                            : Cg01WorldReference(command.ReferenceFormId);
-                        if (command.Kind == "setActorVariable")
-                            placement.SetMeta(
-                                $"opennv_{command.Variable!.ToLowerInvariant()}",
-                                command.Value);
-                        else
-                            placement.LookAt(player.GlobalPosition, Vector3.Up);
-                    }
-                    completed();
-                });
-        }
-    }
-
-    private void StartCg02DadSpeechRuntime(
-        Fo3Cg02DadSpeechRuntime speech,
-        Fo3Cg01ToddlerPlayer player,
-        IReadOnlyCollection<string> appliedInfoFormIds,
-        Action<string> cueCompleted,
-        Action completed)
-    {
-        if (!_cg02IntroActors.TryGetValue(speech.DadReferenceFormId, out var dad))
-            throw new InvalidOperationException("Fallout 3 CG02 Dad actor is absent.");
-        var sex = (_selectedSex ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 player sex is absent.")).EngineSex;
-        var cues = speech.Cues
-            .Where(value => value.EngineSex is null || value.EngineSex == sex)
-            .OrderBy(value => value.Sequence)
-            .ToArray();
-        if (cues.Length != 2 || cues[0].Sequence != 0 || cues[1].Sequence != 1)
-            throw new InvalidOperationException("Fallout 3 CG02 Dad cue selection differs.");
-        var next = Array.FindIndex(cues, value => !appliedInfoFormIds.Contains(
-            value.InfoFormId, StringComparer.OrdinalIgnoreCase));
-        Play(next < 0 ? cues.Length : next);
-
-        void Play(int index)
-        {
-            if (index == cues.Length)
-            {
-                player.SetMeta("opennv_cg02_stage", speech.TargetStage);
-                foreach (var command in speech.Stage7Commands)
-                {
-                    var placement = _cg02IntroActors.TryGetValue(
-                        command.ReferenceFormId, out var actor)
-                        ? actor.Placement
-                        : Cg01WorldReference(command.ReferenceFormId);
-                    if (command.Kind == "evaluatePackage")
-                    {
-                        placement.SetMeta("opennv_evaluate_package", 1);
-                        continue;
-                    }
-                    placement.SetMeta(
-                        $"opennv_{command.Variable.ToLowerInvariant()}",
-                        command.Value);
-                }
-                completed();
-                return;
-            }
-            var cue = cues[index];
-            var animation = dad.Actor.LoadedAnimations.Single(value =>
-                ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                    ActorModelSlice.NormalizeAnimationPath(cue.SpeakerIdleLogicalPath),
-                    StringComparison.OrdinalIgnoreCase) &&
-                value.SourceSha256.Equals(
-                    cue.SpeakerIdleSourceSha256,
-                    StringComparison.OrdinalIgnoreCase));
-            _cg02IntroAnimations[speech.DadReferenceFormId] =
-                ActorAnimationPlayback.Start(dad.Actor, animation);
-            var voice = new AudioStreamPlayer
-            {
-                Name = $"Fallout3Cg02DadVoice{cue.Sequence}",
-            };
-            AddChild(voice);
-            var dialogue = new GamebryoDialoguePlayback(
-                voice,
-                _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-            _cg02IntroDialogue.Add(dialogue);
-            dialogue.Start(
-                new SourceDialogueLine(
-                    cue.InfoFormId,
-                    cue.Response.Index,
-                    speech.DadReferenceFormId,
-                    cue.Response.Text,
-                    new SourceDialogueAsset(
-                        cue.Response.Voice.LogicalPath,
-                        cue.Response.Voice.SourcePath,
-                        cue.Response.Voice.Sha256),
-                    new SourceDialogueAsset(
-                        cue.Response.Lip.LogicalPath,
-                        cue.Response.Lip.SourcePath,
-                        cue.Response.Lip.Sha256)),
-                new FaceGenMorphController(
-                    dad.Actor,
-                    _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-                () =>
-                {
-                    cueCompleted(cue.InfoFormId);
-                    if (cue.TargetStage is not null && cue.TargetStage != speech.TargetStage)
-                        throw new InvalidOperationException(
-                            "Fallout 3 CG02 Dad result stage differs.");
-                    Play(index + 1);
-                });
-        }
-    }
-
-    private void StartCg02OverseerSpeechRuntime(
-        Fo3Cg02OverseerSpeechRuntime speech,
-        Fo3Cg01ToddlerPlayer player,
-        IReadOnlyCollection<string> appliedInfoFormIds,
-        Action<string, int, int?> cueCompleted,
-        Action completed)
-    {
-        if (!_cg02IntroActors.TryGetValue(
-                speech.OverseerReferenceFormId, out var overseer))
-            throw new InvalidOperationException("Fallout 3 CG02 Overseer actor is absent.");
-        var sex = (_selectedSex ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 player sex is absent.")).EngineSex;
-        var cues = speech.Cues
-            .Where(value => value.EngineSex is null || value.EngineSex == sex)
-            .OrderBy(value => value.Sequence).ToArray();
-        if (cues.Length != 4 ||
-            !cues.Select(value => value.Sequence).SequenceEqual([0, 1, 2, 3]))
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Overseer cue selection differs.");
-        var next = Array.FindIndex(cues, value => !appliedInfoFormIds.Contains(
-            value.InfoFormId, StringComparer.OrdinalIgnoreCase));
-        Play(next < 0 ? cues.Length : next);
-
-        void Play(int index)
-        {
-            if (index == cues.Length)
-            {
-                completed();
-                return;
-            }
-            var cue = cues[index];
-            if (cue.SpeakerIdleLogicalPath is not null)
-            {
-                var animation = overseer.Actor.LoadedAnimations.Single(value =>
-                    ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                        ActorModelSlice.NormalizeAnimationPath(
-                            cue.SpeakerIdleLogicalPath),
-                        StringComparison.OrdinalIgnoreCase) &&
-                    value.SourceSha256.Equals(
-                        cue.SpeakerIdleSourceSha256,
-                        StringComparison.OrdinalIgnoreCase));
-                _cg02IntroAnimations[speech.OverseerReferenceFormId] =
-                    ActorAnimationPlayback.Start(overseer.Actor, animation);
-            }
-            var voice = new AudioStreamPlayer
-            {
-                Name = $"Fallout3Cg02OverseerVoice{cue.Sequence}",
-            };
-            AddChild(voice);
-            var dialogue = new GamebryoDialoguePlayback(
-                voice,
-                _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-            _cg02IntroDialogue.Add(dialogue);
-            dialogue.Start(
-                new SourceDialogueLine(
-                    cue.InfoFormId,
-                    cue.Response.Index,
-                    speech.OverseerReferenceFormId,
-                    cue.Response.Text,
-                    new SourceDialogueAsset(
-                        cue.Response.Voice.LogicalPath,
-                        cue.Response.Voice.SourcePath,
-                        cue.Response.Voice.Sha256),
-                    new SourceDialogueAsset(
-                        cue.Response.Lip.LogicalPath,
-                        cue.Response.Lip.SourcePath,
-                        cue.Response.Lip.Sha256)),
-                new FaceGenMorphController(
-                    overseer.Actor,
-                    _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-                () =>
-                {
-                    var appliedCommands = 0;
-                    int? activeStage = null;
-                    foreach (var command in cue.Effects)
-                    {
-                        Apply(command);
-                        appliedCommands++;
-                        if (command.Kind != "setStage")
-                            continue;
-                        activeStage = (int)command.Value;
-                        player.SetMeta("opennv_cg02_stage", activeStage.Value);
-                        foreach (var nested in speech.StageResults[activeStage.Value])
-                        {
-                            Apply(nested);
-                            appliedCommands++;
-                        }
-                    }
-                    cueCompleted(cue.InfoFormId, appliedCommands, activeStage);
-                    Play(index + 1);
-                });
-        }
-
-        void Apply(Fo3Cg02OverseerCommand command)
-        {
-            Node3D Actor(string formId) => _cg02IntroActors.TryGetValue(
-                    formId, out var actor)
-                ? actor.Placement
-                : Cg01WorldReference(formId);
-            switch (command.Kind)
-            {
-                case "setStage":
-                    break;
-                case "setActorVariable":
-                    Actor(command.ReferenceFormId).SetMeta(
-                        $"opennv_{command.Variable.ToLowerInvariant()}", command.Value);
-                    break;
-                case "evaluatePackage":
-                    Actor(command.ReferenceFormId).SetMeta(
-                        "opennv_evaluate_package", 1);
-                    break;
-                case "lookAt":
-                    var target = command.TargetReferenceFormId ==
-                        speech.PlayerReferenceFormId
-                        ? player.GlobalPosition
-                        : Actor(command.TargetReferenceFormId).GlobalPosition;
-                    Actor(command.ReferenceFormId).LookAt(target, Vector3.Up);
-                    Actor(command.ReferenceFormId).SetMeta("opennv_looks_at_player", 1);
-                    break;
-                case "stopLook":
-                    Actor(command.ReferenceFormId).SetMeta("opennv_looks_at_player", 0);
-                    break;
-                case "addItem":
-                    player.SetMeta($"opennv_item_{command.ItemFormId}", command.Count);
-                    break;
-                case "resetPipboyManager":
-                    player.SetMeta("opennv_reset_pipboy_manager", 1);
-                    break;
-                case "addAchievement":
-                    player.SetMeta("opennv_achievement", command.Value);
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"Fallout 3 CG02 Overseer command is unsupported: {command.Kind}");
-            }
-        }
-    }
-
-    private void StartCg02DadPartyRuntime(
-        Fo3Cg02DadPartyRuntime party,
-        Fo3Cg01ToddlerPlayer player,
-        IReadOnlyCollection<string> appliedInfoFormIds,
-        Action<string, int> completed)
-    {
-        if (!party.ArrivedAtStart ||
-            party.InitialDistanceGameUnits > party.PackageRadiusGameUnits)
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Dad party package requires unimplemented travel.");
-        if (appliedInfoFormIds.Contains(
-                party.Cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
-            return;
-        var dad = _cg02IntroActors[party.DadReferenceFormId];
-        dad.Placement.SetMeta("opennv_active_package_form_id", party.PackageFormId);
-        var animation = dad.Actor.LoadedAnimations.Single(value =>
-            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                ActorModelSlice.NormalizeAnimationPath(
-                    party.Cue.SpeakerIdleLogicalPath),
-                StringComparison.OrdinalIgnoreCase) &&
-            value.SourceSha256.Equals(
-                party.Cue.SpeakerIdleSourceSha256,
-                StringComparison.OrdinalIgnoreCase));
-        _cg02IntroAnimations[party.DadReferenceFormId] =
-            ActorAnimationPlayback.Start(dad.Actor, animation);
-        var voice = new AudioStreamPlayer { Name = "Fallout3Cg02DadPartyVoice" };
-        AddChild(voice);
-        var dialogue = new GamebryoDialoguePlayback(
-            voice, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-        _cg02IntroDialogue.Add(dialogue);
-        dialogue.Start(
-            new SourceDialogueLine(
-                party.Cue.InfoFormId, party.Cue.Response.Index,
-                party.DadReferenceFormId, party.Cue.Response.Text,
-                new SourceDialogueAsset(
-                    party.Cue.Response.Voice.LogicalPath,
-                    party.Cue.Response.Voice.SourcePath,
-                    party.Cue.Response.Voice.Sha256),
-                new SourceDialogueAsset(
-                    party.Cue.Response.Lip.LogicalPath,
-                    party.Cue.Response.Lip.SourcePath,
-                    party.Cue.Response.Lip.Sha256)),
-            new FaceGenMorphController(
-                dad.Actor, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-            () =>
-            {
-                foreach (var command in party.StageCommands)
-                {
-                    switch (command.Kind)
-                    {
-                        case "enablePlayerControls":
-                            player.SetMeta("opennv_cg02_enabled_controls",
-                                JsonSerializer.Serialize(command.Arguments));
-                            break;
-                        case "autosave":
-                            player.SetMeta("opennv_autosave", 1);
-                            break;
-                        case "setObjectiveDisplayed":
-                            player.SetMeta("opennv_displayed_objective", command.Value);
-                            break;
-                        case "enable":
-                            Cg01WorldReference(command.ReferenceFormId)
-                                .SetMeta("opennv_enabled", 1);
-                            break;
-                        case "evaluatePackage":
-                            (_cg02IntroActors.TryGetValue(command.ReferenceFormId,
-                                out var actor) ? actor.Placement :
-                                Cg01WorldReference(command.ReferenceFormId))
-                                .SetMeta("opennv_evaluate_package", 1);
-                            break;
-                        case "setStage":
-                            player.SetMeta("opennv_tutorial_stage", command.Value);
-                            break;
-                        case "forceRadioStationUpdate":
-                            player.SetMeta("opennv_force_radio_station_update", 1);
-                            break;
-                        default:
-                            throw new InvalidOperationException(
-                                $"Fallout 3 CG02 Dad party command is unsupported: {command.Kind}");
-                    }
-                }
-                player.SetMeta("opennv_cg02_stage", party.TargetStage);
-                completed(party.Cue.InfoFormId, party.StageCommands.Count + 1);
-            });
-    }
-
-    private void StartCg02BirthdayInteraction(
-        Fo3Cg02BirthdayParticipant participant,
-        Fo3Cg01ToddlerPlayer player,
-        Action<string, int?> completed)
-    {
-        var actor = EnsureCg02BirthdayActor(participant);
-        var engineSex = (_selectedSex ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 birthday player sex is absent.")).EngineSex;
-        var greeting = participant.GreetingInfoFormIds
-            .Select(formId => participant.Nodes[formId])
-            .Single(node => (node.EngineSex is null || node.EngineSex == engineSex) &&
-                Cg02BirthdayConditionsMatch(node, actor, player));
-        var subtitle = AddVaultDialogueOverlay(
-            $"FO3_CG02_BIRTHDAY_{participant.ReferenceFormId}");
-        var menu = subtitle.GetParent() as OwnedGamebryoDialogueMenuRuntime ??
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday DialogueMenu owner is absent.");
-        player.SetMenuInputHandler(_ => false);
-        PlayNode(greeting);
-
-        void PlayNode(Fo3Cg02BirthdayDialogueNode node)
-        {
-            var responses = node.ResponseIndexes
-                .Select(index => participant.Lines[$"{node.InfoFormId}:{index}"])
-                .ToArray();
-            GamebryoDialoguePlayback.ValidateOrderedLines(
-                responses.Select(response => new SourceDialogueLine(
-                    node.InfoFormId, response.Index, participant.BaseFormId,
-                    response.Text,
-                    new SourceDialogueAsset(response.Voice.LogicalPath,
-                        response.Voice.SourcePath, response.Voice.Sha256),
-                    new SourceDialogueAsset(response.Lip.LogicalPath,
-                        response.Lip.SourcePath, response.Lip.Sha256))).ToArray());
-            PlayLine(0);
-
-            void PlayLine(int index)
-            {
-                if (index == responses.Length)
-                {
-                    var targetStage = node.Effects
-                        .Where(effect => effect.Kind == "setStage")
-                        .Select(effect => (int?)effect.Stage)
-                        .SingleOrDefault();
-                    foreach (var effect in node.Effects)
-                    {
-                        if (effect.Kind == "setTimer")
-                            player.SetMeta("opennv_cg02_timer", effect.Seconds);
-                        else if (effect.Kind == "setQuestVariable")
-                        {
-                            player.SetMeta(
-                                $"opennv_cg02_{effect.Variable.ToLowerInvariant()}",
-                                effect.Value);
-                            player.SetMeta(
-                                $"opennv_cg02_quest_variable_{effect.Variable}",
-                                effect.Value);
-                        }
-                        else if (effect.Kind == "setActorVariable")
-                            _cg02IntroActors[effect.ReferenceFormId].Placement.SetMeta(
-                                $"opennv_{effect.Variable.ToLowerInvariant()}",
-                                effect.Value);
-                        else if (effect.Kind == "removeItem")
-                        {
-                            var key = $"opennv_cg02_item_{effect.FormId}";
-                            var remaining = player.GetMeta(key, 0).AsInt32() - effect.Count;
-                            if (remaining < 0)
-                                throw new InvalidOperationException(
-                                    "Fallout 3 CG02 removed item count differs.");
-                            player.SetMeta(key, remaining);
-                        }
-                        else if (effect.Kind == "startCombat")
-                        {
-                            actor.Placement.SetMeta("opennv_combat_target", effect.Target);
-                            (_cg02IntroActors.TryGetValue(effect.ReferenceFormId,
-                                out var responder) ? responder.Placement :
-                                Cg01WorldReference(effect.ReferenceFormId))
-                                .SetMeta("opennv_evaluate_package", 1);
-                            player.SetMeta("opennv_cg02_combat_runtime_blocker",
-                                "fo3-cg02-butch-combat-runtime-not-implemented");
-                        }
-                    }
-                    completed(node.InfoFormId, targetStage);
-                    if (node.LinkedTopicFormIds.Count == 0)
-                    {
-                        menu.HideMenu();
-                        player.SetMenuInputHandler(null);
-                        menu.QueueFree();
-                        _vaultPreviewOverlay = null;
-                        return;
-                    }
-                    menu.ShowTopics(
-                        participant.DisplayName,
-                        node.LinkedTopicFormIds.SelectMany(topicFormId =>
-                        {
-                            var topic = participant.Topics[topicFormId];
-                            var candidates = participant.Nodes.Values.Where(value =>
-                                value.TopicFormId.Equals(topicFormId,
-                                    StringComparison.OrdinalIgnoreCase) &&
-                                (value.EngineSex is null || value.EngineSex == engineSex) &&
-                                Cg02BirthdayConditionsMatch(value, actor, player)).ToArray();
-                            return candidates.Select(next =>
-                                (topic.FormId, topic.Text, (Action)(() => PlayNode(next))));
-                        }).ToArray());
-                    return;
-                }
-                var response = responses[index];
-                menu.ShowLine(participant.DisplayName, response.Text, () => { });
-                var voice = new AudioStreamPlayer
-                {
-                    Name = $"Fallout3Cg02BirthdayVoice{node.InfoFormId}_{response.Index}",
-                };
-                AddChild(voice);
-                var dialogue = new GamebryoDialoguePlayback(
-                    voice, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-                _cg02IntroDialogue.Add(dialogue);
-                dialogue.Start(
-                    new SourceDialogueLine(
-                        node.InfoFormId, response.Index, participant.BaseFormId,
-                        response.Text,
-                        new SourceDialogueAsset(response.Voice.LogicalPath,
-                            response.Voice.SourcePath, response.Voice.Sha256),
-                        new SourceDialogueAsset(response.Lip.LogicalPath,
-                            response.Lip.SourcePath, response.Lip.Sha256)),
-                    new FaceGenMorphController(actor.Actor,
-                        _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-                    () => PlayLine(index + 1));
-            }
-        }
-    }
-
-    private CellActorLoader.PlacedActor EnsureCg02BirthdayActor(
-        Fo3Cg02BirthdayParticipant participant)
-    {
-        if (_cg02IntroActors.TryGetValue(participant.ReferenceFormId, out var existing))
-            return existing;
-        if (_vaultBirthCoverage?.Cg01DadActor is { } dad &&
-            dad.ReferenceFormId.Equals(
-                participant.ReferenceFormId, StringComparison.OrdinalIgnoreCase) &&
-            dad.BaseFormId.Equals(
-                participant.BaseFormId, StringComparison.OrdinalIgnoreCase))
-            return dad;
-        if (participant.ActorScenePath is null || participant.ActorSceneSha256 is null)
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday actor scene is absent.");
-        using var stream = File.OpenRead(participant.ActorScenePath);
-        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!actual.Equals(participant.ActorSceneSha256,
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday actor scene hash differs.");
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 birthday world is absent.");
-        var actor = CellActorLoader.Load(
-                participant.ActorScenePath,
-                new HashSet<string>([coverage.Contract.CellFormId],
-                    StringComparer.OrdinalIgnoreCase),
-                coverage.CellRoot,
-                coverage.Contract.EntryPositionGameUnits,
-                _runtimeConfiguration,
-                proofEnableInitiallyDisabled: false,
-                materializeInitiallyDisabled: true)
-            ?? throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday actor is absent.");
-        if (actor.ReferenceFormId != participant.ReferenceFormId ||
-            actor.BaseFormId != participant.BaseFormId)
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 birthday actor identity differs.");
-        _cg02IntroActors.Add(actor.ReferenceFormId, actor);
-        return actor;
-    }
-
-    private static bool Cg02BirthdayConditionsMatch(
-        Fo3Cg02BirthdayDialogueNode node,
-        CellActorLoader.PlacedActor actor,
-        Fo3Cg01ToddlerPlayer player)
-    {
-        foreach (var condition in node.Conditions)
-        {
-            if (condition.OperatorFlags !=
-                Fo3OpeningFlowNumericContracts.DialogueConditionEqual)
-                throw new InvalidOperationException(
-                    "Fallout 3 CG02 dialogue condition comparison is unsupported.");
-            double actual = condition.Function switch
-            {
-                Fo3OpeningFlowNumericContracts.DialogueConditionGetItemCount =>
-                    player.GetMeta($"opennv_cg02_item_{condition.Parameter1:x8}", 0)
-                        .AsInt32(),
-                Fo3OpeningFlowNumericContracts.DialogueConditionGetQuestVariable =>
-                    player.GetMeta(
-                        $"opennv_cg02_quest_variable_{condition.Parameter2}", 0)
-                        .AsInt32(),
-                Fo3OpeningFlowNumericContracts.DialogueConditionGetIsCurrentPackage =>
-                    actor.Placement.GetMeta("opennv_active_package_form_id", "")
-                        .AsString().Equals($"{condition.Parameter1:x8}",
-                            StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.0,
-                _ => throw new InvalidOperationException(
-                    $"Fallout 3 CG02 dialogue condition is unsupported: " +
-                    condition.Function),
-            };
-            if (actual != condition.ComparisonValue)
-                return false;
-        }
-        return true;
-    }
-
-    private CellActorLoader.PlacedActor EnsureCg02CakeAndy(
-        Fo3Cg02CakeRuntime cake)
-    {
-        if (_cg02IntroActors.TryGetValue(cake.AndyReferenceFormId, out var existing))
-            return existing;
-        using var stream = File.OpenRead(cake.AndyActorScenePath);
-        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!actual.Equals(cake.AndyActorSceneSha256,
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Andy actor scene hash differs.");
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 cake world is absent.");
-        var actor = CellActorLoader.Load(
-                cake.AndyActorScenePath,
-                new HashSet<string>([coverage.Contract.CellFormId],
-                    StringComparer.OrdinalIgnoreCase),
-                coverage.CellRoot,
-                coverage.Contract.EntryPositionGameUnits,
-                _runtimeConfiguration,
-                proofEnableInitiallyDisabled: false,
-                materializeInitiallyDisabled: true)
-            ?? throw new InvalidOperationException("Fallout 3 CG02 Andy is absent.");
-        if (actor.ReferenceFormId != cake.AndyReferenceFormId ||
-            actor.BaseFormId != cake.AndyBaseFormId)
-            throw new InvalidOperationException(
-                "Fallout 3 CG02 Andy actor identity differs.");
-        _cg02IntroActors.Add(actor.ReferenceFormId, actor);
-        return actor;
-    }
-
-    private void BeginCg01DadDialogue(
-        Fo3Cg01Stage0State stage5,
-        Fo3Cg01RuntimeContext context,
-        bool resumed)
-    {
-        _vaultPreviewOverlay?.QueueFree();
-        var subtitle = AddVaultDialogueOverlay("FO3_CG01_STAGE5_DAD_DIALOGUE");
-        subtitle.SetMeta("opennv_speaker_reference_form_id", stage5.Dad.Reference.FormId);
-        var cues = _profile.Cg01Stage10Transition.DialogueFor(context.Sex.EngineSex);
-        PlayCg01DadCue(stage5, context, cues, 0, subtitle);
-        GD.Print(
-            $"OPENNV_FO3_CG01_DAD_DIALOGUE_STARTED stage={stage5.ActiveStage} " +
-            $"sex={context.Sex.EngineSex} cues={cues.Count} resumed={(resumed ? 1 : 0)} " +
-            "movieReplayed=0");
-    }
-
-    private void PlayCg01DadCue(
-        Fo3Cg01Stage0State stage5,
-        Fo3Cg01RuntimeContext context,
-        IReadOnlyList<Fo3Cg01DadSpeechCue> cues,
-        int index,
-        Button subtitle)
-    {
-        if (index < 0 || index >= cues.Count)
-            throw new InvalidOperationException("Fallout 3 CG01 Dad dialogue cursor differs.");
-        var cue = cues[index];
-        var speaker = subtitle.GetMeta("opennv_speaker_reference_form_id").AsString();
-        if (!speaker.Equals(stage5.Dad.Reference.FormId, StringComparison.OrdinalIgnoreCase) ||
-            _cg01DadDialogueGeometry is null ||
-            !_cg01DadDialogueGeometry.FrustumIntersection)
-            throw new InvalidOperationException(
-                "Fallout 3 CG01 subtitle or camera subject differs from Dad.");
-        var publishedSpeakerIdle = PublishCg01DadSpeakerIdle(cue);
-        _vaultDialogueVoice?.Stop();
-        _vaultDialogueVoice?.QueueFree();
-        ClearCg01DadLip();
-        var stream = AudioStreamOggVorbis.LoadFromFile(cue.Response.Voice.SourcePath)
-            ?? throw new InvalidOperationException(
-                $"Fallout 3 CG01 Dad voice could not be decoded: " +
-                cue.Response.Voice.LogicalPath);
-        var durationSeconds = stream.GetLength();
-        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0.0)
-            throw new InvalidOperationException("Fallout 3 CG01 Dad voice has no duration.");
-        _activeCg01DadLip = FaceGenLipAnimation.Load(
-            cue.Response.Lip.SourcePath,
-            RuntimeConfiguration.Load().ActorCompiler.FaceGenAnimation.Lip);
-        _activeCg01DadInfoFormId = cue.InfoFormId;
-        _cg01DadLipSampleLogged = false;
-        _vaultDialogueVoice = new AudioStreamPlayer
-        {
-            Name = $"Fallout3Cg01DadVoice{cue.Sequence}",
-            Stream = stream,
-        };
-        _vaultDialogueVoice.SetMeta("opennv_info_form_id", cue.InfoFormId);
-        _vaultDialogueVoice.SetMeta("opennv_speaker_reference_form_id", speaker);
-        _vaultDialogueVoice.SetMeta(
-            "opennv_speaker_idle_form_id",
-            cue.SpeakerIdle.FormId);
-        _vaultDialogueVoice.Finished += () =>
-        {
-            ClearCg01DadLip();
-            _vaultDialogueVoice?.QueueFree();
-            _vaultDialogueVoice = null;
-            if (index + 1 < cues.Count)
-            {
-                var timer = GetTree().CreateTimer(cue.DadTimerAfterSeconds);
-                timer.Timeout += () => PlayCg01DadCue(
-                    stage5,
-                    context,
-                    cues,
-                    index + 1,
-                    subtitle);
-                GD.Print(
-                    $"OPENNV_FO3_CG01_DAD_TIMER_SET info={cue.InfoFormId} " +
-                    $"seconds={cue.DadTimerAfterSeconds:F1}");
-                return;
-            }
-            CompleteCg01DadDialogue(stage5, context, cues, subtitle);
-        };
-        AddChild(_vaultDialogueVoice);
-        ShowVaultDialogue(
-            subtitle,
-            _vaultBirthCoverage?.Cg01DadActor.Actor.Name ??
-                throw new InvalidOperationException("Fallout 3 CG01 Dad actor is unavailable."),
-            cue.Response.Text);
-        _vaultDialogueVoice.Play();
-        if (_vaultDialogueVoice.GetMeta("opennv_info_form_id").AsString() !=
-                _activeCg01DadInfoFormId ||
-            _vaultDialogueVoice.GetMeta("opennv_speaker_reference_form_id").AsString() !=
-                speaker ||
-            _vaultDialogueVoice.GetMeta("opennv_speaker_idle_form_id").AsString() !=
-                cue.SpeakerIdle.FormId ||
-            publishedSpeakerIdle.Player.CurrentAnimation.ToString() !=
-                publishedSpeakerIdle.RuntimeName)
-            throw new InvalidOperationException(
-                "Fallout 3 CG01 audio, LIP, and speaker idle do not own the same INFO.");
-        GD.Print(
-            $"OPENNV_FO3_CG01_DAD_CUE_STARTED sequence={cue.Sequence} " +
-            $"info={cue.InfoFormId} duration={durationSeconds:F3} " +
-            $"voice={cue.Response.Voice.LogicalPath} lip={cue.Response.Lip.LogicalPath}");
-        GD.Print(
-            $"OPENNV_FO3_CG01_DAD_LIP_LOADED info={cue.InfoFormId} " +
-            $"frames={_activeCg01DadLip.FrameCount} " +
-            $"startFrame={_activeCg01DadLip.StartFrame} " +
-            $"metadata=0x{_activeCg01DadLip.MetadataWord:x8} " +
-            $"actor={_vaultBirthCoverage?.Cg01DadActor.ReferenceFormId}");
-        if (_cg01ProofCapturePath is not null && cue.Sequence == 1)
-            CaptureCg01DadCue(cue, publishedSpeakerIdle, subtitle);
-    }
-
-    private async void CaptureCg01DadCue(
-        Fo3Cg01DadSpeechCue cue,
-        ActorModelSlice.LoadedAnimation publishedSpeakerIdle,
-        Button subtitle)
-    {
-        try
-        {
-            for (var frame = 0;
-                 frame < Fo3OpeningFlowNumericContracts.Cg01CaptureWarmupFrames;
-                 frame++)
-                await ToSignal(
-                    RenderingServer.Singleton,
-                    RenderingServer.SignalName.FramePostDraw);
-            var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-                "Fallout 3 CG01 capture has no owned world.");
-            if (_cg01ProofCaptureCompleted ||
-                _background.Visible ||
-                _panel.Visible ||
-                _introLayer is not null ||
-                _video is not null ||
-                !coverage.Cg01DadActor.Placement.Visible ||
-                coverage.DoctorActor.Placement.Visible ||
-                coverage.DadActor.Placement.Visible ||
-                _cg01DadDialogueGeometry is null ||
-                !_cg01DadDialogueGeometry.FrustumIntersection ||
-                _vaultDialogueVoice is null ||
-                !_vaultDialogueVoice.Playing ||
-                _activeCg01DadLip is null ||
-                _activeCg01DadInfoFormId != cue.InfoFormId ||
-                !subtitle.Visible ||
-                publishedSpeakerIdle.Player.CurrentAnimation.ToString() !=
-                    publishedSpeakerIdle.RuntimeName)
-                throw new InvalidOperationException(
-                    "Fallout 3 CG01 capture presentation is blank, stale, or unsynchronized.");
-            var path = _cg01ProofCapturePath ?? throw new InvalidOperationException(
-                "Fallout 3 CG01 capture path is absent.");
-            var image = GetViewport().GetTexture().GetImage();
-            image.Convert(Image.Format.Rgba8);
-            var data = image.GetData();
-            var pixels = image.GetWidth() * image.GetHeight();
-            if (pixels <= 0 ||
-                data.Length != pixels * Fo3OpeningFlowNumericContracts.CaptureBytesPerPixel)
-                throw new InvalidOperationException(
-                    "Fallout 3 CG01 capture viewport is empty.");
-            var minimum = byte.MaxValue;
-            var maximum = byte.MinValue;
-            for (var offset = 0;
-                 offset < data.Length;
-                 offset += Fo3OpeningFlowNumericContracts.CaptureBytesPerPixel)
-            {
-                for (var channel = 0;
-                     channel < Fo3OpeningFlowNumericContracts.CaptureRgbChannels;
-                     channel++)
-                {
-                    minimum = Math.Min(minimum, data[offset + channel]);
-                    maximum = Math.Max(maximum, data[offset + channel]);
-                }
-            }
-            var rgbSpan = maximum - minimum;
-            if (rgbSpan <= 0)
-                throw new InvalidOperationException(
-                    "Fallout 3 CG01 capture contains one blank color.");
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var saveError = image.SavePng(path);
-            if (saveError != Error.Ok)
-                throw new InvalidOperationException(
-                    $"Fallout 3 CG01 capture could not be saved: {saveError}.");
-            using var stream = File.OpenRead(path);
-            _cg01ProofCaptureSha256 = Convert.ToHexString(
-                SHA256.HashData(stream)).ToLowerInvariant();
-            _cg01ProofCaptureInfoFormId = cue.InfoFormId;
-            _cg01ProofCaptureSpeakerIdleFormId = cue.SpeakerIdle.FormId;
-            _cg01ProofCaptureWidth = image.GetWidth();
-            _cg01ProofCaptureHeight = image.GetHeight();
-            _cg01ProofCaptureRgbSpan = rgbSpan;
-            _cg01ProofCaptureCompleted = true;
-            GD.Print(
-                $"OPENNV_FO3_CG01_COHERENT_CAPTURE_READY path={path} " +
-                $"sha256={_cg01ProofCaptureSha256} info={cue.InfoFormId} " +
-                $"idle={cue.SpeakerIdle.FormId} size={image.GetWidth()}x{image.GetHeight()} " +
-                $"rgbSpan={rgbSpan} shellVisible=0 movieVisible=0 frustum=1 " +
-                "audioLipIdleSynchronized=1");
-        }
-        catch (Exception exception)
-        {
-            GD.PushError($"OPENNV_FO3_CG01_COHERENT_CAPTURE_FAIL {exception.Message}");
-            GetTree().Quit(Fo3OpeningFlowNumericContracts.ProofFailureExitCode);
-        }
-    }
-
-    private ActorModelSlice.LoadedAnimation PublishCg01DadSpeakerIdle(
-        Fo3Cg01DadSpeechCue cue) =>
-        PublishCg01DadSpeakerIdle(
-            cue.Sequence,
-            cue.InfoFormId,
-            cue.SpeakerIdle,
-            stage12Response: false);
-
-    private ActorModelSlice.LoadedAnimation PublishCg01DadSpeakerIdle(
-        Fo3Cg01Stage12DadResponseCue cue) =>
-        PublishCg01DadSpeakerIdle(
-            cue.Sequence,
-            cue.InfoFormId,
-            cue.SpeakerIdle,
-            stage12Response: true);
-
-    private ActorModelSlice.LoadedAnimation PublishCg01DadSpeakerIdle(
-        int sequence,
-        string infoFormId,
-        Fo3Cg01DadSpeakerIdle speakerIdle,
-        bool stage12Response)
-    {
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 CG01 Dad speaker idle has no owned actor scene.");
-        var expectedAnimations = stage12Response
-            ? coverage.Cg01DadAppearance.Stage12DialogueAnimations
-            : coverage.Cg01DadAppearance.DialogueAnimations;
-        var expected = expectedAnimations.Single(value =>
-            value.Sequence == sequence &&
-            value.InfoFormId.Equals(infoFormId, StringComparison.OrdinalIgnoreCase));
-        if (!Fo3Cg01Stage10Transition.SpeakerIdleEquals(
-                expected.SpeakerIdle,
-                speakerIdle))
-            throw new InvalidOperationException(
-                "Fallout 3 CG01 Dad INFO speaker-idle source differs from the actor derivative.");
-        var loaded = coverage.Cg01DadActor.Actor.LoadedAnimations.Single(value =>
-            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                ActorModelSlice.NormalizeAnimationPath(speakerIdle.ModelPath),
-                StringComparison.OrdinalIgnoreCase) &&
-            value.SourceSha256.Equals(
-                speakerIdle.SourceSha256,
-                StringComparison.OrdinalIgnoreCase));
-        foreach (var player in coverage.Cg01DadActor.Actor.LoadedAnimations
-                     .Select(value => value.Player).Distinct())
-            player.Stop();
-        loaded.Player.Play(loaded.RuntimeName);
-        loaded.Player.Advance(0.0);
-        if (loaded.Player.CurrentAnimation.ToString() != loaded.RuntimeName ||
-            _cg01DadPublishedSpeakerIdleInfoFormIds.Contains(
-                infoFormId,
-                StringComparer.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "Fallout 3 CG01 Dad speaker idle was not published exactly once.");
-        _cg01DadPublishedSpeakerIdleInfoFormIds.Add(infoFormId);
-        _cg01DadDialogueGeometry = CellReferenceLedger.MeasureGeometry(
-            coverage.Cg01DadActor.Actor.Root,
-            coverage.Camera,
-            coverage.Cg01DadGrounding.GroundedBounds.GetCenter());
-        if (!_cg01DadDialogueGeometry.RenderLayerVisible ||
-            !_cg01DadDialogueGeometry.AabbValid ||
-            !_cg01DadDialogueGeometry.FrustumIntersection ||
-            _cg01DadDialogueGeometry.Surfaces != coverage.Cg01DadAppearance.Actor.Surfaces)
-            throw new InvalidOperationException(
-                "Fallout 3 CG01 Dad speaker-idle pose is outside the active camera.");
-        GD.Print(
-            $"OPENNV_FO3_CG01_DAD_SPEAKER_IDLE_PUBLISHED sequence={sequence} " +
-            $"info={infoFormId} idle={speakerIdle.FormId} " +
-            $"path={speakerIdle.ModelPath} sha256={speakerIdle.SourceSha256} " +
-            $"stage12Response={(stage12Response ? 1 : 0)} " +
-            $"runtime={loaded.RuntimeName} channels={loaded.Channels} " +
-            $"frustum=1 surfaces={_cg01DadDialogueGeometry.Surfaces}");
-        return loaded;
-    }
-
-    private void UpdateCg01DadLip()
-    {
-        if (_vaultDialogueVoice is null ||
-            !_vaultDialogueVoice.Playing ||
-            _activeCg01DadLip is null ||
-            _cg01DadFace is null)
-            return;
-        var seconds = _vaultDialogueVoice.GetPlaybackPosition();
-        if (_vaultDialogueVoice.GetMeta("opennv_info_form_id").AsString() !=
-                _activeCg01DadInfoFormId)
-            throw new InvalidOperationException(
-                "Fallout 3 CG01 audio and LIP clock INFO identities diverged.");
-        var dominant = _cg01DadFace.Apply(_activeCg01DadLip, seconds);
-        if (_cg01DadLipSampleLogged || dominant.Value == 0.0f)
-            return;
-        _cg01DadLipSampleLogged = true;
-        _cg01DadLipCueSamples++;
-        GD.Print(
-            $"OPENNV_FO3_CG01_DAD_LIP_SAMPLE info={_activeCg01DadInfoFormId} " +
-            $"seconds={seconds:F3} target={dominant.Target} value={dominant.Value:F6}");
-    }
-
-    private void ClearCg01DadLip()
-    {
-        _cg01DadFace?.Clear();
-        _activeCg01DadLip = null;
-        _activeCg01DadInfoFormId = null;
-        _cg01DadLipSampleLogged = false;
     }
 
     private void CompleteCg01DadDialogue(
@@ -2229,7 +1116,7 @@ internal partial class Fo3OpeningFlow
         }
         var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
             "Fallout 3 CG01 stage-20 restore has no toddler world.");
-        if (!world.Player.MovementEnabled ||
+        if (world.Player.MovementEnabled != state.PlayerMovementEnabled ||
             _vaultDialogueVoice is not null ||
             _activeCg01DadLip is not null)
             throw new InvalidOperationException(
@@ -2273,6 +1160,57 @@ internal partial class Fo3OpeningFlow
             var reactorGift = postIntercom.ReactorGiftRuntime ??
                 throw new InvalidOperationException(
                     "Fallout 3 CG02 reactor-gift runtime is absent.");
+            var picture = reactorGift.PictureRuntime;
+            var pictureCompletion = picture.CompletionRuntime;
+            var cg03 = pictureCompletion.NextQuestRuntime ??
+                throw new InvalidOperationException(
+                    "Fallout 3 CG03 stage-5 runtime is absent.");
+            var jonasGift = reactorGift.Participants.Single(value =>
+                value.ReferenceFormId.Equals(postIntercom.JonasReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase));
+            var dadGift = reactorGift.Participants.Single(value =>
+                value.ReferenceFormId.Equals(postIntercom.DadReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase));
+            if (current.ActiveQuestFormId.Equals(
+                    pictureCompletion.NextQuestFormId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                if (current.ActiveStage != pictureCompletion.NextQuestTargetStage &&
+                    current.ActiveStage != cg03.SpeechStage ||
+                    !current.Cg02AdultVaultSuitEquipped)
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG03 completion handoff state differs.");
+                _vaultBirthCoverage!.Cg01DadActor.Placement.Visible = false;
+                _vaultBirthCoverage.Cg01DadActor.Placement.ProcessMode =
+                    ProcessModeEnum.Disabled;
+                var restoredBeatrice = Cg01WorldReference(
+                    pictureCompletion.BeatriceReferenceFormId);
+                restoredBeatrice.Visible = false;
+                restoredBeatrice.ProcessMode = ProcessModeEnum.Disabled;
+                player.SetMeta("opennv_pipboy_radio_on", false);
+                player.SetMeta("opennv_inventory_cleared", 1);
+                player.SetMeta(
+                    $"opennv_cg03_item_{pictureCompletion.AdultVaultSuitFormId}", 1);
+                player.SetMeta("opennv_equipped_item_form_id",
+                    pictureCompletion.AdultVaultSuitFormId);
+                player.SetMeta("opennv_age_race_delta", 1);
+                if (current.Cg02SkillBookTransferred)
+                    player.SetMeta(
+                        $"opennv_reference_item_{pictureCompletion.NextDresserReferenceFormId}_" +
+                        pictureCompletion.SkillBookFormId, 1);
+                StartCg03Stage5Runtime(
+                    cg03,
+                    player,
+                    current.ActiveStage,
+                    current.TimerRemainingSeconds,
+                    current.AppliedPackageFormIds.Contains(
+                        cg03.DadHoldPackageFormId,
+                        StringComparer.OrdinalIgnoreCase),
+                    ApplyCg03Progress);
+                return;
+            }
+            player.SetMeta($"opennv_quest_stage_{current.ActiveQuestFormId}",
+                current.ActiveStage);
             bool InfoAppliedAtStage(int stage) => birthday.Participants
                 .SelectMany(value => value.Nodes.Values)
                 .Where(node => current.AppliedInfoFormIds.Contains(
@@ -2411,6 +1349,7 @@ internal partial class Fo3OpeningFlow
                             : birthday.NextBoundaryBlocker),
                 };
                 player.SetMeta("opennv_cg02_stage", stage);
+                player.SetMeta($"opennv_quest_stage_{current.ActiveQuestFormId}", stage);
                 Persist();
             }
 
@@ -2605,6 +1544,11 @@ internal partial class Fo3OpeningFlow
                                 Cg01WorldReference(command.ReferenceFormId)).SetMeta(
                                     "opennv_evaluate_package", 1);
                             break;
+                        case "setQuestObject":
+                            player.SetMeta(
+                                $"opennv_quest_object_{command.ItemFormId}",
+                                command.Value);
+                            break;
                         default:
                             throw new InvalidOperationException(
                                 $"Fallout 3 CG02 reactor-gift command is unsupported: {command.Kind}");
@@ -2614,8 +1558,10 @@ internal partial class Fo3OpeningFlow
 
             void ApplyReactorGiftStage(int stage)
             {
-                var commands = reactorGift.StageResults[stage];
-                ExecuteReactorGiftStageCommands(stage);
+                var commands = reactorGift.StageResults.TryGetValue(stage,
+                    out var preparedCommands) ? preparedCommands : [];
+                if (commands.Count != 0)
+                    ExecuteReactorGiftStageCommands(stage);
                 IReadOnlyList<string> packages = stage switch
                 {
                     var value when value == reactorGift.JonasStage =>
@@ -2627,6 +1573,10 @@ internal partial class Fo3OpeningFlow
                     var value when value == reactorGift.RangeStage =>
                         [reactorGift.DadWaitPackageFormId],
                     var value when value == reactorGift.HitStage => [],
+                    var value when value == reactorGift.CombatStage =>
+                        [reactorGift.Combatant.PackageFormId],
+                    var value when value == reactorGift.DeathStage => [],
+                    var value when value == reactorGift.CompletionStage => [],
                     _ => throw new InvalidOperationException(
                         "Fallout 3 CG02 reactor-gift stage differs."),
                 };
@@ -2641,16 +1591,51 @@ internal partial class Fo3OpeningFlow
                         .Select(value => value.ObjectiveIndex)
                         .DefaultIfEmpty(current.DisplayedObjectiveIndex).Last(),
                     AccountedCommandCount = current.AccountedCommandCount +
-                        commands.Count + 1,
+                        commands.Count + 1 + (stage == reactorGift.CompletionStage
+                            ? picture.SourceStageCommandCount : 0),
                     AppliedCommandCount = current.AppliedCommandCount +
-                        commands.Count + 1,
+                        commands.Count + 1 + (stage == reactorGift.CompletionStage
+                            ? picture.SourceStageCommandCount : 0),
                     NextBoundary = new Fo3Cg01Stage12Boundary(false,
-                        stage == reactorGift.HitStage
+                        stage == reactorGift.CompletionStage
                             ? reactorGift.NextBoundaryBlocker
                             : postIntercom.NextBoundaryBlocker),
                 };
                 player.SetMeta("opennv_cg02_stage", stage);
+                if (stage == reactorGift.CompletionStage)
+                {
+                    player.SetMeta("opennv_cg02_objective_displayed",
+                        picture.ObjectiveIndex);
+                    player.SetMeta($"opennv_quest_stage_{current.ActiveQuestFormId}",
+                        stage);
+                }
+                if (stage == reactorGift.CombatStage &&
+                    !current.CombatHealthByReferenceFormId.ContainsKey(
+                        reactorGift.Combatant.ReferenceFormId))
+                {
+                    current = current with
+                    {
+                        CombatHealthByReferenceFormId =
+                            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                [reactorGift.Combatant.ReferenceFormId] =
+                                    reactorGift.Combatant.MaximumHealth,
+                            },
+                    };
+                    var combatant = Cg01WorldReference(
+                        reactorGift.Combatant.ReferenceFormId);
+                    combatant.SetMeta("opennv_active_package_form_id",
+                        reactorGift.Combatant.PackageFormId);
+                    combatant.SetMeta("opennv_package_target_form_id",
+                        reactorGift.Combatant.PackageTargetFormId);
+                    combatant.SetMeta("opennv_package_radius_game_units",
+                        reactorGift.Combatant.PackageRadiusGameUnits);
+                    combatant.SetMeta("opennv_current_health",
+                        reactorGift.Combatant.MaximumHealth);
+                }
                 Persist();
+                if (stage == reactorGift.HitStage)
+                    StartReactorGiftParticipant(dadGift);
             }
 
             void StartReactorGiftParticipant(Fo3Cg02BirthdayParticipant participant)
@@ -2666,12 +1651,268 @@ internal partial class Fo3OpeningFlow
                         {
                             AppliedInfoFormIds = current.AppliedInfoFormIds
                                 .Append(infoFormId).ToArray(),
+                            AccountedCommandCount = current.AccountedCommandCount +
+                                participant.Nodes[infoFormId].Effects.Count(value =>
+                                    value.Kind != "setStage"),
+                            AppliedCommandCount = current.AppliedCommandCount +
+                                participant.Nodes[infoFormId].Effects.Count(value =>
+                                    value.Kind != "setStage"),
                         };
                         if (targetStage is { } stage)
                             ApplyReactorGiftStage(stage);
                         else
                             Persist();
                     });
+            }
+
+            void CompletePictureSequence()
+            {
+                var transferredBook = player.GetMeta(
+                    $"opennv_cg02_item_{pictureCompletion.SkillBookFormId}", 0)
+                    .AsInt32() > 0;
+                _vaultBirthCoverage!.Cg01DadActor.Placement.Visible = false;
+                _vaultBirthCoverage.Cg01DadActor.Placement.ProcessMode =
+                    ProcessModeEnum.Disabled;
+                var beatrice = Cg01WorldReference(
+                    pictureCompletion.BeatriceReferenceFormId);
+                beatrice.Visible = false;
+                beatrice.ProcessMode = ProcessModeEnum.Disabled;
+                player.ConfigureSourceFormActivations(null);
+                player.ClearSourceHitscan();
+                player.SetMeta("opennv_pipboy_radio_on", false);
+                player.SetMeta("opennv_inventory_cleared", 1);
+                player.SetMeta(
+                    $"opennv_cg02_item_{pictureCompletion.SkillBookFormId}", 0);
+                if (transferredBook)
+                    player.SetMeta(
+                        $"opennv_reference_item_{pictureCompletion.NextDresserReferenceFormId}_" +
+                        pictureCompletion.SkillBookFormId, 1);
+                player.SetMeta(
+                    $"opennv_cg03_item_{pictureCompletion.AdultVaultSuitFormId}", 1);
+                player.SetMeta("opennv_equipped_item_form_id",
+                    pictureCompletion.AdultVaultSuitFormId);
+                player.SetMeta("opennv_age_race_delta", 1);
+                player.MoveToSourceTransform(
+                    pictureCompletion.NextQuestStartTransform,
+                    _vaultBirthCoverage.Contract);
+                current = current with
+                {
+                    ActiveQuestFormId = pictureCompletion.NextQuestFormId,
+                    ActiveQuestEditorId = pictureCompletion.NextQuestEditorId,
+                    ActiveStage = pictureCompletion.NextQuestTargetStage,
+                    TimerRemainingSeconds = 0.0,
+                    TimerAdvancing = false,
+                    Cg02PictureImageSpaceElapsedSeconds =
+                        pictureCompletion.ImageSpaceModifier.DurationSeconds,
+                    Cg02PictureSoundStarted = true,
+                    PlayerMovementEnabled = false,
+                    Cg02SkillBookTransferred = transferredBook,
+                    Cg02AdultVaultSuitEquipped = true,
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        pictureCompletion.Stage100CommandCount +
+                        pictureCompletion.NextQuestStage0CommandCount,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        pictureCompletion.Stage100CommandCount +
+                        pictureCompletion.NextQuestStage0CommandCount,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(
+                        false, pictureCompletion.NextBoundaryBlocker),
+                };
+                player.SetMeta("opennv_active_quest_form_id",
+                    pictureCompletion.NextQuestFormId);
+                player.SetMeta("opennv_cg03_stage",
+                    pictureCompletion.NextQuestTargetStage);
+                player.SetMeta(
+                    $"opennv_quest_stage_{pictureCompletion.NextQuestFormId}",
+                    pictureCompletion.NextQuestTargetStage);
+                Persist();
+                StartCg03Stage5Runtime(
+                    cg03,
+                    player,
+                    current.ActiveStage,
+                    current.TimerRemainingSeconds,
+                    current.AppliedPackageFormIds.Contains(
+                        cg03.DadHoldPackageFormId,
+                        StringComparer.OrdinalIgnoreCase),
+                    ApplyCg03Progress);
+            }
+
+            void ApplyCg03Progress(Fo3Cg03Stage5Progress progress)
+            {
+                current = current with
+                {
+                    ActiveStage = progress.Stage,
+                    TimerRemainingSeconds = progress.TimerRemainingSeconds,
+                    TimerAdvancing = progress.TimerAdvancing,
+                    AppliedInfoFormIds = progress.AppliedInfoFormId is null ||
+                        current.AppliedInfoFormIds.Contains(
+                            progress.AppliedInfoFormId,
+                            StringComparer.OrdinalIgnoreCase)
+                        ? current.AppliedInfoFormIds
+                        : current.AppliedInfoFormIds.Append(
+                            progress.AppliedInfoFormId).ToArray(),
+                    AppliedPackageFormIds = current.AppliedPackageFormIds.Contains(
+                            progress.AppliedPackageFormId,
+                            StringComparer.OrdinalIgnoreCase)
+                        ? current.AppliedPackageFormIds
+                        : current.AppliedPackageFormIds.Append(
+                            progress.AppliedPackageFormId).ToArray(),
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        progress.AppliedCommandCount,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        progress.AppliedCommandCount,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(
+                        false, progress.NextBoundaryBlocker),
+                };
+                Persist();
+            }
+
+            void CompletionProgress(Fo3Cg02CompletionProgress progress)
+            {
+                var stageChanged = current.ActiveStage != progress.Stage;
+                current = current with
+                {
+                    ActiveStage = progress.Stage,
+                    TimerRemainingSeconds = progress.TimerRemainingSeconds,
+                    TimerAdvancing = progress.TimerAdvancing,
+                    Cg02PictureImageSpaceElapsedSeconds =
+                        progress.ImageSpaceElapsedSeconds,
+                    Cg02PictureSoundStarted = progress.SoundStarted,
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        (stageChanged ? pictureCompletion.Stage98CommandCount : 0),
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        (stageChanged ? pictureCompletion.Stage98CommandCount : 0),
+                };
+                player.SetMeta("opennv_cg02_stage", progress.Stage);
+                player.SetMeta("opennv_cg02_timer", progress.TimerRemainingSeconds);
+                player.SetMeta("opennv_cg02_run_timer",
+                    progress.TimerAdvancing ? 1 : 0);
+                Persist();
+            }
+
+            void StartPictureCompletion()
+            {
+                StartCg02CompletionTimer(
+                    pictureCompletion, current.ActiveStage,
+                    current.TimerRemainingSeconds,
+                    current.Cg02PictureImageSpaceElapsedSeconds,
+                    current.Cg02PictureSoundStarted,
+                    CompletionProgress, CompletePictureSequence);
+            }
+
+            void StartPictureJonas()
+            {
+                if (current.AppliedInfoFormIds.Contains(
+                        picture.JonasInfoFormId, StringComparer.OrdinalIgnoreCase))
+                    return;
+                StartCg02BirthdayInteraction(jonasGift, player,
+                    (infoFormId, targetStage) =>
+                    {
+                        if (targetStage is not null || !infoFormId.Equals(
+                                picture.JonasInfoFormId,
+                                StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException(
+                                "Fallout 3 CG02 picture Jonas result differs.");
+                        current = current with
+                        {
+                            ActiveStage = picture.TimerStage,
+                            AppliedInfoFormIds = current.AppliedInfoFormIds
+                                .Append(infoFormId).ToArray(),
+                            TimerRemainingSeconds =
+                                pictureCompletion.Stage95TimerSeconds,
+                            TimerAdvancing = true,
+                            AccountedCommandCount = current.AccountedCommandCount + 1 +
+                                pictureCompletion.Stage95CommandCount,
+                            AppliedCommandCount = current.AppliedCommandCount + 1 +
+                                pictureCompletion.Stage95CommandCount,
+                            NextBoundary = new Fo3Cg01Stage12Boundary(
+                                false, picture.NextBoundaryBlocker),
+                        };
+                        player.SetMeta("opennv_cg02_stage", picture.TimerStage);
+                        player.SetMeta(
+                            $"opennv_quest_stage_{current.ActiveQuestFormId}",
+                            picture.TimerStage);
+                        player.SetMeta("opennv_objectives_completed", true);
+                        player.SetMeta("opennv_equipped_item_form_id", "");
+                        player.SetMeta("opennv_cg02_timer",
+                            pictureCompletion.Stage95TimerSeconds);
+                        player.SetMeta("opennv_cg02_run_timer", 1);
+                        Persist();
+                        StartPictureCompletion();
+                    });
+            }
+
+            void ApplyPictureStage()
+            {
+                if (current.ActiveStage != picture.SourceStage)
+                    return;
+                player.StopAtAuthoredTrigger();
+                _vaultBirthCoverage!.Cg01DadActor.Placement.SetMeta(
+                    "opennv_dotalk", picture.PictureDadTalkValue);
+                current = current with
+                {
+                    ActiveStage = picture.PictureStage,
+                    PlayerMovementEnabled = false,
+                    DisplayedObjectiveIndex = picture.ObjectiveIndex,
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        picture.PictureStageCommandCount,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        picture.PictureStageCommandCount,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(
+                        false, picture.NextBoundaryBlocker),
+                };
+                player.SetMeta("opennv_cg02_objective_completed",
+                    picture.ObjectiveIndex);
+                player.SetMeta("opennv_cg02_stage", picture.PictureStage);
+                player.SetMeta($"opennv_quest_stage_{current.ActiveQuestFormId}",
+                    picture.PictureStage);
+                Persist();
+                StartPictureJonas();
+            }
+
+            void PicturePackageCompleted(string packageFormId)
+            {
+                if (current.AppliedPackageFormIds.Contains(
+                        packageFormId, StringComparer.OrdinalIgnoreCase))
+                    return;
+                var package = picture.Packages.Single(value =>
+                    value.FormId.Equals(packageFormId,
+                        StringComparison.OrdinalIgnoreCase));
+                var actor = package.ActorReferenceFormId.Equals(
+                        postIntercom.DadReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? _vaultBirthCoverage!.Cg01DadActor.Placement
+                    : EnsureJonas().Placement;
+                actor.SetMeta("opennv_picture_ready", 1);
+                if (package.ActorReferenceFormId.Equals(
+                        postIntercom.DadReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    actor.SetMeta("opennv_dotalk", picture.DadTalkValue);
+                    actor.SetMeta("opennv_timer", picture.DadTimerSeconds);
+                }
+                current = current with
+                {
+                    AppliedPackageFormIds = current.AppliedPackageFormIds
+                        .Append(package.FormId).ToArray(),
+                    AccountedCommandCount = current.AccountedCommandCount +
+                        package.CompletionCommandCount,
+                    AppliedCommandCount = current.AppliedCommandCount +
+                        package.CompletionCommandCount,
+                };
+                Persist();
+            }
+
+            void StartPicturePositioning()
+            {
+                var dad = _vaultBirthCoverage!.Cg01DadActor;
+                var jonas = EnsureJonas();
+                StartCg02PicturePositioning(
+                    picture, interaction.TimerTransition.DadLead, player,
+                    dad, jonas, () => current.AppliedPackageFormIds,
+                    PicturePackageCompleted, ApplyPictureStage);
+                if (!current.AppliedInfoFormIds.Contains(
+                        picture.DadInfoFormId, StringComparer.OrdinalIgnoreCase))
+                    StartReactorGiftParticipant(dadGift);
             }
 
             void ApplyTargetHit(string targetReferenceFormId)
@@ -2693,6 +1934,48 @@ internal partial class Fo3OpeningFlow
                     reactorGift.TutorialHitStage);
                 if (current.Cg02TargetHitFormIds.Count == reactorGift.RequiredHitCount)
                     ApplyReactorGiftStage(reactorGift.HitStage);
+                else
+                    Persist();
+            }
+
+            void ApplyCombatHit()
+            {
+                if (current.ActiveStage != reactorGift.CombatStage ||
+                    !current.CombatHealthByReferenceFormId.TryGetValue(
+                        reactorGift.Combatant.ReferenceFormId, out var health))
+                    return;
+                var outcome = GamebryoRangedCombat.ApplyHit(
+                    new GamebryoRangedAttack(
+                        reactorGift.Combatant.WeaponFormId,
+                        reactorGift.Combatant.AmmunitionFormId,
+                        reactorGift.Combatant.WeaponDamage),
+                    player.GetMeta("opennv_equipped_item_form_id", "").AsString(),
+                    new GamebryoCombatantState(
+                        reactorGift.Combatant.ReferenceFormId,
+                        reactorGift.Combatant.MaximumHealth,
+                        health,
+                        current.DeadCombatReferenceFormIds.Contains(
+                            reactorGift.Combatant.ReferenceFormId,
+                            StringComparer.OrdinalIgnoreCase)));
+                current = current with
+                {
+                    CombatHealthByReferenceFormId =
+                        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            [outcome.Target.ReferenceFormId] =
+                                outcome.Target.CurrentHealth,
+                        },
+                    DeadCombatReferenceFormIds = outcome.Target.Dead
+                        ? [outcome.Target.ReferenceFormId]
+                        : current.DeadCombatReferenceFormIds,
+                };
+                var combatant = Cg01WorldReference(outcome.Target.ReferenceFormId);
+                combatant.SetMeta("opennv_combat_target_form_id",
+                    reactorGift.Combatant.PlayerReferenceFormId);
+                combatant.SetMeta("opennv_current_health", outcome.Target.CurrentHealth);
+                combatant.SetMeta("opennv_dead", outcome.Target.Dead ? 1 : 0);
+                if (outcome.Died)
+                    ApplyReactorGiftStage(reactorGift.DeathStage);
                 else
                     Persist();
             }
@@ -2880,6 +2163,11 @@ internal partial class Fo3OpeningFlow
                 else if (effect.Kind == "setActorVariable")
                     _cg02IntroActors[effect.ReferenceFormId].Placement.SetMeta(
                         $"opennv_{effect.Variable.ToLowerInvariant()}", effect.Value);
+                else if (effect.Kind == "evaluatePackage")
+                    (_cg02IntroActors.TryGetValue(effect.ReferenceFormId,
+                        out var packageActor) ? packageActor.Placement :
+                        Cg01WorldReference(effect.ReferenceFormId))
+                        .SetMeta("opennv_evaluate_package", 1);
                 else if (effect.Kind == "startCombat")
                 {
                     EnsureCg02BirthdayActor(birthday.Participants.Single(value =>
@@ -3015,12 +2303,6 @@ internal partial class Fo3OpeningFlow
                     })),
                 StringComparer.OrdinalIgnoreCase);
             activations[postIntercom.IntercomReferenceFormId] = ActivateIntercom;
-            var jonasGift = reactorGift.Participants.Single(value =>
-                value.ReferenceFormId.Equals(postIntercom.JonasReferenceFormId,
-                    StringComparison.OrdinalIgnoreCase));
-            var dadGift = reactorGift.Participants.Single(value =>
-                value.ReferenceFormId.Equals(postIntercom.DadReferenceFormId,
-                    StringComparison.OrdinalIgnoreCase));
             activations[postIntercom.JonasReferenceFormId] = () =>
             {
                 if (current.ActiveStage == reactorGift.SourceStage)
@@ -3031,18 +2313,22 @@ internal partial class Fo3OpeningFlow
                 if (current.ActiveStage == postIntercom.GoodbyeStage)
                     ActivateDadPostIntercom();
                 else if (current.ActiveStage == reactorGift.JonasStage ||
-                         current.ActiveStage == reactorGift.TargetStage)
+                         current.ActiveStage == reactorGift.TargetStage ||
+                         current.ActiveStage == reactorGift.HitStage ||
+                         current.ActiveStage == reactorGift.DeathStage)
                     StartReactorGiftParticipant(dadGift);
             };
             player.ConfigureSourceFormActivations(activations);
+            var sourceHits = reactorGift.TargetReferenceFormIds.ToDictionary(
+                formId => formId,
+                formId => (Action)(() => ApplyTargetHit(formId)),
+                StringComparer.OrdinalIgnoreCase);
+            sourceHits.Add(reactorGift.Combatant.ReferenceFormId, ApplyCombatHit);
             player.ConfigureSourceHitscan(
                 _runtimeConfiguration.Player.DesktopInput.Fire.Action,
                 _runtimeConfiguration.Player.FireRayDistanceMeters,
                 reactorGift.RequiredWeaponFormId,
-                reactorGift.TargetReferenceFormIds.ToDictionary(
-                    formId => formId,
-                    formId => (Action)(() => ApplyTargetHit(formId)),
-                    StringComparer.OrdinalIgnoreCase));
+                sourceHits);
             if (current.ActiveStage >= postIntercom.SourceStage)
             {
                 EnsureJonas();
@@ -3065,12 +2351,46 @@ internal partial class Fo3OpeningFlow
                 ExecuteReactorGiftStageCommands(reactorGift.RangeStage);
             if (current.ActiveStage >= reactorGift.HitStage)
                 ExecuteReactorGiftStageCommands(reactorGift.HitStage);
+            if (current.ActiveStage >= reactorGift.CombatStage)
+                ExecuteReactorGiftStageCommands(reactorGift.CombatStage);
+            if (current.ActiveStage >= reactorGift.DeathStage)
+                ExecuteReactorGiftStageCommands(reactorGift.DeathStage);
+            if (current.ActiveStage == picture.SourceStage)
+                StartPicturePositioning();
+            else if (current.ActiveStage == picture.PictureStage)
+            {
+                StartPicturePositioning();
+                StartPictureJonas();
+            }
+            else if (current.ActiveStage == pictureCompletion.TimerStage ||
+                     current.ActiveStage == pictureCompletion.FlashStage)
+                StartPictureCompletion();
             foreach (var targetReferenceFormId in current.Cg02TargetHitFormIds.Distinct(
                 StringComparer.OrdinalIgnoreCase))
                 Cg01WorldReference(targetReferenceFormId).SetMeta(
                     "opennv_animation_group", reactorGift.TargetAnimationGroup);
             player.SetMeta("opennv_cg02_target_count",
                 current.Cg02TargetHitFormIds.Count);
+            if (current.CombatHealthByReferenceFormId.TryGetValue(
+                    reactorGift.Combatant.ReferenceFormId, out var restoredHealth))
+            {
+                var restoredCombatant = Cg01WorldReference(
+                    reactorGift.Combatant.ReferenceFormId);
+                restoredCombatant.SetMeta("opennv_current_health", restoredHealth);
+                restoredCombatant.SetMeta("opennv_dead",
+                    current.DeadCombatReferenceFormIds.Contains(
+                        reactorGift.Combatant.ReferenceFormId,
+                        StringComparer.OrdinalIgnoreCase) ? 1 : 0);
+                restoredCombatant.SetMeta("opennv_active_package_form_id",
+                    reactorGift.Combatant.PackageFormId);
+                restoredCombatant.SetMeta("opennv_package_target_form_id",
+                    reactorGift.Combatant.PackageTargetFormId);
+                restoredCombatant.SetMeta("opennv_package_radius_game_units",
+                    reactorGift.Combatant.PackageRadiusGameUnits);
+                if (restoredHealth < reactorGift.Combatant.MaximumHealth)
+                    restoredCombatant.SetMeta("opennv_combat_target_form_id",
+                        reactorGift.Combatant.PlayerReferenceFormId);
+            }
             StartButchPackageIfEligible();
             if ((current.ActiveStage == butch.AggregateStage ||
                  current.ActiveStage == butch.SceneDoneStage) &&
@@ -3521,7 +2841,11 @@ internal partial class Fo3OpeningFlow
             .DadSpeechRuntime?.OverseerSpeechRuntime;
         var restoredParty = restoredOverseer?.DadPartyRuntime;
         var restoredBirthday = restoredParty?.BirthdayInteractionsRuntime;
-        if (current.ActiveQuestFormId.Equals(
+        var restoredPost = restoredBirthday?.ButchRuntime?.PostIntercomRuntime;
+        var restoredGift = restoredPost?.ReactorGiftRuntime;
+        var restoredCg03 = restoredGift?.PictureRuntime.CompletionRuntime
+            .NextQuestRuntime;
+        if ((current.ActiveQuestFormId.Equals(
                 restoredCompletion.NextQuestFormId, StringComparison.OrdinalIgnoreCase) &&
             (current.ActiveStage == restoredCompletion.Cg02Stage0.TargetStage ||
              current.ActiveStage == restoredCompletion.Cg02Stage0.IntroRuntime?.TargetStage ||
@@ -3538,7 +2862,31 @@ internal partial class Fo3OpeningFlow
              restoredBirthday?.ButchRuntime is { } restoredButch &&
                  (current.ActiveStage == restoredButch.SceneDoneStage ||
                   current.ActiveStage == restoredButch.AggregateStage ||
-                  current.ActiveStage == restoredButch.IntercomStage)))
+                  current.ActiveStage == restoredButch.IntercomStage) ||
+             restoredPost is not null &&
+                 (current.ActiveStage == restoredPost.AnswerStage ||
+                  current.ActiveStage == restoredPost.GoodbyeStage ||
+                  current.ActiveStage == restoredPost.TargetStage) ||
+             restoredGift is not null &&
+                 (current.ActiveStage == restoredGift.JonasStage ||
+                  current.ActiveStage == restoredGift.TargetStage ||
+                  current.ActiveStage == restoredGift.RangeStage ||
+                  current.ActiveStage == restoredGift.HitStage ||
+                  current.ActiveStage == restoredGift.CombatStage ||
+                  current.ActiveStage == restoredGift.DeathStage ||
+                  current.ActiveStage == restoredGift.CompletionStage ||
+                  current.ActiveStage == restoredGift.PictureRuntime.PictureStage ||
+                  current.ActiveStage == restoredGift.PictureRuntime.TimerStage ||
+                  current.ActiveStage == restoredGift.PictureRuntime
+                     .CompletionRuntime.FlashStage)) ||
+             restoredGift is not null &&
+                 current.ActiveQuestFormId.Equals(
+                     restoredGift.PictureRuntime.CompletionRuntime.NextQuestFormId,
+                     StringComparison.OrdinalIgnoreCase) &&
+                 (current.ActiveStage == restoredGift.PictureRuntime
+                      .CompletionRuntime.NextQuestTargetStage ||
+                  restoredCg03 is not null &&
+                  current.ActiveStage == restoredCg03.SpeechStage)))
         {
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 restored completion player is absent."))
@@ -3689,7 +3037,31 @@ internal partial class Fo3OpeningFlow
                  restoredBirthday.ButchRuntime is { } butch &&
                     (current.ActiveStage == butch.SceneDoneStage ||
                      current.ActiveStage == butch.AggregateStage ||
-                     current.ActiveStage == butch.IntercomStage)))
+                     current.ActiveStage == butch.IntercomStage) ||
+                 restoredPost is not null &&
+                    (current.ActiveStage == restoredPost.AnswerStage ||
+                     current.ActiveStage == restoredPost.GoodbyeStage ||
+                     current.ActiveStage == restoredPost.TargetStage) ||
+                 restoredGift is not null &&
+                    (current.ActiveStage == restoredGift.JonasStage ||
+                     current.ActiveStage == restoredGift.TargetStage ||
+                     current.ActiveStage == restoredGift.RangeStage ||
+                     current.ActiveStage == restoredGift.HitStage ||
+                     current.ActiveStage == restoredGift.CombatStage ||
+                     current.ActiveStage == restoredGift.DeathStage ||
+                     current.ActiveStage == restoredGift.CompletionStage ||
+                     current.ActiveStage == restoredGift.PictureRuntime.PictureStage ||
+                     current.ActiveStage == restoredGift.PictureRuntime.TimerStage ||
+                     current.ActiveStage == restoredGift.PictureRuntime
+                         .CompletionRuntime.FlashStage) ||
+                 restoredGift is not null &&
+                    current.ActiveQuestFormId.Equals(
+                        restoredGift.PictureRuntime.CompletionRuntime.NextQuestFormId,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    (current.ActiveStage == restoredGift.PictureRuntime
+                         .CompletionRuntime.NextQuestTargetStage ||
+                     restoredCg03 is not null &&
+                     current.ActiveStage == restoredCg03.SpeechStage)))
             {
                 InstallBirthday(restoredBirthday, restoredPlayer);
             }

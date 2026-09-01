@@ -73,6 +73,18 @@ FO3_CG00_EARLY_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src"
 FO3_CG01_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
     "Campaigns/Fallout3/Fo3OpeningFlow.Cg01.cs"
 )
+FO3_CG02_PICTURE_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg02Picture.cs"
+)
+FO3_CG02_BIRTHDAY_ACTORS = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg02BirthdayActors.cs"
+)
+FO3_CG03_STAGE5_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg03Stage5.cs"
+)
+FO3_CG03_DAD_RECIPE = Path(__file__).resolve().parents[1] / "recipes" / (
+    "fo3-vault101-cg03-dad-actor-v1.json"
+)
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -177,6 +189,35 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_cg03_stage5_uses_owned_dad_and_source_runtime(self) -> None:
+        recipe = json.loads(FO3_RECIPE.read_text(encoding="utf-8"))
+
+        def find_stage5(value: object) -> dict[str, object] | None:
+            if isinstance(value, dict):
+                if "cg03Stage5" in value:
+                    return dict(value["cg03Stage5"])
+                for nested in value.values():
+                    result = find_stage5(nested)
+                    if result is not None:
+                        return result
+            elif isinstance(value, list):
+                for nested in value:
+                    result = find_stage5(nested)
+                    if result is not None:
+                        return result
+            return None
+
+        stage5 = find_stage5(recipe)
+        self.assertIsNotNone(stage5)
+        actor = json.loads(FO3_CG03_DAD_RECIPE.read_text(encoding="utf-8"))
+        self.assertEqual(stage5["dadReferenceFormId"],
+                         actor["proofActorReferenceFormId"])
+        self.assertEqual(stage5["dadBaseFormId"], actor["expectedBaseFormId"])
+        runtime = FO3_CG03_STAGE5_RUNTIME.read_text(encoding="utf-8")
+        self.assertIn("StartCg03Stage5Runtime", runtime)
+        self.assertIn("GamebryoDialoguePlayback", runtime)
+        self.assertIn("CellActorLoader.Load", runtime)
+
     def test_compiles_cg02_overseer_speech_through_stage10(self) -> None:
         quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
         topic = Record("DIAL", 0x30992, 0,
@@ -332,6 +373,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "DIAL", 0xC8, 0, subrecord("EDID", b"GREETING\0"), ())
         greeting = Record(
             "INFO", 0x319BD, 0,
+            subrecord("TRDT", b"\0" * 12 + b"\x01\0\0\0") +
             subrecord("NAM1", b"Happy birthday!\0") +
             subrecord("CTDA", condition(72, base.form_id)) +
             b"".join(subrecord("TCLT", struct.pack("<I", topic.form_id))
@@ -341,6 +383,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         gift_infos = tuple(
             Record(
                 "INFO", 0x79000 + stage, 0,
+                subrecord("TRDT", b"\0" * 12 + b"\x01\0\0\0") +
                 subrecord("NAM1", f"Gift {stage}.".encode() + b"\0") +
                 subrecord("CTDA", condition(72, base.form_id)) +
                 subrecord("SCTX", f"setstage CG02 {stage}".encode() + b"\0"),
@@ -524,15 +567,34 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("000300e8", post["jonasReferenceFormId"])
         self.assertEqual("00031d48", post["intercomReferenceFormId"])
         gift = post["reactorGift"]
-        self.assertEqual([40, 42, 44, 50, 55], [
+        self.assertEqual([40, 42, 44, 50, 55, 60, 70, 80], [
             gift["sourceStage"], gift["jonasStage"], gift["targetStage"],
-            gift["rangeStage"], gift["hitStage"]])
+            gift["rangeStage"], gift["hitStage"], gift["combatStage"],
+            gift["deathStage"], gift["completionStage"]])
         self.assertEqual(
             ["000304eb", "0007674b", "00076746"],
             gift["targetReferenceFormIds"],
         )
         self.assertEqual("000c0327", gift["bbGunFormId"])
         self.assertEqual("0002935b", gift["bbAmmoFormId"])
+        self.assertEqual("000306cd", gift["radroachReferenceFormId"])
+        self.assertEqual("000306cc", gift["radroachBaseFormId"])
+        self.assertEqual([90, 95], [gift["pictureStage"], gift["pictureTimerStage"]])
+        self.assertEqual(
+            ["000306d4", "000306d5"],
+            [gift["dadPicturePackageFormId"],
+             gift["jonasPicturePackageFormId"]],
+        )
+        self.assertEqual(
+            ["00060c81", "000c6de2"],
+            gift["playerPictureTriggerReferenceFormIds"],
+        )
+        self.assertEqual([98, 100, 0, 5], [
+            gift["photoFlashStage"], gift["finalStage"],
+            gift["nextQuestEntryStage"], gift["nextQuestTargetStage"],
+        ])
+        self.assertEqual("00014e85", gift["nextQuestFormId"])
+        self.assertEqual("0001d73b", gift["nextQuestStartMarkerFormId"])
         source = read_csharp_source_module(FO3_CG01_RUNTIME)
         self.assertIn("postIntercom.StageResults[stage]", source)
         self.assertIn("reactorGift.StageResults[stage]", source)
@@ -540,7 +602,22 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertIn("ConfigureSourceFormActivations(activations)", source)
         self.assertIn("ConfigureSourceHitscan", source)
         self.assertIn("Cg02TargetHitFormIds", source)
+        self.assertIn("GamebryoRangedCombat.ApplyHit", source)
+        birthday_source = read_csharp_source_module(FO3_CG02_BIRTHDAY_ACTORS)
+        self.assertIn("Cg02GreetingStagePriority", birthday_source)
+        self.assertIn("CombatHealthByReferenceFormId", source)
         self.assertNotIn('InfoFormId.Equals("00031d3c"', source)
+        picture_source = read_csharp_source_module(FO3_CG02_PICTURE_RUNTIME)
+        self.assertIn("GamebryoPackageTravel.Start", picture_source)
+        self.assertIn("MinimumHeadingDegrees", picture_source)
+        self.assertIn("triggerSource.DimensionsGameUnits", picture_source)
+        self.assertNotIn("ArriveAtSourceTarget(\n                package.FormId", source)
+        completion_source = read_csharp_source_module(
+            FO3_CG02_PICTURE_RUNTIME.with_name(
+                "Fo3OpeningFlow.Cg02Completion.cs")
+        )
+        self.assertIn("Stage98TimerSeconds", completion_source)
+        self.assertIn("StartStage90ImageSpace", completion_source)
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(

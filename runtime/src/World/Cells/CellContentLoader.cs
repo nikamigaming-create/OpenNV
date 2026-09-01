@@ -33,7 +33,8 @@ internal static class CellContentLoader
         string? actorScenesManifestPath,
         bool proofEnableActor,
         bool buildCollision,
-        uint renderLayer)
+        uint renderLayer,
+        RuntimeMaterialLoader.TextureCache? textureCache = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -47,10 +48,16 @@ internal static class CellContentLoader
         var assetLogicalPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var collisionAssets = new HashSet<string>(StringComparer.Ordinal);
         var landscapeCollisionAssets = new HashSet<string>(StringComparer.Ordinal);
+        var collisionFaceSelections = new Dictionary<string, string>(StringComparer.Ordinal);
+        var controllerPlaybacks = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var doorArticulations = new Dictionary<string, DoorArticulationContract>(StringComparer.Ordinal);
+        var particleEffects = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         try
         {
-            var textures = RuntimeMaterialLoader.LoadTextures(source, configuration.Renderer);
+            var textures = RuntimeMaterialLoader.LoadTextures(
+                source,
+                configuration.Renderer,
+                textureCache);
             var materialBindings = 0;
             var defaultCompiler = source.GetProperty("compiler");
             foreach (var asset in source.GetProperty("assets").EnumerateArray())
@@ -73,6 +80,8 @@ internal static class CellContentLoader
                         $"CELL asset articulation differs from its static sidecar: {assetId}");
                 if (articulation is not null)
                     doorArticulations.Add(assetId, articulation);
+                if (asset.TryGetProperty("particleEffect", out var particleEffect))
+                    particleEffects.Add(assetId, particleEffect.Clone());
                 if (!loaded.SourceSha256.Equals(
                         asset.GetProperty("sourceSha256").GetString(),
                         StringComparison.OrdinalIgnoreCase))
@@ -92,7 +101,33 @@ internal static class CellContentLoader
                     configuration.Renderer,
                     configuration.ContentCompiler.RetailGrass);
                 SetRenderLayer(loaded.Scene, renderLayer);
+                if (asset.TryGetProperty("controllerPlayback", out var playback) &&
+                    playback.ValueKind != JsonValueKind.Null)
+                {
+                    var animations = playback.GetProperty("animations")
+                        .EnumerateArray()
+                        .ToArray();
+                    if (playback.GetProperty("status").GetString() !=
+                            "source-looping-controller-complete" ||
+                        animations.Length == 0 ||
+                        animations.Any(animation =>
+                            animation.GetProperty("channels").GetInt32() <= 0 ||
+                            animation.GetProperty("stopSeconds").GetSingle() <=
+                                animation.GetProperty("startSeconds").GetSingle() ||
+                            animation.GetProperty("frequency").GetSingle() <= 0.0f))
+                        throw new InvalidOperationException(
+                            $"Unsupported source controller playback contract: {assetId}");
+                    controllerPlaybacks.Add(
+                        assetId,
+                        animations.Select(animation =>
+                            animation.GetProperty("name").GetString()!).ToArray());
+                }
                 var collision = asset.GetProperty("collision");
+                var faceSelection = collision.GetProperty("faceSelection").GetString()!;
+                if (faceSelection is not "all-source-faces" and not "source-upward-walkable-deck")
+                    throw new InvalidOperationException(
+                        $"Unsupported authored collision face selection: {faceSelection}");
+                collisionFaceSelections.Add(assetId, faceSelection);
                 if (collision.GetProperty("enabled").GetBoolean())
                 {
                     var collisionSource = collision.GetProperty("source").GetString();
@@ -259,6 +294,7 @@ internal static class CellContentLoader
                         $"Controller articulation is attached to a non-door reference: {referenceFormId}");
                 var referencePosition = ReadVector(reference.GetProperty("positionGodotUnits"));
                 var referenceScale = reference.GetProperty("scale").GetSingle();
+                var baseRecordType = reference.GetProperty("baseRecordType").GetString()!;
                 var baseEditorId = reference.GetProperty("baseEditorId").GetString()!;
                 if (poolManifest is not null &&
                     poolManifest.BallRoles.TryGetValue(referenceFormId, out var ballRole))
@@ -423,6 +459,41 @@ internal static class CellContentLoader
                     containers.Add(referenceFormId, container);
                     placement = container;
                 }
+                else if (baseRecordType == "MSTT")
+                {
+                    var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
+                    if (dynamicBodies.Count == 1)
+                    {
+                        var movingStatic = new MovingStaticInstance();
+                        movingStatic.Configure(
+                            referenceFormId,
+                            dynamicBodies[0],
+                            configuration.Pickup);
+                        movingStatic.Freeze = !buildCollision;
+                        if (!buildCollision)
+                        {
+                            movingStatic.CollisionLayer = 0u;
+                            movingStatic.CollisionMask = 0u;
+                        }
+                        placement = movingStatic;
+                        if (buildCollision)
+                            collisionMeshes += dynamicBodies[0].Hulls.Count +
+                                dynamicBodies[0].Spheres.Count;
+                    }
+                    else
+                    {
+                        placement = new Node3D
+                        {
+                            Name = $"MSTT_UNSUPPORTED_PHYSICS_{referenceFormId}",
+                            Basis = new Basis(rotation),
+                        };
+                        GD.PushWarning(
+                            "OPENNV_OWNED_MSTT_PHYSICS_UNSUPPORTED " +
+                            $"reference={referenceFormId} asset={assetId} " +
+                            $"dynamicBodies={dynamicBodies.Count} " +
+                            "disposition=visual-only-no-collision");
+                    }
+                }
                 else
                 {
                     placement = new Node3D
@@ -464,7 +535,14 @@ internal static class CellContentLoader
                         doorArticulation);
                     visual = presentationRoot;
                 }
+                if (controllerPlaybacks.TryGetValue(assetId, out var sourceSequences))
+                    StartSourceControllerPlayback(instance, sourceSequences);
                 SetRenderLayer(visual, renderLayer);
+                if (particleEffects.TryGetValue(assetId, out var particleEffect))
+                    visual.AddChild(OwnedNifParticleEffect.Create(
+                        particleEffect,
+                        textures,
+                        renderLayer));
                 CountGeometry(visual, ref surfaces, ref vertices, ref triangles);
                 placedReferences.Add(new PlacedReference(
                     referenceFormId,
@@ -537,16 +615,15 @@ internal static class CellContentLoader
                         doorArticulation.Close.ToRuntimeSequence());
                     articulatedDoor.RestoreOpenState(session.IsDoorOpen(referenceFormId));
                 }
-                else if (buildCollision && prototypes[assetId].CollisionScene is Node3D collisionPrototype)
+                else if (buildCollision && placement is not MovingStaticInstance &&
+                    prototypes[assetId].CollisionScene is Node3D collisionPrototype)
                 {
                     var collisionInstance = collisionPrototype.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
                         ?? throw new InvalidOperationException($"Could not duplicate authored collision: {assetId}");
                     collisionInstance.Name = $"AUTHORED_COLLISION_{assetId}";
                     placement.AddChild(collisionInstance);
                     verifiedAuthoredCollision = collisionInstance;
-                    if (baseEditorId.StartsWith(
-                            "WastelandRoad",
-                            StringComparison.OrdinalIgnoreCase))
+                    if (collisionFaceSelections[assetId] == "source-upward-walkable-deck")
                         collisionMeshes += BuildWalkableRoadCollision(
                             placement,
                             collisionInstance,
@@ -564,7 +641,7 @@ internal static class CellContentLoader
                 else if (buildCollision &&
                     (collisionAssets.Contains(assetId) ||
                         interactionType is not null and not "pool-table" and not "pool-component") &&
-                    placement is not PickupInstance { CanGrab: true })
+                    placement is not PickupInstance { CanGrab: true } and not MovingStaticInstance)
                 {
                     foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(instance))
                     {
@@ -647,7 +724,9 @@ internal static class CellContentLoader
                     root,
                     originGameUnits,
                     configuration,
-                    proofEnableActor);
+                    proofEnableActor,
+                    materializeInitiallyDisabled: true,
+                    collisionLayer: renderLayer);
                 if (placedActor is not null)
                 {
                     SetRenderLayer(placedActor.Value.Placement, renderLayer);
@@ -711,6 +790,7 @@ internal static class CellContentLoader
                 loadedLodBlocks,
                 lodCoverage,
                 prototypes.Count,
+                textures.TwoDimensional,
                 textures.TwoDimensional.Count,
                 textures.AuthoredDdsTextures,
                 textures.AuthoredDdsMipChainTextures,
@@ -1523,8 +1603,10 @@ internal static class CellContentLoader
             throw new InvalidOperationException("Could not merge owned LAND collision mesh.");
         var shape = collisionMesh.CreateTrimeshShape() ??
             throw new InvalidOperationException("Could not construct owned LAND collision shape.");
-        if (shape is ConcavePolygonShape3D concave)
-            concave.BackfaceCollision = true;
+        if (shape is not ConcavePolygonShape3D concave)
+            throw new InvalidOperationException(
+                "Owned LAND collision did not produce a concave triangle shape.");
+        concave.BackfaceCollision = true;
         var body = new StaticBody3D
         {
             Name = "LAND_ACTIVE_SET_COLLISION",
@@ -1559,6 +1641,38 @@ internal static class CellContentLoader
             body.CollisionLayer = collisionLayer;
         foreach (var shape in shapes)
             shape.BackfaceCollision = true;
+    }
+
+    private static void StartSourceControllerPlayback(Node3D instance, string[] sequences)
+    {
+        var players = NodeTraversal.SelfAndDescendants<AnimationPlayer>(instance).ToArray();
+        if (players.Length != 1 || sequences.Length == 0 ||
+            sequences.Any(sequence => !players[0].HasAnimation(sequence)))
+            throw new InvalidOperationException(
+                "Owned source controller animations are absent or ambiguous.");
+        for (var index = 0; index < sequences.Length; index++)
+        {
+            var sequence = sequences[index];
+            var animation = players[0].GetAnimation(sequence) ??
+                throw new InvalidOperationException($"Owned source animation is missing: {sequence}");
+            animation.LoopMode = Animation.LoopModeEnum.Linear;
+            if (index == 0)
+            {
+                players[0].Play(sequence);
+                continue;
+            }
+            var libraryName = new StringName($"opennv_source_controller_{index}");
+            var library = new AnimationLibrary();
+            library.AddAnimation(sequence, animation);
+            var player = new AnimationPlayer
+            {
+                Name = $"SOURCE_CONTROLLER_PLAYER_{index}",
+                RootNode = players[0].RootNode,
+            };
+            players[0].GetParent().AddChild(player);
+            player.AddAnimationLibrary(libraryName, library);
+            player.Play(new StringName($"{libraryName}/{sequence}"));
+        }
     }
 
     private static int BuildWalkableRoadCollision(
@@ -1649,6 +1763,7 @@ internal static class CellContentLoader
         IReadOnlyList<LoadedLodBlock> LodBlocks,
         LodCoverageContract? LodCoverage,
         int Assets,
+        IReadOnlyDictionary<string, Texture2D> TextureAssets,
         int Textures,
         int AuthoredDdsTextures,
         int AuthoredDdsMipChainTextures,

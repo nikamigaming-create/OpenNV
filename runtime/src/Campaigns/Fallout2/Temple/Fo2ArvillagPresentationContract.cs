@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Campaigns.Fallout1;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
@@ -24,11 +25,51 @@ internal sealed record Fo2ArvillagFloorMaterialDepth(
     string ArtifactId,
     Fo2FrmReliefArtifact Relief);
 
+internal sealed record Fo2ArvillagIntMetarule(
+    string Semantic,
+    int Rule,
+    int Argument);
+
+internal sealed record Fo2ArvillagIntInventoryItem(
+    int Serial,
+    int Pid,
+    int Tile,
+    int Elevation,
+    int Quantity);
+
+internal sealed record Fo2ArvillagIntObjectCreation(
+    string Procedure,
+    int Offset,
+    ClassicIntObjectCreation Source);
+
+internal sealed record Fo2ArvillagIntRole(
+    string Role,
+    int ActorSerial,
+    int ActorTile,
+    int ActorElevation,
+    int ActorRotation,
+    string ActorFid,
+    string ActorPid,
+    string ActorSid,
+    int ActorScriptIndex,
+    ClassicMapIntProgram Program,
+    int MessageListId,
+    string MessageLogicalPath,
+    string MessageSha256,
+    IReadOnlyDictionary<int, string> Messages,
+    IReadOnlyDictionary<int, int> InitialGlobalVariables,
+    IReadOnlyList<Fo2ArvillagIntMetarule> MapEnterMetarules,
+    IReadOnlyList<int> CritterStats,
+    IReadOnlyList<Fo2ArvillagIntInventoryItem> InitialInventory,
+    IReadOnlyList<Fo2ArvillagIntObjectCreation> ObjectCreations);
+
 internal sealed class Fo2ArvillagPresentationCatalog
 {
     internal const int MapIndex = 4;
     internal const int Elevation = 0;
     internal const int DefaultFloorTileId = 1;
+    private const int ClassicWallObjectType = 3;
+    private const uint ClassicObjectNoBlockFlag = 0x10;
     private const string CacheSchema = "opennv-fo2-arvillag-presentation-cache/v1";
     private const string SourceSchema = "opennv-fo2-owned-map-slice/v1";
     private const string ReliefSchema = "opennv-fo2-arvillag-object-relief-cache/v1";
@@ -49,6 +90,9 @@ internal sealed class Fo2ArvillagPresentationCatalog
         IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
+        ClassicMapIntInitialization intInitialization,
+        ClassicIntInventoryContract inventoryContract,
+        IReadOnlyDictionary<string, Fo2ArvillagIntRole> intRoles,
         IReadOnlyList<Fo2ArvillagReliefPlacement> reliefPlacements,
         IReadOnlyDictionary<int, Fo2ArvillagFloorMaterialDepth> floorMaterialDepth,
         float floorNormalScale,
@@ -61,6 +105,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
         int arrivalRotation,
         int firstActionTile,
         IReadOnlySet<int> admittedArrivalTiles,
+        IReadOnlySet<int> walkableTiles,
         float sideRoughness)
     {
         ManifestPath = manifestPath;
@@ -73,6 +118,9 @@ internal sealed class Fo2ArvillagPresentationCatalog
         Artifacts = artifacts;
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
+        IntInitialization = intInitialization;
+        InventoryContract = inventoryContract;
+        IntRoles = intRoles;
         ReliefPlacements = reliefPlacements;
         FloorMaterialDepth = floorMaterialDepth;
         FloorNormalScale = floorNormalScale;
@@ -85,6 +133,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
         ArrivalRotation = arrivalRotation;
         FirstActionTile = firstActionTile;
         AdmittedArrivalTiles = admittedArrivalTiles;
+        WalkableTiles = walkableTiles;
         SideRoughness = sideRoughness;
     }
 
@@ -98,6 +147,9 @@ internal sealed class Fo2ArvillagPresentationCatalog
     internal IReadOnlyDictionary<string, Fo2MapArtifact> Artifacts { get; }
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
+    internal ClassicMapIntInitialization IntInitialization { get; }
+    internal ClassicIntInventoryContract InventoryContract { get; }
+    internal IReadOnlyDictionary<string, Fo2ArvillagIntRole> IntRoles { get; }
     internal IReadOnlyList<Fo2ArvillagReliefPlacement> ReliefPlacements { get; }
     internal IReadOnlyDictionary<int, Fo2ArvillagFloorMaterialDepth>
         FloorMaterialDepth
@@ -112,6 +164,7 @@ internal sealed class Fo2ArvillagPresentationCatalog
     internal int ArrivalRotation { get; }
     internal int FirstActionTile { get; }
     internal IReadOnlySet<int> AdmittedArrivalTiles { get; }
+    internal IReadOnlySet<int> WalkableTiles { get; }
     internal float SideRoughness { get; }
 
     internal static Fo2ArvillagPresentationCatalog Load(
@@ -235,11 +288,48 @@ internal sealed class Fo2ArvillagPresentationCatalog
             tileBindings);
         var objectRows = Fo2TemplePresentationCatalog.FlattenObjects(
             map.GetProperty("objects"));
+        var initialization = ClassicMapInitializationOwner.Parse(map);
+        var intInitialization = ClassicMapIntInitializationOwner.Parse(
+            source.GetProperty("initializationScripts"), initialization);
+        var inventorySource = source.GetProperty("classicInventoryContract");
+        var currency = inventorySource.GetProperty("currency");
+        if (Fo2TemplePresentationCatalog.RequiredString(inventorySource, "schema") !=
+                "opennv-classic-inventory-contract/v1" ||
+            Fo2TemplePresentationCatalog.RequiredString(inventorySource, "campaign") !=
+                "Fallout2" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                inventorySource, "retailBuild") != "1.02" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                currency, "accounting") != "owned-inventory-stack-quantity" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                currency, "adjustment") !=
+                    "signed-existing-stack-reassignment")
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG classic inventory contract drifted.");
+        var inventoryContract = new ClassicIntInventoryContract(
+            Fo2TemplePresentationCatalog.RequiredString(inventorySource, "id"),
+            currency.GetProperty("pid").GetInt32());
         var objectPlacements = Fo2TemplePresentationCatalog.LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
             source.GetProperty("frms"),
             artifacts,
             objectRows);
+        var intRoles = source.GetProperty("villageIntRoles").EnumerateObject()
+            .ToDictionary(
+                row => row.Name,
+                row => LoadIntRole(row.Name, row.Value, intInitialization),
+                StringComparer.Ordinal);
+        if (!intRoles.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
+                new[] { "elder", "firstSpeakingNpc" }) ||
+            intRoles.Values.Any(role => !objectPlacements.Any(placement =>
+                placement.Serial == role.ActorSerial &&
+                placement.Tile == role.ActorTile &&
+                placement.Elevation == role.ActorElevation &&
+                placement.Rotation == role.ActorRotation &&
+                placement.Fid == role.ActorFid &&
+                placement.Pid == role.ActorPid)))
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG INT role placement drifted.");
         Fo2TemplePresentationCatalog.VerifyCounts(
             cache.GetProperty("counts"),
             artifacts,
@@ -381,6 +471,15 @@ internal sealed class Fo2ArvillagPresentationCatalog
             !artifacts.Values.All(artifact => resourceIdentities.Contains(
                 $"{artifact.LogicalPath}|{artifact.SourceSha256}")))
             throw new InvalidOperationException("Fallout 2 ARVILLAG resource closure drifted.");
+        var walkableTiles = BuildSourceWalkableTiles(tileEntries, objectPlacements);
+        var walkableMask = Enumerable.Range(0, Fo1HexMath.Width * Fo1HexMath.Height)
+            .Select(walkableTiles.Contains).ToArray();
+        if (walkableTiles.Count != route.VillageArrival.WalkableHexes ||
+            Fo2TempleMovementConsumer.MaskSha256(walkableMask) !=
+                route.VillageArrival.WalkMaskSha256 ||
+            !legalNeighbors.Append(arrivalTile).All(walkableTiles.Contains))
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG source walk topology drifted.");
         var sideRoughness = relief.GetProperty("sideRoughness").GetSingle();
         if (!float.IsFinite(sideRoughness) || sideRoughness is < 0.0f or > 1.0f)
             throw new InvalidOperationException("Fallout 2 ARVILLAG relief roughness drifted.");
@@ -396,6 +495,9 @@ internal sealed class Fo2ArvillagPresentationCatalog
             artifacts,
             tileBindings,
             objectPlacements,
+            intInitialization,
+            inventoryContract,
+            intRoles,
             reliefPlacements,
             floorMaterialDepth,
             floorNormalScale,
@@ -408,6 +510,107 @@ internal sealed class Fo2ArvillagPresentationCatalog
             arrivalRotation,
             action.GetProperty("toTile").GetInt32(),
             legalNeighbors.Append(arrivalTile).ToHashSet(),
+            walkableTiles,
             sideRoughness);
+    }
+
+    private static IReadOnlySet<int> BuildSourceWalkableTiles(
+        IReadOnlyList<uint> tileEntries,
+        IReadOnlyList<Fo2MapObjectPlacement> objectPlacements)
+    {
+        var blocked = objectPlacements.Where(row =>
+                row.TopLevel && row.Elevation == Elevation && row.Tile >= 0 &&
+                row.ObjectType != ClassicWallObjectType &&
+                row.Blocking(ClassicObjectNoBlockFlag))
+            .Select(row => row.Tile)
+            .ToHashSet();
+        var result = new HashSet<int>();
+        for (var tile = 0; tile < Fo1HexMath.Width * Fo1HexMath.Height; tile++)
+        {
+            var floorIndex = (tile / Fo1HexMath.Width / 2) * Fo1HexMath.FloorWidth +
+                Fo1HexMath.FloorWidth - 1 - (tile % Fo1HexMath.Width / 2);
+            if ((tileEntries[floorIndex] & 0x0fff) != DefaultFloorTileId &&
+                !blocked.Contains(tile))
+                result.Add(tile);
+        }
+        return result;
+    }
+
+    private static Fo2ArvillagIntRole LoadIntRole(
+        string role,
+        JsonElement source,
+        ClassicMapIntInitialization initialization)
+    {
+        var actor = source.GetProperty("actor");
+        var programSource = source.GetProperty("program");
+        var scriptIndex = actor.GetProperty("scriptIndex").GetInt32();
+        var program = initialization.ScriptSlots
+            .Where(row => row.ScriptIndex == scriptIndex)
+            .Select(row => row.Program)
+            .Distinct()
+            .Single(row => row.LogicalPath.Equals(
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        programSource, "logicalPath"),
+                    StringComparison.OrdinalIgnoreCase) &&
+                row.Sha256 == Fo2TemplePresentationCatalog.RequiredHash(
+                    programSource, "sha256"));
+        var messages = source.GetProperty("messageCatalog");
+        var parsedMessages = messages.GetProperty("messages").EnumerateObject()
+            .ToDictionary(
+                row => int.Parse(
+                    row.Name,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                row => row.Value.GetString() ?? throw new InvalidOperationException(
+                    "Fallout 2 ARVILLAG message text is null."));
+        if (parsedMessages.Count == 0 || parsedMessages.Values.Any(
+                string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG message catalog is empty.");
+        var initialGlobals = source.GetProperty("initialGlobalVariables")
+            .EnumerateObject().ToDictionary(
+                row => int.Parse(
+                    row.Name,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                row => row.Value.GetProperty("initialValue").GetInt32());
+        var metarules = source.GetProperty("mapEnterMetarules")
+            .EnumerateObject().Select(row => new Fo2ArvillagIntMetarule(
+                row.Name,
+                row.Value.GetProperty("rule").GetInt32(),
+                row.Value.GetProperty("argument").GetInt32())).ToArray();
+        return new Fo2ArvillagIntRole(
+            role,
+            actor.GetProperty("serial").GetInt32(),
+            actor.GetProperty("tile").GetInt32(),
+            actor.GetProperty("elevation").GetInt32(),
+            actor.GetProperty("rotation").GetInt32(),
+            Fo2TemplePresentationCatalog.RequiredString(actor, "fid"),
+            Fo2TemplePresentationCatalog.RequiredString(actor, "pid"),
+            Fo2TemplePresentationCatalog.RequiredString(actor, "sid"),
+            scriptIndex,
+            program,
+            messages.GetProperty("messageListId").GetInt32(),
+            Fo2TemplePresentationCatalog.RequiredString(messages, "logicalPath"),
+            Fo2TemplePresentationCatalog.RequiredHash(messages, "sha256"),
+            parsedMessages,
+            initialGlobals,
+            metarules,
+            source.GetProperty("critterStats").EnumerateArray()
+                .Select(row => row.GetInt32()).ToArray(),
+            source.GetProperty("initialInventory").EnumerateArray().Select(row =>
+                new Fo2ArvillagIntInventoryItem(
+                    row.GetProperty("serial").GetInt32(),
+                    row.GetProperty("pid").GetInt32(),
+                    row.GetProperty("tile").GetInt32(),
+                    row.GetProperty("elevation").GetInt32(),
+                    row.GetProperty("quantity").GetInt32())).ToArray(),
+            source.GetProperty("objectCreations").EnumerateArray().Select(row =>
+                new Fo2ArvillagIntObjectCreation(
+                    Fo2TemplePresentationCatalog.RequiredString(row, "procedure"),
+                    row.GetProperty("offset").GetInt32(),
+                    new ClassicIntObjectCreation(
+                        row.GetProperty("pid").GetInt32(),
+                        row.GetProperty("tile").GetInt32(),
+                        row.GetProperty("elevation").GetInt32(),
+                        row.GetProperty("scriptId").GetInt32()))).ToArray());
     }
 }

@@ -60,6 +60,8 @@ test("New Vegas uses an explicit immutable cache registration", () => {
   assert.match(main, /campaign:\s*"NewVegas"/u);
   assert.match(main, /OPENNV_NEWVEGAS_CACHE_ROOT/u);
   assert.match(html, /id="choose-newvegas-cache"/u);
+  assert.match(main, /opennv-cell-scene\/v14/u);
+  assert.doesNotMatch(main, /opennv-cell-scene\/v13/u);
 });
 
 test("Fallout 2 enables only the matching owned-cache Hex first slice", () => {
@@ -135,6 +137,22 @@ test("flat and OpenXR launches separate engine and game arguments", () => {
       "--cache-root", profile.cacheRoot,
       "--opening-menu", "--save-path", profile.savePath, "--vr"]
   );
+});
+
+test("bounded New Vegas hot-play profile is explicit in the runtime handoff", () => {
+  const profile = {
+    ready: true,
+    cacheRoot: "D:\\cache\\newvegas-bounded-default",
+    savePath: "D:\\profiles\\courier-v1.json",
+    boundedDefaultProfile: true
+  };
+  const flat = validateLaunchRequest({ campaign: "newvegas" });
+  assert.deepEqual(createRuntimeArguments(flat, { newVegasProfile: profile }), [
+    "--xr-mode", "off", "--", "--reuse-cache",
+    "--cache-root", profile.cacheRoot,
+    "--opening-menu", "--save-path", profile.savePath,
+    "--bounded-default-profile"
+  ]);
 });
 
 test("standalone routes cannot inherit TTW sources or each other's saves", () => {

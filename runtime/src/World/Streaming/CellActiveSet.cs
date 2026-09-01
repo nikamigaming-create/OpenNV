@@ -9,7 +9,7 @@ namespace OpenNV.Runtime.World.Streaming;
 
 internal sealed class CellActiveSet
 {
-    private readonly IReadOnlyDictionary<string, SpaceState> _spaces;
+    private readonly Dictionary<string, SpaceState> _spaces;
     private readonly List<Update> _updates = new();
     private IReadOnlySet<string> _activeCellFormIds = new HashSet<string>(
         StringComparer.OrdinalIgnoreCase);
@@ -48,6 +48,32 @@ internal sealed class CellActiveSet
     internal IReadOnlySet<string> ActiveCellFormIds => _activeCellFormIds;
 
     internal IReadOnlyList<Update> Updates => _updates;
+
+    internal void AddSpace(Space space)
+    {
+        var state = SpaceState.Capture(space);
+        if (!_spaces.TryAdd(state.FormId, state))
+            throw new InvalidOperationException(
+                $"Active CELL set already contains CELL: {state.FormId}");
+        if (_spaces.Values
+            .Where(candidate => candidate != state)
+            .SelectMany(candidate => candidate.Roots)
+            .Any(root => state.Roots.Contains(root)))
+            throw new InvalidOperationException(
+                $"Active CELL set contains duplicate owned roots: {state.FormId}");
+        state.SetActive(_activeCellFormIds.Contains(state.FormId));
+    }
+
+    internal void AddEdge(string fromCellFormId, string toCellFormId)
+    {
+        if (!_spaces.ContainsKey(fromCellFormId) || !_spaces.ContainsKey(toCellFormId))
+            throw new InvalidOperationException(
+                $"Active CELL edge references an unloaded CELL: " +
+                $"{fromCellFormId} -> {toCellFormId}");
+        if (fromCellFormId.Equals(toCellFormId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Active CELL edge cannot link a CELL to itself: {fromCellFormId}");
+    }
 
     internal void Activate(string activeCellFormId)
     {

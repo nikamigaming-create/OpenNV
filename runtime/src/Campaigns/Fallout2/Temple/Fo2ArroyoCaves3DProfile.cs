@@ -201,7 +201,7 @@ internal sealed record Fo2ArroyoCaves3DProfile(
     private const string SourceMapLightVerticalProjectionMode =
         "source-tile-center-one-hex-circumradius-height-v1";
     private const string ShaderContract =
-        "opennv-world-space-owned-frm-triplanar-albedo-normal-rock/v3";
+        "opennv-world-space-owned-frm-multiscale-triplanar-albedo-normal-rock/v4";
     private const string GroundingMode = "runtime-aabb-seat-to-molded-source-floor-v1";
     private const string CoLocatedLayerMode =
         "same-tile-source-serial-front-order-v1";

@@ -70,8 +70,13 @@ internal partial class OpeningQuestRuntime
         if (generation != _generation)
             return;
         if (lineIndex == 0)
+        {
+            GD.Print(
+                $"OPENNV_NEW_GAME_DIALOGUE_INFO info={info.FormId} " +
+                $"responses={info.Responses.Count} choices={info.NextTopicFormIds.Count}");
             GamebryoDialoguePlayback.ValidateOrderedLines(
                 info.Responses.Select(response => SourceLine(info.FormId, response)).ToArray());
+        }
         if (lineIndex >= info.Responses.Count)
         {
             ExecuteInfoCommands(info, topic, completed, generation, 0);
@@ -110,7 +115,7 @@ internal partial class OpeningQuestRuntime
         var menu = new OwnedGamebryoDialogueMenuRuntime(
             source.DialogueMenu,
             _opening.MainMenuColor,
-            _opening.Style.BackgroundFillAlpha,
+            OwnedUiTheme.NormalizeByteChannel(_opening.Style.BackgroundFillAlpha),
             OwnedUiTheme.BuildFont(fonts.SpeakerName),
             OwnedUiTheme.BuildFont(fonts.Body));
         menu.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
@@ -179,9 +184,9 @@ internal partial class OpeningQuestRuntime
         string VoiceTypeFormId,
         FaceGenMorphController Face);
 
-    private void UpdateDialogueVoice()
+    private void UpdateDialogueVoice(double deltaSeconds)
     {
-        _dialoguePlayback.Update();
+        _dialoguePlayback.Update(deltaSeconds);
     }
 
     private void CompleteDialogueVoice()

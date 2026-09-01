@@ -17,10 +17,12 @@ internal partial class RetailOpening : CanvasLayer
     private Control _canvas = null!;
     private AudioStreamPlayer _music = null!;
     private VideoStreamPlayer? _video;
-    private Action? _introFinished;
-    private Action<string>? _menuActionRequested;
+    private Func<Task>? _introFinished;
+    private Func<string, Task>? _menuActionRequested;
+    private Action? _newGameStarted;
     private string _cancelAction = "";
     private bool _introCompleted;
+    private bool _transitionStarted;
     private readonly Dictionary<string, Button> _buttonsByAction =
         new(StringComparer.Ordinal);
 
@@ -28,12 +30,14 @@ internal partial class RetailOpening : CanvasLayer
         OpeningManifest manifest,
         bool hasSave,
         string cancelAction,
-        Action introFinished,
-        Action<string> menuActionRequested)
+        Action newGameStarted,
+        Func<Task> introFinished,
+        Func<string, Task> menuActionRequested)
     {
         _manifest = manifest;
         _introFinished = introFinished;
         _menuActionRequested = menuActionRequested;
+        _newGameStarted = newGameStarted;
         _cancelAction = cancelAction;
         Name = "RetailOpening";
 
@@ -90,7 +94,7 @@ internal partial class RetailOpening : CanvasLayer
             var button = BuildButton(authored, font);
             if (!hasSave && authored.Action is ContinueAction or LoadAction)
                 button.Disabled = true;
-            button.Pressed += () => Dispatch(authored.Action);
+            button.Pressed += () => _ = Dispatch(authored.Action);
             _canvas.AddChild(button);
             if (!_buttonsByAction.TryAdd(authored.Action, button))
                 throw new InvalidOperationException(
@@ -138,11 +142,13 @@ internal partial class RetailOpening : CanvasLayer
         if (!configuredCancel && !escape)
             return;
         GetViewport().SetInputAsHandled();
-        CompleteIntro();
+        _ = CompleteIntro();
     }
 
-    private void Dispatch(string action)
+    private async Task Dispatch(string action)
     {
+        if (_transitionStarted)
+            return;
         if (action == NewGameAction)
         {
             PlayIntro();
@@ -153,13 +159,33 @@ internal partial class RetailOpening : CanvasLayer
             GetTree().Quit();
             return;
         }
-        _menuActionRequested?.Invoke(action);
+        if (action is not (ContinueAction or LoadAction))
+        {
+            if (_menuActionRequested is not null)
+                await _menuActionRequested(action);
+            return;
+        }
+        _transitionStarted = true;
+        SetButtonsDisabled();
+        try
+        {
+            if (_menuActionRequested is not null)
+                await _menuActionRequested(action);
+            QueueFree();
+        }
+        catch (Exception exception)
+        {
+            RestoreOwnedFailureCover();
+            GD.PushError($"OPENNV_OWNED_MENU_TRANSITION_FAIL {exception}");
+            GetTree().Quit(1);
+        }
     }
 
     private void PlayIntro()
     {
         if (_video is not null)
             return;
+        _newGameStarted?.Invoke();
         _music.Stop();
         _canvas.Visible = false;
         _video = new VideoStreamPlayer
@@ -170,20 +196,48 @@ internal partial class RetailOpening : CanvasLayer
             Loop = false,
         };
         _video.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        _video.Finished += CompleteIntro;
+        _video.Finished += () => _ = CompleteIntro();
         _viewport.AddChild(_video);
         _video.Play();
     }
 
-    private void CompleteIntro()
+    private async Task CompleteIntro()
     {
-        if (_introCompleted)
+        if (_introCompleted || _transitionStarted)
             return;
         _introCompleted = true;
+        _transitionStarted = true;
         _video?.Stop();
         _music.Stop();
-        _introFinished?.Invoke();
-        QueueFree();
+        try
+        {
+            if (_introFinished is not null)
+                await _introFinished();
+            QueueFree();
+        }
+        catch (Exception exception)
+        {
+            RestoreOwnedFailureCover();
+            GD.PushError($"OPENNV_OWNED_INTRO_TRANSITION_FAIL {exception}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private void RestoreOwnedFailureCover()
+    {
+        if (_video is not null)
+        {
+            _video.Stop();
+            _video.Visible = false;
+        }
+        _canvas.Visible = true;
+        Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    private void SetButtonsDisabled()
+    {
+        foreach (var button in _buttonsByAction.Values)
+            button.Disabled = true;
     }
 
     private void ScaleReferenceCanvas()

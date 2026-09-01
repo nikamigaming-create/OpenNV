@@ -38,7 +38,8 @@ internal sealed record OpeningManifest(
 
     internal static OpeningManifest Load(
         string path,
-        RuntimeConfiguration configuration)
+        RuntimeConfiguration configuration,
+        bool allowRouteValidationProfile = false)
     {
         var resolved = System.IO.Path.GetFullPath(path);
         using var document = JsonDocument.Parse(File.ReadAllText(resolved));
@@ -70,13 +71,25 @@ internal sealed record OpeningManifest(
                 ExpectedFirstSliceClosureStatus
             : declaredCreatorCapExclusions &&
                 sourceClosure.GetProperty("status").GetString() == "incomplete";
+        var unaccounted = sourceClosure.GetProperty("unaccounted");
+        var routeValidationProjection =
+            allowRouteValidationProfile &&
+            root.GetProperty("playerFaceGenProfile").GetString() ==
+                "source-default-route-validation" &&
+            sourceClosure.GetProperty("playableClaimReady").GetBoolean() == false &&
+            sourceClosure.GetProperty("unaccountedCount").GetInt32() == 1 &&
+            unaccounted.GetArrayLength() == 1 &&
+            unaccounted[0].GetProperty("reason").GetString() ==
+                "creator-valid-selection-preview-closure";
         if (sourceClosure.GetProperty("schema").GetString() !=
                 ExpectedFirstSliceClosureSchema ||
             !validClosureStatus ||
-            sourceClosure.GetProperty("playableClaimReady").GetBoolean() !=
-                (omitted.GetArrayLength() == 0) ||
-            sourceClosure.GetProperty("unaccountedCount").GetInt32() != 0 ||
-            sourceClosure.GetProperty("unaccounted").GetArrayLength() != 0 ||
+            (!routeValidationProjection &&
+                sourceClosure.GetProperty("playableClaimReady").GetBoolean() !=
+                    (omitted.GetArrayLength() == 0)) ||
+            (!routeValidationProjection &&
+                sourceClosure.GetProperty("unaccountedCount").GetInt32() != 0) ||
+            (!routeValidationProjection && unaccounted.GetArrayLength() != 0) ||
             sourceClosure.GetProperty("unsupported").GetArrayLength() != 0)
             throw new InvalidOperationException(
                 "Owned opening first-slice source closure is inconsistent.");

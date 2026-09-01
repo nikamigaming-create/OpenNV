@@ -24,6 +24,7 @@ from actor_gltf import (
     sample_transform_animation,
 )
 from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
+from cell_catalog import cell_parent_form_id
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from export_static_nif_gltf import export_static_nif
@@ -33,6 +34,7 @@ from owned_archive_stack import OwnedArchiveStack
 from player_facegen_preview import (
     PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
     PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
+    PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS,
     prepare_default_player_facegen_preview,
 )
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
@@ -44,6 +46,11 @@ from compiler_provenance import compiler_provenance
 OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
 OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
+FULL_PLAYER_FACEGEN_PROFILE = "all-source-valid-selections"
+ROUTE_PLAYER_FACEGEN_PROFILE = "source-default-route-validation"
+PLAYER_FACEGEN_PROFILES = frozenset(
+    {FULL_PLAYER_FACEGEN_PROFILE, ROUTE_PLAYER_FACEGEN_PROFILE}
+)
 RACE_SEX_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-racesex-menu-tiles/v1"
 TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-textedit-menu-tiles/v1"
 DIALOGUE_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-dialogue-menu-tiles/v1"
@@ -53,6 +60,9 @@ PLAYER_BASE_LEVEL_OFFSET = 8
 PLAYER_BASE_HEALTH_OFFSET = 0
 PLAYER_BASE_ACBS_BYTES = 24
 PLAYER_BASE_DATA_MINIMUM_BYTES = 11
+CREATURE_DATA_BYTES = 17
+CREATURE_HEALTH_OFFSET = 4
+CREATURE_ATTACK_DAMAGE_OFFSET = 8
 RACE_DATA_BYTES = 36
 RACE_FLAGS_OFFSET = 32
 RACE_PLAYABLE_FLAG = 0x01
@@ -97,10 +107,14 @@ FACEGEN_SLIDER_INCREMENT_TRAIT = "user6"
 FACEGEN_SLIDER_INCREMENT_DEFAULT_THRESHOLD = 1.0
 FNV_ENGINE_BUILD = "1.4.0.525"
 FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE = "fnv-1.4.0.525-gmst-ixpbase-v1"
+FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN_EVIDENCE = (
+    "fnv-1.4.0.525-gmst-fjumpheightmin-retail-oracle-v1"
+)
 # FalloutNV.exe owns this default; FalloutNV.esm intentionally has no GMST override.
 # The value was recovered from the exact 1.4.0.525 engine setting and is emitted with
 # explicit engine-default provenance, never as a recipe/runtime fallback.
 FNV_ENGINE_DEFAULT_XP_BASE = 200
+FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN = 64.0
 REQUIRED_VITAL_GAME_SETTINGS = (
     "fAVDHealthEnduranceMult",
     "fAVDHealthLevelMult",
@@ -200,6 +214,7 @@ REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_PRIMITIVE_BYTES = 32
 REFERENCE_PRIMITIVE_FLOAT_COUNT = 7
 LEVELED_ITEM_ENTRY_BYTES = 12
+LEVELED_ITEM_FORM_OFFSET = 4
 WEAPON_DATA_BYTES = 15
 WEAPON_DAMAGE_OFFSET = 12
 WEAPON_CLIP_SIZE_OFFSET = 14
@@ -210,6 +225,7 @@ FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
     "nif-marker-minus-gmst-target-offset-for-actor-placement"
 )
 FURNITURE_MARKER_PLACEMENT_AXES = ("x", "y", "z")
+CONDITION_OPERATOR_EQUAL = 0x00
 CONDITION_OPERATOR_GREATER_OR_EQUAL = 0x60
 PLAYER_CONTROL_ARGUMENTS = (
     "movement",
@@ -237,12 +253,14 @@ OPENING_COMMAND_KINDS = frozenset(
         "playerControls",
         "playIdle",
         "referenceEnabled",
+        "resetPipBoyManager",
         "removeitem",
         "removeScriptPackage",
         "sayTo",
         "setDestroyed",
         "setGlobal",
         "setQuestVariable",
+        "setReferenceVariable",
         "setStage",
         "setTimer",
         "showMenu",
@@ -298,6 +316,7 @@ class ReferenceTransformSource:
     record_type: str
     position_game_units: tuple[float, float, float]
     rotation_radians: tuple[float, float, float]
+    cell_form_id: int | None = None
     base_form_id: int | None = None
     record_sha256: str = ""
 
@@ -306,6 +325,11 @@ class ReferenceTransformSource:
             "formId": form_id_text(self.form_id),
             "editorId": self.editor_id,
             "recordType": self.record_type,
+            "cellFormId": (
+                form_id_text(self.cell_form_id)
+                if self.cell_form_id is not None
+                else None
+            ),
             "positionGameUnits": list(self.position_game_units),
             "rotationRadians": list(self.rotation_radians),
             "rotationGodotQuaternion": godot_rotation_quaternion(
@@ -387,7 +411,11 @@ def emit_player_facegen_preview_set(
     """Emit the compiled full-body preview contract for strict sibling consumers."""
     if (
         preview_set.get("schema") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA
-        or preview_set.get("status") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
+        or preview_set.get("status")
+        not in {
+            PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
+            PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS,
+        }
     ):
         raise ValueError("Owned player FaceGen preview-set contract is malformed")
     output = (
@@ -442,6 +470,14 @@ def _subrecord_form_id(data: bytes) -> int | None:
     return struct.unpack_from("<I", data)[0]
 
 
+def _record_link_form_id(record_type: str, signature: str, data: bytes) -> int | None:
+    if record_type == "LVLI" and signature == "LVLO":
+        if len(data) != LEVELED_ITEM_ENTRY_BYTES:
+            raise ValueError("Owned leveled-item graph link differs")
+        return struct.unpack_from("<I", data, LEVELED_ITEM_FORM_OFFSET)[0]
+    return _subrecord_form_id(data)
+
+
 def _record_editor_id(record: Record) -> str | None:
     for subrecord in iter_subrecords(record):
         if subrecord.signature == "EDID":
@@ -474,7 +510,9 @@ def index_records(
             if subrecord.signature == "EDID":
                 editor_id = zstring(subrecord.data)
             if subrecord.signature in link_signatures:
-                target = _subrecord_form_id(subrecord.data)
+                target = _record_link_form_id(
+                    record.signature, subrecord.signature, subrecord.data
+                )
                 if target:
                     links.append((subrecord.signature, target))
                     reverse_links[(subrecord.signature, target)].append(record.form_id)
@@ -537,8 +575,9 @@ def record_graph_closure(
                         f"signature={signature}:target={form_id_text(target)}"
                     )
                     continue
-                selected.add(target)
-                added.add(target)
+                if target not in selected:
+                    selected.add(target)
+                    added.add(target)
         return added
 
     root_dependencies = add_links(root_forms)
@@ -582,6 +621,15 @@ def record_graph_closure(
     }
     selected.update(enable_parent_children)
     add_links(enable_parent_children)
+
+    leveled_frontier = {
+        form_id for form_id in selected if by_form[form_id].signature == "LVLI"
+    }
+    while leveled_frontier:
+        added = add_links(leveled_frontier)
+        leveled_frontier = {
+            form_id for form_id in added if by_form[form_id].signature == "LVLI"
+        }
 
     for current in tuple(selected | root_dependencies):
         row = by_form.get(current)
@@ -646,6 +694,7 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
         primitive = None
         leveled_entries: list[dict[str, object]] = []
         weapon = None
+        creature = None
         inventory: list[dict[str, object]] = []
         for subrecord in iter_subrecords(record):
             inventory.append(
@@ -681,6 +730,17 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                     "boundsGameUnits": list(primitive_values[:3]),
                     "colorRgba": list(primitive_values[3:REFERENCE_PRIMITIVE_FLOAT_COUNT]),
                     "type": primitive_values[REFERENCE_PRIMITIVE_FLOAT_COUNT],
+                }
+            if record.signature == "CREA" and subrecord.signature == "DATA":
+                if len(subrecord.data) != CREATURE_DATA_BYTES or creature is not None:
+                    raise ValueError(
+                        f"Owned creature DATA differs: {form_id_text(record.form_id)}"
+                    )
+                creature = {
+                    "maximumHealth": struct.unpack_from(
+                        "<H", subrecord.data, CREATURE_HEALTH_OFFSET
+                    )[0],
+                    "attackDamage": subrecord.data[CREATURE_ATTACK_DAMAGE_OFFSET],
                 }
             if record.signature == "LVLI" and subrecord.signature == "LVLO":
                 if len(subrecord.data) != LEVELED_ITEM_ENTRY_BYTES:
@@ -764,6 +824,7 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                 "primitive": primitive,
                 "leveledEntries": leveled_entries,
                 "weapon": weapon,
+                "creature": creature,
                 "questStageScripts": stage_scripts,
                 "questObjectives": quest_objectives,
                 "subrecords": inventory,
@@ -3285,6 +3346,18 @@ def compile_ui(
         documents,
         resolved_includes,
     )
+    dialogue_font_ids = {
+        int(font_id)
+        for menu in flow_menus
+        for tile_contract in [menu.get("dialogueMenuTiles")]
+        if tile_contract is not None
+        for font_id in (
+            dict(tile_contract)["speakerName"]["font"],
+            dict(tile_contract)["speakerText"]["font"],
+            dict(dict(tile_contract)["topics"])["template"]["font"],
+        )
+    }
+    gameplay_font_ids = frozenset(set(gameplay_font_ids) | dialogue_font_ids)
     gameplay["physicalDevice"] = _prepare_gameplay_physical_device(
         dict(dict(recipe_ui["gameplayPresentation"])["physicalDevice"]),
         owned_archives,
@@ -3845,6 +3918,9 @@ def _script_commands_unconditional(source: str) -> list[dict[str, object]]:
                 }
             )
             continue
+        if re.fullmatch(r"ResetPipBoyManager", line, re.IGNORECASE):
+            commands.append({"kind": "resetPipBoyManager"})
+            continue
         match = re.fullmatch(
             r"(\w+)\.(ResetAI|EVP|StopLook|Look)\s*(\w+)?",
             line,
@@ -4209,6 +4285,7 @@ def _scan_flow_sources(
                     record.signature,
                     tuple(values[:3]),
                     tuple(values[3:]),
+                    cell_parent_form_id(record),
                     next(
                         (
                             _subrecord_form_id(subrecord.data)
@@ -4375,6 +4452,17 @@ def _compile_gameplay_vitals(sources: FlowSourceCatalog) -> dict[str, object]:
             "value": FNV_ENGINE_DEFAULT_XP_BASE,
         }
     )
+    settings.append(
+        {
+            "editorId": "fJumpHeightMin",
+            "formId": None,
+            "recordSha256": None,
+            "sourceKind": "falloutnv-exact-build-engine-default",
+            "engineBuild": FNV_ENGINE_BUILD,
+            "evidenceId": FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN_EVIDENCE,
+            "value": FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN,
+        }
+    )
 
     actor_values_by_editor = {
         str(value["editorId"]).casefold(): value for value in sources.actor_values
@@ -4416,6 +4504,7 @@ def _compile_gameplay_vitals(sources: FlowSourceCatalog) -> dict[str, object]:
                 "(targetLevel - 1) * (((targetLevel - 2) * iXPBumpBase) / 2 + "
                 "iXPBase)"
             ),
+            "jumpHeightGameUnits": "fJumpHeightMin",
         },
     }
 
@@ -5257,6 +5346,155 @@ def _compile_topic_closure(
     return rows, str(root["formId"])
 
 
+def _compile_package_dialogue_closure(
+    records: list[dict[str, object]],
+    package: dict[str, object],
+    actor_base_form_id: str,
+    quest: dict[str, object],
+    scripts: dict[str, tuple[int, str]],
+    condition_function_names: dict[str, object],
+) -> tuple[list[dict[str, object]], str]:
+    function_ids = {
+        str(name).casefold(): int(form_id)
+        for form_id, name in condition_function_names.items()
+    }
+    required_functions = {
+        "getobjectivecompleted", "getstage", "getstagedone", "getisid"
+    }
+    if not required_functions.issubset(function_ids):
+        raise ValueError("Owned package-dialogue condition functions are absent")
+    stage_conditions = [
+        condition
+        for condition in package["conditions"]
+        if str(condition["functionName"]).casefold() in {"getstage", "getstagedone"}
+        and str(condition["parameter1"]).casefold()
+        == str(quest["formId"]).casefold()
+        and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
+        and (
+            str(condition["functionName"]).casefold() == "getstage"
+            or float(condition["comparisonValue"]) == 1.0
+        )
+    ]
+    if len(stage_conditions) != 1:
+        raise ValueError("Owned package dialogue has no unique completed stage")
+    source_function_name = str(stage_conditions[0]["functionName"]).casefold()
+    source_stage = (
+        int(stage_conditions[0]["comparisonValue"])
+        if source_function_name == "getstage"
+        else int(stage_conditions[0]["parameter2"])
+    )
+    greeting = _unique_manifest_record(records, "GREETING", "DIAL")
+    greeting_form_id = str(greeting["formId"])
+    greeting_candidates = []
+    for record in records:
+        if record["recordType"] != "INFO" or not any(
+            int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE
+            and str(group["label"]).casefold() == greeting_form_id.casefold()
+            for group in record["groups"]
+        ):
+            continue
+        if not any(
+            link["signature"] == "QSTI"
+            and str(link["formId"]).casefold() == str(quest["formId"]).casefold()
+            for link in record["links"]
+        ):
+            continue
+        conditions = record["conditions"]
+        if not any(
+            int(condition["function"]) == function_ids["getisid"]
+            and str(condition["parameter1"]).casefold()
+            == actor_base_form_id.casefold()
+            and float(condition["comparisonValue"]) == 1.0
+            for condition in conditions
+        ):
+            continue
+        exact_stage = any(
+            int(condition["function"]) == function_ids["getstage"]
+            and str(condition["parameter1"]).casefold()
+            == str(quest["formId"]).casefold()
+            and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
+            and float(condition["comparisonValue"]) == float(source_stage)
+            for condition in conditions
+        )
+        completed_stages = [
+            int(condition["parameter2"])
+            for condition in conditions
+            if int(condition["function"]) == function_ids["getstagedone"]
+            and str(condition["parameter1"]).casefold()
+            == str(quest["formId"]).casefold()
+            and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
+            and float(condition["comparisonValue"]) == 1.0
+            and int(condition["parameter2"]) <= source_stage
+        ]
+        if exact_stage or completed_stages:
+            greeting_candidates.append(
+                (record, source_stage if exact_stage else max(completed_stages), exact_stage)
+            )
+    exact_candidates = [value for value in greeting_candidates if value[2]]
+    eligible = exact_candidates or greeting_candidates
+    if eligible:
+        latest_stage = max(value[1] for value in eligible)
+        greeting_infos = [value[0] for value in eligible if value[1] == latest_stage]
+    else:
+        greeting_infos = []
+    if len(greeting_infos) != 1:
+        raise ValueError(
+            "Owned package greeting is ambiguous: "
+            f"package={package['editorId']} matches={len(greeting_infos)}"
+        )
+    greeting_info = _dialogue_info_manifest(
+        greeting_infos[0], scripts, str(quest["editorId"])
+    )
+    topics_by_form = {
+        str(record["formId"]): record
+        for record in records
+        if record["recordType"] == "DIAL"
+    }
+    infos_by_topic: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        if record["recordType"] != "INFO":
+            continue
+        for group in record["groups"]:
+            if int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE:
+                infos_by_topic[str(group["label"])].append(record)
+    closure = set()
+    queue = deque(greeting_info["nextTopicFormIds"])
+    while queue:
+        form_id = queue.popleft()
+        if form_id in closure:
+            continue
+        if form_id not in topics_by_form:
+            raise ValueError(f"Owned package dialogue topic is absent: {form_id}")
+        closure.add(form_id)
+        for info in infos_by_topic.get(form_id, []):
+            queue.extend(
+                link["formId"]
+                for link in info["links"]
+                if link["signature"] == "TCLT"
+            )
+    rows = [{
+        "formId": greeting_form_id,
+        "editorId": _record_editor_id_from_manifest(greeting),
+        "prompt": next(iter(_record_text_values(greeting, "FULL")), ""),
+        "infos": [greeting_info],
+    }]
+    for form_id in sorted(closure, key=lambda value: int(value, FORM_ID_RADIX)):
+        topic = topics_by_form[form_id]
+        rows.append({
+            "formId": form_id,
+            "editorId": _record_editor_id_from_manifest(topic),
+            "prompt": next(iter(_record_text_values(topic, "FULL")), ""),
+            "infos": [
+                _dialogue_info_manifest(info, scripts, str(quest["editorId"]))
+                for info in sorted(
+                    infos_by_topic.get(form_id, []),
+                    key=lambda value: int(value["sourceOrder"]),
+                )
+            ],
+        })
+    return rows, greeting_form_id
+
+
 def _compile_actor_dialogue_voice(
     topics: list[dict[str, object]],
     role: dict[str, object],
@@ -5564,6 +5802,22 @@ def _resolve_command_record_identities(
     resolved_counts: dict[str, int] = defaultdict(int)
     for command in command_rows:
         kind = str(command.get("kind", ""))
+        if kind == "setQuestVariable":
+            quest_editor_id = str(command["questEditorId"])
+            quest_matches = [
+                record
+                for record in records_by_editor.get(quest_editor_id.casefold(), [])
+                if record["recordType"] == "QUST"
+            ]
+            reference_matches = [
+                record
+                for record in records_by_editor.get(quest_editor_id.casefold(), [])
+                if record["recordType"] in {"REFR", "ACHR", "ACRE"}
+            ]
+            if not quest_matches and len(reference_matches) == 1:
+                command["kind"] = "setReferenceVariable"
+                command["referenceEditorId"] = command.pop("questEditorId")
+                kind = "setReferenceVariable"
         if kind not in OPENING_COMMAND_KINDS:
             raise ValueError(f"Owned opening command kind is unaccounted: {kind!r}")
         kind_counts[kind] += 1
@@ -5926,6 +6180,14 @@ def _compile_guide_package(
     values: dict[str, list[bytes]] = defaultdict(list)
     for subrecord in subrecords:
         values[subrecord.signature].append(subrecord.data)
+    event_names = {"POBA": "begin", "POEA": "end", "POCA": "change"}
+    event_sources: dict[str, list[str]] = defaultdict(list)
+    current_event = None
+    for subrecord in subrecords:
+        if subrecord.signature in event_names:
+            current_event = event_names[subrecord.signature]
+        elif subrecord.signature == "SCTX" and current_event is not None:
+            event_sources[current_event].append(zstring(subrecord.data))
     editor_id = _catalog_text(subrecords, "EDID")
     if editor_id is None:
         raise ValueError(f"Owned guide PACK {record.form_id:08x} has no editor ID")
@@ -6051,6 +6313,14 @@ def _compile_guide_package(
             "target": target,
             "idleAnimationFormIds": [form_id_text(value) for value in idle_forms],
             "idleAnimationLogicalPaths": idle_paths,
+            "eventCommands": {
+                event: [
+                    command
+                    for source in event_sources.get(event, [])
+                    for command in _script_commands(source)
+                ]
+                for event in event_names.values()
+            },
         },
         tuple(idle_paths),
     )
@@ -7016,6 +7286,146 @@ def _compile_hit_target_sets(
     return results
 
 
+def _compile_combat_encounters(
+    records: list[dict[str, object]],
+    configurations: Iterable[object],
+    ordinary_quests: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    results = []
+    records_by_form = {
+        str(record["formId"]).casefold(): record for record in records
+    }
+    for source_configuration in configurations:
+        configuration = dict(source_configuration)
+        script = _unique_manifest_record(
+            records, str(configuration["deathScriptEditorId"]), "SCPT"
+        )
+        sources = _record_text_values(script, "SCTX")
+        if len(sources) != 1:
+            raise ValueError("Owned combat death script source is ambiguous")
+        source = sources[0]
+        increment = re.search(
+            r"set\s+(?P<quest>\w+)\.n(?P<variable>\w+)\s+to\s+"
+            r"(?P=quest)\.n(?P=variable)\s*\+\s*(?P<increment>\d+)",
+            source,
+            re.IGNORECASE,
+        )
+        early_stage = re.search(
+            r"if\s*\(GetObjectiveDisplayed\s+(?P<quest>\w+)\s+"
+            r"(?P<objective>\d+)\s*==\s*0\s*&&\s*GetStage\s+(?P=quest)\s*<\s*"
+            r"(?P<minimum>\d+)\).*?SetStage\s+(?P=quest)\s+"
+            r"(?P<stage>\d+).*?endif",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        completion = re.search(
+            r"if\s*\((?P<quest>\w+)\.n(?P<variable>\w+)\s*==\s*"
+            r"(?P<threshold>\d+)\s*&&\s*GetObjectiveCompleted\s+(?P=quest)\s+"
+            r"(?P<objective>\d+)\s*==\s*0\).*?SetStage\s+(?P=quest)\s+"
+            r"(?P<stage>\d+).*?(?P<reset_actor>\w+)\.ResetAI.*?endif",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not increment or not early_stage or not completion:
+            raise ValueError("Owned combat death semantics differ")
+        quest_editor_id = increment["quest"]
+        variable_name = f"n{increment['variable']}"
+        if (
+            int(increment["increment"]) <= 0
+            or early_stage["quest"].casefold() != quest_editor_id.casefold()
+            or completion["quest"].casefold() != quest_editor_id.casefold()
+            or f"n{completion['variable']}".casefold() != variable_name.casefold()
+            or int(early_stage["objective"]) != int(completion["objective"])
+            or int(early_stage["minimum"]) != int(early_stage["stage"])
+            or int(completion["threshold"]) <= 0
+        ):
+            raise ValueError("Owned combat death transition differs")
+        quest = next(
+            (
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold() == quest_editor_id.casefold()
+            ),
+            None,
+        )
+        if quest is None:
+            raise ValueError("Owned combat quest is absent")
+        variables = {
+            str(value["name"]).casefold(): value for value in quest["variables"]
+        }
+        variable = variables.get(variable_name.casefold())
+        if variable is None:
+            raise ValueError("Owned combat death counter is absent")
+        reset_actor = _unique_manifest_record(
+            records, completion["reset_actor"], "ACHR"
+        )
+        targets = []
+        for reference_editor_id in configuration["referenceEditorIds"]:
+            reference = _unique_manifest_record(
+                records, str(reference_editor_id), "ACRE"
+            )
+            base_links = [
+                link for link in reference["links"] if link["signature"] == "NAME"
+            ]
+            if len(base_links) != 1:
+                raise ValueError("Owned combat actor base identity is ambiguous")
+            base = records_by_form.get(str(base_links[0]["formId"]).casefold())
+            if base is None or base["recordType"] != "CREA":
+                raise ValueError("Owned combat creature base is absent")
+            if not any(
+                link["signature"] == "SCRI"
+                and str(link["formId"]).casefold()
+                == str(script["formId"]).casefold()
+                for link in base["links"]
+            ):
+                raise ValueError("Owned combat creature death script differs")
+            creature = base.get("creature")
+            if (
+                not isinstance(creature, dict)
+                or int(creature.get("maximumHealth", 0)) <= 0
+                or int(creature.get("attackDamage", 0)) <= 0
+            ):
+                raise ValueError("Owned combat creature stats are absent")
+            package_form_ids = [
+                str(link["formId"])
+                for link in base["links"]
+                if link["signature"] == "PKID"
+            ]
+            if not package_form_ids or any(
+                records_by_form.get(form_id.casefold(), {}).get("recordType") != "PACK"
+                for form_id in package_form_ids
+            ):
+                raise ValueError("Owned combat creature AI packages are absent")
+            targets.append(
+                {
+                    "referenceFormId": reference["formId"],
+                    "baseFormId": base["formId"],
+                    "maximumHealth": int(creature["maximumHealth"]),
+                    "attackDamage": int(creature["attackDamage"]),
+                    "packageFormIds": package_form_ids,
+                }
+            )
+        if len(targets) != len(configuration["referenceEditorIds"]):
+            raise ValueError("Owned combat creature reference set differs")
+        results.append(
+            {
+                "deathScriptFormId": script["formId"],
+                "deathScriptEditorId": str(configuration["deathScriptEditorId"]),
+                "questFormId": quest["formId"],
+                "questVariableIndex": int(variable["index"]),
+                "questVariableName": str(variable["name"]),
+                "counterIncrement": int(increment["increment"]),
+                "threshold": int(completion["threshold"]),
+                "objectiveIndex": int(early_stage["objective"]),
+                "minimumCombatStage": int(early_stage["minimum"]),
+                "completionStage": int(completion["stage"]),
+                "resetActorReferenceFormId": reset_actor["formId"],
+                "targets": targets,
+            }
+        )
+    return results
+
+
 def compile_new_game_flow(
     master_path: Path,
     ui_archive_path: Path,
@@ -7025,7 +7435,10 @@ def compile_new_game_flow(
     audio_archives: OwnedArchiveStack,
     cache_root: Path,
     configuration: RuntimeConfiguration,
+    player_facegen_profile: str = FULL_PLAYER_FACEGEN_PROFILE,
 ) -> tuple[dict[str, object], tuple[str, ...]]:
+    if player_facegen_profile not in PLAYER_FACEGEN_PROFILES:
+        raise ValueError("Owned player FaceGen profile is unsupported")
     quest_editor_id = str(flow["questEditorId"])
     quest = _unique_manifest_record(records, quest_editor_id, "QUST")
     quest_script = _unique_manifest_record(
@@ -7260,14 +7673,19 @@ def compile_new_game_flow(
             )
             packages.append(package)
         ordinary_quest_editor_id = str(actor_contract["questEditorId"])
-        if not any(
-            str(ordinary["editorId"]).casefold()
-            == ordinary_quest_editor_id.casefold()
+        ordinary_quest = next((
+            ordinary
             for ordinary in ordinary_quests
-        ):
+            if str(ordinary["editorId"]).casefold()
+            == ordinary_quest_editor_id.casefold()
+        ), None)
+        if ordinary_quest is None:
             raise ValueError(
                 f"Owned ordinary actor quest is absent: {ordinary_quest_editor_id}"
             )
+        packages_by_editor = {
+            str(package["editorId"]).casefold(): package for package in packages
+        }
         activation_topic_editor_id = str(actor_contract["activationTopicEditorId"])
         topics_by_form = {}
         topic_roots = {}
@@ -7284,6 +7702,53 @@ def compile_new_game_flow(
             topic_roots[str(topic_editor_id).casefold()] = topic_root_form_id
             for topic in topic_rows:
                 topics_by_form[str(topic["formId"])] = topic
+        package_dialogues = []
+        for dialogue_source in actor_contract.get("automaticPackageDialogues", []):
+            dialogue_contract = dict(dialogue_source)
+            package_editor_id = str(dialogue_contract["packageEditorId"])
+            package = packages_by_editor.get(package_editor_id.casefold())
+            if package is None or str(package["packageTypeName"]).casefold() != "dialogue":
+                raise ValueError(
+                    f"Owned automatic dialogue package is absent: {package_editor_id}"
+                )
+            topic_rows, greeting_topic_form_id = _compile_package_dialogue_closure(
+                records,
+                package,
+                str(role["baseFormId"]),
+                ordinary_quest,
+                sources.scripts,
+                dict(guide_contract["conditionFunctionNames"]),
+            )
+            for topic in topic_rows:
+                existing = topics_by_form.get(str(topic["formId"]))
+                if existing is None:
+                    topics_by_form[str(topic["formId"])] = topic
+                    continue
+                if (
+                    existing["editorId"] != topic["editorId"]
+                    or existing["prompt"] != topic["prompt"]
+                ):
+                    raise ValueError(
+                        f"Owned ordinary dialogue topic differs: {topic['formId']}"
+                    )
+                infos_by_form = {
+                    str(info["formId"]): info for info in existing["infos"]
+                }
+                for info in topic["infos"]:
+                    previous = infos_by_form.get(str(info["formId"]))
+                    if previous is not None and previous != info:
+                        raise ValueError(
+                            f"Owned ordinary dialogue INFO differs: {info['formId']}"
+                        )
+                    infos_by_form[str(info["formId"])] = info
+                existing["infos"] = sorted(
+                    infos_by_form.values(),
+                    key=lambda value: int(value["sourceOrder"]),
+                )
+            package_dialogues.append({
+                "packageFormId": package["formId"],
+                "greetingTopicFormId": greeting_topic_form_id,
+            })
         topics = sorted(
             topics_by_form.values(),
             key=lambda value: int(str(value["formId"]), FORM_ID_RADIX),
@@ -7305,10 +7770,13 @@ def compile_new_game_flow(
             for info in topic["infos"]
             for command in info["commands"]
         ]
+        commands.extend(
+            command
+            for package in packages
+            for event_commands in package["eventCommands"].values()
+            for command in event_commands
+        )
         arrivals = []
-        packages_by_editor = {
-            str(package["editorId"]).casefold(): package for package in packages
-        }
         for transition_source in actor_contract.get("arrivalTransitions", []):
             transition = dict(transition_source)
             package_editor_id = str(transition["packageEditorId"])
@@ -7350,12 +7818,6 @@ def compile_new_game_flow(
                     re.IGNORECASE,
                 )
             }
-            ordinary_quest = next(
-                value
-                for value in ordinary_quests
-                if str(value["editorId"]).casefold()
-                == ordinary_quest_editor_id.casefold()
-            )
             if len(from_stages) != 1 or len(to_stages) != 1:
                 raise ValueError(
                     f"Owned ordinary arrival stages are ambiguous: {script_editor_id}"
@@ -7403,7 +7865,7 @@ def compile_new_game_flow(
                 re.IGNORECASE,
             )
             if (
-                len(objective_matches) != 1
+                len(set(objective_matches)) != 1
                 or {value.casefold() for value in say_matches}
                 != {topic_editor_id.casefold()}
             ):
@@ -7423,12 +7885,6 @@ def compile_new_game_flow(
                 raise ValueError(
                     f"Owned ordinary trigger volume is absent: {script_editor_id}"
                 )
-            ordinary_quest = next(
-                value
-                for value in ordinary_quests
-                if str(value["editorId"]).casefold()
-                == ordinary_quest_editor_id.casefold()
-            )
             automatic_triggers.append(
                 {
                     "scriptFormId": script["formId"],
@@ -7443,7 +7899,7 @@ def compile_new_game_flow(
                     ),
                     "boundsGameUnits": primitive["boundsGameUnits"],
                     "questFormId": ordinary_quest["formId"],
-                    "objectiveIndex": int(objective_matches[0]),
+                    "objectiveIndex": int(next(iter(set(objective_matches)))),
                     "topicFormId": topic_roots[topic_editor_id.casefold()],
                 }
             )
@@ -7459,6 +7915,7 @@ def compile_new_game_flow(
                 "voice": voice,
                 "arrivalTransitions": arrivals,
                 "automaticDialogueTriggers": automatic_triggers,
+                "automaticPackageDialogues": package_dialogues,
                 "commandContract": _resolve_command_record_identities(
                     commands, records
                 ),
@@ -7469,11 +7926,46 @@ def compile_new_game_flow(
         str(guide_actor_ai["referenceFormId"]),
         guide_animation_paths,
     )
+    ordinary_locomotion_paths = [
+        str(guide_actor_ai["locomotion"][role]["logicalPath"])
+        for role in ("walk", "run")
+    ]
+    for actor in ordinary_actors:
+        _merge_actor_animation_paths(
+            actor_animations,
+            str(actor["referenceFormId"]),
+            ordinary_locomotion_paths,
+        )
     hit_target_sets = _compile_hit_target_sets(
         records,
         flow.get("hitTargetSets", []),
         ordinary_quests,
         ordinary_actors,
+    )
+    for command in (
+        command
+        for quest_row in ordinary_quests
+        for stage in quest_row["stages"]
+        for command in stage["commands"]
+        if command["kind"] == "sayTo"
+    ):
+        matches = [
+            actor
+            for actor in ordinary_actors
+            if str(role_by_name[str(actor["role"])]["editorId"]).casefold()
+            == str(command["speakerEditorId"]).casefold()
+            and any(
+                str(topic["editorId"]).casefold()
+                == str(command["topicEditorId"]).casefold()
+                for topic in actor["topics"]
+            )
+        ]
+        if len(matches) != 1 or str(command["targetEditorId"]).casefold() != "player":
+            raise ValueError("Owned ordinary stage dialogue speaker differs")
+    combat_encounters = _compile_combat_encounters(
+        records,
+        flow.get("combatEncounters", []),
+        ordinary_quests,
     )
     flow_commands = _all_flow_commands(programs, dialogue)
     command_contract = _resolve_command_record_identities(flow_commands, records)
@@ -7580,10 +8072,17 @@ def compile_new_game_flow(
             str(character_rules["appearancePreviewOutfitFormId"]),
             16,
         ),
-        include_all_playable_race_selections=True,
+        include_all_playable_race_selections=(
+            player_facegen_profile == FULL_PLAYER_FACEGEN_PROFILE
+        ),
+        source_default_route_selection_only=(
+            player_facegen_profile == ROUTE_PLAYER_FACEGEN_PROFILE
+        ),
     )
     appearance["preview"] = (
-        "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-"
+        "owned-source-default-player-identity-full-body-live-preview-route-validation"
+        if player_facegen_profile == ROUTE_PLAYER_FACEGEN_PROFILE
+        else "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-"
         "previews-all-native-geometry-controls"
     )
     tag_menu_commands = [
@@ -7626,6 +8125,7 @@ def compile_new_game_flow(
             "ordinaryQuests": ordinary_quests,
             "ordinaryActors": ordinary_actors,
             "hitTargetSets": hit_target_sets,
+            "combatEncounters": combat_encounters,
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
             "guideActorAi": guide_actor_ai,
@@ -8012,6 +8512,7 @@ def prepare_opening_manifest(
     master_sha256: str,
     default_ini_path: Path,
     preferences_ini_path: Path | None = None,
+    player_facegen_profile: str = FULL_PLAYER_FACEGEN_PROFILE,
 ) -> dict[str, object]:
     recipe = load_opening_recipe(recipe_path)
     graph = dict(recipe["recordGraph"])
@@ -8072,6 +8573,7 @@ def prepare_opening_manifest(
         audio_archives,
         cache_root,
         configuration,
+        player_facegen_profile,
     )
     ui = compile_ui(
         data_root,
@@ -8130,6 +8632,7 @@ def prepare_opening_manifest(
             "sha256": file_sha256(recipe_path),
         },
         "configuration": configuration.manifest(),
+        "playerFaceGenProfile": player_facegen_profile,
         "master": {
             "file": master_path.name,
             "bytes": master_path.stat().st_size,

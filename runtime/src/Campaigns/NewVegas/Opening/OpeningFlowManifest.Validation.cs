@@ -65,13 +65,23 @@ internal sealed partial record OpeningNewGameFlow
         foreach (var actor in flow.OrdinaryActors)
         {
             var actorCommands = actor.Topics.Values.SelectMany(topic =>
-                topic.Infos.SelectMany(info => info.Commands)).ToArray();
+                    topic.Infos.SelectMany(info => info.Commands))
+                .Concat(actor.Packages.Values.SelectMany(package =>
+                    package.EventCommands.Values.SelectMany(commands => commands)))
+                .ToArray();
             if (!flow.SceneRoles.TryGetValue(actor.Role, out var role) ||
                 !role.ReferenceFormId.Equals(
                     actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
                 !role.BaseFormId.Equals(actor.BaseFormId, StringComparison.OrdinalIgnoreCase) ||
                 actor.PackagePriority.Count == 0 ||
                 actor.PackagePriority.Any(formId => !actor.Packages.ContainsKey(formId)) ||
+                actor.Packages.Values.Any(package =>
+                    package.EventCommands.Keys.Any(eventName =>
+                        eventName is not ("begin" or "end" or "change"))) ||
+                actor.Packages.Values.Any(package =>
+                    package.EventCommands.Any(eventCommands =>
+                        eventCommands.Key is not "end" &&
+                        eventCommands.Value.Count != 0)) ||
                 !actor.Topics.ContainsKey(actor.ActivationTopicFormId) ||
                 !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase) ||
                 actor.ArrivalTransitions.Any(value =>
@@ -91,7 +101,12 @@ internal sealed partial record OpeningNewGameFlow
                     value.BoundsGameUnits.Z <= 0 ||
                     !actor.Topics.ContainsKey(value.TopicFormId) ||
                     !flow.OrdinaryQuests.TryGetValue(value.QuestFormId, out var triggerQuest) ||
-                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)))
+                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)) ||
+                actor.AutomaticPackageDialogues.Any(value =>
+                    !actor.Packages.TryGetValue(value.PackageFormId, out var package) ||
+                    !package.PackageTypeName.Equals(
+                        "dialogue", StringComparison.OrdinalIgnoreCase) ||
+                    !actor.Topics.ContainsKey(value.GreetingTopicFormId)))
                 throw new InvalidOperationException(
                     "Owned ordinary actor dialogue handoff is incomplete.");
             ValidateCommandContract(actor.CommandContract, actorCommands);
@@ -122,6 +137,36 @@ internal sealed partial record OpeningNewGameFlow
                         StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException(
                     "Owned hit-target set is incomplete.");
+        }
+        foreach (var encounter in flow.CombatEncounters)
+        {
+            if (string.IsNullOrWhiteSpace(encounter.DeathScriptFormId) ||
+                string.IsNullOrWhiteSpace(encounter.DeathScriptEditorId) ||
+                !flow.OrdinaryQuests.TryGetValue(
+                    encounter.QuestFormId, out var combatQuest) ||
+                !combatQuest.Variables.TryGetValue(
+                    checked((uint)encounter.QuestVariableIndex), out var counterName) ||
+                !counterName.Equals(
+                    encounter.QuestVariableName, StringComparison.OrdinalIgnoreCase) ||
+                !combatQuest.Objectives.ContainsKey(encounter.ObjectiveIndex) ||
+                !combatQuest.Stages.ContainsKey(encounter.MinimumCombatStage) ||
+                !combatQuest.Stages.ContainsKey(encounter.CompletionStage) ||
+                encounter.CounterIncrement <= 0 || encounter.Threshold <= 0 ||
+                encounter.Targets.Count != encounter.Threshold ||
+                encounter.Targets.Select(value => value.ReferenceFormId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    encounter.Targets.Count ||
+                encounter.Targets.Any(value =>
+                    value.MaximumHealth <= 0 || value.AttackDamage <= 0 ||
+                    value.PackageFormIds.Count == 0 ||
+                    value.PackageFormIds.Distinct(
+                        StringComparer.OrdinalIgnoreCase).Count() !=
+                    value.PackageFormIds.Count) ||
+                !flow.OrdinaryActors.Any(actor => actor.ReferenceFormId.Equals(
+                    encounter.ResetActorReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "Owned ordinary combat encounter is incomplete.");
         }
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)
@@ -438,14 +483,33 @@ internal sealed partial record OpeningNewGameFlow
         var race = appearance.Races.SingleOrDefault(value => value.FormId.Equals(
             appearance.DefaultRaceFormId,
             StringComparison.OrdinalIgnoreCase));
+        var fullSelectionProfile =
+            previewSet.Status == ExpectedPlayerFaceGenPreviewStatus &&
+            previewSet.RuntimeDisposition == ExpectedPlayerFaceGenPreviewRuntimeDisposition &&
+            previewSet.SelectionScope == ExpectedPlayerFaceGenPreviewSelectionScope &&
+            previewSet.UnsupportedSelectionScope ==
+                ExpectedPlayerFaceGenUnsupportedSelectionScope;
+        var routeSelectionProfile =
+            previewSet.Status == RoutePlayerFaceGenPreviewStatus &&
+            previewSet.RuntimeDisposition == RoutePlayerFaceGenPreviewRuntimeDisposition &&
+            previewSet.SelectionScope == RoutePlayerFaceGenPreviewSelectionScope &&
+            previewSet.UnsupportedSelectionScope ==
+                RoutePlayerFaceGenUnsupportedSelectionScope;
+        var validSelectionInventory = fullSelectionProfile
+            ? OwnedGamebryoFaceGenSelectionInventory.IsComplete(
+                previewSet,
+                appearance.Races.SelectMany(value => value.Sex.Select(pair =>
+                    new OwnedGamebryoFaceGenSelectionDomain(
+                        pair.Key,
+                        value.FormId,
+                        pair.Value.HairOptions.Select(option => option.FormId).ToArray(),
+                        pair.Value.EyeOptions.Select(option => option.FormId).ToArray()))))
+            : routeSelectionProfile &&
+                race is not null &&
+                ValidRoutePlayerFaceGenSelection(previewSet, appearance, race);
         if (race is null ||
             previewSet.Schema != ExpectedPlayerFaceGenPreviewSchema ||
-            previewSet.Status != ExpectedPlayerFaceGenPreviewStatus ||
-            previewSet.RuntimeDisposition !=
-                ExpectedPlayerFaceGenPreviewRuntimeDisposition ||
-            previewSet.SelectionScope != ExpectedPlayerFaceGenPreviewSelectionScope ||
-            previewSet.UnsupportedSelectionScope !=
-                ExpectedPlayerFaceGenUnsupportedSelectionScope ||
+            (!fullSelectionProfile && !routeSelectionProfile) ||
             !previewSet.PlayerFormId.Equals(
                 appearance.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) ||
@@ -461,14 +525,7 @@ internal sealed partial record OpeningNewGameFlow
                 ExpectedPlayerFaceGenBodyComponentRoles,
                 StringComparer.Ordinal) ||
             !ValidPlayerBodySourcesBySex(previewSet.BodyComponentSourcesBySex) ||
-            !OwnedGamebryoFaceGenSelectionInventory.IsComplete(
-                previewSet,
-                appearance.Races.SelectMany(value => value.Sex.Select(pair =>
-                    new OwnedGamebryoFaceGenSelectionDomain(
-                        pair.Key,
-                        value.FormId,
-                        pair.Value.HairOptions.Select(option => option.FormId).ToArray(),
-                        pair.Value.EyeOptions.Select(option => option.FormId).ToArray())))))
+            !validSelectionInventory)
             return false;
 
         return previewSet.Previews.All(preview =>
@@ -523,6 +580,25 @@ internal sealed partial record OpeningNewGameFlow
             !string.IsNullOrWhiteSpace(preview.BufferSha256) &&
             !string.IsNullOrWhiteSpace(preview.EgtPath) &&
             !string.IsNullOrWhiteSpace(preview.EgtSha256));
+    }
+
+    private static bool ValidRoutePlayerFaceGenSelection(
+        OpeningPlayerFaceGenPreviewSet previewSet,
+        OpeningPlayerAppearance appearance,
+        OpeningAppearanceRace race)
+    {
+        if (!race.Sex.TryGetValue("male", out var male) || previewSet.Previews.Count != 1)
+            return false;
+        var preview = previewSet.Previews[0];
+        return preview.PlayerFormId.Equals(
+                appearance.PlayerFormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.RaceFormId.Equals(
+                appearance.DefaultRaceFormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.Sex == "male" &&
+            preview.HairFormId.Equals(
+                male.DefaultHairFormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.EyesFormId.Equals(
+                male.DefaultEyesFormId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ValidPlayerBodySourcesBySex(
@@ -742,6 +818,12 @@ internal sealed partial record OpeningNewGameFlow
             !DictionaryMatches(contract.KindCounts, kindCounts) ||
             !DictionaryMatches(contract.RecordIdentityCounts, identityCounts) ||
             commands.Any(command => !RuntimeCommandKinds.Contains(command.Kind)) ||
+            commands.Any(command =>
+                command.Kind == "playerControls" &&
+                (!OpeningPlayerControlContract.Matches(
+                    command.ControlArguments,
+                    command.ControlValues) ||
+                 command.ControlValues.Any(value => value is not 0 and not 1))) ||
             commands.Any(command =>
                 !ValidIdentity(command.ItemEditorId, command.ItemFormId, command.ItemRecordType) ||
                 !ValidIdentity(

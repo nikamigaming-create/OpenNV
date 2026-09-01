@@ -50,6 +50,7 @@ internal enum GamebryoResultCommandKind
 {
     ActorValueDelta,
     SetQuestVariable,
+    SetReferenceVariable,
     SetDestroyed,
     AddItem,
     RemoveItem,
@@ -59,6 +60,7 @@ internal enum GamebryoResultCommandKind
     RemoveScriptPackage,
     ImageSpaceModifier,
     ReferenceEnabled,
+    ResetPipBoyManager,
     ActorIntent,
     Objective,
     StartQuest,

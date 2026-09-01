@@ -47,7 +47,10 @@ from nif_decoder import (  # noqa: E402
     load_nif_decoder_contract,
 )
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
-from scene_asset_pipeline import authored_collision_source  # noqa: E402
+from scene_asset_pipeline import (  # noqa: E402
+    authored_collision_face_selection,
+    authored_collision_source,
+)
 
 
 def identity_transform(target: object) -> None:
@@ -429,6 +432,38 @@ def synthetic_fallout_animation(user_version_2: int, root: object) -> bytes:
 
 
 class StaticNifGltfTest(unittest.TestCase):
+    def test_owned_road_face_selection_is_path_and_collision_source_bound(self) -> None:
+        packed = "NIF-authored-bhk-packed-triangles"
+        self.assertEqual(
+            authored_collision_face_selection(
+                "meshes\\landscape\\roads\\roadchunkcluster01.nif",
+                packed,
+            ),
+            "source-upward-walkable-deck",
+        )
+        self.assertEqual(
+            authored_collision_face_selection(
+                "meshes/scol/scolroadstraightlongbcapped02b.nif",
+                packed,
+            ),
+            "source-upward-walkable-deck",
+        )
+        self.assertEqual(
+            authored_collision_face_selection(
+                "meshes\\architecture\\goodsprings\\roadsidewall.nif",
+                packed,
+            ),
+            "all-source-faces",
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires its packed-triangle source contract",
+        ):
+            authored_collision_face_selection(
+                "meshes\\landscape\\roads\\roadchunk01.nif",
+                "unsupported-or-absent",
+            )
+
     def test_fallout_alternate_animation_identity_is_controller_sequence_only(self) -> None:
         contract = load_nif_decoder_contract()
         for alternate_user_version_2 in contract.animation_user_version_2:
@@ -610,6 +645,50 @@ class StaticNifGltfTest(unittest.TestCase):
             ],
         )
 
+    def test_dynamic_sphere_body_retains_exact_owned_radius_and_body_values(self) -> None:
+        root = NifFormat.NiNode()
+        root.name = "Root"
+        target = NifFormat.NiNode()
+        target.name = "MovingStatic"
+        root.add_child(target)
+        collision = NifFormat.bhkCollisionObject()
+        collision.target = target
+        target.collision_object = collision
+        body = NifFormat.bhkRigidBody()
+        collision.body = body
+        body.mass = 2.5
+        body.friction = 0.75
+        body.restitution = 0.2
+        body.linear_damping = 0.15
+        body.angular_damping = 0.35
+        body.havok_col_filter.layer = 4
+        sphere = NifFormat.bhkSphereShape()
+        sphere.radius = 1.25
+        body.shape = sphere
+        blocks = [root, target, collision, body, sphere]
+
+        bodies, unsupported = dynamic_physics_contract(
+            blocks,
+            {id(block): index for index, block in enumerate(blocks)},
+        )
+
+        self.assertEqual(unsupported, [])
+        self.assertEqual(len(bodies), 1)
+        exported = bodies[0]
+        self.assertEqual(exported["shapeType"], "sphere")
+        self.assertEqual(exported["hulls"], [])
+        self.assertEqual(exported["spheres"], [{
+            "shapeBlock": 4,
+            "radiusHavokUnits": 1.25,
+            "radiusGameUnits": 8.75,
+        }])
+        self.assertEqual(exported["mass"], 2.5)
+        self.assertEqual(exported["friction"], 0.75)
+        self.assertAlmostEqual(exported["restitution"], 0.2)
+        self.assertAlmostEqual(exported["linearDamping"], 0.15)
+        self.assertAlmostEqual(exported["angularDamping"], 0.35)
+        self.assertEqual(exported["layer"], 4)
+
     def test_compiler_source_hash_accounts_for_every_owned_module(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.py"
@@ -724,6 +803,162 @@ class StaticNifGltfTest(unittest.TestCase):
             self.assertEqual(first_gltf["asset"]["version"], "2.0")
             self.assertEqual(first_gltf["accessors"][0]["min"], [-1.0, 0.0, -0.0])
             self.assertEqual(first_gltf["accessors"][0]["max"], [1.0, 2.0, -0.0])
+
+    def test_single_source_transform_sequence_exports_playable_scene_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            source = directory / "source-loop.nif"
+            source.write_bytes(b"synthetic source transform loop")
+            document, _collision = synthetic_controller_door_document()
+            manager = next(
+                block
+                for block in document.get_global_iterator()
+                if isinstance(block, NifFormat.NiControllerManager)
+            )
+            manager.flags = 76
+            manager.frequency = 1.0
+            manager.phase = 0.0
+            manager.num_controller_sequences = 1
+            manager.controller_sequences.update_size()
+            sequence = manager.controller_sequences[0]
+            source_controlled = sequence.controlled_blocks[0]
+            source_controlled.interpolator.data.translations.interpolation = (
+                NifFormat.KeyType.LINEARKEY
+            )
+            source_controlled.interpolator.data.translations.num_keys = 2
+            source_controlled.interpolator.data.translations.keys.update_size()
+            for key_index, value in enumerate((0.0, 1.0)):
+                key = source_controlled.interpolator.data.translations.keys[key_index]
+                key.time = value
+                key.value.x = value
+            frame = NifFormat.NiNode()
+            frame.name = "Frame"
+            identity_transform(frame)
+            document.roots[0].add_child(frame)
+            sequence.num_controlled_blocks = 2
+            sequence.controlled_blocks.update_size()
+            empty_controlled = sequence.controlled_blocks[1]
+            empty_controlled.node_name = "Frame"
+            empty_controlled.controller_type = "NiTransformController"
+            empty_controlled.controller = source_controlled.controller
+            empty_controlled.interpolator = NifFormat.NiTransformInterpolator()
+            morph_shape = next(
+                block
+                for block in document.get_global_iterator()
+                if isinstance(block, NifFormat.NiTriShape) and block.name == b"BGate:0"
+            )
+            morpher = NifFormat.NiGeomMorpherController()
+            morpher.flags = 76
+            morpher.frequency = 1.0
+            morpher.phase = 0.0
+            morpher.start_time = 0.0
+            morpher.stop_time = 1.0
+            morpher.target = morph_shape
+            morph_shape.controller = morpher
+            morph_data = NifFormat.NiMorphData()
+            morpher.data = morph_data
+            morph_data.num_morphs = 2
+            morph_data.num_vertices = len(morph_shape.data.vertices)
+            morph_data.relative_targets = 1
+            morph_data.morphs.update_size()
+            for index, morph in enumerate(morph_data.morphs):
+                morph.arg = morph_data.num_vertices
+                morph.frame_name = "Base" if index == 0 else "SourceTarget"
+                morph.vectors.update_size()
+                for target, source_vertex in zip(
+                    morph.vectors,
+                    morph_shape.data.vertices,
+                    strict=True,
+                ):
+                    if index == 0:
+                        target.x, target.y, target.z = (
+                            source_vertex.x,
+                            source_vertex.y,
+                            source_vertex.z,
+                        )
+                    else:
+                        target.z = 0.25
+            morpher.num_interpolators = 2
+            morpher.interpolator_weights.update_size()
+            for index, weight in enumerate(morpher.interpolator_weights):
+                interpolator = NifFormat.NiFloatInterpolator()
+                weight.interpolator = interpolator
+                float_data = NifFormat.NiFloatData()
+                interpolator.data = float_data
+                group = float_data.data
+                group.interpolation = NifFormat.KeyType.LINEARKEY
+                group.num_keys = 2
+                group.keys.update_size()
+                for key_index, value in enumerate((0.0, float(index))):
+                    group.keys[key_index].time = float(key_index)
+                    group.keys[key_index].value = value
+            self.assertEqual(
+                (
+                    int(morpher.flags),
+                    len(morpher.interpolator_weights),
+                    len(morpher.data.morphs),
+                    bool(morpher.data.relative_targets),
+                    type(morpher.target).__name__,
+                ),
+                (76, 2, 2, True, "NiTriShape"),
+            )
+            decoded = SimpleNamespace(
+                document=document,
+                evidence=lambda: {"status": "synthetic-in-memory-contract"},
+            )
+            with patch("export_static_nif_gltf.decode_nif", return_value=decoded):
+                result = export_static_nif(
+                    source,
+                    "meshes/open-nv-tests/source-loop.nif",
+                    directory / "source-loop.gltf",
+                    directory / "source-loop.opennv.json",
+                    load_runtime_configuration().content_compiler,
+                    strict=False,
+                )
+
+            playback = result["coverage"]["sourceControllerPlayback"]
+            self.assertEqual(playback["status"], "source-looping-controller-complete")
+            self.assertEqual(
+                playback["animations"],
+                [
+                    {
+                        "name": "Open",
+                        "sourceType": "NiControllerSequence",
+                        "startSeconds": 0.0,
+                        "stopSeconds": 1.0,
+                        "frequency": 1.0,
+                        "phase": 0.0,
+                        "channels": 2,
+                    },
+                    {
+                        "name": "NiGeomMorpherController",
+                        "sourceType": "NiGeomMorpherController",
+                        "startSeconds": 0.0,
+                        "stopSeconds": 1.0,
+                        "frequency": 1.0,
+                        "phase": 0.0,
+                        "channels": 1,
+                    },
+                ],
+            )
+            gltf = json.loads((directory / "source-loop.gltf").read_text())
+            self.assertEqual(len(gltf["animations"]), 2)
+            self.assertEqual(gltf["animations"][0]["name"], "Open")
+            self.assertEqual(gltf["animations"][1]["name"], "NiGeomMorpherController")
+            self.assertEqual(len(gltf["animations"][1]["channels"]), 1)
+            self.assertEqual(
+                [len(mesh.get("weights", [])) for mesh in gltf["meshes"]],
+                [1, 0],
+            )
+            controlled = next(
+                node for node in gltf["nodes"] if node["name"] == "BGate"
+            )
+            self.assertTrue(controlled["children"])
+            self.assertEqual(len(gltf["animations"][0]["channels"]), 2)
+            self.assertEqual(
+                sorted(channel["target"]["path"] for channel in gltf["animations"][0]["channels"]),
+                ["rotation", "translation"],
+            )
 
     def test_controller_door_groups_only_authored_target_visual_and_collision(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
@@ -1221,6 +1456,24 @@ class StaticNifGltfTest(unittest.TestCase):
         metadata = material_metadata(shape)
         self.assertEqual(metadata["baseColor"], [1.0, 1.0, 1.0])
         self.assertEqual(metadata["alpha"], 0.75)
+
+    def test_sky_shader_authored_texture_survives(self) -> None:
+        shape = NifFormat.NiTriShape()
+        shader = NifFormat.SkyShaderProperty()
+        shader.sky_object_type = NifFormat.SkyObjectType.BSSMSKYSTARS
+        shader.file_name = r"Textures\Sky\SkyStars.dds"
+        shape.add_property(shader)
+
+        self.assertEqual(texture_paths(shape), [r"textures\sky\skystars.dds"])
+
+    def test_weather_cloud_placeholder_is_not_a_static_texture_binding(self) -> None:
+        shape = NifFormat.NiTriShape()
+        shader = NifFormat.SkyShaderProperty()
+        shader.sky_object_type = NifFormat.SkyObjectType.BSSMSKYCLOUDS
+        shader.file_name = r"Textures\Sky\CloudClear.dds"
+        shape.add_property(shader)
+
+        self.assertEqual(texture_paths(shape), [])
 
     def test_self_illum_requires_the_material_color_controller(self) -> None:
         shape = NifFormat.NiTriShape()

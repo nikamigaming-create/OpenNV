@@ -68,9 +68,10 @@
       "lowerLayerSurface": "LowerLayer:0"
     }
   },
-  "actorRecipes": [
-    "goodsprings-easy-pete-actor-v1"
-  ],
+  "actorRecipes": [],
+  "actorDiscovery": {
+    "mode": "effective-achr"
+  },
   "selection": {
     "modelPrefixes": [],
     "includeBaseRecordTypes": [

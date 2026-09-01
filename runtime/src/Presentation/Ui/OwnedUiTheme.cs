@@ -10,6 +10,13 @@ internal static class OwnedUiTheme
     private const int FontTextureIndex = 0;
     internal const float CenteringFactor = 0.5f;
 
+    internal static float NormalizeByteChannel(float value)
+    {
+        if (!float.IsFinite(value) || value < 0.0f || value > ByteChannelMaximum)
+            throw new InvalidOperationException("Owned UI byte channel is invalid.");
+        return value / ByteChannelMaximum;
+    }
+
     internal static FontFile BuildFont(OwnedBitmapFont authored)
     {
         var fontSize = Mathf.RoundToInt(authored.LineHeightPixels);
@@ -41,7 +48,7 @@ internal static class OwnedUiTheme
                 glyph.Codepoint,
                 new Vector2(
                     glyph.HorizontalOffsetPixels,
-                    authored.AscentPixels - glyph.VerticalBearingPixels));
+                    -glyph.VerticalBearingPixels));
             font.SetGlyphSize(FontCacheIndex, cacheSize, glyph.Codepoint, glyph.Size);
             font.SetGlyphUVRect(FontCacheIndex, cacheSize, glyph.Codepoint, glyph.UvRect);
             font.SetGlyphTextureIdx(

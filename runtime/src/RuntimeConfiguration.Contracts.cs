@@ -78,6 +78,7 @@ internal sealed record DesktopInputConfiguration(
     DesktopKeyBindingConfiguration MoveRight,
     DesktopKeyBindingConfiguration MoveForward,
     DesktopKeyBindingConfiguration MoveBackward,
+    DesktopKeyBindingConfiguration Jump,
     DesktopKeyBindingConfiguration Activate,
     DesktopKeyBindingConfiguration Grab,
     DesktopKeyBindingConfiguration Reload,
@@ -98,6 +99,7 @@ internal sealed record DesktopInputConfiguration(
             yield return MoveRight;
             yield return MoveForward;
             yield return MoveBackward;
+            yield return Jump;
             yield return Activate;
             yield return Grab;
             yield return Reload;
@@ -269,6 +271,11 @@ internal sealed record DiagnosticMuzzleFlashConfiguration(
 internal sealed record DoorConfiguration(
     ConfigurationProvenance Provenance,
     float OpenAngleDegrees);
+
+internal sealed record PersistenceConfiguration(
+    ConfigurationProvenance Provenance,
+    int AtomicReplaceAttempts,
+    int AtomicReplaceRetryMilliseconds);
 
 internal sealed record HudConfiguration(
     ConfigurationProvenance Provenance,
@@ -1307,9 +1314,19 @@ internal sealed record ActorAnimationProfilesConfiguration(
         if (NPC_.Mode != "exact-owned-member" ||
             string.IsNullOrWhiteSpace(NPC_.Path) ||
             NPC_.FileName is not null ||
+            NPC_.Roles is not null ||
             CREA.Mode != "skeleton-directory" ||
             CREA.Path is not null ||
-            string.IsNullOrWhiteSpace(CREA.FileName))
+            string.IsNullOrWhiteSpace(CREA.FileName) ||
+            CREA.Roles is null ||
+            CREA.Roles.Count != 3 ||
+            !CREA.Roles.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
+                new[] { "locomotion", "melee", "hit" }) ||
+            CREA.Roles.Values.Any(candidates =>
+                candidates.Count == 0 ||
+                candidates.Any(string.IsNullOrWhiteSpace) ||
+                candidates.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    candidates.Count))
             throw new InvalidOperationException(
                 "Actor animation profiles do not declare complete owned-member resolvers.");
     }
@@ -1318,7 +1335,8 @@ internal sealed record ActorAnimationProfilesConfiguration(
 internal sealed record ActorAnimationProfileConfiguration(
     string Mode,
     string? Path,
-    string? FileName);
+    string? FileName,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Roles);
 
 internal sealed record FaceGenMaterialConfiguration(
     string Schema,

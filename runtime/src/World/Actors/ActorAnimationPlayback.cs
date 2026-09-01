@@ -184,9 +184,15 @@ internal sealed class ActorAnimationPlayback
 
     private void RequirePublishedPhase()
     {
-        if (!Animation.Player.CurrentAnimation.ToString().Equals(
+        var publishedAnimation = Animation.Player.CurrentAnimation.ToString();
+        var terminalAnimation = Animation.Player.AssignedAnimation.ToString();
+        var identityPublished = publishedAnimation.Equals(
                 Animation.RuntimeName,
                 StringComparison.Ordinal) ||
+            Terminal && terminalAnimation.Equals(
+                Animation.RuntimeName,
+                StringComparison.Ordinal);
+        if (!identityPublished ||
             Math.Abs(Animation.Player.CurrentAnimationPosition - _positionSeconds) >
                 PhaseToleranceSeconds)
             throw new InvalidOperationException(
