@@ -86,220 +86,6 @@ internal sealed record Fo3Cg01DadLeadTrigger(
     int SourceStage,
     int TargetStage);
 
-internal sealed record Fo3Cg02Stage5Actor(
-    string ReferenceFormId,
-    string EditorId,
-    bool Enabled,
-    bool LooksAtPlayer,
-    bool IgnoresCrime);
-
-internal sealed record Fo3Cg02Stage5Item(
-    string FormId,
-    string EditorId,
-    int AddedCount,
-    bool Equipped);
-
-internal sealed record Fo3Cg02IntroParticipant(
-    int Phase,
-    int SequenceInPhase,
-    int Sequence,
-    string? EngineSex,
-    string ReferenceFormId,
-    string ReferenceEditorId,
-    string BaseFormId,
-    string ActorScenePath,
-    string ActorSceneSha256,
-    string InfoFormId,
-    string? SpeakerIdleFormId,
-    string? SpeakerIdleLogicalPath,
-    Fo3OwnedDialogueResponse Response,
-    IReadOnlyDictionary<string, int> QuestVariableEffects,
-    int ResultEffectCount);
-
-internal sealed record Fo3Cg02IntroSound(
-    int Phase,
-    int Sequence,
-    string FormId,
-    string EditorId,
-    string LogicalPath,
-    string SourcePath,
-    string Sha256);
-
-internal sealed record Fo3Cg02Stage6Command(
-    int Index,
-    string Kind,
-    string ReferenceFormId,
-    string ReferenceEditorId,
-    string? Variable,
-    int Value);
-
-internal sealed record Fo3Cg02DadSpeechCue(
-    int Sequence,
-    string? EngineSex,
-    string InfoFormId,
-    string SpeakerIdleFormId,
-    string SpeakerIdleLogicalPath,
-    string SpeakerIdleSourceSha256,
-    Fo3OwnedDialogueResponse Response,
-    int? TargetStage);
-
-internal sealed record Fo3Cg02DadStage7Command(
-    int Index,
-    string Kind,
-    string ReferenceFormId,
-    string Variable,
-    double Value);
-
-internal sealed record Fo3Cg02DadSpeechRuntime(
-    int SourceStage,
-    int TargetStage,
-    double FailsafeSeconds,
-    string DadReferenceFormId,
-    IReadOnlyList<Fo3Cg02DadSpeechCue> Cues,
-    IReadOnlyList<Fo3Cg02DadStage7Command> Stage7Commands,
-    int FinalCommandCount,
-    Fo3Cg02OverseerSpeechRuntime? OverseerSpeechRuntime,
-    string NextBoundaryBlocker);
-
-internal sealed record Fo3Cg02OverseerCommand(
-    int Index,
-    string Kind,
-    string ReferenceFormId,
-    string TargetReferenceFormId,
-    string Variable,
-    double Value,
-    string ItemFormId,
-    int Count);
-
-internal sealed record Fo3Cg02OverseerSpeechCue(
-    int Sequence,
-    string? EngineSex,
-    string InfoFormId,
-    string? SpeakerIdleLogicalPath,
-    string? SpeakerIdleSourceSha256,
-    Fo3OwnedDialogueResponse Response,
-    IReadOnlyList<Fo3Cg02OverseerCommand> Effects);
-
-internal sealed record Fo3Cg02OverseerSpeechRuntime(
-    int SourceStage,
-    int TargetStage,
-    string OverseerReferenceFormId,
-    string OverseerBaseFormId,
-    string PlayerReferenceFormId,
-    string ActorScenePath,
-    string ActorSceneSha256,
-    IReadOnlyList<Fo3Cg02OverseerSpeechCue> Cues,
-    IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02OverseerCommand>> StageResults,
-    Fo3Cg02DadPartyRuntime? DadPartyRuntime,
-    string NextBoundaryBlocker);
-
-internal sealed record Fo3Cg02DadPartyStageCommand(
-    string Kind,
-    string ReferenceFormId,
-    int Value,
-    IReadOnlyList<int> Arguments);
-
-internal sealed record Fo3Cg02DadPartyRuntime(
-    int SourceStage,
-    int TargetStage,
-    string DadReferenceFormId,
-    string PackageFormId,
-    int PackageRadiusGameUnits,
-    int PackageResultCommandCount,
-    double InitialDistanceGameUnits,
-    bool ArrivedAtStart,
-    Fo3Cg02DadSpeechCue Cue,
-    IReadOnlyList<Fo3Cg02DadPartyStageCommand> StageCommands,
-    Fo3Cg02BirthdayInteractionsRuntime? BirthdayInteractionsRuntime,
-    string NextBoundaryBlocker);
-
-internal sealed record Fo3Cg02BirthdayEffect(
-    string Kind,
-    int Stage,
-    double Seconds,
-    string Variable,
-    int Value,
-    string ReferenceFormId,
-    string FormId,
-    int Count,
-    string Target,
-    string Source);
-
-internal sealed record Fo3Cg02BirthdayDialogueNode(
-    string InfoFormId,
-    string TopicFormId,
-    string? EngineSex,
-    IReadOnlyList<int> ResponseIndexes,
-    IReadOnlyList<string> LinkedTopicFormIds,
-    IReadOnlyList<Fo3Cg02DialogueCondition> Conditions,
-    IReadOnlyList<Fo3Cg02BirthdayEffect> Effects);
-
-internal sealed record Fo3Cg02DialogueCondition(
-    int OperatorFlags,
-    double ComparisonValue,
-    int Function,
-    int Parameter1,
-    int Parameter2,
-    int RunOn);
-
-internal sealed record Fo3Cg02BirthdayTopic(
-    string FormId,
-    string Text);
-
-internal sealed record Fo3Cg02BirthdayParticipant(
-    string ReferenceFormId,
-    string BaseFormId,
-    string DisplayName,
-    string? ActorScenePath,
-    string? ActorSceneSha256,
-    IReadOnlyList<string> GreetingInfoFormIds,
-    IReadOnlyDictionary<string, Fo3OwnedDialogueResponse> Lines,
-    IReadOnlyDictionary<string, Fo3Cg02BirthdayDialogueNode> Nodes,
-    IReadOnlyDictionary<string, Fo3Cg02BirthdayTopic> Topics);
-
-internal sealed record Fo3Cg02BirthdayStageResult(
-    int Stage,
-    string Kind,
-    string FormId,
-    int Count,
-    int CommandCount,
-    int? AggregateStage);
-
-internal sealed record Fo3Cg02BirthdayInteractionsRuntime(
-    int SourceStage,
-    double FailsafeSeconds,
-    IReadOnlyList<Fo3Cg02BirthdayParticipant> Participants,
-    IReadOnlyDictionary<int, Fo3Cg02BirthdayStageResult> StageResults,
-    int AggregateStage,
-    Fo3Cg02CakeRuntime? CakeRuntime,
-    Fo3Cg02ButchRuntime? ButchRuntime,
-    string NextBoundaryBlocker);
-
-internal sealed record Fo3Cg02ButchStage35Command(
-    string Kind,
-    string ReferenceFormId,
-    string ActorReferenceFormId,
-    string Variable,
-    int Value);
-
-internal sealed record Fo3Cg01Stage90Completion(
-    int SourceStage,
-    int TargetStage,
-    double TimerInitialSeconds,
-    int RunTimerValue,
-    Fo3Stage90ImageSpaceModifier ImageSpaceModifier,
-    Fo3Stage90Sound Sound,
-    int Stage90CommandCount,
-    int Stage100CommandCount,
-    string DisabledDadReferenceFormId,
-    double PlayerScale,
-    bool PlayerToddler,
-    string NextQuestFormId,
-    string NextQuestEditorId,
-    int NextQuestStage,
-    Fo3Cg02Stage0Transition Cg02Stage0,
-    string NextBoundaryBlocker);
-
 internal sealed record Fo3Cg01DadLeadSequence(
     Fo3Cg01DadTravelPackage BibleTravel,
     Fo3Cg01DadTravelPackage LeadTravel,
@@ -1860,6 +1646,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var cg02Butch = cg02Birthday?.ButchRuntime;
         var cg02Completion = cg02Butch?.PostIntercomRuntime?.ReactorGiftRuntime?
             .PictureRuntime.CompletionRuntime;
+        var cg03 = cg02Completion?.NextQuestRuntime;
         var savedInfoFormIds = RequiredArray(source, "appliedInfoFormIds")
             .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
         var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
@@ -1904,6 +1691,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
         if (cg02Butch?.PostIntercomRuntime?.ReactorGiftRuntime is { } reactorGift)
             birthdayInfoFormIds.UnionWith(reactorGift.Participants.SelectMany(
                 value => value.Nodes.Keys));
+        if (cg03 is not null)
+            birthdayInfoFormIds.UnionWith(
+                cg03.Cues.Select(value => value.InfoFormId));
         var matchingCg02Sequence = validCg02Sequences.SingleOrDefault(sequence =>
             sequence.Take(Math.Min(savedCg02InfoFormIds.Length, sequence.Length))
                 .SequenceEqual(savedCg02InfoFormIds.Take(sequence.Length),
@@ -1941,7 +1731,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var reachedCg03 = cg02Completion is not null &&
             RequiredFormId(active, "formId") == cg02Completion.NextQuestFormId &&
             RequiredString(active, "editorId") == cg02Completion.NextQuestEditorId &&
-            stage == cg02Completion.NextQuestTargetStage;
+            (stage == cg02Completion.NextQuestTargetStage ||
+             cg03 is not null && stage == cg03.SpeechStage);
         var reachedNextQuest = reachedCg03 ||
             RequiredFormId(active, "formId") == completion.NextQuestFormId &&
             RequiredString(active, "editorId") == completion.NextQuestEditorId &&
@@ -2145,6 +1936,14 @@ internal sealed record Fo3Cg01PostStage14Transition(
                             interactionCommandCount += commandPicture.CompletionRuntime
                                 .Stage100CommandCount + commandPicture.CompletionRuntime
                                 .NextQuestStage0CommandCount;
+                        if (reachedCg03 && cg03 is not null &&
+                            savedPackageFormIds.Contains(
+                                cg03.DadHoldPackageFormId,
+                                StringComparer.OrdinalIgnoreCase))
+                            interactionCommandCount += cg03.Stage5CommandCount;
+                        if (reachedCg03 && cg03 is not null &&
+                            stage == cg03.SpeechStage)
+                            interactionCommandCount += cg03.Stage6CommandCount + 1;
                         interactionCommandCount += commandPicture.Packages
                             .Where(value => savedPackageFormIds.Contains(
                                 value.FormId, StringComparer.OrdinalIgnoreCase))
@@ -2222,6 +2021,14 @@ internal sealed record Fo3Cg01PostStage14Transition(
                             "Saved Fallout 3 CG02 picture package count differs.");
                     expectedPackages = expectedPackages.Append(package.FormId);
                 }
+            if (reachedCg03 && cg03 is not null)
+            {
+                expectedPackages = expectedPackages.Append(
+                    cg03.DadHoldPackageFormId);
+                if (stage == cg03.SpeechStage)
+                    expectedPackages = expectedPackages.Append(
+                        cg03.DadTalkPackageFormId);
+            }
         }
         var expectedPackageArray = expectedPackages.ToArray();
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
@@ -2248,7 +2055,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
             reachedNextQuest && cg02Butch is not null &&
                 stage == cg02Butch.IntercomStage &&
                 (timerAdvancing || timerRemaining != 0.0) ||
-            reachedNextQuest && (cg02Butch is null ||
+            reachedNextQuest && !reachedCg03 && (cg02Butch is null ||
                 stage != cg02Butch.AggregateStage &&
                 stage != cg02Butch.SceneDoneStage &&
                 stage != cg02Butch.IntercomStage &&
@@ -2266,6 +2073,11 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 ? timerAdvancing || timerRemaining != 0.0
                 : timerRemaining > completion.Cg02Stage0.IntroRuntime.InitialSeconds ||
                   timerAdvancing != (timerRemaining > 0.0)) ||
+            reachedCg03 && cg03 is not null &&
+                (stage == cg03.SourceStage
+                    ? timerRemaining > cg03.TimerSeconds ||
+                      timerAdvancing != (timerRemaining > 0.0)
+                    : timerAdvancing || timerRemaining != 0.0) ||
             reachedNextQuest &&
                 (!double.IsFinite(imageSpaceElapsed) ||
                  imageSpaceElapsed < completion.TimerInitialSeconds ||
@@ -2278,7 +2090,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             cg02Butch?.PostIntercomRuntime?.ReactorGiftRuntime?.PictureRuntime
                 is { } timerPicture &&
             (reachedCg03
-                ? timerAdvancing || timerRemaining != 0.0 ||
+                ? (cg03 is null || stage != cg03.SourceStage) &&
+                    (timerAdvancing || timerRemaining != 0.0) ||
                   pictureImageSpaceElapsed != timerPicture.CompletionRuntime
                     .ImageSpaceModifier.DurationSeconds ||
                   !pictureSoundStarted || !adultVaultSuitEquipped

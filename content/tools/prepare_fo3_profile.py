@@ -4957,6 +4957,17 @@ def _compile_cg02_reactor_gift_runtime(
         "nextBoundary": {"applied": False,
                          "blocker": "fo3-cg03-stage-5-runtime-not-implemented"},
     }
+    if "cg03Stage5" in config:
+        completion_runtime["nextQuestRuntime"] = _compile_cg03_stage5_runtime(
+            records,
+            next_quest,
+            next_stage_sources,
+            dict(config["cg03Stage5"]),
+        )
+        completion_runtime["nextBoundary"] = {
+            "applied": True,
+            "blocker": None,
+        }
     trigger_base = exact("playerPictureTriggerBaseFormId", ACTIVATOR_RECORD)
     trigger_script = exact("playerPictureTriggerScriptFormId", SCRIPT_RECORD)
     if struct.unpack("<I", _single_subrecord(trigger_base, "SCRI"))[0] != \
@@ -5092,7 +5103,179 @@ def _compile_cg02_reactor_gift_runtime(
                                  "blocker": "fo3-cg03-stage-5-runtime-not-implemented"},
             },
             "nextBoundary": {"applied": False,
-                             "blocker": "fo3-cg03-stage-5-runtime-not-implemented"}}
+                             "blocker": ("fo3-cg03-stage-6-dad-force-greet-runtime-not-implemented"
+                                         if "cg03Stage5" in config else
+                                         "fo3-cg03-stage-5-runtime-not-implemented")}}
+
+
+def _compile_cg03_stage5_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    config: dict[str, object],
+) -> dict[str, object]:
+    by_form = {record.form_id: record for record in records}
+    by_editor = {(_editor_id(record) or "").casefold(): record for record in records
+                 if _editor_id(record)}
+
+    def exact(name: str, signature: str) -> object:
+        record = by_form.get(int(str(config[name]), FORM_ID_RADIX))
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG03 stage 5 {name} differs")
+        return record
+
+    source_stage = int(config["sourceStage"])
+    speech_stage = int(config["speechStage"])
+    sources = stage_sources.get(source_stage, [])
+    if not sources:
+        raise ValueError("Fallout 3 CG03 stage 5 source is absent")
+    commands = [command for source in sources for command in _source_commands(source)]
+    dad_reference = exact("dadReferenceFormId", ACTOR_REFERENCE_RECORD)
+    dad_base = exact("dadBaseFormId", NPC_RECORD)
+    dad_script = exact("dadScriptFormId", SCRIPT_RECORD)
+    if struct.unpack("<I", _single_subrecord(dad_reference, "NAME"))[0] != dad_base.form_id or \
+            struct.unpack("<I", _single_subrecord(dad_base, "SCRI"))[0] != dad_script.form_id:
+        raise ValueError("Fallout 3 CG03 Dad actor/script join differs")
+    recipe = actor_preparation.load_recipe(str(config["dadActorRecipeId"]))
+    if str(recipe["proofActorReferenceFormId"]).casefold() != _form_id(dad_reference.form_id) or \
+            str(recipe["expectedBaseFormId"]).casefold() != _form_id(dad_base.form_id):
+        raise ValueError("Fallout 3 CG03 Dad actor recipe differs")
+    hold_package = exact("dadHoldPackageFormId", PACKAGE_RECORD)
+    talk_package = exact("dadTalkPackageFormId", PACKAGE_RECORD)
+    package_ids = {struct.unpack("<I", row.data)[0] for row in iter_subrecords(dad_base)
+                   if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES}
+    if {hold_package.form_id, talk_package.form_id} - package_ids:
+        raise ValueError("Fallout 3 CG03 Dad package ownership differs")
+    package_conditions = {
+        package.form_id: [_dialogue_condition(row.data) for row in iter_subrecords(package)
+                          if row.signature == "CTDA"]
+        for package in (hold_package, talk_package)
+    }
+    if any(len(rows) != 1 or int(rows[0]["function"]) != GET_STAGE_FUNCTION or
+           int(rows[0]["parameter1"]) != quest.form_id or
+           rows[0]["comparisonValue"] != float(speech_stage)
+           for rows in package_conditions.values()):
+        raise ValueError("Fallout 3 CG03 Dad package condition differs")
+    topic = exact("dadSpeechTopicFormId", DIALOGUE_TOPIC_RECORD)
+    voice_id = struct.unpack("<I", _single_subrecord(dad_base, "VTCK"))[0]
+    voice = by_form.get(voice_id)
+    if voice is None or voice.signature != VOICE_TYPE_RECORD:
+        raise ValueError("Fallout 3 CG03 Dad voice type differs")
+    cues = []
+    for raw_info_id in config["dadSpeechInfoFormIds"]:
+        info = by_form.get(int(str(raw_info_id), FORM_ID_RADIX))
+        if info is None or info.signature != DIALOGUE_INFO_RECORD or not any(
+                group.group_type == DIALOGUE_CHILD_GROUP_TYPE and
+                group.label_u32 == topic.form_id for group in info.groups):
+            raise ValueError("Fallout 3 CG03 Dad speech INFO differs")
+        conditions = [_dialogue_condition(row.data) for row in iter_subrecords(info)
+                      if row.signature == "CTDA"]
+        identity = [row for row in conditions
+                    if int(row["function"]) == GET_IS_ID_FUNCTION]
+        sex = [row for row in conditions
+               if int(row["function"]) == GET_PC_IS_SEX_FUNCTION]
+        if len(identity) != 1 or int(identity[0]["parameter1"]) != dad_base.form_id or \
+                len(sex) != 1 or int(sex[0]["parameter1"]) not in (0, 1):
+            raise ValueError("Fallout 3 CG03 Dad speech conditions differ")
+        idle_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(info)
+                    if row.signature == "SNAM" and len(row.data) == FORM_ID_BYTES]
+        idle = by_form.get(idle_ids[0]) if len(idle_ids) == 1 else None
+        idle_models = [] if idle is None else _text_values(idle, "MODL")
+        if idle is None or idle.signature != IDLE_RECORD or len(idle_models) != 1:
+            raise ValueError("Fallout 3 CG03 Dad speech idle differs")
+        response_number = None
+        responses = []
+        for row in iter_subrecords(info):
+            if row.signature == "TRDT":
+                if len(row.data) not in DIALOGUE_RESPONSE_METADATA_BYTES:
+                    raise ValueError("Fallout 3 CG03 Dad response metadata differs")
+                response_number = int(row.data[DIALOGUE_RESPONSE_NUMBER_OFFSET])
+            elif row.signature == "NAM1" and response_number is not None:
+                responses.append((response_number, zstring(row.data)))
+                response_number = None
+        result_commands = [command for source in _text_values(info, "SCTX")
+                           for command in _source_commands(source)]
+        stage_match = SET_STAGE_PATTERN.fullmatch(result_commands[0]) \
+            if len(result_commands) == 1 else None
+        if len(responses) != 1 or not responses[0][1] or stage_match is None or \
+                int(stage_match.group("stage")) != speech_stage or \
+                stage_match.group("quest").casefold() != (_editor_id(quest) or "").casefold():
+            raise ValueError("Fallout 3 CG03 Dad speech result differs")
+        cues.append({
+            "infoFormId": _form_id(info.form_id),
+            "engineSex": "female" if int(sex[0]["parameter1"]) else "male",
+            "speakerIdle": {
+                "formId": _form_id(idle.form_id),
+                "modelPath": canonical_member_path(f"meshes\\{idle_models[0]}"),
+            },
+            "response": {
+                "index": responses[0][0],
+                "text": responses[0][1],
+                "textSha256": hashlib.sha256(responses[0][1].encode()).hexdigest(),
+            },
+        })
+    stage6_commands = [command for source in stage_sources.get(speech_stage, [])
+                       for command in _source_commands(source)]
+    expected_stage6 = [
+        f"set {_editor_id(dad_reference)}.doTalk to 0",
+        f"{_editor_id(dad_reference)}.evp",
+    ]
+    if [value.casefold() for value in stage6_commands] != \
+            [value.casefold() for value in expected_stage6]:
+        raise ValueError("Fallout 3 CG03 stage 6 result differs")
+    movie = next((PLAY_BINK_COMMAND_PATTERN.fullmatch(command) for command in commands
+                  if command.casefold().startswith("playbink ")), None)
+    timer = next((SET_REFERENCE_VARIABLE_PATTERN.fullmatch(command) for command in commands
+                  if ".timer" in command.casefold()), None)
+    if movie is None or timer is None or timer.group("subject").casefold() != \
+            (_editor_id(dad_reference) or "").casefold():
+        raise ValueError("Fallout 3 CG03 stage 5 timer/movie differs")
+    required_references = {
+        str(config["radioReferenceFormId"]): "REFR",
+        str(config["cg02HiddenPlaneReferenceFormId"]): "REFR",
+        str(config["cg03HiddenPlaneReferenceFormId"]): "REFR",
+        str(config["pipBoyFormId"]): "ARMO",
+    }
+    if any(by_form.get(int(form_id, FORM_ID_RADIX)) is None or
+           by_form[int(form_id, FORM_ID_RADIX)].signature != signature
+           for form_id, signature in required_references.items()):
+        raise ValueError("Fallout 3 CG03 stage 5 source identity differs")
+    dad_script_source = _script_source(dad_script)
+    timer_block = re.search(
+        rf"if\s+doTalk\s*==\s*1.*?timer\s+to\s+timer\s*-\s*GetSecondsPassed.*?"
+        rf"SayTo\s+player\s+{re.escape(_editor_id(topic) or '')}\s+1",
+        dad_script_source, re.IGNORECASE | re.DOTALL)
+    if timer_block is None:
+        raise ValueError("Fallout 3 CG03 Dad timer/SayTo script differs")
+    return {
+        "schema": "opennv-fo3-cg03-stage-5-dad-speech-runtime/v1",
+        "questFormId": _form_id(quest.form_id),
+        "questEditorId": _editor_id(quest),
+        "sourceStage": source_stage,
+        "speechStage": speech_stage,
+        "stage5CommandCount": len(commands),
+        "stage6CommandCount": len(stage6_commands),
+        "dadReferenceFormId": _form_id(dad_reference.form_id),
+        "dadBaseFormId": _form_id(dad_base.form_id),
+        "dadActorRecipeId": str(recipe["id"]),
+        "dadHoldPackageFormId": _form_id(hold_package.form_id),
+        "dadTalkPackageFormId": _form_id(talk_package.form_id),
+        "timerSeconds": float(timer.group("value")),
+        "movie": {"logicalPath": movie.group("path"),
+                  "arguments": [int(value) for value in movie.group("arguments").split()]},
+        "radioReferenceFormId": str(config["radioReferenceFormId"]),
+        "cg02HiddenPlaneReferenceFormId": str(config["cg02HiddenPlaneReferenceFormId"]),
+        "cg03HiddenPlaneReferenceFormId": str(config["cg03HiddenPlaneReferenceFormId"]),
+        "vaultSuitFormId": _form_id(by_editor["vaultsuit101"].form_id),
+        "pipBoyFormId": str(config["pipBoyFormId"]),
+        "dialogue": {"voiceType": {"formId": _form_id(voice.form_id),
+                                      "editorId": _editor_id(voice)},
+                     "branches": cues,
+                     "dialoguePlaybackPrepared": False,
+                     "dialoguePlaybackImplemented": False},
+        "nextBoundary": {"applied": False,
+                         "blocker": "fo3-cg03-stage-6-dad-force-greet-runtime-not-implemented"},
+    }
 
 
 def _compile_cg02_cake_runtime(
@@ -8222,8 +8405,11 @@ def _bind_owned_dad_dialogue_audio(
         if secondary_voices_archive is not None:
             if secondary_voices_archive_sha256 is None:
                 raise ValueError("Fallout 3 secondary voice archive hash is absent")
-            archive_stack.append((secondary_voices_archive,
-                                  secondary_voices_archive_sha256))
+            if (secondary_voices_archive.archive.resolve() !=
+                    voices_archive.archive.resolve() or
+                    secondary_voices_archive_sha256 != voices_archive_sha256):
+                archive_stack.append((secondary_voices_archive,
+                                      secondary_voices_archive_sha256))
         matches = [(archive, archive_sha256, path)
                    for archive, archive_sha256 in archive_stack
                    for path in archive.members
@@ -8608,6 +8794,17 @@ def _bind_cg02_intro_assets(
             post_intercom = dict(butch.get("postIntercomRuntime", {}))
             if post_intercom:
                 actor_recipe_ids.append(str(post_intercom["jonasActorRecipeId"]))
+                reactor_gift = dict(post_intercom.get("reactorGiftRuntime", {}))
+                picture = dict(reactor_gift.get("pictureRuntime", {}))
+                completion = dict(picture.get("completionRuntime", {}))
+                cg03 = dict(completion.get("nextQuestRuntime", {}))
+                if cg03:
+                    actor_recipe_ids.append(str(cg03["dadActorRecipeId"]))
+                    cg03_reference_id = str(cg03["dadReferenceFormId"]).casefold()
+                    animation_paths[cg03_reference_id] = tuple(dict.fromkeys(
+                        str(dict(branch)["speakerIdle"]["modelPath"])
+                        for branch in dict(cg03["dialogue"])["branches"]
+                    ))
     actor_set = actor_preparation.prepare_actor_set(
         data_root,
         profile_root,
@@ -8757,6 +8954,25 @@ def _bind_cg02_intro_assets(
                             "sound",
                         )
                         completion_runtime["sound"] = completion_sound
+                        cg03 = dict(completion_runtime.get("nextQuestRuntime", {}))
+                        if cg03:
+                            actor_scene = scenes.get(
+                                str(cg03["dadReferenceFormId"]).casefold())
+                            if actor_scene is None:
+                                raise ValueError(
+                                    "Fallout 3 CG03 Dad actor scene is absent")
+                            cg03["dadActorScene"] = actor_scene
+                            dialogue = dict(cg03["dialogue"])
+                            _bind_owned_dad_dialogue_animations(
+                                dialogue, meshes_archive, meshes_archive_sha256)
+                            _bind_owned_dad_dialogue_audio(
+                                dialogue, voices_archive, voices_archive_sha256,
+                                profile_root, voices_archive,
+                                voices_archive_sha256)
+                            dialogue["dialoguePlaybackPrepared"] = True
+                            dialogue["dialoguePlaybackImplemented"] = True
+                            cg03["dialogue"] = dialogue
+                            completion_runtime["nextQuestRuntime"] = cg03
                         picture["completionRuntime"] = completion_runtime
                         reactor_gift["pictureRuntime"] = picture
                     post_intercom["reactorGiftRuntime"] = reactor_gift
@@ -10219,6 +10435,48 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     }
     cg02_movie["video"] = prepared_cg02_video
     cg02["stage5Commands"] = cg02_commands
+    intro = dict(cg02["introRuntime"])
+    dad_speech = dict(intro["dadSpeechRuntime"])
+    overseer = dict(dad_speech["overseerSpeechRuntime"])
+    party = dict(overseer["dadPartyRuntime"])
+    birthday = dict(party["birthdayInteractionsRuntime"])
+    butch = dict(birthday["butchRuntime"])
+    post_intercom = dict(butch["postIntercomRuntime"])
+    reactor_gift = dict(post_intercom["reactorGiftRuntime"])
+    picture = dict(reactor_gift["pictureRuntime"])
+    cg02_completion = dict(picture["completionRuntime"])
+    cg03 = dict(cg02_completion.get("nextQuestRuntime", {}))
+    prepared_cg03_video = None
+    cg03_source = None
+    if cg03:
+        cg03_movie = dict(cg03["movie"])
+        cg03_sources = [
+            row for row in videos[1:]
+            if str(row["file"]).casefold() ==
+                str(cg03_movie["logicalPath"]).casefold()
+        ]
+        if len(cg03_sources) != 1:
+            raise ValueError("Fallout 3 CG03 owned transition movie is ambiguous")
+        cg03_source = cg03_sources[0]
+        prepared_cg03_video = {
+            **cg03_source,
+            "runtime": _prepare_runtime_video(
+                Path(str(cg03_source["source"])), profile_root,
+                configuration, video_import_policy),
+        }
+        cg03_movie["video"] = prepared_cg03_video
+        cg03["movie"] = cg03_movie
+        cg02_completion["nextQuestRuntime"] = cg03
+        picture["completionRuntime"] = cg02_completion
+        reactor_gift["pictureRuntime"] = picture
+        post_intercom["reactorGiftRuntime"] = reactor_gift
+        butch["postIntercomRuntime"] = post_intercom
+        birthday["butchRuntime"] = butch
+        party["birthdayInteractionsRuntime"] = birthday
+        overseer["dadPartyRuntime"] = party
+        dad_speech["overseerSpeechRuntime"] = overseer
+        intro["dadSpeechRuntime"] = dad_speech
+        cg02["introRuntime"] = intro
     completion["cg02Stage0"] = cg02
     dad_lead["completion"] = completion
     dad_return["dadLead"] = dad_lead
@@ -10231,6 +10489,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     transition_videos = [
         prepared_transition_video if row is transition_source
         else prepared_cg02_video if row is cg02_source
+        else prepared_cg03_video if row is cg03_source
         else row
         for row in videos[1:]
     ]

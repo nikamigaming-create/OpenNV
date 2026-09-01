@@ -172,6 +172,9 @@ internal partial class Fo3OpeningFlow
             case Fo3OwnedVideoMode.Cg02Transition:
                 CompleteCg02TransitionMovie(skipped);
                 break;
+            case Fo3OwnedVideoMode.Cg03Transition:
+                CompleteCg03TransitionMovie(skipped);
+                break;
         }
     }
 

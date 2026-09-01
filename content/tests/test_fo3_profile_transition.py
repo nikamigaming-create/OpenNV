@@ -79,6 +79,12 @@ FO3_CG02_PICTURE_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "sr
 FO3_CG02_BIRTHDAY_ACTORS = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
     "Campaigns/Fallout3/Fo3OpeningFlow.Cg02BirthdayActors.cs"
 )
+FO3_CG03_STAGE5_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg03Stage5.cs"
+)
+FO3_CG03_DAD_RECIPE = Path(__file__).resolve().parents[1] / "recipes" / (
+    "fo3-vault101-cg03-dad-actor-v1.json"
+)
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -183,6 +189,35 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_cg03_stage5_uses_owned_dad_and_source_runtime(self) -> None:
+        recipe = json.loads(FO3_RECIPE.read_text(encoding="utf-8"))
+
+        def find_stage5(value: object) -> dict[str, object] | None:
+            if isinstance(value, dict):
+                if "cg03Stage5" in value:
+                    return dict(value["cg03Stage5"])
+                for nested in value.values():
+                    result = find_stage5(nested)
+                    if result is not None:
+                        return result
+            elif isinstance(value, list):
+                for nested in value:
+                    result = find_stage5(nested)
+                    if result is not None:
+                        return result
+            return None
+
+        stage5 = find_stage5(recipe)
+        self.assertIsNotNone(stage5)
+        actor = json.loads(FO3_CG03_DAD_RECIPE.read_text(encoding="utf-8"))
+        self.assertEqual(stage5["dadReferenceFormId"],
+                         actor["proofActorReferenceFormId"])
+        self.assertEqual(stage5["dadBaseFormId"], actor["expectedBaseFormId"])
+        runtime = FO3_CG03_STAGE5_RUNTIME.read_text(encoding="utf-8")
+        self.assertIn("StartCg03Stage5Runtime", runtime)
+        self.assertIn("GamebryoDialoguePlayback", runtime)
+        self.assertIn("CellActorLoader.Load", runtime)
+
     def test_compiles_cg02_overseer_speech_through_stage10(self) -> None:
         quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
         topic = Record("DIAL", 0x30992, 0,

@@ -63,6 +63,7 @@ internal sealed record Fo3Cg02CompletionRuntime(
     int NextQuestStage0CommandCount,
     string NextQuestStartMarkerFormId,
     Fo3Cg01Transform NextQuestStartTransform,
+    Fo3Cg03Stage5Runtime? NextQuestRuntime,
     string NextBoundaryBlocker);
 
 internal static class Fo3Cg02PictureContract
@@ -147,6 +148,9 @@ internal static class Fo3Cg02PictureContract
             source.GetProperty("nextQuestStartMarkerFormId").GetString()!,
             Fo3Cg01Stage12Transition.LoadTransform(
                 source.GetProperty("nextQuestStartTransform")),
+            source.TryGetProperty("nextQuestRuntime", out var nextQuestRuntime)
+                ? Fo3Cg03Stage5Contract.Load(nextQuestRuntime)
+                : null,
             source.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
     }
 
