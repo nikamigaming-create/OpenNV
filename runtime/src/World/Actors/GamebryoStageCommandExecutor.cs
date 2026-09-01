@@ -63,6 +63,7 @@ internal enum GamebryoStageCommandKind
 {
     SetTimer,
     SetQuestVariable,
+    SetReferenceVariable,
     SetLocationSpecificLoadScreensOnly,
     SetInCharacterGeneration,
     SetStage,

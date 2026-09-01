@@ -10,7 +10,10 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from actor_catalog import resolve_actor_outfit_form_ids, scan_actor_catalog  # noqa: E402
-from prepare_actor import resolve_proof_creature  # noqa: E402
+from prepare_actor import (  # noqa: E402
+    _resolve_creature_animation_role,
+    resolve_proof_creature,
+)
 
 
 def subrecord(signature: str, data: bytes) -> bytes:
@@ -149,6 +152,22 @@ def plugin() -> bytes:
 
 
 class ActorCatalogTest(unittest.TestCase):
+    def test_creature_animation_role_selects_one_owned_skeleton_candidate(self):
+        class Archive:
+            members = {
+                r"meshes\creatures\dog\h2hrecoil.kf",
+            }
+
+        self.assertEqual(
+            _resolve_creature_animation_role(
+                [Archive()],
+                r"meshes\creatures\dog\skeleton.nif",
+                "hit",
+                [r"idleanims\hitreaction_torso.kf", "h2hrecoil.kf"],
+            ),
+            r"meshes\creatures\dog\h2hrecoil.kf",
+        )
+
     def test_actor_graph_retains_identity_appearance_and_placement(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "synthetic.esm"

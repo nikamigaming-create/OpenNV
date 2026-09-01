@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import struct
 import sys
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ from opening_catalog import (
     _compile_package_dialogue_closure,
     _compile_topic_closure,
     _resolve_command_record_identities,
+    _record_link_form_id,
     _script_commands,
 )
 
@@ -45,6 +47,14 @@ def record(
 
 
 class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
+    def test_leveled_item_graph_link_uses_lvlo_item_field(self) -> None:
+        payload = struct.pack("<HHIHH", 1, 0, 0x000E3778, 1, 0)
+
+        self.assertEqual(
+            0x000E3778,
+            _record_link_form_id("LVLI", "LVLO", payload),
+        )
+
     def test_compiles_package_selected_greeting_and_linked_choice(self) -> None:
         greeting = record("DIAL", "000000c8", "GREETING")
         greeting["text"].append({"signature": "FULL", "value": "GREETING"})
@@ -141,6 +151,42 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         )
         self.assertEqual("0010a1ed", sneak_topics[0]["infos"][0]["formId"])
         self.assertEqual("setStage", sneak_topics[0]["infos"][0]["commands"][0]["kind"])
+
+        sneak_end_info = record(
+            "INFO", "0010a1ee", "",
+            links=[{"signature": "QSTI", "formId": "0010a214"}],
+            source="SetObjectiveDisplayed VCG02 40 1",
+        )
+        sneak_end_info.update({
+            "sourceOrder": 13,
+            "groups": [{"type": 7, "label": "000000c8"}],
+            "conditions": [
+                {"function": 420, "parameter1": "0010a214", "parameter2": 30,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+                {"function": 72, "parameter1": "00104e84", "parameter2": 0,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+            ],
+            "dialogueData": {"flags": 1, "responseType": 0},
+        })
+        sneak_end_topics, _ = _compile_package_dialogue_closure(
+            [greeting, greeting_info, sneak_info, sneak_end_info],
+            {
+                "editorId": "VCG02SunnySmilesDialogueSneakEnd",
+                "conditions": [{
+                    "functionName": "getStage",
+                    "parameter1": "0010a214",
+                    "parameter2": 0,
+                    "comparisonValue": 50.0,
+                    "operatorFlags": 0,
+                }],
+            },
+            "00104e84",
+            {"formId": "0010a214", "editorId": "VCG02"},
+            {},
+            {"58": "getStage", "72": "getIsId", "420": "getStageDone",
+             "421": "getObjectiveCompleted"},
+        )
+        self.assertEqual("0010a1ee", sneak_end_topics[0]["infos"][0]["formId"])
 
     def test_compiles_source_hit_target_set_without_target_specific_runtime_ids(self) -> None:
         records = [
@@ -310,6 +356,17 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         self.assertEqual("0007ea24", commands[1]["resolvedItemFormId"])
         self.assertEqual("WEAP", commands[1]["resolvedItemRecordType"])
         self.assertEqual(4, contract["commandCount"])
+
+    def test_resolves_reference_script_variable_without_quest_substitution(self) -> None:
+        commands = _script_commands("set VCG02GSSettlerREF.bVulnerable to 0")
+        records = [record("ACHR", "0010a20e", "VCG02GSSettlerREF")]
+
+        contract = _resolve_command_record_identities(commands, records)
+
+        self.assertEqual("setReferenceVariable", commands[0]["kind"])
+        self.assertEqual("0010a20e", commands[0]["referenceFormId"])
+        self.assertEqual("ACHR", commands[0]["referenceRecordType"])
+        self.assertEqual(1, contract["commandCount"])
 
     def test_compiles_authored_entry_objective_from_quest_and_timer_identity(self) -> None:
         records = [

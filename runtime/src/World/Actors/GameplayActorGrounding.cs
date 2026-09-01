@@ -92,7 +92,11 @@ internal sealed partial class GameplayActorGrounding : Node3D
                      _activeSet.ActiveCellFormIds.Contains(space.CellFormId)))
         {
             foreach (var actor in space.Actors.Where(actor =>
-                         !_groundedReferences.Contains(actor.ReferenceFormId)))
+                         !_groundedReferences.Contains(actor.ReferenceFormId) &&
+                         actor.Placement.Visible &&
+                         actor.Placement.ProcessMode != ProcessModeEnum.Disabled &&
+                         (!actor.Placement.HasMeta("opennv_enabled") ||
+                          actor.Placement.GetMeta("opennv_enabled").AsInt32() != 0)))
             {
                 var sourcePlacement = actor.Placement.GlobalTransform;
                 var visualBounds = ActorModelSlice.PosedWorldBounds(

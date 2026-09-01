@@ -406,6 +406,29 @@ def _extract_mesh_member(
     return archive, archive.extract(requested)
 
 
+def _resolve_creature_animation_role(
+    archives: Sequence[BsaArchive],
+    skeleton_path: str,
+    role: str,
+    candidates: object,
+) -> str:
+    if not isinstance(candidates, list) or not candidates:
+        raise ValueError(f"CREA animation role has no source candidates: {role}")
+    skeleton_directory = PureWindowsPath(
+        canonical_member_path(skeleton_path)
+    ).parent
+    matches = []
+    for candidate in candidates:
+        path = _mesh_logical_path(str(skeleton_directory / str(candidate)))
+        if sum(path in archive.members for archive in archives) == 1:
+            matches.append(path)
+    if len(matches) != 1:
+        raise ValueError(
+            f"CREA animation role is ambiguous or absent: {role} matches={len(matches)}"
+        )
+    return matches[0]
+
+
 def _member_manifest(
     archive: BsaArchive,
     member: ExtractedMember,
@@ -604,10 +627,13 @@ def _prepare_creature_actor(
         PureWindowsPath(canonical_member_path(skeleton_path)).parent / idle_name
     )
     creature_animation_roles = {
-        str(role): _mesh_logical_path(
-            str(PureWindowsPath(canonical_member_path(skeleton_path)).parent / str(path))
+        str(role): _resolve_creature_animation_role(
+            context.mesh_archives,
+            skeleton_path,
+            str(role),
+            candidates,
         )
-        for role, path in dict(animation_profile.get("roles", {})).items()
+        for role, candidates in dict(animation_profile.get("roles", {})).items()
     }
     if set(creature_animation_roles) != {"locomotion", "melee", "hit"}:
         raise ValueError("CREA animation profile has incomplete source roles")

@@ -647,7 +647,9 @@ internal static class CellContentLoader
                     root,
                     originGameUnits,
                     configuration,
-                    proofEnableActor);
+                    proofEnableActor,
+                    materializeInitiallyDisabled: true,
+                    collisionLayer: renderLayer);
                 if (placedActor is not null)
                 {
                     SetRenderLayer(placedActor.Value.Placement, renderLayer);
@@ -1523,8 +1525,6 @@ internal static class CellContentLoader
             throw new InvalidOperationException("Could not merge owned LAND collision mesh.");
         var shape = collisionMesh.CreateTrimeshShape() ??
             throw new InvalidOperationException("Could not construct owned LAND collision shape.");
-        if (shape is ConcavePolygonShape3D concave)
-            concave.BackfaceCollision = true;
         var body = new StaticBody3D
         {
             Name = "LAND_ACTIVE_SET_COLLISION",

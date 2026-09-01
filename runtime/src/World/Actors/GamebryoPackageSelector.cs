@@ -155,6 +155,9 @@ internal static class GamebryoPackageSelector
                     "Source package without a target contains a reference.");
             return;
         }
+        if (target.Kind.Equals("currentLocation", StringComparison.Ordinal) &&
+            target.ReferenceFormId is null && target.Placement is null)
+            return;
         if (target.Kind is "nearReference" or "referenceMarker" &&
             !string.IsNullOrWhiteSpace(target.ReferenceFormId) &&
             target.Placement is { } placement &&
@@ -163,7 +166,7 @@ internal static class GamebryoPackageSelector
                 target.ReferenceFormId,
                 StringComparison.OrdinalIgnoreCase))
             return;
-        if (target.Kind.Equals("actorReference", StringComparison.Ordinal) &&
+        if (target.Kind is "actorReference" or "reference" &&
             !string.IsNullOrWhiteSpace(target.ReferenceFormId) &&
             target.Placement is null)
             return;

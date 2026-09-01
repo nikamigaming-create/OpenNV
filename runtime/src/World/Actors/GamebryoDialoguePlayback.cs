@@ -36,6 +36,9 @@ internal sealed class GamebryoDialoguePlayback
     private FaceGenMorphController? _face;
     private Action? _completed;
     private int _generation;
+    private double _durationSeconds;
+    private double _positionSeconds;
+    private Action? _pendingCompletion;
 
     internal GamebryoDialoguePlayback(
         AudioStreamPlayer voice,
@@ -43,15 +46,12 @@ internal sealed class GamebryoDialoguePlayback
     {
         _voice = voice;
         _lipConfiguration = lipConfiguration;
-        _voice.Finished += Complete;
     }
 
     internal AudioStreamPlayer Voice => _voice;
     internal SourceDialogueLine? ActiveLine { get; private set; }
 
-    internal double PositionSeconds => _voice.Playing
-        ? _voice.GetPlaybackPosition()
-        : 0.0;
+    internal double PositionSeconds => _positionSeconds;
 
     internal void Start(
         SourceDialogueLine line,
@@ -69,6 +69,11 @@ internal sealed class GamebryoDialoguePlayback
                 $"Source dialogue voice has no duration: {line.Voice.LogicalPath}");
         _lip = FaceGenLipAnimation.Load(line.Lip.SourcePath, _lipConfiguration);
         _face = face;
+        _durationSeconds = durationSeconds;
+        _positionSeconds = 0.0;
+        GD.Print(
+            $"OPENNV_GAMEBRYO_DIALOGUE_CLOCK_STARTED info={line.InfoFormId} " +
+            $"response={line.ResponseIndex} durationSeconds={durationSeconds:F6}");
         ActiveLine = line;
         var generation = ++_generation;
         _completed = () =>
@@ -85,9 +90,19 @@ internal sealed class GamebryoDialoguePlayback
         _voice.Play();
     }
 
-    internal void Update()
+    internal void Update(double deltaSeconds)
     {
-        if (_completed is null || _lip is null || _face is null || !_voice.Playing)
+        if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
+            throw new InvalidOperationException("Source dialogue delta is invalid.");
+        var pending = _pendingCompletion;
+        _pendingCompletion = null;
+        if (pending is not null)
+        {
+            GD.Print("OPENNV_GAMEBRYO_DIALOGUE_COMPLETION_PUBLISHED");
+            pending();
+            return;
+        }
+        if (_completed is null || _lip is null || _face is null)
             return;
         var line = ActiveLine ?? throw new InvalidOperationException(
             "Source dialogue playback lost its active INFO identity.");
@@ -96,14 +111,25 @@ internal sealed class GamebryoDialoguePlayback
             _voice.GetMeta("opennv_speaker_identity").AsString() != line.SpeakerIdentity)
             throw new InvalidOperationException(
                 "Source dialogue voice and LIP identities diverged.");
-        _face.Apply(_lip, _voice.GetPlaybackPosition());
+        _positionSeconds = Math.Min(
+            _durationSeconds,
+            _positionSeconds + deltaSeconds);
+        _face.Apply(_lip, _positionSeconds);
+        if (_positionSeconds >= _durationSeconds)
+        {
+            GD.Print(
+                $"OPENNV_GAMEBRYO_DIALOGUE_CLOCK_COMPLETE info={line.InfoFormId} " +
+                $"response={line.ResponseIndex} durationSeconds={_durationSeconds:F6}");
+            Complete();
+        }
     }
 
     internal void Complete()
     {
         var completed = _completed;
         _completed = null;
-        completed?.Invoke();
+        if (completed is not null)
+            _pendingCompletion = completed;
     }
 
     internal void Stop()
@@ -113,6 +139,8 @@ internal sealed class GamebryoDialoguePlayback
         _lip = null;
         _face = null;
         ActiveLine = null;
+        _durationSeconds = 0.0;
+        _positionSeconds = 0.0;
         _generation++;
         if (_voice.Playing)
             _voice.Stop();

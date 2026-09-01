@@ -20,6 +20,7 @@ internal sealed record RuntimeConfiguration(
     PickupConfiguration Pickup,
     PoolConfiguration Pool,
     DoorConfiguration Door,
+    PersistenceConfiguration Persistence,
     HudConfiguration Hud,
     CaptureConfiguration Capture,
     ProofConfiguration Proof,
@@ -210,6 +211,7 @@ internal sealed record RuntimeConfiguration(
             Pickup.Provenance,
             Pool.Provenance,
             Door.Provenance,
+            Persistence.Provenance,
             Hud.Provenance,
             Capture.Provenance,
             Capture.Gallery.Provenance,
@@ -298,6 +300,12 @@ internal sealed record RuntimeConfiguration(
         RequireUnitInterval((float)Pool.StrikeHaptic.Amplitude, nameof(Pool.StrikeHaptic.Amplitude));
         RequirePositive(Pool.StrikeHaptic.DurationSeconds, nameof(Pool.StrikeHaptic.DurationSeconds));
         RequirePositive(Door.OpenAngleDegrees, nameof(Door.OpenAngleDegrees));
+        RequirePositive(
+            Persistence.AtomicReplaceAttempts,
+            nameof(Persistence.AtomicReplaceAttempts));
+        RequirePositive(
+            Persistence.AtomicReplaceRetryMilliseconds,
+            nameof(Persistence.AtomicReplaceRetryMilliseconds));
         RequirePositive(Proof.SpawnFloorRayStartMeters, nameof(Proof.SpawnFloorRayStartMeters));
         if (Proof.SpawnFloorRayEndMeters >= 0.0f)
             throw new InvalidOperationException("Spawn floor proof ray end must be below the origin.");

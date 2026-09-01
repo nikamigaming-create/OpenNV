@@ -24,6 +24,7 @@ from actor_gltf import (
     sample_transform_animation,
 )
 from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
+from cell_catalog import cell_parent_form_id
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from export_static_nif_gltf import export_static_nif
@@ -33,6 +34,7 @@ from owned_archive_stack import OwnedArchiveStack
 from player_facegen_preview import (
     PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
     PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
+    PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS,
     prepare_default_player_facegen_preview,
 )
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
@@ -44,6 +46,11 @@ from compiler_provenance import compiler_provenance
 OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
 OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
+FULL_PLAYER_FACEGEN_PROFILE = "all-source-valid-selections"
+ROUTE_PLAYER_FACEGEN_PROFILE = "source-default-route-validation"
+PLAYER_FACEGEN_PROFILES = frozenset(
+    {FULL_PLAYER_FACEGEN_PROFILE, ROUTE_PLAYER_FACEGEN_PROFILE}
+)
 RACE_SEX_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-racesex-menu-tiles/v1"
 TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-textedit-menu-tiles/v1"
 DIALOGUE_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-dialogue-menu-tiles/v1"
@@ -203,6 +210,7 @@ REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_PRIMITIVE_BYTES = 32
 REFERENCE_PRIMITIVE_FLOAT_COUNT = 7
 LEVELED_ITEM_ENTRY_BYTES = 12
+LEVELED_ITEM_FORM_OFFSET = 4
 WEAPON_DATA_BYTES = 15
 WEAPON_DAMAGE_OFFSET = 12
 WEAPON_CLIP_SIZE_OFFSET = 14
@@ -217,12 +225,12 @@ CONDITION_OPERATOR_EQUAL = 0x00
 CONDITION_OPERATOR_GREATER_OR_EQUAL = 0x60
 PLAYER_CONTROL_ARGUMENTS = (
     "movement",
-    "pipBoy",
     "fighting",
     "pointOfView",
     "looking",
-    "rolloverText",
     "sneaking",
+    "menu",
+    "activation",
 )
 OPENING_COMMAND_CONTRACT_SCHEMA = "opennv-owned-opening-command-contract/v1"
 OPENING_COMMAND_KINDS = frozenset(
@@ -247,6 +255,7 @@ OPENING_COMMAND_KINDS = frozenset(
         "setDestroyed",
         "setGlobal",
         "setQuestVariable",
+        "setReferenceVariable",
         "setStage",
         "setTimer",
         "showMenu",
@@ -302,6 +311,7 @@ class ReferenceTransformSource:
     record_type: str
     position_game_units: tuple[float, float, float]
     rotation_radians: tuple[float, float, float]
+    cell_form_id: int | None = None
     base_form_id: int | None = None
     record_sha256: str = ""
 
@@ -310,6 +320,11 @@ class ReferenceTransformSource:
             "formId": form_id_text(self.form_id),
             "editorId": self.editor_id,
             "recordType": self.record_type,
+            "cellFormId": (
+                form_id_text(self.cell_form_id)
+                if self.cell_form_id is not None
+                else None
+            ),
             "positionGameUnits": list(self.position_game_units),
             "rotationRadians": list(self.rotation_radians),
             "rotationGodotQuaternion": godot_rotation_quaternion(
@@ -391,7 +406,11 @@ def emit_player_facegen_preview_set(
     """Emit the compiled full-body preview contract for strict sibling consumers."""
     if (
         preview_set.get("schema") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA
-        or preview_set.get("status") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
+        or preview_set.get("status")
+        not in {
+            PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
+            PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS,
+        }
     ):
         raise ValueError("Owned player FaceGen preview-set contract is malformed")
     output = (
@@ -446,6 +465,14 @@ def _subrecord_form_id(data: bytes) -> int | None:
     return struct.unpack_from("<I", data)[0]
 
 
+def _record_link_form_id(record_type: str, signature: str, data: bytes) -> int | None:
+    if record_type == "LVLI" and signature == "LVLO":
+        if len(data) != LEVELED_ITEM_ENTRY_BYTES:
+            raise ValueError("Owned leveled-item graph link differs")
+        return struct.unpack_from("<I", data, LEVELED_ITEM_FORM_OFFSET)[0]
+    return _subrecord_form_id(data)
+
+
 def _record_editor_id(record: Record) -> str | None:
     for subrecord in iter_subrecords(record):
         if subrecord.signature == "EDID":
@@ -478,7 +505,9 @@ def index_records(
             if subrecord.signature == "EDID":
                 editor_id = zstring(subrecord.data)
             if subrecord.signature in link_signatures:
-                target = _subrecord_form_id(subrecord.data)
+                target = _record_link_form_id(
+                    record.signature, subrecord.signature, subrecord.data
+                )
                 if target:
                     links.append((subrecord.signature, target))
                     reverse_links[(subrecord.signature, target)].append(record.form_id)
@@ -541,8 +570,9 @@ def record_graph_closure(
                         f"signature={signature}:target={form_id_text(target)}"
                     )
                     continue
-                selected.add(target)
-                added.add(target)
+                if target not in selected:
+                    selected.add(target)
+                    added.add(target)
         return added
 
     root_dependencies = add_links(root_forms)
@@ -586,6 +616,15 @@ def record_graph_closure(
     }
     selected.update(enable_parent_children)
     add_links(enable_parent_children)
+
+    leveled_frontier = {
+        form_id for form_id in selected if by_form[form_id].signature == "LVLI"
+    }
+    while leveled_frontier:
+        added = add_links(leveled_frontier)
+        leveled_frontier = {
+            form_id for form_id in added if by_form[form_id].signature == "LVLI"
+        }
 
     for current in tuple(selected | root_dependencies):
         row = by_form.get(current)
@@ -3302,6 +3341,18 @@ def compile_ui(
         documents,
         resolved_includes,
     )
+    dialogue_font_ids = {
+        int(font_id)
+        for menu in flow_menus
+        for tile_contract in [menu.get("dialogueMenuTiles")]
+        if tile_contract is not None
+        for font_id in (
+            dict(tile_contract)["speakerName"]["font"],
+            dict(tile_contract)["speakerText"]["font"],
+            dict(dict(tile_contract)["topics"])["template"]["font"],
+        )
+    }
+    gameplay_font_ids = frozenset(set(gameplay_font_ids) | dialogue_font_ids)
     gameplay["physicalDevice"] = _prepare_gameplay_physical_device(
         dict(dict(recipe_ui["gameplayPresentation"])["physicalDevice"]),
         owned_archives,
@@ -4226,6 +4277,7 @@ def _scan_flow_sources(
                     record.signature,
                     tuple(values[:3]),
                     tuple(values[3:]),
+                    cell_parent_form_id(record),
                     next(
                         (
                             _subrecord_form_id(subrecord.data)
@@ -5306,7 +5358,6 @@ def _compile_package_dialogue_closure(
     if len(stage_conditions) != 1:
         raise ValueError("Owned package dialogue has no unique completed stage")
     source_function_name = str(stage_conditions[0]["functionName"]).casefold()
-    source_function = function_ids[source_function_name]
     source_stage = (
         int(stage_conditions[0]["comparisonValue"])
         if source_function_name == "getstage"
@@ -5314,7 +5365,7 @@ def _compile_package_dialogue_closure(
     )
     greeting = _unique_manifest_record(records, "GREETING", "DIAL")
     greeting_form_id = str(greeting["formId"])
-    greeting_infos = []
+    greeting_candidates = []
     for record in records:
         if record["recordType"] != "INFO" or not any(
             int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE
@@ -5330,17 +5381,6 @@ def _compile_package_dialogue_closure(
             continue
         conditions = record["conditions"]
         if not any(
-            int(condition["function"]) == source_function
-            and str(condition["parameter1"]).casefold()
-            == str(quest["formId"]).casefold()
-            and (
-                float(condition["comparisonValue"]) == float(source_stage)
-                if source_function_name == "getstage"
-                else int(condition["parameter2"]) == source_stage
-                and float(condition["comparisonValue"]) == 1.0
-            )
-            for condition in conditions
-        ) or not any(
             int(condition["function"]) == function_ids["getisid"]
             and str(condition["parameter1"]).casefold()
             == actor_base_form_id.casefold()
@@ -5348,7 +5388,35 @@ def _compile_package_dialogue_closure(
             for condition in conditions
         ):
             continue
-        greeting_infos.append(record)
+        exact_stage = any(
+            int(condition["function"]) == function_ids["getstage"]
+            and str(condition["parameter1"]).casefold()
+            == str(quest["formId"]).casefold()
+            and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
+            and float(condition["comparisonValue"]) == float(source_stage)
+            for condition in conditions
+        )
+        completed_stages = [
+            int(condition["parameter2"])
+            for condition in conditions
+            if int(condition["function"]) == function_ids["getstagedone"]
+            and str(condition["parameter1"]).casefold()
+            == str(quest["formId"]).casefold()
+            and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
+            and float(condition["comparisonValue"]) == 1.0
+            and int(condition["parameter2"]) <= source_stage
+        ]
+        if exact_stage or completed_stages:
+            greeting_candidates.append(
+                (record, source_stage if exact_stage else max(completed_stages), exact_stage)
+            )
+    exact_candidates = [value for value in greeting_candidates if value[2]]
+    eligible = exact_candidates or greeting_candidates
+    if eligible:
+        latest_stage = max(value[1] for value in eligible)
+        greeting_infos = [value[0] for value in eligible if value[1] == latest_stage]
+    else:
+        greeting_infos = []
     if len(greeting_infos) != 1:
         raise ValueError(
             "Owned package greeting is ambiguous: "
@@ -5714,6 +5782,22 @@ def _resolve_command_record_identities(
     resolved_counts: dict[str, int] = defaultdict(int)
     for command in command_rows:
         kind = str(command.get("kind", ""))
+        if kind == "setQuestVariable":
+            quest_editor_id = str(command["questEditorId"])
+            quest_matches = [
+                record
+                for record in records_by_editor.get(quest_editor_id.casefold(), [])
+                if record["recordType"] == "QUST"
+            ]
+            reference_matches = [
+                record
+                for record in records_by_editor.get(quest_editor_id.casefold(), [])
+                if record["recordType"] in {"REFR", "ACHR", "ACRE"}
+            ]
+            if not quest_matches and len(reference_matches) == 1:
+                command["kind"] = "setReferenceVariable"
+                command["referenceEditorId"] = command.pop("questEditorId")
+                kind = "setReferenceVariable"
         if kind not in OPENING_COMMAND_KINDS:
             raise ValueError(f"Owned opening command kind is unaccounted: {kind!r}")
         kind_counts[kind] += 1
@@ -7331,7 +7415,10 @@ def compile_new_game_flow(
     audio_archives: OwnedArchiveStack,
     cache_root: Path,
     configuration: RuntimeConfiguration,
+    player_facegen_profile: str = FULL_PLAYER_FACEGEN_PROFILE,
 ) -> tuple[dict[str, object], tuple[str, ...]]:
+    if player_facegen_profile not in PLAYER_FACEGEN_PROFILES:
+        raise ValueError("Owned player FaceGen profile is unsupported")
     quest_editor_id = str(flow["questEditorId"])
     quest = _unique_manifest_record(records, quest_editor_id, "QUST")
     quest_script = _unique_manifest_record(
@@ -7758,7 +7845,7 @@ def compile_new_game_flow(
                 re.IGNORECASE,
             )
             if (
-                len(objective_matches) != 1
+                len(set(objective_matches)) != 1
                 or {value.casefold() for value in say_matches}
                 != {topic_editor_id.casefold()}
             ):
@@ -7792,7 +7879,7 @@ def compile_new_game_flow(
                     ),
                     "boundsGameUnits": primitive["boundsGameUnits"],
                     "questFormId": ordinary_quest["formId"],
-                    "objectiveIndex": int(objective_matches[0]),
+                    "objectiveIndex": int(next(iter(set(objective_matches)))),
                     "topicFormId": topic_roots[topic_editor_id.casefold()],
                 }
             )
@@ -7819,6 +7906,16 @@ def compile_new_game_flow(
         str(guide_actor_ai["referenceFormId"]),
         guide_animation_paths,
     )
+    ordinary_locomotion_paths = [
+        str(guide_actor_ai["locomotion"][role]["logicalPath"])
+        for role in ("walk", "run")
+    ]
+    for actor in ordinary_actors:
+        _merge_actor_animation_paths(
+            actor_animations,
+            str(actor["referenceFormId"]),
+            ordinary_locomotion_paths,
+        )
     hit_target_sets = _compile_hit_target_sets(
         records,
         flow.get("hitTargetSets", []),
@@ -7955,10 +8052,17 @@ def compile_new_game_flow(
             str(character_rules["appearancePreviewOutfitFormId"]),
             16,
         ),
-        include_all_playable_race_selections=True,
+        include_all_playable_race_selections=(
+            player_facegen_profile == FULL_PLAYER_FACEGEN_PROFILE
+        ),
+        source_default_route_selection_only=(
+            player_facegen_profile == ROUTE_PLAYER_FACEGEN_PROFILE
+        ),
     )
     appearance["preview"] = (
-        "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-"
+        "owned-source-default-player-identity-full-body-live-preview-route-validation"
+        if player_facegen_profile == ROUTE_PLAYER_FACEGEN_PROFILE
+        else "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-"
         "previews-all-native-geometry-controls"
     )
     tag_menu_commands = [
@@ -8388,6 +8492,7 @@ def prepare_opening_manifest(
     master_sha256: str,
     default_ini_path: Path,
     preferences_ini_path: Path | None = None,
+    player_facegen_profile: str = FULL_PLAYER_FACEGEN_PROFILE,
 ) -> dict[str, object]:
     recipe = load_opening_recipe(recipe_path)
     graph = dict(recipe["recordGraph"])
@@ -8448,6 +8553,7 @@ def prepare_opening_manifest(
         audio_archives,
         cache_root,
         configuration,
+        player_facegen_profile,
     )
     ui = compile_ui(
         data_root,
@@ -8506,6 +8612,7 @@ def prepare_opening_manifest(
             "sha256": file_sha256(recipe_path),
         },
         "configuration": configuration.manifest(),
+        "playerFaceGenProfile": player_facegen_profile,
         "master": {
             "file": master_path.name,
             "bytes": master_path.stat().st_size,

@@ -57,7 +57,8 @@ internal static class CellActorLoader
         Vector3 cellOriginGameUnits,
         RuntimeConfiguration configuration,
         bool proofEnableInitiallyDisabled,
-        bool materializeInitiallyDisabled = false)
+        bool materializeInitiallyDisabled = false,
+        uint? collisionLayer = null)
     {
         var resolvedManifest = VerifiedGltfLoader.ResolvePath(actorScenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedManifest));
@@ -114,6 +115,14 @@ internal static class CellActorLoader
             recordType == "CREA"
                 ? ActorModelSlice.BoundsContract.AnyActor
                 : ActorModelSlice.BoundsContract.Humanoid);
+        var localBounds = LocalBounds(placement, loaded.Bounds);
+        placement.SetMeta(
+            "opennv_source_form_id",
+            reference.GetProperty("formId").GetString()!);
+        GamebryoActorCollision.Start(
+            placement,
+            localBounds,
+            collisionLayer ?? configuration.Player.CollisionMask);
         if (initiallyDisabled && materializeInitiallyDisabled && !proofEnableInitiallyDisabled)
         {
             placement.Visible = false;
@@ -136,7 +145,32 @@ internal static class CellActorLoader
                 .Select(value => value.GetString()!)
                 .ToArray(),
             root.GetProperty("idleAnimation").GetString()!,
-            loaded);
+            loaded,
+            localBounds);
+    }
+
+    private static Aabb LocalBounds(Node3D placement, Aabb worldBounds)
+    {
+        var corners = new[]
+        {
+            worldBounds.Position,
+            worldBounds.Position + new Vector3(worldBounds.Size.X, 0.0f, 0.0f),
+            worldBounds.Position + new Vector3(0.0f, worldBounds.Size.Y, 0.0f),
+            worldBounds.Position + new Vector3(0.0f, 0.0f, worldBounds.Size.Z),
+            worldBounds.End,
+            worldBounds.Position + new Vector3(worldBounds.Size.X, worldBounds.Size.Y, 0.0f),
+            worldBounds.Position + new Vector3(worldBounds.Size.X, 0.0f, worldBounds.Size.Z),
+            worldBounds.Position + new Vector3(0.0f, worldBounds.Size.Y, worldBounds.Size.Z),
+        }.Select(placement.ToLocal).ToArray();
+        var minimum = corners.Aggregate((left, right) => new Vector3(
+            MathF.Min(left.X, right.X),
+            MathF.Min(left.Y, right.Y),
+            MathF.Min(left.Z, right.Z)));
+        var maximum = corners.Aggregate((left, right) => new Vector3(
+            MathF.Max(left.X, right.X),
+            MathF.Max(left.Y, right.Y),
+            MathF.Max(left.Z, right.Z)));
+        return new Aabb(minimum, maximum - minimum);
     }
 
     private static Vector3 ReadVector(JsonElement array)
@@ -178,5 +212,6 @@ internal static class CellActorLoader
         IReadOnlyList<string> OutfitFormIds,
         IReadOnlyList<string> HeadPartFormIds,
         string IdleAnimationPath,
-        ActorModelSlice.LoadedActor Actor);
+        ActorModelSlice.LoadedActor Actor,
+        Aabb LocalBounds);
 }

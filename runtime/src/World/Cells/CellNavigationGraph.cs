@@ -12,7 +12,6 @@ internal sealed class CellNavigationGraph
     private const int NoAdjacentTriangle = -1;
     private const float TriangleCentroidDivisor = 3.0f;
     private const float BarycentricUnit = 1.0f;
-    private const float ExternalEndpointToleranceGameUnits = 4.0f;
 
     private readonly IReadOnlyList<NavigationMeshRecord> _navmeshes;
     private readonly IReadOnlyDictionary<string, NavigationMeshRecord> _navmeshesByFormId;
@@ -28,6 +27,11 @@ internal sealed class CellNavigationGraph
     internal int NavMeshes => _navmeshes.Count;
     internal int Vertices => _navmeshes.Sum(value => value.Vertices.Count);
     internal int Triangles => _navmeshes.Sum(value => value.Triangles.Count);
+
+    internal IReadOnlyList<Vector3> CandidatePoints => _navmeshes
+        .SelectMany(value => Enumerable.Range(0, value.Triangles.Count)
+            .Select(value.Centroid))
+        .ToArray();
 
     internal static CellNavigationGraph Load(
         JsonElement source,
@@ -69,10 +73,27 @@ internal sealed class CellNavigationGraph
         return result;
     }
 
-    private static Vector3 ExternalSharedEdgeMidpoint(
+    private Vector3 ExternalSharedEdgeMidpoint(
         NavigationNode source,
         NavigationNode target)
     {
+        var reciprocal = target.NavMesh.Triangles[target.TriangleIndex]
+            .AdjacentTriangles
+            .Where(adjacent => !target.NavMesh.IsInternalNeighbor(
+                target.TriangleIndex,
+                adjacent))
+            .Where(adjacent => adjacent >= 0 &&
+                adjacent < target.NavMesh.ExternalConnections.Count)
+            .Select(adjacent => target.NavMesh.ExternalConnections[adjacent])
+            .Any(connection => connection.NavMeshFormId.Equals(
+                    source.NavMesh.FormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                connection.TriangleIndex == source.TriangleIndex);
+        if (!reciprocal)
+            throw new InvalidOperationException(
+                "Owned NAVM external edge is not reciprocal: " +
+                $"{source.NavMesh.FormId}:{source.TriangleIndex} -> " +
+                $"{target.NavMesh.FormId}:{target.TriangleIndex}.");
         var sourceVertices = source.NavMesh.TriangleVertices(source.TriangleIndex);
         var targetVertices = target.NavMesh.TriangleVertices(target.TriangleIndex);
         var candidates = (
@@ -101,12 +122,6 @@ internal sealed class CellNavigationGraph
                 second.TargetIndex
             select new { First = first, Second = second, maximumDistanceSquared })
             .First();
-        if (matched.maximumDistanceSquared >
-            ExternalEndpointToleranceGameUnits * ExternalEndpointToleranceGameUnits)
-            throw new InvalidOperationException(
-                $"Owned NAVM external edge endpoints do not match: " +
-                $"{source.NavMesh.FormId}:{source.TriangleIndex} -> " +
-                $"{target.NavMesh.FormId}:{target.TriangleIndex}.");
         return (
             sourceVertices[matched.First.SourceIndex] +
             targetVertices[matched.First.TargetIndex] +

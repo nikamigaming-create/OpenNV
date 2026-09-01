@@ -50,6 +50,7 @@ internal enum GamebryoResultCommandKind
 {
     ActorValueDelta,
     SetQuestVariable,
+    SetReferenceVariable,
     SetDestroyed,
     AddItem,
     RemoveItem,

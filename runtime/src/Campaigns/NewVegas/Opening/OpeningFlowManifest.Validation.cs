@@ -483,14 +483,33 @@ internal sealed partial record OpeningNewGameFlow
         var race = appearance.Races.SingleOrDefault(value => value.FormId.Equals(
             appearance.DefaultRaceFormId,
             StringComparison.OrdinalIgnoreCase));
+        var fullSelectionProfile =
+            previewSet.Status == ExpectedPlayerFaceGenPreviewStatus &&
+            previewSet.RuntimeDisposition == ExpectedPlayerFaceGenPreviewRuntimeDisposition &&
+            previewSet.SelectionScope == ExpectedPlayerFaceGenPreviewSelectionScope &&
+            previewSet.UnsupportedSelectionScope ==
+                ExpectedPlayerFaceGenUnsupportedSelectionScope;
+        var routeSelectionProfile =
+            previewSet.Status == RoutePlayerFaceGenPreviewStatus &&
+            previewSet.RuntimeDisposition == RoutePlayerFaceGenPreviewRuntimeDisposition &&
+            previewSet.SelectionScope == RoutePlayerFaceGenPreviewSelectionScope &&
+            previewSet.UnsupportedSelectionScope ==
+                RoutePlayerFaceGenUnsupportedSelectionScope;
+        var validSelectionInventory = fullSelectionProfile
+            ? OwnedGamebryoFaceGenSelectionInventory.IsComplete(
+                previewSet,
+                appearance.Races.SelectMany(value => value.Sex.Select(pair =>
+                    new OwnedGamebryoFaceGenSelectionDomain(
+                        pair.Key,
+                        value.FormId,
+                        pair.Value.HairOptions.Select(option => option.FormId).ToArray(),
+                        pair.Value.EyeOptions.Select(option => option.FormId).ToArray()))))
+            : routeSelectionProfile &&
+                race is not null &&
+                ValidRoutePlayerFaceGenSelection(previewSet, appearance, race);
         if (race is null ||
             previewSet.Schema != ExpectedPlayerFaceGenPreviewSchema ||
-            previewSet.Status != ExpectedPlayerFaceGenPreviewStatus ||
-            previewSet.RuntimeDisposition !=
-                ExpectedPlayerFaceGenPreviewRuntimeDisposition ||
-            previewSet.SelectionScope != ExpectedPlayerFaceGenPreviewSelectionScope ||
-            previewSet.UnsupportedSelectionScope !=
-                ExpectedPlayerFaceGenUnsupportedSelectionScope ||
+            (!fullSelectionProfile && !routeSelectionProfile) ||
             !previewSet.PlayerFormId.Equals(
                 appearance.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) ||
@@ -506,14 +525,7 @@ internal sealed partial record OpeningNewGameFlow
                 ExpectedPlayerFaceGenBodyComponentRoles,
                 StringComparer.Ordinal) ||
             !ValidPlayerBodySourcesBySex(previewSet.BodyComponentSourcesBySex) ||
-            !OwnedGamebryoFaceGenSelectionInventory.IsComplete(
-                previewSet,
-                appearance.Races.SelectMany(value => value.Sex.Select(pair =>
-                    new OwnedGamebryoFaceGenSelectionDomain(
-                        pair.Key,
-                        value.FormId,
-                        pair.Value.HairOptions.Select(option => option.FormId).ToArray(),
-                        pair.Value.EyeOptions.Select(option => option.FormId).ToArray())))))
+            !validSelectionInventory)
             return false;
 
         return previewSet.Previews.All(preview =>
@@ -568,6 +580,25 @@ internal sealed partial record OpeningNewGameFlow
             !string.IsNullOrWhiteSpace(preview.BufferSha256) &&
             !string.IsNullOrWhiteSpace(preview.EgtPath) &&
             !string.IsNullOrWhiteSpace(preview.EgtSha256));
+    }
+
+    private static bool ValidRoutePlayerFaceGenSelection(
+        OpeningPlayerFaceGenPreviewSet previewSet,
+        OpeningPlayerAppearance appearance,
+        OpeningAppearanceRace race)
+    {
+        if (!race.Sex.TryGetValue("male", out var male) || previewSet.Previews.Count != 1)
+            return false;
+        var preview = previewSet.Previews[0];
+        return preview.PlayerFormId.Equals(
+                appearance.PlayerFormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.RaceFormId.Equals(
+                appearance.DefaultRaceFormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.Sex == "male" &&
+            preview.HairFormId.Equals(
+                male.DefaultHairFormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.EyesFormId.Equals(
+                male.DefaultEyesFormId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ValidPlayerBodySourcesBySex(

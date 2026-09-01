@@ -10,6 +10,13 @@ internal static class OwnedUiTheme
     private const int FontTextureIndex = 0;
     internal const float CenteringFactor = 0.5f;
 
+    internal static float NormalizeByteChannel(float value)
+    {
+        if (!float.IsFinite(value) || value < 0.0f || value > ByteChannelMaximum)
+            throw new InvalidOperationException("Owned UI byte channel is invalid.");
+        return value / ByteChannelMaximum;
+    }
+
     internal static FontFile BuildFont(OwnedBitmapFont authored)
     {
         var fontSize = Mathf.RoundToInt(authored.LineHeightPixels);

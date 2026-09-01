@@ -14,7 +14,12 @@ from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
 from exterior_scene import prepare_exterior_scene
 from compiler_provenance import FAMILIES, compiler_identities
 from export_static_nif_gltf import export_static_nif
-from opening_catalog import prepare_opening_manifest
+from opening_catalog import (
+    FULL_PLAYER_FACEGEN_PROFILE,
+    PLAYER_FACEGEN_PROFILES,
+    ROUTE_PLAYER_FACEGEN_PROFILE,
+    prepare_opening_manifest,
+)
 from owned_archive_stack import (
     AUDIO_ARCHIVE_RECIPE_SCHEMA,
     load_owned_archive_stack,
@@ -28,6 +33,34 @@ from runtime_configuration import configured_recipe_path, load_runtime_configura
 
 
 SCHEMA = "opennv-legal-asset-cache/v1"
+
+
+def route_exterior_positions(
+    opening_manifest: dict[str, object],
+    persistent_cell_form_id: str,
+) -> tuple[tuple[float, float, float], ...]:
+    """Collect source route positions owned by one exterior persistent CELL."""
+    positions: set[tuple[float, float, float]] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            position = value.get("positionGameUnits")
+            if (
+                str(value.get("cellFormId", "")).casefold()
+                == persistent_cell_form_id.casefold()
+                and isinstance(position, list)
+                and len(position) == 3
+                and all(isinstance(component, (int, float)) for component in position)
+            ):
+                positions.add(tuple(float(component) for component in position))
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(opening_manifest.get("newGameFlow"))
+    return tuple(sorted(positions))
 
 
 def file_sha256(path: Path) -> str:
@@ -224,7 +257,10 @@ def prepare(
     expected_meshes_sha256: str = "",
     cell_recipe: str | None = None,
     preferences_ini: Path | None = None,
+    player_facegen_profile: str = FULL_PLAYER_FACEGEN_PROFILE,
 ) -> dict[str, object]:
+    if player_facegen_profile not in PLAYER_FACEGEN_PROFILES:
+        raise ValueError("Owned player FaceGen profile is unsupported")
     configuration = load_runtime_configuration()
     legal_assets = configuration.document["legalAssets"]
     if not isinstance(legal_assets, dict):
@@ -309,6 +345,7 @@ def prepare(
             "logicalModel": logical_model,
             "cellRecipe": cell_recipe,
             "openingRecipe": opening_recipe_path.stem,
+            "playerFaceGenProfile": player_facegen_profile,
         },
         "master": {"file": master.name, "bytes": master.stat().st_size, "sha256": master_hash},
         "defaultIni": {
@@ -374,6 +411,7 @@ def prepare(
             master_hash,
             default_ini,
             preferences_ini,
+            player_facegen_profile,
         )
     if reuse["static"]:
         asset = prior["asset"]
@@ -446,6 +484,14 @@ def prepare(
                         raise ValueError("Linked CELL recipe identity is missing or duplicated")
                     seen_recipes.add(recipe_id)
                     if linked_recipe_document["schema"] == "opennv-exterior-recipe/v1":
+                        route_positions = (
+                            route_exterior_positions(
+                                opening["manifest"],
+                                str(linked_recipe_document["persistentCellFormId"]),
+                            )
+                            if player_facegen_profile == ROUTE_PLAYER_FACEGEN_PROFILE
+                            else ()
+                        )
                         linked_scene = prepare_exterior_scene(
                             master,
                             meshes,
@@ -456,6 +502,7 @@ def prepare(
                             master_hash,
                             owned_archives=visual_archives,
                             family_compiler=identities["families"]["cell"],
+                            required_route_positions_game_units=route_positions,
                         )
                     else:
                         linked_scene = prepare_cell_scene(
@@ -612,6 +659,11 @@ def main() -> int:
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
     parser.add_argument("--cell-recipe")
     parser.add_argument("--preferences-ini", type=Path)
+    parser.add_argument(
+        "--player-facegen-profile",
+        choices=tuple(sorted(PLAYER_FACEGEN_PROFILES)),
+        default=FULL_PLAYER_FACEGEN_PROFILE,
+    )
     args = parser.parse_args()
     if args.compiler_identity:
         print(
@@ -649,6 +701,7 @@ def main() -> int:
             args.expected_meshes_bsa_sha256,
             args.cell_recipe,
             args.preferences_ini,
+            args.player_facegen_profile,
         )
     except Exception as error:
         print(f"OPENNV_LEGAL_ASSET_ERROR {error}", file=sys.stderr)

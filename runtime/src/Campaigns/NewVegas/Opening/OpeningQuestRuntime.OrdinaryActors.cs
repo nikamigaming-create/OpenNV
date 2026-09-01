@@ -14,6 +14,8 @@ internal partial class OpeningQuestRuntime
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ActorAnimationPlayback> _ordinaryActorLocomotion =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _completedOrdinaryPackages =
+        new(StringComparer.OrdinalIgnoreCase);
     private bool _ordinaryAutomaticDialogueActive;
 
     private void EvaluateOrdinaryActorPackages()
@@ -22,7 +24,9 @@ internal partial class OpeningQuestRuntime
         {
             var placed = _loaded.Actors.Single(value => value.ReferenceFormId.Equals(
                 actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase));
-            var candidates = actor.PackagePriority.Select(formId => actor.Packages[formId])
+            var candidates = actor.PackagePriority
+                .Where(formId => !_completedOrdinaryPackages.Contains(formId))
+                .Select(formId => actor.Packages[formId])
                 .Select(package => new GamebryoPackageCandidate<OpeningGuidePackage>(
                     package.FormId,
                     package.Conditions.Select(PackageCondition).ToArray(),
@@ -119,8 +123,19 @@ internal partial class OpeningQuestRuntime
         CellActorLoader.PlacedActor placed,
         GamebryoPackageCandidate<OpeningGuidePackage> selected)
     {
-        var target = selected.Target.Placement ?? throw new InvalidOperationException(
-            "Owned ordinary package travel has no source placement.");
+        var reference = selected.Value.Location?.Reference ??
+            throw new InvalidOperationException(
+                "Owned ordinary package travel has no source reference.");
+        var sourceContent = ContentOwningActor(placed);
+        var targetContent = ContentOwningReference(reference);
+        placed.Placement.Reparent(targetContent.Root, true);
+        var target = GamebryoPackagePlacement.FromCellReference(
+            selected.Target.Kind,
+            reference.FormId,
+            targetContent.Root.ToLocal(targetContent.GameToWorld(
+                reference.PositionGameUnits)),
+            reference.RotationGodot,
+            placed.Placement.Scale);
         var grounded = GameplayActorGrounding.ApplyGroundOffset(
             placed, target.SourceTransform.Origin);
         target = new SourcePackagePlacement(
@@ -129,12 +144,11 @@ internal partial class OpeningQuestRuntime
             GamebryoPackagePlacement.AdjustSupportHeight(
                 target.SourceTransform,
                 grounded.Y - target.SourceTransform.Origin.Y));
-        var path = _loaded.MainContent.Navigation.FindPath(
-                _loaded.CellToGameUnits(placed.Placement.Position),
-                _loaded.CellToGameUnits(target.SourceTransform.Origin))
-            .Select(_loaded.GameToCellUnits)
-            .Select(position => GameplayActorGrounding.ApplyGroundOffset(placed, position))
-            .ToArray();
+        var path = OrdinaryActorTravelPath(
+            placed,
+            sourceContent,
+            targetContent,
+            target.SourceTransform.Origin);
         if (path.Length == 0 && placed.Placement.Position.DistanceTo(
                 target.SourceTransform.Origin) <=
             GamebryoPackageTravel.ExactArrivalToleranceCellUnits)
@@ -161,8 +175,76 @@ internal partial class OpeningQuestRuntime
                 clip.RootMotion.StartSeconds,
                 clip.RootMotion.StopSeconds,
                 clip.RootMotion.CycleType,
-                ZeroedAccumulationRootTranslation));
+            ZeroedAccumulationRootTranslation));
     }
+
+    private Vector3[] OrdinaryActorTravelPath(
+        CellActorLoader.PlacedActor placed,
+        CellContentLoader.LoadedContent source,
+        CellContentLoader.LoadedContent target,
+        Vector3 targetPosition)
+    {
+        IEnumerable<Vector3> WorldPath(
+            CellContentLoader.LoadedContent content,
+            Vector3 from,
+            Vector3 to) => content.Navigation.FindPath(
+                content.WorldToGame(from),
+                content.WorldToGame(to)).Select(content.GameToWorld);
+
+        var targetWorld = target.Root.ToGlobal(targetPosition);
+        IEnumerable<Vector3> worldPath;
+        if (source.FormId.Equals(target.FormId, StringComparison.OrdinalIgnoreCase))
+            worldPath = WorldPath(source, placed.Placement.GlobalPosition, targetWorld);
+        else
+        {
+            var links = _loaded.PortalLinks.Where(link =>
+                    link.FromCellFormId.Equals(source.FormId, StringComparison.OrdinalIgnoreCase) &&
+                    link.ToCellFormId.Equals(target.FormId, StringComparison.OrdinalIgnoreCase) ||
+                    link.ToCellFormId.Equals(source.FormId, StringComparison.OrdinalIgnoreCase) &&
+                    link.FromCellFormId.Equals(target.FormId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (links.Length != 1)
+                throw new InvalidOperationException(
+                    "Owned ordinary package cross-CELL path is absent or ambiguous.");
+            var link = links[0];
+            var sourceFrame = link.FromCellFormId.Equals(
+                    source.FormId, StringComparison.OrdinalIgnoreCase)
+                ? link.FromFrame
+                : link.ToFrame;
+            var targetFrame = link.FromCellFormId.Equals(
+                    target.FormId, StringComparison.OrdinalIgnoreCase)
+                ? link.FromFrame
+                : link.ToFrame;
+            var sourcePortal = (sourceFrame.From + sourceFrame.To) * BoundsToHalfExtents;
+            var targetPortal = (targetFrame.From + targetFrame.To) * BoundsToHalfExtents;
+            worldPath = WorldPath(source, placed.Placement.GlobalPosition, sourcePortal)
+                .Concat(WorldPath(target, targetPortal, targetWorld));
+        }
+        return worldPath
+            .Select(world => target.Root.ToLocal(world))
+            .Select(position => GameplayActorGrounding.ApplyGroundOffset(placed, position))
+            .ToArray();
+    }
+
+    private CellContentLoader.LoadedContent ContentOwningActor(
+        CellActorLoader.PlacedActor actor) => AllLoadedContent().Single(content =>
+            ReferenceEquals(actor.Placement, content.Root) ||
+            content.Root.IsAncestorOf(actor.Placement));
+
+    private CellContentLoader.LoadedContent ContentOwningReference(
+        OpeningGuideReference reference)
+    {
+        if (reference.CellFormId is null)
+            throw new InvalidOperationException(
+                "Owned package reference has no source CELL identity: " +
+                reference.FormId);
+        return AllLoadedContent().Single(content =>
+            content.SourceCellFormIds.Contains(reference.CellFormId));
+    }
+
+    private IEnumerable<CellContentLoader.LoadedContent> AllLoadedContent() =>
+        new[] { _loaded.MainContent }
+            .Concat(_loaded.LinkedCells.Select(value => value.Content));
 
     private void UpdateOrdinaryActorTravel(double delta)
     {
@@ -227,6 +309,10 @@ internal partial class OpeningQuestRuntime
         _ordinaryAutomaticDialogueActive = true;
         _generation++;
         var generation = _generation;
+        // A new package-owned GREETING is a new retail dialogue selection pass.
+        // INFO say-once state persists, but an earlier conversation's ordered
+        // cursor must not suppress newly eligible stage-conditioned INFO rows.
+        _topicCursors.Remove(dialogue.GreetingTopicFormId);
         PlayTopicForm(
             dialogue.GreetingTopicFormId,
             () =>
@@ -234,6 +320,7 @@ internal partial class OpeningQuestRuntime
                 if (generation != _generation)
                     return;
                 _ordinaryAutomaticDialogueActive = false;
+                _completedOrdinaryPackages.Add(dialogue.PackageFormId);
                 _loaded.Session.StoreOpeningState(CaptureState(true));
                 EvaluateOrdinaryActorPackages();
             },
@@ -280,6 +367,8 @@ internal partial class OpeningQuestRuntime
                 {
                     if (generation != _generation)
                         return;
+                    _completedOrdinaryPackages.Add(
+                        _ordinaryActorPackages[actor.ReferenceFormId].FormId);
                     _loaded.Session.StoreOpeningState(CaptureState(true));
                     EvaluateOrdinaryActorPackages();
                 },

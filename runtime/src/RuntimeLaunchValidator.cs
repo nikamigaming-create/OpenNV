@@ -37,12 +37,16 @@ internal static class RuntimeLaunchValidator
             if (!options.ContainsKey("report") || !options.ContainsKey("save-path") ||
                 !options.ContainsKey("opening-proof-name") ||
                 !options.ContainsKey("opening-proof-timeout-seconds") ||
-                openingProofMode is not "checkpoint" and not "creator" and not "resume" ||
-                (openingProofMode is "checkpoint" or "creator") !=
+                openingProofMode is not "checkpoint" and not "creator" and not "resume" and
+                    not "route-stage50" and not "route-stage50-resume" ||
+                (openingProofMode is "checkpoint" or "creator" or "route-stage50") !=
+                    (options.ContainsKey("new-game") || startsFromMenuNewGame) ||
+                openingProofMode == "route-stage50-resume" &&
                     (options.ContainsKey("new-game") || startsFromMenuNewGame))
                 throw new ArgumentException(
-                    "--opening-proof requires mode checkpoint or creator with --new-game or the owned " +
-                    "menu new-game route, or mode resume without either, plus --report, " +
+                    "--opening-proof requires mode checkpoint, creator, or route-stage50 with " +
+                    "--new-game or the owned " +
+                    "menu new-game route, or mode resume/route-stage50-resume without either, plus --report, " +
                     "--save-path, --opening-proof-name, and --opening-proof-timeout-seconds.");
         }
         if (options.ContainsKey("opening-character-video") &&

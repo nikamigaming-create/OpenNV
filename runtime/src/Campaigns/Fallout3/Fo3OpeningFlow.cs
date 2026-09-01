@@ -233,7 +233,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _cg02PictureCompletionTick?.Invoke(delta);
         _cg03DadSpeechTick?.Invoke(delta);
         foreach (var dialogue in _cg02IntroDialogue)
-            dialogue.Update();
+            dialogue.Update(delta);
         foreach (var animation in _cg02IntroAnimations.Values)
             animation.Advance(delta);
         if (_vaultStage90Fade is not null && _activeStage90ImageSpaceModifier is not null)

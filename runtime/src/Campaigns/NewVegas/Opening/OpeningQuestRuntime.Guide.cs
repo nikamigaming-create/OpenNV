@@ -194,22 +194,24 @@ internal partial class OpeningQuestRuntime
 
     private GamebryoPackageTarget PackageTarget(OpeningGuidePackage package)
     {
-        if (package.Target is not null)
-            return new GamebryoPackageTarget(
-                $"packageTarget:{package.Target.TypeName}",
-                package.Target.FormId,
-                null);
-        if (package.Location is null)
-            return GamebryoPackageTarget.None;
         if (package.Location is not
             {
                 TypeName: "nearReference",
                 Reference: { } reference,
             })
-            return new GamebryoPackageTarget(
-                package.Location.TypeName,
-                package.Location.Reference?.FormId,
-                null);
+        {
+            if (package.Target is not null)
+                return new GamebryoPackageTarget(
+                    package.Target.TypeName,
+                    package.Target.FormId,
+                    null);
+            return package.Location is null
+                ? GamebryoPackageTarget.None
+                : new GamebryoPackageTarget(
+                    package.Location.TypeName,
+                    package.Location.Reference?.FormId,
+                    null);
+        }
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
         var placement = reference.FormId.Equals(
                 furniture.ReferenceFormId,
@@ -876,7 +878,7 @@ internal partial class OpeningQuestRuntime
     {
         var origin = _guideActor.Placement.GlobalPosition;
         var levelTarget = new Vector3(globalTarget.X, origin.Y, globalTarget.Z);
-        if (levelTarget.IsEqualApprox(origin))
+        if ((levelTarget - origin).LengthSquared() <= Mathf.Epsilon)
             return;
         _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
     }

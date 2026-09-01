@@ -579,7 +579,9 @@ public partial class RuntimeCoordinator : Node3D
         var openingManifest = usesCampaignState
             ? OpeningManifest.Load(
                 RequireOption(options, "opening-manifest"),
-                _configuration)
+                _configuration,
+                options.TryGetValue("opening-proof", out var openingProofMode) &&
+                    openingProofMode is "route-stage50" or "route-stage50-resume")
             : null;
         var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
         if (galleryContract is not null)

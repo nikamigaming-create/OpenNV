@@ -78,6 +78,7 @@
       "MISC": ["SCRI"],
       "TERM": ["SCRI"],
       "WEAP": ["SCRI", "NAM0"],
+      "LVLI": ["LVLO"],
       "FLST": ["LNAM"]
     },
     "reverseFormLinkSubrecords": [

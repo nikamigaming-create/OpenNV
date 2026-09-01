@@ -70,6 +70,20 @@ PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE = (
 PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE = (
     "invalid-race-sex-hair-eyes-source-tuple"
 )
+PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS = (
+    "compiled-source-default-player-identity-full-body-live-preview-with-ctl-egm-"
+    "targets-all-native-geometry-controls-runtime-bound"
+)
+PLAYER_FACEGEN_ROUTE_RUNTIME_DISPOSITION = (
+    "owned-source-default-player-identity-preview-host-and-all-native-geometry-"
+    "controls-bound-other-source-valid-tuples-fail-closed-route-validation-profile"
+)
+PLAYER_FACEGEN_ROUTE_SELECTION_SCOPE = (
+    "source-default-player-identity-route-validation"
+)
+PLAYER_FACEGEN_ROUTE_UNSUPPORTED_SCOPE = (
+    "other-source-valid-or-invalid-race-sex-hair-eyes-tuple"
+)
 PLAYER_FACEGEN_HEAD_RUNTIME_DISPOSITION = (
     "owned-default-male-preview-host-and-all-native-geometry-controls-bound-"
     "other-identities-unimplemented-sibling-gamebryo-slider-semantics-"
@@ -308,6 +322,7 @@ def prepare_default_player_facegen_preview(
     presentation_outfit_form_id: int | None = None,
     include_locomotion_animation: bool = False,
     include_all_playable_race_selections: bool = False,
+    source_default_route_selection_only: bool = False,
 ) -> dict[str, object]:
     """Export exact Player previews for the requested owned selection scope."""
     catalog = scan_actor_catalog(master_path)
@@ -315,9 +330,20 @@ def prepare_default_player_facegen_preview(
     if player is None or player.female or player.race_form_id is None:
         raise ValueError("Owned Player base is not the expected default male humanoid")
     player_contract = dict(appearance["player"])
-    if include_all_playable_race_selections and not include_full_body:
+    if source_default_route_selection_only and include_all_playable_race_selections:
+        raise ValueError("Player preview selection projections are mutually exclusive")
+    if (include_all_playable_race_selections or source_default_route_selection_only) and not include_full_body:
         raise ValueError("Playable-race FaceGen previews require full-body assembly")
-    if include_all_playable_race_selections:
+    if source_default_route_selection_only:
+        selections = (
+            PlayerPreviewSelection(
+                PLAYER_PREVIEW_SEX,
+                int(str(player_contract["defaultRaceFormId"]), FORM_ID_RADIX),
+                int(player.hair_form_id or 0),
+                int(player.eyes_form_id or 0),
+            ),
+        )
+    elif include_all_playable_race_selections:
         selections = _playable_race_preview_selections(
             appearance,
             player.form_id,
@@ -354,6 +380,8 @@ def prepare_default_player_facegen_preview(
         if include_all_playable_race_selections
         else len(PLAYER_PREVIEW_SEXES) if include_full_body else 1
     )
+    if source_default_route_selection_only:
+        expected_selection_count = 1
     if len(selections) != expected_selection_count:
         raise ValueError("Owned player preview selection inventory is incomplete")
     default_race = catalog.races.get(player.race_form_id)
@@ -681,7 +709,7 @@ def prepare_default_player_facegen_preview(
             / "player-facegen-preview"
             / selection.sex
         )
-        if include_all_playable_race_selections:
+        if include_all_playable_race_selections or source_default_route_selection_only:
             output_root /= (
                 f"{selection.race_form_id:08x}-"
                 f"{selection.hair_form_id:08x}-"
@@ -793,7 +821,7 @@ def prepare_default_player_facegen_preview(
         ],
     }
     if include_full_body:
-        expanded = include_all_playable_race_selections
+        expanded = include_all_playable_race_selections or source_default_route_selection_only
         return {
             "schema": (
                 PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA
@@ -801,16 +829,24 @@ def prepare_default_player_facegen_preview(
                 else PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA
             ),
             "status": (
-                PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
+                PLAYER_FACEGEN_ROUTE_PREVIEW_STATUS
+                if source_default_route_selection_only
+                else PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
                 if expanded
                 else PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS
             ),
             **common,
             **(
                 {
-                    "selectionScope": PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE,
+                    "selectionScope": (
+                        PLAYER_FACEGEN_ROUTE_SELECTION_SCOPE
+                        if source_default_route_selection_only
+                        else PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE
+                    ),
                     "unsupportedSelectionScope": (
-                        PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE
+                        PLAYER_FACEGEN_ROUTE_UNSUPPORTED_SCOPE
+                        if source_default_route_selection_only
+                        else PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE
                     ),
                 }
                 if expanded
@@ -818,7 +854,9 @@ def prepare_default_player_facegen_preview(
             ),
             "previews": preview_rows,
             "runtimeDisposition": (
-                PLAYER_FACEGEN_PLAYABLE_RACE_RUNTIME_DISPOSITION
+                PLAYER_FACEGEN_ROUTE_RUNTIME_DISPOSITION
+                if source_default_route_selection_only
+                else PLAYER_FACEGEN_PLAYABLE_RACE_RUNTIME_DISPOSITION
                 if expanded
                 else PLAYER_FACEGEN_FULL_BODY_RUNTIME_DISPOSITION
             ),

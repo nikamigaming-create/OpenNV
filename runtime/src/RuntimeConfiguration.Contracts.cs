@@ -270,6 +270,11 @@ internal sealed record DoorConfiguration(
     ConfigurationProvenance Provenance,
     float OpenAngleDegrees);
 
+internal sealed record PersistenceConfiguration(
+    ConfigurationProvenance Provenance,
+    int AtomicReplaceAttempts,
+    int AtomicReplaceRetryMilliseconds);
+
 internal sealed record HudConfiguration(
     ConfigurationProvenance Provenance,
     float[] DesktopPanelPositionPixels,
@@ -1315,7 +1320,11 @@ internal sealed record ActorAnimationProfilesConfiguration(
             CREA.Roles.Count != 3 ||
             !CREA.Roles.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
                 new[] { "locomotion", "melee", "hit" }) ||
-            CREA.Roles.Values.Any(string.IsNullOrWhiteSpace))
+            CREA.Roles.Values.Any(candidates =>
+                candidates.Count == 0 ||
+                candidates.Any(string.IsNullOrWhiteSpace) ||
+                candidates.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    candidates.Count))
             throw new InvalidOperationException(
                 "Actor animation profiles do not declare complete owned-member resolvers.");
     }
@@ -1325,7 +1334,7 @@ internal sealed record ActorAnimationProfileConfiguration(
     string Mode,
     string? Path,
     string? FileName,
-    IReadOnlyDictionary<string, string>? Roles);
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Roles);
 
 internal sealed record FaceGenMaterialConfiguration(
     string Schema,

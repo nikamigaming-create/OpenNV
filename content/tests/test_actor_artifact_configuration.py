@@ -68,8 +68,13 @@ class ActorArtifactConfigurationTest(unittest.TestCase):
             {"locomotion", "melee", "hit"},
         )
         self.assertTrue(all(
-            not Path(value).is_absolute() and value.casefold().endswith(".kf")
-            for value in profile["roles"].values()
+            isinstance(candidates, list) and
+            candidates and
+            all(
+                not Path(value).is_absolute() and value.casefold().endswith(".kf")
+                for value in candidates
+            )
+            for candidates in profile["roles"].values()
         ))
 
 

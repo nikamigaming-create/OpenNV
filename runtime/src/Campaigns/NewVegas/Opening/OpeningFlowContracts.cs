@@ -723,6 +723,7 @@ internal sealed record OpeningGuideReference(
     string FormId,
     string? EditorId,
     string RecordType,
+    string? CellFormId,
     Vector3 PositionGameUnits,
     Vector3 RotationRadians,
     Quaternion RotationGodot);

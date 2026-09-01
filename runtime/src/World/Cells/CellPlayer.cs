@@ -86,6 +86,7 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _activationEnabled = true;
     private bool _combatEnabled = true;
     private bool _saveEnabled = true;
+    private bool _acceptSyntheticMouseMotion;
     private CellNavigationGraph? _navigation;
     private Node3D? _navigationRoot;
     private Vector3 _navigationOriginGameUnits;
@@ -124,6 +125,10 @@ internal partial class CellPlayer : CharacterBody3D
     internal string LastActivationCollider { get; private set; } = "none";
     internal string LastActivationDoorFormId { get; private set; } = "none";
     internal int DesktopActivationEdges { get; private set; }
+    internal bool MovementEnabled => _movementEnabled;
+    internal bool LookEnabled => _lookEnabled;
+    internal bool ActivationEnabled => _activationEnabled;
+    internal bool AcceptsSyntheticMouseMotion => _acceptSyntheticMouseMotion;
     internal Vector3 LastBlockingNormal { get; private set; }
     internal Node? LastBlockingCollider { get; private set; }
     internal Vector3? LastBlockingPosition { get; private set; }
@@ -148,6 +153,9 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void SetExternalActivationHandler(Func<Node?, bool>? handler) =>
         _externalActivationHandler = handler;
+
+    internal void SetSyntheticMouseMotionPolicy(bool enabled) =>
+        _acceptSyntheticMouseMotion = enabled;
 
     internal void ConfigureJamJvsSprint(JamJvsSprintContract sprint)
     {
@@ -557,12 +565,17 @@ internal partial class CellPlayer : CharacterBody3D
                 safeMargin: 0.0f,
                 recoveryAsCollision: false))
         {
-            RecordBlockingCollision(forwardCollision);
-            LastStepAttempt =
-                $"forward-blocked:normal={forwardCollision.GetNormal()}:" +
-                $"travel={forwardCollision.GetTravel()}:" +
-                $"collider={forwardCollision.GetCollider()}";
-            return false;
+            var forwardNormal = forwardCollision.GetNormal();
+            if (forwardNormal.Dot(Vector3.Up) < MathF.Cos(FloorMaxAngle))
+            {
+                RecordBlockingCollision(forwardCollision);
+                LastStepAttempt =
+                    $"forward-blocked:normal={forwardNormal}:" +
+                    $"travel={forwardCollision.GetTravel()}:" +
+                    $"collider={forwardCollision.GetCollider()}";
+                return false;
+            }
+            horizontalMotion = forwardCollision.GetTravel();
         }
         var advanced = raised;
         advanced.Origin += horizontalMotion;
@@ -645,7 +658,8 @@ internal partial class CellPlayer : CharacterBody3D
         }
         if (_lookEnabled &&
             inputEvent is InputEventMouseMotion motion &&
-            Input.MouseMode == Input.MouseModeEnum.Captured)
+            (Input.MouseMode == Input.MouseModeEnum.Captured ||
+             _acceptSyntheticMouseMotion))
         {
             var sensitivity = _settings?.ApplyMouseSensitivity(
                 _configuration.Player.MouseSensitivityRadiansPerPixel) ??
@@ -713,8 +727,7 @@ internal partial class CellPlayer : CharacterBody3D
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
         {
-            if (collider is null &&
-                _portalTravel?.TryActivateFacing(
+            if (_portalTravel?.TryActivateFacing(
                     aimSource,
                     this,
                     _configuration.Player.ActivationDistanceMeters,

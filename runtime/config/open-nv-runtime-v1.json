@@ -249,6 +249,16 @@
     },
     "openAngleDegrees": 90.0
   },
+  "persistence": {
+    "provenance": {
+      "classification": "OpenNV host policy",
+      "status": "implemented",
+      "source": ".NET atomic file replacement semantics",
+      "evidence": "runtime/src/Gameplay/State/GameplaySession.cs"
+    },
+    "atomicReplaceAttempts": 4,
+    "atomicReplaceRetryMilliseconds": 10
+  },
   "hud": {
     "provenance": {
       "classification": "open-nv-policy",
@@ -1174,9 +1184,9 @@
         "mode": "skeleton-directory",
         "fileName": "mtidle.kf",
         "roles": {
-          "locomotion": "locomotion\\mtfastforward.kf",
-          "melee": "h2hattackforwardpower.kf",
-          "hit": "idleanims\\hitreaction_torso.kf"
+          "locomotion": ["locomotion\\mtfastforward.kf"],
+          "melee": ["h2hattackforwardpower.kf"],
+          "hit": ["idleanims\\hitreaction_torso.kf", "h2hrecoil.kf"]
         }
       }
     },

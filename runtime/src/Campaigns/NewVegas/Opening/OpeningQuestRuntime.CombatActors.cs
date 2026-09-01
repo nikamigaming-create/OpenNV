@@ -12,6 +12,8 @@ internal partial class OpeningQuestRuntime
         _combatActorAnimations = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, GamebryoCreatureCombatAi> _combatActorAi =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CombatNavigationState> _combatNavigation =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private void InitializeCombatActors()
     {
@@ -166,15 +168,15 @@ internal partial class OpeningQuestRuntime
                 if (_combatActorAnimations[target.ReferenceFormId].Role ==
                     GamebryoCreatureAnimationPlayback.HitRole)
                     continue;
-                var playerCellPosition = _loaded.Root.ToLocal(
+                var content = AllLoadedContent().Single(value =>
+                    ReferenceEquals(actor.Placement, value.Root) ||
+                    value.Root.IsAncestorOf(actor.Placement));
+                var playerCellPosition = content.Root.ToLocal(
                     _loaded.Player.GlobalPosition);
-                var currentGamePosition = _loaded.CellToGameUnits(
-                    actor.Placement.Position);
-                var targetGamePosition = _loaded.CellToGameUnits(
-                    playerCellPosition);
-                var path = _loaded.MainContent.Navigation.FindPath(
-                    currentGamePosition,
-                    targetGamePosition).Select(_loaded.GameToCellUnits).ToArray();
+                var currentGamePosition = content.WorldToGame(
+                    actor.Placement.GlobalPosition);
+                var targetGamePosition = content.WorldToGame(
+                    _loaded.Player.GlobalPosition);
                 var horizontalDistance = new Vector2(
                     playerCellPosition.X - actor.Placement.Position.X,
                     playerCellPosition.Z - actor.Placement.Position.Z).Length();
@@ -185,14 +187,42 @@ internal partial class OpeningQuestRuntime
                         _configuration.Player.CapsuleRadiusMeters /
                         _loaded.UnitsToMeters,
                     target.AttackDamage);
-                var forwardPath = path.SkipWhile(value =>
-                    value.IsEqualApprox(actor.Placement.Position)).ToArray();
-                var nextWaypoint = forwardPath.Length > 0
-                    ? forwardPath[0]
-                    : horizontalDistance <= contract.ContactRangeGameUnits
-                        ? playerCellPosition
-                        : throw new InvalidOperationException(
-                            "Owned creature combat navigation returned no path.");
+                if (!_combatNavigation.TryGetValue(
+                        target.ReferenceFormId, out var navigation))
+                {
+                    navigation = new CombatNavigationState(
+                        content.Navigation.FindPath(
+                                currentGamePosition,
+                                targetGamePosition)
+                            .Select(content.GameToWorld)
+                            .Select(content.Root.ToLocal)
+                            .ToArray(),
+                        0);
+                }
+                while (navigation.Index < navigation.Path.Count &&
+                    new Vector2(
+                        navigation.Path[navigation.Index].X - actor.Placement.Position.X,
+                        navigation.Path[navigation.Index].Z - actor.Placement.Position.Z)
+                        .IsZeroApprox())
+                    navigation = navigation with { Index = navigation.Index + 1 };
+                if (navigation.Index >= navigation.Path.Count &&
+                    horizontalDistance > contract.ContactRangeGameUnits)
+                {
+                    navigation = new CombatNavigationState(
+                        content.Navigation.FindPath(
+                                currentGamePosition,
+                                targetGamePosition)
+                            .Select(content.GameToWorld)
+                            .Select(content.Root.ToLocal)
+                            .ToArray(),
+                        0);
+                }
+                _combatNavigation[target.ReferenceFormId] = navigation;
+                if (navigation.Path.Count == 0)
+                    continue;
+                var nextWaypoint = navigation.Index < navigation.Path.Count
+                    ? navigation.Path[navigation.Index]
+                    : playerCellPosition;
                 var ai = _combatActorAi[target.ReferenceFormId];
                 var priorPhase = ai.State.Phase;
                 var step = ai.Advance(
@@ -200,7 +230,12 @@ internal partial class OpeningQuestRuntime
                     actor.Placement.Transform,
                     playerCellPosition,
                     nextWaypoint);
-                actor.Placement.Transform = step.Transform;
+                actor.Placement.Transform = navigation.Index < navigation.Path.Count
+                    ? GamebryoPackagePlacement.AtSupportHeight(
+                        step.Transform,
+                        navigation.Path[navigation.Index].Y)
+                    : step.Transform;
+                GamebryoActorCollision.Synchronize(actor.Placement);
                 var animation = _combatActorAnimations[target.ReferenceFormId];
                 if (step.BeganMelee)
                     animation.Play(GamebryoCreatureAnimationPlayback.MeleeRole);
@@ -210,7 +245,11 @@ internal partial class OpeningQuestRuntime
                 else if (priorPhase == GamebryoCreatureCombatPhase.Melee &&
                     step.State.Phase == GamebryoCreatureCombatPhase.Chase)
                     animation.Play(GamebryoCreatureAnimationPlayback.LocomotionRole);
-                if (step.Damage > 0)
+                if (step.Damage > 0 && GameplaySession.WorldLineIsClear(
+                        actor.Placement,
+                        GamebryoActorCollision.Center(actor.Placement),
+                        _loaded.Player.GlobalPosition,
+                        _loaded.Player.CollisionMask))
                 {
                     var hitPoints = _loaded.Session.ApplySourceDamage(step.Damage);
                     actor.Placement.SetMeta("opennv_last_melee_damage", step.Damage);
@@ -256,4 +295,8 @@ internal partial class OpeningQuestRuntime
                 "Owned combat actor identity is absent or ambiguous.");
         return matches[0];
     }
+
+    private sealed record CombatNavigationState(
+        IReadOnlyList<Vector3> Path,
+        int Index);
 }

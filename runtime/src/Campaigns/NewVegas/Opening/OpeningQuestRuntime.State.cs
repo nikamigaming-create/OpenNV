@@ -8,6 +8,8 @@ using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.SceneGraph;
+using OpenNV.Runtime.World.Portals;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -28,7 +30,7 @@ internal partial class OpeningQuestRuntime
                 new SourceGamebryoResultCommand<OpeningFlowCommand>(
                     sourceIndex,
                     ResultCommandKind(command.Kind),
-                    ResultCommandIsTerminal(command),
+                    ResultCommandIsTerminal(info.Commands, sourceIndex),
                     command)).ToArray();
             var execution = GamebryoResultCommandExecutor.Execute(
                 commands,
@@ -74,6 +76,9 @@ internal partial class OpeningQuestRuntime
                 break;
             case "setQuestVariable":
                 ApplyQuestVariable(command);
+                break;
+            case "setReferenceVariable":
+                ApplyReferenceVariable(command);
                 break;
             case "setDestroyed":
                 ApplyDestroyedFromInfo(command);
@@ -178,16 +183,26 @@ internal partial class OpeningQuestRuntime
         };
     }
 
-    private bool ResultCommandIsTerminal(OpeningFlowCommand command) =>
-        command.Kind is "sayTo" or "deferredStage" ||
-        command.Kind == "setStage" && command.QuestFormId?.Equals(
-            _flow.QuestFormId,
-            StringComparison.OrdinalIgnoreCase) == true;
+    private bool ResultCommandIsTerminal(
+        IReadOnlyList<OpeningFlowCommand> orderedCommands,
+        int sourceIndex)
+    {
+        var command = orderedCommands[sourceIndex];
+        if (command.Kind is "sayTo" or "deferredStage")
+            return true;
+        return sourceIndex == orderedCommands.Count - 1 &&
+            orderedCommands.Any(value =>
+                value.Kind == "setStage" &&
+                value.QuestFormId?.Equals(
+                    _flow.QuestFormId,
+                    StringComparison.OrdinalIgnoreCase) == true);
+    }
 
     private static GamebryoResultCommandKind ResultCommandKind(string kind) => kind switch
     {
         "actorValueDelta" => GamebryoResultCommandKind.ActorValueDelta,
         "setQuestVariable" => GamebryoResultCommandKind.SetQuestVariable,
+        "setReferenceVariable" => GamebryoResultCommandKind.SetReferenceVariable,
         "setDestroyed" => GamebryoResultCommandKind.SetDestroyed,
         "additem" => GamebryoResultCommandKind.AddItem,
         "removeitem" => GamebryoResultCommandKind.RemoveItem,
@@ -218,6 +233,8 @@ internal partial class OpeningQuestRuntime
         Action completed,
         int generation)
     {
+        GD.Print(
+            $"OPENNV_NEW_GAME_DIALOGUE_TOPICS_PRESENTED count={topicFormIds.Count}");
         var choices = new List<(string Identity, string Text, Action Selected)>();
         foreach (var formId in topicFormIds)
         {
@@ -230,7 +247,13 @@ internal partial class OpeningQuestRuntime
             choices.Add((
                 topic.FormId,
                 topic.Prompt,
-                () => PlayTopic(topic, completed, generation)));
+                () =>
+                {
+                    GD.Print(
+                        $"OPENNV_NEW_GAME_DIALOGUE_TOPIC_SELECTED topic={topic.FormId}");
+                    PlayTopic(topic, completed, generation);
+                }
+            ));
         }
         var ordinarySpeaker = _flow.OrdinaryActors.SingleOrDefault(actor =>
             topicFormIds.Any(actor.Topics.ContainsKey));
@@ -297,6 +320,19 @@ internal partial class OpeningQuestRuntime
             throw new InvalidOperationException("Owned quest-variable command is incomplete.");
         _questVariables[QuestVariableKey(command.QuestFormId, command.ValueName)] = value;
     }
+
+    private void ApplyReferenceVariable(OpeningFlowCommand command)
+    {
+        if (command.ReferenceFormId is null || command.ValueName is null ||
+            command.NumericValue is not { } value || !float.IsFinite(value))
+            throw new InvalidOperationException(
+                "Owned reference variable command is incomplete.");
+        _referenceVariables[ReferenceVariableKey(
+            command.ReferenceFormId, command.ValueName)] = value;
+    }
+
+    private static string ReferenceVariableKey(string referenceFormId, string variable) =>
+        $"{referenceFormId}:{variable}";
 
     private void ApplyQuestTimer(OpeningFlowCommand command)
     {
@@ -410,11 +446,17 @@ internal partial class OpeningQuestRuntime
                     case "setQuestVariable":
                         ApplyQuestVariable(source);
                         break;
+                    case "setReferenceVariable":
+                        ApplyReferenceVariable(source);
+                        break;
                     case "setStage":
                         ApplyQuestStage(source);
                         break;
                     case "actorIntent":
                         ApplyOrdinaryActorIntent(source);
+                        break;
+                    case "referenceEnabled":
+                        ApplyReferenceEnabled(source);
                         break;
                     default:
                         throw new InvalidOperationException(
@@ -568,6 +610,139 @@ internal partial class OpeningQuestRuntime
         return _loaded.Player.GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0;
     }
 
+    private IReadOnlyList<Vector3> FindAcceptanceFiringPath(
+        CellContentLoader.LoadedContent content,
+        Vector3 playerFootWorld,
+        Vector3 aimTargetWorld,
+        Node3D target,
+        IReadOnlySet<Vector3> rejectedDestinations)
+    {
+        var playerGame = content.WorldToGame(playerFootWorld);
+        var cameraOffset = _loaded.Player.Camera.GlobalPosition -
+            _loaded.Player.GlobalPosition;
+        var ranged = content.Navigation.CandidatePoints
+            .Select(candidate => new
+            {
+                Game = candidate,
+                World = content.GameToWorld(candidate),
+            })
+            .Where(candidate =>
+                candidate.World.DistanceTo(aimTargetWorld) <=
+                    _configuration.Player.FireRayDistanceMeters &&
+                !rejectedDestinations.Contains(candidate.World))
+            .Select(candidate => new
+            {
+                candidate.Game,
+                candidate.World,
+                Path = TryFindAcceptancePath(content, playerGame, candidate.Game),
+            })
+            .Where(candidate => candidate.Path is not null)
+            .Select(candidate => new
+            {
+                candidate.Game,
+                candidate.World,
+                Path = candidate.Path!,
+            })
+            .ToArray();
+        var clear = ranged
+            .Where(candidate => AcceptanceNavigationPathIsClear(candidate.Path) &&
+                CellRouteTravelAcceptance.CanAdvanceCapsule(
+                    _loaded.Player,
+                    candidate.Path[0]))
+            .ToArray();
+        var visible = clear
+            .Where(candidate => _loaded.Session.CanHitscanReach(
+                candidate.World + Vector3.Up *
+                    (_configuration.Player.SpawnCenterHeightMeters +
+                     _loaded.Player.SafeMargin) + cameraOffset,
+                aimTargetWorld,
+                _loaded.Player.CollisionMask,
+                target))
+            .ToArray();
+        GD.Print(
+            $"OPENNV_OPENING_ACCEPTANCE_FIRE_POSITIONS ranged={ranged.Length} " +
+            $"clear={clear.Length} visible={visible.Length}");
+        var candidates = visible
+            .OrderBy(candidate => AcceptanceNavigationPathLength(candidate.Path))
+            .ThenBy(candidate => candidate.Game.X)
+            .ThenBy(candidate => candidate.Game.Y)
+            .ThenBy(candidate => candidate.Game.Z)
+            .FirstOrDefault();
+        if (candidates is null)
+            return Array.Empty<Vector3>();
+        return candidates.Path;
+    }
+
+    private static IReadOnlyList<Vector3>? TryFindAcceptancePath(
+        CellContentLoader.LoadedContent content,
+        Vector3 playerGame,
+        Vector3 candidateGame)
+    {
+        try
+        {
+            return content.Navigation.FindPath(playerGame, candidateGame)
+                .Select(content.GameToWorld)
+                .ToArray();
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private bool AcceptanceNavigationPathIsClear(IReadOnlyList<Vector3> path)
+    {
+        if (path.Count == 0)
+            return false;
+        var previous = _loaded.Player.GlobalPosition;
+        foreach (var waypoint in path)
+        {
+            var distance = HorizontalDistance(previous, waypoint);
+            var samples = Math.Max(
+                1,
+                Mathf.CeilToInt(distance / _configuration.Player.CapsuleRadiusMeters));
+            for (var sample = 1; sample <= samples; sample++)
+            {
+                var amount = (float)sample / samples;
+                var candidate = previous.Lerp(waypoint, amount);
+                if (!PlayerNavigationWorldCandidateIsClear(candidate))
+                    return false;
+            }
+            previous = waypoint;
+        }
+        return true;
+    }
+
+    private bool PlayerNavigationWorldCandidateIsClear(Vector3 candidate)
+    {
+        var query = new PhysicsShapeQueryParameters3D
+        {
+            Shape = new CapsuleShape3D
+            {
+                Radius = _configuration.Player.CapsuleRadiusMeters,
+                Height = _configuration.Player.CapsuleHeightMeters,
+            },
+            Transform = new Transform3D(
+                _loaded.Player.GlobalBasis.Orthonormalized(),
+                candidate + Vector3.Up *
+                    (_configuration.Player.SpawnCenterHeightMeters +
+                     _loaded.Player.SafeMargin)),
+            CollisionMask = _configuration.Player.CollisionMask,
+            CollideWithAreas = false,
+            CollideWithBodies = true,
+            Exclude = new Godot.Collections.Array<Rid> { _loaded.Player.GetRid() },
+        };
+        return _loaded.Player.GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0;
+    }
+
+    private static float AcceptanceNavigationPathLength(IReadOnlyList<Vector3> path)
+    {
+        var total = 0.0f;
+        for (var index = 1; index < path.Count; index++)
+            total += path[index - 1].DistanceTo(path[index]);
+        return total;
+    }
+
     private Vector3 PlayerNavigationCandidateWorld(Vector3 candidateGameUnits) =>
         _loaded.GameToWorld(candidateGameUnits) +
         Vector3.Up * (
@@ -634,13 +809,21 @@ internal partial class OpeningQuestRuntime
         OpeningTransformState.Capture(_guideActor.Placement))
     {
         GuidePackage = CaptureGuidePackageState(),
-        EquippedWeapon = _equippedWeaponState,
+        EquippedWeapon = _loaded.Session.CaptureOpeningEquippedWeaponState() ??
+            _equippedWeaponState,
         OrdinaryActorTransforms = _flow.OrdinaryActors.ToDictionary(
             value => value.ReferenceFormId,
             value => OpeningTransformState.Capture(
                 _loaded.Actors.Single(actor => actor.ReferenceFormId.Equals(
                     value.ReferenceFormId,
                     StringComparison.OrdinalIgnoreCase)).Placement),
+            StringComparer.OrdinalIgnoreCase),
+        OrdinaryActorCellFormIds = _flow.OrdinaryActors.ToDictionary(
+            value => value.ReferenceFormId,
+            value => ContentOwningActor(
+                _loaded.Actors.Single(actor => actor.ReferenceFormId.Equals(
+                    value.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase))).FormId,
             StringComparer.OrdinalIgnoreCase),
         CombatHealthByReferenceFormId = _combatHealthByReferenceFormId
             .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
@@ -665,6 +848,16 @@ internal partial class OpeningQuestRuntime
                     value.Value.State.MeleeClockSeconds,
                     value.Value.State.HitApplied),
                 StringComparer.OrdinalIgnoreCase),
+        ReferenceVariables = _referenceVariables
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => value.Value,
+                StringComparer.OrdinalIgnoreCase),
+        SaidOnceInfoFormIds = _saidOnce.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+        CompletedOrdinaryPackageFormIds = _completedOrdinaryPackages
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray(),
     };
 
     internal static bool MatchesFlow(
@@ -684,7 +877,7 @@ internal partial class OpeningQuestRuntime
 
     internal static bool GameplayUiEnabled(OpeningCampaignState state) =>
         state.PlayerControls.Count == PlayerControlCount &&
-        state.PlayerControls[PipBoyControlIndex] == EnabledControlValue;
+        state.PlayerControls[MenuControlIndex] == EnabledControlValue;
 
     internal static void ApplyPlayerControlPolicy(
         CellPlayer player,
@@ -698,7 +891,7 @@ internal partial class OpeningQuestRuntime
         player.SetControlPolicy(
             Enabled(MovementControlIndex),
             Enabled(LookingControlIndex),
-            Enabled(MovementControlIndex) && Enabled(RolloverTextControlIndex),
+            Enabled(ActivationControlIndex),
             Enabled(FightingControlIndex),
             saveEnabled);
     }
@@ -756,6 +949,12 @@ internal partial class OpeningQuestRuntime
                     flow.OrdinaryActors.Select(value => value.ReferenceFormId)))
             throw new InvalidOperationException(
                 "Saved ordinary actor transforms do not match the owned flow.");
+        if (state.OrdinaryActorCellFormIds.Count != 0 &&
+            !state.OrdinaryActorCellFormIds.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    flow.OrdinaryActors.Select(value => value.ReferenceFormId)))
+            throw new InvalidOperationException(
+                "Saved ordinary actor CELL identities do not match the owned flow.");
         var combatTargets = flow.CombatEncounters.SelectMany(value => value.Targets)
             .ToDictionary(
                 value => value.ReferenceFormId,
@@ -999,6 +1198,11 @@ internal partial class OpeningQuestRuntime
         Replace(_traits, state.TraitFormIds);
         Replace(_psychologyScores, state.PsychologyScores);
         Replace(_questVariables, state.QuestVariables);
+        Replace(_referenceVariables, state.ReferenceVariables);
+        Replace(_saidOnce, state.SaidOnceInfoFormIds);
+        Replace(
+            _completedOrdinaryPackages,
+            state.CompletedOrdinaryPackageFormIds);
         Replace(_quests, state.Quests, value => value.FormId);
         Replace(_globals, state.Globals, value => value.FormId);
         Replace(_objectives, state.Objectives, value => ObjectiveKey(value.QuestFormId, value.Index));
@@ -1079,6 +1283,12 @@ internal partial class OpeningQuestRuntime
                 throw new InvalidOperationException(
                     "Saved ordinary actor transform target is absent.");
             transform.Value.Apply(actor.Placement);
+            var content = RestoreContentForOrdinaryActor(
+                transform.Key,
+                actor.Placement.GlobalPosition,
+                state.OrdinaryActorCellFormIds);
+            if (!ReferenceEquals(actor.Placement.GetParent(), content.Root))
+                actor.Placement.Reparent(content.Root, true);
         }
         _restoredGuidePackageState = state.GuidePackage;
         foreach (var reference in _referenceEnabledStates)
@@ -1089,6 +1299,75 @@ internal partial class OpeningQuestRuntime
                         reference, StringComparison.OrdinalIgnoreCase))))
                 SetReferenceVisibility(reference, false, false);
         PublishCombatActors();
+        ReconcileLegacyOrdinaryDialogueCompletion();
+    }
+
+    private CellContentLoader.LoadedContent RestoreContentForOrdinaryActor(
+        string actorReferenceFormId,
+        Vector3 globalPosition,
+        IReadOnlyDictionary<string, string> savedCells)
+    {
+        if (savedCells.TryGetValue(actorReferenceFormId, out var cellFormId))
+            return AllLoadedContent().Single(content => content.FormId.Equals(
+                cellFormId,
+                StringComparison.OrdinalIgnoreCase));
+        var ranked = AllLoadedContent()
+            .Select(content => new
+            {
+                Content = content,
+                Distance = content.GameToWorld(content.Navigation.FindNearestPoint(
+                    content.WorldToGame(globalPosition))).DistanceSquaredTo(globalPosition),
+            })
+            .OrderBy(value => value.Distance)
+            .ThenBy(value => value.Content.FormId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (ranked.Length == 0 ||
+            ranked.Length > 1 && Mathf.IsEqualApprox(
+                ranked[0].Distance,
+                ranked[1].Distance))
+            throw new InvalidOperationException(
+                "Saved ordinary actor CELL cannot be recovered from owned NAVM state.");
+        return ranked[0].Content;
+    }
+
+    private void ReconcileLegacyOrdinaryDialogueCompletion()
+    {
+        if (_completedOrdinaryPackages.Count != 0)
+            return;
+        foreach (var actor in _flow.OrdinaryActors)
+        {
+            var quest = _flow.OrdinaryQuests.Values.Single(value =>
+                actor.Topics[actor.ActivationTopicFormId].Infos.Any(info =>
+                    info.Commands.Any(command =>
+                        command.Kind == "setStage" &&
+                        command.QuestFormId is not null &&
+                        command.QuestFormId.Equals(
+                            value.FormId,
+                            StringComparison.OrdinalIgnoreCase))));
+            if (!_quests.TryGetValue(quest.FormId, out var state) ||
+                state.Stage == quest.EntryStage)
+                continue;
+            var completedInfos = actor.Topics[actor.ActivationTopicFormId].Infos
+                .Where(info => info.SayOnce && info.Commands.Any(command =>
+                    command.Kind == "setStage" &&
+                    command.QuestFormId is not null &&
+                    command.QuestFormId.Equals(
+                        quest.FormId,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    command.Stage == state.Stage))
+                .ToArray();
+            var entryPackages = actor.Packages.Values.Where(package =>
+                    package.PackageTypeName == "dialogue" &&
+                    package.Location?.Reference is null &&
+                    package.Target is { TypeName: "reference" })
+                .ToArray();
+            if (completedInfos.Length != 1 || entryPackages.Length != 1)
+                throw new InvalidOperationException(
+                    "Saved ordinary dialogue completion cannot be reconstructed " +
+                    "unambiguously from its source graph.");
+            _saidOnce.Add(completedInfos[0].FormId);
+            _completedOrdinaryPackages.Add(entryPackages[0].FormId);
+        }
     }
 
     private static void Replace<T>(HashSet<T> target, IEnumerable<T> source)
@@ -1341,7 +1620,7 @@ internal partial class OpeningQuestRuntime
             _loaded.Player.SetControlPolicy(false, false, false, false, false);
             return;
         }
-        _loaded.Session.SetGameplayUiVisible(_playerControls[PipBoyControlIndex]);
+        _loaded.Session.SetGameplayUiVisible(_playerControls[MenuControlIndex]);
         ApplyPlayerControlPolicy(
             _loaded.Player,
             _playerControls

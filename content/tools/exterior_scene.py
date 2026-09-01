@@ -182,6 +182,9 @@ def prepare_exterior_scene(
     retail_grass_render_state_observation: Path | None = None,
     owned_archives: OwnedArchiveStack | None = None,
     family_compiler: dict[str, str] | None = None,
+    required_route_positions_game_units: tuple[
+        tuple[float, float, float], ...
+    ] = (),
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
     scene_archives = owned_archives if owned_archives is not None else BsaArchive(meshes_path)
@@ -238,6 +241,17 @@ def prepare_exterior_scene(
         raise ValueError("Exterior recipe requires one declared streaming contract")
     loaded_grid_diameter = int(streaming["loadedGridDiameter"])
     requested_grids = loaded_grid_coordinates(cell.coordinates, loaded_grid_diameter)
+    requested_grids = tuple(
+        sorted(
+            {
+                *requested_grids,
+                *(
+                    reference_grid(position, exterior_cell_size_game_units)
+                    for position in required_route_positions_game_units
+                ),
+            }
+        )
+    )
     cells_by_grid = {
         candidate.coordinates: candidate
         for candidate in catalog.cells.values()
