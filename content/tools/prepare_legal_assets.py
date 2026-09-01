@@ -27,7 +27,7 @@ from owned_archive_stack import (
     AUDIO_ARCHIVE_RECIPE_SCHEMA,
     load_owned_archive_stack,
 )
-from prepare_actor import prepare_actor_set
+from prepare_actor import load_recipe as load_actor_recipe, prepare_actor_set
 from plugin_records import iter_plugin_records
 from prepare_fo3_profile import (
     default_recipe_path as default_fo3_profile_recipe_path,
@@ -684,7 +684,7 @@ def prepare(
                 primary_document = json.loads(cell_scene_path.read_text(encoding="utf-8"))
                 primary_document["linkedCells"] = linked_cell_scenes
                 atomic_text(cell_scene_path, primary_document)
-        actor_recipe_documents = [load_recipe(value) for value in actor_recipe_ids]
+        actor_recipe_documents = [load_actor_recipe(value) for value in actor_recipe_ids]
         scene_documents = [
             json.loads(Path(str(cell_scene["output"])).read_text(encoding="utf-8")),
             *(

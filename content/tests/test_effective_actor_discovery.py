@@ -8,10 +8,19 @@ from unittest.mock import patch
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from prepare_legal_assets import discover_effective_exterior_actors  # noqa: E402
+from prepare_legal_assets import (  # noqa: E402
+    discover_effective_exterior_actors,
+    load_actor_recipe,
+)
 
 
 class EffectiveActorDiscoveryTest(unittest.TestCase):
+    def test_named_actor_recipes_use_the_actor_schema_loader(self):
+        recipe = load_actor_recipe("goodsprings-doc-mitchell-actor-v1")
+
+        self.assertEqual(recipe["schema"], "opennv-actor-recipe/v1")
+        self.assertEqual(recipe["cellRecipe"], "goodsprings-doc-mitchell-house-v1")
+
     def test_loaded_cells_and_spatially_relevant_persistent_achrs_are_discovered(self):
         persistent = 0x100
         source_cell = 0x200
