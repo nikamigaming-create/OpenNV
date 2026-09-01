@@ -1419,6 +1419,7 @@ internal partial class OpeningQuestRuntime
         EvaluateGuidePackage();
         _objective.Visible = false;
         CloseModal();
+        _loaded.Player.ReleaseAuthoredCameraPresentation();
         ApplyStageControlPolicy();
         var state = CaptureState(true);
         _loaded.Session.StoreOpeningState(state);

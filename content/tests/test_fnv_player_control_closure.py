@@ -51,6 +51,30 @@ class FnvPlayerControlClosureTest(unittest.TestCase):
             player,
         )
 
+    def test_open_world_handoff_releases_the_authored_camera_and_keeps_portal_owners(self):
+        state = (OPENING / "OpeningQuestRuntime.State.cs").read_text(
+            encoding="utf-8"
+        )
+        player = (
+            ROOT / "runtime" / "src" / "World" / "Cells" / "CellPlayer.cs"
+        ).read_text(encoding="utf-8")
+        portal = (
+            ROOT / "runtime" / "src" / "World" / "Portals" / "CellPortalTravel.cs"
+        ).read_text(encoding="utf-8")
+
+        complete = state[state.index("private void CompleteOpening()") :]
+        release = player[player.index("internal void ReleaseAuthoredCameraPresentation()") :]
+        self.assertIn("_loaded.Player.ReleaseAuthoredCameraPresentation();", complete)
+        self.assertLess(
+            complete.index("ReleaseAuthoredCameraPresentation"),
+            complete.index("ApplyStageControlPolicy"),
+        )
+        self.assertIn("_configuration.Player.DesktopCameraOffsetMeters.Vector3()", release)
+        self.assertIn("Basis.Identity", release)
+        self.assertIn("_session.CrossPortal(", portal)
+        self.assertIn("_activeSet.Activate(target.CellFormId);", portal)
+        self.assertIn("_environmentSet?.Activate(target.CellFormId);", portal)
+
 
 if __name__ == "__main__":
     unittest.main()

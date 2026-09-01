@@ -249,6 +249,15 @@ internal partial class CellPlayer : CharacterBody3D
         _camera.Transform = transformFromFloor;
     }
 
+    internal void ReleaseAuthoredCameraPresentation()
+    {
+        if (_useXr || _useClassicDiorama)
+            return;
+        _camera.Transform = new Transform3D(
+            Basis.Identity,
+            _configuration.Player.DesktopCameraOffsetMeters.Vector3());
+    }
+
     internal void Configure(
         float yaw,
         GameplaySession session,
