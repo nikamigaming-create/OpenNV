@@ -91,7 +91,12 @@ internal sealed partial record OpeningNewGameFlow
                     value.BoundsGameUnits.Z <= 0 ||
                     !actor.Topics.ContainsKey(value.TopicFormId) ||
                     !flow.OrdinaryQuests.TryGetValue(value.QuestFormId, out var triggerQuest) ||
-                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)))
+                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)) ||
+                actor.AutomaticPackageDialogues.Any(value =>
+                    !actor.Packages.TryGetValue(value.PackageFormId, out var package) ||
+                    !package.PackageTypeName.Equals(
+                        "dialogue", StringComparison.OrdinalIgnoreCase) ||
+                    !actor.Topics.ContainsKey(value.GreetingTopicFormId)))
                 throw new InvalidOperationException(
                     "Owned ordinary actor dialogue handoff is incomplete.");
             ValidateCommandContract(actor.CommandContract, actorCommands);

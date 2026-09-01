@@ -804,6 +804,8 @@ class CellCatalogTest(unittest.TestCase):
                 "goodsprings-settler-04-actor-v1",
                 "goodsprings-sunny-smiles-actor-v1",
                 "goodsprings-cheyenne-actor-v1",
+                "goodsprings-vcg02-gecko-1-actor-v1",
+                "goodsprings-vcg02-gecko-2-actor-v1",
             ],
         )
 

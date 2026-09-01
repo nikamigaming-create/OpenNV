@@ -15,6 +15,7 @@
     "VGenericTimer",
     "SunnyRef",
     "VCG02SunnyTravelOutside",
+    "VCG02SunnySmilesDialogueStart",
     "VCG02SunnyPatrolTriggerSCRIPT",
     "VCG02SunnyPatrolTriggerREF",
     "VCG02SunnyBark",
@@ -362,8 +363,10 @@
       },
       "conditionFunctionNames": {
         "58": "getStage",
+        "72": "getIsId",
         "79": "getQuestVariable",
         "421": "getObjectiveCompleted",
+        "420": "getStageDone",
         "546": "getQuestCompleted"
       },
       "locationTypeNames": {
@@ -401,7 +404,8 @@
         "questEditorId": "VCG02",
         "packageEditorIds": [
           "SunnyMeetPlayerDialoguePackage",
-          "VCG02SunnyTravelOutside"
+          "VCG02SunnyTravelOutside",
+          "VCG02SunnySmilesDialogueStart"
         ],
         "arrivalTransitions": [
           {
@@ -415,6 +419,11 @@
             "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT",
             "triggerReferenceEditorId": "VCG02SunnyPatrolTriggerREF",
             "topicEditorId": "VCG02SunnyBark"
+          }
+        ],
+        "automaticPackageDialogues": [
+          {
+            "packageEditorId": "VCG02SunnySmilesDialogueStart"
           }
         ],
         "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"

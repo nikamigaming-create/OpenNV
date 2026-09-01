@@ -210,6 +210,7 @@ FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
     "nif-marker-minus-gmst-target-offset-for-actor-placement"
 )
 FURNITURE_MARKER_PLACEMENT_AXES = ("x", "y", "z")
+CONDITION_OPERATOR_EQUAL = 0x00
 CONDITION_OPERATOR_GREATER_OR_EQUAL = 0x60
 PLAYER_CONTROL_ARGUMENTS = (
     "movement",
@@ -5257,6 +5258,124 @@ def _compile_topic_closure(
     return rows, str(root["formId"])
 
 
+def _compile_package_dialogue_closure(
+    records: list[dict[str, object]],
+    package: dict[str, object],
+    actor_base_form_id: str,
+    quest: dict[str, object],
+    scripts: dict[str, tuple[int, str]],
+    condition_function_names: dict[str, object],
+) -> tuple[list[dict[str, object]], str]:
+    function_ids = {
+        str(name).casefold(): int(form_id)
+        for form_id, name in condition_function_names.items()
+    }
+    required_functions = {"getobjectivecompleted", "getstagedone", "getisid"}
+    if not required_functions.issubset(function_ids):
+        raise ValueError("Owned package-dialogue condition functions are absent")
+    stage_conditions = [
+        condition
+        for condition in package["conditions"]
+        if str(condition["functionName"]).casefold() == "getstagedone"
+        and str(condition["parameter1"]).casefold()
+        == str(quest["formId"]).casefold()
+        and int(condition["operatorFlags"]) == CONDITION_OPERATOR_EQUAL
+        and float(condition["comparisonValue"]) == 1.0
+    ]
+    if len(stage_conditions) != 1:
+        raise ValueError("Owned package dialogue has no unique completed stage")
+    source_stage = int(stage_conditions[0]["parameter2"])
+    greeting = _unique_manifest_record(records, "GREETING", "DIAL")
+    greeting_form_id = str(greeting["formId"])
+    greeting_infos = []
+    for record in records:
+        if record["recordType"] != "INFO" or not any(
+            int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE
+            and str(group["label"]).casefold() == greeting_form_id.casefold()
+            for group in record["groups"]
+        ):
+            continue
+        if not any(
+            link["signature"] == "QSTI"
+            and str(link["formId"]).casefold() == str(quest["formId"]).casefold()
+            for link in record["links"]
+        ):
+            continue
+        conditions = record["conditions"]
+        if not any(
+            int(condition["function"]) == function_ids["getstagedone"]
+            and str(condition["parameter1"]).casefold()
+            == str(quest["formId"]).casefold()
+            and int(condition["parameter2"]) == source_stage
+            and float(condition["comparisonValue"]) == 1.0
+            for condition in conditions
+        ) or not any(
+            int(condition["function"]) == function_ids["getisid"]
+            and str(condition["parameter1"]).casefold()
+            == actor_base_form_id.casefold()
+            and float(condition["comparisonValue"]) == 1.0
+            for condition in conditions
+        ):
+            continue
+        greeting_infos.append(record)
+    if len(greeting_infos) != 1:
+        raise ValueError(
+            "Owned package greeting is ambiguous: "
+            f"package={package['editorId']} matches={len(greeting_infos)}"
+        )
+    greeting_info = _dialogue_info_manifest(
+        greeting_infos[0], scripts, str(quest["editorId"])
+    )
+    topics_by_form = {
+        str(record["formId"]): record
+        for record in records
+        if record["recordType"] == "DIAL"
+    }
+    infos_by_topic: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        if record["recordType"] != "INFO":
+            continue
+        for group in record["groups"]:
+            if int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE:
+                infos_by_topic[str(group["label"])].append(record)
+    closure = set()
+    queue = deque(greeting_info["nextTopicFormIds"])
+    while queue:
+        form_id = queue.popleft()
+        if form_id in closure:
+            continue
+        if form_id not in topics_by_form:
+            raise ValueError(f"Owned package dialogue topic is absent: {form_id}")
+        closure.add(form_id)
+        for info in infos_by_topic.get(form_id, []):
+            queue.extend(
+                link["formId"]
+                for link in info["links"]
+                if link["signature"] == "TCLT"
+            )
+    rows = [{
+        "formId": greeting_form_id,
+        "editorId": _record_editor_id_from_manifest(greeting),
+        "prompt": next(iter(_record_text_values(greeting, "FULL")), ""),
+        "infos": [greeting_info],
+    }]
+    for form_id in sorted(closure, key=lambda value: int(value, FORM_ID_RADIX)):
+        topic = topics_by_form[form_id]
+        rows.append({
+            "formId": form_id,
+            "editorId": _record_editor_id_from_manifest(topic),
+            "prompt": next(iter(_record_text_values(topic, "FULL")), ""),
+            "infos": [
+                _dialogue_info_manifest(info, scripts, str(quest["editorId"]))
+                for info in sorted(
+                    infos_by_topic.get(form_id, []),
+                    key=lambda value: int(value["sourceOrder"]),
+                )
+            ],
+        })
+    return rows, greeting_form_id
+
+
 def _compile_actor_dialogue_voice(
     topics: list[dict[str, object]],
     role: dict[str, object],
@@ -7260,14 +7379,19 @@ def compile_new_game_flow(
             )
             packages.append(package)
         ordinary_quest_editor_id = str(actor_contract["questEditorId"])
-        if not any(
-            str(ordinary["editorId"]).casefold()
-            == ordinary_quest_editor_id.casefold()
+        ordinary_quest = next((
+            ordinary
             for ordinary in ordinary_quests
-        ):
+            if str(ordinary["editorId"]).casefold()
+            == ordinary_quest_editor_id.casefold()
+        ), None)
+        if ordinary_quest is None:
             raise ValueError(
                 f"Owned ordinary actor quest is absent: {ordinary_quest_editor_id}"
             )
+        packages_by_editor = {
+            str(package["editorId"]).casefold(): package for package in packages
+        }
         activation_topic_editor_id = str(actor_contract["activationTopicEditorId"])
         topics_by_form = {}
         topic_roots = {}
@@ -7284,6 +7408,34 @@ def compile_new_game_flow(
             topic_roots[str(topic_editor_id).casefold()] = topic_root_form_id
             for topic in topic_rows:
                 topics_by_form[str(topic["formId"])] = topic
+        package_dialogues = []
+        for dialogue_source in actor_contract.get("automaticPackageDialogues", []):
+            dialogue_contract = dict(dialogue_source)
+            package_editor_id = str(dialogue_contract["packageEditorId"])
+            package = packages_by_editor.get(package_editor_id.casefold())
+            if package is None or str(package["packageTypeName"]).casefold() != "dialogue":
+                raise ValueError(
+                    f"Owned automatic dialogue package is absent: {package_editor_id}"
+                )
+            topic_rows, greeting_topic_form_id = _compile_package_dialogue_closure(
+                records,
+                package,
+                str(role["baseFormId"]),
+                ordinary_quest,
+                sources.scripts,
+                dict(guide_contract["conditionFunctionNames"]),
+            )
+            for topic in topic_rows:
+                existing = topics_by_form.get(str(topic["formId"]))
+                if existing is not None and existing != topic:
+                    raise ValueError(
+                        f"Owned ordinary dialogue topic differs: {topic['formId']}"
+                    )
+                topics_by_form[str(topic["formId"])] = topic
+            package_dialogues.append({
+                "packageFormId": package["formId"],
+                "greetingTopicFormId": greeting_topic_form_id,
+            })
         topics = sorted(
             topics_by_form.values(),
             key=lambda value: int(str(value["formId"]), FORM_ID_RADIX),
@@ -7306,9 +7458,6 @@ def compile_new_game_flow(
             for command in info["commands"]
         ]
         arrivals = []
-        packages_by_editor = {
-            str(package["editorId"]).casefold(): package for package in packages
-        }
         for transition_source in actor_contract.get("arrivalTransitions", []):
             transition = dict(transition_source)
             package_editor_id = str(transition["packageEditorId"])
@@ -7350,12 +7499,6 @@ def compile_new_game_flow(
                     re.IGNORECASE,
                 )
             }
-            ordinary_quest = next(
-                value
-                for value in ordinary_quests
-                if str(value["editorId"]).casefold()
-                == ordinary_quest_editor_id.casefold()
-            )
             if len(from_stages) != 1 or len(to_stages) != 1:
                 raise ValueError(
                     f"Owned ordinary arrival stages are ambiguous: {script_editor_id}"
@@ -7423,12 +7566,6 @@ def compile_new_game_flow(
                 raise ValueError(
                     f"Owned ordinary trigger volume is absent: {script_editor_id}"
                 )
-            ordinary_quest = next(
-                value
-                for value in ordinary_quests
-                if str(value["editorId"]).casefold()
-                == ordinary_quest_editor_id.casefold()
-            )
             automatic_triggers.append(
                 {
                     "scriptFormId": script["formId"],
@@ -7459,6 +7596,7 @@ def compile_new_game_flow(
                 "voice": voice,
                 "arrivalTransitions": arrivals,
                 "automaticDialogueTriggers": automatic_triggers,
+                "automaticPackageDialogues": package_dialogues,
                 "commandContract": _resolve_command_record_identities(
                     commands, records
                 ),

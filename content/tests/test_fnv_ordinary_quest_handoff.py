@@ -13,6 +13,7 @@ sys.path.insert(0, str(TOOLS))
 from opening_catalog import (
     _compile_ordinary_quests,
     _compile_hit_target_sets,
+    _compile_package_dialogue_closure,
     _compile_topic_closure,
     _resolve_command_record_identities,
     _script_commands,
@@ -43,6 +44,66 @@ def record(
 
 
 class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
+    def test_compiles_package_selected_greeting_and_linked_choice(self) -> None:
+        greeting = record("DIAL", "000000c8", "GREETING")
+        greeting["text"].append({"signature": "FULL", "value": "GREETING"})
+        choice = record("DIAL", "0010a1de", "VCG02GSSunnySmilesTopic000")
+        choice["text"].append({"signature": "FULL", "value": "Okay, I'm in."})
+        greeting_info = record(
+            "INFO",
+            "0010a1ec",
+            "",
+            links=[
+                {"signature": "QSTI", "formId": "0010a214"},
+                {"signature": "TCLT", "formId": "0010a1de"},
+            ],
+            source="set VCG02.bShootingTutorialActive to 0",
+        )
+        greeting_info.update({
+            "sourceOrder": 10,
+            "groups": [{"type": 7, "label": "000000c8"}],
+            "conditions": [
+                {"function": 420, "parameter1": "0010a214", "parameter2": 10,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+                {"function": 72, "parameter1": "00104e84", "parameter2": 0,
+                 "comparisonValue": 1.0, "operatorFlags": 0},
+            ],
+            "dialogueData": {"flags": 0, "responseType": 0},
+        })
+        choice_info = record(
+            "INFO", "0010a1e5", "", source="SetStage VCG02 25"
+        )
+        choice_info.update({
+            "sourceOrder": 11,
+            "groups": [{"type": 7, "label": "0010a1de"}],
+            "conditions": [],
+            "dialogueData": {"flags": 1, "responseType": 0},
+        })
+
+        topics, root = _compile_package_dialogue_closure(
+            [greeting, choice, greeting_info, choice_info],
+            {
+                "editorId": "VCG02SunnySmilesDialogueStart",
+                "conditions": [{
+                    "functionName": "getStageDone",
+                    "parameter1": "0010a214",
+                    "parameter2": 10,
+                    "comparisonValue": 1.0,
+                    "operatorFlags": 0,
+                }],
+            },
+            "00104e84",
+            {"formId": "0010a214", "editorId": "VCG02"},
+            {},
+            {"72": "getIsId", "420": "getStageDone",
+             "421": "getObjectiveCompleted"},
+        )
+
+        self.assertEqual("000000c8", root)
+        self.assertEqual(["000000c8", "0010a1de"], [topic["formId"] for topic in topics])
+        self.assertEqual("setQuestVariable", topics[0]["infos"][0]["commands"][0]["kind"])
+        self.assertEqual("setStage", topics[1]["infos"][0]["commands"][0]["kind"])
+
     def test_compiles_source_hit_target_set_without_target_specific_runtime_ids(self) -> None:
         records = [
             record(

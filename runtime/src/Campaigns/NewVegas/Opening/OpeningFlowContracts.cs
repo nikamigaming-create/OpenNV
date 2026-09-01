@@ -339,7 +339,12 @@ internal sealed record OpeningOrdinaryActor(
     OpeningDialogueVoice Voice,
     IReadOnlyList<OpeningOrdinaryPackageArrival> ArrivalTransitions,
     IReadOnlyList<OpeningOrdinaryDialogueTrigger> AutomaticDialogueTriggers,
+    IReadOnlyList<OpeningOrdinaryPackageDialogue> AutomaticPackageDialogues,
     OpeningCommandContract CommandContract);
+
+internal sealed record OpeningOrdinaryPackageDialogue(
+    string PackageFormId,
+    string GreetingTopicFormId);
 
 internal sealed record OpeningOrdinaryPackageArrival(
     string PackageFormId,

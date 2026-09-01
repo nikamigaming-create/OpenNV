@@ -20,6 +20,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private const int GetIsSexConditionFunction = 70;
     private const int GetIsIdConditionFunction = 72;
     private const int GetQuestVariableConditionFunction = 79;
+    private const int GetStageDoneConditionFunction = 420;
     private const int ConditionOperatorMask = 0xe0;
     private const int ConditionEqual = 0x00;
     private const int ConditionNotEqual = 0x20;

@@ -251,6 +251,9 @@ internal partial class OpeningQuestRuntime
                     condition.Parameter1,
                     StringComparison.OrdinalIgnoreCase)) ? 1.0f : 0.0f,
             GetQuestVariableConditionFunction => _docReaction,
+            GetStageDoneConditionFunction when _quests.TryGetValue(
+                condition.Parameter1, out var quest) =>
+                quest.Stage >= checked((int)condition.Parameter2) ? 1.0f : 0.0f,
             _ => throw new InvalidOperationException(
                 $"Owned dialogue condition function is unsupported: {condition.Function}"),
         };

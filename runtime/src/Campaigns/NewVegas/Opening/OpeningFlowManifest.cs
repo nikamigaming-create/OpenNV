@@ -325,6 +325,11 @@ internal sealed partial record OpeningNewGameFlow(
                     value.GetProperty("objectiveIndex").GetInt32(),
                     value.GetProperty("topicFormId").GetString()!))
                 .ToArray(),
+            source.GetProperty("automaticPackageDialogues").EnumerateArray()
+                .Select(value => new OpeningOrdinaryPackageDialogue(
+                    value.GetProperty("packageFormId").GetString()!,
+                    value.GetProperty("greetingTopicFormId").GetString()!))
+                .ToArray(),
             ParseCommandContract(source.GetProperty("commandContract")));
     }
 

@@ -75,6 +75,8 @@ internal static class GamebryoPackageSelector
         var actual = condition.FunctionName.ToLowerInvariant() switch
         {
             "getstage" => state.QuestStages.GetValueOrDefault(condition.QuestFormId),
+            "getstagedone" => state.QuestStages.GetValueOrDefault(condition.QuestFormId) >=
+                checked((int)condition.VariableIndex) ? 1.0 : 0.0,
             "getquestcompleted" => state.CompletedQuests.Contains(condition.QuestFormId)
                 ? 1.0
                 : 0.0,
@@ -101,7 +103,7 @@ internal static class GamebryoPackageSelector
         if (string.IsNullOrWhiteSpace(condition.QuestFormId) ||
             condition.FunctionName.ToLowerInvariant() is not
                 ("getstage" or "getquestcompleted" or "getquestvariable" or
-                 "getobjectivecompleted"))
+                 "getobjectivecompleted" or "getstagedone"))
             throw new InvalidOperationException(
                 $"Source package condition function is unsupported: " +
                 $"{condition.FunctionName}");
