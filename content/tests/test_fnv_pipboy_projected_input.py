@@ -24,6 +24,20 @@ class FnvPipBoyProjectedInputTest(unittest.TestCase):
         self.assertIn("_target.PushInput(forwarded, true)", router)
         self.assertNotIn("Rect2(", router)
 
+    def test_owned_pipboy_does_not_double_decode_live_crt_viewport(self):
+        controller = (
+            ROOT / "runtime" / "src" / "Presentation" / "Ui" /
+            "GameplayUiController.cs"
+        ).read_text(encoding="utf-8")
+
+        material_start = controller.index(
+            'ResourceName = "OpenNV_OwnedPipBoyDynamicCrt"'
+        )
+        material_end = controller.index("});", material_start)
+        material = controller[material_start:material_end]
+        self.assertIn("AlbedoTextureForceSrgb = false", material)
+        self.assertNotIn("AlbedoTextureForceSrgb = true", material)
+
 
 if __name__ == "__main__":
     unittest.main()

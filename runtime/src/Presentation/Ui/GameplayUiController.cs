@@ -529,7 +529,9 @@ internal partial class GameplayUiController : CanvasLayer
             {
                 ResourceName = "OpenNV_OwnedPipBoyDynamicCrt",
                 AlbedoTexture = crtTexture,
-                AlbedoTextureForceSrgb = true,
+                // SubViewport output is already in the renderer's working color space.
+                // Decoding it as an sRGB source a second time washes out the live CRT.
+                AlbedoTextureForceSrgb = false,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             });
