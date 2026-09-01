@@ -54,7 +54,8 @@ internal static class CellSceneLoader
         bool useClassicDiorama = false,
         OwnedGameplayUiPresentation? gameplayUi = null,
         OpeningGameplayVitalsContract? gameplayVitals = null,
-        bool lazyLinkedCells = false)
+        bool lazyLinkedCells = false,
+        IReadOnlySet<string>? requiredReferenceFormIds = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -107,7 +108,9 @@ internal static class CellSceneLoader
                 actorScenesManifestPath,
                 proofEnableActor,
                 buildCollision,
-                applyCellEnvironment);
+                applyCellEnvironment,
+                requiredReferenceFormIds ?? new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase));
         }
         var textureCache = new RuntimeMaterialLoader.TextureCache();
         var main = CellContentLoader.Load(

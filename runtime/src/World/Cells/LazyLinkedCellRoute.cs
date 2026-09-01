@@ -23,7 +23,9 @@ internal sealed class LazyLinkedCellRoute
     private readonly bool _buildCollision;
     private readonly bool _applyCellEnvironment;
     private readonly RuntimeMaterialLoader.TextureCache _textureCache;
+    private readonly IReadOnlyList<CellDescriptor> _descriptors;
     private readonly IReadOnlyList<RouteEdge> _edges;
+    private readonly IReadOnlySet<string> _requiredReferenceFormIds;
     private readonly Dictionary<string, LoadedRouteCell> _loaded;
     private readonly List<CellSceneLoader.LinkedCell> _linkedCells;
     private readonly List<CellSceneLoader.PortalLink> _portalLinks;
@@ -46,7 +48,9 @@ internal sealed class LazyLinkedCellRoute
         bool buildCollision,
         bool applyCellEnvironment,
         RuntimeMaterialLoader.TextureCache textureCache,
+        IReadOnlyList<CellDescriptor> descriptors,
         IReadOnlyList<RouteEdge> edges,
+        IReadOnlySet<string> requiredReferenceFormIds,
         LoadedRouteCell initial,
         List<CellSceneLoader.LinkedCell> linkedCells,
         List<CellSceneLoader.PortalLink> portalLinks,
@@ -66,7 +70,9 @@ internal sealed class LazyLinkedCellRoute
         _buildCollision = buildCollision;
         _applyCellEnvironment = applyCellEnvironment;
         _textureCache = textureCache;
+        _descriptors = descriptors;
         _edges = edges;
+        _requiredReferenceFormIds = requiredReferenceFormIds;
         _loaded = new Dictionary<string, LoadedRouteCell>(StringComparer.OrdinalIgnoreCase)
         {
             [initial.Content.FormId] = initial,
@@ -98,7 +104,8 @@ internal sealed class LazyLinkedCellRoute
         string? actorScenesManifestPath,
         bool proofEnableActor,
         bool buildCollision,
-        bool applyCellEnvironment)
+        bool applyCellEnvironment,
+        IReadOnlySet<string> requiredReferenceFormIds)
     {
         var initialLoad = Stopwatch.StartNew();
         var (descriptors, edges) = ReadRoute(routeScenePath, routeSource);
@@ -227,7 +234,9 @@ internal sealed class LazyLinkedCellRoute
             buildCollision,
             applyCellEnvironment,
             textureCache,
+            descriptors,
             edges,
+            requiredReferenceFormIds,
             new LoadedRouteCell(activeDescriptor, activeContent),
             linkedCells,
             portalLinks,
@@ -296,12 +305,115 @@ internal sealed class LazyLinkedCellRoute
                 _parent.GetTree(),
                 SceneTree.SignalName.ProcessFrame);
             MaterializeAdjacent(_session.ActiveCellFormId);
+            MaterializeRequiredReferenceOwners();
             _initialAdjacentReady.SetResult();
         }
         catch (Exception exception)
         {
             _initialAdjacentReady.SetException(exception);
         }
+    }
+
+    private void MaterializeRequiredReferenceOwners()
+    {
+        if (_requiredReferenceFormIds.Count == 0)
+            return;
+        var ownership = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var descriptor in _descriptors)
+        {
+            if (descriptor.SceneSha256 is not null)
+                VerifiedGltfLoader.VerifyHash(descriptor.ScenePath, descriptor.SceneSha256);
+            using var document = JsonDocument.Parse(File.ReadAllText(descriptor.ScenePath));
+            foreach (var reference in document.RootElement.GetProperty("references")
+                         .EnumerateArray())
+                AddReferenceOwner(
+                    ownership,
+                    reference.GetProperty("formId").GetString()!,
+                    descriptor.FormId);
+        }
+        if (_actorScenesManifestPath is not null)
+            foreach (var actor in CellActorLoader.LoadManifestEntries(
+                         _actorScenesManifestPath))
+                AddReferenceOwner(
+                    ownership,
+                    actor.ReferenceFormId,
+                    actor.CellFormId);
+
+        var ownerCells = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var referenceFormId in _requiredReferenceFormIds)
+        {
+            if (!ownership.TryGetValue(referenceFormId, out var ownerCell))
+                throw new InvalidOperationException(
+                    $"Prepared route has no owning CELL for required reference: " +
+                    referenceFormId);
+            if (!_descriptors.Any(value => value.FormId.Equals(
+                    ownerCell,
+                    StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    $"Required reference belongs to a CELL outside the prepared route: " +
+                    referenceFormId);
+            ownerCells.Add(ownerCell);
+        }
+        foreach (var ownerCell in ownerCells.Order(StringComparer.OrdinalIgnoreCase))
+            MaterializePathTo(ownerCell);
+    }
+
+    private static void AddReferenceOwner(
+        IDictionary<string, string> ownership,
+        string referenceFormId,
+        string cellFormId)
+    {
+        if (ownership.TryGetValue(referenceFormId, out var previous))
+        {
+            if (!previous.Equals(cellFormId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Prepared route reference has ambiguous CELL ownership: " +
+                    referenceFormId);
+            return;
+        }
+        ownership.Add(referenceFormId, cellFormId);
+    }
+
+    private void MaterializePathTo(string targetCellFormId)
+    {
+        if (_loaded.ContainsKey(targetCellFormId))
+            return;
+        var queue = new Queue<string>();
+        var previous = new Dictionary<string, RouteStep?>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var loadedCell in _loaded.Keys)
+        {
+            queue.Enqueue(loadedCell);
+            previous.Add(loadedCell, null);
+        }
+        while (queue.TryDequeue(out var current))
+        {
+            if (current.Equals(targetCellFormId, StringComparison.OrdinalIgnoreCase))
+                break;
+            foreach (var edge in _edges.Where(value => value.Contains(current)))
+            {
+                var next = edge.Other(current);
+                if (previous.ContainsKey(next.FormId))
+                    continue;
+                previous.Add(next.FormId, new RouteStep(current, edge, next));
+                queue.Enqueue(next.FormId);
+            }
+        }
+        if (!previous.ContainsKey(targetCellFormId))
+            throw new InvalidOperationException(
+                $"Prepared route has no authored CELL path to required reference owner: " +
+                targetCellFormId);
+        var path = new List<RouteStep>();
+        var cursor = targetCellFormId;
+        while (previous[cursor] is { } step)
+        {
+            path.Add(step);
+            cursor = step.PreviousCellFormId;
+        }
+        path.Reverse();
+        foreach (var step in path)
+            if (!_loaded.ContainsKey(step.Descriptor.FormId))
+                Materialize(step.Edge, step.Descriptor, step.PreviousCellFormId);
     }
 
     private void MaterializeAdjacent(string cellFormId)
@@ -558,4 +670,9 @@ internal sealed class LazyLinkedCellRoute
     private sealed record LoadedRouteCell(
         CellDescriptor Descriptor,
         CellContentLoader.LoadedContent Content);
+
+    private sealed record RouteStep(
+        string PreviousCellFormId,
+        RouteEdge Edge,
+        CellDescriptor Descriptor);
 }

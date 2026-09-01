@@ -65,6 +65,33 @@ class FnvLazyLinkedCellsTest(unittest.TestCase):
         self.assertIn("_actorGrounding.AddSpace", route)
         self.assertIn("_portalTravel!.AddLink", route)
 
+    def test_initial_role_closure_materializes_second_hop_owners_before_ready(self):
+        route = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "World"
+            / "Cells"
+            / "LazyLinkedCellRoute.cs"
+        ).read_text(encoding="utf-8")
+        coordinator = (ROOT / "runtime" / "src" / "RuntimeCoordinator.cs").read_text(
+            encoding="utf-8"
+        )
+
+        prefetch = route[route.index("private async Task PrefetchInitialAdjacent") :]
+        prefetch = prefetch[: prefetch.index("private void MaterializeAdjacent")]
+        self.assertLess(
+            prefetch.index("MaterializeRequiredReferenceOwners();"),
+            prefetch.index("_initialAdjacentReady.SetResult();"),
+        )
+        self.assertIn("NewGameFlow.SceneRoles.Values", coordinator)
+        self.assertIn("CellActorLoader.LoadManifestEntries", route)
+        self.assertIn('GetProperty("references")', route)
+        self.assertIn("MaterializePathTo(ownerCell)", route)
+        self.assertIn("previous.Add(next.FormId, new RouteStep", route)
+        self.assertNotIn("tutorialGuide", route)
+        self.assertNotIn("00104e85", route)
+
 
 if __name__ == "__main__":
     unittest.main()

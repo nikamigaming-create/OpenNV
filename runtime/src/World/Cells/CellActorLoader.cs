@@ -18,17 +18,27 @@ internal static class CellActorLoader
         string manifestPath,
         IReadOnlySet<string> acceptedCellFormIds)
     {
+        var scenes = LoadManifestEntries(manifestPath)
+            .Where(value => acceptedCellFormIds.Contains(value.CellFormId))
+            .Select(value => value.ScenePath)
+            .ToArray();
+        if (scenes.Length == 0)
+            throw new InvalidOperationException(
+                "Cell actor manifest contains no actor scenes.");
+        return scenes;
+    }
+
+    internal static IReadOnlyList<ActorManifestEntry> LoadManifestEntries(
+        string manifestPath)
+    {
         var resolvedManifest = VerifiedGltfLoader.ResolvePath(manifestPath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedManifest));
         var root = document.RootElement;
         var schema = root.GetProperty("schema").GetString();
         if (schema != ActorSceneSetSchema && schema != WorldActorSceneSetSchema)
             throw new InvalidOperationException($"Unexpected OpenNV cell actor manifest: {resolvedManifest}");
-        if (schema == ActorSceneSetSchema &&
-            !acceptedCellFormIds.Contains(root.GetProperty("cellFormId").GetString()!))
-            throw new InvalidOperationException($"Legacy actor manifest belongs to another CELL: {resolvedManifest}");
         var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var scenes = new List<string>();
+        var scenes = new List<ActorManifestEntry>();
         foreach (var row in root.GetProperty("actors").EnumerateArray())
         {
             var reference = row.GetProperty("referenceFormId").GetString()!;
@@ -42,10 +52,9 @@ internal static class CellActorLoader
             var cellFormId = schema == WorldActorSceneSetSchema
                 ? row.GetProperty("cellFormId").GetString()!
                 : root.GetProperty("cellFormId").GetString()!;
-            if (acceptedCellFormIds.Contains(cellFormId))
-                scenes.Add(scene);
+            scenes.Add(new ActorManifestEntry(reference, cellFormId, scene));
         }
-        if (scenes.Count < 1)
+        if (scenes.Count == 0)
             throw new InvalidOperationException("Cell actor manifest contains no actor scenes.");
         return scenes;
     }
@@ -232,4 +241,9 @@ internal static class CellActorLoader
         string IdleAnimationPath,
         ActorModelSlice.LoadedActor Actor,
         Aabb LocalBounds);
+
+    internal readonly record struct ActorManifestEntry(
+        string ReferenceFormId,
+        string CellFormId,
+        string ScenePath);
 }

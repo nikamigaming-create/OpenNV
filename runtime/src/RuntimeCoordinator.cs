@@ -644,7 +644,10 @@ public partial class RuntimeCoordinator : Node3D
             usesCampaignState &&
             !options.ContainsKey("opening-proof") &&
             !options.ContainsKey("opening-character-video") &&
-            !options.ContainsKey("capture-root"));
+            !options.ContainsKey("capture-root"),
+            openingManifest?.NewGameFlow.SceneRoles.Values
+                .Select(value => value.ReferenceFormId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
         if (options.TryGetValue("jam-profile", out var jamProfilePath))
         {
             var jamProfile = JamProfileContract.Load(jamProfilePath);
