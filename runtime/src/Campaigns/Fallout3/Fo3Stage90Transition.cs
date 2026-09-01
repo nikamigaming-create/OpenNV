@@ -336,6 +336,9 @@ internal sealed record Fo3Stage90Transition(
             RequiredSha256(source, "recordSha256"));
     }
 
+    internal static Fo3Stage90ImageSpaceModifier LoadModifier(JsonElement source) =>
+        LoadModifier(source, RequiredString(source, "editorId"));
+
     internal static Fo3Stage90Sound LoadSound(JsonElement source, string expectedEditorId)
     {
         var formId = RequiredFormId(source, "formId");
@@ -351,6 +354,9 @@ internal sealed record Fo3Stage90Transition(
             RequiredSha256(source, "recordSha256"),
             RequiredSha256(source, "soundDataSha256"));
     }
+
+    internal static Fo3Stage90Sound LoadSound(JsonElement source) =>
+        LoadSound(source, RequiredString(source, "editorId"));
 
     private static Fo3OwnedDialogueResponse LoadResponse(
         JsonElement source,

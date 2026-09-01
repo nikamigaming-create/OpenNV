@@ -399,7 +399,19 @@
         "jonasScriptFormId": "000306d8",
         "playerPictureTriggerBaseFormId": "000c6de1",
                 "playerPictureTriggerScriptFormId": "000c6de0",
-                "playerPictureTriggerReferenceFormIds": ["00060c81", "000c6de2"]
+                "playerPictureTriggerReferenceFormIds": ["00060c81", "000c6de2"],
+                "photoFlashStage": 98,
+                "finalStage": 100,
+                "cameraFlashImageSpaceModifierFormId": "000bb288",
+                "fadeSoundFormId": "000bc426",
+                "beatriceReferenceFormId": "000309ad",
+                "skillBookFormId": "00034040",
+                "nextDresserReferenceFormId": "00077785",
+                "adultVaultSuitFormId": "0000431e",
+                "nextQuestFormId": "00014e85",
+                "nextQuestEntryStage": 0,
+                "nextQuestTargetStage": 5,
+                "nextQuestStartMarkerFormId": "0001d73b"
               }
             }
           }

@@ -338,6 +338,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "DIAL", 0xC8, 0, subrecord("EDID", b"GREETING\0"), ())
         greeting = Record(
             "INFO", 0x319BD, 0,
+            subrecord("TRDT", b"\0" * 12 + b"\x01\0\0\0") +
             subrecord("NAM1", b"Happy birthday!\0") +
             subrecord("CTDA", condition(72, base.form_id)) +
             b"".join(subrecord("TCLT", struct.pack("<I", topic.form_id))
@@ -347,6 +348,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         gift_infos = tuple(
             Record(
                 "INFO", 0x79000 + stage, 0,
+                subrecord("TRDT", b"\0" * 12 + b"\x01\0\0\0") +
                 subrecord("NAM1", f"Gift {stage}.".encode() + b"\0") +
                 subrecord("CTDA", condition(72, base.form_id)) +
                 subrecord("SCTX", f"setstage CG02 {stage}".encode() + b"\0"),
@@ -552,6 +554,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             ["00060c81", "000c6de2"],
             gift["playerPictureTriggerReferenceFormIds"],
         )
+        self.assertEqual([98, 100, 0, 5], [
+            gift["photoFlashStage"], gift["finalStage"],
+            gift["nextQuestEntryStage"], gift["nextQuestTargetStage"],
+        ])
+        self.assertEqual("00014e85", gift["nextQuestFormId"])
+        self.assertEqual("0001d73b", gift["nextQuestStartMarkerFormId"])
         source = read_csharp_source_module(FO3_CG01_RUNTIME)
         self.assertIn("postIntercom.StageResults[stage]", source)
         self.assertIn("reactorGift.StageResults[stage]", source)
@@ -569,6 +577,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertIn("MinimumHeadingDegrees", picture_source)
         self.assertIn("triggerSource.DimensionsGameUnits", picture_source)
         self.assertNotIn("ArriveAtSourceTarget(\n                package.FormId", source)
+        completion_source = read_csharp_source_module(
+            FO3_CG02_PICTURE_RUNTIME.with_name(
+                "Fo3OpeningFlow.Cg02Completion.cs")
+        )
+        self.assertIn("Stage98TimerSeconds", completion_source)
+        self.assertIn("StartStage90ImageSpace", completion_source)
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(

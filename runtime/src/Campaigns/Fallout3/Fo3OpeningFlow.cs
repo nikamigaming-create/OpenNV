@@ -72,6 +72,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Action<double>? _cg02ButchTimerTick;
     private Action<double>? _cg02ButchPackageTick;
     private Action<double>? _cg02PicturePackageTick;
+    private Action<double>? _cg02PictureCompletionTick;
     private readonly Dictionary<string, CellActorLoader.PlacedActor> _cg02IntroActors =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly List<GamebryoDialoguePlayback> _cg02IntroDialogue = [];
@@ -227,6 +228,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _cg02ButchTimerTick?.Invoke(delta);
         _cg02ButchPackageTick?.Invoke(delta);
         _cg02PicturePackageTick?.Invoke(delta);
+        _cg02PictureCompletionTick?.Invoke(delta);
         foreach (var dialogue in _cg02IntroDialogue)
             dialogue.Update();
         foreach (var animation in _cg02IntroAnimations.Values)
