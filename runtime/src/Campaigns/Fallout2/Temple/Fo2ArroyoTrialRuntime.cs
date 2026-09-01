@@ -106,7 +106,7 @@ internal sealed record Fo2ArroyoTrialProgressState(
     }
 }
 
-internal sealed class Fo2ArroyoTrialRuntime
+internal sealed partial class Fo2ArroyoTrialRuntime
 {
     private readonly Fo2ArroyoTrialRouteContract _contract;
     private readonly Fo2ArroyoCavesPresentationCatalog _catalog;
@@ -121,6 +121,7 @@ internal sealed class Fo2ArroyoTrialRuntime
     private readonly ClassicDoorSession _cameronDoor;
     private readonly ClassicMapIntProgram _cameronProgram;
     private readonly ClassicRetailRandomContract _randomContract;
+    private readonly ClassicIntTimerContract _timerContract;
     private readonly Func<ClassicRetailRandomLifecycleState> _readRandomState;
     private readonly Action<ClassicRetailRandomLifecycleState,
         ClassicRetailRandomLifecycleState> _commitRandomState;
@@ -134,6 +135,7 @@ internal sealed class Fo2ArroyoTrialRuntime
         Node3D worldParent,
         Fo2ArroyoTrialProgressState state,
         ClassicRetailRandomContract randomContract,
+        ClassicIntTimerContract timerContract,
         Func<ClassicRetailRandomLifecycleState> readRandomState,
         Action<ClassicRetailRandomLifecycleState,
             ClassicRetailRandomLifecycleState> commitRandomState)
@@ -143,6 +145,7 @@ internal sealed class Fo2ArroyoTrialRuntime
         _player = player;
         _worldParent = worldParent;
         _randomContract = randomContract;
+        _timerContract = timerContract;
         _readRandomState = readRandomState;
         _commitRandomState = commitRandomState;
         _cameronProgram = catalog.IntInitialization.ScriptSlots.Single(row =>
@@ -185,6 +188,7 @@ internal sealed class Fo2ArroyoTrialRuntime
         Fo2ArroyoCavesPlayerBody player,
         Node3D worldParent,
         ClassicRetailRandomContract randomContract,
+        ClassicIntTimerContract timerContract,
         Func<ClassicRetailRandomLifecycleState> readRandomState,
         Action<ClassicRetailRandomLifecycleState,
             ClassicRetailRandomLifecycleState> commitRandomState,
@@ -203,6 +207,7 @@ internal sealed class Fo2ArroyoTrialRuntime
             worldParent,
             restored ?? Fo2ArroyoTrialProgressState.Initial(contract),
             randomContract,
+            timerContract,
             readRandomState,
             commitRandomState);
     }
@@ -430,23 +435,31 @@ internal sealed class Fo2ArroyoTrialRuntime
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.Cameron.ReleaseDoorSerial) ??
             throw new InvalidOperationException("Fallout 2 Cameron door sprite is absent.");
-        foreach (var tile in _contract.Cameron.ReleaseActorTiles)
+        var release = ExecuteCameronRelease(decodedState, actor, door);
+        foreach (var movement in release.WorldState.Movements)
         {
-            actor.Position = Fo1HexMath.Center(tile);
-            actor.SetMeta("map_tile", tile);
+            if (movement.ObjectHandle != release.ActorHandle)
+                throw new InvalidOperationException(
+                    "Fallout 2 Cameron source moved an unbound object.");
+            actor.Position = Fo1HexMath.Center(movement.DestinationTile);
+            actor.SetMeta("map_tile", movement.DestinationTile);
         }
-        actor.Visible = _contract.Cameron.ReleaseFinalVisible;
+        var actorState = release.WorldState.Objects[release.ActorHandle];
+        actor.Visible = actorState.Visible;
         actor.SetMeta("actemvil_release_applied", true);
         _cameronDoorPlayback = new ClassicDoorPlayback(
             _cameronDoor,
             door,
             state => ApplyCameronDoorPlaybackState(door, state));
         door.AddChild(_cameronDoorPlayback);
-        var doorState = _cameronDoorPlayback.BeginOpening();
-        if (doorState.Open != _contract.Cameron.ReleaseDoorOpened)
+        var sourceDoor = release.WorldState.Doors[release.DoorHandle];
+        var doorState = sourceDoor.Open
+            ? _cameronDoorPlayback.BeginOpening()
+            : _cameronDoor.State;
+        if (doorState.Open != sourceDoor.Open)
             throw new InvalidOperationException(
                 "Fallout 2 Cameron door source presentation disagrees with decoded release state.");
-        door.SetMeta("source_door_unlocked", _contract.Cameron.ReleaseDoorUnlocked);
+        door.SetMeta("source_door_unlocked", !sourceDoor.Locked);
         State = State with
         {
             Stage = Fo2ArroyoTrialProgressState.NegotiatedStage,
@@ -457,10 +470,10 @@ internal sealed class Fo2ArroyoTrialRuntime
                 .Single(row => row.Value == branch.LocalVariable13).Value,
             CameronMapVariable20 = decodedState.MapVariables.Single().Value,
             CameronDialogueSelections = _dialogueIndex,
-            CameronTile = _contract.Cameron.ReleaseActorTiles[^1],
-            CameronVisible = _contract.Cameron.ReleaseFinalVisible,
+            CameronTile = actorState.Tile,
+            CameronVisible = actorState.Visible,
             CameronDoorOpened = doorState.Open,
-            CameronDoorUnlocked = _contract.Cameron.ReleaseDoorUnlocked,
+            CameronDoorUnlocked = !sourceDoor.Locked,
             CameronDoorPlaybackState = doorState,
         };
         State.Validate(_contract);

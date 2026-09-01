@@ -11,6 +11,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
 {
     private const string RetailRandomContractResource =
         "res://config/classic-retail-random-fo2-1.02-v1.json";
+    private const string ClassicIntTimeContractResource =
+        "res://config/classic-int-time-v1.json";
     private Fo2ArroyoCavesPresentationCatalog _arroyo = null!;
     private Fo2TemplePresentationCatalog _temple = null!;
     private Fo2TempleTransitionCatalog _transition = null!;
@@ -25,6 +27,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private string? _villageArrivalCaptureRoot;
     private string _savePath = "";
     private ClassicRetailRandomContract _retailRandomContract = null!;
+    private ClassicIntTimerContract _classicIntTimerContract = null!;
     private ClassicRetailRandomLifecycleState _retailRandomLifecycle = null!;
     private bool _persistenceEnabled;
     private IReadOnlyList<Fo2AdjacentMapSession> _adjacentSessions =
@@ -59,6 +62,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         {
             var runtimeConfiguration = RuntimeConfiguration.Load();
             _retailRandomContract = LoadRetailRandomContract();
+            _classicIntTimerContract = LoadClassicIntTimerContract();
             _retailRandomLifecycle =
                 ClassicRetailRandomLifecycle.InitializeFromExactBuildClock(
                     _retailRandomContract);
@@ -325,6 +329,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 player,
                 this,
                 _retailRandomContract,
+                _classicIntTimerContract,
                 () => _retailRandomLifecycle,
                 CommitRetailRandomLifecycle,
                 restoredState?.TrialProgress);
@@ -440,6 +445,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 RetailRandomContractResource);
         using var document = JsonDocument.Parse(bytes);
         return ClassicRetailRandomContract.Parse(document.RootElement);
+    }
+
+    private static ClassicIntTimerContract LoadClassicIntTimerContract()
+    {
+        var bytes = Godot.FileAccess.GetFileAsBytes(ClassicIntTimeContractResource);
+        if (bytes.Length == 0)
+            throw new FileNotFoundException(
+                "Classic INT time contract is missing.",
+                ClassicIntTimeContractResource);
+        using var document = JsonDocument.Parse(bytes);
+        return ClassicIntTimerContract.Parse(document.RootElement);
     }
 
     private async Task RunOpeningTail(

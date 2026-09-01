@@ -26,7 +26,10 @@ internal sealed record ClassicIntExpressionContext(
     int? Month,
     IClassicIntObjectFactory ObjectFactory,
     int? SourceObject = null,
-    IClassicIntActorQueries? ActorQueries = null);
+    IClassicIntActorQueries? ActorQueries = null,
+    ClassicIntTimerContract? TimerContract = null,
+    int? FixedParameter = null,
+    int? CurrentMapIndex = null);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,

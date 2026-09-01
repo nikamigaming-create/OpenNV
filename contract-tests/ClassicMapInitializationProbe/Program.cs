@@ -209,6 +209,44 @@ using var randomDocument = JsonDocument.Parse(File.ReadAllBytes(
     Path.Combine("runtime", "config", "classic-retail-random-fo2-1.02-v1.json")));
 var randomContract = ClassicRetailRandomContract.Parse(randomDocument.RootElement);
 var randomState = ClassicRetailRandomLifecycle.Initialize(1, randomContract);
+using var timerDocument = JsonDocument.Parse(File.ReadAllBytes(
+    Path.Combine("runtime", "config", "classic-int-time-v1.json")));
+var timerContract = ClassicIntTimerContract.Parse(timerDocument.RootElement);
+var timerState = ClassicIntTimerOwner.Schedule(
+    ClassicIntTimerState.Initial,
+    200,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2),
+    7);
+timerState = ClassicIntTimerOwner.Schedule(
+    timerState,
+    200,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2),
+    8);
+var timerWorld = new ClassicIntWorldObjectState(
+    false,
+    new Dictionary<int, ClassicIntDoorObjectState>())
+{
+    Objects = new Dictionary<int, ClassicIntWorldObject>
+    {
+        [200] = new(200, 1, 100, 0, true),
+    },
+    Timers = timerState,
+};
+var restoredTimerWorld = ClassicIntWorldObjectState.Restore(
+    JsonSerializer.SerializeToElement(timerWorld.Save()));
+var firstTimer = ClassicIntTimerOwner.TakeNextDue(
+    restoredTimerWorld.Timers,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2));
+var secondTimer = ClassicIntTimerOwner.TakeNextDue(
+    firstTimer.State,
+    ClassicIntTimerOwner.GameTicks(timerContract, 2));
+if (firstTimer.Event.FixedParameter != 7 ||
+    secondTimer.Event.FixedParameter != 8 ||
+    secondTimer.State.Pending.Count != 0 ||
+    secondTimer.State.CurrentTick !=
+        ClassicIntTimerOwner.GameTicks(timerContract, 2))
+    throw new InvalidOperationException(
+        "Classic INT timer ordering or save state drifted.");
 var messageHandles = Enumerable.Range(100, 24).ToDictionary(
     messageId => (MessageList: 344, MessageId: messageId),
     messageId => 9000 + messageId);
@@ -672,9 +710,110 @@ foreach (var path in args)
                         completed.State.RandomState.Events.Count)
                     throw new InvalidOperationException(
                         "Owned Cameron dialogue result save state drifted.");
+                const int playerHandle = 1;
+                const int cameronHandle = 2;
+                const int doorHandle = 3;
+                var releaseContext = gameContext with
+                {
+                    DudeObject = playerHandle,
+                    SelfObject = cameronHandle,
+                    ActorQueries = new ClassicIntActorQueryTable(
+                        new Dictionary<(int, int), bool>
+                        {
+                            [(cameronHandle, playerHandle)] = true,
+                        }),
+                    TimerContract = timerContract,
+                    CurrentMapIndex = 3,
+                };
+                var releaseWorld = new ClassicIntWorldObjectState(
+                    false,
+                    new Dictionary<int, ClassicIntDoorObjectState>
+                    {
+                        [doorHandle] = new(false, true),
+                    })
+                {
+                    Objects = new Dictionary<int, ClassicIntWorldObject>
+                    {
+                        [playerHandle] = new(playerHandle, null, 13729, 2, true),
+                        [cameronHandle] = new(
+                            cameronHandle, 0x01000112, 13728, 2, true),
+                        [doorHandle] = new(
+                            doorHandle, 0x020003A6, 19928, 2, true),
+                    },
+                };
+                ClassicIntProcedureResult RunCameron(
+                    string procedure,
+                    ClassicIntProcedureState state,
+                    ClassicIntExpressionContext context,
+                    ClassicIntWorldObjectState world) =>
+                    ClassicIntEventDispatcher.Execute(
+                        cameron.Program,
+                        procedure,
+                        state,
+                        context with
+                        {
+                            ProgramVariables = state.ProgramVariables,
+                            LocalVariables = state.LocalVariables,
+                            ScriptLocalVariables = state.ScriptLocalVariables,
+                            MapVariables = state.MapVariables,
+                            GlobalVariables = state.GlobalVariables,
+                        },
+                        world,
+                        randomContract,
+                        cameron.Program.ExecutableProgram.Procedures[procedure]
+                            .Instructions.Count);
+                var released = RunCameron(
+                    "critter_p_proc", completed.State, releaseContext, releaseWorld);
+                released = RunCameron(
+                    "critter_p_proc", released.State, releaseContext,
+                    released.WorldObjects);
+                if (released.WorldObjects.Timers.Pending is not [{ } sourceTimer])
+                    throw new InvalidOperationException(
+                        "Owned Cameron release timer was not scheduled.");
+                var sourceDelivery = ClassicIntTimerOwner.TakeNextDue(
+                    released.WorldObjects.Timers, sourceTimer.DueTick);
+                released = RunCameron(
+                    "timed_event_p_proc",
+                    released.State,
+                    releaseContext with
+                    {
+                        FixedParameter = sourceDelivery.Event.FixedParameter,
+                    },
+                    released.WorldObjects with { Timers = sourceDelivery.State });
+                var releaseBudget = cameron.Program.ExecutableProgram
+                    .Procedures["critter_p_proc"].Instructions.Count;
+                while (released.WorldObjects.Objects[cameronHandle].Visible &&
+                    releaseBudget-- > 0)
+                    released = RunCameron(
+                        "critter_p_proc", released.State, releaseContext,
+                        released.WorldObjects);
+                if (!released.WorldObjects.Movements.Select(row => row.DestinationTile)
+                        .SequenceEqual([19728, 22712, 28715]) ||
+                    released.WorldObjects.Objects[cameronHandle] is not
+                    { Tile: 28715, Visible: false } ||
+                    released.WorldObjects.Doors[doorHandle] is not
+                    { Open: true, Locked: false } ||
+                    released.WorldObjects.Timers.Pending.Count != 0 ||
+                    released.WorldObjects.Timers.CurrentTick !=
+                        ClassicIntTimerOwner.GameTicks(timerContract, 2) ||
+                    released.State.ScriptLocalVariables[14] != 4)
+                    throw new InvalidOperationException(
+                        "Owned Cameron critter/timer release chain drifted.");
+                var restoredRelease = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(
+                        released.WorldObjects.Save()));
+                if (restoredRelease.Objects[cameronHandle] is not
+                    { Tile: 28715, Visible: false } ||
+                    restoredRelease.Doors[doorHandle] is not
+                    { Open: true, Locked: false } ||
+                    restoredRelease.Timers.CurrentTick !=
+                        released.WorldObjects.Timers.CurrentTick)
+                    throw new InvalidOperationException(
+                        "Owned Cameron release world save state drifted.");
                 Console.WriteLine(
                     $"{Path.GetFileName(path)}|{cameron.Program.Program}|" +
-                    $"{terminalTaggedSpeechProcedure}|{completed.ExecutedInstructions}");
+                    $"{terminalTaggedSpeechProcedure}+critter/timer-release|" +
+                    $"{completed.ExecutedInstructions + released.ExecutedInstructions}");
             }
         }
         var jasmine = programs.FirstOrDefault(row => string.Equals(

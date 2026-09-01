@@ -47,6 +47,19 @@ internal sealed record ClassicIntAttackRequest(
     int TargetHandle,
     IReadOnlyList<int> SourceArguments);
 
+internal sealed record ClassicIntWorldObject(
+    int Handle,
+    int? Pid,
+    int Tile,
+    int Elevation,
+    bool Visible);
+
+internal sealed record ClassicIntMovement(
+    int ObjectHandle,
+    int SourceTile,
+    int DestinationTile,
+    int Speed);
+
 internal interface IClassicIntActorQueries
 {
     bool CanSee(int observerHandle, int targetHandle);
@@ -112,6 +125,10 @@ internal interface IClassicIntWorldObjectState
     IReadOnlyList<ClassicIntInventoryEntry> Inventory { get; }
     ClassicIntMapStartOverride? MapStartOverride { get; }
     IReadOnlyList<ClassicIntAttackRequest> AttackRequests { get; }
+    IReadOnlyDictionary<int, ClassicIntWorldObject> Objects { get; }
+    IReadOnlyList<ClassicIntMovement> Movements { get; }
+    ClassicIntTimerState Timers { get; }
+    bool DialogueSystemEntered { get; }
 }
 
 internal sealed record ClassicIntWorldObjectState(
@@ -130,6 +147,17 @@ internal sealed record ClassicIntWorldObjectState(
 
     public IReadOnlyList<ClassicIntAttackRequest> AttackRequests
     { get; init; } = [];
+
+    public IReadOnlyDictionary<int, ClassicIntWorldObject> Objects
+    { get; init; } = new Dictionary<int, ClassicIntWorldObject>();
+
+    public IReadOnlyList<ClassicIntMovement> Movements
+    { get; init; } = [];
+
+    public ClassicIntTimerState Timers
+    { get; init; } = ClassicIntTimerState.Initial;
+
+    public bool DialogueSystemEntered { get; init; }
 
     internal static ClassicIntWorldObjectState Empty { get; } = new(
         false, new Dictionary<int, ClassicIntDoorObjectState>());
@@ -156,6 +184,10 @@ internal sealed record ClassicIntWorldObjectState(
             .ThenBy(row => row.ObjectHandle).ToArray(),
         MapStartOverride,
         AttackRequests,
+        Objects = Objects.OrderBy(row => row.Key).Select(row => row.Value).ToArray(),
+        Movements,
+        Timers,
+        DialogueSystemEntered,
     };
 
     internal static ClassicIntWorldObjectState Restore(JsonElement source)
@@ -183,7 +215,7 @@ internal sealed record ClassicIntWorldObjectState(
             lightLevel.ValueKind != JsonValueKind.Null
                 ? lightLevel.GetInt32()
                 : null);
-        return result with
+        var restored = result with
         {
             CreatedObjects = source.TryGetProperty("CreatedObjects", out var objects)
                 ? objects.EnumerateArray().ToDictionary(
@@ -213,7 +245,36 @@ internal sealed record ClassicIntWorldObjectState(
                         mapStart.GetProperty("Rotation").GetInt32())
                     : null,
             AttackRequests = attackRequests,
+            Objects = source.TryGetProperty("Objects", out var worldObjects)
+                ? worldObjects.EnumerateArray().ToDictionary(
+                    row => row.GetProperty("Handle").GetInt32(),
+                    row => new ClassicIntWorldObject(
+                        row.GetProperty("Handle").GetInt32(),
+                        row.GetProperty("Pid").ValueKind == JsonValueKind.Null
+                            ? null
+                            : row.GetProperty("Pid").GetInt32(),
+                        row.GetProperty("Tile").GetInt32(),
+                        row.GetProperty("Elevation").GetInt32(),
+                        row.GetProperty("Visible").GetBoolean()))
+                : new Dictionary<int, ClassicIntWorldObject>(),
+            Movements = source.TryGetProperty("Movements", out var movements)
+                ? movements.Deserialize<ClassicIntMovement[]>() ?? []
+                : [],
+            Timers = source.TryGetProperty("Timers", out var timers)
+                ? timers.Deserialize<ClassicIntTimerState>() ??
+                    throw new InvalidOperationException(
+                        "Classic INT saved timer state is invalid.")
+                : ClassicIntTimerState.Initial,
+            DialogueSystemEntered = source.TryGetProperty(
+                "DialogueSystemEntered", out var entered) && entered.GetBoolean(),
         };
+        restored.Timers.Validate();
+        if (restored.Objects.Any(row => row.Key == 0 || row.Key != row.Value.Handle) ||
+            restored.Movements.Any(row =>
+                !restored.Objects.ContainsKey(row.ObjectHandle)))
+            throw new InvalidOperationException(
+                "Classic INT saved world object state is invalid.");
+        return restored;
     }
 }
 
@@ -296,6 +357,7 @@ internal static class ClassicIntProcedureVm
     private const ushort Not = 0x8045;
     private const ushort Negate = 0x8046;
     private const ushort Random = 0x80B4;
+    private const ushort TileContainsPidObject = 0x80A7;
     private const ushort CreateObject = 0x80B7;
     private const ushort OverrideMapStart = 0x80A9;
     private const ushort DisplayMessage = 0x80B8;
@@ -309,8 +371,12 @@ internal static class ClassicIntProcedureVm
     private const ushort SetMapVariable = 0x80C4;
     private const ushort GlobalVariable = 0x80C5;
     private const ushort SetGlobalVariable = 0x80C6;
+    private const ushort AnimateMoveObjectToTile = 0x80CE;
     private const ushort Attack = 0x80D0;
+    private const ushort TileDistanceObjects = 0x80D3;
+    private const ushort TileNumber = 0x80D4;
     private const ushort ObjectCanSeeObject = 0x80DC;
+    private const ushort SetObjectVisibility = 0x80E3;
     private const ushort CritterStat = 0x80CA;
     private const ushort Metarule = 0x810B;
     private const ushort MessageString = 0x8105;
@@ -321,6 +387,11 @@ internal static class ClassicIntProcedureVm
     private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
     private const ushort GameTimeHour = 0x80F6;
+    private const ushort AddTimerEvent = 0x80F0;
+    private const ushort GameTicks = 0x80F2;
+    private const ushort FixedParameter = 0x80F7;
+    private const ushort DialogueSystemEnter = 0x80F9;
+    private const ushort CurrentMapIndex = 0x8101;
     private const ushort DoorLock = 0x812E;
     private const ushort DoorUnlock = 0x812F;
     private const ushort DoorIsOpen = 0x8130;
@@ -423,6 +494,12 @@ internal static class ClassicIntProcedureVm
         var inventory = sourceWorldObjects.Inventory.ToList();
         var mapStartOverride = sourceWorldObjects.MapStartOverride;
         var attackRequests = sourceWorldObjects.AttackRequests.ToList();
+        var objects = new Dictionary<int, ClassicIntWorldObject>(
+            sourceWorldObjects.Objects);
+        var movements = sourceWorldObjects.Movements.ToList();
+        var timers = sourceWorldObjects.Timers;
+        timers.Validate();
+        var dialogueSystemEntered = sourceWorldObjects.DialogueSystemEntered;
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -506,9 +583,19 @@ internal static class ClassicIntProcedureVm
                     Store(locals, stack, program, procedure, offset, true);
                     break;
                 case ScriptLocal:
-                    stack.Add(Read(scriptLocals, Pop(stack, program, procedure, offset),
-                        program, procedure, offset, "script-local"));
-                    break;
+                    {
+                        var variableIndex = Pop(stack, program, procedure, offset);
+                        if (variableIndex < 0)
+                            throw Failure(program, procedure, offset,
+                                "script-local-index");
+                        if (!scriptLocals.TryGetValue(variableIndex, out var value))
+                        {
+                            value = 0;
+                            scriptLocals.Add(variableIndex, value);
+                        }
+                        stack.Add(value);
+                        break;
+                    }
                 case SetScriptLocal:
                     Store(scriptLocals, stack, program, procedure, offset, false);
                     break;
@@ -621,6 +708,20 @@ internal static class ClassicIntProcedureVm
                         stack.Add(handle);
                         break;
                     }
+                case TileContainsPidObject:
+                    {
+                        var pid = Pop(stack, program, procedure, offset);
+                        var elevation = Pop(stack, program, procedure, offset);
+                        var tile = Pop(stack, program, procedure, offset);
+                        var matches = objects.Values.Where(row =>
+                            row.Pid == pid && row.Tile == tile &&
+                            row.Elevation == elevation).Take(2).ToArray();
+                        if (matches.Length != 1)
+                            throw Failure(program, procedure, offset,
+                                "tile-pid-object-lookup");
+                        stack.Add(matches[0].Handle);
+                        break;
+                    }
                 case ScriptOverrides:
                     scriptOverrides = true;
                     break;
@@ -638,6 +739,32 @@ internal static class ClassicIntProcedureVm
                 case GameTimeHour:
                     stack.Add(game.GameTimeHour ?? throw Failure(
                         program, procedure, offset, "missing-game-time-hour"));
+                    break;
+                case GameTicks:
+                    stack.Add(ClassicIntTimerOwner.GameTicks(
+                        game.TimerContract ?? throw Failure(
+                            program, procedure, offset, "missing-timer-contract"),
+                        Pop(stack, program, procedure, offset)));
+                    break;
+                case AddTimerEvent:
+                    {
+                        var fixedParameter = Pop(stack, program, procedure, offset);
+                        var delay = Pop(stack, program, procedure, offset);
+                        var target = Pop(stack, program, procedure, offset);
+                        if (!objects.ContainsKey(target))
+                            throw Failure(program, procedure, offset,
+                                "missing-timer-target");
+                        timers = ClassicIntTimerOwner.Schedule(
+                            timers, target, delay, fixedParameter);
+                        break;
+                    }
+                case FixedParameter:
+                    stack.Add(game.FixedParameter ?? throw Failure(
+                        program, procedure, offset, "missing-fixed-parameter"));
+                    break;
+                case CurrentMapIndex:
+                    stack.Add(game.CurrentMapIndex ?? throw Failure(
+                        program, procedure, offset, "missing-current-map"));
                     break;
                 case GetMonth:
                     stack.Add(game.Month ?? throw Failure(
@@ -679,6 +806,48 @@ internal static class ClassicIntProcedureVm
                     break;
                 case DoorUnlock:
                     SetDoor(Pop(stack, program, procedure, offset), locked: false);
+                    break;
+                case TileNumber:
+                    stack.Add(WorldObject(
+                        Pop(stack, program, procedure, offset)).Tile);
+                    break;
+                case TileDistanceObjects:
+                    {
+                        var target = WorldObject(
+                            Pop(stack, program, procedure, offset));
+                        var sourceObject = WorldObject(
+                            Pop(stack, program, procedure, offset));
+                        if (sourceObject.Elevation != target.Elevation)
+                            throw Failure(program, procedure, offset,
+                                "cross-elevation-tile-distance");
+                        stack.Add(Fallout1.Fo1HexMath.Distance(
+                            sourceObject.Tile, target.Tile));
+                        break;
+                    }
+                case AnimateMoveObjectToTile:
+                    {
+                        var speed = Pop(stack, program, procedure, offset);
+                        var destination = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var worldObject = WorldObject(handle);
+                        movements.Add(new ClassicIntMovement(
+                            handle, worldObject.Tile, destination, speed));
+                        objects[handle] = worldObject with { Tile = destination };
+                        break;
+                    }
+                case SetObjectVisibility:
+                    {
+                        var invisible = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var worldObject = WorldObject(handle);
+                        if (invisible is not (0 or 1))
+                            throw Failure(program, procedure, offset,
+                                "object-visibility-flag");
+                        objects[handle] = worldObject with { Visible = invisible == 0 };
+                        break;
+                    }
+                case DialogueSystemEnter:
+                    dialogueSystemEntered = true;
                     break;
                 case DisplayMessage:
                     {
@@ -779,12 +948,22 @@ internal static class ClassicIntProcedureVm
                 Inventory = inventory,
                 MapStartOverride = mapStartOverride,
                 AttackRequests = attackRequests,
+                Objects = objects,
+                Movements = movements,
+                Timers = timers,
+                DialogueSystemEntered = dialogueSystemEntered,
             });
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
             doors.TryGetValue(objectHandle, out var door)
                 ? door
                 : throw Failure(program, procedure, offset, "missing-door-object");
+
+        ClassicIntWorldObject WorldObject(int objectHandle) =>
+            objects.TryGetValue(objectHandle, out var worldObject)
+                ? worldObject
+                : throw Failure(program, procedure, offset,
+                    "missing-world-object");
 
         void SetDoor(int objectHandle, bool? open = null, bool? locked = null)
         {
