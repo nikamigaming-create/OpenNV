@@ -53,6 +53,7 @@ internal partial class GameplayUiController : CanvasLayer
     private readonly Dictionary<int, Label> _ownedStatusValues = new();
     private readonly Dictionary<int, OwnedPipBoyStringSource> _ownedStatusSources = new();
     private readonly Dictionary<GameplayUiPanel, PipBoyGlowSurface> _ownedButtonGlows = new();
+    private ProjectedSurfaceInputRouter? _ownedPipBoyInput;
     private Label? _xrContent;
     private ColorRect? _xrCursor;
     private Sprite3D? _xrScreen;
@@ -458,6 +459,14 @@ internal partial class GameplayUiController : CanvasLayer
             deviceViewport,
             crtViewport.GetTexture(),
             presentation);
+        var screenInput = new Control
+        {
+            Name = "OwnedPipBoyProjectedScreenInput",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        screenInput.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        screenInput.GuiInput += input => _ownedPipBoyInput?.Forward(input);
+        _pipBoyPanel.AddChild(screenInput);
     }
 
     private void BuildOwnedPhysicalPipBoy(
@@ -606,6 +615,11 @@ internal partial class GameplayUiController : CanvasLayer
         };
         viewport.AddChild(camera);
         camera.LookAt(frame.Target, frame.Up);
+        _ownedPipBoyInput = new ProjectedSurfaceInputRouter(
+            screenMatches[0].Mesh,
+            screenMatches[0].Surface,
+            camera,
+            (SubViewport)_ownedPipBoyCanvas!.GetViewport());
         GD.Print(
             $"OPENNV_OWNED_PIPBOY_PHYSICAL_READY source={contract.LogicalPath} " +
             $"surfaces={contract.Surfaces} vertices={contract.Vertices} " +
