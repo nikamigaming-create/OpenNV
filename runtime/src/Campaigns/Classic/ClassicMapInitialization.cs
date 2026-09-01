@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace OpenNV.Runtime.Campaigns.Classic;
@@ -23,18 +24,25 @@ internal sealed record ClassicMapInitialization(
     IReadOnlyList<ClassicMapScriptSlot> ScriptSlots)
 {
     internal IReadOnlyList<ClassicMapInitializationObject> ScriptedObjects =>
-        Objects.Where(row => row.ScriptIndex >= 0).ToArray();
+        Objects.Where(ClassicMapInitializationOwner.HasLiveScriptIdentity).ToArray();
 }
 
 internal static class ClassicMapInitializationOwner
 {
+    private static readonly string NoScriptSid = uint.MaxValue.ToString(
+        "x8", CultureInfo.InvariantCulture);
+
+    internal static bool HasLiveScriptIdentity(ClassicMapInitializationObject row) =>
+        row.ScriptIndex >= 0 && !string.Equals(
+            row.Sid, NoScriptSid, StringComparison.Ordinal);
+
     internal static ClassicMapInitialization Parse(JsonElement map)
     {
         var objects = ParseObjects(map.GetProperty("objects"));
         var slots = ParseScriptSlots(map.GetProperty("scriptLists"));
         var liveSids = slots.Select(row => row.Sid).ToHashSet(StringComparer.Ordinal);
         var missing = objects
-            .Where(row => row.ScriptIndex >= 0 && !liveSids.Contains(row.Sid))
+            .Where(row => HasLiveScriptIdentity(row) && !liveSids.Contains(row.Sid))
             .Select(row => row.Sid)
             .Distinct(StringComparer.Ordinal)
             .ToArray();

@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from corpus_io import atomic_json
+from classic_int_initialization import compile_map_int_initialization
 from fo1_frm import decode_frm
 from fo1_map_objects import (
     OBJECT_TYPE_NAMES,
@@ -20,7 +22,11 @@ from fo1_map_objects import (
     parse_script_section,
 )
 from fo1_profile import Fo1ProfileError, map_layout_manifest, parse_map_layout
-from fo2_arroyo_trial_route import _walk_mask_sha256, _walkable_by_elevation
+from fo2_arroyo_trial_route import (
+    _parse_dialogue_catalog,
+    _walk_mask_sha256,
+    _walkable_by_elevation,
+)
 from fo2_first_slice import (
     FORM_ID_RADIX,
     FRM_PALETTE_SIZE,
@@ -109,8 +115,176 @@ def compile_fo2_arvillag_slice(
         )
         if end_offset != len(map_resource.data):
             raise Fo1ProfileError("Fallout 2 ARVILLAG object graph has trailing bytes")
+        initialization_scripts = compile_map_int_initialization(
+            asdict(layout.header), scripts, resolver
+        )
 
         flat_objects = _flatten_objects(objects)
+        programs = [
+            initialization_scripts["mapHeader"]["program"],
+            *(
+                row["program"]
+                for row in initialization_scripts["liveScriptSlots"]
+            ),
+        ]
+        configured_roles = recipe.get("villageIntRoles", {})
+        if set(configured_roles) != {"elder", "firstSpeakingNpc"}:
+            raise Fo1ProfileError("Fallout 2 ARVILLAG INT roles are incomplete")
+        village_int_roles: dict[str, dict[str, Any]] = {}
+        configured_metarules = recipe.get("villageIntMetarules", {})
+        global_resource = resolver.read(
+            recipe["trialState"]["globalCatalog"]["logicalPath"]
+        )
+        global_rows = {
+            int(match.group("index")): {
+                "name": match.group("name"),
+                "initialValue": int(match.group("value")),
+            }
+            for match in re.finditer(
+                r"^(?P<name>[A-Za-z0-9_]+)\s*:=\s*(?P<value>-?[0-9]+)\s*;"
+                r"\s*//\s*\((?P<index>[0-9]+)\)",
+                global_resource.data.decode("cp1252"),
+                re.MULTILINE,
+            )
+        }
+        if not global_rows:
+            raise Fo1ProfileError("Fallout 2 ARVILLAG global catalog is empty")
+        for role, configured_path in configured_roles.items():
+            matches = [
+                program
+                for program in programs
+                if program is not None
+                and str(program["logicalPath"]).casefold()
+                == str(configured_path).casefold()
+            ]
+            unique_programs = {
+                (program["logicalPath"], program["sha256"]): program
+                for program in matches
+            }
+            if len(unique_programs) != 1:
+                raise Fo1ProfileError(
+                    f"Fallout 2 ARVILLAG {role} INT identity is ambiguous"
+                )
+            program = next(iter(unique_programs.values()))
+            actor_matches = [
+                row
+                for row in flat_objects
+                if int(row["scriptIndex"]) == int(program["scriptsListIndex"])
+            ]
+            if len(actor_matches) != 1:
+                raise Fo1ProfileError(
+                    f"Fallout 2 ARVILLAG {role} actor identity is ambiguous"
+                )
+            actor = actor_matches[0]
+            message_list_ids: set[int] = set()
+            for procedure in program["inventory"]["procedures"]:
+                if procedure["name"] not in (
+                    "look_at_p_proc",
+                    "description_p_proc",
+                ):
+                    continue
+                instructions = procedure["instructions"]
+                for index, instruction in enumerate(instructions):
+                    if instruction["opcode"] != "8105" or index < 2:
+                        continue
+                    message_list = instructions[index - 2]
+                    message_id = instructions[index - 1]
+                    if (
+                        message_list["opcode"] != "c001"
+                        or message_id["opcode"] != "c001"
+                    ):
+                        continue
+                    message_list_ids.add(int(message_list["operand"]))
+            if len(message_list_ids) != 1:
+                raise Fo1ProfileError(
+                    f"Fallout 2 ARVILLAG {role} message-list identity is ambiguous"
+                )
+            message_path = (
+                "text\\english\\dialog\\"
+                + Path(str(program["program"])).stem.casefold()
+                + ".msg"
+            )
+            message_resource = resolver.read(message_path)
+            messages = _parse_dialogue_catalog(message_resource.data)
+            map_enter = next(
+                procedure
+                for procedure in program["inventory"]["procedures"]
+                if procedure["name"] == "map_enter_p_proc"
+            )
+            referenced_globals = {
+                int(map_enter["instructions"][index - 1]["operand"])
+                for index, instruction in enumerate(map_enter["instructions"])
+                if instruction["opcode"] == "80c5"
+                and index > 0
+                and map_enter["instructions"][index - 1]["opcode"] == "c001"
+            }
+            if any(index not in global_rows for index in referenced_globals):
+                raise Fo1ProfileError(
+                    f"Fallout 2 ARVILLAG {role} global source join is incomplete"
+                )
+            referenced_metarules = {
+                (
+                    int(map_enter["instructions"][index - 2]["operand"]),
+                    int(map_enter["instructions"][index - 1]["operand"]),
+                )
+                for index, instruction in enumerate(map_enter["instructions"])
+                if instruction["opcode"] == "810b"
+                and index > 1
+                and map_enter["instructions"][index - 2]["opcode"] == "c001"
+                and map_enter["instructions"][index - 1]["opcode"] == "c001"
+            }
+            role_metarules = {
+                semantic: row
+                for semantic, row in configured_metarules.items()
+                if (int(row["rule"]), int(row["argument"]))
+                in referenced_metarules
+            }
+            if {
+                (int(row["rule"]), int(row["argument"]))
+                for row in role_metarules.values()
+            } != referenced_metarules:
+                raise Fo1ProfileError(
+                    f"Fallout 2 ARVILLAG {role} metarule source join is incomplete"
+                )
+            village_int_roles[role] = {
+                "actor": {
+                    key: actor[key]
+                    for key in (
+                        "serial",
+                        "tile",
+                        "elevation",
+                        "rotation",
+                        "fid",
+                        "pid",
+                        "sid",
+                        "scriptIndex",
+                    )
+                },
+                "program": {
+                    key: program[key]
+                    for key in (
+                        "scriptsListIndex",
+                        "program",
+                        "logicalPath",
+                        "source",
+                        "bytes",
+                        "sha256",
+                    )
+                },
+                "messageCatalog": {
+                    "messageListId": next(iter(message_list_ids)),
+                    "logicalPath": message_resource.logical_path,
+                    "source": message_resource.source,
+                    "bytes": len(message_resource.data),
+                    "sha256": message_resource.sha256,
+                    "messages": messages,
+                },
+                "initialGlobalVariables": {
+                    str(index): global_rows[index]
+                    for index in sorted(referenced_globals)
+                },
+                "mapEnterMetarules": role_metarules,
+            }
         prototypes: dict[str, dict[str, Any]] = {}
         frm_placements: dict[str, list[dict[str, Any]]] = {}
         for obj in flat_objects:
@@ -226,6 +400,8 @@ def compile_fo2_arvillag_slice(
             "objects": objects,
             "allObjectCount": len(flat_objects),
         },
+        "initializationScripts": initialization_scripts,
+        "villageIntRoles": village_int_roles,
         "arrivalWalkContract": {
             "semantics": (
                 "non-default-floor-minus-central-non-wall-blockers-with-owned-exit-grids-v1"

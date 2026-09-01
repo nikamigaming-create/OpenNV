@@ -39,6 +39,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2ArroyoCavesSceneCoverage? Scene { get; private set; }
     internal Fo2TempleSceneCoverage? TempleScene { get; private set; }
     internal Fo2ArvillagSceneCoverage? VillageScene { get; private set; }
+    internal Fo2ArvillagIntRuntime? VillageIntRuntime { get; private set; }
     internal Fo2MapSceneBuildCoverage? AdjacentScene { get; private set; }
     internal Fo2ArroyoClassicGameplayHud? VillageHud { get; private set; }
     internal Fo2TempleConfrontationRuntime? TempleConfrontation { get; private set; }
@@ -358,7 +359,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                             route.Village);
                     var village = BuildVillageScene();
                     player.EnterVillage(village, route.VillageArrival);
-                    ActivateVillagePresentation();
+                    ActivateVillagePresentation(isLoadingGame: true);
                 }
             }
             if (restoredState.MapSha256 != player.CurrentMapSha256 ||
@@ -691,7 +692,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             "Fallout 2 village entry has no active Temple transition runtime.");
         var village = BuildVillageScene();
         var applied = runtime.ApplyVillageExit(transition, village);
-        ActivateVillagePresentation();
+        ActivateVillagePresentation(isLoadingGame: false);
         return applied;
     }
 
@@ -712,7 +713,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         return VillageScene;
     }
 
-    private void ActivateVillagePresentation()
+    private void ActivateVillagePresentation(bool isLoadingGame)
     {
         if (VillageScene is null || Runtime is null || SelectedCharacter is null ||
             Runtime.Player.GetParent() != VillageScene.Root)
@@ -723,6 +724,15 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             TempleScene.Root.Visible = false;
         if (TempleConfrontation is not null)
             TempleConfrontation.Visible = false;
+        VillageIntRuntime = Fo2ArvillagIntRuntime.Enter(
+            _village ?? throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG INT runtime has no source catalog."),
+            VillageScene,
+            Runtime.Player,
+            isLoadingGame,
+            _retailRandomContract,
+            () => _retailRandomLifecycle,
+            CommitRetailRandomLifecycle);
         VillageHud = Fo2ArroyoClassicGameplayHud.Build(VillageScene.Root, _arroyo);
         VillageHud.BindCharacter(SelectedCharacter);
         GD.Print(

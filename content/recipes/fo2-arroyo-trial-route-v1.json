@@ -86,6 +86,16 @@
     "multihexExpansionImplemented": false,
     "routeSelection": "breadth-first-source-neighbor-order-then-exit-serial-v1"
   },
+  "villageIntRoles": {
+    "elder": "scripts\\ahelder.int",
+    "firstSpeakingNpc": "scripts\\actemvil.int"
+  },
+  "villageIntMetarules": {
+    "isLoadingGame": {
+      "rule": 22,
+      "argument": 0
+    }
+  },
   "unsupported": [
     "general INT execution and untagged Speech roll outcomes",
     "wall-edge and multihex collision parity",

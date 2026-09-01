@@ -33,7 +33,7 @@ using var document = JsonDocument.Parse("""
                 "serial": 3,
                 "elevation": 0,
                 "sid": "ffffffff",
-                "scriptIndex": -1,
+                "scriptIndex": 23,
                 "inventory": []
               }
             ]
@@ -403,6 +403,78 @@ foreach (var path in args)
             var ownedMap = ClassicMapInitializationOwner.Parse(ownedMapSource);
             var parsedInitialization = ClassicMapIntInitializationOwner.Parse(
                 ownedScripts, ownedMap);
+            if (ownedDocument.RootElement.TryGetProperty(
+                    "villageIntRoles", out var villageRoles))
+            {
+                foreach (var roleSource in villageRoles.EnumerateObject())
+                {
+                    var actor = roleSource.Value.GetProperty("actor");
+                    var scriptIndex = actor.GetProperty("scriptIndex").GetInt32();
+                    var program = parsedInitialization.ScriptSlots.Single(row =>
+                        row.ScriptIndex == scriptIndex).Program;
+                    var globalVariables = roleSource.Value
+                        .GetProperty("initialGlobalVariables").EnumerateObject()
+                        .ToDictionary(
+                            row => int.Parse(row.Name),
+                            row => row.Value.GetProperty("initialValue").GetInt32());
+                    var metarules = roleSource.Value.GetProperty("mapEnterMetarules")
+                        .EnumerateObject().ToDictionary(
+                            row => (
+                                row.Value.GetProperty("rule").GetInt32(),
+                                row.Value.GetProperty("argument").GetInt32()),
+                            _ => 0);
+                    var state = new ClassicIntProcedureState(
+                        new Dictionary<int, int>(), new Dictionary<int, int>(),
+                        new Dictionary<int, int>(), new Dictionary<int, int>(),
+                        globalVariables, [], randomState);
+                    var roleContext = gameContext with
+                    {
+                        GlobalVariables = globalVariables,
+                        MetaruleValues = metarules,
+                        CurrentMapIndex = 4,
+                    };
+                    var budget = program.ExecutableProgram
+                        .Procedures["map_enter_p_proc"].Instructions.Count;
+                    var roleWorld = new ClassicIntWorldObjectState(
+                        false,
+                        new Dictionary<int, ClassicIntDoorObjectState>())
+                    {
+                        Objects = new Dictionary<int, ClassicIntWorldObject>
+                        {
+                            [gameContext.SelfObject] = new(
+                                gameContext.SelfObject,
+                                null,
+                                actor.GetProperty("tile").GetInt32(),
+                                actor.GetProperty("elevation").GetInt32(),
+                                true),
+                        },
+                    };
+                    var entered = ClassicIntEventDispatcher.Execute(
+                        program, "map_enter_p_proc", state, roleContext,
+                        roleWorld, randomContract, budget);
+                    if (entered.ExecutedInstructions <= 0 ||
+                        entered.ExecutedInstructions > budget ||
+                        entered.State.ValueStack.Count != 0 ||
+                        entered.WorldObjects.TraitAssignments.Count != 2 ||
+                        entered.WorldObjects.TraitAssignments.Any(row =>
+                            row.ObjectHandle != gameContext.SelfObject))
+                        throw new InvalidOperationException(
+                            $"Owned ARVILLAG {roleSource.Name} map-enter drifted: " +
+                            $"executed={entered.ExecutedInstructions}/{budget}; " +
+                            $"stack={entered.State.ValueStack.Count}; " +
+                            $"traits={entered.WorldObjects.TraitAssignments.Count}.");
+                    var restored = ClassicIntWorldObjectState.Restore(
+                        JsonSerializer.SerializeToElement(
+                            entered.WorldObjects.Save()));
+                    if (!restored.TraitAssignments.SequenceEqual(
+                            entered.WorldObjects.TraitAssignments))
+                        throw new InvalidOperationException(
+                            $"Owned ARVILLAG {roleSource.Name} save state drifted.");
+                    Console.WriteLine(
+                        $"{Path.GetFileName(path)}|{program.Program}|" +
+                        $"map_enter_p_proc|{entered.ExecutedInstructions}");
+                }
+            }
             if (parsedInitialization.HeaderProgram is { } header &&
                 string.Equals(header.Program, "ArCaves.int",
                     StringComparison.OrdinalIgnoreCase) &&
@@ -599,10 +671,13 @@ foreach (var path in args)
                     guardianContext, mapEnterWorld, randomContract,
                     mapEnterBudget);
                 if (gateMoved.WorldObjects.Objects[gateHandle] is not
-                        { Tile: 19698, Elevation: 0 } ||
+                    { Tile: 19698, Elevation: 0 } ||
                     gateMoved.WorldObjects.Movements is not
-                        [{ ObjectHandle: var movedHandle, SourceTile: 21303,
-                            DestinationTile: 19698, DestinationElevation: 0 }] ||
+                        [
+                        {
+                            ObjectHandle: var movedHandle, SourceTile: 21303,
+                            DestinationTile: 19698, DestinationElevation: 0
+                        }] ||
                     movedHandle != gateHandle ||
                     !gateMoved.WorldObjects.TraitAssignments.SequenceEqual(
                         new[]

@@ -50,6 +50,10 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
             ROOT
             / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs"
         ).read_text(encoding="utf-8")
+        int_runtime = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagIntRuntime.cs"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("placement_serials | transparent != set(top_level)", compiler)
         self.assertIn("derive_relief(", compiler)
@@ -57,6 +61,10 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("expected_floor_ids", compiler)
         self.assertIn("roofCutawayBoundary", source)
         self.assertIn("arrivalWalkContract", source)
+        self.assertIn("compile_map_int_initialization", source)
+        self.assertIn('"villageIntRoles": village_int_roles', source)
+        self.assertIn('"initialGlobalVariables"', source)
+        self.assertIn('"mapEnterMetarules"', source)
         self.assertIn('"sha256": file_sha256(route_path)', source)
         self.assertIn("visibleSerials.Union(transparent)", catalog)
         self.assertIn("allowOwnedRoofCutaway: true", scene)
@@ -82,6 +90,10 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("_presentation.Visible = false", player)
         self.assertIn("destination_presentation_loaded", player)
         self.assertIn("ApplyVillageFirstAction", player)
+        self.assertIn("ClassicIntEventDispatcher.Execute", int_runtime)
+        self.assertIn("catalog.IntInitialization.ScriptSlots", int_runtime)
+        self.assertIn("readRandomState", int_runtime)
+        self.assertIn("commitRandomState", int_runtime)
         self.assertNotIn("proxy", scene.casefold())
         self.assertNotIn("capsule", scene.casefold())
 
