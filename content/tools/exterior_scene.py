@@ -357,6 +357,7 @@ def prepare_exterior_scene(
         raise ValueError("Exterior recipe selected duplicate references across CELL ownership")
 
     selected: list[tuple[PlacedReference, BaseObject]] = []
+    particle_effect_model_paths: set[str] = set()
     excluded_references: list[dict[str, str]] = []
     for reference in candidates:
         base = catalog.base_objects.get(reference.base_form_id)
@@ -367,6 +368,10 @@ def prepare_exterior_scene(
             recipe,
             configuration.content_compiler,
         )
+        if selection_reason == "special-effect-shader-required" and base.model_path:
+            selected.append((reference, base))
+            particle_effect_model_paths.add(base.model_path)
+            continue
         if selection_reason != "selected":
             if base.model_path:
                 excluded_references.append(
@@ -516,6 +521,7 @@ def prepare_exterior_scene(
         sky_model_paths | {block.model_path for block in lod_blocks},
         partial_lod_clips,
         fully_clipped_lod_model_paths,
+        particle_effect_model_paths=particle_effect_model_paths,
         owned_archives=owned_archives,
     )
     retained_selected = []

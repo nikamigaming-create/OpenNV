@@ -51,6 +51,7 @@ internal static class CellContentLoader
         var collisionFaceSelections = new Dictionary<string, string>(StringComparer.Ordinal);
         var controllerPlaybacks = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var doorArticulations = new Dictionary<string, DoorArticulationContract>(StringComparer.Ordinal);
+        var particleEffects = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         try
         {
             var textures = RuntimeMaterialLoader.LoadTextures(
@@ -79,6 +80,8 @@ internal static class CellContentLoader
                         $"CELL asset articulation differs from its static sidecar: {assetId}");
                 if (articulation is not null)
                     doorArticulations.Add(assetId, articulation);
+                if (asset.TryGetProperty("particleEffect", out var particleEffect))
+                    particleEffects.Add(assetId, particleEffect.Clone());
                 if (!loaded.SourceSha256.Equals(
                         asset.GetProperty("sourceSha256").GetString(),
                         StringComparison.OrdinalIgnoreCase))
@@ -522,6 +525,11 @@ internal static class CellContentLoader
                 if (controllerPlaybacks.TryGetValue(assetId, out var sourceSequences))
                     StartSourceControllerPlayback(instance, sourceSequences);
                 SetRenderLayer(visual, renderLayer);
+                if (particleEffects.TryGetValue(assetId, out var particleEffect))
+                    visual.AddChild(OwnedNifParticleEffect.Create(
+                        particleEffect,
+                        textures,
+                        renderLayer));
                 CountGeometry(visual, ref surfaces, ref vertices, ref triangles);
                 placedReferences.Add(new PlacedReference(
                     referenceFormId,

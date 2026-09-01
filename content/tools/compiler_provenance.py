@@ -167,7 +167,10 @@ def compiler_provenance_source_paths(
     }
     common = {configuration.path, *compiler_common}
     if family == "static":
-        sources = _local_dependencies("export_static_nif_gltf.py") | common
+        sources = _local_dependencies(
+            "export_static_nif_gltf.py",
+            "export_nif_particle_effect.py",
+        ) | common
     elif family == "cell":
         cell_recipes, _ = _cell_route_recipe_paths(cell_recipe_id)
         sources = (
