@@ -58,7 +58,14 @@ internal sealed record ClassicIntMovement(
     int ObjectHandle,
     int SourceTile,
     int DestinationTile,
-    int Speed);
+    int? Speed,
+    int? DestinationElevation = null);
+
+internal sealed record ClassicIntTraitAssignment(
+    int ObjectHandle,
+    int TraitType,
+    int Trait,
+    int Amount);
 
 internal interface IClassicIntActorQueries
 {
@@ -127,6 +134,7 @@ internal interface IClassicIntWorldObjectState
     IReadOnlyList<ClassicIntAttackRequest> AttackRequests { get; }
     IReadOnlyDictionary<int, ClassicIntWorldObject> Objects { get; }
     IReadOnlyList<ClassicIntMovement> Movements { get; }
+    IReadOnlyList<ClassicIntTraitAssignment> TraitAssignments { get; }
     ClassicIntTimerState Timers { get; }
     bool DialogueSystemEntered { get; }
 }
@@ -152,6 +160,9 @@ internal sealed record ClassicIntWorldObjectState(
     { get; init; } = new Dictionary<int, ClassicIntWorldObject>();
 
     public IReadOnlyList<ClassicIntMovement> Movements
+    { get; init; } = [];
+
+    public IReadOnlyList<ClassicIntTraitAssignment> TraitAssignments
     { get; init; } = [];
 
     public ClassicIntTimerState Timers
@@ -186,6 +197,7 @@ internal sealed record ClassicIntWorldObjectState(
         AttackRequests,
         Objects = Objects.OrderBy(row => row.Key).Select(row => row.Value).ToArray(),
         Movements,
+        TraitAssignments,
         Timers,
         DialogueSystemEntered,
     };
@@ -260,6 +272,10 @@ internal sealed record ClassicIntWorldObjectState(
             Movements = source.TryGetProperty("Movements", out var movements)
                 ? movements.Deserialize<ClassicIntMovement[]>() ?? []
                 : [],
+            TraitAssignments = source.TryGetProperty(
+                    "TraitAssignments", out var traitAssignments)
+                ? traitAssignments.Deserialize<ClassicIntTraitAssignment[]>() ?? []
+                : [],
             Timers = source.TryGetProperty("Timers", out var timers)
                 ? timers.Deserialize<ClassicIntTimerState>() ??
                     throw new InvalidOperationException(
@@ -271,7 +287,12 @@ internal sealed record ClassicIntWorldObjectState(
         restored.Timers.Validate();
         if (restored.Objects.Any(row => row.Key == 0 || row.Key != row.Value.Handle) ||
             restored.Movements.Any(row =>
-                !restored.Objects.ContainsKey(row.ObjectHandle)))
+                !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.TraitAssignments.Any(row =>
+                !restored.Objects.ContainsKey(row.ObjectHandle)) ||
+            restored.TraitAssignments.Select(row =>
+                    (row.ObjectHandle, row.TraitType, row.Trait)).Distinct().Count() !=
+                restored.TraitAssignments.Count)
             throw new InvalidOperationException(
                 "Classic INT saved world object state is invalid.");
         return restored;
@@ -358,10 +379,12 @@ internal static class ClassicIntProcedureVm
     private const ushort Negate = 0x8046;
     private const ushort Random = 0x80B4;
     private const ushort TileContainsPidObject = 0x80A7;
+    private const ushort MoveTo = 0x80B6;
     private const ushort CreateObject = 0x80B7;
     private const ushort OverrideMapStart = 0x80A9;
     private const ushort DisplayMessage = 0x80B8;
     private const ushort ScriptOverrides = 0x80B9;
+    private const ushort TileContainsObjectPid = 0x80BB;
     private const ushort SelfObject = 0x80BC;
     private const ushort SourceObject = 0x80BD;
     private const ushort DudeObject = 0x80BF;
@@ -392,6 +415,7 @@ internal static class ClassicIntProcedureVm
     private const ushort FixedParameter = 0x80F7;
     private const ushort DialogueSystemEnter = 0x80F9;
     private const ushort CurrentMapIndex = 0x8101;
+    private const ushort CritterAddTrait = 0x8102;
     private const ushort DoorLock = 0x812E;
     private const ushort DoorUnlock = 0x812F;
     private const ushort DoorIsOpen = 0x8130;
@@ -497,6 +521,8 @@ internal static class ClassicIntProcedureVm
         var objects = new Dictionary<int, ClassicIntWorldObject>(
             sourceWorldObjects.Objects);
         var movements = sourceWorldObjects.Movements.ToList();
+        var traitAssignments = sourceWorldObjects.TraitAssignments.ToDictionary(
+            row => (row.ObjectHandle, row.TraitType, row.Trait));
         var timers = sourceWorldObjects.Timers;
         timers.Validate();
         var dialogueSystemEntered = sourceWorldObjects.DialogueSystemEntered;
@@ -709,6 +735,7 @@ internal static class ClassicIntProcedureVm
                         break;
                     }
                 case TileContainsPidObject:
+                case TileContainsObjectPid:
                     {
                         var pid = Pop(stack, program, procedure, offset);
                         var elevation = Pop(stack, program, procedure, offset);
@@ -720,6 +747,22 @@ internal static class ClassicIntProcedureVm
                             throw Failure(program, procedure, offset,
                                 "tile-pid-object-lookup");
                         stack.Add(matches[0].Handle);
+                        break;
+                    }
+                case MoveTo:
+                    {
+                        var elevation = Pop(stack, program, procedure, offset);
+                        var destination = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        var worldObject = WorldObject(handle);
+                        movements.Add(new ClassicIntMovement(
+                            handle, worldObject.Tile, destination, null, elevation));
+                        objects[handle] = worldObject with
+                        {
+                            Tile = destination,
+                            Elevation = elevation,
+                        };
+                        next = DiscardUnobservedResult(next);
                         break;
                     }
                 case ScriptOverrides:
@@ -766,6 +809,19 @@ internal static class ClassicIntProcedureVm
                     stack.Add(game.CurrentMapIndex ?? throw Failure(
                         program, procedure, offset, "missing-current-map"));
                     break;
+                case CritterAddTrait:
+                    {
+                        var amount = Pop(stack, program, procedure, offset);
+                        var trait = Pop(stack, program, procedure, offset);
+                        var traitType = Pop(stack, program, procedure, offset);
+                        var handle = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(handle);
+                        traitAssignments[(handle, traitType, trait)] =
+                            new ClassicIntTraitAssignment(
+                                handle, traitType, trait, amount);
+                        next = DiscardUnobservedResult(next);
+                        break;
+                    }
                 case GetMonth:
                     stack.Add(game.Month ?? throw Failure(
                         program, procedure, offset, "missing-month"));
@@ -950,6 +1006,7 @@ internal static class ClassicIntProcedureVm
                 AttackRequests = attackRequests,
                 Objects = objects,
                 Movements = movements,
+                TraitAssignments = traitAssignments.Values.ToArray(),
                 Timers = timers,
                 DialogueSystemEntered = dialogueSystemEntered,
             });
@@ -973,6 +1030,20 @@ internal static class ClassicIntProcedureVm
                 Open = open ?? door.Open,
                 Locked = locked ?? door.Locked,
             };
+        }
+
+        int DiscardUnobservedResult(int resultConsumerOffset)
+        {
+            if (!program.Instructions.TryGetValue(
+                    resultConsumerOffset, out var consumer) ||
+                !current.Instructions.Any(row => row.Offset == resultConsumerOffset) ||
+                consumer.Opcode != PopOpcode)
+                throw Failure(program, procedure, offset,
+                    "opcode-result-is-observed");
+            if (++executed > instructionBudget)
+                throw Failure(program, procedure, resultConsumerOffset,
+                    "instruction-budget");
+            return NextOffset(current, resultConsumerOffset);
         }
 
         ClassicIntMessageEffect MessageEffect(

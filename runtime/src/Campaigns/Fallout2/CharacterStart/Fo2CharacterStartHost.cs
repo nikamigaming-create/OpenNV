@@ -638,7 +638,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 Fo2ArroyoTrialProgressState.GateMovedStage or
                 Fo2ArroyoTrialProgressState.VillageArrivalStage or
                 Fo2ArroyoTrialProgressState.VillageFirstActionStage)
-            TrialRuntime.ApplyKlintMapEnter(TempleScene, Runtime.Player);
+            TrialRuntime.ApplyKlintMapEnter(_temple, TempleScene, Runtime.Player);
         TempleConfrontation = Fo2TempleConfrontationRuntime.Build(
             _temple,
             TempleScene,

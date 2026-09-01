@@ -259,6 +259,7 @@ internal sealed partial class Fo2ArroyoTrialRuntime
     }
 
     internal void ApplyKlintMapEnter(
+        Fo2TemplePresentationCatalog catalog,
         Fo2TempleSceneCoverage scene,
         Fo2ArroyoCavesPlayerBody player)
     {
@@ -275,10 +276,6 @@ internal sealed partial class Fo2ArroyoTrialRuntime
         if (gate.GetMeta("source_pid").AsString() != _contract.KlintGate.GatePid ||
             gate.GetMeta("map_tile").AsInt32() != _contract.KlintGate.SourceTile)
             throw new InvalidOperationException("Fallout 2 Klint gate source identity drifted.");
-        gate.Position = Fo1HexMath.Center(_contract.KlintGate.DestinationTile);
-        gate.SetMeta("map_tile", _contract.KlintGate.DestinationTile);
-        gate.SetMeta("acklint_map_enter_applied", true);
-        gate.SetMeta("required_global_10", _contract.KlintGate.RequiredGlobalVariable10);
         var klint = NodeTraversal.Descendants<Sprite3D>(scene.Root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.KlintGate.ActorSerial) ??
@@ -287,6 +284,16 @@ internal sealed partial class Fo2ArroyoTrialRuntime
                 _contract.KlintGate.ActorScriptIndex)
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint map_enter may not remove or replace Klint.");
+        var sourceResult = ExecuteKlintMapEnter(catalog, klint, gate);
+        var sourceGate = sourceResult.WorldObjects.Objects[sourceResult.GateHandle];
+        gate.Position = Fo1HexMath.Center(sourceGate.Tile);
+        gate.SetMeta("map_tile", sourceGate.Tile);
+        gate.SetMeta("acklint_map_enter_applied", true);
+        gate.SetMeta("required_global_10", State.GlobalVariable10);
+        foreach (var assignment in sourceResult.WorldObjects.TraitAssignments)
+            klint.SetMeta(
+                $"classic_int_trait_{assignment.TraitType}_{assignment.Trait}",
+                assignment.Amount);
         player.AdmitPostTrialTempleRoute(
             _contract.Village.Path.Steps.Select(row => row.Tile).ToArray(),
             _contract.KlintGate.PostMoveWalkMaskSha256);
@@ -297,7 +304,7 @@ internal sealed partial class Fo2ArroyoTrialRuntime
                 Fo2ArroyoTrialProgressState.VillageFirstActionStage
                 ? State.Stage
                 : Fo2ArroyoTrialProgressState.GateMovedStage,
-            KlintGateTile = _contract.KlintGate.DestinationTile,
+            KlintGateTile = sourceGate.Tile,
         };
         State.Validate(_contract);
         StateChanged?.Invoke();

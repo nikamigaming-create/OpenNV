@@ -570,11 +570,72 @@ foreach (var path in args)
                     actorHandles.Require(guardianActor) != guardianHandle)
                     throw new InvalidOperationException(
                         "Classic live actor handle registration drifted.");
+                var gateHandle = actorHandles.Register(new object());
                 var guardianContext = gameContext with
                 {
                     DudeObject = playerHandle,
                     SelfObject = guardianHandle,
                 };
+                var mapEnterState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int> { [10] = 2 }, [], randomState);
+                var mapEnterWorld = new ClassicIntWorldObjectState(
+                    false, new Dictionary<int, ClassicIntDoorObjectState>())
+                {
+                    Objects = new Dictionary<int, ClassicIntWorldObject>
+                    {
+                        [playerHandle] = new(playerHandle, null, 20118, 0, true),
+                        [guardianHandle] = new(
+                            guardianHandle, 0x01000003, 21101, 0, true),
+                        [gateHandle] = new(
+                            gateHandle, 0x020003ae, 21303, 0, true),
+                    },
+                };
+                var mapEnterBudget = lintGuardian.Program.ExecutableProgram
+                    .Procedures["map_enter_p_proc"].Instructions.Count;
+                var gateMoved = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "map_enter_p_proc", mapEnterState,
+                    guardianContext, mapEnterWorld, randomContract,
+                    mapEnterBudget);
+                if (gateMoved.WorldObjects.Objects[gateHandle] is not
+                        { Tile: 19698, Elevation: 0 } ||
+                    gateMoved.WorldObjects.Movements is not
+                        [{ ObjectHandle: var movedHandle, SourceTile: 21303,
+                            DestinationTile: 19698, DestinationElevation: 0 }] ||
+                    movedHandle != gateHandle ||
+                    !gateMoved.WorldObjects.TraitAssignments.SequenceEqual(
+                        new[]
+                        {
+                            new ClassicIntTraitAssignment(guardianHandle, 1, 6, 1),
+                            new ClassicIntTraitAssignment(guardianHandle, 1, 5, 1),
+                        }) ||
+                    gateMoved.State.ValueStack.Count != 0 ||
+                    gateMoved.State.RandomState != randomState)
+                    throw new InvalidOperationException(
+                        "Owned ACKlint map-enter gate result drifted.");
+                var restoredMapEnter = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(
+                        gateMoved.WorldObjects.Save()));
+                if (restoredMapEnter.Objects[gateHandle].Tile != 19698 ||
+                    !restoredMapEnter.TraitAssignments.SequenceEqual(
+                        gateMoved.WorldObjects.TraitAssignments))
+                    throw new InvalidOperationException(
+                        "Owned ACKlint map-enter save state drifted.");
+                var closedGate = ClassicIntEventDispatcher.Execute(
+                    lintGuardian.Program, "map_enter_p_proc",
+                    mapEnterState with
+                    {
+                        GlobalVariables = new Dictionary<int, int> { [10] = 0 },
+                    },
+                    guardianContext, mapEnterWorld, randomContract,
+                    mapEnterBudget);
+                if (closedGate.WorldObjects.Objects[gateHandle].Tile != 21303 ||
+                    closedGate.WorldObjects.Movements.Count != 0 ||
+                    !closedGate.WorldObjects.TraitAssignments.SequenceEqual(
+                        gateMoved.WorldObjects.TraitAssignments))
+                    throw new InvalidOperationException(
+                        "Owned ACKlint closed-gate map-enter branch drifted.");
                 var guardianState = new ClassicIntProcedureState(
                     new Dictionary<int, int>(), new Dictionary<int, int>(),
                     new Dictionary<int, int> { [5] = 0 },
