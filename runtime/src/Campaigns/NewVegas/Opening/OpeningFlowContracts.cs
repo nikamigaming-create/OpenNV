@@ -941,6 +941,8 @@ internal sealed record OpeningGameplayVitalsContract(
     private const string ExpectedSchema = "opennv-owned-gameplay-vitals/v1";
     private const string ExactEngineBuild = "1.4.0.525";
     private const string XpBaseEvidenceId = "fnv-1.4.0.525-gmst-ixpbase-v1";
+    private const string JumpHeightEvidenceId =
+        "fnv-1.4.0.525-gmst-fjumpheightmin-retail-oracle-v1";
     private const string HitPointFormula =
         "baseHealth + endurance * fAVDHealthEnduranceMult + " +
         "(level - 1) * fAVDHealthLevelMult";
@@ -948,6 +950,7 @@ internal sealed record OpeningGameplayVitalsContract(
         "fAVDActionPointsBase + agility * fAVDActionPointsMult";
     private const string ExperienceFormula =
         "(targetLevel - 1) * (((targetLevel - 2) * iXPBumpBase) / 2 + iXPBase)";
+    private const string JumpHeightFormula = "fJumpHeightMin";
     private static readonly string[] RequiredActorValues =
         ["AVHealth", "AVActionPoints", "AVXP", "AVEndurance", "AVAgility"];
     private static readonly string[] RequiredGameSettings =
@@ -958,6 +961,7 @@ internal sealed record OpeningGameplayVitalsContract(
         "fAVDActionPointsMult",
         "iXPBumpBase",
         "iXPBase",
+        "fJumpHeightMin",
     ];
 
     internal static OpeningGameplayVitalsContract Parse(JsonElement source)
@@ -1015,6 +1019,8 @@ internal sealed record OpeningGameplayVitalsContract(
         return result;
     }
 
+    internal double JumpHeightGameUnits => Setting("fJumpHeightMin");
+
     private static OpeningVitalsPlayerBase ParsePlayerBase(JsonElement source) => new(
         source.GetProperty("editorId").GetString()!,
         source.GetProperty("formId").GetString()!,
@@ -1055,7 +1061,8 @@ internal sealed record OpeningGameplayVitalsContract(
             GameSettings.Count != RequiredGameSettings.Length ||
             RequiredGameSettings.Any(value => !GameSettings.ContainsKey(value)) ||
             GameSettings.Values.Any(value => !double.IsFinite(value.Value)) ||
-            GameSettings.Where(value => value.Key != "iXPBase").Any(value =>
+            GameSettings.Where(value =>
+                value.Key is not ("iXPBase" or "fJumpHeightMin")).Any(value =>
                 value.Value.SourceKind != "owned-master-gmst" ||
                 value.Value.FormId is null || value.Value.RecordSha256?.Length != 64 ||
                 FalloutFormId.Normalize(value.Value.FormId) != value.Value.FormId) ||
@@ -1068,10 +1075,20 @@ internal sealed record OpeningGameplayVitalsContract(
                 EvidenceId: XpBaseEvidenceId,
                 Value: 200d,
             } ||
-            Derivations.Count != 3 ||
+            GameSettings["fJumpHeightMin"] is not
+            {
+                SourceKind: "falloutnv-exact-build-engine-default",
+                FormId: null,
+                RecordSha256: null,
+                EngineBuild: ExactEngineBuild,
+                EvidenceId: JumpHeightEvidenceId,
+                Value: 64d,
+            } ||
+            Derivations.Count != 4 ||
             Derivations.GetValueOrDefault("maximumHitPoints") != HitPointFormula ||
             Derivations.GetValueOrDefault("maximumActionPoints") != ActionPointFormula ||
-            Derivations.GetValueOrDefault("experienceThreshold") != ExperienceFormula)
+            Derivations.GetValueOrDefault("experienceThreshold") != ExperienceFormula ||
+            Derivations.GetValueOrDefault("jumpHeightGameUnits") != JumpHeightFormula)
             throw new InvalidOperationException("Owned gameplay-vitals contract is invalid.");
     }
 

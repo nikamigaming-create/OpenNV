@@ -78,6 +78,7 @@ internal sealed record DesktopInputConfiguration(
     DesktopKeyBindingConfiguration MoveRight,
     DesktopKeyBindingConfiguration MoveForward,
     DesktopKeyBindingConfiguration MoveBackward,
+    DesktopKeyBindingConfiguration Jump,
     DesktopKeyBindingConfiguration Activate,
     DesktopKeyBindingConfiguration Grab,
     DesktopKeyBindingConfiguration Reload,
@@ -98,6 +99,7 @@ internal sealed record DesktopInputConfiguration(
             yield return MoveRight;
             yield return MoveForward;
             yield return MoveBackward;
+            yield return Jump;
             yield return Activate;
             yield return Grab;
             yield return Reload;

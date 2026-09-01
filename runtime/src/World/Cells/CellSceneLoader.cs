@@ -249,6 +249,7 @@ internal static class CellSceneLoader
             applyCellEnvironment,
             useClassicDiorama,
             renderBounds,
+            gameplayVitals,
             out var mainLights,
             out var worldEnvironment);
         session.ConfigureWorldContext(
@@ -380,6 +381,7 @@ internal static class CellSceneLoader
         bool applyCellEnvironment,
         bool useClassicDiorama,
         Aabb? renderBounds,
+        OpeningGameplayVitalsContract? gameplayVitals,
         out IReadOnlyList<Light3D> lights,
         out WorldEnvironment? worldEnvironment)
     {
@@ -416,7 +418,8 @@ internal static class CellSceneLoader
             configuration,
             useXr,
             useClassicDiorama,
-            settings);
+            settings,
+            gameplayVitals);
         parent.AddChild(player);
         if (useClassicDiorama)
         {

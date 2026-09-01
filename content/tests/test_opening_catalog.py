@@ -584,12 +584,16 @@ class OpeningCatalogTest(unittest.TestCase):
         self.assertEqual(contract["initialExperiencePoints"], 0)
         self.assertEqual(
             {value["editorId"]: value["value"] for value in contract["gameSettings"]},
-            {**setting_values, "iXPBase": 200},
+            {**setting_values, "iXPBase": 200, "fJumpHeightMin": 64.0},
         )
         self.assertEqual(len(contract["actorValues"]), 5)
         self.assertEqual(
-            contract["gameSettings"][-1]["evidenceId"],
+            contract["gameSettings"][-2]["evidenceId"],
             "fnv-1.4.0.525-gmst-ixpbase-v1",
+        )
+        self.assertEqual(
+            contract["gameSettings"][-1]["evidenceId"],
+            "fnv-1.4.0.525-gmst-fjumpheightmin-retail-oracle-v1",
         )
 
     def test_command_contract_resolves_owned_record_identities(self):

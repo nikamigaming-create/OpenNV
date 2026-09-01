@@ -1,4 +1,5 @@
 import unittest
+import json
 from pathlib import Path
 
 
@@ -128,6 +129,34 @@ class FnvPlayerControlClosureTest(unittest.TestCase):
         self.assertIn("_vitals.HitPoints == _vitals.MaximumHitPoints", session)
         self.assertIn("_vitals.ActionPoints == _vitals.MaximumActionPoints", session)
         self.assertIn("_vitals = expected;", session)
+
+    def test_jump_uses_the_exact_retail_setting_for_flat_and_xr(self):
+        compiler = (
+            ROOT / "content" / "tools" / "opening_catalog.py"
+        ).read_text(encoding="utf-8")
+        player = (
+            ROOT / "runtime" / "src" / "World" / "Cells" / "CellPlayer.cs"
+        ).read_text(encoding="utf-8")
+        configuration = json.loads(
+            (ROOT / "runtime" / "config" / "open-nv-runtime-v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        action_map = (ROOT / "runtime" / "openxr_action_map.tres").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('"fnv-1.4.0.525-gmst-fjumpheightmin-retail-oracle-v1"', compiler)
+        self.assertIn('"editorId": "fJumpHeightMin"', compiler)
+        self.assertIn("gameplayVitals.JumpHeightGameUnits", player)
+        self.assertIn("configuration.World.GameUnitsToMeters", player)
+        self.assertIn("MathF.Sqrt(", player)
+        self.assertEqual(
+            configuration["player"]["desktopInput"]["jump"],
+            {"action": "flat_jump", "physicalKey": "Space"},
+        )
+        self.assertIn('resource_name = "jump"', action_map)
+        self.assertIn('/user/hand/left/input/y/click', action_map)
 
 
 if __name__ == "__main__":

@@ -107,10 +107,14 @@ FACEGEN_SLIDER_INCREMENT_TRAIT = "user6"
 FACEGEN_SLIDER_INCREMENT_DEFAULT_THRESHOLD = 1.0
 FNV_ENGINE_BUILD = "1.4.0.525"
 FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE = "fnv-1.4.0.525-gmst-ixpbase-v1"
+FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN_EVIDENCE = (
+    "fnv-1.4.0.525-gmst-fjumpheightmin-retail-oracle-v1"
+)
 # FalloutNV.exe owns this default; FalloutNV.esm intentionally has no GMST override.
 # The value was recovered from the exact 1.4.0.525 engine setting and is emitted with
 # explicit engine-default provenance, never as a recipe/runtime fallback.
 FNV_ENGINE_DEFAULT_XP_BASE = 200
+FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN = 64.0
 REQUIRED_VITAL_GAME_SETTINGS = (
     "fAVDHealthEnduranceMult",
     "fAVDHealthLevelMult",
@@ -4448,6 +4452,17 @@ def _compile_gameplay_vitals(sources: FlowSourceCatalog) -> dict[str, object]:
             "value": FNV_ENGINE_DEFAULT_XP_BASE,
         }
     )
+    settings.append(
+        {
+            "editorId": "fJumpHeightMin",
+            "formId": None,
+            "recordSha256": None,
+            "sourceKind": "falloutnv-exact-build-engine-default",
+            "engineBuild": FNV_ENGINE_BUILD,
+            "evidenceId": FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN_EVIDENCE,
+            "value": FNV_ENGINE_DEFAULT_JUMP_HEIGHT_MIN,
+        }
+    )
 
     actor_values_by_editor = {
         str(value["editorId"]).casefold(): value for value in sources.actor_values
@@ -4489,6 +4504,7 @@ def _compile_gameplay_vitals(sources: FlowSourceCatalog) -> dict[str, object]:
                 "(targetLevel - 1) * (((targetLevel - 2) * iXPBumpBase) / 2 + "
                 "iXPBase)"
             ),
+            "jumpHeightGameUnits": "fJumpHeightMin",
         },
     }
 

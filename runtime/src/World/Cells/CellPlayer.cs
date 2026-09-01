@@ -9,6 +9,7 @@ using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.Settings;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -75,6 +76,7 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _xrFirePressed;
     private bool _xrSavePressed;
     private bool _xrReloadPressed;
+    private bool _xrJumpPressed;
     private bool _xrSnapTurnReady = true;
     private bool _xrEyeHeightCalibrated;
     private int _xrTrackedFrames;
@@ -95,6 +97,8 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _jamBulletTimeActive;
     private CellPortalTravel? _portalTravel;
     private Vector3? _lastFloorTangentOrigin;
+    private float? _jumpHeightMeters;
+    private bool _jumping;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -264,7 +268,8 @@ internal partial class CellPlayer : CharacterBody3D
         RuntimeConfiguration configuration,
         bool useXr = false,
         bool useClassicDiorama = false,
-        RuntimeSettingsState? settings = null)
+        RuntimeSettingsState? settings = null,
+        OpeningGameplayVitalsContract? gameplayVitals = null)
     {
         if (useXr && useClassicDiorama)
             throw new ArgumentException(
@@ -274,6 +279,11 @@ internal partial class CellPlayer : CharacterBody3D
         _session = session;
         _useXr = useXr;
         _useClassicDiorama = useClassicDiorama;
+        _jumpHeightMeters = gameplayVitals is null
+            ? null
+            : checked((float)(
+                gameplayVitals.JumpHeightGameUnits *
+                configuration.World.GameUnitsToMeters));
         Name = "Player";
         Position = Vector3.Up * (useClassicDiorama
             ? 0.0f
@@ -358,6 +368,7 @@ internal partial class CellPlayer : CharacterBody3D
         if (_jamJbtBulletTime is not null &&
             Input.IsActionJustPressed(JamJbtBulletTimeContract.InputAction))
             SetJamBulletTime(!_jamBulletTimeActive);
+        PollJump();
         var input = ReadMovement();
         var forward = -_camera.GlobalBasis.Z;
         var right = _camera.GlobalBasis.X;
@@ -377,10 +388,12 @@ internal partial class CellPlayer : CharacterBody3D
         var horizontalVelocity = direction * movementSpeed;
         if (!_movementEnabled)
             Velocity = Vector3.Zero;
-        else if (_navigation is not null)
+        else if (_navigation is not null && !_jumping)
             MoveOnOwnedNavigation(horizontalVelocity, (float)delta);
         else
             MoveWithPhysics(horizontalVelocity, (float)delta);
+        if (_jumping && IsOnFloor() && Velocity.Y <= 0.0f)
+            _jumping = false;
         UpdateWeaponFeedback((float)delta);
         if (_useXr)
         {
@@ -440,8 +453,8 @@ internal partial class CellPlayer : CharacterBody3D
         var velocity = Velocity;
         velocity.X = horizontalVelocity.X;
         velocity.Z = horizontalVelocity.Z;
-        velocity.Y = IsOnFloor()
-            ? MathF.Min(velocity.Y, 0.0f)
+        velocity.Y = IsOnFloor() && velocity.Y <= 0.0f
+            ? 0.0f
             : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * delta;
         Velocity = velocity;
         MoveAndSlide();
@@ -497,6 +510,27 @@ internal partial class CellPlayer : CharacterBody3D
             if (!expectedHorizontalMotion.IsZeroApprox())
                 ClearBlockingCollision();
         }
+    }
+
+    private void PollJump()
+    {
+        var requested = _useXr
+            ? _leftGrip!.IsButtonPressed("jump")
+            : Input.IsActionJustPressed(_configuration.Player.DesktopInput.Jump.Action);
+        var pressed = requested && (!_useXr || !_xrJumpPressed);
+        _xrJumpPressed = _useXr && requested;
+        if (!pressed || !_movementEnabled || _jumpHeightMeters is not { } height ||
+            _jumping || (_navigation is null && !IsOnFloor()))
+            return;
+        Velocity = new Vector3(
+            Velocity.X,
+            MathF.Sqrt(
+                2.0f *
+                _configuration.Simulation.GravityMetersPerSecondSquared *
+                height),
+            Velocity.Z);
+        _jumping = true;
+        GD.Print($"OPENNV_PLAYER_JUMP heightMeters={height:F4} useXr={_useXr}");
     }
 
     private bool TryFloorTangentMotion(Vector3 horizontalMotion, float delta)
