@@ -49,6 +49,10 @@ class FnvExteriorSpatialContractTest(unittest.TestCase):
         self.assertIn("POSITION = PROJECTION_MATRIX", night)
         self.assertIn("uniform vec4 stars_encoded", night)
         self.assertIn('environment.SkyModels["nightSky"]', renderer)
+        self.assertIn("content.TextureAssets", renderer)
+        self.assertIn("surface.DiffuseTextureId", renderer)
+        self.assertIn("textureAssets.TryGetValue", renderer)
+        self.assertIn('SetShaderParameter("star_map", starTexture)', renderer)
         self.assertNotIn("Goodsprings", night)
 
     def test_climate_weather_selection_is_source_member_and_explicit_hour(self):

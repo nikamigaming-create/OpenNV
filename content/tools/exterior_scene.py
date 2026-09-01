@@ -139,6 +139,32 @@ def climate_night_sky_model(authored_path: str) -> dict[str, object]:
     }
 
 
+def night_sky_surface_contracts(
+    surfaces: list[dict[str, object]],
+    materials: list[dict[str, object]],
+    semantic: str,
+) -> list[dict[str, object]]:
+    if len(materials) != len(surfaces):
+        raise ValueError("Owned CLMT night sky surfaces and materials differ")
+    result = []
+    for index, (surface, material) in enumerate(zip(surfaces, materials, strict=True)):
+        if int(material["surfaceIndex"]) != index:
+            raise ValueError("Owned CLMT night sky material order differs from its surfaces")
+        texture_id = material.get("diffuseTextureId")
+        if not isinstance(texture_id, str) or not texture_id:
+            raise ValueError("Owned CLMT night sky surface lacks an authored diffuse texture")
+        result.append(
+            {
+                "index": index,
+                "name": surface["name"],
+                "attributes": surface["attributes"],
+                "semantic": semantic,
+                "diffuseTextureId": texture_id,
+            }
+        )
+    return result
+
+
 def unique_texture_manifests(
     manifests: list[dict[str, object]],
 ) -> list[dict[str, object]]:
@@ -702,15 +728,11 @@ def prepare_exterior_scene(
         "assetId": assets[night_path]["id"],
         "model": assets[night_path]["model"],
         "sidecar": assets[night_path]["sidecar"],
-        "surfaces": [
-            {
-                "index": index,
-                "name": surface["name"],
-                "attributes": surface["attributes"],
-                "semantic": str(night_sky_model["surfaceSemantic"]),
-            }
-            for index, surface in enumerate(night_surfaces)
-        ],
+        "surfaces": night_sky_surface_contracts(
+            night_surfaces,
+            assets[night_path]["materials"],
+            str(night_sky_model["surfaceSemantic"]),
+        ),
     }
     terrain_rows = []
     non_geometric_terrain_rows = []

@@ -15,6 +15,7 @@ from exterior_scene import (  # noqa: E402
     climate_night_sky_model,
     environment_sky_models,
     loaded_grid_coordinates,
+    night_sky_surface_contracts,
     reference_grid,
     single_master_landscape_identity,
 )
@@ -31,6 +32,29 @@ class PrepareExteriorCellTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "owned NIF"):
             climate_night_sky_model("sky/stars.dds")
+
+    def test_night_sky_surface_joins_its_authored_texture_identity(self) -> None:
+        surfaces = [{"name": "Stars:0", "attributes": ["POSITION", "TEXCOORD_0"]}]
+        materials = [{"surfaceIndex": 0, "diffuseTextureId": "owned-stars"}]
+
+        self.assertEqual(
+            night_sky_surface_contracts(surfaces, materials, "night-sky"),
+            [
+                {
+                    "index": 0,
+                    "name": "Stars:0",
+                    "attributes": ["POSITION", "TEXCOORD_0"],
+                    "semantic": "night-sky",
+                    "diffuseTextureId": "owned-stars",
+                }
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "authored diffuse texture"):
+            night_sky_surface_contracts(
+                surfaces,
+                [{"surfaceIndex": 0, "diffuseTextureId": None}],
+                "night-sky",
+            )
 
     def test_route_exterior_positions_select_only_owned_persistent_references(self) -> None:
         positions = route_exterior_positions(

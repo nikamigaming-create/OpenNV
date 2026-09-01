@@ -250,7 +250,11 @@ internal static class RetailEnvironmentRenderer
 
         var atmosphere = AddAtmosphere(host, environmentCatalog, resolved, configuration);
         var clouds = AddClouds(host, environmentCatalog, resolved, configuration);
-        var nightSky = AddNightSky(host, environmentCatalog, resolved);
+        var nightSky = AddNightSky(
+            host,
+            environmentCatalog,
+            resolved,
+            content.TextureAssets);
         var imageSpace = RetailImageSpaceRenderer.Apply(
             worldEnvironment,
             resolved.ImageSpace,
@@ -286,11 +290,12 @@ internal static class RetailEnvironmentRenderer
         Node3D host,
         RetailExteriorEnvironment environment,
         RetailExteriorEnvironment.ResolvedEnvironment resolved,
+        IReadOnlyDictionary<string, Texture2D> textureAssets,
         RuntimeConfiguration configuration)
     {
         var atmosphere = AddAtmosphere(host, environment, resolved, configuration);
         var clouds = AddClouds(host, environment, resolved, configuration);
-        var nightSky = AddNightSky(host, environment, resolved);
+        var nightSky = AddNightSky(host, environment, resolved, textureAssets);
         return new SkyApplication(
             atmosphere.SourceSha256,
             clouds.SourceSha256,
@@ -301,7 +306,8 @@ internal static class RetailEnvironmentRenderer
     private static VerifiedGltfLoader.LoadedGltf AddNightSky(
         Node3D host,
         RetailExteriorEnvironment environment,
-        RetailExteriorEnvironment.ResolvedEnvironment resolved)
+        RetailExteriorEnvironment.ResolvedEnvironment resolved,
+        IReadOnlyDictionary<string, Texture2D> textureAssets)
     {
         var evidence = environment.SkyModels["nightSky"];
         var loaded = VerifiedGltfLoader.Load(evidence.ModelPath, evidence.SidecarPath);
@@ -315,7 +321,8 @@ internal static class RetailEnvironmentRenderer
         {
             if (surface.Semantic != "night-sky" ||
                 mesh.Mesh.SurfaceGetMaterial(surface.Index) is not StandardMaterial3D material ||
-                material.AlbedoTexture is null)
+                string.IsNullOrEmpty(surface.DiffuseTextureId) ||
+                !textureAssets.TryGetValue(surface.DiffuseTextureId, out var starTexture))
                 throw new InvalidOperationException(
                     "Owned CLMT night-sky surface lacks its authored star texture.");
             var shader = new ShaderMaterial
@@ -323,7 +330,7 @@ internal static class RetailEnvironmentRenderer
                 Shader = new Shader { Code = NightSkyShaderSource },
                 RenderPriority = material.RenderPriority,
             };
-            shader.SetShaderParameter("star_map", material.AlbedoTexture);
+            shader.SetShaderParameter("star_map", starTexture);
             shader.SetShaderParameter("stars_encoded", resolved.StarsEncoded);
             mesh.SetSurfaceOverrideMaterial(surface.Index, shader);
         }

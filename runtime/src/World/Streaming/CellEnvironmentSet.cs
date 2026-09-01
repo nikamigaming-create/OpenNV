@@ -126,6 +126,7 @@ internal sealed class CellEnvironmentSet
             content.Root,
             catalog,
             resolved,
+            content.TextureAssets,
             configuration);
         return new State(
             content.FormId,

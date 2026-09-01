@@ -147,8 +147,11 @@ internal sealed class RetailExteriorEnvironment
         if (textures.Keys.Intersect(missing, StringComparer.Ordinal).Any())
             throw new InvalidOperationException(
                 "Environment texture cannot be both decoded and authored-missing.");
+        var sceneTextureIds = scene.GetProperty("textures").EnumerateArray()
+            .Select(value => RequireText(value, "id"))
+            .ToHashSet(StringComparer.Ordinal);
         var skyModels = source.GetProperty("skyModels").EnumerateObject()
-            .Select(ParseSkyModel)
+            .Select(value => ParseSkyModel(value, sceneTextureIds))
             .ToDictionary(value => value.Role, StringComparer.Ordinal);
         if (!skyModels.ContainsKey("atmosphere") || !skyModels.ContainsKey("clouds") ||
             !skyModels.ContainsKey("nightSky"))
@@ -464,7 +467,9 @@ internal sealed class RetailExteriorEnvironment
             hash);
     }
 
-    private static SkyModelEvidence ParseSkyModel(JsonProperty property)
+    private static SkyModelEvidence ParseSkyModel(
+        JsonProperty property,
+        IReadOnlySet<string> sceneTextureIds)
     {
         var source = property.Value;
         var surfaces = source.GetProperty("surfaces").EnumerateArray()
@@ -474,7 +479,11 @@ internal sealed class RetailExteriorEnvironment
                 value.GetProperty("attributes").EnumerateArray()
                     .Select(attribute => attribute.GetString() ?? "")
                     .ToArray(),
-                RequireText(value, "semantic")))
+                RequireText(value, "semantic"),
+                value.TryGetProperty("diffuseTextureId", out var textureId) &&
+                    textureId.ValueKind == JsonValueKind.String
+                    ? textureId.GetString()
+                    : null))
             .ToArray();
         if (surfaces.Length == 0 ||
             !surfaces.Select(value => value.Index).SequenceEqual(Enumerable.Range(0, surfaces.Length)) ||
@@ -491,6 +500,11 @@ internal sealed class RetailExteriorEnvironment
             (surfaces.Length != 1 || surfaces[0].Semantic != "atmosphere"))
             throw new InvalidOperationException(
                 "Owned atmosphere model lacks its exact semantic surface route.");
+        if (property.Name == "nightSky" && surfaces.Any(surface =>
+                string.IsNullOrEmpty(surface.DiffuseTextureId) ||
+                !sceneTextureIds.Contains(surface.DiffuseTextureId)))
+            throw new InvalidOperationException(
+                "Owned night-sky surface texture is absent from the CELL texture inventory.");
         return new SkyModelEvidence(
             property.Name,
             CanonicalPath(source.GetProperty("authoredPath").GetString()),
@@ -668,7 +682,8 @@ internal sealed class RetailExteriorEnvironment
         int Index,
         string Name,
         IReadOnlyList<string> Attributes,
-        string Semantic);
+        string Semantic,
+        string? DiffuseTextureId);
 
     internal readonly record struct ResolvedEnvironment(
         uint WeatherFormId,
