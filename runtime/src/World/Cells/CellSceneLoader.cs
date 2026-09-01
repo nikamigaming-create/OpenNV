@@ -85,6 +85,7 @@ internal static class CellSceneLoader
             gameplayUi,
             gameplayVitals);
         parent.AddChild(session);
+        var textureCache = new RuntimeMaterialLoader.TextureCache();
         var main = CellContentLoader.Load(
             resolvedScenePath,
             parent,
@@ -95,7 +96,8 @@ internal static class CellSceneLoader
             actorScenesManifestPath,
             proofEnableActor,
             buildCollision,
-            1u);
+            1u,
+            textureCache);
         if (enableFirstPersonPresentation && main.StartingLoadout is { } loadout)
         {
             session.PrepareStartingLoadout(new GameplaySession.StartingWeapon(
@@ -130,7 +132,8 @@ internal static class CellSceneLoader
                     actorScenesManifestPath,
                     proofEnableActor,
                     buildCollision,
-                    renderLayer);
+                    renderLayer,
+                    textureCache);
                 if (!Mathf.IsEqualApprox(linked.UnitsToMeters, main.UnitsToMeters))
                     throw new InvalidOperationException("Linked CELL unit scales do not match.");
                 var fromDoorId = link.GetProperty("fromDoorReferenceFormId").GetString()!;
@@ -218,6 +221,9 @@ internal static class CellSceneLoader
                     normalAgreement));
             }
         }
+        GD.Print(
+            $"OPENNV_CELL_TEXTURE_CACHE unique={textureCache.UniqueTextures} " +
+            $"reused={textureCache.ReusedTextures} scope=prepared-cell-route");
 
         var allDoors = main.Doors
             .Concat(linkedCells.SelectMany(value => value.Content.Doors))

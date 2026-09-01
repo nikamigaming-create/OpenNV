@@ -33,7 +33,8 @@ internal static class CellContentLoader
         string? actorScenesManifestPath,
         bool proofEnableActor,
         bool buildCollision,
-        uint renderLayer)
+        uint renderLayer,
+        RuntimeMaterialLoader.TextureCache? textureCache = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -50,7 +51,10 @@ internal static class CellContentLoader
         var doorArticulations = new Dictionary<string, DoorArticulationContract>(StringComparer.Ordinal);
         try
         {
-            var textures = RuntimeMaterialLoader.LoadTextures(source, configuration.Renderer);
+            var textures = RuntimeMaterialLoader.LoadTextures(
+                source,
+                configuration.Renderer,
+                textureCache);
             var materialBindings = 0;
             var defaultCompiler = source.GetProperty("compiler");
             foreach (var asset in source.GetProperty("assets").EnumerateArray())
