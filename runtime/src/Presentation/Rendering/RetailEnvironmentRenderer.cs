@@ -361,6 +361,7 @@ internal static class RetailEnvironmentRenderer
                 Name = $"WTHR_{resolved.WeatherFormId:X8}_CloudLayer_{layer}",
                 Mesh = mesh.Mesh,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                ExtraCullMargin = SourceGeometryCullMargin(mesh.Mesh),
             };
             foreach (var surface in evidence.Surfaces)
                 layerMesh.SetSurfaceOverrideMaterial(surface.Index, InvisibleMaterial());
@@ -375,6 +376,17 @@ internal static class RetailEnvironmentRenderer
         loaded.Scene.Free();
         host.AddChild(cloudRoot);
         return new CloudApplication(loaded.SourceSha256, layers);
+    }
+
+    private static float SourceGeometryCullMargin(Mesh mesh)
+    {
+        var bounds = mesh.GetAabb();
+        var margin = bounds.Size.Length();
+        if (!bounds.Position.IsFinite() || !bounds.Size.IsFinite() ||
+            !float.IsFinite(margin) || margin <= 0.0f)
+            throw new InvalidOperationException(
+                "Owned sky geometry has no finite culling extent.");
+        return margin;
     }
 
     private static ShaderMaterial InvisibleMaterial() => new()
