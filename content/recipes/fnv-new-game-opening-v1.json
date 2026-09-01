@@ -18,10 +18,15 @@
     "VCG02SunnySmilesDialogueStart",
     "VCG02SunnyTravelToWell1",
     "VCG02SunnySmilesDialogueSneakStart",
+    "VCG02SunnySneakCloserToWell",
     "VCG02SunnyPatrolTriggerSCRIPT",
     "VCG02SunnyPatrolTriggerREF",
     "VCG02SunnyBark",
     "VCG02SunnyShotReaction",
+    "VCG02GeckoDeathSCRIPT",
+    "VCG02CrGecko",
+    "VCG02Gecko1REF",
+    "VCG02Gecko2REF",
     "VCG02BottleMarkerREF",
     "VCG02TargetSCRIPT",
     "CondNVVarmintRifleLoot",
@@ -409,7 +414,8 @@
           "VCG02SunnyTravelOutside",
           "VCG02SunnySmilesDialogueStart",
           "VCG02SunnyTravelToWell1",
-          "VCG02SunnySmilesDialogueSneakStart"
+          "VCG02SunnySmilesDialogueSneakStart",
+          "VCG02SunnySneakCloserToWell"
         ],
         "arrivalTransitions": [
           {
@@ -441,6 +447,12 @@
         "scriptEditorId": "VCG02TargetSCRIPT",
         "enableParentEditorId": "VCG02BottleMarkerREF",
         "reactionTopicEditorId": "VCG02SunnyShotReaction"
+      }
+    ],
+    "combatEncounters": [
+      {
+        "deathScriptEditorId": "VCG02GeckoDeathSCRIPT",
+        "referenceEditorIds": ["VCG02Gecko1REF", "VCG02Gecko2REF"]
       }
     ],
     "menus": {

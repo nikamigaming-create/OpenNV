@@ -11,6 +11,7 @@ TOOLS = ROOT / "content" / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from opening_catalog import (
+    _compile_combat_encounters,
     _compile_ordinary_quests,
     _compile_hit_target_sets,
     _compile_package_dialogue_closure,
@@ -208,6 +209,68 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         self.assertEqual(3, result["threshold"])
         self.assertEqual(62, result["tutorialStage"])
 
+    def test_compiles_creature_health_ai_and_on_death_counter(self) -> None:
+        death_source = """
+        BEGIN OnDeath
+          set VCG02.nGeckosKilled to VCG02.nGeckosKilled + 1
+          if (GetObjectiveDisplayed VCG02 30 == 0 && GetStage VCG02 < 45)
+            SetStage VCG02 45
+          endif
+          if (VCG02.nGeckosKilled == 2 && GetObjectiveCompleted VCG02 30 == 0)
+            SetStage VCG02 50
+            SunnyREF.ResetAI
+          endif
+        END
+        """
+        creature = record(
+            "CREA",
+            "0010a1f7",
+            "VCG02CrGecko",
+            links=[
+                {"signature": "SCRI", "formId": "0010a1f2"},
+                {"signature": "PKID", "formId": "00025482"},
+            ],
+        )
+        creature["creature"] = {"maximumHealth": 20, "attackDamage": 5}
+        records = [
+            record("SCPT", "0010a1f2", "VCG02GeckoDeathSCRIPT", source=death_source),
+            creature,
+            record("PACK", "00025482", "DefaultPatrolCasual"),
+            record(
+                "ACRE",
+                "0010a1fe",
+                "VCG02Gecko1REF",
+                links=[{"signature": "NAME", "formId": "0010a1f7"}],
+            ),
+            record(
+                "ACRE",
+                "0010a1fd",
+                "VCG02Gecko2REF",
+                links=[{"signature": "NAME", "formId": "0010a1f7"}],
+            ),
+            record("ACHR", "00104e85", "SunnyREF"),
+        ]
+        quests = [{
+            "formId": "0010a214",
+            "editorId": "VCG02",
+            "variables": [{"index": 3, "name": "nGeckosKilled"}],
+        }]
+
+        encounter = _compile_combat_encounters(
+            records,
+            [{
+                "deathScriptEditorId": "VCG02GeckoDeathSCRIPT",
+                "referenceEditorIds": ["VCG02Gecko1REF", "VCG02Gecko2REF"],
+            }],
+            quests,
+        )[0]
+
+        self.assertEqual(45, encounter["minimumCombatStage"])
+        self.assertEqual(50, encounter["completionStage"])
+        self.assertEqual(2, encounter["threshold"])
+        self.assertEqual(20, encounter["targets"][0]["maximumHealth"])
+        self.assertEqual(5, encounter["targets"][0]["attackDamage"])
+
     def test_preserves_source_result_guards_and_resolves_leveled_grant(self) -> None:
         commands = _script_commands(
             """
@@ -314,6 +377,10 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         )
         self.assertEqual(
             "VCG02", recipe["newGameFlow"]["ordinaryActors"][0]["questEditorId"]
+        )
+        self.assertIn(
+            "VCG02SunnySneakCloserToWell",
+            recipe["newGameFlow"]["ordinaryActors"][0]["packageEditorIds"],
         )
 
     def test_compiles_ordered_activation_topic_info_and_source_results(self) -> None:

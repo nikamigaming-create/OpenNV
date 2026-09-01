@@ -37,11 +37,13 @@ internal sealed record OpeningCampaignState(
 {
     internal const string ExpectedSchema = "opennv-opening-campaign-state/v7";
 
-    internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
-    internal OpeningGuidePackageState? GuidePackage { get; init; }
-    internal IReadOnlyDictionary<string, OpeningTransformState> OrdinaryActorTransforms
+    public OpeningEquippedWeaponState? EquippedWeapon { get; init; }
+    public OpeningGuidePackageState? GuidePackage { get; init; }
+    public IReadOnlyDictionary<string, OpeningTransformState> OrdinaryActorTransforms
     { get; init; } = new Dictionary<string, OpeningTransformState>(
             StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, int> CombatHealthByReferenceFormId
+    { get; init; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
     internal static OpeningCampaignState Parse(JsonElement source)
     {
@@ -90,8 +92,10 @@ internal sealed record OpeningCampaignState(
                 weapon.ValueKind == JsonValueKind.Object
                 ? OpeningEquippedWeaponState.Parse(weapon)
                 : null,
-            GuidePackage = OpeningGuidePackageState.Parse(
-                source.GetProperty(nameof(GuidePackage))),
+            GuidePackage = source.TryGetProperty(
+                    nameof(GuidePackage), out var guidePackage)
+                ? OpeningGuidePackageState.Parse(guidePackage)
+                : null,
             OrdinaryActorTransforms = source.TryGetProperty(
                     nameof(OrdinaryActorTransforms), out var ordinaryTransforms)
                 ? ordinaryTransforms.EnumerateObject().ToDictionary(
@@ -100,6 +104,10 @@ internal sealed record OpeningCampaignState(
                     StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, OpeningTransformState>(
                     StringComparer.OrdinalIgnoreCase),
+            CombatHealthByReferenceFormId = source.TryGetProperty(
+                    nameof(CombatHealthByReferenceFormId), out var combatHealth)
+                ? ReadIntDictionary(combatHealth)
+                : new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
         };
         result.Validate();
         return result;
@@ -152,6 +160,10 @@ internal sealed record OpeningCampaignState(
                 "Saved ordinary actor transform identity is invalid.");
         foreach (var transform in OrdinaryActorTransforms.Values)
             transform.Validate();
+        if (CombatHealthByReferenceFormId.Any(value =>
+                FalloutFormId.Normalize(value.Key) != value.Key || value.Value < 0))
+            throw new InvalidOperationException(
+                "Saved ordinary combat health is invalid.");
         if (EquippedWeapon is { } weapon &&
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>

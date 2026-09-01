@@ -377,6 +377,33 @@ internal partial class OpeningQuestRuntime
                 var source = sourceCommand.Value;
                 switch (source.Kind)
                 {
+                    case "sayTo":
+                        {
+                            var speaker = _flow.OrdinaryActors.SingleOrDefault(actor =>
+                                _flow.SceneRoles[actor.Role].EditorId.Equals(
+                                    source.SpeakerEditorId,
+                                    StringComparison.OrdinalIgnoreCase) &&
+                                actor.Topics.Values.Any(topic => topic.EditorId.Equals(
+                                    source.TopicEditorId,
+                                    StringComparison.OrdinalIgnoreCase)));
+                            if (source.TopicEditorId is null || speaker is null ||
+                                index != commands.Length - 1)
+                                throw new InvalidOperationException(
+                                    "Owned ordinary SayTo command must terminate its stage program.");
+                            _generation++;
+                            var generation = _generation;
+                            PlayTopicEditor(
+                                source.TopicEditorId,
+                                () =>
+                                {
+                                    if (generation != _generation)
+                                        return;
+                                    _loaded.Session.StoreOpeningState(CaptureState(true));
+                                    EvaluateOrdinaryActorPackages();
+                                },
+                                generation);
+                            break;
+                        }
                     case "objective":
                         ApplyObjective(source);
                         break;
@@ -395,6 +422,8 @@ internal partial class OpeningQuestRuntime
                 }
                 return true;
             });
+            if (sourceCommands[index].Kind == "sayTo")
+                return;
         }
     }
 
@@ -613,6 +642,12 @@ internal partial class OpeningQuestRuntime
                     value.ReferenceFormId,
                     StringComparison.OrdinalIgnoreCase)).Placement),
             StringComparer.OrdinalIgnoreCase),
+        CombatHealthByReferenceFormId = _combatHealthByReferenceFormId
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => value.Value,
+                StringComparer.OrdinalIgnoreCase),
     };
 
     internal static bool MatchesFlow(
@@ -704,6 +739,17 @@ internal partial class OpeningQuestRuntime
                     flow.OrdinaryActors.Select(value => value.ReferenceFormId)))
             throw new InvalidOperationException(
                 "Saved ordinary actor transforms do not match the owned flow.");
+        var combatTargets = flow.CombatEncounters.SelectMany(value => value.Targets)
+            .ToDictionary(
+                value => value.ReferenceFormId,
+                StringComparer.OrdinalIgnoreCase);
+        if (state.CombatHealthByReferenceFormId.Count != 0 &&
+            (!state.CombatHealthByReferenceFormId.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys) ||
+             state.CombatHealthByReferenceFormId.Any(value =>
+                 value.Value > combatTargets[value.Key].MaximumHealth)))
+            throw new InvalidOperationException(
+                "Saved ordinary combat health does not match the owned flow.");
         if (state.Completed)
             ValidateCompletedState(flow, state);
     }
@@ -933,6 +979,10 @@ internal partial class OpeningQuestRuntime
         Replace(_inventory, state.Inventory, value => value.FormId);
         Replace(_equippedItemFormIds, state.EquippedItemFormIds);
         _equippedWeaponState = state.EquippedWeapon;
+        if (state.CombatHealthByReferenceFormId.Count != 0)
+            Replace(
+                _combatHealthByReferenceFormId,
+                state.CombatHealthByReferenceFormId);
         Replace(_destroyedReferences, state.DestroyedReferenceFormIds);
         Replace(_referenceEnabledStates, state.ReferenceEnabledStates);
         _autoDisplayObjectives = state.AutoDisplayObjectives;
@@ -959,6 +1009,7 @@ internal partial class OpeningQuestRuntime
                     target.ReferenceFormId.Equals(
                         reference, StringComparison.OrdinalIgnoreCase))))
                 SetReferenceVisibility(reference, false, false);
+        PublishCombatActors();
     }
 
     private static void Replace<T>(HashSet<T> target, IEnumerable<T> source)

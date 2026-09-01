@@ -387,6 +387,27 @@ internal sealed record OpeningHitTargetSet(
 
 internal sealed record OpeningHitTarget(string ReferenceFormId, string BaseFormId);
 
+internal sealed record OpeningCombatEncounter(
+    string DeathScriptFormId,
+    string DeathScriptEditorId,
+    string QuestFormId,
+    int QuestVariableIndex,
+    string QuestVariableName,
+    int CounterIncrement,
+    int Threshold,
+    int ObjectiveIndex,
+    int MinimumCombatStage,
+    int CompletionStage,
+    string ResetActorReferenceFormId,
+    IReadOnlyList<OpeningCombatTarget> Targets);
+
+internal sealed record OpeningCombatTarget(
+    string ReferenceFormId,
+    string BaseFormId,
+    int MaximumHealth,
+    int AttackDamage,
+    IReadOnlyList<string> PackageFormIds);
+
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
 internal sealed record OpeningCommandContract(

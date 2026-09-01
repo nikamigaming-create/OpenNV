@@ -76,6 +76,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _referenceEnabledStates =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _combatHealthByReferenceFormId =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> _faceGeometryControlValues =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _faceTextureControlValues =
@@ -866,6 +868,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
         _loaded.Session.SetHitscanHitHandler(HandleHitscanHit);
+        InitializeCombatActors();
         foreach (var activator in _loaded.MainContent.PlacedReferences
                      .Select(reference => reference.Placement)
                      .OfType<ScriptedActivatorInstance>())

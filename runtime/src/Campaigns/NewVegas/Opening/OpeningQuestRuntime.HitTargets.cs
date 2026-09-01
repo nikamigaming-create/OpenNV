@@ -53,7 +53,7 @@ internal partial class OpeningQuestRuntime
             _loaded.Session.StoreOpeningState(CaptureState(true));
             return true;
         }
-        return false;
+        return HandleCombatActorHit(hit);
     }
 
     private Node3D? FindPlacedReference(string referenceFormId) =>

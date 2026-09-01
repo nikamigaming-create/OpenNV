@@ -53,6 +53,9 @@ PLAYER_BASE_LEVEL_OFFSET = 8
 PLAYER_BASE_HEALTH_OFFSET = 0
 PLAYER_BASE_ACBS_BYTES = 24
 PLAYER_BASE_DATA_MINIMUM_BYTES = 11
+CREATURE_DATA_BYTES = 17
+CREATURE_HEALTH_OFFSET = 4
+CREATURE_ATTACK_DAMAGE_OFFSET = 8
 RACE_DATA_BYTES = 36
 RACE_FLAGS_OFFSET = 32
 RACE_PLAYABLE_FLAG = 0x01
@@ -647,6 +650,7 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
         primitive = None
         leveled_entries: list[dict[str, object]] = []
         weapon = None
+        creature = None
         inventory: list[dict[str, object]] = []
         for subrecord in iter_subrecords(record):
             inventory.append(
@@ -682,6 +686,17 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                     "boundsGameUnits": list(primitive_values[:3]),
                     "colorRgba": list(primitive_values[3:REFERENCE_PRIMITIVE_FLOAT_COUNT]),
                     "type": primitive_values[REFERENCE_PRIMITIVE_FLOAT_COUNT],
+                }
+            if record.signature == "CREA" and subrecord.signature == "DATA":
+                if len(subrecord.data) != CREATURE_DATA_BYTES or creature is not None:
+                    raise ValueError(
+                        f"Owned creature DATA differs: {form_id_text(record.form_id)}"
+                    )
+                creature = {
+                    "maximumHealth": struct.unpack_from(
+                        "<H", subrecord.data, CREATURE_HEALTH_OFFSET
+                    )[0],
+                    "attackDamage": subrecord.data[CREATURE_ATTACK_DAMAGE_OFFSET],
                 }
             if record.signature == "LVLI" and subrecord.signature == "LVLO":
                 if len(subrecord.data) != LEVELED_ITEM_ENTRY_BYTES:
@@ -765,6 +780,7 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                 "primitive": primitive,
                 "leveledEntries": leveled_entries,
                 "weapon": weapon,
+                "creature": creature,
                 "questStageScripts": stage_scripts,
                 "questObjectives": quest_objectives,
                 "subrecords": inventory,
@@ -7166,6 +7182,146 @@ def _compile_hit_target_sets(
     return results
 
 
+def _compile_combat_encounters(
+    records: list[dict[str, object]],
+    configurations: Iterable[object],
+    ordinary_quests: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    results = []
+    records_by_form = {
+        str(record["formId"]).casefold(): record for record in records
+    }
+    for source_configuration in configurations:
+        configuration = dict(source_configuration)
+        script = _unique_manifest_record(
+            records, str(configuration["deathScriptEditorId"]), "SCPT"
+        )
+        sources = _record_text_values(script, "SCTX")
+        if len(sources) != 1:
+            raise ValueError("Owned combat death script source is ambiguous")
+        source = sources[0]
+        increment = re.search(
+            r"set\s+(?P<quest>\w+)\.n(?P<variable>\w+)\s+to\s+"
+            r"(?P=quest)\.n(?P=variable)\s*\+\s*(?P<increment>\d+)",
+            source,
+            re.IGNORECASE,
+        )
+        early_stage = re.search(
+            r"if\s*\(GetObjectiveDisplayed\s+(?P<quest>\w+)\s+"
+            r"(?P<objective>\d+)\s*==\s*0\s*&&\s*GetStage\s+(?P=quest)\s*<\s*"
+            r"(?P<minimum>\d+)\).*?SetStage\s+(?P=quest)\s+"
+            r"(?P<stage>\d+).*?endif",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        completion = re.search(
+            r"if\s*\((?P<quest>\w+)\.n(?P<variable>\w+)\s*==\s*"
+            r"(?P<threshold>\d+)\s*&&\s*GetObjectiveCompleted\s+(?P=quest)\s+"
+            r"(?P<objective>\d+)\s*==\s*0\).*?SetStage\s+(?P=quest)\s+"
+            r"(?P<stage>\d+).*?(?P<reset_actor>\w+)\.ResetAI.*?endif",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not increment or not early_stage or not completion:
+            raise ValueError("Owned combat death semantics differ")
+        quest_editor_id = increment["quest"]
+        variable_name = f"n{increment['variable']}"
+        if (
+            int(increment["increment"]) <= 0
+            or early_stage["quest"].casefold() != quest_editor_id.casefold()
+            or completion["quest"].casefold() != quest_editor_id.casefold()
+            or f"n{completion['variable']}".casefold() != variable_name.casefold()
+            or int(early_stage["objective"]) != int(completion["objective"])
+            or int(early_stage["minimum"]) != int(early_stage["stage"])
+            or int(completion["threshold"]) <= 0
+        ):
+            raise ValueError("Owned combat death transition differs")
+        quest = next(
+            (
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold() == quest_editor_id.casefold()
+            ),
+            None,
+        )
+        if quest is None:
+            raise ValueError("Owned combat quest is absent")
+        variables = {
+            str(value["name"]).casefold(): value for value in quest["variables"]
+        }
+        variable = variables.get(variable_name.casefold())
+        if variable is None:
+            raise ValueError("Owned combat death counter is absent")
+        reset_actor = _unique_manifest_record(
+            records, completion["reset_actor"], "ACHR"
+        )
+        targets = []
+        for reference_editor_id in configuration["referenceEditorIds"]:
+            reference = _unique_manifest_record(
+                records, str(reference_editor_id), "ACRE"
+            )
+            base_links = [
+                link for link in reference["links"] if link["signature"] == "NAME"
+            ]
+            if len(base_links) != 1:
+                raise ValueError("Owned combat actor base identity is ambiguous")
+            base = records_by_form.get(str(base_links[0]["formId"]).casefold())
+            if base is None or base["recordType"] != "CREA":
+                raise ValueError("Owned combat creature base is absent")
+            if not any(
+                link["signature"] == "SCRI"
+                and str(link["formId"]).casefold()
+                == str(script["formId"]).casefold()
+                for link in base["links"]
+            ):
+                raise ValueError("Owned combat creature death script differs")
+            creature = base.get("creature")
+            if (
+                not isinstance(creature, dict)
+                or int(creature.get("maximumHealth", 0)) <= 0
+                or int(creature.get("attackDamage", 0)) <= 0
+            ):
+                raise ValueError("Owned combat creature stats are absent")
+            package_form_ids = [
+                str(link["formId"])
+                for link in base["links"]
+                if link["signature"] == "PKID"
+            ]
+            if not package_form_ids or any(
+                records_by_form.get(form_id.casefold(), {}).get("recordType") != "PACK"
+                for form_id in package_form_ids
+            ):
+                raise ValueError("Owned combat creature AI packages are absent")
+            targets.append(
+                {
+                    "referenceFormId": reference["formId"],
+                    "baseFormId": base["formId"],
+                    "maximumHealth": int(creature["maximumHealth"]),
+                    "attackDamage": int(creature["attackDamage"]),
+                    "packageFormIds": package_form_ids,
+                }
+            )
+        if len(targets) != len(configuration["referenceEditorIds"]):
+            raise ValueError("Owned combat creature reference set differs")
+        results.append(
+            {
+                "deathScriptFormId": script["formId"],
+                "deathScriptEditorId": str(configuration["deathScriptEditorId"]),
+                "questFormId": quest["formId"],
+                "questVariableIndex": int(variable["index"]),
+                "questVariableName": str(variable["name"]),
+                "counterIncrement": int(increment["increment"]),
+                "threshold": int(completion["threshold"]),
+                "objectiveIndex": int(early_stage["objective"]),
+                "minimumCombatStage": int(early_stage["minimum"]),
+                "completionStage": int(completion["stage"]),
+                "resetActorReferenceFormId": reset_actor["formId"],
+                "targets": targets,
+            }
+        )
+    return results
+
+
 def compile_new_game_flow(
     master_path: Path,
     ui_archive_path: Path,
@@ -7669,6 +7825,31 @@ def compile_new_game_flow(
         ordinary_quests,
         ordinary_actors,
     )
+    for command in (
+        command
+        for quest_row in ordinary_quests
+        for stage in quest_row["stages"]
+        for command in stage["commands"]
+        if command["kind"] == "sayTo"
+    ):
+        matches = [
+            actor
+            for actor in ordinary_actors
+            if str(role_by_name[str(actor["role"])]["editorId"]).casefold()
+            == str(command["speakerEditorId"]).casefold()
+            and any(
+                str(topic["editorId"]).casefold()
+                == str(command["topicEditorId"]).casefold()
+                for topic in actor["topics"]
+            )
+        ]
+        if len(matches) != 1 or str(command["targetEditorId"]).casefold() != "player":
+            raise ValueError("Owned ordinary stage dialogue speaker differs")
+    combat_encounters = _compile_combat_encounters(
+        records,
+        flow.get("combatEncounters", []),
+        ordinary_quests,
+    )
     flow_commands = _all_flow_commands(programs, dialogue)
     command_contract = _resolve_command_record_identities(flow_commands, records)
     player_animation = _compile_player_animation_graph(
@@ -7820,6 +8001,7 @@ def compile_new_game_flow(
             "ordinaryQuests": ordinary_quests,
             "ordinaryActors": ordinary_actors,
             "hitTargetSets": hit_target_sets,
+            "combatEncounters": combat_encounters,
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
             "guideActorAi": guide_actor_ai,
