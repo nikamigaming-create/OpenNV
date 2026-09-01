@@ -137,6 +137,22 @@ test("flat and OpenXR launches separate engine and game arguments", () => {
   );
 });
 
+test("bounded New Vegas hot-play profile is explicit in the runtime handoff", () => {
+  const profile = {
+    ready: true,
+    cacheRoot: "D:\\cache\\newvegas-bounded-default",
+    savePath: "D:\\profiles\\courier-v1.json",
+    boundedDefaultProfile: true
+  };
+  const flat = validateLaunchRequest({ campaign: "newvegas" });
+  assert.deepEqual(createRuntimeArguments(flat, { newVegasProfile: profile }), [
+    "--xr-mode", "off", "--", "--reuse-cache",
+    "--cache-root", profile.cacheRoot,
+    "--opening-menu", "--save-path", profile.savePath,
+    "--bounded-default-profile"
+  ]);
+});
+
 test("standalone routes cannot inherit TTW sources or each other's saves", () => {
   const newVegas = {
     ready: true,

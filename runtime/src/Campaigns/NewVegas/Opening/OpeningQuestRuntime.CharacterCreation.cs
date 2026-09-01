@@ -310,6 +310,20 @@ internal partial class OpeningQuestRuntime
         Action showEyes = null!;
         Action showFace = null!;
         Action showBody = null!;
+        var admittedPreviews = appearance.FaceGen.PreviewHead.Previews;
+        bool IsAdmitted(
+            string sex,
+            string race,
+            string? hair = null,
+            string? eyes = null) => admittedPreviews.Any(preview =>
+                preview.Sex.Equals(sex, StringComparison.OrdinalIgnoreCase) &&
+                preview.RaceFormId.Equals(race, StringComparison.OrdinalIgnoreCase) &&
+                (hair is null || preview.HairFormId.Equals(
+                    hair,
+                    StringComparison.OrdinalIgnoreCase)) &&
+                (eyes is null || preview.EyesFormId.Equals(
+                    eyes,
+                    StringComparison.OrdinalIgnoreCase)));
 
         showSex = () => _raceSexMenuHost!.ShowList(
             "sex",
@@ -320,13 +334,17 @@ internal partial class OpeningQuestRuntime
                     false,
                     false,
                     () => { }),
-                .. _flow.Character.SexChoices.Select((label, index) =>
+                .. _flow.Character.SexChoices.Select((label, index) => (label, index))
+                    .Where(choice => admittedPreviews.Any(preview => preview.Sex.Equals(
+                        appearance.SexEngineValues[choice.index],
+                        StringComparison.OrdinalIgnoreCase)))
+                    .Select(choice =>
                 {
-                    var choiceIndex = index;
+                    var choiceIndex = choice.index;
                     return new OpeningRaceSexListEntry(
-                        appearance.SexEngineValues[index],
-                        label,
-                        _sexIndex == index,
+                        appearance.SexEngineValues[choice.index],
+                        choice.label,
+                        _sexIndex == choice.index,
                         true,
                         () =>
                         {
@@ -341,7 +359,9 @@ internal partial class OpeningQuestRuntime
             showRace);
         showRace = () => _raceSexMenuHost!.ShowList(
             "race",
-            appearance.Races.Select(race =>
+            appearance.Races.Where(race => IsAdmitted(
+                appearance.SexEngineValues[_sexIndex],
+                race.FormId)).Select(race =>
             {
                 var selectedRace = race;
                 return new OpeningRaceSexListEntry(
@@ -366,7 +386,10 @@ internal partial class OpeningQuestRuntime
             var sex = CurrentSex();
             _raceSexMenuHost!.ShowList(
                 "hair",
-                sex.HairOptions.Select(option =>
+                sex.HairOptions.Where(option => IsAdmitted(
+                    appearance.SexEngineValues[_sexIndex],
+                    _raceFormId,
+                    option.FormId)).Select(option =>
                 {
                     var selectedOption = option;
                     return new OpeningRaceSexListEntry(
@@ -391,7 +414,11 @@ internal partial class OpeningQuestRuntime
             var sex = CurrentSex();
             _raceSexMenuHost!.ShowList(
                 "eyes",
-                sex.EyeOptions.Select(option =>
+                sex.EyeOptions.Where(option => IsAdmitted(
+                    appearance.SexEngineValues[_sexIndex],
+                    _raceFormId,
+                    _hairFormId,
+                    option.FormId)).Select(option =>
                 {
                     var selectedOption = option;
                     return new OpeningRaceSexListEntry(

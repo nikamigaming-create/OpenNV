@@ -217,7 +217,10 @@ public partial class RuntimeCoordinator : Node3D
         LegalAssetPreparer.PreparedContent prepared,
         IReadOnlyDictionary<string, string> options)
     {
-        var manifest = OpeningManifest.Load(prepared.OpeningManifestPath, _configuration);
+        var manifest = OpeningManifest.Load(
+            prepared.OpeningManifestPath,
+            _configuration,
+            options.ContainsKey("bounded-default-profile"));
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)
             ? ResolveRuntimePath(configuredSavePath)
             : ResolveRuntimePath(DefaultNewVegasOpeningSavePath);
@@ -580,6 +583,7 @@ public partial class RuntimeCoordinator : Node3D
             ? OpeningManifest.Load(
                 RequireOption(options, "opening-manifest"),
                 _configuration,
+                options.ContainsKey("bounded-default-profile") ||
                 options.TryGetValue("opening-proof", out var openingProofMode) &&
                     openingProofMode is "route-stage50" or "route-stage50-resume")
             : null;

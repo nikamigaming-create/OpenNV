@@ -9,6 +9,11 @@ internal static class RuntimeLaunchValidator
     internal static void ValidatePreflight(IReadOnlyDictionary<string, string> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (options.ContainsKey("bounded-default-profile") &&
+            (!options.ContainsKey("opening-menu") || options.ContainsKey("opening-proof")))
+            throw new ArgumentException(
+                "--bounded-default-profile requires the interactive --opening-menu path " +
+                "and cannot be combined with an opening proof.");
         if (options.ContainsKey("xr-simulator-proof") &&
             (!options.ContainsKey("vr") || !options.ContainsKey("report")))
             throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");

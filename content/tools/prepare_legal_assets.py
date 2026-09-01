@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -33,6 +34,27 @@ from runtime_configuration import configured_recipe_path, load_runtime_configura
 
 
 SCHEMA = "opennv-legal-asset-cache/v1"
+
+
+def _install_matches_outside_player_facegen_profile(
+    prior: object,
+    current: object,
+) -> bool:
+    if not isinstance(prior, dict) or not isinstance(current, dict):
+        return False
+    prior_copy = copy.deepcopy(prior)
+    current_copy = copy.deepcopy(current)
+    for document in (prior_copy, current_copy):
+        request = document.get("request")
+        if isinstance(request, dict):
+            request.pop("playerFaceGenProfile", None)
+    return prior_copy == current_copy
+
+
+def _player_facegen_profile(install: object) -> object:
+    if not isinstance(install, dict) or not isinstance(install.get("request"), dict):
+        return None
+    return install["request"].get("playerFaceGenProfile")
 
 
 def route_exterior_positions(
@@ -163,7 +185,9 @@ def reusable_families(
     if (
         prior.get("schema") != SCHEMA
         or prior.get("status") != "prepared-legal-assets"
-        or prior.get("install") != install
+        or not _install_matches_outside_player_facegen_profile(
+            prior.get("install"), install
+        )
         or not isinstance(prior.get("compilerFamilies"), dict)
         or not isinstance(prior.get("outputs"), dict)
     ):
@@ -183,6 +207,9 @@ def reusable_families(
                 )
             elif family == "opening":
                 result[family] = (
+                    _player_facegen_profile(prior.get("install"))
+                    == _player_facegen_profile(install)
+                    and
                     _hash_matches(
                         outputs.get("openingManifest"),
                         outputs.get("openingManifestSha256"),

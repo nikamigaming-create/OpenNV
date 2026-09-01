@@ -635,6 +635,9 @@ function readNewVegasProfile(cacheRootOverride = null) {
     cacheRoot
   });
   try {
+    if (process.env.OPENNV_NEWVEGAS_PREFLIGHT_ERROR) {
+      return unavailable(process.env.OPENNV_NEWVEGAS_PREFLIGHT_ERROR);
+    }
     const defaultCellRecipe = productConfiguration()?.legalAssets?.defaultCellRecipe;
     if (typeof defaultCellRecipe !== "string" || path.basename(defaultCellRecipe) !== defaultCellRecipe) {
       return unavailable("The OpenNV default New Vegas cell recipe is invalid.");
@@ -655,10 +658,25 @@ function readNewVegasProfile(cacheRootOverride = null) {
       path.join(dataRoot, manifest.install.master.file),
       manifest.install.master,
       "New Vegas master");
+    const openingManifestPath = path.join(
+      cacheRoot, "generated", "opening", "opening-manifest.json");
+    const openingManifest = JSON.parse(readFileSync(openingManifestPath, "utf8"));
+    const boundedDefaultProfile =
+      openingManifest?.playerFaceGenProfile === "source-default-route-validation" &&
+      openingManifest?.sourceClosure?.playableClaimReady === false &&
+      openingManifest?.sourceClosure?.unaccountedCount === 1 &&
+      openingManifest?.sourceClosure?.unaccounted?.[0]?.reason ===
+        "creator-valid-selection-preview-closure";
+    if (!boundedDefaultProfile &&
+        openingManifest?.sourceClosure?.playableClaimReady !== true) {
+      return unavailable(
+        "This New Vegas cache has an incomplete interactive source closure.",
+        true);
+    }
     const required = [
       [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v13"],
       [path.join("generated", "actors", "actor-scenes.json"), "opennv-world-actor-scenes/v2"],
-      [path.join("generated", "opening", "opening-manifest.json"), "opennv-owned-opening-manifest/v1"]
+      [path.relative(cacheRoot, openingManifestPath), "opennv-owned-opening-manifest/v1"]
     ];
     for (const [relativePath, schema] of required) {
       const document = JSON.parse(readFileSync(path.join(cacheRoot, relativePath), "utf8"));
@@ -669,7 +687,10 @@ function readNewVegasProfile(cacheRootOverride = null) {
       runtimeReady: true,
       validated: true,
       manifestDetected: true,
-      message: "New Vegas owned menu, opening, actor, and Doc Mitchell cell cache registered.",
+      message: boundedDefaultProfile
+        ? "New Vegas bounded default-Courier hot-play cache registered."
+        : "New Vegas owned menu, opening, actor, and Doc Mitchell cell cache registered.",
+      boundedDefaultProfile,
       cacheRoot,
       savePath: path.join(app.getPath("userData"), "profiles", "newvegas", "courier-v1.json")
     };

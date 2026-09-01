@@ -224,6 +224,7 @@ export function createRuntimeArguments(
       "--opening-menu",
       "--save-path", newVegasProfile.savePath
     ];
+    if (newVegasProfile.boundedDefaultProfile) args.push("--bounded-default-profile");
     if (enableJam) {
       if (!jamProfile?.ready) throw new Error(CONTRACT.copy.jamProfileUnavailable);
       args.push("--enable-jam", "--jam-profile", jamProfile.path);
