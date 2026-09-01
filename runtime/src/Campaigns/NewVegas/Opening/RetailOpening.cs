@@ -17,6 +17,7 @@ internal partial class RetailOpening : CanvasLayer
     private Control _canvas = null!;
     private AudioStreamPlayer _music = null!;
     private VideoStreamPlayer? _video;
+    private ColorRect _transitionCover = null!;
     private Func<Task>? _introFinished;
     private Func<string, Task>? _menuActionRequested;
     private Action? _newGameStarted;
@@ -61,6 +62,16 @@ internal partial class RetailOpening : CanvasLayer
             Size = manifest.CanvasSize,
         };
         _viewport.AddChild(_canvas);
+
+        _transitionCover = new ColorRect
+        {
+            Name = "IntroTransitionCover",
+            Color = Colors.Black,
+            Visible = false,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        _transitionCover.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _viewport.AddChild(_transitionCover);
 
         var background = new TextureRect
         {
@@ -207,6 +218,8 @@ internal partial class RetailOpening : CanvasLayer
             return;
         _introCompleted = true;
         _transitionStarted = true;
+        _transitionCover.Visible = true;
+        _viewport.MoveChild(_transitionCover, _viewport.GetChildCount() - 1);
         _video?.Stop();
         _music.Stop();
         try

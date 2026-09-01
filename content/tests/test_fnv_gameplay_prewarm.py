@@ -62,8 +62,47 @@ class FnvGameplayPrewarmTest(unittest.TestCase):
         self.assertGreater(opening.index("QueueFree();", intro_wait), intro_wait)
         self.assertIn("if (_introCompleted || _transitionStarted)", opening)
         self.assertEqual(opening.count("RestoreOwnedFailureCover();"), 2)
+        self.assertIn("_transitionCover.Visible = true;", opening)
+        self.assertIn(
+            "_viewport.MoveChild(_transitionCover, _viewport.GetChildCount() - 1);",
+            opening,
+        )
+        self.assertLess(
+            opening.index("_transitionCover.Visible = true;"),
+            intro_wait,
+        )
         self.assertIn("_video.Visible = false;", opening)
         self.assertIn("_canvas.Visible = true;", opening)
+
+    def test_intro_release_waits_for_configured_opening_camera_owner(self):
+        coordinator = (ROOT / "runtime" / "src" / "RuntimeCoordinator.cs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Task openingReady = loaded.InitialAdjacentReady;", coordinator)
+        self.assertIn(
+            "openingReady = ConfigureOpeningAfterInitialAdjacent(",
+            coordinator,
+        )
+        self.assertIn(
+            "return usesCampaignState ? openingReady : loaded.InitialAdjacentReady;",
+            coordinator,
+        )
+        self.assertIn("openingFlow.Configure(", coordinator)
+        self.assertIn("openingFlow.ProcessMode = ProcessModeEnum.Inherit;", coordinator)
+
+        runtime = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "Campaigns"
+            / "NewVegas"
+            / "Opening"
+            / "OpeningQuestRuntime.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("OPENNV_NEW_GAME_CAMERA_OWNER", runtime)
+        self.assertIn("cameraLocal={_loaded.Player.Camera.Transform.Origin}", runtime)
+        self.assertIn("cameraGlobal={_loaded.Player.Camera.GlobalPosition}", runtime)
 
 
 if __name__ == "__main__":

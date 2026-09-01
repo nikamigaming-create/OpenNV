@@ -1568,6 +1568,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             $"OPENNV_NEW_GAME_FLOW_READY quest={_flow.QuestEditorId} " +
             $"stage={_stage} restored={restoredState is not null} " +
             $"stages={_flow.Stages.Count} topics={_flow.TopicsByFormId.Count}");
+        GD.Print(
+            $"OPENNV_NEW_GAME_CAMERA_OWNER cell={_loaded.FormId} " +
+            $"cellRootGlobal={_loaded.Root.GlobalPosition} " +
+            $"playerGlobal={_loaded.Player.GlobalPosition} " +
+            $"cameraLocal={_loaded.Player.Camera.Transform.Origin} " +
+            $"cameraGlobal={_loaded.Player.Camera.GlobalPosition}");
     }
 
     public override void _Process(double delta)

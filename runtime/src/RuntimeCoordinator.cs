@@ -689,6 +689,7 @@ public partial class RuntimeCoordinator : Node3D
                 restoredOpening is not null &&
                 OpeningQuestRuntime.GameplayUiEnabled(restoredOpening));
         OpeningQuestRuntime? openingFlow = null;
+        Task openingReady = loaded.InitialAdjacentReady;
         if (startsNewGame || restoredOpening is not null)
         {
             if (openingManifest is null)
@@ -697,15 +698,18 @@ public partial class RuntimeCoordinator : Node3D
             openingFlow = new OpeningQuestRuntime();
             AddChild(openingFlow);
             if (loaded.InitialAdjacentReady.IsCompletedSuccessfully)
+            {
                 openingFlow.Configure(
                     openingManifest,
                     loaded,
                     _configuration,
                     restoredOpening);
+                openingReady = Task.CompletedTask;
+            }
             else
             {
                 openingFlow.ProcessMode = ProcessModeEnum.Disabled;
-                _ = ConfigureOpeningAfterInitialAdjacent(
+                openingReady = ConfigureOpeningAfterInitialAdjacent(
                     openingFlow,
                     openingManifest,
                     loaded,
@@ -811,7 +815,7 @@ public partial class RuntimeCoordinator : Node3D
             return loaded.InitialAdjacentReady;
         }
         CompleteCellLoad(loaded, scenePath, options, null);
-        return loaded.InitialAdjacentReady;
+        return usesCampaignState ? openingReady : loaded.InitialAdjacentReady;
     }
 
     private async Task ConfigureOpeningAfterInitialAdjacent(
@@ -834,6 +838,7 @@ public partial class RuntimeCoordinator : Node3D
         {
             GD.PushError($"OPENNV_LAZY_CELL_INITIAL_PREFETCH_FAIL {exception}");
             GetTree().Quit(1);
+            throw;
         }
     }
 
