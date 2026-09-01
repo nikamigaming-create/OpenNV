@@ -943,7 +943,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         {
             UpdateDialogueVoice();
             UpdateOrdinaryActorTravel(delta);
-            UpdateCombatActorAnimations(delta);
+            UpdateCombatActors(delta);
             EvaluateOrdinaryDialogueTriggers();
             return;
         }

@@ -47,6 +47,9 @@ internal sealed record OpeningCampaignState(
     public IReadOnlyDictionary<string, OpeningActorAnimationState> CombatActorAnimations
     { get; init; } = new Dictionary<string, OpeningActorAnimationState>(
         StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, OpeningCombatAiState> CombatActorAi
+    { get; init; } = new Dictionary<string, OpeningCombatAiState>(
+        StringComparer.OrdinalIgnoreCase);
 
     internal static OpeningCampaignState Parse(JsonElement source)
     {
@@ -119,6 +122,14 @@ internal sealed record OpeningCampaignState(
                     StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, OpeningActorAnimationState>(
                     StringComparer.OrdinalIgnoreCase),
+            CombatActorAi = source.TryGetProperty(
+                    nameof(CombatActorAi), out var combatAi)
+                ? combatAi.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => OpeningCombatAiState.Parse(value.Value),
+                    StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, OpeningCombatAiState>(
+                    StringComparer.OrdinalIgnoreCase),
         };
         result.Validate();
         return result;
@@ -181,6 +192,10 @@ internal sealed record OpeningCampaignState(
                 "Saved combat animation identity is invalid.");
         foreach (var animation in CombatActorAnimations.Values)
             animation.Validate();
+        if (CombatActorAi.Keys.Any(value => FalloutFormId.Normalize(value) != value))
+            throw new InvalidOperationException("Saved combat AI identity is invalid.");
+        foreach (var ai in CombatActorAi.Values)
+            ai.Validate();
         if (EquippedWeapon is { } weapon &&
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>
@@ -235,6 +250,25 @@ internal sealed record OpeningActorAnimationState(
             !double.IsFinite(PositionSeconds) || PositionSeconds < 0.0)
             throw new InvalidOperationException(
                 "Saved combat actor animation state is invalid.");
+    }
+}
+
+internal sealed record OpeningCombatAiState(
+    string Phase,
+    float MeleeClockSeconds,
+    bool HitApplied)
+{
+    internal static OpeningCombatAiState Parse(JsonElement source) => new(
+        source.GetProperty(nameof(Phase)).GetString()!,
+        source.GetProperty(nameof(MeleeClockSeconds)).GetSingle(),
+        source.GetProperty(nameof(HitApplied)).GetBoolean());
+
+    internal void Validate()
+    {
+        if (Phase is not ("Chase" or "Melee" or "Dead") ||
+            !float.IsFinite(MeleeClockSeconds) || MeleeClockSeconds < 0.0f ||
+            Phase != "Melee" && MeleeClockSeconds != 0.0f)
+            throw new InvalidOperationException("Saved combat AI state is invalid.");
     }
 }
 

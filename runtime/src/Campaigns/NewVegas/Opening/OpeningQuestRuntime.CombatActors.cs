@@ -1,3 +1,4 @@
+using Godot;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
@@ -9,6 +10,8 @@ internal partial class OpeningQuestRuntime
 {
     private readonly Dictionary<string, GamebryoCreatureAnimationPlayback>
         _combatActorAnimations = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, GamebryoCreatureCombatAi> _combatActorAi =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private void InitializeCombatActors()
     {
@@ -27,6 +30,22 @@ internal partial class OpeningQuestRuntime
             _combatActorAnimations.Add(
                 target.ReferenceFormId,
                 GamebryoCreatureAnimationPlayback.Start(actor.Actor));
+            var actorRadiusGameUnits = Math.Max(
+                actor.Actor.Bounds.Size.X,
+                actor.Actor.Bounds.Size.Z) /
+                _loaded.UnitsToMeters * BoundsToHalfExtents;
+            var playerRadiusGameUnits =
+                _configuration.Player.CapsuleRadiusMeters / _loaded.UnitsToMeters;
+            var contract = GamebryoCreatureCombatAi.Contract(
+                _combatActorAnimations[target.ReferenceFormId],
+                actorRadiusGameUnits + playerRadiusGameUnits,
+                target.AttackDamage);
+            _combatActorAi.Add(
+                target.ReferenceFormId,
+                GamebryoCreatureCombatAi.Start(contract));
+            actor.Placement.SetMeta(
+                "opennv_melee_contact_range_game_units",
+                contract.ContactRangeGameUnits);
         }
         PublishCombatActors();
     }
@@ -60,6 +79,7 @@ internal partial class OpeningQuestRuntime
                         currentHealth == 0));
                 _combatHealthByReferenceFormId[target.ReferenceFormId] =
                     outcome.Target.CurrentHealth;
+                _combatActorAi[target.ReferenceFormId].Interrupt();
                 _combatActorAnimations[target.ReferenceFormId].Play(
                     GamebryoCreatureAnimationPlayback.HitRole);
                 PublishCombatActor(target);
@@ -121,15 +141,91 @@ internal partial class OpeningQuestRuntime
             "opennv_death_script_form_id",
             encounter.DeathScriptFormId);
         _combatActorAnimations[target.ReferenceFormId].Stop();
+        _combatActorAi[target.ReferenceFormId].Kill();
         CombatActor(target).Placement.SetMeta(
             "opennv_death_presentation",
             "source-havok-ragdoll-not-kf");
     }
 
-    private void UpdateCombatActorAnimations(double delta)
+    private void UpdateCombatActors(double delta)
     {
+        if (_loaded.Session.PlayerHitPoints is not > 0)
+            return;
+        foreach (var encounter in _flow.CombatEncounters)
+        {
+            var quest = _quests[encounter.QuestFormId];
+            if (quest.Stage < encounter.MinimumCombatStage)
+                continue;
+            foreach (var target in encounter.Targets)
+            {
+                if (_combatHealthByReferenceFormId[target.ReferenceFormId] == 0 ||
+                    _referenceEnabledStates.TryGetValue(
+                        target.ReferenceFormId, out var enabled) && !enabled)
+                    continue;
+                var actor = CombatActor(target);
+                if (_combatActorAnimations[target.ReferenceFormId].Role ==
+                    GamebryoCreatureAnimationPlayback.HitRole)
+                    continue;
+                var playerCellPosition = _loaded.Root.ToLocal(
+                    _loaded.Player.GlobalPosition);
+                var currentGamePosition = _loaded.CellToGameUnits(
+                    actor.Placement.Position);
+                var targetGamePosition = _loaded.CellToGameUnits(
+                    playerCellPosition);
+                var path = _loaded.MainContent.Navigation.FindPath(
+                    currentGamePosition,
+                    targetGamePosition).Select(_loaded.GameToCellUnits).ToArray();
+                var horizontalDistance = new Vector2(
+                    playerCellPosition.X - actor.Placement.Position.X,
+                    playerCellPosition.Z - actor.Placement.Position.Z).Length();
+                var contract = GamebryoCreatureCombatAi.Contract(
+                    _combatActorAnimations[target.ReferenceFormId],
+                    Math.Max(actor.Actor.Bounds.Size.X, actor.Actor.Bounds.Size.Z) /
+                        _loaded.UnitsToMeters * BoundsToHalfExtents +
+                        _configuration.Player.CapsuleRadiusMeters /
+                        _loaded.UnitsToMeters,
+                    target.AttackDamage);
+                var forwardPath = path.SkipWhile(value =>
+                    value.IsEqualApprox(actor.Placement.Position)).ToArray();
+                var nextWaypoint = forwardPath.Length > 0
+                    ? forwardPath[0]
+                    : horizontalDistance <= contract.ContactRangeGameUnits
+                        ? playerCellPosition
+                        : throw new InvalidOperationException(
+                            "Owned creature combat navigation returned no path.");
+                var ai = _combatActorAi[target.ReferenceFormId];
+                var priorPhase = ai.State.Phase;
+                var step = ai.Advance(
+                    delta,
+                    actor.Placement.Transform,
+                    playerCellPosition,
+                    nextWaypoint);
+                actor.Placement.Transform = step.Transform;
+                var animation = _combatActorAnimations[target.ReferenceFormId];
+                if (step.BeganMelee)
+                    animation.Play(GamebryoCreatureAnimationPlayback.MeleeRole);
+                else if (step.BeganLocomotion &&
+                    animation.Role != GamebryoCreatureAnimationPlayback.LocomotionRole)
+                    animation.Play(GamebryoCreatureAnimationPlayback.LocomotionRole);
+                else if (priorPhase == GamebryoCreatureCombatPhase.Melee &&
+                    step.State.Phase == GamebryoCreatureCombatPhase.Chase)
+                    animation.Play(GamebryoCreatureAnimationPlayback.LocomotionRole);
+                if (step.Damage > 0)
+                {
+                    var hitPoints = _loaded.Session.ApplySourceDamage(step.Damage);
+                    actor.Placement.SetMeta("opennv_last_melee_damage", step.Damage);
+                    actor.Placement.SetMeta("opennv_player_hit_points", hitPoints);
+                    if (hitPoints == 0)
+                    {
+                        _loaded.Session.StoreOpeningState(CaptureState(true));
+                        return;
+                    }
+                }
+            }
+        }
         foreach (var animation in _combatActorAnimations.Values)
             animation.Advance(delta);
+        _loaded.Session.StoreOpeningState(CaptureState(true));
     }
 
     private void PublishCombatActors()

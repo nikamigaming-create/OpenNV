@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Interactions;
+using OpenNV.Runtime.World.Actors;
+using Godot;
 
 var attack = new GamebryoRangedAttack("weapon", "ammunition", 4);
 var target = new GamebryoCombatantState("target", 5, 5, false);
@@ -42,6 +44,44 @@ if (!Rejects(() => GamebryoDeathCounter.Advance(
         new GamebryoDeathCounterState(2, 50, true, true))))
     throw new InvalidOperationException("Completed death counter did not fail closed.");
 
+var meleeContract = new GamebryoCreatureCombatContract(4.0f, 2.0f, 1.0f, 2.0f, 1.0f, 3);
+var melee = GamebryoCreatureCombatAi.Start(meleeContract);
+var chasing = melee.Advance(
+    0.25,
+    Transform3D.Identity,
+    new Vector3(3.0f, 0.0f, 0.0f),
+    new Vector3(3.0f, 0.0f, 0.0f));
+if (!chasing.BeganLocomotion || chasing.Transform.Origin.DistanceTo(
+        new Vector3(1.0f, 0.0f, 0.0f)) > 0.0001f)
+    throw new InvalidOperationException("Creature source locomotion differs.");
+var beganMelee = melee.Advance(
+    0.0,
+    chasing.Transform,
+    new Vector3(2.0f, 0.0f, 0.0f),
+    new Vector3(2.0f, 0.0f, 0.0f));
+if (!beganMelee.BeganMelee || beganMelee.Damage != 0)
+    throw new InvalidOperationException("Creature melee entry differs.");
+var beforeHit = melee.Advance(
+    0.5,
+    beganMelee.Transform,
+    new Vector3(2.0f, 0.0f, 0.0f),
+    new Vector3(2.0f, 0.0f, 0.0f));
+var atHit = melee.Advance(
+    0.5,
+    beforeHit.Transform,
+    new Vector3(2.0f, 0.0f, 0.0f),
+    new Vector3(2.0f, 0.0f, 0.0f));
+if (beforeHit.Damage != 0 || atHit.Damage != 3)
+    throw new InvalidOperationException("Creature source hit timing differs.");
+melee.Kill();
+var dead = melee.Advance(
+    1.0,
+    atHit.Transform,
+    new Vector3(2.0f, 0.0f, 0.0f),
+    new Vector3(2.0f, 0.0f, 0.0f));
+if (dead.State.Phase != GamebryoCreatureCombatPhase.Dead || dead.Damage != 0)
+    throw new InvalidOperationException("Creature dead AI state differs.");
+
 var emptyCampaignState = (OpeningCampaignState)RuntimeHelpers.GetUninitializedObject(
     typeof(OpeningCampaignState));
 using var savedCampaign = JsonDocument.Parse(JsonSerializer.Serialize(emptyCampaignState));
@@ -49,6 +89,8 @@ if (!savedCampaign.RootElement.TryGetProperty(
         nameof(OpeningCampaignState.CombatHealthByReferenceFormId), out _) ||
     !savedCampaign.RootElement.TryGetProperty(
         nameof(OpeningCampaignState.CombatActorAnimations), out _) ||
+    !savedCampaign.RootElement.TryGetProperty(
+        nameof(OpeningCampaignState.CombatActorAi), out _) ||
     !savedCampaign.RootElement.TryGetProperty(
         nameof(OpeningCampaignState.OrdinaryActorTransforms), out _) ||
     !savedCampaign.RootElement.TryGetProperty(

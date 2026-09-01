@@ -656,6 +656,15 @@ internal partial class OpeningQuestRuntime
                     value.Value.Role,
                     value.Value.PositionSeconds),
                 StringComparer.OrdinalIgnoreCase),
+        CombatActorAi = _combatActorAi
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => new OpeningCombatAiState(
+                    value.Value.State.Phase.ToString(),
+                    value.Value.State.MeleeClockSeconds,
+                    value.Value.State.HitApplied),
+                StringComparer.OrdinalIgnoreCase),
     };
 
     internal static bool MatchesFlow(
@@ -763,6 +772,11 @@ internal partial class OpeningQuestRuntime
                     StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys))
             throw new InvalidOperationException(
                 "Saved combat actor animations do not match the owned flow.");
+        if (state.CombatActorAi.Count != 0 &&
+            !state.CombatActorAi.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys))
+            throw new InvalidOperationException(
+                "Saved combat actor AI does not match the owned flow.");
         if (state.Completed)
             ValidateCompletedState(flow, state);
     }
@@ -1013,6 +1027,39 @@ internal partial class OpeningQuestRuntime
                         CombatActor(actor).Actor,
                         saved.Value.Role,
                         saved.Value.PositionSeconds);
+            }
+        }
+        if (state.CombatActorAi.Count != 0)
+        {
+            if (!state.CombatActorAi.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    _combatActorAi.Keys))
+                throw new InvalidOperationException(
+                    "Saved combat actor AI identities differ.");
+            foreach (var saved in state.CombatActorAi)
+            {
+                var target = _flow.CombatEncounters.SelectMany(value => value.Targets)
+                    .Single(value => value.ReferenceFormId.Equals(
+                        saved.Key, StringComparison.OrdinalIgnoreCase));
+                var actor = CombatActor(target);
+                var animation = _combatActorAnimations[saved.Key];
+                var contract = GamebryoCreatureCombatAi.Contract(
+                    animation,
+                    Math.Max(actor.Actor.Bounds.Size.X, actor.Actor.Bounds.Size.Z) /
+                        _loaded.UnitsToMeters * BoundsToHalfExtents +
+                        _configuration.Player.CapsuleRadiusMeters /
+                        _loaded.UnitsToMeters,
+                    target.AttackDamage);
+                if (!Enum.TryParse<GamebryoCreatureCombatPhase>(
+                        saved.Value.Phase, out var phase))
+                    throw new InvalidOperationException(
+                        "Saved combat actor AI phase differs.");
+                _combatActorAi[saved.Key] = GamebryoCreatureCombatAi.Restore(
+                    contract,
+                    new GamebryoCreatureCombatState(
+                        phase,
+                        saved.Value.MeleeClockSeconds,
+                        saved.Value.HitApplied));
             }
         }
         Replace(_destroyedReferences, state.DestroyedReferenceFormIds);

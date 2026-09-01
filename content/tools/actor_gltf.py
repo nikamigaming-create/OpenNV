@@ -250,6 +250,27 @@ def animation_sequence_manifest(payload: bytes) -> dict[str, object]:
         transform_priorities[node_name] = priority
     if not transform_priorities:
         raise ValueError("Actor animation has no transform-controller priorities")
+    text_keys = [
+        {
+            "timeSeconds": float(key.time),
+            "value": _text(key.value),
+        }
+        for extra in (
+            document.get_global_iterator()
+            if hasattr(document, "get_global_iterator")
+            else ()
+        )
+        if isinstance(extra, NifFormat.NiTextKeyExtraData)
+        for key in extra.text_keys
+    ]
+    if any(
+        not math.isfinite(float(value["timeSeconds"])) or
+        float(value["timeSeconds"]) < start or
+        float(value["timeSeconds"]) > stop or
+        not str(value["value"]).strip()
+        for value in text_keys
+    ):
+        raise ValueError("Actor animation has invalid source text keys")
     return {
         "sequenceName": _text(sequence.name),
         "startSeconds": start,
@@ -257,6 +278,7 @@ def animation_sequence_manifest(payload: bytes) -> dict[str, object]:
         "cycleType": int(sequence.cycle_type),
         "controlledBlocks": len(sequence.controlled_blocks),
         "transformPrioritiesByNode": dict(sorted(transform_priorities.items())),
+        "textKeys": text_keys,
     }
 
 
@@ -835,6 +857,15 @@ def export_actor_gltf(
     use_path_names = len(animation_sources) > 1
     for animation_source in animation_sources:
         sequence_manifest = animation_sequence_manifest(animation_source.payload)
+        root_motion = (
+            sample_root_motion(
+                animation_source.payload,
+                source.skeleton_root_node,
+                compiler.animation_samples_per_second,
+            ).manifest()
+            if animation_source.role in {"locomotion", "melee"}
+            else None
+        )
         try:
             animation, channels, animation_origin = _build_animation(
                 animation_source.payload,
@@ -868,6 +899,7 @@ def export_actor_gltf(
                 "transformPrioritiesByNode": sequence_manifest[
                     "transformPrioritiesByNode"
                 ],
+                "textKeys": sequence_manifest["textKeys"],
                 "accumulationRootTranslationDisposition": (
                     "preserve-hash-bound-owned-clip-root-curve"
                     if animation_source.retain_accumulation_root_translation
@@ -879,6 +911,7 @@ def export_actor_gltf(
                 "role": animation_source.role or (
                     "idle" if animation_source is animation_sources[0] else None
                 ),
+                "rootMotion": root_motion,
             }
         )
 

@@ -30,6 +30,14 @@ internal sealed class GamebryoCreatureAnimationPlayback
 
     internal double PositionSeconds => _playback.PositionSeconds;
 
+    internal ActorModelSlice.LoadedAnimation Animation(string role)
+    {
+        if (!_roles.TryGetValue(role, out var animation))
+            throw new InvalidOperationException(
+                $"Owned creature animation role is absent: {role}");
+        return animation;
+    }
+
     internal static GamebryoCreatureAnimationPlayback Start(
         ActorModelSlice.LoadedActor actor,
         string role = IdleRole,
