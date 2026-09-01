@@ -67,6 +67,22 @@ internal sealed record ClassicIntTraitAssignment(
     int Trait,
     int Amount);
 
+internal sealed record ClassicIntDialogueStart(
+    int MessageList,
+    int ObjectHandle,
+    int Mood,
+    int Head,
+    int Background);
+
+internal sealed record ClassicIntDialogueReply(int MessageList, int MessageId);
+
+internal sealed record ClassicIntDialogueOption(
+    int Intelligence,
+    int MessageList,
+    int MessageId,
+    int TargetProcedureIndex,
+    int Reaction);
+
 internal interface IClassicIntActorQueries
 {
     bool CanSee(int observerHandle, int targetHandle);
@@ -137,6 +153,10 @@ internal interface IClassicIntWorldObjectState
     IReadOnlyList<ClassicIntTraitAssignment> TraitAssignments { get; }
     ClassicIntTimerState Timers { get; }
     bool DialogueSystemEntered { get; }
+    ClassicIntDialogueStart? DialogueStart { get; }
+    IReadOnlyList<ClassicIntDialogueReply> DialogueReplies { get; }
+    IReadOnlyList<ClassicIntDialogueOption> DialogueOptions { get; }
+    bool DialogueReady { get; }
 }
 
 internal sealed record ClassicIntWorldObjectState(
@@ -170,6 +190,16 @@ internal sealed record ClassicIntWorldObjectState(
 
     public bool DialogueSystemEntered { get; init; }
 
+    public ClassicIntDialogueStart? DialogueStart { get; init; }
+
+    public IReadOnlyList<ClassicIntDialogueReply> DialogueReplies
+    { get; init; } = [];
+
+    public IReadOnlyList<ClassicIntDialogueOption> DialogueOptions
+    { get; init; } = [];
+
+    public bool DialogueReady { get; init; }
+
     internal static ClassicIntWorldObjectState Empty { get; } = new(
         false, new Dictionary<int, ClassicIntDoorObjectState>());
 
@@ -200,6 +230,10 @@ internal sealed record ClassicIntWorldObjectState(
         TraitAssignments,
         Timers,
         DialogueSystemEntered,
+        DialogueStart,
+        DialogueReplies,
+        DialogueOptions,
+        DialogueReady,
     };
 
     internal static ClassicIntWorldObjectState Restore(JsonElement source)
@@ -283,6 +317,20 @@ internal sealed record ClassicIntWorldObjectState(
                 : ClassicIntTimerState.Initial,
             DialogueSystemEntered = source.TryGetProperty(
                 "DialogueSystemEntered", out var entered) && entered.GetBoolean(),
+            DialogueStart = source.TryGetProperty("DialogueStart", out var dialogueStart) &&
+                dialogueStart.ValueKind != JsonValueKind.Null
+                    ? dialogueStart.Deserialize<ClassicIntDialogueStart>()
+                    : null,
+            DialogueReplies = source.TryGetProperty(
+                    "DialogueReplies", out var dialogueReplies)
+                ? dialogueReplies.Deserialize<ClassicIntDialogueReply[]>() ?? []
+                : [],
+            DialogueOptions = source.TryGetProperty(
+                    "DialogueOptions", out var dialogueOptions)
+                ? dialogueOptions.Deserialize<ClassicIntDialogueOption[]>() ?? []
+                : [],
+            DialogueReady = source.TryGetProperty(
+                "DialogueReady", out var dialogueReady) && dialogueReady.GetBoolean(),
         };
         restored.Timers.Validate();
         if (restored.Objects.Any(row => row.Key == 0 || row.Key != row.Value.Handle) ||
@@ -292,7 +340,17 @@ internal sealed record ClassicIntWorldObjectState(
                 !restored.Objects.ContainsKey(row.ObjectHandle)) ||
             restored.TraitAssignments.Select(row =>
                     (row.ObjectHandle, row.TraitType, row.Trait)).Distinct().Count() !=
-                restored.TraitAssignments.Count)
+                restored.TraitAssignments.Count ||
+            restored.DialogueStart is { } savedDialogue &&
+                !restored.Objects.ContainsKey(savedDialogue.ObjectHandle) ||
+            restored.DialogueReplies.Any(row =>
+                row.MessageList < 0 || row.MessageId < 0) ||
+            restored.DialogueOptions.Any(row =>
+                row.MessageList < 0 || row.MessageId < 0 ||
+                row.TargetProcedureIndex < 0) ||
+            restored.DialogueReady &&
+                (restored.DialogueStart is null ||
+                    restored.DialogueReplies.Count == 0))
             throw new InvalidOperationException(
                 "Classic INT saved world object state is invalid.");
         return restored;
@@ -407,6 +465,7 @@ internal static class ClassicIntProcedureVm
     private const ushort GetMonth = 0x8118;
     private const ushort FloatMessage = 0x810A;
     private const ushort PlaySound = 0x80A3;
+    private const ushort HasTrait = 0x80F3;
     private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
     private const ushort GameTimeHour = 0x80F6;
@@ -414,6 +473,7 @@ internal static class ClassicIntProcedureVm
     private const ushort GameTicks = 0x80F2;
     private const ushort FixedParameter = 0x80F7;
     private const ushort DialogueSystemEnter = 0x80F9;
+    private const ushort ObjectPid = 0x8100;
     private const ushort CurrentMapIndex = 0x8101;
     private const ushort CritterAddTrait = 0x8102;
     private const ushort DoorLock = 0x812E;
@@ -421,6 +481,14 @@ internal static class ClassicIntProcedureVm
     private const ushort DoorIsOpen = 0x8130;
     private const ushort DoorOpen = 0x8131;
     private const ushort DoorClose = 0x8132;
+    private const ushort StartGameDialogue = 0x80DE;
+    private const ushort EndDialogue = 0x80DF;
+    private const ushort GsayStart = 0x811C;
+    private const ushort GsayEnd = 0x811D;
+    private const ushort GsayReply = 0x811E;
+    private const ushort GsayMessage = 0x8120;
+    private const ushort GiqOption = 0x8121;
+    private const ushort DebugMessage = 0x8154;
     private const ushort DifficultyLevel = 0x812A;
     private const ushort CombatDifficulty = 0x814F;
     private const ushort SfallArrayLength = 0x8231;
@@ -526,6 +594,10 @@ internal static class ClassicIntProcedureVm
         var timers = sourceWorldObjects.Timers;
         timers.Validate();
         var dialogueSystemEntered = sourceWorldObjects.DialogueSystemEntered;
+        var dialogueStart = sourceWorldObjects.DialogueStart;
+        var dialogueReplies = sourceWorldObjects.DialogueReplies.ToList();
+        var dialogueOptions = sourceWorldObjects.DialogueOptions.ToList();
+        var dialogueReady = sourceWorldObjects.DialogueReady;
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -586,7 +658,9 @@ internal static class ClassicIntProcedureVm
                     stack.Add(addressValue);
                     break;
                 case FetchProgram:
-                    stack.Add(Read(programVariables, Pop(stack, program, procedure, offset),
+                    stack.Add(ReadOrInitialize(
+                        programVariables,
+                        Pop(stack, program, procedure, offset),
                         program, procedure, offset, "program-variable"));
                     break;
                 case StoreProgram:
@@ -602,7 +676,9 @@ internal static class ClassicIntProcedureVm
                         break;
                     }
                 case FetchLocal:
-                    stack.Add(Read(locals, Pop(stack, program, procedure, offset),
+                    stack.Add(ReadOrInitialize(
+                        locals,
+                        Pop(stack, program, procedure, offset),
                         program, procedure, offset, "procedure-local"));
                     break;
                 case StoreLocal:
@@ -775,6 +851,9 @@ internal static class ClassicIntProcedureVm
                             program, procedure, offset, "string-reference"));
                         break;
                     }
+                case DebugMessage:
+                    _ = Pop(stack, program, procedure, offset);
+                    break;
                 case GameTime:
                     stack.Add(game.GameTime ?? throw Failure(
                         program, procedure, offset, "missing-game-time"));
@@ -905,6 +984,98 @@ internal static class ClassicIntProcedureVm
                 case DialogueSystemEnter:
                     dialogueSystemEntered = true;
                     break;
+                case ObjectPid:
+                    stack.Add(WorldObject(
+                        Pop(stack, program, procedure, offset)).Pid ?? throw Failure(
+                            program, procedure, offset, "missing-object-pid"));
+                    break;
+                case HasTrait:
+                    {
+                        var trait = Pop(stack, program, procedure, offset);
+                        var obj = Pop(stack, program, procedure, offset);
+                        var traitType = Pop(stack, program, procedure, offset);
+                        var traits = game.Traits ?? throw Failure(
+                            program, procedure, offset, "missing-trait-provider");
+                        stack.Add(traits.TryGetValue(
+                            (traitType, obj, trait), out var traitValue)
+                                ? traitValue
+                                : 0);
+                        break;
+                    }
+                case StartGameDialogue:
+                    {
+                        var background = Pop(stack, program, procedure, offset);
+                        var head = Pop(stack, program, procedure, offset);
+                        var mood = Pop(stack, program, procedure, offset);
+                        var obj = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(obj);
+                        if (dialogueStart is not null || dialogueReplies.Count != 0 ||
+                            dialogueOptions.Count != 0)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-already-started");
+                        dialogueStart = new ClassicIntDialogueStart(
+                            messageList, obj, mood, head, background);
+                        dialogueReady = false;
+                        break;
+                    }
+                case GsayStart:
+                    if (dialogueStart is null || dialogueReady)
+                        throw Failure(program, procedure, offset,
+                            "dialogue-sequence-start");
+                    break;
+                case GsayReply:
+                    {
+                        if (dialogueStart is null)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-reply-before-start");
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        dialogueReplies.Add(new ClassicIntDialogueReply(
+                            messageList, messageId));
+                        break;
+                    }
+                case GiqOption:
+                    {
+                        if (dialogueStart is null)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-option-before-start");
+                        var reaction = Pop(stack, program, procedure, offset);
+                        var target = Pop(stack, program, procedure, offset);
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        var intelligence = Pop(stack, program, procedure, offset);
+                        if (target < 0 || target >= program.ProcedureOrder.Count)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-option-target");
+                        dialogueOptions.Add(new ClassicIntDialogueOption(
+                            intelligence, messageList, messageId, target, reaction));
+                        break;
+                    }
+                case GsayMessage:
+                    {
+                        if (dialogueStart is null)
+                            throw Failure(program, procedure, offset,
+                                "dialogue-message-before-start");
+                        _ = Pop(stack, program, procedure, offset);
+                        var messageId = Pop(stack, program, procedure, offset);
+                        var messageList = Pop(stack, program, procedure, offset);
+                        dialogueReplies.Add(new ClassicIntDialogueReply(
+                            messageList, messageId));
+                        dialogueReady = true;
+                        break;
+                    }
+                case GsayEnd:
+                    if (dialogueStart is null || dialogueReplies.Count == 0)
+                        throw Failure(program, procedure, offset,
+                            "dialogue-sequence-end");
+                    dialogueReady = true;
+                    break;
+                case EndDialogue:
+                    if (!dialogueReady)
+                        throw Failure(program, procedure, offset,
+                            "dialogue-end-before-ready");
+                    break;
                 case DisplayMessage:
                     {
                         var handle = Pop(stack, program, procedure, offset);
@@ -1009,6 +1180,10 @@ internal static class ClassicIntProcedureVm
                 TraitAssignments = traitAssignments.Values.ToArray(),
                 Timers = timers,
                 DialogueSystemEntered = dialogueSystemEntered,
+                DialogueStart = dialogueStart,
+                DialogueReplies = dialogueReplies,
+                DialogueOptions = dialogueOptions,
+                DialogueReady = dialogueReady,
             });
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
@@ -1144,6 +1319,21 @@ internal static class ClassicIntProcedureVm
         values.TryGetValue(key, out var value)
             ? value
             : throw Failure(program, procedure, offset, $"missing-{kind}");
+
+    private static int ReadOrInitialize(
+        IDictionary<int, int> values,
+        int index,
+        ClassicIntProgram program,
+        string procedure,
+        int offset,
+        string kind)
+    {
+        if (index < 0)
+            throw Failure(program, procedure, offset, $"invalid-{kind}");
+        if (!values.TryGetValue(index, out var value))
+            values.Add(index, value);
+        return value;
+    }
 
     private static void Binary(
         List<int> stack,

@@ -30,6 +30,7 @@ from fo2_arroyo_trial_route import (
 from fo2_first_slice import (
     FORM_ID_RADIX,
     FRM_PALETTE_SIZE,
+    _parse_critter_pro,
     _archive_paths,
     _flatten_objects,
     _frm_structure,
@@ -212,11 +213,12 @@ def compile_fo2_arvillag_slice(
                 if procedure["name"] == "map_enter_p_proc"
             )
             referenced_globals = {
-                int(map_enter["instructions"][index - 1]["operand"])
-                for index, instruction in enumerate(map_enter["instructions"])
-                if instruction["opcode"] == "80c5"
+                int(procedure["instructions"][index - 1]["operand"])
+                for procedure in program["inventory"]["procedures"]
+                for index, instruction in enumerate(procedure["instructions"])
+                if instruction["opcode"] in ("80c5", "80c6")
                 and index > 0
-                and map_enter["instructions"][index - 1]["opcode"] == "c001"
+                and procedure["instructions"][index - 1]["opcode"] == "c001"
             }
             if any(index not in global_rows for index in referenced_globals):
                 raise Fo1ProfileError(
@@ -284,6 +286,11 @@ def compile_fo2_arvillag_slice(
                     for index in sorted(referenced_globals)
                 },
                 "mapEnterMetarules": role_metarules,
+                "critterStats": _parse_critter_pro(
+                    resolver.read(
+                        "proto\\critters\\" + actor["prototype"]["filename"]
+                    ).data
+                )["statValues"],
             }
         prototypes: dict[str, dict[str, Any]] = {}
         frm_placements: dict[str, list[dict[str, Any]]] = {}

@@ -46,7 +46,8 @@ internal sealed record Fo2ArvillagIntRole(
     string MessageSha256,
     IReadOnlyDictionary<int, string> Messages,
     IReadOnlyDictionary<int, int> InitialGlobalVariables,
-    IReadOnlyList<Fo2ArvillagIntMetarule> MapEnterMetarules);
+    IReadOnlyList<Fo2ArvillagIntMetarule> MapEnterMetarules,
+    IReadOnlyList<int> CritterStats);
 
 internal sealed class Fo2ArvillagPresentationCatalog
 {
@@ -519,6 +520,8 @@ internal sealed class Fo2ArvillagPresentationCatalog
             Fo2TemplePresentationCatalog.RequiredHash(messages, "sha256"),
             parsedMessages,
             initialGlobals,
-            metarules);
+            metarules,
+            source.GetProperty("critterStats").EnumerateArray()
+                .Select(row => row.GetInt32()).ToArray());
     }
 }

@@ -473,6 +473,116 @@ foreach (var path in args)
                     Console.WriteLine(
                         $"{Path.GetFileName(path)}|{program.Program}|" +
                         $"map_enter_p_proc|{entered.ExecutedInstructions}");
+                    if (roleSource.Name == "elder")
+                    {
+                        var critterStats = roleSource.Value.GetProperty("critterStats")
+                            .EnumerateArray().Select(row => row.GetInt32()).ToArray();
+                        var dialogueMessages = roleSource.Value
+                            .GetProperty("messageCatalog");
+                        var messageList = dialogueMessages
+                            .GetProperty("messageListId").GetInt32();
+                        var dialogueStats = critterStats.Select((value, index) =>
+                                (Key: (gameContext.SelfObject, index), Value: value))
+                            .ToDictionary(row => row.Key, row => row.Value);
+                        dialogueStats[(gameContext.DudeObject, 3)] = 5;
+                        dialogueStats[(gameContext.DudeObject, 4)] = 5;
+                        dialogueStats[(gameContext.DudeObject, 34)] = 0;
+                        var talkContext = roleContext with
+                        {
+                            CritterStats = dialogueStats,
+                            Traits = new Dictionary<(int, int, int), int>(),
+                            GameTime = ClassicIntTimerState.Initial.CurrentTick,
+                            MessageHandles = dialogueMessages.GetProperty("messages")
+                                .EnumerateObject().ToDictionary(
+                                    row => (messageList, int.Parse(row.Name)),
+                                    row => int.Parse(row.Name)),
+                        };
+                        var talkBudget = program.ExecutableProgram.Procedures.Values
+                            .Sum(row => row.Instructions.Count);
+                        var looked = ClassicIntEventDispatcher.Execute(
+                            program, "look_at_p_proc", entered.State, talkContext,
+                            entered.WorldObjects, randomContract, talkBudget);
+                        if (!looked.WorldObjects.ScriptOverrides ||
+                            looked.MessageEffects is not [{ MessageList: var lookList,
+                                MessageId: var lookMessage }] ||
+                            lookList != messageList ||
+                            !dialogueMessages.GetProperty("messages")
+                                .TryGetProperty(lookMessage.ToString(), out _))
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder look dispatch drifted.");
+                        var talked = ClassicIntEventDispatcher.Execute(
+                            program, "talk_p_proc", entered.State, talkContext,
+                            entered.WorldObjects, randomContract, talkBudget);
+                        var optionSummary = string.Join(",", talked.WorldObjects
+                            .DialogueOptions.Select(row =>
+                                $"{row.MessageId}:{row.TargetProcedureIndex}"));
+                        var globalDelta = string.Join(",", talked.State.GlobalVariables
+                            .Where(row => !entered.State.GlobalVariables.TryGetValue(
+                                row.Key, out var before) || before != row.Value)
+                            .Select(row => $"{row.Key}:{row.Value}"));
+                        var localDelta = string.Join(",", talked.State.LocalVariables
+                            .Where(row => !entered.State.LocalVariables.TryGetValue(
+                                row.Key, out var before) || before != row.Value)
+                            .Select(row => $"{row.Key}:{row.Value}"));
+                        var programDelta = string.Join(",", talked.State.ProgramVariables
+                            .Where(row => !entered.State.ProgramVariables.TryGetValue(
+                                row.Key, out var before) || before != row.Value)
+                            .Select(row => $"{row.Key}:{row.Value}"));
+                        if (!talked.WorldObjects.DialogueReady ||
+                            talked.WorldObjects.DialogueStart is null ||
+                            talked.WorldObjects.DialogueReplies.Count != 1 ||
+                            talked.WorldObjects.DialogueReplies[0].MessageId != 103 ||
+                            !talked.WorldObjects.DialogueOptions.Select(row =>
+                                    (row.MessageId, row.TargetProcedureIndex))
+                                .SequenceEqual([(104, 21), (105, 31), (106, 24)]) ||
+                            talked.State.GlobalVariables[41] != 1 ||
+                            talked.State.GlobalVariables[531] != 1 ||
+                            talked.State.ProgramVariables[21] != 1)
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder normal-arrival dialogue drifted: " +
+                                $"reply={string.Join(',', talked.WorldObjects.DialogueReplies.Select(row => row.MessageId))}; " +
+                                $"options={optionSummary}; " +
+                                $"globals={globalDelta}; locals={localDelta}; " +
+                                $"program={programDelta}.");
+                        var restoredTalkState = ClassicIntProcedureState.Restore(
+                            JsonSerializer.SerializeToElement(talked.State.Save()),
+                            randomContract);
+                        var restoredTalkWorld = ClassicIntWorldObjectState.Restore(
+                            JsonSerializer.SerializeToElement(
+                                talked.WorldObjects.Save()));
+                        if (!restoredTalkState.GlobalVariables.SequenceEqual(
+                                talked.State.GlobalVariables) ||
+                            !restoredTalkState.LocalVariables.SequenceEqual(
+                                talked.State.LocalVariables) ||
+                            !restoredTalkWorld.DialogueOptions.SequenceEqual(
+                                talked.WorldObjects.DialogueOptions))
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder dialogue save state drifted.");
+                        var selectedWorld = talked.WorldObjects with
+                        {
+                            DialogueReplies = [],
+                            DialogueOptions = [],
+                            DialogueReady = true,
+                        };
+                        var selected = ClassicIntEventDispatcher.Execute(
+                            program,
+                            program.ExecutableProgram.ProcedureOrder[21].Name,
+                            talked.State,
+                            talkContext,
+                            selectedWorld,
+                            randomContract,
+                            talkBudget);
+                        if (!selected.WorldObjects.DialogueReady ||
+                            selected.WorldObjects.DialogueStart is null ||
+                            selected.WorldObjects.DialogueReplies.Count == 0 ||
+                            selected.WorldObjects.DialogueOptions.Count == 0)
+                            throw new InvalidOperationException(
+                                "Owned ARVILLAG Elder option result drifted.");
+                        Console.WriteLine(
+                            $"{Path.GetFileName(path)}|{program.Program}|" +
+                            $"talk_p_proc|{talked.ExecutedInstructions}|" +
+                            $"globals={globalDelta}|program={programDelta}");
+                    }
                 }
             }
             if (parsedInitialization.HeaderProgram is { } header &&

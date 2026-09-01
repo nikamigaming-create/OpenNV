@@ -287,6 +287,10 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     internal Key InventoryPhysicalKey => _profile.Inventory.PhysicalKey;
     internal string InventoryEquipAction => _profile.Attack.Action;
     internal string InventoryInspectAction => _profile.Loot.Action;
+    internal string LookAction => _profile.Look.Action;
+    internal string TalkAction => _profile.Loot.Action;
+    internal float DialogueWidthPixels => _profile.WidthPixels;
+    internal int DialogueFontSizePixels => _profile.FontSizePixels;
     internal bool InventorySpearSelected => _inventory.SpearSelected;
     internal bool InventoryInspectionVisible => _inventory.InspectionVisible;
     internal bool DialogueVisible => _dialogue.IsOpen;

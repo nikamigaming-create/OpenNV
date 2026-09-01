@@ -40,6 +40,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2TempleSceneCoverage? TempleScene { get; private set; }
     internal Fo2ArvillagSceneCoverage? VillageScene { get; private set; }
     internal Fo2ArvillagIntRuntime? VillageIntRuntime { get; private set; }
+    internal Fo2ArvillagInteractionRuntime? VillageInteraction { get; private set; }
     internal Fo2MapSceneBuildCoverage? AdjacentScene { get; private set; }
     internal Fo2ArroyoClassicGameplayHud? VillageHud { get; private set; }
     internal Fo2TempleConfrontationRuntime? TempleConfrontation { get; private set; }
@@ -540,6 +541,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     }
 
     private string AdjacentSavePath => _savePath + ".adjacent-map.json";
+    private string VillageIntSavePath => _savePath + ".arvillag-int.json";
 
     private IReadOnlySet<int> VillageWalkable()
     {
@@ -723,16 +725,39 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         if (TempleScene is not null)
             TempleScene.Root.Visible = false;
         if (TempleConfrontation is not null)
+        {
             TempleConfrontation.Visible = false;
+            TempleConfrontation.SetProcess(false);
+        }
         VillageIntRuntime = Fo2ArvillagIntRuntime.Enter(
             _village ?? throw new InvalidOperationException(
                 "Fallout 2 ARVILLAG INT runtime has no source catalog."),
             VillageScene,
             Runtime.Player,
+            SelectedCharacter,
             isLoadingGame,
             _retailRandomContract,
             () => _retailRandomLifecycle,
             CommitRetailRandomLifecycle);
+        if (isLoadingGame && File.Exists(VillageIntSavePath))
+        {
+            using var savedVillage = JsonDocument.Parse(
+                File.ReadAllBytes(VillageIntSavePath));
+            VillageIntRuntime.Restore(savedVillage.RootElement);
+        }
+        else if (!isLoadingGame && File.Exists(VillageIntSavePath))
+            File.Delete(VillageIntSavePath);
+        VillageInteraction = Fo2ArvillagInteractionRuntime.Build(
+            VillageScene.Root,
+            _village,
+            VillageIntRuntime,
+            Runtime.Player,
+            TempleConfrontation?.LookAction ?? throw new InvalidOperationException(
+                "Fallout 2 village look input is unavailable."),
+            TempleConfrontation.TalkAction,
+            TempleConfrontation.DialogueWidthPixels,
+            TempleConfrontation.DialogueFontSizePixels,
+            () => PersistCurrentState());
         VillageHud = Fo2ArroyoClassicGameplayHud.Build(VillageScene.Root, _arroyo);
         VillageHud.BindCharacter(SelectedCharacter);
         GD.Print(
@@ -760,6 +785,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 TrialRuntime?.State,
                 _trialRoute)
             .Write();
+        if (Runtime.Player.CurrentMapIndex == Fo2ArvillagPresentationCatalog.MapIndex &&
+            VillageIntRuntime is not null)
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(
+                VillageIntRuntime.Save(),
+                new JsonSerializerOptions { WriteIndented = true });
+            var temporary = VillageIntSavePath + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(VillageIntSavePath)!);
+            File.WriteAllBytes(temporary, bytes);
+            File.Move(temporary, VillageIntSavePath, true);
+        }
         return CurrentSave;
     }
 

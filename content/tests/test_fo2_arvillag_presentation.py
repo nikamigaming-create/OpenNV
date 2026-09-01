@@ -54,6 +54,10 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
             ROOT
             / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagIntRuntime.cs"
         ).read_text(encoding="utf-8")
+        interaction = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2ArvillagInteractionRuntime.cs"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("placement_serials | transparent != set(top_level)", compiler)
         self.assertIn("derive_relief(", compiler)
@@ -64,6 +68,7 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("compile_map_int_initialization", source)
         self.assertIn('"villageIntRoles": village_int_roles', source)
         self.assertIn('"initialGlobalVariables"', source)
+        self.assertIn('"critterStats"', source)
         self.assertIn('"mapEnterMetarules"', source)
         self.assertIn('"sha256": file_sha256(route_path)', source)
         self.assertIn("visibleSerials.Union(transparent)", catalog)
@@ -94,6 +99,9 @@ class Fo2ArvillagPresentationTest(unittest.TestCase):
         self.assertIn("catalog.IntInitialization.ScriptSlots", int_runtime)
         self.assertIn("readRandomState", int_runtime)
         self.assertIn("commitRandomState", int_runtime)
+        self.assertIn("Fo1HexMath.TileInDirection", interaction)
+        self.assertIn("_scripts.Talk(role)", interaction)
+        self.assertIn("_scripts.Choose(_activeRole", interaction)
         self.assertNotIn("proxy", scene.casefold())
         self.assertNotIn("capsule", scene.casefold())
 
