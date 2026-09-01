@@ -177,6 +177,7 @@ def synthetic_plugin() -> bytes:
         "REFR",
         0x203,
         subrecord("NAME", struct.pack("<I", 0x303))
+        + subrecord("XESP", struct.pack("<IB3x", 0x200, 1))
         + subrecord("DATA", struct.pack("<6f", 18.0, 28.0, 38.0, 0.0, 0.0, 0.0)),
     )
     container_reference = record(
@@ -472,6 +473,8 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(references[1].scale, 1.0)
         self.assertEqual(references[1].teleport_destination_form_id, 0x400)
         self.assertEqual(references[1].teleport_destination_transform.position, (1.0, 2.0, 3.0))
+        self.assertEqual(references[3].enable_parent_form_id, 0x200)
+        self.assertTrue(references[3].enable_parent_opposite)
         self.assertEqual(catalog.base_objects[references[1].base_form_id].record_type, "DOOR")
         self.assertEqual(cell.authored_lighting.ambient_rgb, (10, 20, 30))
         self.assertEqual(cell.lighting.ambient_rgb, (90, 80, 70))

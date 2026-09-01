@@ -106,6 +106,9 @@ ARMOR_ITEM_DATA_BYTES = 12
 ITEM_ECONOMICS_RECORD_TYPES = frozenset({"ARMO", "IMOD", "KEYM", "MISC", "WEAP"})
 TELEPORT_DESTINATION_TRANSFORM_OFFSET = 4
 TELEPORT_DESTINATION_BYTES = 28
+ENABLE_PARENT_BYTES = 8
+ENABLE_PARENT_OPPOSITE_OFFSET = 4
+ENABLE_PARENT_OPPOSITE_FLAG = 0x00000001
 NAVM_DATA_BYTES = 24
 NAVM_VERTEX = struct.Struct("<3f")
 NAVM_TRIANGLE = struct.Struct("<3H3hI")
@@ -281,6 +284,8 @@ class PlacedReference:
     scale: float
     teleport_destination_form_id: int | None
     teleport_destination_transform: Transform | None
+    enable_parent_form_id: int | None = None
+    enable_parent_opposite: bool = False
 
 
 @dataclass
@@ -854,6 +859,22 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 continue
             teleport = values.get("XTEL", [])
             teleport_data = teleport[0] if teleport else b""
+            enable_parents = values.get("XESP", [])
+            if len(enable_parents) > 1 or (
+                enable_parents and len(enable_parents[0]) != ENABLE_PARENT_BYTES
+            ):
+                raise ValueError(
+                    f"REFR XESP must be {ENABLE_PARENT_BYTES} bytes in "
+                    f"{record.form_id:08x}"
+                )
+            enable_parent_data = enable_parents[0] if enable_parents else b""
+            enable_parent_flags = (
+                struct.unpack_from(
+                    "<I", enable_parent_data, ENABLE_PARENT_OPPOSITE_OFFSET
+                )[0]
+                if enable_parent_data
+                else 0
+            )
             catalog.references.append(
                 PlacedReference(
                     record.form_id,
@@ -871,6 +892,10 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                     )
                     if len(teleport_data) >= TELEPORT_DESTINATION_BYTES
                     else None,
+                    parse_form_id(enable_parent_data, record, "XESP")
+                    if enable_parent_data
+                    else None,
+                    bool(enable_parent_flags & ENABLE_PARENT_OPPOSITE_FLAG),
                 )
             )
     if localized_plugin is None:

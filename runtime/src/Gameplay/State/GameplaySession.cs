@@ -62,12 +62,14 @@ internal partial class GameplaySession : Node
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
     private int _weaponClipSize;
+    private int? _weaponAnimationType;
     private int _ammoInMagazine;
     private int _shotsFired;
     private OpeningCampaignState? _openingState;
     private OwnedGameplayUiPresentation? _gameplayUi;
     private OpeningGameplayVitalsContract? _vitalsContract;
     private GameplayVitals? _vitals;
+    private Func<GamebryoHitscanHit, bool>? _hitscanHitHandler;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -539,6 +541,7 @@ internal partial class GameplaySession : Node
             _weaponDamage = weapon.Damage;
             _weaponClipSize = weapon.ClipSize;
             _ammoInMagazine = weapon.AmmoInMagazine;
+            _weaponAnimationType = weapon.AnimationType;
         }
         else
             ClearEquippedWeapon();
@@ -553,6 +556,7 @@ internal partial class GameplaySession : Node
         _weaponDamage = 0;
         _weaponClipSize = 0;
         _ammoInMagazine = 0;
+        _weaponAnimationType = null;
         SynchronizeHeldWeaponPresentation();
     }
 
@@ -636,6 +640,11 @@ internal partial class GameplaySession : Node
         var to = from - aimSource.GlobalBasis.Z * _configuration.Player.FireRayDistanceMeters;
         var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(
             PhysicsRayQueryParameters3D.Create(from, to, collisionMask));
+        if (hit.Count != 0 && hit["collider"].AsGodotObject() is Node collider)
+            _hitscanHitHandler?.Invoke(new GamebryoHitscanHit(
+                _equippedWeaponFormId,
+                _weaponAnimationType,
+                collider));
         Save();
         RefreshHud(
             hit.Count == 0
@@ -643,6 +652,9 @@ internal partial class GameplaySession : Node
                 : $"{WeaponLabel} fired ({_weaponDamage} damage profile) • hit {hit["collider"].AsGodotObject()}");
         return true;
     }
+
+    internal void SetHitscanHitHandler(Func<GamebryoHitscanHit, bool>? handler) =>
+        _hitscanHitHandler = handler;
 
     internal bool Reload()
     {
@@ -730,6 +742,7 @@ internal partial class GameplaySession : Node
             weaponAmmoFormId = _weaponAmmoFormId,
             weaponDamage = _weaponDamage,
             weaponClipSize = _weaponClipSize,
+            weaponAnimationType = _weaponAnimationType,
             ammoInMagazine = _ammoInMagazine,
             shotsFired = _shotsFired,
             objectiveStage = (int)ObjectiveStage,
@@ -786,6 +799,7 @@ internal partial class GameplaySession : Node
         weaponAmmoFormId = _weaponAmmoFormId,
         weaponDamage = _weaponDamage,
         weaponClipSize = _weaponClipSize,
+        weaponAnimationType = _weaponAnimationType,
         ammoInMagazine = _ammoInMagazine,
         reserveAmmo = ReserveAmmo,
         shotsFired = _shotsFired,
@@ -881,6 +895,11 @@ internal partial class GameplaySession : Node
             : null;
         _weaponDamage = root.GetProperty("weaponDamage").GetInt32();
         _weaponClipSize = root.GetProperty("weaponClipSize").GetInt32();
+        _weaponAnimationType = root.TryGetProperty(
+            "weaponAnimationType", out var weaponAnimationType) &&
+            weaponAnimationType.ValueKind != JsonValueKind.Null
+                ? weaponAnimationType.GetInt32()
+                : null;
         _ammoInMagazine = root.GetProperty("ammoInMagazine").GetInt32();
         _shotsFired = root.GetProperty("shotsFired").GetInt32();
         if (schema == SaveSchemaV7)
@@ -1072,7 +1091,10 @@ internal partial class GameplaySession : Node
                 _weaponAmmoFormId,
                 _weaponDamage,
                 _weaponClipSize,
-                _ammoInMagazine);
+                _ammoInMagazine)
+            {
+                AnimationType = _weaponAnimationType,
+            };
         }
         _openingState = opening with
         {

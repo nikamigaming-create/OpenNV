@@ -18,6 +18,7 @@
     "VCG02SunnyPatrolTriggerSCRIPT",
     "VCG02SunnyPatrolTriggerREF",
     "VCG02SunnyBark",
+    "VCG02SunnyShotReaction",
     "VCG02BottleMarkerREF",
     "VCG02TargetSCRIPT",
     "CondNVVarmintRifleLoot",
@@ -408,7 +409,7 @@
             "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT"
           }
         ],
-        "automaticTopicEditorIds": ["VCG02SunnyBark"],
+        "automaticTopicEditorIds": ["VCG02SunnyBark", "VCG02SunnyShotReaction"],
         "automaticDialogueTriggers": [
           {
             "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT",
@@ -417,6 +418,13 @@
           }
         ],
         "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"
+      }
+    ],
+    "hitTargetSets": [
+      {
+        "scriptEditorId": "VCG02TargetSCRIPT",
+        "enableParentEditorId": "VCG02BottleMarkerREF",
+        "reactionTopicEditorId": "VCG02SunnyShotReaction"
       }
     ],
     "menus": {

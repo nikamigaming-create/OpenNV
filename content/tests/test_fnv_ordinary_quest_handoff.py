@@ -12,6 +12,7 @@ sys.path.insert(0, str(TOOLS))
 
 from opening_catalog import (
     _compile_ordinary_quests,
+    _compile_hit_target_sets,
     _compile_topic_closure,
     _resolve_command_record_identities,
     _script_commands,
@@ -42,6 +43,73 @@ def record(
 
 
 class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
+    def test_compiles_source_hit_target_set_without_target_specific_runtime_ids(self) -> None:
+        records = [
+            record(
+                "SCPT",
+                "0010a1ef",
+                "VCG02TargetSCRIPT",
+                source=(
+                    "begin OnHitWith\n"
+                    "if (GetQuestRunning VCG02 == 1 && Player.IsWeaponOut == 1 && "
+                    "Player.GetWeaponAnimType > 3 && Player.GetWeaponAnimType < 9 && "
+                    "Player.GetEquipped NVWeapMS22Camera == 0)\n"
+                    "SunnyREF.SayTo player VCG02SunnyShotReaction\n"
+                    "set VCG02.nTargetCount to VCG02.nTargetCount + 1\n"
+                    "setstage CGTutorial 62\n"
+                    "if VCG02.nTargetCount >= 3\n"
+                    "SetObjectiveCompleted VCG02 10 1\nSunnyREF.evp\nendif\nendif\nend"
+                ),
+            ),
+            record("REFR", "00168a92", "VCG02BottleMarkerREF"),
+            record(
+                "REFR",
+                "0010a202",
+                "TargetRef",
+                links=[
+                    {"signature": "NAME", "formId": "0010a1f6"},
+                    {"signature": "XESP", "formId": "00168a92"},
+                ],
+            ),
+            record(
+                "MISC",
+                "0010a1f6",
+                "TargetBase",
+                links=[{"signature": "SCRI", "formId": "0010a1ef"}],
+            ),
+            record("WEAP", "0011a208", "NVWeapMS22Camera"),
+            record("QUST", "00059c85", "CGTutorial"),
+            record("ACHR", "00104e85", "SunnyREF"),
+        ]
+        quests = [
+            {
+                "formId": "0010a214",
+                "editorId": "VCG02",
+                "variables": [{"index": 1, "name": "nTargetCount"}],
+            }
+        ]
+        actors = [
+            {"topics": [{"formId": "0010a1df", "editorId": "VCG02SunnyShotReaction"}]}
+        ]
+
+        result = _compile_hit_target_sets(
+            records,
+            [
+                {
+                    "scriptEditorId": "VCG02TargetSCRIPT",
+                    "enableParentEditorId": "VCG02BottleMarkerREF",
+                    "reactionTopicEditorId": "VCG02SunnyShotReaction",
+                }
+            ],
+            quests,
+            actors,
+        )[0]
+
+        self.assertEqual(["0010a202"], [value["referenceFormId"] for value in result["targets"]])
+        self.assertEqual(1, result["questVariableIndex"])
+        self.assertEqual(3, result["threshold"])
+        self.assertEqual(62, result["tutorialStage"])
+
     def test_preserves_source_result_guards_and_resolves_leveled_grant(self) -> None:
         commands = _script_commands(
             """
@@ -69,6 +137,7 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
             "damage": 18,
             "clipSize": 5,
             "ammoFormId": "00004240",
+            "animationType": 5,
         }
 
         contract = _resolve_command_record_identities(commands, records)

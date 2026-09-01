@@ -96,6 +96,33 @@ internal sealed partial record OpeningNewGameFlow
                     "Owned ordinary actor dialogue handoff is incomplete.");
             ValidateCommandContract(actor.CommandContract, actorCommands);
         }
+        foreach (var targetSet in flow.HitTargetSets)
+        {
+            if (string.IsNullOrWhiteSpace(targetSet.ScriptFormId) ||
+                string.IsNullOrWhiteSpace(targetSet.ScriptEditorId) ||
+                targetSet.Targets.Count == 0 ||
+                targetSet.Targets.Select(value => value.ReferenceFormId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    targetSet.Targets.Count ||
+                !flow.OrdinaryQuests.TryGetValue(
+                    targetSet.QuestFormId, out var targetQuest) ||
+                !targetQuest.Variables.TryGetValue(
+                    checked((uint)targetSet.QuestVariableIndex),
+                    out var variableName) ||
+                !variableName.Equals(
+                    targetSet.QuestVariableName, StringComparison.OrdinalIgnoreCase) ||
+                !targetQuest.Objectives.ContainsKey(targetSet.ObjectiveIndex) ||
+                targetSet.WeaponAnimationTypeMinimumExclusive >=
+                    targetSet.WeaponAnimationTypeMaximumExclusive ||
+                targetSet.Threshold <= 0 ||
+                !flow.OrdinaryActors.Any(actor =>
+                    actor.Topics.ContainsKey(targetSet.ReactionTopicFormId) &&
+                    actor.ReferenceFormId.Equals(
+                        targetSet.SpeakerReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "Owned hit-target set is incomplete.");
+        }
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)
             .Where(value => value.Kind == "objective" &&

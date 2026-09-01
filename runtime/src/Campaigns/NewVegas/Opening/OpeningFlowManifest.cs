@@ -13,6 +13,7 @@ internal sealed partial record OpeningNewGameFlow(
     IReadOnlyDictionary<int, string> Objectives,
     IReadOnlyDictionary<string, OpeningOrdinaryQuest> OrdinaryQuests,
     IReadOnlyList<OpeningOrdinaryActor> OrdinaryActors,
+    IReadOnlyList<OpeningHitTargetSet> HitTargetSets,
     int CompletionStage,
     int PsychologyStartStage,
     int OutroStartStage,
@@ -233,6 +234,9 @@ internal sealed partial record OpeningNewGameFlow(
             objectives,
             ordinaryQuests,
             ordinaryActors,
+            source.GetProperty("hitTargetSets").EnumerateArray()
+                .Select(ParseHitTargetSet)
+                .ToArray(),
             quest.GetProperty("completionStage").GetInt32(),
             dialogue.GetProperty("psychologyStartStage").GetInt32(),
             dialogue.GetProperty("outroStartStage").GetInt32(),
@@ -323,6 +327,28 @@ internal sealed partial record OpeningNewGameFlow(
                 .ToArray(),
             ParseCommandContract(source.GetProperty("commandContract")));
     }
+
+    private static OpeningHitTargetSet ParseHitTargetSet(JsonElement source) => new(
+        source.GetProperty("scriptFormId").GetString()!,
+        source.GetProperty("scriptEditorId").GetString()!,
+        source.GetProperty("enableParentFormId").GetString()!,
+        source.GetProperty("targets").EnumerateArray()
+            .Select(value => new OpeningHitTarget(
+                value.GetProperty("referenceFormId").GetString()!,
+                value.GetProperty("baseFormId").GetString()!))
+            .ToArray(),
+        source.GetProperty("questFormId").GetString()!,
+        source.GetProperty("questVariableIndex").GetInt32(),
+        source.GetProperty("questVariableName").GetString()!,
+        source.GetProperty("weaponAnimationTypeMinimumExclusive").GetInt32(),
+        source.GetProperty("weaponAnimationTypeMaximumExclusive").GetInt32(),
+        source.GetProperty("excludedWeaponFormId").GetString()!,
+        source.GetProperty("reactionTopicFormId").GetString()!,
+        source.GetProperty("speakerReferenceFormId").GetString()!,
+        source.GetProperty("tutorialQuestFormId").GetString()!,
+        source.GetProperty("tutorialStage").GetInt32(),
+        source.GetProperty("threshold").GetInt32(),
+        source.GetProperty("objectiveIndex").GetInt32());
 
     private static OpeningCommandContract ParseCommandContract(JsonElement source) => new(
         source.GetProperty("schema").GetString()!,
@@ -1354,7 +1380,8 @@ internal sealed partial record OpeningNewGameFlow(
                 weapon.GetProperty("ammoFormId").GetString()!,
                 weapon.GetProperty("ammoEditorId").GetString()!,
                 weapon.GetProperty("damage").GetInt32(),
-                weapon.GetProperty("clipSize").GetInt32())
+                weapon.GetProperty("clipSize").GetInt32(),
+                weapon.GetProperty("animationType").GetInt32())
             : null,
         value.TryGetProperty("enableParentChildFormIds", out var enableChildren)
             ? enableChildren.EnumerateArray().Select(child => child.GetString()!).ToArray()

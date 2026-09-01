@@ -863,6 +863,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _dialogueVoice,
             configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
+        _loaded.Session.SetHitscanHitHandler(HandleHitscanHit);
         foreach (var activator in _loaded.MainContent.PlacedReferences
                      .Select(reference => reference.Placement)
                      .OfType<ScriptedActivatorInstance>())
@@ -1370,7 +1371,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             throw new InvalidOperationException(
                 $"Owned enabled reference is absent from the loaded world: {referenceFormId}");
         foreach (var node in nodes)
-            node.Visible = enabled;
+            GamebryoReferenceEnableRuntime.Apply(node, enabled);
         return nodes.Length;
     }
 
@@ -1777,7 +1778,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     command.Weapon.AmmoFormId,
                     command.Weapon.Damage,
                     command.Weapon.ClipSize,
-                    command.Weapon.ClipSize);
+                    command.Weapon.ClipSize)
+                {
+                    AnimationType = command.Weapon.AnimationType,
+                };
             }
             return;
         }

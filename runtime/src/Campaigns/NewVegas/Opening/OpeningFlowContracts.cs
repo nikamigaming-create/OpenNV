@@ -362,6 +362,26 @@ internal sealed record OpeningOrdinaryDialogueTrigger(
     int ObjectiveIndex,
     string TopicFormId);
 
+internal sealed record OpeningHitTargetSet(
+    string ScriptFormId,
+    string ScriptEditorId,
+    string EnableParentFormId,
+    IReadOnlyList<OpeningHitTarget> Targets,
+    string QuestFormId,
+    int QuestVariableIndex,
+    string QuestVariableName,
+    int WeaponAnimationTypeMinimumExclusive,
+    int WeaponAnimationTypeMaximumExclusive,
+    string ExcludedWeaponFormId,
+    string ReactionTopicFormId,
+    string SpeakerReferenceFormId,
+    string TutorialQuestFormId,
+    int TutorialStage,
+    int Threshold,
+    int ObjectiveIndex);
+
+internal sealed record OpeningHitTarget(string ReferenceFormId, string BaseFormId);
+
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
 internal sealed record OpeningCommandContract(
@@ -500,7 +520,8 @@ internal sealed record OpeningCommandWeapon(
     string AmmoFormId,
     string AmmoEditorId,
     int Damage,
-    int ClipSize);
+    int ClipSize,
+    int AnimationType);
 
 internal sealed record OpeningGuideActorAi(
     string Role,

@@ -944,6 +944,11 @@ internal partial class OpeningQuestRuntime
         _restoredGuidePackageState = state.GuidePackage;
         foreach (var reference in _referenceEnabledStates)
             SetReferenceVisibility(reference.Key, reference.Value, false);
+        foreach (var reference in _destroyedReferences)
+            if (_flow.HitTargetSets.Any(set => set.Targets.Any(target =>
+                    target.ReferenceFormId.Equals(
+                        reference, StringComparison.OrdinalIgnoreCase))))
+                SetReferenceVisibility(reference, false, false);
     }
 
     private static void Replace<T>(HashSet<T> target, IEnumerable<T> source)

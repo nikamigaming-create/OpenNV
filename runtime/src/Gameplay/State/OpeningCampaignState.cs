@@ -303,6 +303,8 @@ internal sealed record OpeningEquippedWeaponState(
     int ClipSize,
     int AmmoInMagazine)
 {
+    internal int? AnimationType { get; init; }
+
     internal static OpeningEquippedWeaponState Parse(JsonElement source) => new(
         source.GetProperty(nameof(WeaponFormId)).GetString()!,
         source.GetProperty(nameof(AmmoFormId)).ValueKind == JsonValueKind.String
@@ -310,13 +312,20 @@ internal sealed record OpeningEquippedWeaponState(
             : null,
         source.GetProperty(nameof(Damage)).GetInt32(),
         source.GetProperty(nameof(ClipSize)).GetInt32(),
-        source.GetProperty(nameof(AmmoInMagazine)).GetInt32());
+        source.GetProperty(nameof(AmmoInMagazine)).GetInt32())
+    {
+        AnimationType = source.TryGetProperty(nameof(AnimationType), out var animationType) &&
+            animationType.ValueKind != JsonValueKind.Null
+                ? animationType.GetInt32()
+                : null,
+    };
 
     internal void Validate()
     {
         if (FalloutFormId.Normalize(WeaponFormId) != WeaponFormId ||
             AmmoFormId is not null && FalloutFormId.Normalize(AmmoFormId) != AmmoFormId ||
-            Damage <= 0 || ClipSize <= 0 || AmmoInMagazine < 0 || AmmoInMagazine > ClipSize)
+            Damage <= 0 || ClipSize <= 0 || AmmoInMagazine < 0 ||
+            AmmoInMagazine > ClipSize || AnimationType is < 0)
             throw new InvalidOperationException("Saved opening weapon state is invalid.");
     }
 }

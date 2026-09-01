@@ -203,6 +203,8 @@ LEVELED_ITEM_ENTRY_BYTES = 12
 WEAPON_DATA_BYTES = 15
 WEAPON_DAMAGE_OFFSET = 12
 WEAPON_CLIP_SIZE_OFFSET = 14
+WEAPON_DNAM_BYTES = 204
+WEAPON_ANIMATION_TYPE_OFFSET = 0
 DOC_INITIAL_CHAIR_MARKER_ID = 14
 FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
     "nif-marker-minus-gmst-target-offset-for-actor-placement"
@@ -717,6 +719,14 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                 if weapon is None:
                     weapon = {"damage": None, "clipSize": None, "ammoFormId": None}
                 weapon["ammoFormId"] = form_id_text(struct.unpack("<I", subrecord.data)[0])
+            if record.signature == "WEAP" and subrecord.signature == "DNAM":
+                if len(subrecord.data) != WEAPON_DNAM_BYTES:
+                    continue
+                if weapon is None:
+                    weapon = {"damage": None, "clipSize": None, "ammoFormId": None}
+                weapon["animationType"] = struct.unpack_from(
+                    "<I", subrecord.data, WEAPON_ANIMATION_TYPE_OFFSET
+                )[0]
             if (
                 record.signature == "INFO"
                 and subrecord.signature == "DATA"
@@ -5595,7 +5605,9 @@ def _resolve_command_record_identities(
                     record["recordType"] == "WEAP":
                 weapon = record.get("weapon")
                 if not isinstance(weapon, dict) or weapon.get("damage") is None or \
-                        weapon.get("clipSize") is None or weapon.get("ammoFormId") is None:
+                        weapon.get("clipSize") is None or \
+                        weapon.get("ammoFormId") is None or \
+                        weapon.get("animationType") is None:
                     raise ValueError(f"Owned equipped weapon contract is absent: {editor_id}")
                 ammo = records_by_form.get(str(weapon["ammoFormId"]).casefold())
                 if ammo is not None and ammo["recordType"] == "FLST":
@@ -5619,6 +5631,7 @@ def _resolve_command_record_identities(
                     "clipSize": weapon["clipSize"],
                     "ammoFormId": ammo["formId"],
                     "ammoEditorId": _record_editor_id_from_manifest(ammo),
+                    "animationType": weapon.get("animationType"),
                 }
             if editor_field == "itemEditorId" and record["recordType"] == "LVLI":
                 entries = record.get("leveledEntries", [])
@@ -6859,6 +6872,150 @@ def _compile_ordinary_quests(
     return ordinary_quests
 
 
+def _compile_hit_target_sets(
+    records: list[dict[str, object]],
+    configurations: Iterable[object],
+    ordinary_quests: list[dict[str, object]],
+    ordinary_actors: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    results = []
+    for source_configuration in configurations:
+        configuration = dict(source_configuration)
+        script = _unique_manifest_record(
+            records, str(configuration["scriptEditorId"]), "SCPT"
+        )
+        script_sources = _record_text_values(script, "SCTX")
+        if len(script_sources) != 1:
+            raise ValueError("Owned hit-target script source is ambiguous")
+        source = script_sources[0]
+        guard = re.search(
+            r"GetQuestRunning\s+(\w+)\s*==\s*1.*?"
+            r"Player\.IsWeaponOut\s*==\s*1.*?"
+            r"Player\.GetWeaponAnimType\s*>\s*(\d+).*?"
+            r"Player\.GetWeaponAnimType\s*<\s*(\d+).*?"
+            r"Player\.GetEquipped\s+(\w+)\s*==\s*0",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        increment = re.search(
+            r"set\s+(\w+)\.n(\w+)\s+to\s+\1\.n\2\s*\+\s*1",
+            source,
+            re.IGNORECASE,
+        )
+        threshold = re.search(
+            r"if\s+\w+\.n\w+\s*>=\s*(\d+).*?"
+            r"SetObjectiveCompleted\s+(\w+)\s+(\d+)\s+1.*?"
+            r"(\w+)\.evp",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        tutorial = re.search(r"setstage\s+(\w+)\s+(\d+)", source, re.IGNORECASE)
+        reaction = re.search(
+            r"(\w+)\.SayTo\s+player\s+(\w+)", source, re.IGNORECASE
+        )
+        if not all((guard, increment, threshold, tutorial, reaction)):
+            raise ValueError("Owned hit-target script semantics differ")
+        assert guard and increment and threshold and tutorial and reaction
+        quest_editor_id = guard[1]
+        if (
+            increment[1].casefold() != quest_editor_id.casefold()
+            or threshold[2].casefold() != quest_editor_id.casefold()
+            or increment[2].casefold() != "targetcount"
+        ):
+            raise ValueError("Owned hit-target quest counter differs")
+        quest = next(
+            (
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold() == quest_editor_id.casefold()
+            ),
+            None,
+        )
+        if quest is None:
+            raise ValueError("Owned hit-target quest is absent")
+        variables = {str(value["name"]).casefold(): value for value in quest["variables"]}
+        variable = variables.get(f"n{increment[2]}".casefold())
+        if variable is None:
+            raise ValueError("Owned hit-target quest variable is absent")
+        parent = _unique_manifest_record(
+            records, str(configuration["enableParentEditorId"]), "REFR"
+        )
+        target_references = sorted(
+            (
+                record
+                for record in records
+                if record["recordType"] == "REFR"
+                and any(
+                    link["signature"] == "XESP"
+                    and str(link["formId"]).casefold()
+                    == str(parent["formId"]).casefold()
+                    for link in record["links"]
+                )
+            ),
+            key=lambda value: int(str(value["formId"]), FORM_ID_RADIX),
+        )
+        if not target_references:
+            raise ValueError("Owned hit-target enable-parent children are absent")
+        targets = []
+        for reference in target_references:
+            base_links = [
+                link for link in reference["links"] if link["signature"] == "NAME"
+            ]
+            if len(base_links) != 1:
+                raise ValueError("Owned hit-target base identity is ambiguous")
+            base = next(
+                value
+                for value in records
+                if str(value["formId"]).casefold()
+                == str(base_links[0]["formId"]).casefold()
+            )
+            if not any(
+                link["signature"] == "SCRI"
+                and str(link["formId"]).casefold()
+                == str(script["formId"]).casefold()
+                for link in base["links"]
+            ):
+                raise ValueError("Owned hit-target base script differs")
+            targets.append(
+                {"referenceFormId": reference["formId"], "baseFormId": base["formId"]}
+            )
+        excluded_weapon = _unique_manifest_record(records, guard[4], "WEAP")
+        reaction_topic_editor_id = str(configuration["reactionTopicEditorId"])
+        if reaction[2].casefold() != reaction_topic_editor_id.casefold():
+            raise ValueError("Owned hit-target reaction topic differs")
+        reaction_topics = [
+            topic
+            for actor in ordinary_actors
+            for topic in actor["topics"]
+            if str(topic["editorId"]).casefold() == reaction_topic_editor_id.casefold()
+        ]
+        if len(reaction_topics) != 1:
+            raise ValueError("Owned hit-target reaction closure is ambiguous")
+        tutorial_quest = _unique_manifest_record(records, tutorial[1], "QUST")
+        speaker = _unique_manifest_record(records, reaction[1])
+        results.append(
+            {
+                "scriptFormId": script["formId"],
+                "scriptEditorId": configuration["scriptEditorId"],
+                "enableParentFormId": parent["formId"],
+                "targets": targets,
+                "questFormId": quest["formId"],
+                "questVariableIndex": variable["index"],
+                "questVariableName": variable["name"],
+                "weaponAnimationTypeMinimumExclusive": int(guard[2]),
+                "weaponAnimationTypeMaximumExclusive": int(guard[3]),
+                "excludedWeaponFormId": excluded_weapon["formId"],
+                "reactionTopicFormId": reaction_topics[0]["formId"],
+                "speakerReferenceFormId": speaker["formId"],
+                "tutorialQuestFormId": tutorial_quest["formId"],
+                "tutorialStage": int(tutorial[2]),
+                "threshold": int(threshold[1]),
+                "objectiveIndex": int(threshold[3]),
+            }
+        )
+    return results
+
+
 def compile_new_game_flow(
     master_path: Path,
     ui_archive_path: Path,
@@ -7312,6 +7469,12 @@ def compile_new_game_flow(
         str(guide_actor_ai["referenceFormId"]),
         guide_animation_paths,
     )
+    hit_target_sets = _compile_hit_target_sets(
+        records,
+        flow.get("hitTargetSets", []),
+        ordinary_quests,
+        ordinary_actors,
+    )
     flow_commands = _all_flow_commands(programs, dialogue)
     command_contract = _resolve_command_record_identities(flow_commands, records)
     player_animation = _compile_player_animation_graph(
@@ -7462,6 +7625,7 @@ def compile_new_game_flow(
             },
             "ordinaryQuests": ordinary_quests,
             "ordinaryActors": ordinary_actors,
+            "hitTargetSets": hit_target_sets,
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
             "guideActorAi": guide_actor_ai,
