@@ -99,14 +99,14 @@ internal sealed class CellPortalTravel
             ?? throw new InvalidOperationException(
                 $"Portal XTEL destination is missing: {source.Door.ReferenceFormId}");
         source.Door.SetOpen(true);
+        _activeSet.Activate(target.CellFormId);
+        _environmentSet?.Activate(target.CellFormId);
+        player.CollisionMask = target.CollisionLayer;
         player.ApplyPortalArrival(
             target.Root,
             target.OriginGameUnits,
             destination);
-        player.CollisionMask = target.CollisionLayer;
         _session.CrossPortal(source.CellFormId, target.CellFormId, source.Door);
-        _activeSet.Activate(target.CellFormId);
-        _environmentSet?.Activate(target.CellFormId);
         _transitions.Add(new Transition(
             source.CellFormId,
             target.CellFormId,

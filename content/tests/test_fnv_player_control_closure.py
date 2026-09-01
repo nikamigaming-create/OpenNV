@@ -75,6 +75,29 @@ class FnvPlayerControlClosureTest(unittest.TestCase):
         self.assertIn("_activeSet.Activate(target.CellFormId);", portal)
         self.assertIn("_environmentSet?.Activate(target.CellFormId);", portal)
 
+        travel = portal[portal.index("private bool TravelThrough(") :]
+        activate = travel.index("_activeSet.Activate(target.CellFormId);")
+        collision_layer = travel.index("player.CollisionMask = target.CollisionLayer;")
+        arrival = travel.index("player.ApplyPortalArrival(")
+        publish = travel.index("_session.CrossPortal(")
+        self.assertLess(activate, collision_layer)
+        self.assertLess(collision_layer, arrival)
+        self.assertLess(arrival, publish)
+
+    def test_portal_acceptance_covers_both_xtel_arrival_directions(self):
+        acceptance = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "RuntimeCoordinator.Acceptance.cs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("portal.FromCollisionLayer", acceptance)
+        self.assertIn("reverse: false", acceptance)
+        self.assertIn("reverse: true", acceptance)
+        self.assertIn("reverse ? portal.ToDoor : portal.FromDoor", acceptance)
+        self.assertIn("reverse ? portal.FromRoot : portal.ToRoot", acceptance)
+
     def test_owned_pipboy_reset_publishes_inventory_and_control_state(self):
         state = (OPENING / "OpeningQuestRuntime.State.cs").read_text(encoding="utf-8")
         session = (

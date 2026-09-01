@@ -655,12 +655,24 @@ public partial class RuntimeCoordinator
                     null,
                     null));
             else
+            {
+                var initialActiveCellFormId = loaded.Session.ActiveCellFormId;
+                var initialCollisionMask = loaded.Player.CollisionMask;
                 foreach (var portal in loaded.PortalLinks)
+                {
+                    loaded.ActiveSet.Activate(portal.FromCellFormId);
+                    loaded.Player.CollisionMask = portal.FromCollisionLayer;
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                     portalTraversals.Add(await ProvePortalPassage(
                         loaded,
                         portal.FromDoor,
                         portal.ToDoor,
                         portal));
+                }
+                loaded.ActiveSet.Activate(initialActiveCellFormId);
+                loaded.Player.CollisionMask = initialCollisionMask;
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            }
             var failedPortal = portalTraversals.FirstOrDefault(value => !value.Passed);
             if (failedPortal != default)
                 throw new InvalidOperationException(
@@ -779,11 +791,21 @@ public partial class RuntimeCoordinator
                 backwardCollision)
             : null;
         var arrivalFloor = portal is { } target
-            ? await ProvePortalArrivalFloor(loaded, target)
+            ? await ProvePortalArrivalFloor(loaded, target, reverse: false)
             : new PortalArrivalFloor(
                 portalFloor,
                 portalFloor.Collider is not null &&
                     loaded.MainContent.Root.IsAncestorOf(portalFloor.Collider));
+        var reciprocalArrivalFloor = portal is { } reciprocalTarget
+            ? await ProvePortalArrivalFloor(loaded, reciprocalTarget, reverse: true)
+            : arrivalFloor;
+        var arrivalFloorHit = arrivalFloor.Hit.Hit && reciprocalArrivalFloor.Hit.Hit;
+        var arrivalFloorWalkable =
+            arrivalFloor.Hit.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum &&
+            reciprocalArrivalFloor.Hit.Normal.Y >=
+                _configuration.Proof.WalkableSurfaceNormalYMinimum;
+        var arrivalFloorOwned =
+            arrivalFloor.OwnedByTargetCell && reciprocalArrivalFloor.OwnedByTargetCell;
         return new PortalTraversalProof(
             fromDoor.ReferenceFormId,
             toDoor?.ReferenceFormId,
@@ -793,11 +815,10 @@ public partial class RuntimeCoordinator
             openBlockedByDoor,
             openRayPortalClear,
             projectilePortalClear,
-            arrivalFloor.Hit.Hit,
-            arrivalFloor.Hit.Hit &&
-                arrivalFloor.Hit.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum,
-            arrivalFloor.Hit.Y,
-            arrivalFloor.OwnedByTargetCell,
+            arrivalFloorHit,
+            arrivalFloorHit && arrivalFloorWalkable,
+            reciprocalArrivalFloor.Hit.Y,
+            arrivalFloorOwned,
             capsuleWalkForward,
             capsuleWalkBackward,
             portal is null
@@ -807,29 +828,39 @@ public partial class RuntimeCoordinator
 
     private async Task<PortalArrivalFloor> ProvePortalArrivalFloor(
         CellSceneLoader.LoadedCell loaded,
-        CellSceneLoader.PortalLink portal)
+        CellSceneLoader.PortalLink portal,
+        bool reverse)
     {
-        var destination = portal.FromDoor.Destination ??
+        var destinationDoor = reverse ? portal.ToDoor : portal.FromDoor;
+        var destination = destinationDoor.Destination ??
             throw new InvalidOperationException(
-                $"Portal XTEL destination is missing: {portal.FromDoor.ReferenceFormId}");
-        loaded.ActiveSet.Activate(portal.ToCellFormId);
+                $"Portal XTEL destination is missing: {destinationDoor.ReferenceFormId}");
+        var targetCellFormId = reverse ? portal.FromCellFormId : portal.ToCellFormId;
+        var targetRoot = reverse ? portal.FromRoot : portal.ToRoot;
+        var targetOriginGameUnits = reverse
+            ? portal.FromOriginGameUnits
+            : portal.ToOriginGameUnits;
+        var targetCollisionLayer = reverse
+            ? portal.FromCollisionLayer
+            : portal.ToCollisionLayer;
+        loaded.ActiveSet.Activate(targetCellFormId);
         try
         {
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var arrival = CellPlayer.ResolvePortalArrivalFloorPosition(
-                portal.ToRoot,
-                portal.ToOriginGameUnits,
+                targetRoot,
+                targetOriginGameUnits,
                 destination);
             var floor = CellSceneLoader.CastFloorAt(
                 GetWorld3D().DirectSpaceState,
                 _configuration.Proof,
-                portal.ToCollisionLayer,
+                targetCollisionLayer,
                 loaded.Player.GetRid(),
                 arrival);
             return new PortalArrivalFloor(
                 floor,
-                floor.Collider is not null && portal.ToRoot.IsAncestorOf(floor.Collider));
+                floor.Collider is not null && targetRoot.IsAncestorOf(floor.Collider));
         }
         finally
         {
