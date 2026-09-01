@@ -34,6 +34,9 @@ ACTOR_TEMPLATE_FLAGS_BYTES = 2
 NPC_INVENTORY_ENTRY_BYTES = 8
 REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_SCALE_BYTES = 4
+ENABLE_PARENT_BYTES = 8
+ENABLE_PARENT_OPPOSITE_OFFSET = 4
+ENABLE_PARENT_OPPOSITE_FLAG = 1
 REFERENCE_TRANSFORM_FLOATS = 6
 ARMOR_BIPED_DATA_BYTES = 8
 LEVELED_LIST_ENTRY_BYTES = 12
@@ -74,6 +77,7 @@ class HumanoidActor:
     face_symmetric_geometry: tuple[float, ...]
     face_asymmetric_geometry: tuple[float, ...]
     face_symmetric_texture: tuple[float, ...]
+    package_form_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -87,6 +91,7 @@ class ActorReference:
     rotation_radians: tuple[float, float, float]
     scale: float
     enable_parent_form_id: int | None
+    enable_parent_opposite: bool = False
 
     @property
     def initially_disabled(self) -> bool:
@@ -295,6 +300,7 @@ def _actor(record: Record, subrecords: list[tuple[str, bytes]]) -> HumanoidActor
         _optional_float_array(values, record, "FGGS", FACEGEN_SYMMETRIC_GEOMETRY_FLOATS),
         _optional_float_array(values, record, "FGGA", FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS),
         _optional_float_array(values, record, "FGTS", FACEGEN_SYMMETRIC_TEXTURE_FLOATS),
+        tuple(_form_id(data, record, "PKID") for data in values.get("PKID", [])),
     )
 
 
@@ -525,7 +531,7 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
         raise ValueError(f"{record.signature} XSCL must be positive in {record.form_id:08x}")
     enable_parents = values.get("XESP", [])
     if enable_parents and (
-        len(enable_parents) != 1 or len(enable_parents[0]) < FORM_ID_BYTES
+        len(enable_parents) != 1 or len(enable_parents[0]) != ENABLE_PARENT_BYTES
     ):
         raise ValueError(
             f"{record.signature} XESP must contain one enable-parent FormID in "
@@ -533,6 +539,13 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
         )
     enable_parent_form_id = (
         struct.unpack_from("<I", enable_parents[0])[0] if enable_parents else None
+    )
+    enable_parent_opposite = bool(
+        enable_parents
+        and struct.unpack_from(
+            "<I", enable_parents[0], ENABLE_PARENT_OPPOSITE_OFFSET
+        )[0]
+        & ENABLE_PARENT_OPPOSITE_FLAG
     )
     return ActorReference(
         record.form_id,
@@ -544,6 +557,7 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
         tuple(values6[3:]),
         scale,
         enable_parent_form_id,
+        enable_parent_opposite,
     )
 
 

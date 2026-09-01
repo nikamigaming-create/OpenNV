@@ -789,17 +789,17 @@ class CellCatalogTest(unittest.TestCase):
                 },
             ],
         )
+        exterior_route_recipe = load_spatial_recipe(
+            "goodsprings-doc-exterior-active-set-v1"
+        )
         self.assertEqual(
             [
                 *route_recipe["actorRecipes"],
-                *load_spatial_recipe("goodsprings-doc-exterior-active-set-v1")[
-                    "actorRecipes"
-                ],
+                *exterior_route_recipe["actorRecipes"],
                 *load_recipe("goodsprings-saloon-structure-v1")["actorRecipes"],
             ],
             [
                 "goodsprings-doc-mitchell-actor-v1",
-                "goodsprings-easy-pete-actor-v1",
                 "goodsprings-trudy-actor-v1",
                 "goodsprings-settler-04-actor-v1",
                 "goodsprings-sunny-smiles-actor-v1",
@@ -807,6 +807,10 @@ class CellCatalogTest(unittest.TestCase):
                 "goodsprings-vcg02-gecko-1-actor-v1",
                 "goodsprings-vcg02-gecko-2-actor-v1",
             ],
+        )
+        self.assertEqual(
+            exterior_route_recipe["actorDiscovery"],
+            {"mode": "effective-achr"},
         )
 
     def test_fo1_vault13_donor_recipe_matches_current_cell_contract(self) -> None:

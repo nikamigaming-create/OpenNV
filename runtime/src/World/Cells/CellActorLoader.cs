@@ -71,7 +71,19 @@ internal static class CellActorLoader
             throw new InvalidOperationException("Actor scene belongs to another CELL.");
         var reference = root.GetProperty("reference");
         var initiallyDisabled = reference.GetProperty("initiallyDisabled").GetBoolean();
-        if (initiallyDisabled && !proofEnableInitiallyDisabled && !materializeInitiallyDisabled)
+        var enableParentFormId = reference.TryGetProperty(
+            "enableParentFormId", out var enableParent) &&
+            enableParent.ValueKind == JsonValueKind.String
+                ? enableParent.GetString()
+                : null;
+        var enableParentInitiallyDisabled = enableParentFormId is not null &&
+            reference.GetProperty("enableParentInitiallyDisabled").GetBoolean();
+        var enableParentOpposite = enableParentFormId is not null &&
+            reference.GetProperty("enableParentOpposite").GetBoolean();
+        var initiallyEnabled = !initiallyDisabled &&
+            (enableParentFormId is null ||
+                enableParentInitiallyDisabled == enableParentOpposite);
+        if (!initiallyEnabled && !proofEnableInitiallyDisabled && !materializeInitiallyDisabled)
             return null;
         var authoredPosition = ReadVector(reference.GetProperty("positionGameUnits"));
         var position = new Vector3(
@@ -123,18 +135,18 @@ internal static class CellActorLoader
             placement,
             localBounds,
             collisionLayer ?? configuration.Player.CollisionMask);
-        if (initiallyDisabled && materializeInitiallyDisabled && !proofEnableInitiallyDisabled)
-        {
-            placement.Visible = false;
-            placement.ProcessMode = Node.ProcessModeEnum.Disabled;
-            placement.SetMeta("opennv_enabled", 0);
-        }
+        GamebryoReferenceEnableRuntime.Apply(
+            placement,
+            initiallyEnabled || proofEnableInitiallyDisabled);
+        placement.SetMeta(
+            "opennv_enabled",
+            initiallyEnabled || proofEnableInitiallyDisabled ? 1 : 0);
         return new PlacedActor(
             placement,
             reference.GetProperty("formId").GetString()!,
             reference.GetProperty("baseFormId").GetString()!,
             initiallyDisabled,
-            proofEnableInitiallyDisabled && initiallyDisabled,
+            proofEnableInitiallyDisabled && !initiallyEnabled,
             actor.GetProperty("raceFormId").GetString()!,
             actor.GetProperty("hairFormId").GetString()!,
             actor.GetProperty("eyesFormId").GetString()!,
@@ -144,6 +156,11 @@ internal static class CellActorLoader
             actor.GetProperty("headPartFormIds").EnumerateArray()
                 .Select(value => value.GetString()!)
                 .ToArray(),
+            actor.TryGetProperty("packageFormIds", out var packageFormIds)
+                ? packageFormIds.EnumerateArray()
+                    .Select(value => value.GetString()!)
+                    .ToArray()
+                : Array.Empty<string>(),
             root.GetProperty("idleAnimation").GetString()!,
             loaded,
             localBounds);
@@ -211,6 +228,7 @@ internal static class CellActorLoader
         string EyesFormId,
         IReadOnlyList<string> OutfitFormIds,
         IReadOnlyList<string> HeadPartFormIds,
+        IReadOnlyList<string> PackageFormIds,
         string IdleAnimationPath,
         ActorModelSlice.LoadedActor Actor,
         Aabb LocalBounds);

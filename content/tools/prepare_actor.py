@@ -450,7 +450,16 @@ def _reference_manifest(
     catalog: ActorCatalog,
     reference: ActorReference,
     origin: tuple[float, float, float],
+    enable_parent_initially_disabled: bool | None = None,
 ) -> dict[str, object]:
+    if (
+        reference.enable_parent_form_id is not None
+        and enable_parent_initially_disabled is None
+    ):
+        raise ValueError(
+            "Actor XESP parent state was not compiled: "
+            f"{reference.form_id:08x} -> {reference.enable_parent_form_id:08x}"
+        )
     return {
         "formId": f"{reference.form_id:08x}",
         "recordType": reference.record_type,
@@ -464,6 +473,8 @@ def _reference_manifest(
             if reference.enable_parent_form_id is None
             else f"{reference.enable_parent_form_id:08x}"
         ),
+        "enableParentInitiallyDisabled": enable_parent_initially_disabled,
+        "enableParentOpposite": reference.enable_parent_opposite,
         "positionGameUnits": list(reference.position),
         "positionGodotUnits": godot_position(reference.position, origin),
         "rotationRadians": list(reference.rotation_radians),
@@ -732,7 +743,12 @@ def _prepare_creature_actor(
         "recipe": str(recipe["id"]),
         "configuration": configuration.actor_artifact_manifest(),
         "cellFormId": str(recipe["cellFormId"]),
-        "reference": _reference_manifest(catalog, reference, origin),
+        "reference": _reference_manifest(
+            catalog,
+            reference,
+            origin,
+            recipe.get("enableParentInitiallyDisabled"),
+        ),
         "actor": {
             "name": creature.name or creature.editor_id,
             "editorId": creature.editor_id,
@@ -1454,7 +1470,12 @@ def prepare_actor(
         "recipe": recipe_id,
         "configuration": configuration.actor_artifact_manifest(),
         "cellFormId": recipe["cellFormId"],
-        "reference": _reference_manifest(catalog, reference, origin),
+        "reference": _reference_manifest(
+            catalog,
+            reference,
+            origin,
+            recipe.get("enableParentInitiallyDisabled"),
+        ),
         "actor": {
             "name": actor.name,
             "editorId": actor.editor_id,
@@ -1471,6 +1492,11 @@ def prepare_actor(
             ),
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
             "outfitFormIds": [f"{outfit_form:08x}" for outfit_form in outfit_forms],
+            "packageFormIds": [f"{package:08x}" for package in actor.package_form_ids],
+            "templateFormId": (
+                None if actor.template_form_id is None else f"{actor.template_form_id:08x}"
+            ),
+            "templateFlags": actor.template_flags,
             "recordType": HUMANOID_BASE_RECORD_TYPE,
         },
         **(
@@ -1634,6 +1660,7 @@ def prepare_actor_set(
         str, dict[str, str]
     ] | None = None,
     family_compiler: dict[str, str] | None = None,
+    recipe_documents: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
         raise ValueError("Actor-set recipes must be non-empty and unique")
@@ -1644,7 +1671,13 @@ def prepare_actor_set(
     runtime_accumulation_root_animations_by_reference = (
         runtime_accumulation_root_animations_by_reference or {}
     )
-    recipes = [load_recipe(recipe_id) for recipe_id in recipe_ids]
+    recipes = (
+        [load_recipe(recipe_id) for recipe_id in recipe_ids]
+        if recipe_documents is None
+        else recipe_documents
+    )
+    if [str(recipe["id"]) for recipe in recipes] != recipe_ids:
+        raise ValueError("Actor-set recipe documents differ from their ordered identities")
     actors = [
         prepare_actor(
             data_root,

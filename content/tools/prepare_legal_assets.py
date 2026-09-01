@@ -7,10 +7,12 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import os
 import sys
 from pathlib import Path
 
+from actor_catalog import scan_actor_catalog
 from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
 from exterior_scene import prepare_exterior_scene
 from compiler_provenance import FAMILIES, compiler_identities
@@ -26,6 +28,7 @@ from owned_archive_stack import (
     load_owned_archive_stack,
 )
 from prepare_actor import prepare_actor_set
+from plugin_records import iter_plugin_records
 from prepare_fo3_profile import (
     default_recipe_path as default_fo3_profile_recipe_path,
     prepare_profile as prepare_fo3_profile,
@@ -34,6 +37,90 @@ from runtime_configuration import configured_recipe_path, load_runtime_configura
 
 
 SCHEMA = "opennv-legal-asset-cache/v1"
+INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
+FORM_ID_RADIX = 16
+
+
+def discover_effective_exterior_actors(
+    master: Path,
+    recipe: dict[str, object],
+    scene: dict[str, object],
+) -> list[dict[str, object]]:
+    discovery = recipe.get("actorDiscovery")
+    if discovery is None:
+        return []
+    if discovery != {"mode": "effective-achr"}:
+        raise ValueError("Exterior actor discovery must use effective-achr mode")
+    cell = dict(scene["cell"])
+    coordinates = dict(scene["coordinates"])
+    coverage = dict(scene["coverage"])
+    lod = dict(coverage["lod"])
+    source_cells = {
+        int(str(value), FORM_ID_RADIX) for value in cell["sourceCellFormIds"]
+    }
+    persistent_cell = int(str(recipe["persistentCellFormId"]), FORM_ID_RADIX)
+    loaded_grids = {
+        (int(value[0]), int(value[1])) for value in coordinates["loadedCellGrids"]
+    }
+    cell_size = float(lod["cellSizeGameUnits"])
+    if not cell_size > 0.0:
+        raise ValueError("Exterior actor discovery has an invalid source CELL size")
+    actor_catalog = scan_actor_catalog(master)
+    references = [
+        reference
+        for reference in actor_catalog.references
+        if reference.record_type == "ACHR"
+        and reference.cell_form_id in source_cells
+        and reference.actor_form_id in actor_catalog.actors
+        and (
+            reference.cell_form_id != persistent_cell
+            or (
+                math.floor(reference.position[0] / cell_size),
+                math.floor(reference.position[1] / cell_size),
+            )
+            in loaded_grids
+        )
+    ]
+    parent_ids = {
+        reference.enable_parent_form_id
+        for reference in references
+        if reference.enable_parent_form_id is not None
+    }
+    parent_flags = {
+        record.form_id: record.flags
+        for record in iter_plugin_records(master, frozenset({"REFR", "ACHR", "ACRE"}))
+        if record.form_id in parent_ids
+    }
+    if set(parent_flags) != parent_ids:
+        missing = sorted(parent_ids - set(parent_flags))
+        raise ValueError(
+            "Effective ACHR enable parents are absent: "
+            + ",".join(f"{value:08x}" for value in missing)
+        )
+    documents = []
+    for reference in sorted(references, key=lambda value: value.form_id):
+        documents.append(
+            {
+                "schema": "opennv-actor-recipe/v1",
+                "id": f"source-achr-{reference.form_id:08x}",
+                "master": recipe["master"],
+                "meshesArchive": recipe["meshesArchive"],
+                "textureArchives": recipe["textureArchives"],
+                "cellFormId": f"{reference.cell_form_id:08x}",
+                "cellRecipe": str(recipe["id"]),
+                "originGameUnits": list(coordinates["originGameUnits"]),
+                "proofActorReferenceFormId": f"{reference.form_id:08x}",
+                "enableParentInitiallyDisabled": (
+                    None
+                    if reference.enable_parent_form_id is None
+                    else bool(
+                        parent_flags[reference.enable_parent_form_id]
+                        & INITIALLY_DISABLED_RECORD_FLAG
+                    )
+                ),
+            }
+        )
+    return documents
 
 
 def _install_matches_outside_player_facegen_profile(
@@ -365,6 +452,11 @@ def prepare(
     )
     for linked_recipe_document in linked_recipe_documents:
         actor_recipe_ids.extend(str(value) for value in linked_recipe_document["actorRecipes"])
+    actor_discovery_enabled = any(
+        document.get("actorDiscovery") is not None
+        for document in [cell_recipe_document, *linked_recipe_documents]
+        if document is not None
+    )
     opening_recipe_path = configured_recipe_path("opening")
     install = {
         "dataRoot": str(data_root.resolve()),
@@ -409,13 +501,15 @@ def prepare(
         install,
         identities,
         require_cell=cell_recipe_document is not None,
-        require_actor=bool(actor_recipe_ids),
+        require_actor=bool(actor_recipe_ids) or actor_discovery_enabled,
         cell_recipe_id=(
             None if cell_recipe_document is None else str(cell_recipe_document["id"])
         ),
         linked_recipe_ids=tuple(str(row["id"]) for row in linked_recipe_documents),
         actor_recipe_ids=tuple(actor_recipe_ids),
     )
+    if actor_discovery_enabled:
+        reuse["actor"] = False
     if opening_recipe_path.stem != str(legal_assets["defaultOpeningRecipe"]):
         raise ValueError("Configured opening recipe registry and legal-assets default differ")
     if reuse["opening"]:
@@ -590,6 +684,34 @@ def prepare(
                 primary_document = json.loads(cell_scene_path.read_text(encoding="utf-8"))
                 primary_document["linkedCells"] = linked_cell_scenes
                 atomic_text(cell_scene_path, primary_document)
+        actor_recipe_documents = [load_recipe(value) for value in actor_recipe_ids]
+        scene_documents = [
+            json.loads(Path(str(cell_scene["output"])).read_text(encoding="utf-8")),
+            *(
+                json.loads(Path(str(row["scene"])).read_text(encoding="utf-8"))
+                for row in linked_cell_scenes
+            ),
+        ]
+        recipes_by_id = {
+            str(document["id"]): document
+            for document in [cell_recipe_document, *linked_recipe_documents]
+        }
+        for scene_document in scene_documents:
+            spatial_recipe = recipes_by_id[str(scene_document["recipe"])]
+            actor_recipe_documents.extend(
+                discover_effective_exterior_actors(
+                    master,
+                    spatial_recipe,
+                    scene_document,
+                )
+            )
+        references = [
+            str(document["proofActorReferenceFormId"]).casefold()
+            for document in actor_recipe_documents
+        ]
+        if len(references) != len(set(references)):
+            raise ValueError("Named and discovered actor recipes overlap one ACHR")
+        actor_recipe_ids = [str(document["id"]) for document in actor_recipe_documents]
         if actor_recipe_ids:
             if reuse["actor"]:
                 actor_scenes = {"manifest": str(prior["outputs"]["actorScenes"])}
@@ -628,6 +750,7 @@ def prepare(
                         }
                     },
                     identities["families"]["actor"],
+                    recipe_documents=actor_recipe_documents,
                 )
     manifest = {
         "schema": SCHEMA,

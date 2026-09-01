@@ -106,14 +106,19 @@ def _actor_route(
         if configured_links is None
         else [str(row["recipe"]) for row in configured_links]
     )
+    linked_paths = [_recipe_path(recipe_id) for recipe_id in linked_ids]
     linked = [
-        json.loads(_recipe_path(recipe_id).read_text(encoding="utf-8"))
-        for recipe_id in linked_ids
+        json.loads(path.read_text(encoding="utf-8")) for path in linked_paths
     ]
     actor_ids = [str(value) for value in primary["actorRecipes"]]
     for document in linked:
         actor_ids.extend(str(value) for value in document["actorRecipes"])
     actor_paths = [_recipe_path(recipe_id) for recipe_id in actor_ids]
+    discovery_paths = [
+        path
+        for path, document in [(primary_path, primary), *zip(linked_paths, linked)]
+        if document.get("actorDiscovery") is not None
+    ]
     route = {
         "schema": ACTOR_ROUTE_SCHEMA,
         "primaryCellRecipe": str(primary["id"]),
@@ -125,8 +130,15 @@ def _actor_route(
             }
             for recipe_id, path in zip(actor_ids, actor_paths, strict=True)
         ],
+        "discoveries": [
+            {
+                "recipe": json.loads(path.read_text(encoding="utf-8"))["id"],
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+            for path in discovery_paths
+        ],
     }
-    return actor_paths, route
+    return [*actor_paths, *discovery_paths], route
 
 
 def actor_route_manifest(cell_recipe_id: str | None = None) -> dict[str, object]:
@@ -180,7 +192,11 @@ def compiler_provenance_source_paths(
         # that complete graph here makes an opening animation change invalidate
         # actors without coupling either family to unchanged world geometry.
         sources = (
-            _local_dependencies("prepare_actor.py", "opening_catalog.py")
+            _local_dependencies(
+                "prepare_actor.py",
+                "opening_catalog.py",
+                "prepare_legal_assets.py",
+            )
             | compiler_common
             | {
                 configured_recipe_path("visualArchives"),
