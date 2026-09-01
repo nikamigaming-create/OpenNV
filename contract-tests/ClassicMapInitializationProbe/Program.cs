@@ -620,6 +620,62 @@ foreach (var path in args)
                     $"pickup_p_proc+critter_p_proc|" +
                     $"{playerPickup.ExecutedInstructions + attackStarted.ExecutedInstructions}");
             }
+            var cameron = parsedInitialization.ScriptSlots.SingleOrDefault(row =>
+                string.Equals(row.Program.Program, "ACTemVil.int",
+                    StringComparison.OrdinalIgnoreCase));
+            if (cameron is not null)
+            {
+                const string terminalTaggedSpeechProcedure = "Node015a";
+                var sourceState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), [], randomState);
+                var instructionBudget = cameron.Program.ExecutableProgram
+                    .Procedures[terminalTaggedSpeechProcedure].Instructions.Count;
+                var completed = ClassicIntEventDispatcher.Execute(
+                    cameron.Program,
+                    terminalTaggedSpeechProcedure,
+                    sourceState,
+                    gameContext,
+                    ClassicIntWorldObjectState.Empty,
+                    randomContract,
+                    instructionBudget);
+                if (completed.ExecutedInstructions != instructionBudget ||
+                    completed.State.ScriptLocalVariables.Count != 2 ||
+                    completed.State.ScriptLocalVariables[12] != 1 ||
+                    completed.State.ScriptLocalVariables[13] != 2 ||
+                    completed.State.MapVariables is not { Count: 1 } ||
+                    completed.State.MapVariables[20] != 2 ||
+                    completed.State.GlobalVariables is not { Count: 1 } ||
+                    completed.State.GlobalVariables[10] != 2 ||
+                    completed.State.ValueStack.Count != 0 ||
+                    completed.State.RandomState != randomState)
+                    throw new InvalidOperationException(
+                        "Owned Cameron tagged-Speech result drifted.");
+                var restored = ClassicIntProcedureState.Restore(
+                    JsonSerializer.SerializeToElement(completed.State.Save()),
+                    randomContract);
+                if (restored.ScriptLocalVariables[12] != 1 ||
+                    restored.ScriptLocalVariables[13] != 2 ||
+                    restored.MapVariables[20] != 2 ||
+                    restored.GlobalVariables[10] != 2 ||
+                    restored.ValueStack.Count != 0 ||
+                    restored.RandomState.SeedState !=
+                        completed.State.RandomState.SeedState ||
+                    restored.RandomState.RandomState.Seed !=
+                        completed.State.RandomState.RandomState.Seed ||
+                    restored.RandomState.RandomState.Selector !=
+                        completed.State.RandomState.RandomState.Selector ||
+                    !restored.RandomState.RandomState.Shuffle.SequenceEqual(
+                        completed.State.RandomState.RandomState.Shuffle) ||
+                    restored.RandomState.Events.Count !=
+                        completed.State.RandomState.Events.Count)
+                    throw new InvalidOperationException(
+                        "Owned Cameron dialogue result save state drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{cameron.Program.Program}|" +
+                    $"{terminalTaggedSpeechProcedure}|{completed.ExecutedInstructions}");
+            }
         }
         var jasmine = programs.FirstOrDefault(row => string.Equals(
             row.GetProperty("program").GetString(), "jasmine.int",

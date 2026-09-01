@@ -324,6 +324,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 Scene,
                 player,
                 this,
+                _retailRandomContract,
+                () => _retailRandomLifecycle,
+                CommitRetailRandomLifecycle,
                 restoredState?.TrialProgress);
         if (restoredState is not null)
         {

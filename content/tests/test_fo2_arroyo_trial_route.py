@@ -79,6 +79,8 @@ class Fo2ArroyoTrialRouteTest(unittest.TestCase):
         self.assertIn("VillageFirstActionStage", runtime)
         self.assertIn("ClassicDoorSession", runtime)
         self.assertIn("ClassicDoorPlayback", runtime)
+        self.assertIn("ExecuteTaggedSpeechResult(branch)", runtime)
+        self.assertIn("ClassicIntEventDispatcher.Execute", runtime)
         self.assertIn("CameronDoorPlaybackState", runtime)
         self.assertIn('SetMeta("source_door_frame"', runtime)
         self.assertIn('"source_door_sound"', runtime)
