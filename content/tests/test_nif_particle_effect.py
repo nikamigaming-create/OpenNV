@@ -14,10 +14,21 @@ from export_nif_particle_effect import (  # noqa: E402
     PARTICLE_SCHEMA,
     compile_particle_effect,
     export_particle_nif,
+    particle_scene_gltf,
 )
 
 
 class NifParticleEffectTests(unittest.TestCase):
+    def test_particle_carrier_gltf_does_not_reference_zero_byte_buffer(self):
+        scene = particle_scene_gltf(
+            r"meshes\effects\nv\sanddust\sanddust02.nif",
+            "0" * 64,
+        )
+
+        self.assertNotIn("buffers", scene)
+        self.assertEqual(scene["nodes"], [{"name": "sanddust02"}])
+        self.assertEqual(scene["scenes"], [{"nodes": [0]}])
+
     def test_runtime_uses_only_compiled_particle_fields(self):
         source = (ROOT / "runtime" / "src" / "Presentation" / "Rendering" /
                   "OwnedNifParticleEffect.cs").read_text(encoding="utf-8")

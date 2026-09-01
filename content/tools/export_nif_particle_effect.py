@@ -224,15 +224,28 @@ def compile_particle_effect(source_bytes: bytes, logical_path: str) -> dict[str,
     return {"schema": PARTICLE_SCHEMA, "status": "source-particle-graph", "systems": rows}
 
 
+def particle_scene_gltf(logical_path: str, source_hash: str) -> dict[str, object]:
+    """Return a valid node-only glTF for a source particle graph.
+
+    Particle geometry is materialized by the runtime contract, so the carrier
+    scene deliberately has no binary buffer. Godot rejects a referenced
+    zero-byte buffer even though the particle sidecar itself is valid.
+    """
+    return {
+        "asset": {"version": "2.0", "generator": GENERATOR},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"name": Path(logical_path).stem}],
+        "extras": {"openNvSchema": STATIC_SCHEMA, "sourceSha256": source_hash},
+    }
+
+
 def export_particle_nif(source: Path, logical_path: str, gltf_path: Path, sidecar_path: Path) -> dict[str, object]:
     source_bytes = source.read_bytes()
     source_hash = sha256_bytes(source_bytes)
     effect = compile_particle_effect(source_bytes, logical_path)
     binary_name = gltf_path.with_suffix(".bin").name
-    gltf = {"asset": {"version": "2.0", "generator": GENERATOR}, "scene": 0,
-            "scenes": [{"nodes": [0]}], "nodes": [{"name": Path(logical_path).stem}],
-            "buffers": [{"uri": binary_name, "byteLength": 0}],
-            "extras": {"openNvSchema": STATIC_SCHEMA, "sourceSha256": source_hash}}
+    gltf = particle_scene_gltf(logical_path, source_hash)
     gltf_bytes = (json.dumps(gltf, indent=2, sort_keys=True) + "\n").encode()
     atomic_write(gltf_path.with_suffix(".bin"), b"")
     atomic_write(gltf_path, gltf_bytes)
