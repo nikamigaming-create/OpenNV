@@ -14,7 +14,7 @@ from runtime_configuration import RuntimeConfiguration, load_runtime_configurati
 CELL_REPORT_SCHEMA = "opennv-godot-cell/v1"
 XR_REPORT_SCHEMA = "opennv-openxr-rig/v3"
 XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
-FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
+FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v2"
 FLAT_ROUTE_TRAVEL_REPORT_SCHEMA = "opennv-flat-route-travel/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
 CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v7"
@@ -298,7 +298,20 @@ def validate_cell_report(
             _require(bool(actual["projectilePortalClear"]), "Projectile failed one portal hop")
             _require(bool(actual["floorHit"]), "Portal floor probe did not hit")
             _require(bool(actual["floorWalkable"]), "Portal floor is not walkable")
-            _require(bool(actual["capsuleWalkThrough"]), "Capsule failed one portal hop")
+            _require(
+                bool(actual["floorOwnedCellCollision"]),
+                "Portal floor is not owned by the destination CELL",
+            )
+            _require(
+                actual["traversalMode"] == "xtel-activation",
+                "Linked portal did not use XTEL activation semantics",
+            )
+            _require(
+                actual["capsuleWalkForward"] is None
+                and actual["capsuleWalkBackward"] is None
+                and actual["capsuleWalkThrough"] is None,
+                "XTEL portal reported an inapplicable continuous capsule proof",
+            )
     opening_menu = report.get("openingMenuProof")
     if require_opening_menu:
         _require(isinstance(opening_menu, dict), "Normal-menu Continue proof is missing")
@@ -435,7 +448,7 @@ def validate_flat_controls_report(
         and bool(pip_boy["closed"]),
         "Flat Pip-Boy did not open and close",
     )
-    _require(int(report["openDoors"]) >= 1, "Flat activate did not open a door")
+    _require(int(report["activationEdges"]) == 1, "Flat activation edge count differs")
     expected_keys = {
         str(desktop[name]["action"]): str(desktop[name]["physicalKey"])
         for name in (

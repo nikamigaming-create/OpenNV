@@ -724,14 +724,21 @@ internal static partial class Fo1NewGameFlow
                 var contactTile = loaded.Session.PlayerTile;
                 if (!Fo1HexMath.AreNeighbors(contactTile, door.Door.Tile) ||
                     !loaded.Session.TryActivateAdjacentDestinationGenericDoor() ||
-                    !loaded.Session.DestinationGenericDoorOpen || !loaded.Session.CanWalk(door.Door.Tile))
+                    !loaded.Session.DestinationGenericDoorOpen)
                     throw new InvalidOperationException("Fallout generic-door Continue proof did not open its authored blocker.");
+                loaded.Session.CompleteDestinationDoorPlaybackForHeadlessProof();
+                if (!loaded.Session.CanWalk(door.Door.Tile))
+                    throw new InvalidOperationException(
+                        "Fallout generic-door source playback did not release its authored blocker.");
                 if (loaded.Session.ActionPoints == 0)
                     loaded.Session.EndTurn();
                 loaded.Session.SelectTile(door.Door.Tile);
                 loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
                 if (loaded.Session.PlayerTile != door.Door.Tile)
                     throw new InvalidOperationException("Fallout generic-door Continue proof did not move through its opened source blocker.");
+                var doorState = loaded.Session.DestinationGenericDoorState ??
+                    throw new InvalidOperationException(
+                        "Fallout generic-door Continue proof has no source presentation state.");
                 destinationMove = door.Door.Tile;
                 genericDoor = new
                 {
@@ -740,8 +747,10 @@ internal static partial class Fo1NewGameFlow
                     opened = true,
                     movedThroughOpenedBlocker = true,
                     interactionActionPoints = "not-source-backed",
-                    sound = "unsupported-fail-closed",
-                    animationTiming = "unsupported-fail-closed",
+                    sound = doorState.LastSoundLogicalPath,
+                    sourceFrame = doorState.Frame,
+                    framesPerSecond = door.Presentation.StoredFramesPerSecond,
+                    frameCount = door.Presentation.FrameCount,
                 };
             }
             else

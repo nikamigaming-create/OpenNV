@@ -2,6 +2,7 @@ using System.Text.Json;
 
 
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.Items;
 using OpenNV.Runtime.World.Interactions;
 
 namespace OpenNV.Runtime.Gameplay.Containers;
@@ -27,9 +28,7 @@ internal sealed class ContainerInventoryStore
                 container.DisplayName,
                 container.Items.Select(item => new ContainerInventoryDefinitionItem(
                     item.ItemFormId,
-                    item.EditorId,
-                    item.DisplayName,
-                    item.RecordType,
+                    item.Definition,
                     item.Count,
                     item.Resolved)).ToArray()),
             legacyEmptied);
@@ -59,12 +58,7 @@ internal sealed class ContainerInventoryStore
             throw new InvalidOperationException(
                 $"Container item is unavailable: {state.ReferenceFormId}/{normalizedItem}");
         item.RemainingCount--;
-        return new ContainerTransfer(
-            item.ItemFormId,
-            item.EditorId,
-            item.DisplayName,
-            item.RecordType,
-            1);
+        return new ContainerTransfer(item.Definition, 1);
     }
 
     internal IReadOnlyList<ContainerTransfer> TakeAll(string referenceFormId)
@@ -75,29 +69,20 @@ internal sealed class ContainerInventoryStore
 
     internal void Put(string referenceFormId, ContainerTransfer transfer)
     {
-        if (transfer.Count <= 0 || string.IsNullOrWhiteSpace(transfer.EditorId) ||
-            string.IsNullOrWhiteSpace(transfer.DisplayName) ||
-            string.IsNullOrWhiteSpace(transfer.RecordType))
+        if (transfer.Count <= 0 || string.IsNullOrWhiteSpace(transfer.Definition.DisplayName))
             throw new InvalidOperationException("Container deposit item identity is invalid.");
         var state = RequiredState(referenceFormId);
         var itemFormId = FalloutFormId.Normalize(transfer.ItemFormId);
         if (state.Items.TryGetValue(itemFormId, out var current))
         {
-            if (!current.EditorId.Equals(transfer.EditorId, StringComparison.OrdinalIgnoreCase) ||
-                !current.DisplayName.Equals(transfer.DisplayName, StringComparison.Ordinal) ||
-                !current.RecordType.Equals(transfer.RecordType, StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    $"Container deposit item identity is ambiguous: {state.ReferenceFormId}/{itemFormId}");
+            current.Definition = current.Definition.Merge(transfer.Definition);
             current.RemainingCount = checked(current.RemainingCount + transfer.Count);
             return;
         }
         state.Items.Add(
             itemFormId,
             new MutableContainerItem(
-                itemFormId,
-                transfer.EditorId,
-                transfer.DisplayName,
-                transfer.RecordType,
+                transfer.Definition,
                 transfer.Count));
     }
 
@@ -131,10 +116,12 @@ internal sealed class ContainerInventoryStore
             var displayName = RequiredString(row, "displayName");
             var items = row.GetProperty("items").EnumerateArray()
                 .Select(item => new SavedContainerItem(
-                    FalloutFormId.Normalize(RequiredString(item, "itemFormId")),
+                    RequiredString(item, "itemFormId"),
                     RequiredString(item, "editorId"),
                     RequiredString(item, "displayName"),
                     RequiredString(item, "recordType"),
+                    OptionalInt(item, "value"),
+                    OptionalFloat(item, "weight"),
                     item.GetProperty("remainingCount").GetInt32()))
                 .OrderBy(item => item.ItemFormId, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -183,7 +170,7 @@ internal sealed class ContainerInventoryStore
         var items = new Dictionary<string, MutableContainerItem>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in container.Items)
         {
-            if (!entry.Resolved)
+            if (!entry.Resolved || entry.Definition is null)
                 throw new InvalidOperationException(
                     $"Container has unresolved owned contents: {referenceFormId}");
             if (string.IsNullOrWhiteSpace(entry.DisplayName))
@@ -196,11 +183,7 @@ internal sealed class ContainerInventoryStore
             var itemFormId = FalloutFormId.Normalize(entry.ItemFormId);
             if (items.TryGetValue(itemFormId, out var current))
             {
-                if (!current.EditorId.Equals(entry.EditorId, StringComparison.OrdinalIgnoreCase) ||
-                    !current.DisplayName.Equals(entry.DisplayName, StringComparison.Ordinal) ||
-                    !current.RecordType.Equals(entry.RecordType, StringComparison.Ordinal))
-                    throw new InvalidOperationException(
-                        $"Container item identity is ambiguous: {referenceFormId}/{itemFormId}");
+                current.Definition = current.Definition.Merge(entry.Definition);
                 current.RemainingCount = checked(current.RemainingCount + entry.Count);
             }
             else
@@ -208,10 +191,7 @@ internal sealed class ContainerInventoryStore
                 items.Add(
                     itemFormId,
                     new MutableContainerItem(
-                        itemFormId,
-                        entry.EditorId,
-                        entry.DisplayName,
-                        entry.RecordType,
+                        entry.Definition,
                         entry.Count));
             }
         }
@@ -231,6 +211,18 @@ internal sealed class ContainerInventoryStore
                 $"Container save state has no {propertyName}.");
         return property.GetString()!;
     }
+
+    private static int? OptionalInt(JsonElement source, string propertyName) =>
+        source.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.Number
+            ? property.GetInt32()
+            : null;
+
+    private static float? OptionalFloat(JsonElement source, string propertyName) =>
+        source.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.Number
+            ? property.GetSingle()
+            : null;
 
     private sealed class ContainerState(
         string referenceFormId,
@@ -260,14 +252,7 @@ internal sealed class ContainerInventoryStore
             {
                 if (Items.TryGetValue(savedItem.ItemFormId, out var authored))
                 {
-                    if (!authored.EditorId.Equals(
-                            savedItem.EditorId,
-                            StringComparison.OrdinalIgnoreCase) ||
-                        !authored.DisplayName.Equals(savedItem.DisplayName, StringComparison.Ordinal) ||
-                        !authored.RecordType.Equals(savedItem.RecordType, StringComparison.Ordinal))
-                        throw new InvalidOperationException(
-                            $"Saved container item differs from compiled contents: " +
-                            $"{ReferenceFormId}/{savedItem.ItemFormId}");
+                    authored.Definition = authored.Definition.Merge(savedItem.Definition);
                     authored.RemainingCount = savedItem.RemainingCount;
                 }
                 else
@@ -275,10 +260,7 @@ internal sealed class ContainerInventoryStore
                     Items.Add(
                         savedItem.ItemFormId,
                         new MutableContainerItem(
-                            savedItem.ItemFormId,
-                            savedItem.EditorId,
-                            savedItem.DisplayName,
-                            savedItem.RecordType,
+                            savedItem.Definition,
                             savedItem.RemainingCount));
                 }
             }
@@ -289,12 +271,7 @@ internal sealed class ContainerInventoryStore
             var transfers = Items.Values
                 .Where(item => item.RemainingCount > 0)
                 .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .Select(item => new ContainerTransfer(
-                    item.ItemFormId,
-                    item.EditorId,
-                    item.DisplayName,
-                    item.RecordType,
-                    item.RemainingCount))
+                .Select(item => new ContainerTransfer(item.Definition, item.RemainingCount))
                 .ToArray();
             foreach (var item in Items.Values)
                 item.RemainingCount = 0;
@@ -309,12 +286,7 @@ internal sealed class ContainerInventoryStore
                 .Where(item => item.RemainingCount > 0)
                 .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.ItemFormId, StringComparer.OrdinalIgnoreCase)
-                .Select(item => new ContainerInventoryItem(
-                    item.ItemFormId,
-                    item.EditorId,
-                    item.DisplayName,
-                    item.RecordType,
-                    item.RemainingCount))
+                .Select(item => new ContainerInventoryItem(item.Definition, item.RemainingCount))
                 .ToArray());
 
         internal SavedContainerState Save() => new(
@@ -328,21 +300,19 @@ internal sealed class ContainerInventoryStore
                     item.EditorId,
                     item.DisplayName,
                     item.RecordType,
+                    item.Definition.Value,
+                    item.Definition.Weight,
                     item.RemainingCount))
                 .ToArray());
     }
 
-    private sealed class MutableContainerItem(
-        string itemFormId,
-        string editorId,
-        string displayName,
-        string recordType,
-        int remainingCount)
+    private sealed class MutableContainerItem(ItemDefinition definition, int remainingCount)
     {
-        internal string ItemFormId { get; } = itemFormId;
-        internal string EditorId { get; } = editorId;
-        internal string DisplayName { get; } = displayName;
-        internal string RecordType { get; } = recordType;
+        internal ItemDefinition Definition { get; set; } = definition;
+        internal string ItemFormId => Definition.FormId;
+        internal string EditorId => Definition.EditorId;
+        internal string DisplayName => Definition.DisplayName!;
+        internal string RecordType => Definition.RecordType;
         internal int RemainingCount { get; set; } = remainingCount;
     }
 }
@@ -356,19 +326,21 @@ internal sealed record ContainerInventorySnapshot(
     internal bool IsEmpty => Items.Count == 0;
 }
 
-internal sealed record ContainerInventoryItem(
-    string ItemFormId,
-    string EditorId,
-    string DisplayName,
-    string RecordType,
-    int RemainingCount);
+internal sealed record ContainerInventoryItem(ItemDefinition Definition, int RemainingCount)
+{
+    internal string ItemFormId => Definition.FormId;
+    internal string EditorId => Definition.EditorId;
+    internal string DisplayName => Definition.DisplayName!;
+    internal string RecordType => Definition.RecordType;
+}
 
-internal sealed record ContainerTransfer(
-    string ItemFormId,
-    string EditorId,
-    string DisplayName,
-    string RecordType,
-    int Count);
+internal sealed record ContainerTransfer(ItemDefinition Definition, int Count)
+{
+    internal string ItemFormId => Definition.FormId;
+    internal string EditorId => Definition.EditorId;
+    internal string DisplayName => Definition.DisplayName!;
+    internal string RecordType => Definition.RecordType;
+}
 
 internal sealed record SavedContainerState(
     string ReferenceFormId,
@@ -384,7 +356,18 @@ internal sealed record SavedContainerItem(
     string EditorId,
     string DisplayName,
     string RecordType,
-    int RemainingCount);
+    int? Value,
+    float? Weight,
+    int RemainingCount)
+{
+    internal ItemDefinition Definition => new(
+        ItemFormId,
+        EditorId,
+        DisplayName,
+        RecordType,
+        Value,
+        Weight);
+}
 
 internal sealed record ContainerInventoryDefinition(
     string ReferenceFormId,
@@ -394,8 +377,11 @@ internal sealed record ContainerInventoryDefinition(
 
 internal sealed record ContainerInventoryDefinitionItem(
     string ItemFormId,
-    string EditorId,
-    string DisplayName,
-    string RecordType,
+    ItemDefinition? Definition,
     int Count,
-    bool Resolved);
+    bool Resolved)
+{
+    internal string EditorId => Definition?.EditorId ?? "";
+    internal string DisplayName => Definition?.DisplayName ?? "";
+    internal string RecordType => Definition?.RecordType ?? "";
+}

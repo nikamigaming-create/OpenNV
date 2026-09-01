@@ -168,6 +168,12 @@ internal static class RuntimeLaunchValidator
             !hasFo1CampaignPresentation)
             throw new ArgumentException(
                 "--fo1-map and --fo1-elevation require --fo1-campaign-presentation.");
+        if (options.ContainsKey("classic-adjacent-map-catalog") &&
+            (!hasFo1CampaignPresentation || !options.ContainsKey("fo1-map") ||
+                !options.ContainsKey("save-path")))
+            throw new ArgumentException(
+                "--classic-adjacent-map-catalog requires --fo1-campaign-presentation, " +
+                "--fo1-map, and --save-path.");
         if (options.ContainsKey("fo1-campaign-build-proof") &&
             (!hasFo1CampaignPresentation || !options.ContainsKey("report")))
             throw new ArgumentException(

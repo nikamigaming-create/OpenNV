@@ -49,6 +49,7 @@ class NifDecoderContract:
     endian: int
     user_version: int
     user_version_2: int
+    compatible_geometry_user_version_2: frozenset[int]
     animation_user_version_2: frozenset[int]
     animation_root_block_type: str
     export_info_string_count: int
@@ -174,6 +175,7 @@ def load_nif_decoder_contract() -> NifDecoderContract:
         "endian",
         "userVersion",
         "userVersion2",
+        "compatibleGeometryUserVersion2",
         "animationUserVersion2",
         "animationRootBlockType",
         "exportInfoStringCount",
@@ -217,6 +219,10 @@ def load_nif_decoder_contract() -> NifDecoderContract:
         endian=_integer(format_contract, "endian"),
         user_version=_integer(format_contract, "userVersion"),
         user_version_2=_integer(format_contract, "userVersion2"),
+        compatible_geometry_user_version_2=frozenset(
+            _integer({"value": value}, "value")
+            for value in format_contract.get("compatibleGeometryUserVersion2", [])
+        ),
         animation_user_version_2=frozenset(
             _integer({"value": value}, "value")
             for value in format_contract.get("animationUserVersion2", [])
@@ -238,7 +244,10 @@ def load_nif_decoder_contract() -> NifDecoderContract:
         not contract.contract_id
         or not contract.status
         or not contract.animation_user_version_2
+        or not contract.compatible_geometry_user_version_2
         or contract.user_version_2 in contract.animation_user_version_2
+        or contract.user_version_2 in contract.compatible_geometry_user_version_2
+        or contract.animation_user_version_2 & contract.compatible_geometry_user_version_2
         or getattr(NifFormat, contract.animation_root_block_type, None) is None
         or contract.recovery_method != "unique-exact-block-parse"
         or contract.source_mutation_policy != "in-memory-parse-buffer-only"
@@ -284,9 +293,10 @@ def _block_directory(
         contract.endian,
         contract.user_version,
     )
-    primary_format_identity = (
-        format_identity_matches and user_version_2 == contract.user_version_2
-    )
+    primary_format_identity = format_identity_matches and user_version_2 in {
+        contract.user_version_2,
+        *contract.compatible_geometry_user_version_2,
+    }
     animation_format_identity = (
         format_identity_matches
         and user_version_2 in contract.animation_user_version_2

@@ -4,6 +4,7 @@ using Godot;
 
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
@@ -16,6 +17,8 @@ internal sealed record OpeningFlowMenu(
     Rect2? Rect,
     IReadOnlyDictionary<string, OpeningFlowSemanticRect> SemanticRects,
     OwnedUiTexture? Background,
+    OwnedGamebryoDialogueMenu? DialogueMenu,
+    OwnedGamebryoTextEditMenu? TextEditMenu,
     OpeningRaceSexMenuTiles? RaceSexMenuTiles,
     OpeningRaceSexRenderedDevice? RenderedDevice);
 
@@ -27,6 +30,22 @@ internal sealed record OpeningRaceSexRenderedDevice(
     OpeningRaceSexRenderedDeviceFraming Framing,
     OpeningRaceSexPreviewCameraContract PreviewCameraContract)
 {
+    internal OwnedGamebryoFaceGenDeviceContract FaceGenPreviewDevice => new(
+        new Color(
+            Float("menuPlayerLightDiffuseRed"),
+            Float("menuPlayerLightDiffuseGreen"),
+            Float("menuPlayerLightDiffuseBlue")),
+        new Color(
+            Float("menuPlayerLightAmbientRed"),
+            Float("menuPlayerLightAmbientGreen"),
+            Float("menuPlayerLightAmbientBlue")),
+        Float("nearDistanceGameUnits"),
+        Float("farDistanceGameUnits"),
+        Float("terminalFov"),
+        PreviewCameraContract.Status,
+        PreviewCameraContract.CameraContractReady,
+        PreviewCameraContract.ParityReady);
+
     internal float Float(string role) =>
         Settings.TryGetValue(role, out var value) && value.FloatValue is { } result
             ? result
@@ -96,6 +115,7 @@ internal sealed record OpeningRaceSexMenuTiles(
     string SliderRightLabelTrait,
     int FontId,
     OwnedBitmapFont Font,
+    OwnedGamebryoRaceSexControls SharedControls,
     OpeningRaceSexBackground Background,
     OpeningRaceSexFaceGrab FaceGrab,
     OpeningRaceSexScroll Scroll,
@@ -297,6 +317,71 @@ internal sealed record OpeningStageProgram(
     string Source,
     IReadOnlyList<OpeningFlowCommand> Commands);
 
+internal sealed record OpeningOrdinaryQuest(
+    string FormId,
+    string EditorId,
+    string ScriptFormId,
+    string ScriptEditorId,
+    int EntryStage,
+    IReadOnlyDictionary<uint, string> Variables,
+    IReadOnlyDictionary<int, string> Objectives,
+    IReadOnlyDictionary<int, OpeningStageProgram> Stages,
+    OpeningCommandContract CommandContract);
+
+internal sealed record OpeningOrdinaryActor(
+    string Role,
+    string ReferenceFormId,
+    string BaseFormId,
+    IReadOnlyList<string> PackagePriority,
+    IReadOnlyDictionary<string, OpeningGuidePackage> Packages,
+    string ActivationTopicFormId,
+    IReadOnlyDictionary<string, OpeningDialogueTopic> Topics,
+    OpeningDialogueVoice Voice,
+    IReadOnlyList<OpeningOrdinaryPackageArrival> ArrivalTransitions,
+    IReadOnlyList<OpeningOrdinaryDialogueTrigger> AutomaticDialogueTriggers,
+    OpeningCommandContract CommandContract);
+
+internal sealed record OpeningOrdinaryPackageArrival(
+    string PackageFormId,
+    string ScriptFormId,
+    string ScriptEditorId,
+    string ActorReferenceFormId,
+    string QuestFormId,
+    int FromStage,
+    int ToStage);
+
+internal sealed record OpeningOrdinaryDialogueTrigger(
+    string ScriptFormId,
+    string ScriptEditorId,
+    string TriggerReferenceFormId,
+    string TriggerReferenceEditorId,
+    Vector3 PositionGameUnits,
+    Quaternion RotationGodot,
+    Vector3 BoundsGameUnits,
+    string QuestFormId,
+    int ObjectiveIndex,
+    string TopicFormId);
+
+internal sealed record OpeningHitTargetSet(
+    string ScriptFormId,
+    string ScriptEditorId,
+    string EnableParentFormId,
+    IReadOnlyList<OpeningHitTarget> Targets,
+    string QuestFormId,
+    int QuestVariableIndex,
+    string QuestVariableName,
+    int WeaponAnimationTypeMinimumExclusive,
+    int WeaponAnimationTypeMaximumExclusive,
+    string ExcludedWeaponFormId,
+    string ReactionTopicFormId,
+    string SpeakerReferenceFormId,
+    string TutorialQuestFormId,
+    int TutorialStage,
+    int Threshold,
+    int ObjectiveIndex);
+
+internal sealed record OpeningHitTarget(string ReferenceFormId, string BaseFormId);
+
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
 internal sealed record OpeningCommandContract(
@@ -420,7 +505,23 @@ internal sealed record OpeningFlowCommand(
     string? OwnerFormId,
     string? OwnerRecordType,
     string? ReferenceFormId,
-    string? ReferenceRecordType);
+    string? ReferenceRecordType,
+    OpeningCommandGuard? Guard,
+    OpeningCommandWeapon? Weapon,
+    IReadOnlyList<string> EnableParentChildFormIds);
+
+internal sealed record OpeningCommandGuard(
+    string Kind,
+    string? ItemFormId,
+    string? QuestFormId,
+    int? Stage);
+
+internal sealed record OpeningCommandWeapon(
+    string AmmoFormId,
+    string AmmoEditorId,
+    int Damage,
+    int ClipSize,
+    int AnimationType);
 
 internal sealed record OpeningGuideActorAi(
     string Role,
@@ -745,6 +846,7 @@ internal sealed record OpeningFaceGenControlSpace(
     string EngineBuild,
     string SourceExecutableSha256,
     IReadOnlyList<OpeningNativeFaceGenGeometryControl> NativeGeometryControls,
+    OpeningNativeFaceGenAgeControl NativeAgeControl,
     OpeningFaceGenPreviewControl PreviewControl,
     string RuntimeDisposition);
 
@@ -753,107 +855,6 @@ internal sealed record OpeningFaceGenLinearControl(
     string SourceLabel,
     string AxisSha256,
     IReadOnlyList<float> Axis);
-
-internal sealed record OpeningNativeFaceGenGeometryControl(
-    int ControlIndex,
-    string SettingEntity,
-    string SourceLabel,
-    string AxisSha256);
-
-internal sealed record OpeningFaceGenPreviewControl(
-    int ControlIndex,
-    string SettingEntity,
-    string SourceLabel,
-    string AxisSha256,
-    float Minimum,
-    float Maximum,
-    float Step,
-    float Jump,
-    float MorphWeightScale,
-    float ResetValue,
-    float AcceptanceValue,
-    OpeningFaceGenSliderSemanticsEvidence SliderSemanticsEvidence,
-    OpeningFaceGenPreviewPresentation Presentation,
-    string Semantics);
-
-internal sealed record OpeningFaceGenSliderSemanticsEvidence(
-    string Classification,
-    string EngineBuild,
-    string SourceExecutableSha256,
-    float SourceMinimum,
-    float SourceMaximum,
-    float UiScale,
-    float UiMinimum,
-    float UiMaximum,
-    float OrdinaryIncrement,
-    float Jump,
-    float MorphWeightScale,
-    string LowGlobalAddress,
-    string HighGlobalAddress,
-    string IncrementTrait,
-    float IncrementDefaultThreshold);
-
-internal sealed record OpeningFaceGenPreviewPresentation(
-    float ViewportWidthFraction,
-    float ViewportHeightFraction,
-    float VerticalFovHalfAngleFactor,
-    float DepthExtentFraction,
-    float FullInVerticalOffsetGameUnits = float.NaN,
-    float FullInDistanceGameUnits = float.NaN,
-    float FullInYawRadians = float.NaN,
-    float FullOutVerticalOffsetGameUnits = float.NaN,
-    float FullOutDistanceGameUnits = float.NaN,
-    float FullOutYawRadians = float.NaN,
-    float StartingZoomFraction = float.NaN);
-
-internal sealed record OpeningPlayerFaceGenPreviewSet(
-    string Schema,
-    string Status,
-    string PlayerFormId,
-    IReadOnlyList<string> GeometryControlNames,
-    int GeometryControlCount,
-    string RuntimeDisposition,
-    bool FullBody,
-    IReadOnlyList<string>? BodyComponentRoles,
-    IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
-        BodyComponentSourcesBySex,
-    IReadOnlyList<OpeningPlayerFaceGenPreview> Previews);
-
-internal sealed record OpeningPlayerFaceGenPreview(
-    string Schema,
-    string Status,
-    string PlayerFormId,
-    string RaceFormId,
-    string Sex,
-    string HairFormId,
-    string EyesFormId,
-    IReadOnlyList<string> HeadPartFormIds,
-    IReadOnlyList<string> GeometryControlNames,
-    int GeometryControlCount,
-    string GltfPath,
-    string GltfSha256,
-    string SidecarPath,
-    string SidecarSha256,
-    string BufferSha256,
-    string RuntimeDisposition,
-    bool FullBody = false,
-    IReadOnlyList<string>? BodyComponentRoles = null,
-    IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
-        BodyComponentSourcesBySex = null);
-
-internal sealed record OpeningPlayerBodyComponentSource(
-    string Role,
-    string ModelLogicalPath,
-    string ModelSha256,
-    int SourceSurfaceCount,
-    int RetainedSurfaceCount,
-    IReadOnlyList<string> RetainedSurfaceNames,
-    int OmittedDismemberCapSurfaceCount,
-    string DiffuseLogicalPath,
-    string DiffuseSha256,
-    string NormalLogicalPath,
-    string NormalSha256,
-    string ShapeTransformDisposition);
 
 internal sealed record OpeningAppearanceRace(
     string FormId,

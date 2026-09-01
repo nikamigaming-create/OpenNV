@@ -109,6 +109,11 @@ class FaceGenTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "slot=0"):
             synthesize_texture_detail(payload, (0.0,))
 
+    def test_texture_contract_rejects_non_egt_signature(self) -> None:
+        payload = b"FREGT002" + struct.pack("<3I", 1, 1, 0) + bytes(44)
+        with self.assertRaisesRegex(ValueError, "EGT signature"):
+            synthesize_texture_detail(payload, ())
+
     def test_body_shader_composition_multiplies_the_authored_body_mod(self) -> None:
         diffuse = Image.new("RGBA", (1, 1), (128, 100, 64, 222))
         modifier = Image.new("RGB", (1, 1), (120, 128, 140))

@@ -314,10 +314,6 @@ def compile_cell(
                         signature,
                     )
                 )
-        if child["initiallyDisabled"]:
-            reasons.append(blocker("child", key, "initially-disabled-state-not-implemented"))
-        if child.get("enableParent") is not None:
-            reasons.append(blocker("child", key, "enable-parent-state-not-implemented"))
         if child.get("teleport") is not None:
             reasons.append(blocker("child", key, "xtel-runtime-not-implemented"))
         if policy is not None and policy["kind"] == LANDSCAPE_PRESENTATION_KIND:
@@ -579,6 +575,22 @@ def compile_cell(
                         else godot_rotation_quaternion(rotation)
                     ),
                     "scale": child_scales[key],
+                    "initiallyDisabled": bool(child["initiallyDisabled"]),
+                    "enableParentRuntimeFormId": (
+                        None
+                        if child.get("enableParent") is None
+                        else child["enableParent"]["runtimeFormId"]
+                    ),
+                    "enableParentOpposite": (
+                        False
+                        if child.get("enableParent") is None
+                        else bool(child["enableParent"].get("opposite", False))
+                    ),
+                    "enableParentInitiallyDisabled": (
+                        None
+                        if child.get("enableParent") is None
+                        else child["enableParentInitiallyDisabled"]
+                    ),
                     "presentationStatus": presentation_status,
                     "readinessStatus": (
                         BLOCKED_REFERENCE_STATUS

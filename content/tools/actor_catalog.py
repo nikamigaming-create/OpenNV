@@ -111,6 +111,7 @@ class RaceAppearance:
     female_face_symmetric_geometry: tuple[float, ...]
     female_face_asymmetric_geometry: tuple[float, ...]
     female_face_symmetric_texture: tuple[float, ...]
+    valid_eye_form_ids: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -316,7 +317,14 @@ def _race(record: Record, subrecords: list[tuple[str, bytes]]) -> RaceAppearance
     female_face_symmetric_geometry: tuple[float, ...] = ()
     female_face_asymmetric_geometry: tuple[float, ...] = ()
     female_face_symmetric_texture: tuple[float, ...] = ()
+    valid_eye_form_ids: tuple[int, ...] = ()
     for signature, data in subrecords:
+        if signature == "ENAM":
+            if len(data) % FORM_ID_BYTES != 0:
+                raise ValueError(
+                    f"RACE ENAM has partial eye FormID in {record.form_id:08x}"
+                )
+            valid_eye_form_ids = struct.unpack(f"<{len(data) // FORM_ID_BYTES}I", data)
         if signature == "NAM0":
             group, sex, index = "head", "male", None
         elif signature == "NAM1":
@@ -380,6 +388,7 @@ def _race(record: Record, subrecords: list[tuple[str, bytes]]) -> RaceAppearance
         female_face_symmetric_geometry,
         female_face_asymmetric_geometry,
         female_face_symmetric_texture,
+        valid_eye_form_ids,
     )
 
 

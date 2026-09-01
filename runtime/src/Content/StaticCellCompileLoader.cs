@@ -5,6 +5,7 @@ using OpenNV.Runtime.SceneGraph;
 
 
 using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Content;
 
@@ -239,6 +240,17 @@ internal static class StaticCellCompileLoader
                     throw new InvalidOperationException(
                         $"Static CELL presentation contract differs: " +
                         placement.GetProperty("childFormKey").GetString());
+                var initiallyDisabled = placement.GetProperty(
+                    "initiallyDisabled").GetBoolean();
+                var enableParent = placement.GetProperty(
+                    "enableParentRuntimeFormId");
+                var initiallyEnabled = !initiallyDisabled &&
+                    (enableParent.ValueKind == JsonValueKind.Null ||
+                        placement.GetProperty("enableParentInitiallyDisabled").GetBoolean() ==
+                        placement.GetProperty("enableParentOpposite").GetBoolean());
+                GamebryoReferenceEnableRuntime.Apply(
+                    placementNode,
+                    initiallyEnabled);
                 placements++;
             }
             var lighting = sourceCell.GetProperty("lighting");

@@ -7,6 +7,7 @@ using OpenNV.Runtime.Presentation.CharacterCreation;
 
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -190,6 +191,7 @@ internal partial class Fo1TacticalSession : Node
     private IReadOnlyList<MapInventoryHost> _sourceMapInventoryHosts = [];
     private string _sceneSha256 = "";
     private string _sourceMapSha256 = "";
+    private bool _sourceMultihexCoverageComplete;
     private string _savePath = "";
     private int _maximumActionPoints;
     private int _doorTile;
@@ -209,13 +211,19 @@ internal partial class Fo1TacticalSession : Node
     private Fo1DestinationInventoryInteractionContract? _destinationInventoryInteraction;
     private string? _destinationFlareUsePath;
     private Fo1DestinationFlareUseContract? _destinationFlareUse;
-    private bool _destinationFlareLit;
+    private ClassicScriptState _destinationFlareScriptState = new();
+    private bool _destinationFlareExpired;
+    private int _classicScriptGameTime;
     private string? _destinationGenericDoorPath;
     private Fo1DestinationGenericDoorContract? _destinationGenericDoor;
+    private ClassicDoorSession? _destinationGenericDoorSession;
+    private ClassicDoorPlayback? _destinationGenericDoorPlayback;
     private bool _destinationGenericDoorOpen;
     private string? _destinationMedicLookPath;
     private Fo1DestinationMedicLookContract? _destinationMedicLook;
     private bool _destinationMedicLookViewed;
+    private string? _destinationMedicDialogueProcedure;
+    private ClassicPlayerStatusState _classicPlayerStatus = new();
     private string? _destinationReturnExitGridPath;
     private Fo1ExitGridTransitionContract? _destinationReturnExitGrid;
     private int? _activatedDestinationReturnExitGridTile;
@@ -385,11 +393,30 @@ internal partial class Fo1TacticalSession : Node
     internal Fo1DestinationPresentationContract? LoadedDestinationPresentation => _loadedDestinationPresentation;
     internal Fo1DestinationInventoryInteractionContract? DestinationInventoryInteraction => _destinationInventoryInteraction;
     internal Fo1DestinationFlareUseContract? DestinationFlareUse => _destinationFlareUse;
-    internal bool DestinationFlareLit => _destinationFlareLit;
+    internal bool DestinationFlareLit =>
+        _destinationFlareScriptState.Flag("lit") && !_destinationFlareExpired;
+    internal bool DestinationFlareExpired => _destinationFlareExpired;
     internal Fo1DestinationGenericDoorContract? DestinationGenericDoor => _destinationGenericDoor;
     internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
+    internal ClassicDoorState? DestinationGenericDoorState =>
+        _destinationGenericDoorSession?.State;
+    internal ClassicDoorSession? DestinationGenericDoorSession =>
+        _destinationGenericDoorSession;
+
+    internal void AttachDestinationGenericDoorPlayback(ClassicDoorPlayback playback)
+    {
+        if (_destinationGenericDoorSession is null)
+            throw new InvalidOperationException(
+                "Fallout destination door playback attached before its source session.");
+        _destinationGenericDoorPlayback = playback;
+        ApplyDestinationDoorState(_destinationGenericDoorSession.State);
+    }
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
     internal bool DestinationMedicLookViewed => _destinationMedicLookViewed;
+    internal string? DestinationMedicDialogueProcedure => _destinationMedicDialogueProcedure;
+    internal int PlayerPoison => _classicPlayerStatus.Poison;
+    internal int PlayerRadiation => _classicPlayerStatus.Radiation;
+    internal IReadOnlySet<string> PlayerInjuries => _classicPlayerStatus.Injuries;
     internal Fo1ExitGridTransitionContract? DestinationReturnExitGrid => _destinationReturnExitGrid;
     internal int? ActivatedDestinationReturnExitGridTile => _activatedDestinationReturnExitGridTile;
 
@@ -426,6 +453,7 @@ internal partial class Fo1TacticalSession : Node
     internal void Configure(
         string sceneSha256,
         string sourceMapSha256,
+        bool sourceMultihexCoverageComplete,
         bool[] walkable,
         int[] floorIds,
         IReadOnlyDictionary<int, string> floorNames,
@@ -461,6 +489,7 @@ internal partial class Fo1TacticalSession : Node
             throw new ArgumentException("Fallout tactical session received an invalid source MAP hash.");
         _sceneSha256 = sceneSha256;
         _sourceMapSha256 = sourceMapSha256;
+        _sourceMultihexCoverageComplete = sourceMultihexCoverageComplete;
         _runtimeProfile = runtimeProfile;
         if (ownedPlayerFloorHeightMeters is not null &&
             (!float.IsFinite(ownedPlayerFloorHeightMeters.Value) ||
@@ -551,13 +580,31 @@ internal partial class Fo1TacticalSession : Node
             return false;
         if (_walkable[door.Door.Tile])
             throw new InvalidOperationException("Fallout destination generic door opened without its authored MAP blocker.");
-        _destinationGenericDoorOpen = true;
-        _walkable[door.Door.Tile] = true;
-        _status = "Unscripted MAP door activated; its owned blocked hex is now passable.";
+        var state = (_destinationGenericDoorPlayback ?? throw new InvalidOperationException(
+            "Fallout destination generic door has no live source playback binding."))
+            .BeginOpening();
+        _status = $"Unscripted MAP door opening from source frame {state.Frame}; " +
+            $"sound {state.LastSoundLogicalPath}.";
         RefreshHud();
         Save();
         return true;
     }
+
+    internal void CompleteDestinationDoorPlaybackForHeadlessProof() =>
+        (_destinationGenericDoorPlayback ?? throw new InvalidOperationException(
+            "Fallout destination generic door has no live source playback binding."))
+        .CompleteForHeadless();
+
+    private void ApplyDestinationDoorState(ClassicDoorState state)
+    {
+        var door = _destinationGenericDoor ?? throw new InvalidOperationException(
+            "Fallout destination door state changed without its source contract.");
+        _destinationGenericDoorOpen = state.Open;
+        _walkable[door.Door.Tile] = !state.Blocked;
+    }
+
+    internal void ApplyDestinationDoorPlaybackState(ClassicDoorState state) =>
+        ApplyDestinationDoorState(state);
 
     internal bool TryLookAtAdjacentDestinationMedic()
     {
@@ -565,8 +612,121 @@ internal partial class Fo1TacticalSession : Node
             "Fallout destination has no explicit Medic look-at contract.");
         if (!Fo1HexMath.AreNeighbors(_playerTile, medic.Tile))
             return false;
+        var execution = medic.Program.ExecuteWithActions(
+            "look_at_p_proc",
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        if (!execution.Executed || !execution.ScriptOverrides ||
+            execution.DisplayMessages.Count != 1 ||
+            execution.DisplayMessages[0].MessageId != medic.MessageId)
+            throw new InvalidOperationException(
+                "Fallout Medic look script did not emit its admitted message.");
         _destinationMedicLookViewed = true;
         _status = medic.MessageText;
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal bool TryTalkToAdjacentDestinationMedicSeriouslyWounded()
+    {
+        var medic = _destinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit Medic dialogue-result contract.");
+        if (!Fo1HexMath.AreNeighbors(_playerTile, medic.Tile))
+            return false;
+        var execution = medic.Program.ExecuteWithActions(
+            medic.DialogueEntryProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        var node = medic.DialogueNodes[medic.DialogueEntryProcedure];
+        if (!execution.Executed || execution.DialogueReply.Count != 1 ||
+            execution.DialogueOptions.Count != 1 ||
+            execution.DialogueReply[0].Message!.Value.MessageId !=
+                node.ReplyMessageId ||
+            execution.DialogueOptions[0].Message.MessageId !=
+                node.OptionMessageId ||
+            execution.DialogueOptions[0].Target != node.OptionTarget ||
+            execution.DialogueOptions[0].Reaction != node.OptionReaction)
+            throw new InvalidOperationException(
+                "Fallout Medic dialogue result did not execute its admitted actions.");
+        _destinationMedicDialogueProcedure = node.Procedure;
+        _status = node.ReplyText;
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal bool TrySelectDestinationMedicDialogueOption(int messageId)
+    {
+        var medic = _destinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit Medic dialogue-result contract.");
+        if (_destinationMedicDialogueProcedure is null ||
+            !medic.DialogueNodes.TryGetValue(_destinationMedicDialogueProcedure, out var current))
+            return false;
+        var execution = medic.Program.ExecuteWithActions(
+            current.Procedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        var options = execution.DialogueOptions
+            .Where(option => option.Message.MessageId == messageId)
+            .ToArray();
+        if (options.Length != 1 || options[0].Target != current.OptionTarget)
+            return false;
+        if (medic.EffectDialogueTargets.Contains(options[0].Target))
+        {
+            var healing = medic.Program.ExecuteWithActions(
+                options[0].Target,
+                new ClassicScriptState(),
+                new ClassicScriptContext(
+                    false,
+                    false,
+                    _classicScriptGameTime,
+                    PlayerCurrentHitPoints: _playerHitPoints,
+                    PlayerMaximumHitPoints: _playerProfile.HitPoints,
+                    PlayerPoison: _classicPlayerStatus.Poison,
+                    PlayerRadiation: _classicPlayerStatus.Radiation,
+                    PlayerInjuries: _classicPlayerStatus.Injuries));
+            if (!healing.Executed || healing.PlayerHealing < 0 ||
+                _playerHitPoints + healing.PlayerHealing != _playerProfile.HitPoints ||
+                healing.NextProcedure is not null &&
+                    healing.NextProcedure != medic.RadiationFollowupProcedure ||
+                healing.DisplayMessages.Count != 1 ||
+                healing.DisplayMessages[0].MessageId != medic.HealingMessageId)
+                throw new InvalidOperationException(
+                    $"Fallout Medic healing result did not execute: {options[0].Target}");
+            _playerHitPoints += healing.PlayerHealing;
+            _classicPlayerStatus.Apply(healing);
+            _classicScriptGameTime = checked(
+                _classicScriptGameTime +
+                healing.GameTimeAdvanceMinutes * medic.GameTimeTicksPerMinute);
+            ProcessClassicTimedWorldActions();
+            _destinationMedicDialogueProcedure = healing.NextProcedure;
+            _status = medic.HealingMessageText;
+            RefreshHud();
+            Save();
+            return true;
+        }
+        if (!medic.DialogueNodes.TryGetValue(options[0].Target, out var target))
+        {
+            if (!medic.UnsupportedDialogueTargets.Contains(options[0].Target))
+                throw new InvalidOperationException(
+                    $"Fallout Medic dialogue target is unclassified: {options[0].Target}");
+            return false;
+        }
+        var targetExecution = medic.Program.ExecuteWithActions(
+            target.Procedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        if (!targetExecution.Executed || targetExecution.DialogueReply.Count != 1 ||
+            targetExecution.DialogueOptions.Count != 1 ||
+            targetExecution.DialogueReply[0].Message!.Value.MessageId != target.ReplyMessageId ||
+            targetExecution.DialogueOptions[0].Message.MessageId != target.OptionMessageId ||
+            targetExecution.DialogueOptions[0].Target != target.OptionTarget ||
+            targetExecution.DialogueOptions[0].Reaction != target.OptionReaction)
+            throw new InvalidOperationException(
+                $"Fallout Medic dialogue target did not execute: {target.Procedure}");
+        _destinationMedicDialogueProcedure = target.Procedure;
+        _status = target.ReplyText;
         RefreshHud();
         Save();
         return true;
@@ -594,13 +754,13 @@ internal partial class Fo1TacticalSession : Node
         if (_activatedDestinationReturnExitGridTile is not { } activatedTile || !reverse.IsTrigger(activatedTile))
             throw new InvalidOperationException(
                 "Fallout source return requires a committed source-authored VAULT13 trigger.");
-        if (reverse.SourceMapIndex != forward.DestinationMapIndex ||
-            reverse.SourceMapName != forward.DestinationMapName ||
-            !string.Equals(reverse.SourceMapSha256, forward.DestinationMapSha256, StringComparison.OrdinalIgnoreCase) ||
-            reverse.DestinationMapIndex != forward.SourceMapIndex ||
-            reverse.DestinationMapName != forward.SourceMapName ||
-            !string.Equals(reverse.DestinationMapSha256, forward.SourceMapSha256, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(reverse.DestinationMapSha256, _sourceMapSha256, StringComparison.OrdinalIgnoreCase))
+        ClassicMapJoinOwner.ValidateReciprocal(
+            forward.JoinForTrigger(_activatedExitGridTile!.Value),
+            reverse.JoinForTrigger(activatedTile));
+        if (!string.Equals(
+                reverse.DestinationMapSha256,
+                _sourceMapSha256,
+                StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Fallout reciprocal exit-grid contract does not return to this loaded V13ENT MAP.");
         RestoreSourceTacticalState(reverse.DestinationTile);
@@ -665,6 +825,11 @@ internal partial class Fo1TacticalSession : Node
             : Fo1DestinationGenericDoorContract.Load(_destinationGenericDoorPath, destination, transition);
         if (_destinationGenericDoor is not null)
         {
+            _destinationGenericDoorSession ??= new ClassicDoorSession(
+                _destinationGenericDoor.Presentation,
+                _destinationGenericDoorOpen
+                    ? ClassicDoorSession.OpenTerminal(_destinationGenericDoor.Presentation)
+                    : null);
             if (_walkable[_destinationGenericDoor.Door.Tile])
                 throw new InvalidOperationException("Fallout destination generic door is not an authored presentation blocker.");
             if (_destinationGenericDoorOpen)
@@ -1517,39 +1682,61 @@ internal partial class Fo1TacticalSession : Node
         foreach (var mob in actors)
         {
             mob.ResetActionPoints();
-            var distance = Fo1HexMath.Distance(mob.Tile, _playerTile);
-            if (distance <= _runtimeProfile.Gameplay.RatAttackRangeHexes)
+            var turn = ClassicCombatTurnOwner.BeginTargetTurn(
+                mob.ActionPoints,
+                mob.MaximumActionPoints,
+                mob.AiPacket,
+                mob.Team,
+                mob.Alerted,
+                mob.Tile,
+                _playerTile,
+                Fo1HexMath.Neighbors(mob.Tile).ToHashSet());
+            if (turn.Action == ClassicTargetTurnAction.AdjacentAttackRequired)
             {
                 RatAttack(mob);
                 continue;
             }
-            var original = mob.Tile;
-            _walkable[original] = true;
-            _mobsByTile.Remove(original);
-            var path = FindPath(original, _playerTile);
-            var movement = Math.Min(
-                _runtimeProfile.Gameplay.RatMovementLimitHexes,
-                Math.Max(0, path.Count - 1));
-            movement = Math.Min(movement, mob.ActionPoints);
-            var destination = movement > 0 ? path[movement - 1] : original;
-            for (var index = 0; index < movement; index++)
-                mob.SpendActionPoint();
-            mob.MoveTo(destination);
-            _walkable[destination] = false;
-            _mobsByTile[destination] = mob;
-            if (Fo1HexMath.Distance(destination, _playerTile) <=
-                    _runtimeProfile.Gameplay.RatAttackRangeHexes &&
-                mob.ActionPoints > 0)
-                RatAttack(mob);
+            if (turn.Action != ClassicTargetTurnAction.MovementRequired)
+                continue;
+            var sourceWalkable = Enumerable.Range(0, _walkable.Length)
+                .Where(tile => _walkable[tile] || tile == mob.Tile)
+                .ToHashSet();
+            var path = ClassicTargetPathOwner.Plan(
+                mob.Tile,
+                _playerTile,
+                mob.ActionPoints,
+                sourceWalkable,
+                new ClassicTargetPathContract(
+                    _sourceMapSha256,
+                    true,
+                    _sourceMultihexCoverageComplete,
+                    null,
+                    null));
+            if (path.Boundary != ClassicTargetPathBoundary.MoveAnimationRequired)
+                throw new InvalidOperationException(
+                    "FO1 rat path did not preserve its source move-animation boundary.");
         }
     }
 
     private void RatAttack(Fo1Mob mob)
     {
-        mob.PlayAttack();
-        var damage = Math.Max(_runtimeProfile.Gameplay.MinimumDamage, mob.MeleeDamage);
-        _playerHitPoints = Math.Max(0, _playerHitPoints - damage);
-        mob.SpendActionPoint();
+        var intent = ClassicAttackOwner.Prepare(
+            $"{mob.Serial}:{mob.Pid}",
+            "player",
+            Fo1HexMath.Distance(mob.Tile, _playerTile),
+            mob.ActionPoints,
+            new ClassicAttackSource(
+                mob.Pid,
+                mob.MeleeDamage,
+                mob.MeleeDamage,
+                null,
+                null,
+                null,
+                null,
+                ClassicAttackOwner.EngineRollRequired));
+        if (intent.Boundary != ClassicAttackBoundary.ActionPointCostRequired)
+            throw new InvalidOperationException(
+                "FO1 rat attack did not preserve its source-engine combat boundary.");
     }
 
     private void BuildWorldMarkers()
@@ -1644,10 +1831,6 @@ internal partial class Fo1TacticalSession : Node
         BuildTargetReticle();
         BuildFpsCrosshair();
     }
-
-    private string ControlsText() => _firstPersonModeActive
-        ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • I inventory • P Pip-Boy • Esc mouse"
-        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save";
 
     private void BuildFpsCrosshair()
     {
@@ -1762,23 +1945,6 @@ internal partial class Fo1TacticalSession : Node
         _targetReticleLabel.Text =
             $"TARGET: GIANT RAT  HP {_selectedMob.HitPoints}/{_selectedMob.MaximumHitPoints}";
         _targetReticle.Visible = true;
-    }
-
-    private void RefreshMobReadability()
-    {
-        var tactical = _camera is null ||
-            _camera.Projection == Camera3D.ProjectionType.Orthogonal;
-        foreach (var mob in _mobs)
-            mob.UpdateReadability(_playerTile, tactical);
-    }
-
-    private static Label HudLabel(Container parent)
-    {
-        var label = new Label();
-        label.AddThemeColorOverride("font_color", new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point68f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point96f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point48f));
-        label.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt16);
-        parent.AddChild(label);
-        return label;
     }
 
     private void RefreshHud()

@@ -3,13 +3,15 @@ using System.Text.Json;
 
 
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>One explicit source-script use contract for the VAULT13 MAP flare stack.</summary>
 internal sealed record Fo1DestinationFlareUseContract(
     string Path, string Sha256, int HostSerial, string Symbol, string Pid,
-    string PrototypeSha256, string ScriptSha256)
+    string PrototypeSha256, string ScriptSha256, ClassicScriptProgram Program,
+    int ExpiryLocalIndex, int ExpiryDurationGameTicks)
 {
     private const string Schema = "opennv-fo1-destination-flare-use/v1";
 
@@ -38,16 +40,51 @@ internal sealed record Fo1DestinationFlareUseContract(
             Required(item.GetProperty("profile"), "subtypeName") != "weapon")
             throw new InvalidOperationException("Fallout flare use descriptor item is not the admitted MAP stack.");
         var semantics = root.GetProperty("semantics");
+        var expiry = semantics.GetProperty("expiry");
         if (Required(semantics, "action") != "use_proc" ||
             Required(semantics, "result") != "lit-state" ||
             !semantics.GetProperty("storesGameTime").GetBoolean() ||
-            Required(semantics, "expiry") != "unimplemented-fail-closed")
+            Required(expiry, "operation") != "elapsed-game-time-greater-than" ||
+            Required(expiry, "result") != "destroy-self" ||
+            Required(expiry, "runtime") != "decoded-destroy-self" ||
+            expiry.GetProperty("localIndex").GetInt32() < 0 ||
+            expiry.GetProperty("durationGameTicks").GetInt32() <= 0)
             throw new InvalidOperationException("Fallout flare use descriptor semantics are not bounded.");
         var scriptSha256 = Required(root.GetProperty("script"), "sha256");
         if (!Hash(scriptSha256))
             throw new InvalidOperationException("Fallout flare use descriptor script hash is invalid.");
+        var program = ClassicScriptProgram.Parse(root.GetProperty("effectProgram"));
+        var expiryLocalIndex = expiry.GetProperty("localIndex").GetInt32();
+        var expiryDurationGameTicks = expiry.GetProperty("durationGameTicks").GetInt32();
+        var validationState = new ClassicScriptState();
+        if (!program.Execute(
+                "use_proc",
+                validationState,
+                new ClassicScriptContext(true, false, expiryDurationGameTicks)) ||
+            validationState.Local(expiryLocalIndex) != expiryDurationGameTicks)
+            throw new InvalidOperationException(
+                "Fallout flare use event does not store source game time.");
+        var exactBoundary = checked(expiryDurationGameTicks + expiryDurationGameTicks);
+        var atBoundary = program.ExecuteWithActions(
+            "start_proc",
+            validationState,
+            new ClassicScriptContext(false, false, exactBoundary));
+        var afterBoundary = program.ExecuteWithActions(
+            "start_proc",
+            validationState,
+            new ClassicScriptContext(
+                false,
+                false,
+                checked(exactBoundary + Math.Sign(expiryDurationGameTicks))));
+        if (atBoundary.Executed || atBoundary.DestroySelf ||
+            !afterBoundary.Executed || !afterBoundary.DestroySelf)
+            throw new InvalidOperationException(
+                "Fallout flare expiry does not preserve its strict source boundary.");
         return new Fo1DestinationFlareUseContract(
-            resolved, sha256, hostSerial, symbol, pid, prototypeSha256, scriptSha256);
+            resolved, sha256, hostSerial, symbol, pid, prototypeSha256, scriptSha256,
+            program,
+            expiryLocalIndex,
+            expiryDurationGameTicks);
     }
 
     internal object Report() => new
@@ -60,7 +97,14 @@ internal sealed record Fo1DestinationFlareUseContract(
         Pid,
         PrototypeSha256,
         ScriptSha256,
-        semantics = new { action = "use_proc", result = "lit-state", expiry = "unimplemented-fail-closed" },
+        semantics = new
+        {
+            action = "use_proc",
+            result = "lit-state",
+            expiryLocalIndex = ExpiryLocalIndex,
+            expiryDurationGameTicks = ExpiryDurationGameTicks,
+            expiry = "decoded-destroy-self",
+        },
     };
 
     private static string Required(JsonElement source, string name) =>

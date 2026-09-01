@@ -4,6 +4,7 @@ using OpenNV.Runtime.Campaigns.Fallout1;
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2TempleTopologyCoverage(
+    string MapSha256,
     string ProfilePath,
     string ProfileSha256,
     string FloorSupportMode,
@@ -14,6 +15,9 @@ internal sealed record Fo2TempleTopologyCoverage(
     int SourceBlockingObjects,
     int SourceBlockingHexes,
     int MultihexCentralOnlyBlockers,
+    bool DoorStateComplete,
+    bool MultihexCoverageComplete,
+    IReadOnlySet<int> TargetWalkableTiles,
     string WalkMaskMode,
     string WalkMaskSha256,
     int WalkableHexes,
@@ -38,6 +42,7 @@ internal sealed record Fo2TempleTopologyCoverage(
 internal static class Fo2TempleTopology
 {
     private const int TileCount = Fo1HexMath.Width * Fo1HexMath.Height;
+    private const int ClassicDoorObjectType = 2;
 
     internal static Fo2TempleTopologyCoverage Build(
         Node3D root,
@@ -57,9 +62,22 @@ internal static class Fo2TempleTopology
             .Where(row => row.Tile >= 0 && row.Blocking(profile.ObjectNoBlockFlag))
             .ToArray();
         var blocked = blockingObjects.Select(row => row.Tile).ToHashSet();
+        var multihexBlockers = blockingObjects
+            .Where(row => (row.Flags & profile.ObjectMultihexFlag) != 0)
+            .ToArray();
+        var doors = catalog.ObjectPlacements
+            .Where(row => row.ObjectType == ClassicDoorObjectType)
+            .ToArray();
         var walkable = Enumerable.Range(0, TileCount)
             .Select(tile => floorSupported[tile] && !blocked.Contains(tile))
             .ToArray();
+        var targetBlocked = blockingObjects
+            .Where(row => row.Serial != catalog.Confrontation.Critter.Serial)
+            .Select(row => row.Tile)
+            .ToHashSet();
+        var targetWalkable = Enumerable.Range(0, TileCount)
+            .Where(tile => floorSupported[tile] && !targetBlocked.Contains(tile))
+            .ToHashSet();
         if (!walkable[catalog.EntryTile])
             throw new InvalidOperationException(
                 "Fallout 2 Temple MAP header entry is not source-walkable.");
@@ -151,6 +169,7 @@ internal static class Fo2TempleTopology
             walkMaskSha256,
             entryReachableHexes);
         return new Fo2TempleTopologyCoverage(
+            catalog.MapSha256,
             profile.ResourcePath,
             profile.Sha256,
             profile.FloorSupport.Mode,
@@ -160,7 +179,10 @@ internal static class Fo2TempleTopology
             floorBody.GetPath().ToString(),
             blockingObjects.Length,
             blocked.Count,
-            blockingObjects.Count(row => (row.Flags & profile.ObjectMultihexFlag) != 0),
+            multihexBlockers.Length,
+            doors.Length == 0,
+            multihexBlockers.Length == 0,
+            targetWalkable,
             profile.WalkMask.Mode,
             walkMaskSha256,
             walkable.Count(value => value),

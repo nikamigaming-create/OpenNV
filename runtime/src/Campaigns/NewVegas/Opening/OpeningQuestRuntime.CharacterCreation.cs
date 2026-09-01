@@ -12,18 +12,28 @@ internal partial class OpeningQuestRuntime
 {
     private void ShowNameMenu(Action completed)
     {
-        var content = OpenPanel(MenuRect("name"), "name");
-        var prompt = NewLabel(_flow.Strings["namePrompt"]);
+        if (!_flow.Menus.TryGetValue("name", out var nameMenu) ||
+            nameMenu.TextEditMenu is not { } source)
+            throw new InvalidOperationException(
+                "Owned TextEditMenu tile contract is absent.");
+        var content = OpenOwnedTilePanel(source.Panel, "name");
+        var prompt = NewLabel("");
         prompt.HorizontalAlignment = HorizontalAlignment.Center;
+        OwnedGamebryoTileRuntime.BindText(prompt, source.Prompt.Text);
+        var promptSize = prompt.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            prompt,
+            source.Prompt.Placement,
+            source.Panel.Rect.Size,
+            promptSize);
         content.AddChild(prompt);
         var input = new LineEdit
         {
-            Name = "OwnedPlayerNameInput",
             Text = _playerName,
-            PlaceholderText = _flow.Strings["namePrompt"],
+            PlaceholderText = source.Prompt.Text.Text,
             Alignment = HorizontalAlignment.Center,
             CustomMinimumSize = new Vector2(
-                0.0f,
+                source.InputWrapWidth,
                 _opening.Font.LineHeightPixels * 2.0f),
         };
         ApplyTextTheme(input);
@@ -32,8 +42,20 @@ internal partial class OpeningQuestRuntime
             _opening.Style);
         input.AddThemeStyleboxOverride("normal", inputStyle);
         input.AddThemeStyleboxOverride("focus", inputStyle);
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            input,
+            source.Input,
+            source.Panel.Rect.Size,
+            input.CustomMinimumSize);
         content.AddChild(input);
-        var accept = NewButton(_flow.Strings["ok"]);
+        var accept = NewButton("");
+        OwnedGamebryoTileRuntime.BindText(accept, source.Accept.Text);
+        var acceptSize = accept.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            accept,
+            source.Accept.Placement,
+            source.Panel.Rect.Size,
+            acceptSize);
         content.AddChild(accept);
         void Submit()
         {
@@ -81,7 +103,7 @@ internal partial class OpeningQuestRuntime
             _loaded.MainContent.Lighting,
             _loaded.UnitsToMeters);
         var root = _raceSexRenderedDeviceHost.CreateMenuPresentationHost(
-            source.Background.Rect);
+            source.SharedControls.BackgroundRect);
         _raceSexMenuHost = new OpeningRaceSexMenuHost(
             source,
             _opening.MainMenuColor,
@@ -93,13 +115,46 @@ internal partial class OpeningQuestRuntime
         _raceSexMenuHost.FaceGrabHost();
         var preview = _raceSexRenderedDeviceHost.CreateFacePresentationHost();
         var previewControls = FaceGenPreviewControls(faceGen);
-        OpeningPlayerFaceGenPreviewHost? previewHost = null;
+        var ageControl = faceGen.ControlSpace.NativeAgeControl;
+        var previewBindings = previewControls.Append(
+            new OpeningNativeFaceGenGeometryControl(
+                -1,
+                ageControl.SettingEntity,
+                ageControl.SourceLabel,
+                ageControl.GeometryAxisSha256)).ToArray();
+        var textureControls = faceGen.PreviewHead.Previews[0].TextureControls;
+        OwnedGamebryoFaceGenPreviewHost? previewHost = null;
         OpeningPlayerFaceGenPreview? selectedPreviewState = null;
 
         void RefreshPreview() => previewHost?.SetPreviewState(
             _bodyProportions,
             _appearancePreviewFaceFraming,
             greenProjection: _appearancePreviewMode == "2d");
+
+        OwnedGamebryoFaceGenAgeState CurrentAgeState(float rawValue)
+        {
+            var geometry = FaceSymmetricGeometryCoordinates(
+                faceGen, _faceGeometryControlValues);
+            var texture = OwnedGamebryoFaceGenTextureRuntime.Coordinates(
+                faceGen.SymmetricTextureValues,
+                textureControls,
+                _faceTextureControlValues,
+                previewPolicy.MorphWeightScale);
+            return OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+                ageControl, geometry, texture, rawValue);
+        }
+
+        void ApplyAge()
+        {
+            if (_faceAgeRawValue is not { } rawValue || previewHost is null)
+                return;
+            var state = CurrentAgeState(rawValue);
+            previewHost.ApplyAge(
+                ageControl.SettingEntity,
+                state.GeometryAxisCoefficient,
+                ageControl.TextureAxis,
+                state.TextureAxisCoefficient);
+        }
 
         void UpdateControlValue(
             OpeningNativeFaceGenGeometryControl control,
@@ -117,13 +172,44 @@ internal partial class OpeningQuestRuntime
                 : value;
             var morphWeight = uiValue * previewPolicy.MorphWeightScale;
             _faceGeometryControlValues[control.SettingEntity] = uiValue;
-            previewHost?.Apply(control.SettingEntity, uiValue);
+            OwnedGamebryoFaceGenMorphRuntime.Publish(
+                previewHost,
+                control.SettingEntity,
+                uiValue);
+            ApplyAge();
             RefreshPreview();
             GD.Print(
                 $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={control.SettingEntity} " +
                 $"axisSha256={control.AxisSha256} uiValue={uiValue:R} " +
                 $"morphWeight={morphWeight:R} " +
                 $"semantics={previewPolicy.Semantics}");
+        }
+
+        void UpdateTextureValue(
+            OpeningNativeFaceGenTextureControl control,
+            float value)
+        {
+            if (!float.IsFinite(value) ||
+                value < previewPolicy.Minimum || value > previewPolicy.Maximum)
+                throw new InvalidOperationException(
+                    "FaceGen RaceSexMenu tone value is invalid.");
+            _faceTextureControlValues[control.SettingEntity] = value;
+            previewHost?.ApplyTexture(control.SettingEntity, value);
+            ApplyAge();
+            RefreshPreview();
+        }
+
+        void UpdateAgeValue(float value)
+        {
+            var state = CurrentAgeState(value);
+            _faceAgeRawValue = value;
+            ApplyAge();
+            RefreshPreview();
+            GD.Print(
+                $"OPENNV_NEW_GAME_FACEGEN_AGE setting={ageControl.SettingEntity} " +
+                $"rawValue={value:R} years={state.Years:R} " +
+                $"geometry={state.SymmetricGeometrySha256} " +
+                $"texture={state.SymmetricTextureSha256} semantics={ageControl.Semantics}");
         }
 
         void RenderPreview(OpeningAppearanceSex sex)
@@ -143,31 +229,33 @@ internal partial class OpeningQuestRuntime
             previewHost = null;
             _appearancePreviewHost = null;
             var engineSex = appearance.SexEngineValues[_sexIndex];
-            var selectedPreview = faceGen.PreviewHead.Previews.SingleOrDefault(value =>
-                engineSex == value.Sex &&
-                _raceFormId.Equals(value.RaceFormId, StringComparison.OrdinalIgnoreCase) &&
-                _hairFormId.Equals(value.HairFormId, StringComparison.OrdinalIgnoreCase) &&
-                _eyesFormId.Equals(value.EyesFormId, StringComparison.OrdinalIgnoreCase));
-            if (selectedPreview is null)
-                throw new InvalidOperationException(
-                    "Owned RaceSexMenu has no exact full-body preview artifact for " +
-                    $"sex={engineSex} race={_raceFormId} hair={_hairFormId} " +
-                    $"eyes={_eyesFormId}.");
+            var selectedPreview = OwnedGamebryoFaceGenSelectionInventory.Require(
+                faceGen.PreviewHead,
+                engineSex,
+                _raceFormId,
+                _hairFormId,
+                _eyesFormId);
             selectedPreviewState = selectedPreview;
-            previewHost = OpeningPlayerFaceGenPreviewHost.Load(
+            previewHost = OwnedGamebryoFaceGenPreviewHost.Load(
                 selectedPreview,
-                previewControls,
+                previewBindings,
                 previewPolicy,
                 preview,
                 _configuration,
                 _loaded.MainContent.Lighting,
                 _loaded.UnitsToMeters,
                 source.FaceGrab.Rect.Size,
-                renderedDevice);
+                renderedDevice.FaceGenPreviewDevice);
             foreach (var control in previewControls)
-                previewHost.Apply(
+                OwnedGamebryoFaceGenMorphRuntime.Publish(
+                    previewHost,
                     control.SettingEntity,
                     _faceGeometryControlValues[control.SettingEntity]);
+            foreach (var control in selectedPreview.TextureControls)
+                previewHost.ApplyTexture(
+                    control.SettingEntity,
+                    _faceTextureControlValues[control.SettingEntity]);
+            ApplyAge();
             RefreshPreview();
             _appearancePreviewHost = previewHost;
             GD.Print(
@@ -330,9 +418,7 @@ internal partial class OpeningQuestRuntime
             _raceSexMenuHost!.ShowSliders(
                 "faceGeometry",
                 previewControls.Select(control =>
-                {
-                    var selectedControl = control;
-                    return new OpeningRaceSexSliderEntry(
+                    new OpeningRaceSexSliderEntry(
                         control.SettingEntity,
                         control.SourceLabel,
                         _faceGeometryControlValues[control.SettingEntity],
@@ -345,10 +431,46 @@ internal partial class OpeningQuestRuntime
                             System.Globalization.CultureInfo.InvariantCulture),
                         value =>
                         {
-                            UpdateControlValue(selectedControl, value);
+                            UpdateControlValue(control, value);
                             showFace();
-                        });
-                }).ToArray(),
+                        }))
+                .Concat(textureControls.Select(control =>
+                    new OpeningRaceSexSliderEntry(
+                        control.SettingEntity,
+                        control.SourceLabel,
+                        _faceTextureControlValues[control.SettingEntity],
+                        previewPolicy.Minimum,
+                        previewPolicy.Maximum,
+                        previewPolicy.Step,
+                        previewPolicy.Jump,
+                        value => value.ToString(
+                            "+0;-0;0",
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        value =>
+                        {
+                            UpdateTextureValue(control, value);
+                            showFace();
+                        })))
+                .Append(new OpeningRaceSexSliderEntry(
+                    ageControl.SourceLabel,
+                    ageControl.SettingEntity,
+                    _faceAgeRawValue ?? OwnedGamebryoFaceGenAgeRuntime.InitialRawValue(
+                        ageControl,
+                        FaceSymmetricGeometryCoordinates(
+                            faceGen, _faceGeometryControlValues)),
+                    ageControl.RawMinimum,
+                    ageControl.RawMaximum,
+                    ageControl.RawStep,
+                    ageControl.RawStep,
+                    value => CurrentAgeState(value).Years.ToString(
+                        "0",
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    value =>
+                    {
+                        UpdateAgeValue(value);
+                        showFace();
+                    }))
+                .ToArray(),
                 showEyes,
                 Accept);
         };

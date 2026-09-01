@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -54,7 +55,7 @@ internal sealed record Fo3Cg01Stage12Transition(
     private const string ExpectedStatus =
         "source-backed-player-trigger-and-stage-result-runtime-unapplied";
     private const string ExpectedBoundaryBlocker =
-        "fo3-cg01-stage-12-dad-response-not-implemented";
+        "awaiting-source-owned-dad-response-completion";
     private const int ExpectedSourceStage = 10;
     private const int ExpectedTargetStage = 12;
     private const int ExpectedObjectiveIndex = 10;
@@ -182,14 +183,29 @@ internal sealed record Fo3Cg01Stage12Transition(
             !actionReferenceWasPlayer)
             throw new InvalidOperationException(
                 "Fallout 3 CG01 walk-to-Dad trigger activation differs.");
-        var trace = new[]
+        var trace = new List<string>
         {
             "trigger:onTriggerEnter:player",
-            "s12:0:setObjectiveCompleted",
-            "s12:1:disablePlayerControls",
-            "s12:2:setScriptVariable",
-            "s12:3:setScriptVariable",
         };
+        var commands = new[]
+        {
+            (Kind: GamebryoStageCommandKind.Objective, Trace: "s12:0:setObjectiveCompleted"),
+            (Kind: GamebryoStageCommandKind.PlayerControls, Trace: "s12:1:disablePlayerControls"),
+            (Kind: GamebryoStageCommandKind.SetScriptVariable,
+                Trace: "s12:2:setScriptVariable"),
+            (Kind: GamebryoStageCommandKind.SetScriptVariable,
+                Trace: "s12:3:setScriptVariable"),
+        }.Select((command, sourceIndex) => new SourceGamebryoStageCommand<string>(
+            sourceIndex,
+            command.Kind,
+            command.Trace)).ToArray();
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(commands, command =>
+        {
+            trace.Add(command.Value);
+            applied++;
+            return applied == command.SourceIndex + 1;
+        });
         return new Fo3Cg01Stage12State(
             SourceStage,
             QuestFormId,
@@ -201,8 +217,8 @@ internal sealed record Fo3Cg01Stage12Transition(
             DisabledPlayerControls,
             DadDoTalk,
             DadTimerSeconds,
-            ExpectedCommandCount,
-            ExpectedCommandCount,
+            commands.Length,
+            applied,
             trace,
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
     }
@@ -284,7 +300,7 @@ internal sealed record Fo3Cg01Stage12Transition(
                 "Fallout 3 CG01 stage-12 Dad variable differs.");
     }
 
-    private static Fo3Cg01Transform LoadTransform(JsonElement source) => new(
+    internal static Fo3Cg01Transform LoadTransform(JsonElement source) => new(
         ReadVector3(source, "positionGameUnits"),
         ReadVector3(source, "rotationRadians"),
         RequiredDouble(source, "scale"));

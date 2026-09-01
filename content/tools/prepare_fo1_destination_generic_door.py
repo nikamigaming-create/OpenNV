@@ -15,6 +15,7 @@ from typing import Any
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError, sha256_path
 from fo1_frm import decode_frm
+from classic_door import decode_classic_door, materialize_classic_door_assets
 
 
 SCHEMA = "opennv-fo1-destination-generic-door/v1"
@@ -29,6 +30,7 @@ FLOOR_HEIGHT = MAP_HEIGHT // 2
 FLOOR_COUNT = FLOOR_WIDTH * FLOOR_HEIGHT
 NO_SCRIPT_INDEX = -1
 NO_SCRIPT_ID = "ffffffff"
+PID_RADIX = 16
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -96,7 +98,8 @@ def frm_summary(data: bytes) -> dict[str, Any]:
 
 
 def build(transport_path: Path, presentation_path: Path, transition_path: Path,
-          fallout2_master: Path, fallout2_critter: Path | None, output_path: Path) -> dict[str, Any]:
+          fallout2_master: Path, fallout2_critter: Path | None, output_path: Path,
+          ffmpeg: str = "ffmpeg") -> dict[str, Any]:
     if output_path.exists():
         raise Fo1ProfileError(f"refusing to overwrite destination generic-door descriptor: {output_path}")
     transport, presentation, transition = (
@@ -149,6 +152,16 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path,
     if hashlib.sha256(prototype_resource.data).hexdigest() != door["prototype"]["sha256"]:
         raise Fo1ProfileError("generic-door owned PRO bytes do not match the MAP prototype hash")
     art_sha256 = hashlib.sha256(art_resource.data).hexdigest()
+    door_presentation = decode_classic_door(
+        resolver, int(door["pid"], PID_RADIX), door["artFilename"]
+    )
+    door_presentation["runtimeAssets"] = materialize_classic_door_assets(
+        resolver,
+        door_presentation,
+        int(door["rotation"]),
+        output_path.parent / f"{output_path.stem}-assets",
+        ffmpeg,
+    )
     document = {
         "schema": SCHEMA,
         "status": "compiled-owned-map-unscripted-generic-door-open-passability",
@@ -171,8 +184,8 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path,
             "script": {"mapScriptIndex": NO_SCRIPT_INDEX, "sid": NO_SCRIPT_ID,
                        "semantics": "no-script-boundary-generic-door-open-passability-only"},
             "closed": {"walkable": False}, "open": {"walkable": True},
-            "interactionActionPoints": "not-source-backed", "sound": "unsupported-fail-closed",
-            "animationTiming": "unsupported-fail-closed",
+            "interactionActionPoints": "not-source-backed",
+            "presentation": door_presentation,
         },
         "sourceWalkMaskRoute": {"pathTiles": route, "contactTile": route[-1], "contactIsAdjacent": route[-1] in neighbors(door["tile"])},
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,
@@ -196,11 +209,12 @@ def main() -> int:
     parser.add_argument("--fallout2-master", type=Path, required=True)
     parser.add_argument("--fallout2-critter", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--ffmpeg", default="ffmpeg")
     args = parser.parse_args()
     try:
         result = build(args.transport.resolve(), args.presentation.resolve(), args.exit_grid_transition.resolve(),
                        args.fallout2_master.resolve(), args.fallout2_critter.resolve() if args.fallout2_critter else None,
-                       args.output.resolve())
+                       args.output.resolve(), args.ffmpeg)
     except Exception as error:
         print(f"OPENNV_FO1_DESTINATION_GENERIC_DOOR_ERROR {error}")
         return 2

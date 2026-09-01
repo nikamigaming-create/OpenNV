@@ -536,7 +536,8 @@ def _prepare_creature_actor(
         raise ValueError("Creature recipe must pin its expected CREA base")
     if not isinstance(recipe.get("expectedInitiallyDisabled"), bool):
         raise ValueError("Creature recipe must pin its authored initially-disabled state")
-    if recipe.get("enableParentPolicy") != "require-absent":
+    enable_parent_policy = recipe.get("enableParentPolicy")
+    if enable_parent_policy not in {"require-absent", "require-source-form-id"}:
         raise ValueError("Creature recipe must declare its enable-parent policy")
 
     catalog = context.catalog
@@ -552,10 +553,25 @@ def _prepare_creature_actor(
             f"expected={recipe['expectedInitiallyDisabled']} "
             f"actual={reference.initially_disabled}"
         )
-    if reference.enable_parent_form_id is not None:
+    expected_enable_parent = (
+        form_id(str(recipe["expectedEnableParentFormId"]))
+        if enable_parent_policy == "require-source-form-id" and
+        "expectedEnableParentFormId" in recipe
+        else None
+    )
+    if enable_parent_policy == "require-absent" and \
+            reference.enable_parent_form_id is not None:
         raise ValueError(
             "Creature ACRE has an XESP enable parent but its recipe requires none: "
             f"{reference.enable_parent_form_id:08x}"
+        )
+    if enable_parent_policy == "require-source-form-id" and (
+        expected_enable_parent is None or
+        reference.enable_parent_form_id != expected_enable_parent
+    ):
+        raise ValueError(
+            "Creature ACRE enable parent differs from its recipe: "
+            f"expected={expected_enable_parent} actual={reference.enable_parent_form_id}"
         )
 
     configured_origin = recipe.get("originGameUnits")
@@ -889,7 +905,10 @@ def prepare_actor(
     ):
         raise ValueError("Proof actor race has no complete sex-specific head/body table")
     hair = catalog.parts.get(actor.hair_form_id or 0)
-    eyes = catalog.parts.get(actor.eyes_form_id or 0)
+    resolved_eyes_form_id = actor.eyes_form_id or (
+        race.valid_eye_form_ids[0] if race.valid_eye_form_ids else 0
+    )
+    eyes = catalog.parts.get(resolved_eyes_form_id)
     head_parts = [catalog.parts.get(part) for part in actor.head_part_form_ids]
     if hair is None or hair.model_path is None or eyes is None or eyes.texture_path is None:
         raise ValueError("Proof actor has incomplete hair or eye records")
@@ -917,7 +936,11 @@ def prepare_actor(
         if not outfits or any(outfit is None for outfit in outfits):
             raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
         outfit_models = [
-            outfit.female_model_path if actor.female else outfit.male_model_path
+            (
+                outfit.female_model_path or outfit.male_model_path
+                if actor.female
+                else outfit.male_model_path or outfit.female_model_path
+            )
             for outfit in outfits
         ]
     if any(path is None for path in outfit_models):
@@ -1395,7 +1418,11 @@ def prepare_actor(
             "female": actor.female,
             "raceFormId": f"{appearance_race_form_id:08x}",
             "hairFormId": f"{actor.hair_form_id:08x}",
-            "eyesFormId": f"{actor.eyes_form_id:08x}",
+            "eyesFormId": f"{resolved_eyes_form_id:08x}",
+            "eyesSource": (
+                "npc-enam" if actor.eyes_form_id is not None
+                else "race-enam-first-engine-default"
+            ),
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
             "outfitFormIds": [f"{outfit_form:08x}" for outfit_form in outfit_forms],
             "recordType": HUMANOID_BASE_RECORD_TYPE,

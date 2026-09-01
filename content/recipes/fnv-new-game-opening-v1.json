@@ -5,12 +5,27 @@
   "provenance": {
     "classification": "owned-data-root-selection",
     "status": "opening-route-rooted",
-    "source": "FalloutNV.esm VCG00/VCG01 plus the owned Fallout UI, voice, lip, and loose Video sources",
+    "source": "FalloutNV.esm VCG00/VCG01/VCG02 plus the owned Fallout UI, voice, lip, and loose Video sources",
     "evidence": "The compiler derives stages, scripts, references, dialogue, voice types, paired voice/lip members, packages, CELL ownership, menu tiles, includes, textures, and Bink assets from selected owned records and archive bytes."
   },
   "rootEditorIds": [
     "VCG00",
-    "VCG01"
+    "VCG01",
+    "VCG02",
+    "VGenericTimer",
+    "SunnyRef",
+    "VCG02SunnyTravelOutside",
+    "VCG02SunnyPatrolTriggerSCRIPT",
+    "VCG02SunnyPatrolTriggerREF",
+    "VCG02SunnyBark",
+    "VCG02SunnyShotReaction",
+    "VCG02BottleMarkerREF",
+    "VCG02TargetSCRIPT",
+    "CondNVVarmintRifleLoot",
+    "WeapNVVarmintRifle",
+    "Ammo556mm",
+    "SunnyMeetPlayerDialoguePackage",
+    "VFreeformGoodspringsGSSunnySmilesTopic019"
   ],
   "entryPoint": {
     "questEditorId": "VCG00",
@@ -53,10 +68,12 @@
       "FURN": ["SCRI"],
       "MISC": ["SCRI"],
       "TERM": ["SCRI"],
-      "WEAP": ["SCRI"]
+      "WEAP": ["SCRI", "NAM0"],
+      "FLST": ["LNAM"]
     },
     "reverseFormLinkSubrecords": [
-      "QSTI"
+      "QSTI",
+      "XESP"
     ],
     "parentGroupTypes": [
       1,
@@ -231,6 +248,9 @@
   "newGameFlow": {
     "questEditorId": "VCG01",
     "questScriptEditorId": "VCG01SCRIPT",
+    "ordinaryQuestEditorIds": [
+      "VCG02"
+    ],
     "dialogueVoice": {
       "speakerRole": "guideActor"
     },
@@ -343,6 +363,7 @@
       "conditionFunctionNames": {
         "58": "getStage",
         "79": "getQuestVariable",
+        "421": "getObjectiveCompleted",
         "546": "getQuestCompleted"
       },
       "locationTypeNames": {
@@ -370,16 +391,58 @@
     },
     "sceneRoles": {
       "guideActor": "DocMitchellREF",
+      "tutorialGuide": "SunnyREF",
       "vigorTester": "VCG01VigorTesterREF",
       "exitDoor": "GSDocMitchellHouseIntDoorREF"
     },
+    "ordinaryActors": [
+      {
+        "role": "tutorialGuide",
+        "questEditorId": "VCG02",
+        "packageEditorIds": [
+          "SunnyMeetPlayerDialoguePackage",
+          "VCG02SunnyTravelOutside"
+        ],
+        "arrivalTransitions": [
+          {
+            "packageEditorId": "VCG02SunnyTravelOutside",
+            "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT"
+          }
+        ],
+        "automaticTopicEditorIds": ["VCG02SunnyBark", "VCG02SunnyShotReaction"],
+        "automaticDialogueTriggers": [
+          {
+            "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT",
+            "triggerReferenceEditorId": "VCG02SunnyPatrolTriggerREF",
+            "topicEditorId": "VCG02SunnyBark"
+          }
+        ],
+        "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"
+      }
+    ],
+    "hitTargetSets": [
+      {
+        "scriptEditorId": "VCG02TargetSCRIPT",
+        "enableParentEditorId": "VCG02BottleMarkerREF",
+        "reactionTopicEditorId": "VCG02SunnyShotReaction"
+      }
+    ],
     "menus": {
       "dialogue": {
         "document": "menus\\dialog\\dialog_menu.xml"
       },
       "name": {
         "document": "menus\\dialog\\texteditmenu.xml",
-        "layoutTile": "TEM_MainRect"
+        "layoutTile": "TEM_MainRect",
+        "textEditTiles": {
+          "menuName": "TextEditMenu",
+          "panelTile": "TEM_MainRect",
+          "promptTile": "textedit_prompt",
+          "promptEntity": "-sEnterName",
+          "inputTile": "textedit_text",
+          "acceptTile": "textedit_button_ok",
+          "acceptEntity": "-sOk"
+        }
       },
       "appearance": {
         "document": "menus\\chargen\\race_sex_menu.xml",
@@ -534,6 +597,38 @@
             17, 18, 19, 20, 21, 26, 29, 31, 32, 34, 35, 36, 37, 38, 39,
             40, 41, 42, 44, 45, 46, 47, 49, 50, 52, 53, 54
           ]
+        },
+        "nativeTextureExposure": {
+          "classification": "implementation-neutral-static-control-registration-contract",
+          "engineBuild": "1.4.0.525",
+          "sourceExecutableSha256": "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57",
+          "settingEntityTemplate": "sRSMToneOption{oneBasedOrdinal:02d}",
+          "controlIndices": [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 17, 18,
+            19, 20, 21, 23, 24, 25, 26, 29, 30, 31
+          ]
+        },
+        "nativeAgeExposure": {
+          "classification": "implementation-neutral-observe-only-racesexmenu-and-published-facegen-ctl-contract",
+          "engineBuild": "1.4.0.525",
+          "sourceExecutableSha256": "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57",
+          "settingEntity": "sRSMAge",
+          "sourceLabel": "Age",
+          "sourceRace": "all",
+          "rawMinimum": 1,
+          "rawMaximum": 10,
+          "rawStep": 1,
+          "mappedMinimumYears": 15.0,
+          "mappedMaximumYears": 65.0,
+          "mappedMultiplier": 5.550000190734863,
+          "mappedAddend": 9.449999809265137,
+          "sliderTileId": "0x1a",
+          "handlerAddress": "0x7b4dd7",
+          "multiplierAddress": "0x1075ba0",
+          "addendAddress": "0x1075b98",
+          "minimumAddress": "0x1015a38",
+          "maximumAddress": "0x1075b90",
+          "semantics": "round-linear-raw-slider-years-then-shape-age-and-color-age-with-baseline-delta-preserved"
         },
         "runtimePreviewControl": {
           "controlIndex": 0,

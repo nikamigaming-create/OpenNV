@@ -18,6 +18,8 @@ import shutil
 import tempfile
 from typing import Any
 
+from classic_map_joins import exit_grid_records, reciprocal_map_joins
+from classic_int_initialization import compile_map_int_initialization
 from fo1_campaign_inventory import parse_maps_txt
 from fo1_map_objects import (
     CONTRACT_SCHEMA as OBJECT_CONTRACT_SCHEMA,
@@ -63,6 +65,13 @@ def map_summary(
 ) -> dict[str, Any]:
     object_graph = document["objectGraph"]
     script_lists = object_graph["scriptLists"]
+    initialization = document["initializationScripts"]
+    all_objects = sum(
+        1
+        for elevation in object_graph["objects"]["elevations"]
+        for obj in elevation["objects"]
+        for _ in flatten_object(obj)
+    )
     layout = document["layout"]
     return {
         "id": map_id,
@@ -74,13 +83,23 @@ def map_summary(
         "version": document["header"]["version"],
         "presentElevations": layout["presentElevations"],
         "topLevelObjects": object_graph["objects"]["totalTopLevelObjects"],
+        "allObjects": all_objects,
         "doors": len(object_graph["doors"]),
         "liveScripts": sum(row["liveCount"] for row in script_lists),
+        "headerIntPrograms": int(initialization["mapHeader"]["program"] is not None),
+        "randomSites": len(initialization["randomSites"]),
+        "exitGrids": len(document["exitGrids"]),
         "resources": len(document["resources"]),
         "entry": document["entry"],
         "mapsTxt": document["mapsTxt"],
         "promotion": document["promotion"],
     }
+
+
+def flatten_object(source: dict[str, Any]):
+    yield source
+    for inventory in source["inventory"]:
+        yield from flatten_object(inventory["object"])
 
 
 def build_campaign_transport(
@@ -131,6 +150,7 @@ def build_campaign_transport(
     )
     try:
         map_rows: list[dict[str, Any]] = []
+        join_maps: list[dict[str, Any]] = []
         seen_source_hashes: set[str] = set()
         for map_id, map_path in zip(map_ids, map_paths, strict=True):
             source_bytes = map_path.read_bytes()
@@ -155,6 +175,11 @@ def build_campaign_transport(
                 )
             seen_source_hashes.add(source_hash)
             configured_row = configured.get(layout.header.mapIndex)
+            initialization_scripts = compile_map_int_initialization(
+                asdict(layout.header),
+                object_contract["map"]["scriptLists"],
+                resolver,
+            )
             document = {
                 "schema": MAP_SCHEMA,
                 "status": "transported",
@@ -177,6 +202,13 @@ def build_campaign_transport(
                 },
                 "layout": map_layout_manifest(layout),
                 "objectGraph": object_contract["map"],
+                "initializationScripts": initialization_scripts,
+                "exitGrids": exit_grid_records(
+                    layout.header.mapIndex,
+                    layout.header.name,
+                    source_hash,
+                    object_contract["map"]["objects"],
+                ),
                 "resources": object_contract["resources"],
                 "promotion": {
                     "state": "transported",
@@ -186,7 +218,7 @@ def build_campaign_transport(
                     "headsetAccepted": False,
                 },
                 "unsupported": [
-                    "SSL/INT script execution and script-authored entry overrides",
+                    "INT execution and script-authored entry overrides",
                     "3D presentation mapping",
                     "Godot entity creation",
                     "turn, AP, RNG, dialogue, quest, and world-map simulation",
@@ -197,6 +229,18 @@ def build_campaign_transport(
             relative_path = f"maps/{map_id}.json"
             digest = write_payload(staging / relative_path, document)
             map_rows.append(map_summary(map_id, relative_path, digest, document))
+            if (
+                configured_row is not None
+                and str(configured_row["map_name"]).casefold() == map_id
+            ):
+                join_maps.append(
+                    {
+                        "mapIndex": layout.header.mapIndex,
+                        "mapName": layout.header.name,
+                        "mapSha256": source_hash,
+                        "exitGrids": document["exitGrids"],
+                    }
+                )
 
         resources = [
             {
@@ -210,6 +254,68 @@ def build_campaign_transport(
                 key=lambda item: item.logical_path,
             )
         ]
+        map_joins = reciprocal_map_joins(join_maps)
+        map_documents = [
+            json.loads((staging / row["path"]).read_text(encoding="utf-8"))
+            for row in map_rows
+        ]
+        programs_by_sha256: dict[str, dict[str, Any]] = {}
+        random_procedures: dict[str, int] = {}
+        random_ranges: dict[str, int] = {}
+        random_operand_kinds: dict[str, int] = {}
+        random_expression_statuses: dict[str, int] = {}
+        random_unsupported: dict[str, int] = {}
+        branch_kinds: dict[str, int] = {}
+        branch_target_kinds: dict[str, int] = {}
+        branch_expression_statuses: dict[str, int] = {}
+        branch_unsupported: dict[str, int] = {}
+        source_expression_random_sites = 0
+        for document in map_documents:
+            initialization = document["initializationScripts"]
+            programs = [
+                row["program"] for row in initialization["liveScriptSlots"]
+            ]
+            if initialization["mapHeader"]["program"] is not None:
+                programs.insert(0, initialization["mapHeader"]["program"])
+            for program in programs:
+                programs_by_sha256.setdefault(program["sha256"], program)
+            for site in initialization["randomSites"]:
+                random_procedures[site["procedure"]] = (
+                    random_procedures.get(site["procedure"], 0) + 1
+                )
+                operand_kind = site["operandKind"]
+                random_operand_kinds[operand_kind] = (
+                    random_operand_kinds.get(operand_kind, 0) + 1
+                )
+                expression_status = site["expressionStatus"]
+                random_expression_statuses[expression_status] = (
+                    random_expression_statuses.get(expression_status, 0) + 1
+                )
+                if site["unsupported"] is not None:
+                    key = site["unsupported"].split(" at ", 1)[0]
+                    random_unsupported[key] = random_unsupported.get(key, 0) + 1
+                if site["operandKind"] == "literal-inclusive-range":
+                    key = f"{site['minimum']}..{site['maximum']}"
+                    random_ranges[key] = random_ranges.get(key, 0) + 1
+                else:
+                    source_expression_random_sites += 1
+        for program in programs_by_sha256.values():
+            for procedure in program["inventory"]["procedures"]:
+                for branch in procedure["branches"]:
+                    branch_kinds[branch["kind"]] = (
+                        branch_kinds.get(branch["kind"], 0) + 1
+                    )
+                    target_kind = branch["targetKind"]
+                    branch_target_kinds[target_kind] = (
+                        branch_target_kinds.get(target_kind, 0) + 1
+                    )
+                    expression_status = branch["expressionStatus"]
+                    branch_expression_statuses[expression_status] = (
+                        branch_expression_statuses.get(expression_status, 0) + 1
+                    )
+                    if branch["unsupported"] is not None:
+                        key = branch["unsupported"].split(" at ", 1)[0]
+                        branch_unsupported[key] = branch_unsupported.get(key, 0) + 1
         campaign = {
             "schema": CAMPAIGN_SCHEMA,
             "status": "transported-not-rendered",
@@ -226,8 +332,46 @@ def build_campaign_transport(
                 "mapContracts": len(map_rows),
                 "presentElevations": sum(len(row["presentElevations"]) for row in map_rows),
                 "topLevelObjects": sum(row["topLevelObjects"] for row in map_rows),
+                "allObjects": sum(row["allObjects"] for row in map_rows),
+                "nestedInventoryObjects": sum(
+                    row["allObjects"] - row["topLevelObjects"] for row in map_rows
+                ),
                 "doors": sum(row["doors"] for row in map_rows),
                 "liveScripts": sum(row["liveScripts"] for row in map_rows),
+                "mapHeaderIntPrograms": sum(
+                    row["headerIntPrograms"] for row in map_rows
+                ),
+                "uniqueIntPrograms": len(programs_by_sha256),
+                "uniqueIntProcedures": sum(
+                    len(program["inventory"]["procedures"])
+                    for program in programs_by_sha256.values()
+                ),
+                "sourceInstanceRandomSites": sum(
+                    row["randomSites"] for row in map_rows
+                ),
+                "literalRangeRandomSites": sum(
+                    row["randomSites"] for row in map_rows
+                ) - source_expression_random_sites,
+                "sourceExpressionRandomSites": source_expression_random_sites,
+                "randomOperandKindHistogram": dict(
+                    sorted(random_operand_kinds.items())
+                ),
+                "randomExpressionStatusHistogram": dict(
+                    sorted(random_expression_statuses.items())
+                ),
+                "randomUnsupportedHistogram": dict(sorted(random_unsupported.items())),
+                "randomProcedureHistogram": dict(sorted(random_procedures.items())),
+                "randomRangeHistogram": dict(sorted(random_ranges.items())),
+                "branchKindHistogram": dict(sorted(branch_kinds.items())),
+                "branchTargetKindHistogram": dict(
+                    sorted(branch_target_kinds.items())
+                ),
+                "branchExpressionStatusHistogram": dict(
+                    sorted(branch_expression_statuses.items())
+                ),
+                "branchUnsupportedHistogram": dict(sorted(branch_unsupported.items())),
+                "exitGrids": sum(row["exitGrids"] for row in map_rows),
+                "reciprocalMapJoins": len(map_joins),
                 "uniqueResources": len(resources),
                 "mapsTxtRows": len(configured),
                 "configuredMaps": sum(row["mapsTxt"] is not None for row in map_rows),
@@ -241,6 +385,7 @@ def build_campaign_transport(
                 "openXrAcceptedMaps": 0,
             },
             "maps": map_rows,
+            "mapJoins": map_joins,
             "resources": resources,
             "unsupported": [
                 "script execution and quest state",
@@ -260,6 +405,7 @@ def build_campaign_transport(
             "elevations": campaign["coverage"]["presentElevations"],
             "objects": campaign["coverage"]["topLevelObjects"],
             "doors": campaign["coverage"]["doors"],
+            "reciprocalMapJoins": campaign["coverage"]["reciprocalMapJoins"],
             "resources": len(resources),
             "retailOrDerivedAssetsPackaged": False,
         }

@@ -3,6 +3,7 @@ using System.Text.Json;
 
 
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -47,6 +48,22 @@ internal sealed record Fo1ExitGridTransitionContract(
 
     internal bool IsTrigger(int tile) => Triggers.Any(trigger => trigger.Tile == tile);
 
+    internal ClassicMapJoin JoinForTrigger(int tile)
+    {
+        var trigger = Triggers.Single(row => row.Tile == tile);
+        return new ClassicMapJoin(
+            trigger.Serial,
+            new ClassicMapEndpoint(
+                SourceMapIndex, SourceMapName, SourceMapSha256, trigger.Tile, null, null),
+            new ClassicMapEndpoint(
+                DestinationMapIndex,
+                DestinationMapName,
+                DestinationMapSha256,
+                DestinationTile,
+                DestinationElevation,
+                DestinationRotation));
+    }
+
     internal object Report(int? activatedTile, bool destinationSceneLoaded = false) => new
     {
         schema = Schema,
@@ -70,6 +87,13 @@ internal sealed record Fo1ExitGridTransitionContract(
             Triggers.Select(trigger => trigger.Tile).Distinct().Count() != Triggers.Count ||
             Triggers.Any(trigger => trigger.Tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height || string.IsNullOrWhiteSpace(trigger.Pid) || !Hash(trigger.PrototypeSha256)))
             throw new InvalidOperationException("Fallout 1 exit-grid transition descriptor is incomplete.");
+        foreach (var trigger in Triggers)
+            _ = ClassicMapJoinOwner.Commit(
+                JoinForTrigger(trigger.Tile),
+                SourceMapIndex,
+                SourceMapSha256,
+                trigger.Tile,
+                null);
     }
 
     private static string Required(JsonElement source, string property) => source.TryGetProperty(property, out var value) &&

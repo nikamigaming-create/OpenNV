@@ -46,6 +46,7 @@ def plugin() -> bytes:
         + subrecord("INDX", struct.pack("<I", 0))
         + subrecord("MODL", b"characters/_male/femaleupperbody.nif\0")
         + subrecord("ICON", b"characters/female/upperbody.dds\0")
+        + subrecord("ENAM", struct.pack("<2I", 0x31, 0x33))
         + subrecord("FGGS", struct.pack("<50f", *([1.0] * 50)))
         + subrecord("FGGA", struct.pack("<30f", *([2.0] * 30)))
         + subrecord("FGTS", struct.pack("<50f", *([3.0] * 50))),
@@ -176,6 +177,7 @@ class ActorCatalogTest(unittest.TestCase):
         self.assertEqual(race.female_face_symmetric_geometry[0], 1.0)
         self.assertEqual(race.female_face_asymmetric_geometry[0], 2.0)
         self.assertEqual(race.female_face_symmetric_texture[0], 3.0)
+        self.assertEqual(race.valid_eye_form_ids, (0x31, 0x33))
         self.assertEqual(catalog.armor[0x40].female_model_path, "armor\\female.nif")
         self.assertEqual(catalog.armor[0x40].female_ground_model_path, "armor\\female_go.nif")
         self.assertEqual(catalog.armor[0x40].biped_flags, 0x00000004)

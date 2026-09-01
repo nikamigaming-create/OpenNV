@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from corpus_io import atomic_json
+from classic_int_initialization import compile_map_int_initialization
 from fo1_frm import decode_frm
 from fo1_map_objects import (
     OBJECT_TYPE_NAMES,
@@ -214,6 +215,10 @@ def compile_fo2_arroyo_caves_slice(
         if end_offset != len(map_resource.data):
             raise Fo1ProfileError("Fallout 2 Arroyo Caves object graph has trailing bytes")
 
+        initialization_scripts = compile_map_int_initialization(
+            asdict(layout.header), scripts, resolver
+        )
+
         flat_objects = _flatten_objects(objects)
         prototypes: dict[str, dict[str, Any]] = {}
         frm_placements: dict[str, list[dict[str, Any]]] = {}
@@ -386,6 +391,7 @@ def compile_fo2_arroyo_caves_slice(
             "objects": objects,
             "allObjectCount": len(flat_objects),
         },
+        "initializationScripts": initialization_scripts,
         "arrivalWalkContract": {
             "semantics": "non-default-floor-art-minus-central-source-blocking-object-hexes-v1",
             "walkMaskSha256": _walk_mask_sha256(walkable),

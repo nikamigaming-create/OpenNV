@@ -8,6 +8,14 @@ from content.tests.csharp_source_module import read_csharp_source_module
 
 ROOT = Path(__file__).resolve().parents[2]
 OPENING = ROOT / "runtime" / "src" / "Campaigns" / "NewVegas" / "Opening"
+SHARED_HOST = (
+    ROOT
+    / "runtime"
+    / "src"
+    / "Presentation"
+    / "CharacterCreation"
+    / "OwnedGamebryoFaceGenPreviewHost.cs"
+)
 
 
 class FnvFaceGenPreviewRuntimeTest(unittest.TestCase):
@@ -22,9 +30,7 @@ class FnvFaceGenPreviewRuntimeTest(unittest.TestCase):
         self.assertEqual(0.1, preview["morphWeightScale"])
         self.assertEqual(2.5, preview["acceptanceValue"] * preview["morphWeightScale"])
 
-        host = (OPENING / "OpeningPlayerFaceGenPreviewHost.cs").read_text(
-            encoding="utf-8"
-        )
+        host = SHARED_HOST.read_text(encoding="utf-8")
         apply_method = host[
             host.index("internal void Apply") : host.index(
                 "internal Image CaptureRenderedImage"
@@ -46,9 +52,7 @@ class FnvFaceGenPreviewRuntimeTest(unittest.TestCase):
         )
 
     def test_vertex_delta_report_converts_actor_game_units_to_meters(self) -> None:
-        host = (OPENING / "OpeningPlayerFaceGenPreviewHost.cs").read_text(
-            encoding="utf-8"
-        )
+        host = SHARED_HOST.read_text(encoding="utf-8")
         metric = host[
             host.index("internal float MaximumAppliedVertexDeltaMeters") : host.index(
                 "private static void VerifyHash"

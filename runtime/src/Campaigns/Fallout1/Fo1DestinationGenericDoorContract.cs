@@ -3,13 +3,14 @@ using System.Text.Json;
 
 
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>One explicit unscripted MAP door whose owned blocker becomes walkable when activated.</summary>
 internal sealed record Fo1DestinationGenericDoorContract(
     string Path, string Sha256, Fo1TacticalSession.SourceDoorContract Door,
-    IReadOnlyList<int> SourceWalkMaskRoute)
+    IReadOnlyList<int> SourceWalkMaskRoute, ClassicDoorSource Presentation)
 {
     private const string Schema = "opennv-fo1-destination-generic-door/v1";
     private const int NoScriptIndex = -1;
@@ -51,9 +52,7 @@ internal sealed record Fo1DestinationGenericDoorContract(
             Required(source.GetProperty("script"), "sid") != NoScriptId ||
             source.GetProperty("closed").GetProperty("walkable").GetBoolean() ||
             !source.GetProperty("open").GetProperty("walkable").GetBoolean() ||
-            Required(source, "interactionActionPoints") != "not-source-backed" ||
-            Required(source, "sound") != "unsupported-fail-closed" ||
-            Required(source, "animationTiming") != "unsupported-fail-closed")
+            Required(source, "interactionActionPoints") != "not-source-backed")
             throw new InvalidOperationException("Fallout generic-door descriptor has unsupported behavior.");
         var prototypeSha256 = Required(source.GetProperty("prototype"), "sha256");
         var artSha256 = Required(source.GetProperty("art"), "sha256");
@@ -71,7 +70,10 @@ internal sealed record Fo1DestinationGenericDoorContract(
             !Fo1HexMath.AreNeighbors(route[^1], door.Tile) ||
             route.Zip(route.Skip(1)).Any(pair => !Fo1HexMath.AreNeighbors(pair.First, pair.Second)))
             throw new InvalidOperationException("Fallout generic-door descriptor route is not source-adjacent.");
-        return new Fo1DestinationGenericDoorContract(resolved, sha256, door, route);
+        var doorPresentation = ClassicDoorSource.Load(
+            source.GetProperty("presentation"), prototypeSha256, artSha256);
+        return new Fo1DestinationGenericDoorContract(
+            resolved, sha256, door, route, doorPresentation);
     }
 
     internal object Report(bool open) => new
@@ -82,8 +84,7 @@ internal sealed record Fo1DestinationGenericDoorContract(
         door = Door.Report(open),
         sourceWalkMaskRoute = SourceWalkMaskRoute,
         interactionActionPoints = "not-source-backed",
-        sound = "unsupported-fail-closed",
-        animationTiming = "unsupported-fail-closed",
+        sourcePresentation = Presentation,
     };
 
     private static string Required(JsonElement source, string name) =>

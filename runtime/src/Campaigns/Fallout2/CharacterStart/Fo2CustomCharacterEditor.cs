@@ -736,6 +736,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             _ageValue,
             _sexValue,
             _special.ToArray(),
+            Fo2CharacterStartCatalog.SkillNames.Select(_ => 0).ToArray(),
             _taggedSkills.ToArray(),
             _traits.ToArray());
         var provisional = new Fo2CharacterSelection(

@@ -13,6 +13,11 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from classic_ssl_effects import (
+    decode_medic_heal_player,
+    decode_single_message_look,
+    decode_single_reply_option_dialogue,
+)
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError, sha256_path
 from prepare_fo1_destination_generic_door import (
@@ -26,8 +31,6 @@ MAP_PRESENTATION_SCHEMA = "opennv-fo1-campaign-map-presentation/v1"
 FLOOR_WIDTH = MAP_WIDTH // 2
 MEDIC_SYMBOL = "SCRIPT_MEDIC"
 SCRIPT_DEFINE = re.compile(r"^\s*#define\s+(SCRIPT_[A-Z0-9_]+)\s+\(\s*(\d+)\s*\)", re.MULTILINE)
-LOOK_AT = re.compile(r"procedure\s+look_at_p_proc\s+begin(?P<body>.*?)\bend\b", re.IGNORECASE | re.DOTALL)
-DISPLAY_MESSAGE = re.compile(r"display_msg\s*\(\s*mstr\s*\(\s*(\d+)\s*\)\s*\)", re.IGNORECASE)
 MESSAGE_ROW = re.compile(r"^\s*\{\s*(\d+)\s*\}\s*\{[^}]*\}\s*\{(?P<text>.*)\}\s*$")
 
 
@@ -42,17 +45,15 @@ def read_script_id(header: Path) -> int:
     return values[MEDIC_SYMBOL]
 
 
-def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str]:
+def read_look_message(
+    script_path: Path,
+    message_path: Path,
+) -> tuple[int, str, dict[str, Any], dict[int, str], dict[str, Any]]:
     script = script_path.read_text(encoding="cp1252")
     if not re.search(rf"#define\s+NAME\s+{MEDIC_SYMBOL}\b", script):
         raise Fo1ProfileError("Medic script does not bind NAME to SCRIPT_MEDIC")
-    match = LOOK_AT.search(script)
-    if match is None:
-        raise Fo1ProfileError("Medic script has no look_at_p_proc")
-    message = DISPLAY_MESSAGE.search(match.group("body"))
-    if message is None:
-        raise Fo1ProfileError("Medic look_at_p_proc does not emit one source message")
-    message_id = int(message.group(1))
+    effect_program = decode_single_message_look(script)
+    message_id = effect_program["events"]["look_at_p_proc"][0]["then"][1]["messageId"]
     messages: dict[int, str] = {}
     for line in message_path.read_text(encoding="cp1252").splitlines():
         row = MESSAGE_ROW.match(line)
@@ -60,7 +61,12 @@ def read_look_message(script_path: Path, message_path: Path) -> tuple[int, str]:
             messages[int(row.group(1))] = row.group("text")
     if message_id not in messages or not messages[message_id]:
         raise Fo1ProfileError("Medic source message file does not contain the look-at message")
-    return message_id, messages[message_id]
+    for procedure in ("MedicSeriouslyWounded", "MedicStartHealing"):
+        dialogue = decode_single_reply_option_dialogue(script, procedure)
+        effect_program["events"].update(dialogue["events"])
+    healing, healing_boundary = decode_medic_heal_player(script)
+    effect_program["events"].update(healing["events"])
+    return message_id, messages[message_id], effect_program, messages, healing_boundary
 
 
 def shortest_contact_path(start: int, target: int, floor_ids: list[int], default_tile: int,
@@ -125,7 +131,31 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
     if elevation is None or source_rows is None:
         raise Fo1ProfileError("Medic look destination elevation is absent from source/presentation")
     script_id = read_script_id(scripts_header)
-    message_id, message_text = read_look_message(medic_script, medic_message)
+    message_id, message_text, effect_program, messages, healing_boundary = read_look_message(
+        medic_script, medic_message
+    )
+    if not messages.get(healing_boundary["messageId"]):
+        raise Fo1ProfileError("Medic healing source message is unavailable")
+    dialogue_procedures = ("MedicSeriouslyWounded", "MedicStartHealing")
+    dialogue_nodes = []
+    for procedure in dialogue_procedures:
+        dialogue_actions = effect_program["events"][procedure][0]["then"]
+        reply_action, option_action = dialogue_actions
+        if not messages.get(reply_action["messageId"]) or not messages.get(option_action["messageId"]):
+            raise Fo1ProfileError("Medic dialogue source messages are unavailable")
+        dialogue_nodes.append({
+            "procedure": procedure,
+            "reply": {
+                "messageId": reply_action["messageId"],
+                "messageText": messages[reply_action["messageId"]],
+            },
+            "option": {
+                "messageId": option_action["messageId"],
+                "messageText": messages[option_action["messageId"]],
+                "target": option_action["target"],
+                "reaction": option_action["reaction"],
+            },
+        })
     door = generic_door["door"]
     if not door.get("open", {}).get("walkable"):
         raise Fo1ProfileError("generic-door descriptor does not mark its opened tile walkable")
@@ -171,8 +201,28 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
             "art": {"logicalPath": art_path, "source": art.source, "sha256": art.sha256, "mapArtFilename": actor["artFilename"]},
         },
         "semantics": {"procedure": "look_at_p_proc", "messageId": message_id, "messageText": message_text,
-                      "result": "display-message-only", "dialogue": "unimplemented-fail-closed",
+                      "result": "display-message-only", "dialogue": "decoded-bounded-option-results",
                       "combat": "not-proven-by-look-at-only", "actionPoints": "not-source-backed"},
+        "effectProgram": effect_program,
+        "healingResult": {
+            **healing_boundary,
+            "messageText": messages[healing_boundary["messageId"]],
+        },
+        "dialogueResult": {
+            "entryProcedure": "MedicSeriouslyWounded",
+            "nodes": dialogue_nodes,
+            "effectTargets": sorted({
+                node["option"]["target"] for node in dialogue_nodes
+                if node["option"]["target"] in effect_program["events"]
+                and node["option"]["target"] not in dialogue_procedures
+            }),
+            "unsupportedTargets": sorted({
+                node["option"]["target"] for node in dialogue_nodes
+                if node["option"]["target"] not in dialogue_procedures
+                and node["option"]["target"] not in effect_program["events"]
+            }),
+            "optionSelection": "decoded-targets-only",
+        },
         "sourceWalkMaskRoute": {"pathTiles": route, "contactTile": route[-1], "contactIsAdjacent": route[-1] in neighbors(actor["tile"])},
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,
     }

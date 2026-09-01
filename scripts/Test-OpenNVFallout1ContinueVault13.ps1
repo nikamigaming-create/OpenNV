@@ -147,8 +147,10 @@ if ($PSBoundParameters.ContainsKey('DestinationGenericDoor') -and
      -not $proof.genericDoor.movedThroughOpenedBlocker -or
      -not $proof.genericDoor.approach.sourceWalkMaskOnly -or
      $proof.genericDoor.interactionActionPoints -ne 'not-source-backed' -or
-     $proof.genericDoor.sound -ne 'unsupported-fail-closed' -or
-     $proof.genericDoor.animationTiming -ne 'unsupported-fail-closed')) {
+     [string]::IsNullOrWhiteSpace($proof.genericDoor.sound) -or
+     $proof.genericDoor.framesPerSecond -le 0 -or
+     $proof.genericDoor.frameCount -le 1 -or
+     $proof.genericDoor.sourceFrame -ne ($proof.genericDoor.frameCount - 1))) {
     throw 'Fallout 1 launcher Continue proof did not preserve the bounded generic-door contract.'
 }
 

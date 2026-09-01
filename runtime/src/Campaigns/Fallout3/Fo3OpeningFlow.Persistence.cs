@@ -227,6 +227,20 @@ internal partial class Fo3OpeningFlow
             value = selection.FaceControlValue(control.SettingEntity),
         }).ToArray();
 
+    private object SavedTextureControls(Fo3AppearanceSelection selection)
+    {
+        var controls = _profile.Appearance.PreviewFor(
+            selection,
+            selection.Race.Sex.Single(value => value.Value == selection.Sex).Key)
+            .TextureControls;
+        return controls.Select(control => new
+        {
+            settingEntity = control.SettingEntity,
+            axisSha256 = control.AxisSha256,
+            value = selection.TextureControlValues[control.SettingEntity],
+        }).ToArray();
+    }
+
     private Fo3AppearanceSelection LoadSavedFaceControls(
         JsonElement faceGen,
         Fo3AppearanceSelection selection)
@@ -246,6 +260,53 @@ internal partial class Fo3OpeningFlow
                 selection,
                 control,
                 RequiredSaveSingle(row, "value"));
+        }
+        if (faceGen.TryGetProperty("textureControls", out var textureRows))
+        {
+            var controls = _profile.Appearance.PreviewFor(
+                selection,
+                selection.Race.Sex.Single(value => value.Value == selection.Sex).Key)
+                .TextureControls;
+            var rows = textureRows.EnumerateArray().ToArray();
+            if (rows.Length != controls.Count)
+                throw new InvalidOperationException(
+                    "Saved Fallout 3 FaceGen tone count differs from the profile.");
+            var values = selection.TextureControlValues.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.Ordinal);
+            foreach (var control in controls)
+            {
+                var row = rows.Single(value =>
+                    RequiredSaveString(value, "settingEntity") == control.SettingEntity);
+                if (RequiredSaveString(row, "axisSha256") != control.AxisSha256)
+                    throw new InvalidOperationException(
+                        "Saved Fallout 3 FaceGen tone identity differs from the profile.");
+                values[control.SettingEntity] = RequiredSaveSingle(row, "value");
+                if (values[control.SettingEntity] < _profile.Appearance.FaceControl.Minimum ||
+                    values[control.SettingEntity] > _profile.Appearance.FaceControl.Maximum)
+                    throw new InvalidOperationException(
+                        "Saved Fallout 3 FaceGen tone value is outside the profile.");
+            }
+            var preview = _profile.Appearance.PreviewFor(
+                selection,
+                selection.Race.Sex.Single(value => value.Value == selection.Sex).Key);
+            var textureSha256 = OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+                preview.SymmetricTexture,
+                controls,
+                values,
+                _profile.Appearance.FaceControl.MorphWeightScale);
+            selection = selection with
+            {
+                Sex = selection.Sex with
+                {
+                    FaceGen = selection.Sex.FaceGen with
+                    {
+                        SymmetricTextureSha256 = textureSha256,
+                    },
+                },
+                TextureControlValues = values,
+            };
         }
         return selection;
     }
@@ -278,6 +339,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             nextCommand = _profile.Appearance.AcceptedStageCommand,
@@ -315,6 +377,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             playerPackage = new
@@ -365,6 +428,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             playerPackage = new
@@ -423,7 +487,8 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage10State? cg01Stage10 = null,
         Fo3Cg01Stage12State? cg01Stage12 = null,
         Fo3Cg01ToddlerWorldState? cg01ToddlerWorld = null,
-        Fo3Cg01Stage14State? cg01Stage14 = null)
+        Fo3Cg01Stage14State? cg01Stage14 = null,
+        Fo3Cg01Stage20State? cg01Stage20 = null)
     {
         var state = new
         {
@@ -432,7 +497,7 @@ internal partial class Fo3OpeningFlow
             profileSha256 = _profile.Sha256,
             questEditorId = _profile.QuestEditorId,
             questFormId = _profile.QuestFormId,
-            stage = cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
+            stage = cg01Stage20?.ActiveStage ?? cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
                 cg01Stage10?.ActiveStage ?? cg01?.ActiveStage ?? stage100?.Stage ??
                 stage90?.Stage ?? stage85?.Stage ?? stage80.Stage,
             activeQuest = cg01 is null
@@ -441,7 +506,7 @@ internal partial class Fo3OpeningFlow
                 {
                     formId = cg01.ActiveQuestFormId,
                     editorId = cg01.ActiveQuestEditorId,
-                    stage = cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
+                    stage = cg01Stage20?.ActiveStage ?? cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
                         cg01Stage10?.ActiveStage ?? cg01.ActiveStage,
                 },
             playerName,
@@ -459,6 +524,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             playerPackage = new
@@ -637,7 +703,12 @@ internal partial class Fo3OpeningFlow
             cg01Stage12DadResponse = cg01Stage14 is null
                 ? null
                 : _profile.Cg01Stage12DadResponse.SavedState(cg01Stage14),
-            birthRuntime = BirthRuntimeState(cg01Stage14 is not null
+            cg01PostStage14Transition = cg01Stage20 is null
+                ? null
+                : _profile.Cg01PostStage14Transition.SavedState(cg01Stage20),
+            birthRuntime = BirthRuntimeState(cg01Stage20 is not null
+                ? "cg01-stage20-package-dialogue-sequence-applied"
+                : cg01Stage14 is not null
                 ? "cg01-stage14-dad-response-applied-package-evaluated"
                 : cg01Stage12 is not null
                 ? "cg01-stage12-physical-trigger-applied-post-stage12-blocked"
@@ -797,6 +868,31 @@ internal partial class Fo3OpeningFlow
             cg01Stage12,
             toddlerWorld,
             cg01Stage14);
+
+    private void PersistCg01Stage20Transition(
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage0State cg01,
+        Fo3Cg01Stage10State cg01Stage10,
+        Fo3Cg01Stage12State cg01Stage12,
+        Fo3Cg01ToddlerWorldState toddlerWorld,
+        Fo3Cg01Stage14State cg01Stage14,
+        Fo3Cg01Stage20State cg01Stage20) =>
+        PersistStage80Transition(
+            context.PlayerName,
+            context.Sex,
+            context.Selection,
+            context.Section4Package,
+            context.Stage65,
+            context.Stage80,
+            context.Stage85,
+            context.Stage90,
+            context.Stage100,
+            cg01,
+            cg01Stage10,
+            cg01Stage12,
+            toddlerWorld,
+            cg01Stage14,
+            cg01Stage20);
 
     private void WriteState(object state)
     {

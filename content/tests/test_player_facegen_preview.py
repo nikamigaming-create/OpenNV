@@ -12,12 +12,16 @@ if str(TOOLS) not in sys.path:
 
 from player_facegen_preview import (  # noqa: E402
     PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE,
+    PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE,
     PLAYER_FACEGEN_PREVIEW_SCHEMA,
     PLAYER_FULL_BODY_COMPONENT_ROLES,
     _head_only_facegen_assembly,
     _with_outfit_body,
     _player_body_component_sources,
     _player_preview_selections,
+    _playable_race_preview_selections,
 )
 
 
@@ -50,6 +54,18 @@ class PlayerFaceGenPreviewTests(unittest.TestCase):
         self.assertEqual(
             PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA.rsplit("/", 1)[-1],
             "v3",
+        )
+        self.assertEqual(
+            PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA.rsplit("/", 1)[-1],
+            "v5",
+        )
+        self.assertEqual(
+            PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE,
+            "all-playable-race-sex-valid-hair-eyes-cartesian-product",
+        )
+        self.assertEqual(
+            PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE,
+            "invalid-race-sex-hair-eyes-source-tuple",
         )
 
     def test_default_selection_identities_cover_owned_male_and_female(self) -> None:
@@ -109,6 +125,42 @@ class PlayerFaceGenPreviewTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "sex selections are incomplete"):
             _player_preview_selections(appearance, 0x00000007)
+
+    def test_playable_race_valid_hair_eye_product_is_deterministic(self) -> None:
+        appearance = {
+            "player": {"formId": "00000007"},
+            "races": [{
+                "formId": "00000019",
+                "sex": {
+                    "male": {
+                        "hairOptions": [
+                            {"formId": "00000192"},
+                            {"formId": "00000191"},
+                        ],
+                        "eyeOptions": [{"formId": "00000194"}],
+                    },
+                    "female": {
+                        "hairOptions": [{"formId": "00000193"}],
+                        "eyeOptions": [
+                            {"formId": "00000196"},
+                            {"formId": "00000195"},
+                        ],
+                    },
+                },
+            }],
+        }
+
+        rows = _playable_race_preview_selections(appearance, 0x00000007)
+
+        self.assertEqual(
+            [(row.sex, row.hair_form_id, row.eyes_form_id) for row in rows],
+            [
+                ("male", 0x00000191, 0x00000194),
+                ("male", 0x00000192, 0x00000194),
+                ("female", 0x00000193, 0x00000195),
+                ("female", 0x00000193, 0x00000196),
+            ],
+        )
 
     def test_default_male_body_roles_follow_owned_race_table(self) -> None:
         race = SimpleNamespace(

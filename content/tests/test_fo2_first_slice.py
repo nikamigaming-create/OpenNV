@@ -88,6 +88,7 @@ def synthetic_critter_pro() -> bytes:
     stats = [8, 5, 5, 5, 5, 8, 5, 50, 9, 8, 0, 3, 0, 15, 0, 5] + [0] * 19
     struct.pack_into(">35i", result, 0x30, *stats)
     struct.pack_into(">35i", result, 0xBC, *([0] * 35))
+    struct.pack_into(">18i", result, 0x148, *([0, 0, 0, 45, 60] + [0] * 13))
     return bytes(result)
 
 
@@ -118,6 +119,149 @@ def synthetic_weapon_pro() -> bytes:
     )
     result[0x79] = 56
     return bytes(result)
+
+
+def synthetic_acklint_int() -> bytes:
+    push = lambda value: struct.pack(">Hi", 0xC001, value)
+    opcode = lambda value: struct.pack(">H", value)
+    epilogue = b"".join([
+        push(0), opcode(0x800D), opcode(0x8019), opcode(0x802A),
+        opcode(0x8029), opcode(0x800C), opcode(0x801C), opcode(0x802A),
+        opcode(0x8029), opcode(0x801C),
+    ])
+    names = [
+        "..............", "checkPartyMembersNearDoor", "start", "critter_p_proc",
+        "pickup_p_proc", "talk_p_proc", "destroy_p_proc", "look_at_p_proc",
+        "description_p_proc", "use_skill_on_p_proc", "damage_p_proc",
+        "map_enter_p_proc", "Node998", "Node999", "Node001", "Node002",
+        "Node003", "Node004", "Node005",
+    ]
+    identifiers = bytearray()
+    name_offsets = []
+    for name in names:
+        name_offsets.append(4 + len(identifiers))
+        identifiers.extend(name.encode("ascii") + b"\0")
+    body_start = 42 + 4 + len(names) * 24 + 4 + len(identifiers)
+    bodies_by_name: dict[str, bytes] = {
+        name: opcode(0x8000) for name in names
+    }
+    critter_start = body_start + sum(
+        len(bodies_by_name[name]) for name in names[:3]
+    )
+    critter_prefix_length = 2 + 6 + 6 + 2 + 6 + 2 + 2 + 2 + 2 + 2 + 2
+    critter_effect_length = 6 + 6 + 2 + 2 + 7 * 6 + 2
+    critter_epilogue = critter_start + critter_prefix_length + critter_effect_length
+    critter = b"".join([
+        opcode(0x802B), push(critter_epilogue), push(5), opcode(0x80C1),
+        push(2), opcode(0x8033), opcode(0x80BC), opcode(0x80BF),
+        opcode(0x80DC), opcode(0x803E), opcode(0x802F), push(5), push(1),
+        opcode(0x80C2), opcode(0x80BF),
+        *(push(value) for value in [0, 1, 0, 0, 30000, 0, 0]),
+        opcode(0x80D0), epilogue,
+    ])
+    bodies_by_name["critter_p_proc"] = critter
+    pickup_start = critter_start + len(critter)
+    pickup_epilogue = pickup_start + 2 + 6 + 2 + 2 + 2 + 2 + 6 + 6 + 2
+    pickup = b"".join([
+        opcode(0x802B), push(pickup_epilogue), opcode(0x80BD), opcode(0x80BF),
+        opcode(0x8033), opcode(0x802F), push(5), push(2), opcode(0x80C2),
+        epilogue,
+    ])
+    bodies_by_name["pickup_p_proc"] = pickup
+
+    def dialogue_call(target_index: int) -> bytes:
+        return b"".join([
+            push(751), opcode(0x80BC), push(4), push(1), opcode(0x8046),
+            push(1), opcode(0x8046), opcode(0x80DE), opcode(0x811C), push(0),
+            opcode(0x800D), push(0), push(target_index), opcode(0x8005),
+            opcode(0x801A), opcode(0x811D), opcode(0x80DF),
+        ])
+
+    talk_start = pickup_start + len(pickup)
+    first_call = dialogue_call(14)
+    second_call = dialogue_call(14)
+    talk_prefix_length = 6 + 2 + 2 + 6 + 2 + 2 + 2 + 6 + 2 + 2 + 2
+    talk_else = talk_start + talk_prefix_length + len(first_call) + 8
+    talk_end = talk_else + len(second_call)
+    talk = b"".join([
+        push(talk_else), opcode(0x80BF), opcode(0x8149), push(0x0100003E),
+        opcode(0x8033), opcode(0x80BF), opcode(0x8149), push(0x0100003D),
+        opcode(0x8033), opcode(0x803F), opcode(0x802F), first_call,
+        push(talk_end), opcode(0x8004), second_call, epilogue,
+    ])
+    bodies_by_name["talk_p_proc"] = talk
+
+    look_start = talk_start + len(talk) + len(bodies_by_name["destroy_p_proc"])
+    look_else = look_start + 66
+    look_epilogue = look_else + 16
+    look = b"".join([
+        opcode(0x802B), opcode(0x80B9), push(look_else), push(7),
+        opcode(0x80C1), push(0), opcode(0x8033), opcode(0x802F),
+        push(7), push(1), opcode(0x80C2), push(751), push(100),
+        opcode(0x8105), opcode(0x80B8), push(look_epilogue), opcode(0x8004),
+        push(751), push(101), opcode(0x8105), opcode(0x80B8), epilogue,
+    ])
+    bodies_by_name["look_at_p_proc"] = look
+
+    def dialogue_node(
+        reply_ids: tuple[int, ...],
+        options: list[tuple[int, int, int, bool]],
+    ) -> bytes:
+        if len(reply_ids) == 2:
+            reply = b"".join([
+                push(751), push(751), push(reply_ids[0]), opcode(0x8105),
+                opcode(0x80BF), opcode(0x80A4), opcode(0x8039), push(751),
+                push(reply_ids[1]), opcode(0x8105), opcode(0x8039), opcode(0x811E),
+            ])
+        else:
+            reply = b"".join([push(751), push(reply_ids[0]), opcode(0x811E)])
+        encoded_options = []
+        for message_id, target_index, intelligence, maximum in options:
+            encoded_options.extend([
+                push(intelligence),
+                opcode(0x8046) if maximum else b"",
+                push(751), push(message_id), push(target_index), push(50),
+                opcode(0x8121),
+            ])
+        return b"".join([opcode(0x802B), reply, *encoded_options, epilogue])
+
+    bodies_by_name["Node998"] = b"".join([
+        opcode(0x802B), push(5), push(2), opcode(0x80C2), epilogue,
+    ])
+    bodies_by_name["Node999"] = opcode(0x802B) + epilogue
+    bodies_by_name["Node001"] = dialogue_node(
+        (103, 104),
+        [(105, 15, 3, True), (106, 16, 4, False),
+         (107, 17, 4, False), (108, 13, 4, False)],
+    )
+    bodies_by_name["Node002"] = dialogue_node((109, 110), [(111, 13, 3, True)])
+    bodies_by_name["Node003"] = dialogue_node(
+        (112, 113),
+        [(114, 13, 4, False), (115, 17, 4, False), (116, 18, 4, False)],
+    )
+    bodies_by_name["Node004"] = dialogue_node((117,), [(118, 13, 4, False)])
+    bodies_by_name["Node005"] = dialogue_node((119,), [(120, 13, 4, False)])
+
+    bodies = []
+    body_offset = body_start
+    payload = bytearray()
+    for name in names:
+        bodies.append(body_offset)
+        body = bodies_by_name[name]
+        payload.extend(body)
+        body_offset += len(body)
+    table = b"".join(
+        struct.pack(">6I", name_offsets[index], 0, 0, 0, bodies[index], 0)
+        for index in range(len(names))
+    )
+    return (
+        bytes(42)
+        + struct.pack(">I", len(names))
+        + table
+        + struct.pack(">I", len(identifiers))
+        + identifiers
+        + payload
+    )
 
 
 def synthetic_confrontation_map() -> bytes:
@@ -198,12 +342,13 @@ class Fo2FirstSliceTest(unittest.TestCase):
             item_list = b"unused.pro\r\n" * 6 + b"00000013.pro\r\n"
             critter_art_list = b"unused.frm\r\n" * 64 + b"nmwarr,11,1\r\n"
             item_art_list = b"unused.frm\r\n" * 42 + b"spear.frm\r\n"
-            guardian_script = b"synthetic hash-bound ACKlint INT bytecode"
+            guardian_script = synthetic_acklint_int()
             guardian_messages = b"".join(
                 f"{{{message_id}}}{{}}{{guardian {message_id}}}\r\n".encode("ascii")
-                for message_id in range(103, 121)
+                for message_id in range(100, 121)
             )
             script_entries = ["unused.int"] * 751
+            script_entries[744] = "ARTemple.int"
             script_entries[750] = "ACKlint.int"
             scripts_list = ("\r\n".join(script_entries) + "\r\n").encode("ascii")
             (install / "master.dat").write_bytes(
@@ -222,6 +367,7 @@ class Fo2FirstSliceTest(unittest.TestCase):
                         ("text\\english\\game\\pro_item.msg", b"{700}{}{Spear}\r\n", False),
                         ("text\\english\\dialog\\acklint.msg", guardian_messages, False),
                         ("scripts\\acklint.int", guardian_script, False),
+                        ("scripts\\artemple.int", guardian_script, False),
                         ("scripts\\scripts.lst", scripts_list, False),
                     ]
                 )
@@ -369,20 +515,6 @@ class Fo2FirstSliceTest(unittest.TestCase):
                                         ],
                                     },
                                 ],
-                                "hostilityTrigger": {
-                                    "pickupProcedure": {
-                                        "requiresSourcePlayer": True,
-                                        "localVariable": 5,
-                                        "setValue": 2,
-                                    },
-                                    "critterProcedure": {
-                                        "localVariable": 5,
-                                        "requiredValue": 2,
-                                        "requiresCanSeePlayer": True,
-                                        "setValueBeforeAttack": 1,
-                                        "attackPlayer": True,
-                                    },
-                                },
                             },
                         },
                         "declaredRole": "synthetic Temple source slice",
@@ -399,10 +531,47 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertFalse(document["newGameStart"]["playerEntry"]["placedPlayerObject"])
             self.assertEqual(document["map"]["objects"]["totalTopLevelObjects"], 1)
             self.assertEqual(document["map"]["allObjectCount"], 2)
+            initialization = document["initializationScripts"]
+            self.assertEqual(
+                initialization["mapHeader"]["program"]["program"],
+                "ARTemple.int",
+            )
+            self.assertEqual(initialization["liveScriptSlots"], [])
+            self.assertEqual(initialization["randomSites"], [])
             confrontation = document["boundedConfrontation"]
             self.assertEqual(confrontation["critter"]["serial"], 2)
             self.assertEqual(confrontation["critter"]["currentHitPoints"], 50)
             self.assertEqual(confrontation["critter"]["prototype"]["stats"]["actionPoints"], 9)
+            self.assertEqual(
+                confrontation["critter"]["equippedAttack"],
+                {
+                    "inventorySerial": 1,
+                    "pid": "00000007",
+                    "objectFlags": "02000008",
+                    "hand": "right",
+                    "minimumDamage": 3,
+                    "maximumDamage": 10,
+                    "damageType": 0,
+                    "maximumRange": 2,
+                    "actionPointCost": 4,
+                    "animationCode": 4,
+                    "minimumStrength": 4,
+                    "criticalFailureType": 1,
+                    "roundsPerAttack": 0,
+                    "caliber": 0,
+                    "ammunitionPid": "ffffffff",
+                    "ammunitionCapacity": 0,
+                    "hitResolution": "engine-roll-required",
+                },
+            )
+            self.assertEqual(
+                confrontation["critter"]["prototype"]["stats"]["skills"][4],
+                60,
+            )
+            self.assertEqual(
+                confrontation["critter"]["prototype"]["stats"]["damageThresholds"],
+                [0] * 7,
+            )
             self.assertEqual(confrontation["defeatLoot"]["serial"], 1)
             self.assertEqual(confrontation["defeatLoot"]["displayName"], "Spear")
             self.assertEqual(
@@ -417,7 +586,26 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertEqual(guardian["nodes"][2]["options"][2]["messageId"], 116)
             self.assertEqual(guardian["nodes"][2]["options"][2]["target"], "Node005")
             self.assertTrue(guardian["implementedBoundary"]["dialogueNodes"])
+            self.assertTrue(guardian["implementedBoundary"]["pickupToAttackTransition"])
             self.assertFalse(guardian["implementedBoundary"]["generalIntExecution"])
+            effects = guardian["effectProgram"]
+            self.assertEqual(effects["schema"], "opennv-classic-script-effects/v1")
+            self.assertEqual(
+                effects["events"]["Node999"][0]["then"],
+                [{"operation": "dialogue-end"}],
+            )
+            self.assertEqual(
+                effects["events"]["pickup_proc"][0]["then"][0],
+                {"operation": "set-local", "index": 5, "value": 2},
+            )
+            self.assertEqual(
+                [row["messageId"] for row in guardian["displayMessages"]],
+                [100, 101],
+            )
+            self.assertEqual(
+                effects["events"]["look_at_p_proc"][0]["then"][2]["messageId"],
+                100,
+            )
             self.assertTrue(document["promotion"]["transported"])
             self.assertFalse(document["runtimeCompatibility"]["ready"])
             self.assertFalse(document["retailOrDerivedAssetsPackaged"])

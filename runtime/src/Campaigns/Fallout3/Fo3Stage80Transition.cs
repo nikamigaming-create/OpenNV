@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -212,14 +213,57 @@ internal sealed record Fo3Stage80Transition(
         if (stage65.Stage != SourceStage)
             throw new InvalidOperationException("Fallout 3 stage-80 source state differs.");
         var branch = DialogueBranches[engineSex];
+        var sourceIndex = 0;
+        var commandList = new List<SourceGamebryoStageCommand<object>>
+        {
+            new(sourceIndex++, GamebryoStageCommandKind.AddScriptPackage, AddedPlayerPackage),
+        };
+        commandList.AddRange(ScriptVariables.Select(variable =>
+            new SourceGamebryoStageCommand<object>(
+                sourceIndex++, GamebryoStageCommandKind.SetScriptVariable, variable)));
+        commandList.AddRange(EvaluatedPackageReferences.Select(reference =>
+            new SourceGamebryoStageCommand<object>(
+                sourceIndex++, GamebryoStageCommandKind.ActorIntent, reference)));
+        commandList.AddRange(EnabledReferences.Select(reference =>
+            new SourceGamebryoStageCommand<object>(
+                sourceIndex++, GamebryoStageCommandKind.Enable, reference)));
+        var commands = commandList.ToArray();
+        Fo3Stage80Package? package = null;
+        var variables = new List<Fo3Stage80Variable>();
+        var evaluated = new List<Fo3Stage80Reference>();
+        var enabled = new List<Fo3Stage80Reference>();
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(commands, command =>
+        {
+            switch (command.Kind)
+            {
+                case GamebryoStageCommandKind.AddScriptPackage:
+                    package = (Fo3Stage80Package)command.Value;
+                    break;
+                case GamebryoStageCommandKind.SetScriptVariable:
+                    variables.Add((Fo3Stage80Variable)command.Value);
+                    break;
+                case GamebryoStageCommandKind.ActorIntent:
+                    evaluated.Add((Fo3Stage80Reference)command.Value);
+                    break;
+                case GamebryoStageCommandKind.Enable:
+                    enabled.Add((Fo3Stage80Reference)command.Value);
+                    break;
+                default:
+                    return false;
+            }
+            applied++;
+            return applied == command.SourceIndex + 1;
+        });
         return new Fo3Stage80State(
             Stage,
             branch.InfoFormId,
-            AccountedCommandCount,
-            AddedPlayerPackage,
-            ScriptVariables,
-            EvaluatedPackageReferences,
-            EnabledReferences,
+            applied,
+            package ?? throw new InvalidOperationException(
+                "Fallout 3 stage-80 package mutation was not persisted."),
+            variables,
+            evaluated,
+            enabled,
             NextBoundary);
     }
 

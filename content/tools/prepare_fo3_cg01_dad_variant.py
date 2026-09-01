@@ -240,6 +240,28 @@ def _resolve_variants(
     ):
         raise ValueError("Fallout 3 CG01 Dad dialogue assets are not prepared")
     archive = BsaArchive(meshes_path)
+    dad_lead = _required_object(
+        _required_object(
+            _required_object(
+                _required_object(post_stage5, "postStage14Transition"),
+                "stage20Interaction",
+            ),
+            "timerTransition",
+        ),
+        "dadReturn",
+    )
+    locomotion = _required_object(_required_object(dad_lead, "dadLead"), "locomotion")
+    locomotion_path = canonical_member_path(_required_string(locomotion, "logicalPath"))
+    locomotion_member = archive.extract(locomotion_path)
+    if (
+        locomotion.get("sourceArchive") != meshes_path.name
+        or _required_sha256(locomotion, "sourceArchiveSha256")
+        != _required_sha256(meshes_row, "sha256")
+        or locomotion_member.sha256 != _required_sha256(locomotion, "sha256")
+        or float(_required_object(locomotion, "rootMotion").get(
+            "speedGameUnitsPerSecond", 0.0)) <= 0.0
+    ):
+        raise ValueError("Fallout 3 CG01 Dad lead locomotion ownership differs")
     stage12_contract, stage12_paths = _dialogue_animation_contract(
         _required_list(stage12_dialogue, "branches"),
         meshes_path,
@@ -313,9 +335,11 @@ def _resolve_variants(
             f"{race_form_id}-{player_sex}-"
             f"{symmetric_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
             f"cg01speech-{dialogue_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
-            f"walked-{stage12_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
+            f"walked-{stage12_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
+            f"lead-{locomotion_member.sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
         )
-        runtime_paths = tuple(dict.fromkeys([*dialogue_paths, *stage12_paths]))
+        runtime_paths = tuple(dict.fromkeys([
+            *dialogue_paths, *stage12_paths, locomotion_path]))
         variants.append(
             Cg01DadVariant(
                 output_identity=f"{_required_string(actor_recipe, 'id')}-{variant_id}",

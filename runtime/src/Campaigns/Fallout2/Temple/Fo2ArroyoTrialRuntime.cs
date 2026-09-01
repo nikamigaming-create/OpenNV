@@ -3,6 +3,7 @@ using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -18,6 +19,7 @@ internal sealed record Fo2ArroyoTrialProgressState(
     bool CameronVisible,
     bool CameronDoorOpened,
     bool CameronDoorUnlocked,
+    ClassicDoorState CameronDoorPlaybackState,
     int KlintGateTile,
     bool KlintAlive,
     bool VillageRouteCompleted,
@@ -44,6 +46,7 @@ internal sealed record Fo2ArroyoTrialProgressState(
             true,
             false,
             false,
+            ClassicDoorSession.Closed(contract.Cameron.ReleaseDoorPresentation),
             contract.KlintGate.SourceTile,
             true,
             false,
@@ -63,6 +66,8 @@ internal sealed record Fo2ArroyoTrialProgressState(
                 contract.Cameron.TaggedSpeechBranch.SelectedMessageIds.Count &&
             CameronTile == contract.Cameron.Tile &&
             CameronVisible && !CameronDoorOpened && !CameronDoorUnlocked &&
+            CameronDoorPlaybackState ==
+                ClassicDoorSession.Closed(contract.Cameron.ReleaseDoorPresentation) &&
             KlintGateTile == contract.KlintGate.SourceTile && !VillageRouteCompleted;
         var negotiated = Stage == NegotiatedStage || Stage == ReturnedStage ||
             Stage == GateMovedStage || Stage == VillageArrivalStage ||
@@ -76,7 +81,8 @@ internal sealed record Fo2ArroyoTrialProgressState(
                 contract.Cameron.TaggedSpeechBranch.SelectedMessageIds.Count &&
             CameronTile == contract.Cameron.ReleaseActorTiles[^1] && !CameronVisible &&
             CameronDoorOpened == contract.Cameron.ReleaseDoorOpened &&
-            CameronDoorUnlocked == contract.Cameron.ReleaseDoorUnlocked;
+            CameronDoorUnlocked == contract.Cameron.ReleaseDoorUnlocked &&
+            CameronDoorPlaybackState.Open;
         var gateState = Stage == GateMovedStage || Stage == VillageArrivalStage ||
                 Stage == VillageFirstActionStage
             ? KlintGateTile == contract.KlintGate.DestinationTile
@@ -112,6 +118,8 @@ internal sealed class Fo2ArroyoTrialRuntime
     private int _returnIndex;
     private int _dialogueIndex;
     private int _villageIndex;
+    private readonly ClassicDoorSession _cameronDoor;
+    private ClassicDoorPlayback? _cameronDoorPlayback;
 
     private Fo2ArroyoTrialRuntime(
         Fo2ArroyoTrialRouteContract contract,
@@ -135,8 +143,13 @@ internal sealed class Fo2ArroyoTrialRuntime
                 .ToHashSet());
         State = state;
         State.Validate(contract);
+        _cameronDoor = new ClassicDoorSession(
+            contract.Cameron.ReleaseDoorPresentation,
+            state.CameronDoorPlaybackState);
         _dialogueIndex = state.CameronDialogueSelections;
         _player.PersistenceBoundaryReached += OnPlayerPersistenceBoundary;
+        if (state.Stage != Fo2ArroyoTrialProgressState.InitialStage)
+            BindRestoredCameronDoorPlayback();
     }
 
     internal event Action? StateChanged;
@@ -397,7 +410,15 @@ internal sealed class Fo2ArroyoTrialRuntime
         }
         actor.Visible = _contract.Cameron.ReleaseFinalVisible;
         actor.SetMeta("actemvil_release_applied", true);
-        door.SetMeta("source_door_open", _contract.Cameron.ReleaseDoorOpened);
+        _cameronDoorPlayback = new ClassicDoorPlayback(
+            _cameronDoor,
+            door,
+            state => ApplyCameronDoorPlaybackState(door, state));
+        door.AddChild(_cameronDoorPlayback);
+        var doorState = _cameronDoorPlayback.BeginOpening();
+        if (doorState.Open != _contract.Cameron.ReleaseDoorOpened)
+            throw new InvalidOperationException(
+                "Fallout 2 Cameron door source presentation disagrees with decoded release state.");
         door.SetMeta("source_door_unlocked", _contract.Cameron.ReleaseDoorUnlocked);
         State = State with
         {
@@ -409,8 +430,47 @@ internal sealed class Fo2ArroyoTrialRuntime
             CameronDialogueSelections = _dialogueIndex,
             CameronTile = _contract.Cameron.ReleaseActorTiles[^1],
             CameronVisible = _contract.Cameron.ReleaseFinalVisible,
-            CameronDoorOpened = _contract.Cameron.ReleaseDoorOpened,
+            CameronDoorOpened = doorState.Open,
             CameronDoorUnlocked = _contract.Cameron.ReleaseDoorUnlocked,
+            CameronDoorPlaybackState = doorState,
+        };
+        State.Validate(_contract);
+        StateChanged?.Invoke();
+    }
+
+    private void BindRestoredCameronDoorPlayback()
+    {
+        var root = ElevationRoot(_contract.Cameron.Elevation, _contract.Cameron.Tile, 0);
+        var door = NodeTraversal.Descendants<Sprite3D>(root).SingleOrDefault(row =>
+            row.HasMeta("map_serial") &&
+            row.GetMeta("map_serial").AsInt32() == _contract.Cameron.ReleaseDoorSerial) ??
+            throw new InvalidOperationException(
+                "Fallout 2 restored Cameron door sprite is absent.");
+        _cameronDoorPlayback = new ClassicDoorPlayback(
+            _cameronDoor,
+            door,
+            state => ApplyCameronDoorPlaybackState(door, state));
+        door.AddChild(_cameronDoorPlayback);
+        ApplyCameronDoorPlaybackState(door, _cameronDoor.State);
+    }
+
+    private void ApplyCameronDoorPlaybackState(Sprite3D door, ClassicDoorState doorState)
+    {
+        door.SetMeta("source_door_open", doorState.Open);
+        door.SetMeta("source_door_blocked", doorState.Blocked);
+        door.SetMeta("source_door_frame", doorState.Frame);
+        door.SetMeta(
+            "source_door_frames_per_second",
+            _contract.Cameron.ReleaseDoorPresentation.StoredFramesPerSecond);
+        door.SetMeta("source_door_phase", doorState.Phase);
+        if (doorState.LastSoundLogicalPath is { } sound)
+            door.SetMeta("source_door_sound", sound);
+        if (State.Stage == Fo2ArroyoTrialProgressState.InitialStage)
+            return;
+        State = State with
+        {
+            CameronDoorOpened = doorState.Open,
+            CameronDoorPlaybackState = doorState,
         };
         State.Validate(_contract);
         StateChanged?.Invoke();

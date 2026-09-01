@@ -4,6 +4,7 @@ using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -30,8 +31,9 @@ internal sealed record Fo2CharacterStartSaveState(
     Fo2TempleAppliedTransition? TempleExitTransition,
     Fo2ArroyoTrialProgressState? TrialProgress)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v14";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v15";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string VersionFourteenSchema = "opennv-fo2-character-arroyo-save/v14";
     private const string SplitAppearanceSchema = "opennv-fo2-character-arroyo-save/v13";
     private const string BodyAppearanceSchema = "opennv-fo2-character-arroyo-save/v12";
     private const string PriorSchema = "opennv-fo2-character-arroyo-save/v10";
@@ -166,6 +168,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     Character.Profile.Age,
                     Character.Profile.Sex,
                     special = Character.Profile.Special,
+                    skillBonuses = Character.Profile.SkillBonuses,
                     taggedSkills = Character.Profile.TaggedSkills,
                     traits = Character.Profile.Traits,
                     appearance = new
@@ -237,9 +240,51 @@ internal sealed record Fo2CharacterStartSaveState(
                 {
                     targetHitPoints = TempleConfrontation.TargetHitPoints,
                     playerActionPoints = TempleConfrontation.PlayerActionPoints,
+                    targetActionPoints = TempleConfrontation.TargetActionPoints,
+                    targetTurnCount = TempleConfrontation.TargetTurnCount,
+                    lastTargetTurnAction = TempleConfrontation.LastTargetTurnAction?.ToString(),
+                    lastTargetAttack = TempleConfrontation.LastTargetAttack is null ? null : new
+                    {
+                        actorId = TempleConfrontation.LastTargetAttack.ActorId,
+                        targetId = TempleConfrontation.LastTargetAttack.TargetId,
+                        distanceHexes = TempleConfrontation.LastTargetAttack.DistanceHexes,
+                        actorActionPoints = TempleConfrontation.LastTargetAttack.ActorActionPoints,
+                        boundary = TempleConfrontation.LastTargetAttack.Boundary.ToString(),
+                        source = new
+                        {
+                            weaponPid = TempleConfrontation.LastTargetAttack.Source.AttackPid,
+                            minimumDamage = TempleConfrontation.LastTargetAttack.Source.MinimumDamage,
+                            maximumDamage = TempleConfrontation.LastTargetAttack.Source.MaximumDamage,
+                            damageType = TempleConfrontation.LastTargetAttack.Source.DamageType,
+                            maximumRangeHexes = TempleConfrontation.LastTargetAttack.Source.MaximumRangeHexes,
+                            actionPointCost = TempleConfrontation.LastTargetAttack.Source.ActionPointCost,
+                            animationCode = TempleConfrontation.LastTargetAttack.Source.AnimationCode,
+                            hitResolution = TempleConfrontation.LastTargetAttack.Source.HitResolution,
+                        },
+                    },
+                    lastTargetPath = TempleConfrontation.LastTargetPath is null ? null : new
+                    {
+                        currentTile = TempleConfrontation.LastTargetPath.CurrentTile,
+                        targetTile = TempleConfrontation.LastTargetPath.TargetTile,
+                        actionPoints = TempleConfrontation.LastTargetPath.ActionPoints,
+                        rotation = TempleConfrontation.LastTargetPath.Rotation,
+                        completedSteps = TempleConfrontation.LastTargetPath.CompletedSteps,
+                        path = TempleConfrontation.LastTargetPath.Path,
+                        boundary = TempleConfrontation.LastTargetPath.Boundary.ToString(),
+                        contract = new
+                        {
+                            mapSha256 = TempleConfrontation.LastTargetPath.Contract.MapSha256,
+                            doorStateComplete = TempleConfrontation.LastTargetPath.Contract.DoorStateComplete,
+                            multihexCoverageComplete = TempleConfrontation.LastTargetPath.Contract.MultihexCoverageComplete,
+                            stepActionPointCost = TempleConfrontation.LastTargetPath.Contract.StepActionPointCost,
+                            moveAnimation = TempleConfrontation.LastTargetPath.Contract.MoveAnimation,
+                        },
+                    },
                     combatActive = TempleConfrontation.CombatActive,
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
+                    scriptState = TempleConfrontation.ScriptState.Save(),
+                    intWorldState = TempleConfrontation.IntWorldState.Save(),
                 },
                 templeExitTransition = TempleExitTransition is null ? null : new
                 {
@@ -267,6 +312,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     TrialProgress.CameronVisible,
                     TrialProgress.CameronDoorOpened,
                     TrialProgress.CameronDoorUnlocked,
+                    CameronDoorPlaybackState = TrialProgress.CameronDoorPlaybackState.Save(),
                     TrialProgress.KlintGateTile,
                     TrialProgress.KlintAlive,
                     TrialProgress.VillageRouteCompleted,
@@ -307,7 +353,7 @@ internal sealed record Fo2CharacterStartSaveState(
         var previous = schema == PreviousSchema;
         var route = schema == RouteSchema;
         var confrontation = schema == ConfrontationSchema;
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema && schema != SplitAppearanceSchema &&
                 schema != BodyAppearanceSchema &&
                 schema != PriorSchema && schema != VersionNineSchema &&
                 schema != ColorAppearanceSchema &&
@@ -345,6 +391,9 @@ internal sealed record Fo2CharacterStartSaveState(
             savedCharacter.GetProperty("Age").GetInt32(),
             RequiredString(savedCharacter, "Sex"),
             ReadInts(savedCharacter.GetProperty("special")),
+            savedCharacter.TryGetProperty("skillBonuses", out var skillBonuses)
+                ? ReadInts(skillBonuses)
+                : source.Profile.SkillBonuses,
             ReadStrings(savedCharacter.GetProperty("taggedSkills")),
             ReadStrings(savedCharacter.GetProperty("traits")));
         var provisionalCharacter = new Fo2CharacterSelection(mode, source, profile);
@@ -394,7 +443,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                (schema == Schema || schema == SplitAppearanceSchema ||
+                (schema == Schema || schema == VersionFourteenSchema || schema == SplitAppearanceSchema ||
                     schema == BodyAppearanceSchema ||
                     schema == PriorSchema || schema == VersionNineSchema ||
                     schema == ColorAppearanceSchema ||
@@ -405,7 +454,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
                 lastTransition == arroyo.LiveExit,
-            4 => (schema is Schema or SplitAppearanceSchema or BodyAppearanceSchema) &&
+            4 => (schema is Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema) &&
                 trialProgress is not null && trialRoute is not null &&
                 elevation == trialRoute.VillageArrival.Elevation &&
                 arrivalTile == trialRoute.VillageArrival.ArrivalTile &&
@@ -471,7 +520,7 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2ArroyoTrialProgressState? trialProgress,
         Fo2ArroyoTrialRouteContract? trialRoute)
     {
-        if (schema is not (Schema or SplitAppearanceSchema or BodyAppearanceSchema))
+        if (schema is not (Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema))
         {
             if (schema == PriorSchema &&
                 root.TryGetProperty("templeExitTransition", out var priorExit) &&
@@ -545,7 +594,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoTrialRouteContract? trialRoute)
     {
-        if (schema is not (Schema or SplitAppearanceSchema or BodyAppearanceSchema))
+        if (schema is not (Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema))
             return null;
         var value = root.GetProperty("trialProgress");
         if (value.ValueKind == JsonValueKind.Null)
@@ -564,6 +613,11 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("CameronVisible").GetBoolean(),
             value.GetProperty("CameronDoorOpened").GetBoolean(),
             value.GetProperty("CameronDoorUnlocked").GetBoolean(),
+            value.TryGetProperty("CameronDoorPlaybackState", out var doorPlayback)
+                ? ClassicDoorState.Restore(doorPlayback)
+                : value.GetProperty("CameronDoorOpened").GetBoolean()
+                    ? ClassicDoorSession.OpenTerminal(contract.Cameron.ReleaseDoorPresentation)
+                    : ClassicDoorSession.Closed(contract.Cameron.ReleaseDoorPresentation),
             value.GetProperty("KlintGateTile").GetInt32(),
             value.GetProperty("KlintAlive").GetBoolean(),
             value.GetProperty("VillageRouteCompleted").GetBoolean(),
@@ -578,7 +632,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema &&
+            schema != SplitAppearanceSchema &&
             schema != BodyAppearanceSchema &&
             schema != PriorSchema && schema != VersionNineSchema &&
             schema != ColorAppearanceSchema &&
@@ -617,7 +672,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character,
         Fo2TemplePresentationCatalog temple)
     {
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema &&
+            schema != SplitAppearanceSchema &&
             schema != BodyAppearanceSchema &&
             schema != PriorSchema && schema != VersionNineSchema &&
             schema != ColorAppearanceSchema &&
@@ -640,14 +696,97 @@ internal sealed record Fo2CharacterStartSaveState(
         var state = new Fo2TempleConfrontationState(
             value.GetProperty("targetHitPoints").GetInt32(),
             value.GetProperty("playerActionPoints").GetInt32(),
+            value.TryGetProperty("targetActionPoints", out var targetActionPoints)
+                ? targetActionPoints.GetInt32()
+                : temple.Confrontation.Critter.CurrentActionPoints,
+            value.TryGetProperty("targetTurnCount", out var targetTurnCount)
+                ? targetTurnCount.GetInt32()
+                : 0,
+            value.TryGetProperty("lastTargetTurnAction", out var lastTargetTurnAction) &&
+                lastTargetTurnAction.ValueKind == JsonValueKind.String
+                ? Enum.TryParse<ClassicTargetTurnAction>(
+                    lastTargetTurnAction.GetString(), out var parsedTargetTurnAction)
+                    ? parsedTargetTurnAction
+                    : throw new InvalidOperationException(
+                        "Fallout 2 save target-turn action is invalid.")
+                : null,
+            ReadClassicAttackIntent(value),
+            ReadClassicTargetPath(value),
             value.GetProperty("combatActive").GetBoolean(),
             value.GetProperty("spearLooted").GetBoolean(),
             value.TryGetProperty("spearEquipped", out var equipped) &&
-                equipped.GetBoolean());
+                equipped.GetBoolean(),
+            schema == Schema
+                ? ClassicScriptState.Restore(value.GetProperty("scriptState"))
+                : new ClassicScriptState(),
+            value.TryGetProperty("intWorldState", out var intWorldState)
+                ? ClassicIntWorldObjectState.Restore(intWorldState)
+                : ClassicIntWorldObjectState.Empty);
         state.Validate(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
         return state;
+    }
+
+    private static ClassicAttackIntent? ReadClassicAttackIntent(JsonElement confrontation)
+    {
+        if (!confrontation.TryGetProperty("lastTargetAttack", out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (value.ValueKind != JsonValueKind.Object ||
+            !Enum.TryParse<ClassicAttackBoundary>(
+                value.GetProperty("boundary").GetString(), out var boundary))
+            throw new InvalidOperationException("Fallout 2 save attack intent is invalid.");
+        var sourceValue = value.GetProperty("source");
+        var actionPointCost = sourceValue.GetProperty("actionPointCost");
+        var source = new ClassicAttackSource(
+            sourceValue.GetProperty("weaponPid").GetString() ?? "",
+            sourceValue.GetProperty("minimumDamage").GetInt32(),
+            sourceValue.GetProperty("maximumDamage").GetInt32(),
+            sourceValue.GetProperty("damageType").GetInt32(),
+            sourceValue.GetProperty("maximumRangeHexes").GetInt32(),
+            actionPointCost.ValueKind == JsonValueKind.Null
+                ? null
+                : actionPointCost.GetInt32(),
+            sourceValue.GetProperty("animationCode").GetInt32(),
+            sourceValue.GetProperty("hitResolution").GetString() ?? "");
+        var intent = ClassicAttackOwner.Prepare(
+            value.GetProperty("actorId").GetString() ?? "",
+            value.GetProperty("targetId").GetString() ?? "",
+            value.GetProperty("distanceHexes").GetInt32(),
+            value.GetProperty("actorActionPoints").GetInt32(),
+            source);
+        if (intent.Boundary != boundary)
+            throw new InvalidOperationException("Fallout 2 save attack boundary drifted.");
+        return intent;
+    }
+
+    private static ClassicTargetPathState? ReadClassicTargetPath(JsonElement confrontation)
+    {
+        if (!confrontation.TryGetProperty("lastTargetPath", out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (!Enum.TryParse<ClassicTargetPathBoundary>(
+                value.GetProperty("boundary").GetString(), out var boundary))
+            throw new InvalidOperationException("Fallout 2 save target-path boundary is invalid.");
+        var source = value.GetProperty("contract");
+        var stepCost = source.GetProperty("stepActionPointCost");
+        var animation = source.GetProperty("moveAnimation");
+        var contract = new ClassicTargetPathContract(
+            source.GetProperty("mapSha256").GetString() ?? "",
+            source.GetProperty("doorStateComplete").GetBoolean(),
+            source.GetProperty("multihexCoverageComplete").GetBoolean(),
+            stepCost.ValueKind == JsonValueKind.Null ? null : stepCost.GetInt32(),
+            animation.ValueKind == JsonValueKind.Null ? null : animation.GetString());
+        return new ClassicTargetPathState(
+            value.GetProperty("currentTile").GetInt32(),
+            value.GetProperty("targetTile").GetInt32(),
+            value.GetProperty("actionPoints").GetInt32(),
+            value.GetProperty("rotation").GetInt32(),
+            value.GetProperty("completedSteps").GetInt32(),
+            value.GetProperty("path").EnumerateArray().Select(row => row.GetInt32()).ToArray(),
+            contract,
+            boundary);
     }
 
     private static Fo2CharacterAppearanceContract ReadAppearance(
@@ -656,7 +795,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2CharacterSelection character)
     {
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema &&
+            schema != SplitAppearanceSchema &&
             schema != BodyAppearanceSchema &&
             schema != PriorSchema && schema != VersionNineSchema)
         {
@@ -696,7 +836,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 recipe.DefaultNoseStyleId,
                 recipe.DefaultMouthStyleId);
         }
-        var value = schema == Schema
+        var value = schema is Schema or VersionFourteenSchema
             ? savedCharacter.GetProperty("appearance")
             : root.GetProperty("appearance");
         var appearance = new Fo2CharacterAppearanceContract(
@@ -724,7 +864,7 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("GeneratedPortraitSha256").GetString() ?? "",
             value.GetProperty("GeneratedPortraitWidth").GetInt32(),
             value.GetProperty("GeneratedPortraitHeight").GetInt32(),
-            schema is Schema or SplitAppearanceSchema
+            schema is Schema or VersionFourteenSchema or SplitAppearanceSchema
                 ? JsonSerializer.Deserialize<CharacterBodyProportions>(
                     value.GetProperty("BodyProportions").GetRawText()) ??
                     throw new InvalidOperationException(

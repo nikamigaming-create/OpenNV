@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -11,86 +12,52 @@ internal partial class Fo3OpeningFlow
 {
     private void AddSelector(GridContainer grid, string title, OptionButton selector)
     {
-        selector.Name = $"FO3_RaceSexMenu_{title}";
-        selector.CustomMinimumSize = new Vector2(
-            0.0f,
-            _profile.Appearance.Ui.ListItemHeight);
+        var source = _profile.Appearance.Ui.RaceSexControls.List;
+        var fontId = _profile.Appearance.Ui.RaceSexControls.FontId;
+        if (!_profile.UiFonts.TryGetValue(fontId, out var sourceFont))
+            throw new InvalidOperationException(
+                $"Fallout 3 RaceSexMenu owned bitmap font is absent: {fontId}");
+        var font = OwnedUiTheme.BuildFont(sourceFont);
+        selector.Name = $"{source.Tile}_{title}";
+        selector.CustomMinimumSize = source.Rect.Size;
         selector.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        selector.AddThemeFontSizeOverride(
-            "font_size",
-            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
+        selector.AddThemeFontOverride("font", font);
+        selector.AddThemeFontSizeOverride("font_size", font.FixedSize);
         grid.AddChild(selector);
     }
 
     private static void FillOptions(
         OptionButton selector,
         IReadOnlyList<Fo3AppearanceRace> options,
-        string selectedFormId,
-        string prefix)
+        string selectedFormId)
     {
         selector.Clear();
         for (var index = 0; index < options.Count; index++)
         {
-            selector.AddItem($"{prefix}  •  {options[index].Label}");
+            selector.AddItem(options[index].Label);
             selector.SetItemMetadata(index, options[index].FormId);
-            if (options[index].FormId == selectedFormId)
-                selector.Select(index);
         }
+        selector.Select(OwnedGamebryoTileRuntime.RequireSourceSelection(
+            options,
+            option => option.FormId,
+            selectedFormId));
     }
 
     private static void FillOptions(
         OptionButton selector,
         IReadOnlyList<Fo3AppearanceOption> options,
-        string selectedFormId,
-        string prefix)
+        string selectedFormId)
     {
         selector.Clear();
         for (var index = 0; index < options.Count; index++)
         {
-            selector.AddItem($"{prefix}  •  {options[index].Label}");
+            selector.AddItem(options[index].Label);
             selector.SetItemMetadata(index, options[index].FormId);
-            if (options[index].FormId == selectedFormId)
-                selector.Select(index);
         }
-    }
-
-    private void RenderAppearancePreview(
-        HBoxContainer preview,
-        Fo3AppearanceAsset head,
-        Fo3AppearanceAsset hair,
-        Fo3AppearanceAsset eyes,
-        Fo3FaceGenDefaults faceGen)
-    {
-        foreach (var child in preview.GetChildren())
-        {
-            preview.RemoveChild(child);
-            child.QueueFree();
-        }
-        preview.AddChild(AppearancePreviewTile("MENU", _profile.Appearance.Ui.BackgroundTexture));
-        preview.AddChild(AppearancePreviewTile("HEAD", head));
-        preview.AddChild(AppearancePreviewTile("HAIR", hair));
-        preview.AddChild(AppearancePreviewTile("EYES", eyes));
-        preview.TooltipText =
-            $"FaceGen defaults: {faceGen.SymmetricGeometrySha256} / " +
-            $"{faceGen.AsymmetricGeometrySha256} / {faceGen.SymmetricTextureSha256}";
-    }
-
-    private VBoxContainer AppearancePreviewTile(string title, Fo3AppearanceAsset asset)
-    {
-        var image = LoadAppearanceImage(asset);
-        var tile = new VBoxContainer();
-        tile.AddChild(Label(title, Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        tile.AddChild(new TextureRect
-        {
-            Texture = ImageTexture.CreateFromImage(image),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(
-                Fo3OpeningFlowNumericContracts.AppearancePreviewTexturePixels,
-                Fo3OpeningFlowNumericContracts.AppearancePreviewTexturePixels),
-            TooltipText = $"source={asset.SourceSha256} preview={asset.PreviewSha256}",
-        });
-        return tile;
+        selector.Select(OwnedGamebryoTileRuntime.RequireSourceSelection(
+            options,
+            option => option.FormId,
+            selectedFormId));
     }
 
     private static Image LoadAppearanceImage(Fo3AppearanceAsset asset)
@@ -103,12 +70,9 @@ internal partial class Fo3OpeningFlow
     }
 
     private Control CreatorSurface(
-        float left,
-        float top,
-        float width,
-        float height,
+        OwnedGamebryoTileLayout layout,
         Fo3AppearanceAsset background,
-        string name)
+        Vector2 sourceCanvas)
     {
         if (_creatorLayer is null)
         {
@@ -118,15 +82,12 @@ internal partial class Fo3OpeningFlow
             _panel.Visible = false;
             _background.Visible = _vaultPreviewHost is null;
         }
-        var surface = new Control { Name = name };
-        surface.AnchorLeft = left;
-        surface.AnchorTop = top;
-        surface.AnchorRight = left + width;
-        surface.AnchorBottom = top + height;
+        var surface = new Control();
+        OwnedGamebryoTileRuntime.ApplyAnchored(surface, layout, sourceCanvas);
         _creatorLayer.AddChild(surface);
         var texture = new TextureRect
         {
-            Name = $"{name}_OwnedBackground",
+            Name = $"{layout.Tile}_OwnedBackground",
             Texture = ImageTexture.CreateFromImage(LoadAppearanceImage(background)),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
@@ -167,7 +128,7 @@ internal partial class Fo3OpeningFlow
             _creatorLayer = null;
         }
         _activeNameInput = null;
-        _activeAppearanceCategory = null;
+        _activeAppearanceShowFace = null;
         _activeFaceControlSlider = null;
         _activeAppearanceSelection = null;
         _activeFacePreview = null;

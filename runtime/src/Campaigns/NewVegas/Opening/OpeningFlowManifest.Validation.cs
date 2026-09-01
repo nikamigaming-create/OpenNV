@@ -4,6 +4,7 @@ using Godot;
 
 
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -43,6 +44,85 @@ internal sealed partial record OpeningNewGameFlow
                 flow.QuestFormId,
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Owned New Game flow is incomplete.");
+        foreach (var ordinary in flow.OrdinaryQuests.Values)
+        {
+            if (string.IsNullOrWhiteSpace(ordinary.FormId) ||
+                string.IsNullOrWhiteSpace(ordinary.EditorId) ||
+                string.IsNullOrWhiteSpace(ordinary.ScriptFormId) ||
+                string.IsNullOrWhiteSpace(ordinary.ScriptEditorId) ||
+                ordinary.Stages.Count == 0 ||
+                !ordinary.Stages.ContainsKey(ordinary.EntryStage) ||
+                ordinary.Stages.Values.SelectMany(stage => stage.Commands)
+                    .Where(command => command.Kind == "objective")
+                    .Any(command => command.Index is null ||
+                        !ordinary.Objectives.ContainsKey(command.Index.Value)))
+                throw new InvalidOperationException(
+                    "Owned ordinary quest handoff is incomplete.");
+            ValidateCommandContract(
+                ordinary.CommandContract,
+                ordinary.Stages.Values.SelectMany(stage => stage.Commands).ToArray());
+        }
+        foreach (var actor in flow.OrdinaryActors)
+        {
+            var actorCommands = actor.Topics.Values.SelectMany(topic =>
+                topic.Infos.SelectMany(info => info.Commands)).ToArray();
+            if (!flow.SceneRoles.TryGetValue(actor.Role, out var role) ||
+                !role.ReferenceFormId.Equals(
+                    actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
+                !role.BaseFormId.Equals(actor.BaseFormId, StringComparison.OrdinalIgnoreCase) ||
+                actor.PackagePriority.Count == 0 ||
+                actor.PackagePriority.Any(formId => !actor.Packages.ContainsKey(formId)) ||
+                !actor.Topics.ContainsKey(actor.ActivationTopicFormId) ||
+                !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase) ||
+                actor.ArrivalTransitions.Any(value =>
+                    !actor.Packages.ContainsKey(value.PackageFormId) ||
+                    !value.ActorReferenceFormId.Equals(
+                        actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
+                    !flow.OrdinaryQuests.TryGetValue(
+                        value.QuestFormId, out var arrivalQuest) ||
+                    !arrivalQuest.Stages.ContainsKey(value.FromStage) ||
+                    !arrivalQuest.Stages.ContainsKey(value.ToStage) ||
+                    string.IsNullOrWhiteSpace(value.ScriptEditorId)) ||
+                actor.AutomaticDialogueTriggers.Any(value =>
+                    string.IsNullOrWhiteSpace(value.ScriptFormId) ||
+                    string.IsNullOrWhiteSpace(value.ScriptEditorId) ||
+                    string.IsNullOrWhiteSpace(value.TriggerReferenceFormId) ||
+                    value.BoundsGameUnits.X <= 0 || value.BoundsGameUnits.Y <= 0 ||
+                    value.BoundsGameUnits.Z <= 0 ||
+                    !actor.Topics.ContainsKey(value.TopicFormId) ||
+                    !flow.OrdinaryQuests.TryGetValue(value.QuestFormId, out var triggerQuest) ||
+                    !triggerQuest.Objectives.ContainsKey(value.ObjectiveIndex)))
+                throw new InvalidOperationException(
+                    "Owned ordinary actor dialogue handoff is incomplete.");
+            ValidateCommandContract(actor.CommandContract, actorCommands);
+        }
+        foreach (var targetSet in flow.HitTargetSets)
+        {
+            if (string.IsNullOrWhiteSpace(targetSet.ScriptFormId) ||
+                string.IsNullOrWhiteSpace(targetSet.ScriptEditorId) ||
+                targetSet.Targets.Count == 0 ||
+                targetSet.Targets.Select(value => value.ReferenceFormId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                    targetSet.Targets.Count ||
+                !flow.OrdinaryQuests.TryGetValue(
+                    targetSet.QuestFormId, out var targetQuest) ||
+                !targetQuest.Variables.TryGetValue(
+                    checked((uint)targetSet.QuestVariableIndex),
+                    out var variableName) ||
+                !variableName.Equals(
+                    targetSet.QuestVariableName, StringComparison.OrdinalIgnoreCase) ||
+                !targetQuest.Objectives.ContainsKey(targetSet.ObjectiveIndex) ||
+                targetSet.WeaponAnimationTypeMinimumExclusive >=
+                    targetSet.WeaponAnimationTypeMaximumExclusive ||
+                targetSet.Threshold <= 0 ||
+                !flow.OrdinaryActors.Any(actor =>
+                    actor.Topics.ContainsKey(targetSet.ReactionTopicFormId) &&
+                    actor.ReferenceFormId.Equals(
+                        targetSet.SpeakerReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "Owned hit-target set is incomplete.");
+        }
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)
             .Where(value => value.Kind == "objective" &&
@@ -363,6 +443,9 @@ internal sealed partial record OpeningNewGameFlow
             previewSet.Status != ExpectedPlayerFaceGenPreviewStatus ||
             previewSet.RuntimeDisposition !=
                 ExpectedPlayerFaceGenPreviewRuntimeDisposition ||
+            previewSet.SelectionScope != ExpectedPlayerFaceGenPreviewSelectionScope ||
+            previewSet.UnsupportedSelectionScope !=
+                ExpectedPlayerFaceGenUnsupportedSelectionScope ||
             !previewSet.PlayerFormId.Equals(
                 appearance.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) ||
@@ -370,41 +453,61 @@ internal sealed partial record OpeningNewGameFlow
             !previewSet.GeometryControlNames.SequenceEqual(
                 controls.Select(value => value.SettingEntity),
                 StringComparer.Ordinal) ||
+            previewSet.TextureControlCount <= 0 ||
+            previewSet.TextureControlCount != previewSet.TextureControlNames.Count ||
             !previewSet.FullBody ||
             previewSet.BodyComponentRoles is null ||
             !previewSet.BodyComponentRoles.SequenceEqual(
                 ExpectedPlayerFaceGenBodyComponentRoles,
                 StringComparer.Ordinal) ||
             !ValidPlayerBodySourcesBySex(previewSet.BodyComponentSourcesBySex) ||
-            previewSet.Previews.Count != 2 ||
-            !previewSet.Previews.Select(value => value.Sex)
-                .ToHashSet(StringComparer.Ordinal).SetEquals(["male", "female"]) ||
-            previewSet.Previews.Select(value =>
-                    $"{value.Sex}:{value.RaceFormId}:{value.HairFormId}:{value.EyesFormId}")
-                .Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2)
+            !OwnedGamebryoFaceGenSelectionInventory.IsComplete(
+                previewSet,
+                appearance.Races.SelectMany(value => value.Sex.Select(pair =>
+                    new OwnedGamebryoFaceGenSelectionDomain(
+                        pair.Key,
+                        value.FormId,
+                        pair.Value.HairOptions.Select(option => option.FormId).ToArray(),
+                        pair.Value.EyeOptions.Select(option => option.FormId).ToArray())))))
             return false;
 
         return previewSet.Previews.All(preview =>
-            race.Sex.TryGetValue(preview.Sex, out var sex) &&
+            appearance.Races.SingleOrDefault(value => value.FormId.Equals(
+                preview.RaceFormId,
+                StringComparison.OrdinalIgnoreCase)) is { } previewRace &&
+            previewRace.Sex.TryGetValue(preview.Sex, out var sex) &&
             preview.Schema == previewSet.Schema &&
             preview.Status == previewSet.Status &&
             preview.RuntimeDisposition == previewSet.RuntimeDisposition &&
             preview.PlayerFormId.Equals(
                 previewSet.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) &&
-            preview.RaceFormId.Equals(
-                race.FormId,
-                StringComparison.OrdinalIgnoreCase) &&
-            preview.HairFormId.Equals(
-                sex.DefaultHairFormId,
-                StringComparison.OrdinalIgnoreCase) &&
-            preview.EyesFormId.Equals(
-                sex.DefaultEyesFormId,
-                StringComparison.OrdinalIgnoreCase) &&
+            sex.HairOptions.Any(value => value.FormId.Equals(
+                preview.HairFormId,
+                StringComparison.OrdinalIgnoreCase)) &&
+            sex.EyeOptions.Any(value => value.FormId.Equals(
+                preview.EyesFormId,
+                StringComparison.OrdinalIgnoreCase)) &&
             preview.GeometryControlCount == previewSet.GeometryControlCount &&
             preview.GeometryControlNames.SequenceEqual(
                 previewSet.GeometryControlNames,
                 StringComparer.Ordinal) &&
+            preview.TextureControlCount == previewSet.TextureControlCount &&
+            preview.TextureControlNames.SequenceEqual(
+                previewSet.TextureControlNames,
+                StringComparer.Ordinal) &&
+            preview.TextureControls.Select(value => value.SettingEntity).SequenceEqual(
+                previewSet.TextureControlNames,
+                StringComparer.Ordinal) &&
+            preview.TextureControls.All(value =>
+                value.Axis.Count == preview.SymmetricTexture.Count) &&
+            preview.AgeControl is { } previewAge &&
+            previewAge.SettingEntity ==
+                appearance.FaceGen.ControlSpace.NativeAgeControl.SettingEntity &&
+            previewAge.GeometryAxis.SequenceEqual(
+                appearance.FaceGen.ControlSpace.NativeAgeControl.GeometryAxis) &&
+            previewAge.TextureAxis.SequenceEqual(
+                appearance.FaceGen.ControlSpace.NativeAgeControl.TextureAxis) &&
             preview.FullBody == previewSet.FullBody &&
             preview.BodyComponentRoles is not null &&
             preview.BodyComponentRoles.SequenceEqual(
@@ -417,7 +520,9 @@ internal sealed partial record OpeningNewGameFlow
             !string.IsNullOrWhiteSpace(preview.GltfSha256) &&
             !string.IsNullOrWhiteSpace(preview.SidecarPath) &&
             !string.IsNullOrWhiteSpace(preview.SidecarSha256) &&
-            !string.IsNullOrWhiteSpace(preview.BufferSha256));
+            !string.IsNullOrWhiteSpace(preview.BufferSha256) &&
+            !string.IsNullOrWhiteSpace(preview.EgtPath) &&
+            !string.IsNullOrWhiteSpace(preview.EgtSha256));
     }
 
     private static bool ValidPlayerBodySourcesBySex(
@@ -477,6 +582,19 @@ internal sealed partial record OpeningNewGameFlow
             source.AsymmetricTextureControlCount != FaceGenAsymmetricTextureControlCount ||
             source.SymmetricGeometryControls.Count != FaceGenSymmetricGeometryControlCount ||
             source.NativeGeometryControls.Count != FaceGenNativeGeometryControlCount)
+            return false;
+
+        var age = source.NativeAgeControl;
+        if (string.IsNullOrWhiteSpace(age.SettingEntity) ||
+            string.IsNullOrWhiteSpace(age.SourceLabel) ||
+            string.IsNullOrWhiteSpace(age.Semantics) ||
+            age.GeometryAxis.Count != FaceGenSymmetricGeometryCount ||
+            age.TextureAxis.Count != FaceGenSymmetricTextureCount ||
+            age.GeometryAxis.Any(value => !float.IsFinite(value)) ||
+            age.TextureAxis.Any(value => !float.IsFinite(value)) ||
+            age.RawMinimum >= age.RawMaximum || age.RawStep <= 0.0f ||
+            age.MappedMinimumYears >= age.MappedMaximumYears ||
+            age.MappedMultiplier <= 0.0f)
             return false;
 
         var controls = source.SymmetricGeometryControls;

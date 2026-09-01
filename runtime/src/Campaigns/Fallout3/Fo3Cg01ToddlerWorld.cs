@@ -3,6 +3,7 @@ using Godot;
 
 
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Interactions;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -28,6 +29,8 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
     string MoveRightAction,
     string MoveForwardAction,
     string MoveBackwardAction,
+    string ActivateAction,
+    float ActivationDistanceMeters,
     string TriggerReferenceFormId,
     int TargetStage)
 {
@@ -127,6 +130,8 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
             configuration.Player.DesktopInput.MoveRight.Action,
             configuration.Player.DesktopInput.MoveForward.Action,
             configuration.Player.DesktopInput.MoveBackward.Action,
+            configuration.Player.DesktopInput.Activate.Action,
+            configuration.Player.ActivationDistanceMeters,
             stage12.Trigger.ReferenceFormId,
             stage12.TargetStage);
     }
@@ -152,7 +157,6 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
             RequiredFormId(source, "playerStartMarkerFormId") != PlayerStartMarkerFormId ||
             RequiredFormId(source, "triggerReferenceFormId") != TriggerReferenceFormId ||
             !RequiredBoolean(source, "triggerEntered") ||
-            RequiredBoolean(source, "movementEnabled") ||
             RequiredBoolean(source, "visualBodyPrepared"))
             throw new InvalidOperationException(
                 "Saved Fallout 3 CG01 toddler world differs.");
@@ -163,7 +167,7 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
             ReadQuaternion(source, "playerRotation"),
             TriggerReferenceFormId,
             true,
-            false,
+            RequiredBoolean(source, "movementEnabled"),
             RequiredPositiveInteger(source, "authoredCollisionBodies"));
         return state;
     }
@@ -210,6 +214,7 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
         VerifyInput(input, "moveRight", player.DesktopInput.MoveRight);
         VerifyInput(input, "moveForward", player.DesktopInput.MoveForward);
         VerifyInput(input, "moveBackward", player.DesktopInput.MoveBackward);
+        VerifyInput(input, "activate", player.DesktopInput.Activate);
     }
 
     private static void VerifyInput(
@@ -460,6 +465,86 @@ internal sealed record Fo3Cg01ToddlerWorldRuntime(
         Player.MovementEnabled,
         AuthoredCollisionBodies);
 
+    internal Area3D InstallStage20Interactions(
+        Fo3Vault101BirthSceneCoverage scene,
+        Fo3Cg01Stage20Interaction interaction,
+        Action gateActivated,
+        Action exitEntered,
+        Action bookActivated)
+    {
+        Player.ConfigureSourceActivation(interaction, gateActivated, bookActivated);
+        var source = interaction.ExitTriggerTransform;
+        var trigger = new Area3D
+        {
+            Name = $"REFR_{interaction.ExitTriggerReferenceFormId}_CG01_EXIT_CRIB_TRIGGER",
+            Position = SourceLocalPosition(source.PositionGameUnits, scene.Contract.EntryPositionGameUnits),
+            Rotation = new Vector3(0, -(float)source.RotationRadians.Z, 0),
+            CollisionLayer = 0,
+            CollisionMask = Contract.CollisionLayer,
+            Monitoring = true,
+            Monitorable = false,
+        };
+        trigger.SetMeta("opennv_source_form_id", interaction.ExitTriggerReferenceFormId);
+        trigger.AddChild(new CollisionShape3D
+        {
+            Name = "OWNED_XPRM_BOX",
+            Shape = new BoxShape3D
+            {
+                Size = new Vector3(
+                (float)interaction.ExitTriggerDimensionsGameUnits.X,
+                (float)interaction.ExitTriggerDimensionsGameUnits.Z,
+                (float)interaction.ExitTriggerDimensionsGameUnits.Y)
+            },
+        });
+        trigger.BodyEntered += body =>
+        {
+            if (body != Player || !trigger.Monitoring)
+                return;
+            trigger.Monitoring = false;
+            exitEntered();
+        };
+        scene.CellRoot.AddChild(trigger);
+        return trigger;
+    }
+
+    internal Area3D InstallDadLeadEndTrigger(
+        Fo3Vault101BirthSceneCoverage scene,
+        Fo3Cg01DadLeadTrigger contract,
+        Action entered)
+    {
+        var source = contract.SourceTransform;
+        var trigger = new Area3D
+        {
+            Name = $"REFR_{contract.ReferenceFormId}_CG01_END_QUEST_TRIGGER",
+            Position = SourceLocalPosition(source.PositionGameUnits, scene.Contract.EntryPositionGameUnits),
+            Rotation = new Vector3(0, -(float)source.RotationRadians.Z, 0),
+            CollisionLayer = 0,
+            CollisionMask = Contract.CollisionLayer,
+            Monitoring = true,
+            Monitorable = false,
+        };
+        trigger.SetMeta("opennv_source_form_id", contract.ReferenceFormId);
+        trigger.AddChild(new CollisionShape3D
+        {
+            Name = "OWNED_XPRM_BOX",
+            Shape = new BoxShape3D
+            {
+                Size = new Vector3(
+                    (float)contract.DimensionsGameUnits.X,
+                    (float)contract.DimensionsGameUnits.Z,
+                    (float)contract.DimensionsGameUnits.Y),
+            },
+        });
+        trigger.BodyEntered += body =>
+        {
+            if (body != Player || !trigger.Monitoring)
+                return;
+            entered();
+        };
+        scene.CellRoot.AddChild(trigger);
+        return trigger;
+    }
+
     private const float MinimumValue = 0.0f;
 
     private static Vector3 SourceLocalPosition(
@@ -472,24 +557,28 @@ internal sealed record Fo3Cg01ToddlerWorldRuntime(
 internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
 {
     private const float MinimumValue = 0.0f;
-    private const float MaximumWallNormalVerticalComponent = 0.5f;
-    private const float AcceptanceWallClearanceRadii = 4.0f;
+    private const float PressedInputStrength = 1.0f;
 
     private Fo3Cg01ToddlerWorldContract _contract = null!;
     private Camera3D _camera = null!;
     private float _pitch;
-    private bool _acceptanceForward;
-    private Vector3? _acceptanceTarget;
-    private Vector3 _acceptanceHeading;
-    private float _acceptanceWallClearanceMeters;
+    private bool _acceptanceTracking;
+    private bool _acceptanceInputPressed;
+    private Fo3Cg01Stage20Interaction? _interaction;
+    private Action? _gateActivated;
+    private Action? _bookActivated;
+    private Func<InputEvent, bool>? _menuInputHandler;
+    private IReadOnlyDictionary<string, Action>? _sourceFormActivations;
+    private IReadOnlyDictionary<string, Action>? _sourceHits;
+    private string? _fireAction;
+    private string? _requiredEquippedItemFormId;
+    private float _fireDistanceMeters;
 
     internal bool MovementEnabled { get; private set; } = true;
     internal int AcceptancePhysicsFrames { get; private set; }
-    internal int AcceptanceWallContacts { get; private set; }
     internal float AcceptanceHorizontalTravelMeters { get; private set; }
-    internal float AcceptanceTargetDistanceMeters => _acceptanceTarget is Vector3 target
-        ? Horizontal(target - GlobalPosition).Length()
-        : MinimumValue;
+    internal uint SourceActivationCollisionLayer => _contract.CollisionMask;
+    internal uint SourceBodyCollisionLayer => _contract.CollisionLayer;
 
     internal void Configure(
         Fo3Cg01ToddlerWorldContract contract,
@@ -550,22 +639,64 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         SetMeta("opennv_visual_body_prepared", false);
     }
 
-    internal void SetAcceptanceTarget(Vector3 target)
+    internal void BeginConfiguredInputAcceptance()
     {
-        var horizontalTarget = new Vector3(target.X, GlobalPosition.Y, target.Z);
-        if (horizontalTarget.IsEqualApprox(GlobalPosition))
+        if (!MovementEnabled || _acceptanceTracking || _acceptanceInputPressed)
             throw new InvalidOperationException(
-                "Fallout 3 CG01 toddler proof target has no horizontal separation.");
-        LookAt(horizontalTarget, Vector3.Up);
-        _acceptanceTarget = horizontalTarget;
-        _acceptanceForward = true;
+                "Fallout 3 CG01 toddler configured-input acceptance state differs.");
+        _acceptanceTracking = true;
+        _acceptanceInputPressed = true;
+        Input.ParseInputEvent(new InputEventAction
+        {
+            Action = _contract.MoveForwardAction,
+            Pressed = true,
+            Strength = PressedInputStrength,
+        });
     }
 
     internal void StopAtAuthoredTrigger()
     {
         MovementEnabled = false;
-        _acceptanceForward = false;
-        _acceptanceTarget = null;
+        ReleaseAcceptanceInput();
+        Velocity = Vector3.Zero;
+    }
+
+    internal void CancelConfiguredInputAcceptance()
+    {
+        _acceptanceTracking = false;
+        ReleaseAcceptanceInput();
+        Velocity = Vector3.Zero;
+    }
+
+    internal void EnableMovementAtSourceStage()
+    {
+        if (MovementEnabled)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 toddler movement was already enabled.");
+        MovementEnabled = true;
+    }
+
+    internal void ApplySourceScale(double sourceScale)
+    {
+        if (!double.IsFinite(sourceScale) || sourceScale <= 0.0)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 player source scale differs.");
+        Scale = Vector3.One * (float)(sourceScale / _contract.PlayerScale);
+        SetMeta("opennv_source_player_scale", sourceScale);
+    }
+
+    internal void MoveToSourceTransform(
+        Fo3Cg01Transform source,
+        Fo3Vault101BirthPresentationContract scene)
+    {
+        var local = GamebryoCoordinate.ConvertVector(
+            new Vector3(
+                (float)source.PositionGameUnits.X,
+                (float)source.PositionGameUnits.Y,
+                (float)source.PositionGameUnits.Z) - scene.EntryPositionGameUnits);
+        GlobalPosition = scene.UnitsToMeters * local +
+            Vector3.Up * _contract.SpawnCenterHeightMeters;
+        Rotation = new Vector3(0.0f, -(float)source.RotationRadians.Z, 0.0f);
         Velocity = Vector3.Zero;
     }
 
@@ -577,7 +708,51 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
-        if (inputEvent is not InputEventMouseMotion motion || !MovementEnabled)
+        if (_menuInputHandler?.Invoke(inputEvent) == true)
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (!MovementEnabled)
+            return;
+        if (_sourceHits is not null && inputEvent.IsActionPressed(_fireAction!))
+        {
+            GamebryoEquippedHitscan.Fire(
+                _camera, GetRid(), _contract.CollisionMask, _fireDistanceMeters,
+                GetMeta("opennv_equipped_item_form_id", "").AsString(),
+                _requiredEquippedItemFormId!, _sourceHits);
+            return;
+        }
+        if ((_interaction is not null || _sourceFormActivations is not null) &&
+            inputEvent.IsActionPressed(_contract.ActivateAction))
+        {
+            var query = PhysicsRayQueryParameters3D.Create(
+                _camera.GlobalPosition,
+                _camera.GlobalPosition + -_camera.GlobalBasis.Z * _contract.ActivationDistanceMeters,
+                _contract.CollisionMask);
+            query.Exclude = [GetRid()];
+            var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+            if (hit.TryGetValue("collider", out var value) && value.AsGodotObject() is Node node)
+            {
+                for (Node? current = node; current is not null; current = current.GetParent())
+                {
+                    if (!current.HasMeta("opennv_source_form_id"))
+                        continue;
+                    var formId = current.GetMeta("opennv_source_form_id").AsString();
+                    if (_sourceFormActivations?.TryGetValue(formId, out var activated) == true)
+                        activated();
+                    else if (_interaction is not null && formId.Equals(
+                        _interaction.GateReferenceFormId, StringComparison.OrdinalIgnoreCase))
+                        _gateActivated?.Invoke();
+                    else if (_interaction is not null && formId.Equals(
+                        _interaction.BookReferenceFormId, StringComparison.OrdinalIgnoreCase))
+                        _bookActivated?.Invoke();
+                    break;
+                }
+            }
+            return;
+        }
+        if (inputEvent is not InputEventMouseMotion motion)
             return;
         Rotation = new Vector3(
             MinimumValue,
@@ -590,18 +765,63 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         _camera.Rotation = new Vector3(_pitch, MinimumValue, MinimumValue);
     }
 
+    internal void ConfigureSourceActivation(
+        Fo3Cg01Stage20Interaction interaction,
+        Action gateActivated,
+        Action bookActivated)
+    {
+        _interaction = interaction;
+        _gateActivated = gateActivated;
+        _bookActivated = bookActivated;
+    }
+
+    internal void SetMenuInputHandler(Func<InputEvent, bool>? handler)
+    {
+        if ((handler is null) == (_menuInputHandler is null))
+            throw new InvalidOperationException(
+                "Fallout 3 toddler menu-input lifecycle differs.");
+        _menuInputHandler = handler;
+        MovementEnabled = handler is null;
+        Velocity = Vector3.Zero;
+    }
+
+    internal void ConfigureSourceFormActivations(
+        IReadOnlyDictionary<string, Action>? activations)
+    {
+        if ((activations is null) == (_sourceFormActivations is null) ||
+            activations is { Count: 0 })
+            throw new InvalidOperationException(
+                "Fallout 3 source-form activation lifecycle differs.");
+        _sourceFormActivations = activations;
+    }
+
+    internal void ConfigureSourceHitscan(
+        string fireAction,
+        float distanceMeters,
+        string requiredEquippedItemFormId,
+        IReadOnlyDictionary<string, Action> sourceHits)
+    {
+        if (string.IsNullOrWhiteSpace(fireAction) ||
+            !float.IsFinite(distanceMeters) || distanceMeters <= 0.0f ||
+            string.IsNullOrWhiteSpace(requiredEquippedItemFormId) ||
+            sourceHits.Count == 0)
+            throw new InvalidOperationException(
+                "Fallout 3 source hitscan contract is invalid.");
+        _fireAction = fireAction;
+        _fireDistanceMeters = distanceMeters;
+        _requiredEquippedItemFormId = requiredEquippedItemFormId;
+        _sourceHits = sourceHits;
+    }
+
     public override void _PhysicsProcess(double delta)
     {
-        var input = _acceptanceForward
-            ? Vector2.Up
-            : Input.GetVector(
-                _contract.MoveLeftAction,
-                _contract.MoveRightAction,
-                _contract.MoveForwardAction,
-                _contract.MoveBackwardAction);
-        var direction = _acceptanceTarget is Vector3 acceptanceTarget
-            ? AcceptanceDirection(acceptanceTarget)
-            : (GlobalBasis * new Vector3(input.X, MinimumValue, input.Y)).Normalized();
+        var input = Input.GetVector(
+            _contract.MoveLeftAction,
+            _contract.MoveRightAction,
+            _contract.MoveForwardAction,
+            _contract.MoveBackwardAction);
+        var direction = (GlobalBasis *
+            new Vector3(input.X, MinimumValue, input.Y)).Normalized();
         var velocity = MovementEnabled
             ? direction * _contract.MoveSpeedMetersPerSecond
             : Vector3.Zero;
@@ -613,44 +833,26 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         {
             var before = GlobalPosition;
             MoveAndSlide();
-            UpdateAcceptanceMotion(before);
+            if (_acceptanceTracking)
+            {
+                AcceptancePhysicsFrames++;
+                AcceptanceHorizontalTravelMeters +=
+                    Horizontal(GlobalPosition - before).Length();
+            }
         }
     }
 
-    private Vector3 AcceptanceDirection(Vector3 target)
+    private void ReleaseAcceptanceInput()
     {
-        var direct = Horizontal(target - GlobalPosition).Normalized();
-        return _acceptanceWallClearanceMeters > MinimumValue
-            ? _acceptanceHeading
-            : direct;
-    }
-
-    private void UpdateAcceptanceMotion(Vector3 before)
-    {
-        if (_acceptanceTarget is not Vector3 target)
+        if (!_acceptanceInputPressed)
             return;
-        AcceptancePhysicsFrames++;
-        var travelled = Horizontal(GlobalPosition - before).Length();
-        AcceptanceHorizontalTravelMeters += travelled;
-        if (_acceptanceWallClearanceMeters > MinimumValue)
-            _acceptanceWallClearanceMeters = MathF.Max(
-                MinimumValue,
-                _acceptanceWallClearanceMeters - travelled);
-        var direct = Horizontal(target - GlobalPosition).Normalized();
-        for (var index = 0; index < GetSlideCollisionCount(); index++)
+        Input.ParseInputEvent(new InputEventAction
         {
-            var normal = GetSlideCollision(index).GetNormal();
-            if (MathF.Abs(normal.Y) > MaximumWallNormalVerticalComponent)
-                continue;
-            normal = Horizontal(normal).Normalized();
-            var first = new Vector3(-normal.Z, MinimumValue, normal.X);
-            var second = -first;
-            _acceptanceHeading = first.Dot(direct) >= second.Dot(direct) ? first : second;
-            _acceptanceWallClearanceMeters =
-                _contract.CapsuleRadiusMeters * AcceptanceWallClearanceRadii;
-            AcceptanceWallContacts++;
-            break;
-        }
+            Action = _contract.MoveForwardAction,
+            Pressed = false,
+            Strength = MinimumValue,
+        });
+        _acceptanceInputPressed = false;
     }
 
     private static Vector3 Horizontal(Vector3 value) =>

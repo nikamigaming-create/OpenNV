@@ -368,13 +368,12 @@ internal partial class OpeningQuestRuntime
                 savedCreatorControls != nativeCreatorControls)
                 throw new InvalidOperationException(
                     "Opening source closure has incomplete creator control bindings.");
-            var unsupported = new[]
-            {
-                "non-default-race-hair-eye-live-3d-face-preview",
-            };
+            var unsupported = Array.Empty<string>();
             return new OpeningSourceClosureAcceptance(
                 "opennv-fnv-first-slice-source-closure/v1",
-                "source-accounted-playable-claim-blocked-by-explicit-capability-gap",
+                omitted.Length == 0
+                    ? "source-accounted-native-runtime-and-visual-promotion-pending"
+                    : "incomplete",
                 omitted.Length == 0 && unsupported.Length == 0 && unaccounted.Count == 0,
                 host._opening.IntroVideoPath,
                 HashFile(host._opening.IntroVideoPath),

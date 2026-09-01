@@ -36,20 +36,15 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
             guardian["messageCatalog"]["logicalPath"],
             "text\\english\\dialog\\acklint.msg",
         )
-        self.assertEqual(
-            [node["id"] for node in guardian["nodes"]],
-            ["Node001", "Node002", "Node003", "Node004", "Node005"],
-        )
-        self.assertEqual(
-            [option["messageId"] for option in guardian["nodes"][2]["options"]],
-            [114, 115, 116],
-        )
+        self.assertNotIn("nodes", guardian)
+        self.assertNotIn("preTrialPlayerArtFids", guardian)
+        self.assertNotIn("hostilityTrigger", guardian)
         self.assertEqual(profile["adapter"]["movementActionPointCost"], 1)
         self.assertEqual(
             profile["adapter"]["movementResolution"],
             "exact-adjacent-source-walk-mask-hex-v1",
         )
-        self.assertFalse(profile["adapter"]["targetTurns"])
+        self.assertTrue(profile["adapter"]["targetTurns"])
         self.assertFalse(profile["adapter"]["generalIntScripts"])
         self.assertTrue(profile["adapter"]["boundedGuardianDialogue"])
         self.assertIn("source-acklint-dialogue", profile["adapter"]["identity"])
@@ -86,7 +81,47 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
         self.assertIn("_state.PlayerActionPoints - _profile.MovementActionPointCost", combat)
         self.assertIn("TargetPlacementExact", combat)
         self.assertIn("internal bool Talk()", combat)
+        self.assertIn("internal bool LookAtGuardian()", combat)
+        self.assertIn('"look_at_p_proc"', combat)
         self.assertIn("internal bool SelectDialogueOption(int messageId)", combat)
+        turn_owner = (
+            ROOT / "runtime/src/Campaigns/Classic/ClassicCombatTurnOwner.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("BeginTargetTurn", turn_owner)
+        self.assertIn("sourceMaximumActionPoints", turn_owner)
+        self.assertIn("AdjacentAttackRequired", turn_owner)
+        self.assertIn("MovementRequired", turn_owner)
+        self.assertNotIn("Fallout1", turn_owner)
+        self.assertNotIn("Fallout2", turn_owner)
+        self.assertIn("ClassicCombatTurnOwner.BeginTargetTurn", combat)
+        self.assertIn("_contract.Critter.RuntimeAiPacket", combat)
+        self.assertIn("_contract.Critter.RuntimeTeam", combat)
+        self.assertIn("_state.IntWorldState.AttackRequests.Any", combat)
+        self.assertIn("TargetActionPoints", combat)
+        self.assertIn("TargetTurnCount", combat)
+        save = (
+            ROOT / "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartSave.cs"
+        ).read_text(encoding="utf-8")
+        proof = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("targetActionPoints = TempleConfrontation.TargetActionPoints", save)
+        self.assertIn("targetTurnCount = TempleConfrontation.TargetTurnCount", save)
+        self.assertIn("intWorldState = TempleConfrontation.IntWorldState.Save()", save)
+        self.assertIn("lastTargetTurnAction =", save)
+        self.assertIn('TryGetProperty("targetActionPoints"', save)
+        self.assertIn('TryGetProperty("targetTurnCount"', save)
+        self.assertIn('TryGetProperty("lastTargetTurnAction"', save)
+        self.assertIn("left.TargetActionPoints == right.TargetActionPoints", proof)
+        self.assertIn("left.TargetTurnCount == right.TargetTurnCount", proof)
+        self.assertIn("left.LastTargetTurnAction == right.LastTargetTurnAction", proof)
+        dialogue = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleGuardianDialogue.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("execution.DialogueEnded", dialogue)
+        self.assertIn("option.Target", dialogue)
         self.assertIn("confrontation.SelectDialogueOption(106)", proof)
         self.assertIn("confrontation.SelectDialogueOption(116)", proof)
         self.assertIn("confrontation.SelectDialogueOption(120)", proof)
@@ -104,7 +139,11 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
         self.assertIn("targetAiExecuted = false", proof)
         self.assertIn("targetHitPoints = TempleConfrontation.TargetHitPoints", save)
         self.assertIn("playerActionPoints = TempleConfrontation.PlayerActionPoints", save)
-        self.assertIn('opennv-fo2-character-arroyo-save/v10', save)
+        self.assertIn('opennv-fo2-character-arroyo-save/v15', save)
+        self.assertIn('confrontation.Loot() || !confrontation.State.CombatActive', proof)
+        self.assertIn('State.IntWorldState.AttackRequests.Count != 1', proof)
+        self.assertIn('scriptState = TempleConfrontation.ScriptState.Save()', save)
+        self.assertIn('ClassicIntWorldObjectState.Restore(intWorldState)', save)
         self.assertIn("ReadTempleExitTransition(", save)
         self.assertIn("ValidateTempleExitTransition(", save)
         self.assertIn("applied.TargetMapIndex != 4", save)

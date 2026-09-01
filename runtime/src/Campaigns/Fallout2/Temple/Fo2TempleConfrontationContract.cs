@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -14,6 +15,9 @@ internal sealed record Fo2TempleCritterStats(
     int MeleeDamage,
     int Sequence,
     int CriticalChance,
+    IReadOnlyList<int> DamageThresholds,
+    IReadOnlyList<int> DamageResistances,
+    IReadOnlyList<int> Skills,
     int AiPacket,
     int Team);
 
@@ -27,6 +31,25 @@ internal sealed record Fo2TempleWeaponStats(
     int ActionPointCostPrimary,
     int ActionPointCostSecondary,
     int AnimationCode);
+
+internal sealed record Fo2TempleEquippedAttack(
+    int InventorySerial,
+    string Pid,
+    string ObjectFlags,
+    string Hand,
+    int MinimumDamage,
+    int MaximumDamage,
+    int DamageType,
+    int MaximumRange,
+    int ActionPointCost,
+    int AnimationCode,
+    int MinimumStrength,
+    int CriticalFailureType,
+    int RoundsPerAttack,
+    int Caliber,
+    string AmmunitionPid,
+    int AmmunitionCapacity,
+    string HitResolution);
 
 internal sealed record Fo2TempleGuardianDialogueSegment(
     int? MessageId,
@@ -46,15 +69,6 @@ internal sealed record Fo2TempleGuardianDialogueNode(
     IReadOnlyList<Fo2TempleGuardianDialogueSegment> Reply,
     IReadOnlyList<Fo2TempleGuardianDialogueOption> Options);
 
-internal sealed record Fo2TempleGuardianHostilityTrigger(
-    int LocalVariable,
-    int PickupSetValue,
-    int CritterRequiredValue,
-    int CritterSetValueBeforeAttack,
-    bool PickupRequiresSourcePlayer,
-    bool CritterRequiresCanSeePlayer,
-    bool CritterAttacksPlayer);
-
 internal sealed record Fo2TempleGuardianScript(
     string Schema,
     string Authority,
@@ -70,7 +84,8 @@ internal sealed record Fo2TempleGuardianScript(
     string InitialNode,
     string TerminalNode,
     IReadOnlyDictionary<string, Fo2TempleGuardianDialogueNode> Nodes,
-    Fo2TempleGuardianHostilityTrigger Hostility,
+    IReadOnlyDictionary<int, string> DisplayMessages,
+    ClassicScriptProgram EffectProgram,
     string ContractSha256);
 
 internal sealed record Fo2TempleConfrontationCritter(
@@ -87,6 +102,7 @@ internal sealed record Fo2TempleConfrontationCritter(
     int CurrentActionPoints,
     int RuntimeAiPacket,
     int RuntimeTeam,
+    Fo2TempleEquippedAttack EquippedAttack,
     string PrototypeLogicalPath,
     string PrototypeSha256,
     string MessageLogicalPath,
@@ -151,6 +167,29 @@ internal sealed record Fo2TempleConfrontationContract(
                 critter.GetProperty("currentActionPoints").GetInt32(),
                 critter.GetProperty("runtimeAiPacket").GetInt32(),
                 critter.GetProperty("runtimeTeam").GetInt32(),
+                new Fo2TempleEquippedAttack(
+                    critter.GetProperty("equippedAttack").GetProperty("inventorySerial").GetInt32(),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "pid"),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "objectFlags"),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "hand"),
+                    critter.GetProperty("equippedAttack").GetProperty("minimumDamage").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("maximumDamage").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("damageType").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("maximumRange").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("actionPointCost").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("animationCode").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("minimumStrength").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("criticalFailureType").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("roundsPerAttack").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("caliber").GetInt32(),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "ammunitionPid"),
+                    critter.GetProperty("equippedAttack").GetProperty("ammunitionCapacity").GetInt32(),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "hitResolution")),
                 Fo2TemplePresentationCatalog.RequiredString(critterPrototype, "logicalPath"),
                 Fo2TemplePresentationCatalog.RequiredHash(critterPrototype, "sha256"),
                 Fo2TemplePresentationCatalog.RequiredString(critterMessage, "logicalPath"),
@@ -167,6 +206,12 @@ internal sealed record Fo2TempleConfrontationContract(
                     critterStats.GetProperty("meleeDamage").GetInt32(),
                     critterStats.GetProperty("sequence").GetInt32(),
                     critterStats.GetProperty("criticalChance").GetInt32(),
+                    critterStats.GetProperty("damageThresholds").EnumerateArray()
+                        .Select(row => row.GetInt32()).ToArray(),
+                    critterStats.GetProperty("damageResistances").EnumerateArray()
+                        .Select(row => row.GetInt32()).ToArray(),
+                    critterStats.GetProperty("skills").EnumerateArray()
+                        .Select(row => row.GetInt32()).ToArray(),
                     critterStats.GetProperty("aiPacket").GetInt32(),
                     critterStats.GetProperty("team").GetInt32())),
             new Fo2TempleConfrontationLoot(
@@ -221,6 +266,28 @@ internal sealed record Fo2TempleConfrontationContract(
             Critter.Stats.HitPoints <= 0 || Critter.Stats.ActionPoints <= 0 ||
             Critter.Stats.Team != Critter.RuntimeTeam ||
             Critter.Stats.AiPacket != Critter.RuntimeAiPacket ||
+            Critter.Stats.DamageThresholds.Count !=
+                Critter.Stats.DamageResistances.Count ||
+            Critter.Stats.DamageThresholds.Count == 0 ||
+            Critter.Stats.Skills.Count == 0 ||
+            Critter.Stats.DamageThresholds.Any(value => value < 0) ||
+            Critter.Stats.DamageResistances.Any(value => value < 0) ||
+            Critter.Stats.Skills.Any(value => value < 0) ||
+            Critter.EquippedAttack.InventorySerial != DefeatLoot.Serial ||
+            Critter.EquippedAttack.Pid != DefeatLoot.Pid ||
+            Critter.EquippedAttack.Hand != "right" ||
+            Critter.EquippedAttack.MinimumDamage != DefeatLoot.Weapon.MinimumDamage ||
+            Critter.EquippedAttack.MaximumDamage != DefeatLoot.Weapon.MaximumDamage ||
+            Critter.EquippedAttack.DamageType != DefeatLoot.Weapon.DamageType ||
+            Critter.EquippedAttack.MaximumRange != DefeatLoot.Weapon.MaximumRangePrimary ||
+            Critter.EquippedAttack.ActionPointCost != DefeatLoot.Weapon.ActionPointCostPrimary ||
+            Critter.EquippedAttack.AnimationCode != DefeatLoot.Weapon.AnimationCode ||
+            Critter.EquippedAttack.MinimumStrength != DefeatLoot.Weapon.MinimumStrength ||
+            Critter.EquippedAttack.RoundsPerAttack < 0 ||
+            Critter.EquippedAttack.AmmunitionCapacity < 0 ||
+            Critter.EquippedAttack.AmmunitionPid.Length != DefeatLoot.Pid.Length ||
+            !Critter.EquippedAttack.AmmunitionPid.All(Uri.IsHexDigit) ||
+            Critter.EquippedAttack.HitResolution != "engine-roll-required" ||
             DefeatLoot.Quantity <= 0 || DefeatLoot.Weapon.MinimumDamage <= 0 ||
             DefeatLoot.Weapon.MaximumDamage < DefeatLoot.Weapon.MinimumDamage ||
             DefeatLoot.Weapon.ActionPointCostPrimary <= 0 ||
@@ -250,9 +317,11 @@ internal sealed record Fo2TempleConfrontationContract(
         var nodes = source.GetProperty("nodes").EnumerateArray()
             .Select(ReadGuardianNode)
             .ToDictionary(row => row.Id, StringComparer.Ordinal);
-        var hostility = source.GetProperty("hostilityTrigger");
-        var pickup = hostility.GetProperty("pickupProcedure");
-        var critter = hostility.GetProperty("critterProcedure");
+        var displayMessages = source.GetProperty("displayMessages").EnumerateArray()
+            .ToDictionary(
+                row => row.GetProperty("messageId").GetInt32(),
+                row => Fo2TemplePresentationCatalog.RequiredString(row, "text"));
+        var effectProgram = ClassicScriptProgram.Parse(source.GetProperty("effectProgram"));
         var result = new Fo2TempleGuardianScript(
             Fo2TemplePresentationCatalog.RequiredString(source, "schema"),
             Fo2TemplePresentationCatalog.RequiredString(source, "authority"),
@@ -270,15 +339,47 @@ internal sealed record Fo2TempleConfrontationContract(
             Fo2TemplePresentationCatalog.RequiredString(source, "initialNode"),
             Fo2TemplePresentationCatalog.RequiredString(source, "terminalNode"),
             nodes,
-            new Fo2TempleGuardianHostilityTrigger(
-                pickup.GetProperty("localVariable").GetInt32(),
-                pickup.GetProperty("setValue").GetInt32(),
-                critter.GetProperty("requiredValue").GetInt32(),
-                critter.GetProperty("setValueBeforeAttack").GetInt32(),
-                pickup.GetProperty("requiresSourcePlayer").GetBoolean(),
-                critter.GetProperty("requiresCanSeePlayer").GetBoolean(),
-                critter.GetProperty("attackPlayer").GetBoolean()),
+            displayMessages,
+            effectProgram,
             Fo2TemplePresentationCatalog.RequiredHash(source, "contractSha256"));
+        var lookState = new ClassicScriptState();
+        var firstLook = effectProgram.ExecuteWithActions(
+            "look_at_p_proc", lookState, new ClassicScriptContext(false, false, default));
+        var repeatLook = effectProgram.ExecuteWithActions(
+            "look_at_p_proc", lookState, new ClassicScriptContext(false, false, default));
+        var lookMessageIds = firstLook.DisplayMessages.Concat(repeatLook.DisplayMessages)
+            .Select(row => row.MessageId).ToHashSet();
+        var talkEntries = result.PreTrialPlayerArtFids.Select(fid =>
+            effectProgram.ExecuteWithActions(
+                "talk_p_proc",
+                new ClassicScriptState(),
+                new ClassicScriptContext(false, false, default, fid))).ToArray();
+        bool DialogueMatches(Fo2TempleGuardianDialogueNode node)
+        {
+            var execution = effectProgram.ExecuteWithActions(
+                node.Id,
+                new ClassicScriptState(),
+                new ClassicScriptContext(false, false, default));
+            var reply = execution.DialogueReply.Select(segment =>
+                segment.PlayerName ? (int?)null : segment.Message!.Value.MessageId).ToArray();
+            var expectedReply = node.Reply.Select(segment => segment.MessageId).ToArray();
+            var options = execution.DialogueOptions.Select(option =>
+                (option.Message.MessageId, option.Target, option.MinimumIntelligence,
+                    option.MaximumIntelligence, option.Reaction)).ToArray();
+            var expectedOptions = node.Options.Select(option =>
+                (option.MessageId, option.Target, option.MinimumIntelligence,
+                    option.MaximumIntelligence, option.Reaction)).ToArray();
+            return execution.Executed && reply.SequenceEqual(expectedReply) &&
+                options.SequenceEqual(expectedOptions) &&
+                execution.DialogueReply.Where(segment => !segment.PlayerName).All(segment =>
+                    segment.Message!.Value.MessageListId == result.MessageListId) &&
+                execution.DialogueOptions.All(option =>
+                    option.Message.MessageListId == result.MessageListId);
+        }
+        var terminalExecution = effectProgram.ExecuteWithActions(
+            result.TerminalNode,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
         if (result.Schema != "opennv-fo2-acklint-guardian-script/v1" ||
             string.IsNullOrWhiteSpace(result.Authority) ||
             result.ScriptsListIndex != 750 ||
@@ -288,29 +389,31 @@ internal sealed record Fo2TempleConfrontationContract(
                 "scripts\\acklint.int", StringComparison.OrdinalIgnoreCase) ||
             !result.MessageLogicalPath.Equals(
                 "text\\english\\dialog\\acklint.msg", StringComparison.OrdinalIgnoreCase) ||
-            result.MessageListId != 751 || result.InitialNode != "Node001" ||
-            result.TerminalNode != "Node999" || result.Nodes.Count != 5 ||
-            !result.Nodes.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
-                new[] { "Node001", "Node002", "Node003", "Node004", "Node005" }) ||
-            result.Hostility != new Fo2TempleGuardianHostilityTrigger(5, 2, 2, 1, true, true, true) ||
+            result.MessageListId != 751 || result.Nodes.Count == 0 ||
+            !result.Nodes.ContainsKey(result.InitialNode) ||
+            talkEntries.Length == 0 || talkEntries.Any(entry =>
+                !entry.Executed || entry.OpenDialogueNode != result.InitialNode) ||
+            result.Nodes.Values.Any(node => !DialogueMatches(node)) ||
+            !terminalExecution.Executed || !terminalExecution.DialogueEnded ||
+            !firstLook.Executed || !firstLook.ScriptOverrides ||
+            firstLook.DisplayMessages.Count != 1 ||
+            firstLook.DisplayMessages[0].MessageListId != result.MessageListId ||
+            !repeatLook.Executed || !repeatLook.ScriptOverrides ||
+            repeatLook.DisplayMessages.Count != 1 ||
+            repeatLook.DisplayMessages[0].MessageListId != result.MessageListId ||
+            lookMessageIds.Count != 2 ||
+            !result.DisplayMessages.Keys.ToHashSet().SetEquals(lookMessageIds) ||
             !boundary.GetProperty("dialogueNodes").GetBoolean() ||
-            boundary.GetProperty("pickupToAttackTransition").GetBoolean() ||
+            !boundary.GetProperty("pickupToAttackTransition").GetBoolean() ||
             boundary.GetProperty("generalIntExecution").GetBoolean())
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint guardian script contract is invalid.");
-        var messages = result.Nodes.Values.SelectMany(node =>
-                node.Reply.Where(segment => segment.MessageId is not null)
-                    .Select(segment => segment.MessageId!.Value)
-                    .Concat(node.Options.Select(option => option.MessageId)))
-            .ToHashSet();
-        if (!messages.SetEquals(Enumerable.Range(103, 18)) ||
-            result.Nodes.Values.SelectMany(node => node.Options).Any(option =>
+        if (result.Nodes.Values.SelectMany(node => node.Options).Any(option =>
                 !result.Nodes.ContainsKey(option.Target) && option.Target != result.TerminalNode ||
                 (option.MinimumIntelligence is not null) ==
                     (option.MaximumIntelligence is not null) ||
-                option.MinimumIntelligence is not null && option.MinimumIntelligence != 4 ||
-                option.MaximumIntelligence is not null && option.MaximumIntelligence != 3 ||
-                option.Reaction != 50 || string.IsNullOrWhiteSpace(option.Text)))
+                option.MinimumIntelligence is < 0 || option.MaximumIntelligence is < 0 ||
+                string.IsNullOrWhiteSpace(option.Text)))
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint guardian dialogue graph is invalid.");
         return result;

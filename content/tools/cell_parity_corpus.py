@@ -428,6 +428,15 @@ def build_corpus(
     children = sorted(state.children.values(), key=lambda row: str(row["formKey"]))
     cells_by_key = {str(row["formKey"]): row for row in cells}
     children_by_key = {str(row["formKey"]): row for row in children}
+    for child in children:
+        enable_parent = child.get("enableParent")
+        if not isinstance(enable_parent, dict):
+            child["enableParentInitiallyDisabled"] = None
+            continue
+        parent = children_by_key.get(str(enable_parent["key"]))
+        child["enableParentInitiallyDisabled"] = (
+            None if parent is None else bool(parent["initiallyDisabled"])
+        )
 
     requirements: dict[FormKey, Counter[str]] = defaultdict(Counter)
     for cell in cells:
@@ -475,6 +484,15 @@ def build_corpus(
             gaps.append(gap_row("parent-cell-missing", key, target_form_key=cell_key))
         for parse_gap in child["parseGaps"]:
             gaps.append(gap_row("cell-child-parse-gap", key, detail=str(parse_gap)))
+        enable_parent = child.get("enableParent")
+        if isinstance(enable_parent, dict) and child["enableParentInitiallyDisabled"] is None:
+            gaps.append(
+                gap_row(
+                    "enable-parent-missing",
+                    key,
+                    target_form_key=str(enable_parent["key"]),
+                )
+            )
         base = child.get("baseOrActor")
         if isinstance(base, dict):
             base_key = str(base["key"])

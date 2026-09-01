@@ -1,16 +1,34 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
-
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
-/// <summary>One hash-bound SCRIPT_MEDIC look-at message; dialogue and combat stay outside this boundary.</summary>
+internal sealed record Fo1MedicDialogueNode(
+    string Procedure,
+    int ReplyMessageId,
+    string ReplyText,
+    int OptionMessageId,
+    string OptionText,
+    string OptionTarget,
+    int OptionReaction);
+
+/// <summary>One hash-bound SCRIPT_MEDIC look-at message and bounded decoded dialogue path.</summary>
 internal sealed record Fo1DestinationMedicLookContract(
     string Path, string Sha256, int Serial, int Tile, string Pid, string Fid,
     string PrototypeSha256, string ArtSha256, string MessageText, int MessageId,
-    IReadOnlyList<int> SourceWalkMaskRoute)
+    IReadOnlyList<int> SourceWalkMaskRoute, ClassicScriptProgram Program,
+    string DialogueEntryProcedure,
+    IReadOnlyDictionary<string, Fo1MedicDialogueNode> DialogueNodes,
+    IReadOnlySet<string> EffectDialogueTargets,
+    string HealingProcedure,
+    int HealingMessageId,
+    string HealingMessageText,
+    int GameTimeTicksPerMinute,
+    string RadiationFollowupProcedure,
+    IReadOnlySet<string> UnsupportedDialogueTargets)
 {
     private const string Schema = "opennv-fo1-destination-medic-look/v1";
     private const string GenericDoorSchema = "opennv-fo1-destination-generic-door/v1";
@@ -58,7 +76,7 @@ internal sealed record Fo1DestinationMedicLookContract(
         var semantics = root.GetProperty("semantics");
         if (Required(semantics, "procedure") != LookAtProcedure ||
             Required(semantics, "result") != DisplayMessageOnly ||
-            Required(semantics, "dialogue") != "unimplemented-fail-closed" ||
+            Required(semantics, "dialogue") != "decoded-bounded-option-results" ||
             Required(semantics, "combat") != "not-proven-by-look-at-only" ||
             Required(semantics, "actionPoints") != "not-source-backed")
             throw new InvalidOperationException("Fallout Medic look descriptor has unsupported behavior.");
@@ -66,6 +84,91 @@ internal sealed record Fo1DestinationMedicLookContract(
         var messageId = semantics.GetProperty("messageId").GetInt32();
         if (messageId < 0)
             throw new InvalidOperationException("Fallout Medic look descriptor message ID is invalid.");
+        var program = ClassicScriptProgram.Parse(root.GetProperty("effectProgram"));
+        var execution = program.ExecuteWithActions(
+            LookAtProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
+        if (!execution.Executed || !execution.ScriptOverrides ||
+            execution.DisplayMessages.Count != 1 ||
+            execution.DisplayMessages[0] != new ClassicScriptMessage(null, messageId))
+            throw new InvalidOperationException(
+                "Fallout Medic look descriptor does not execute its source message.");
+        var dialogue = root.GetProperty("dialogueResult");
+        var dialogueEntryProcedure = Required(dialogue, "entryProcedure");
+        var dialogueNodes = dialogue.GetProperty("nodes").EnumerateArray().Select(node =>
+        {
+            var procedure = Required(node, "procedure");
+            var reply = node.GetProperty("reply");
+            var option = node.GetProperty("option");
+            return new Fo1MedicDialogueNode(
+                procedure,
+                reply.GetProperty("messageId").GetInt32(),
+                Required(reply, "messageText"),
+                option.GetProperty("messageId").GetInt32(),
+                Required(option, "messageText"),
+                Required(option, "target"),
+                option.GetProperty("reaction").GetInt32());
+        }).ToDictionary(node => node.Procedure, StringComparer.Ordinal);
+        var unsupportedDialogueTargets = dialogue.GetProperty("unsupportedTargets")
+            .EnumerateArray().Select(target => target.GetString() ?? "")
+            .ToHashSet(StringComparer.Ordinal);
+        var effectDialogueTargets = dialogue.GetProperty("effectTargets")
+            .EnumerateArray().Select(target => target.GetString() ?? "")
+            .ToHashSet(StringComparer.Ordinal);
+        var healing = root.GetProperty("healingResult");
+        var healingProcedure = Required(healing, "procedure");
+        var healingMessageId = healing.GetProperty("messageId").GetInt32();
+        var healingMessageText = Required(healing, "messageText");
+        var gameTimeTicksPerMinute = healing.GetProperty("gameTicksPerMinute").GetInt32();
+        var radiationFollowupProcedure = Required(healing, "radiationFollowupProcedure");
+        var healingExecution = program.ExecuteWithActions(
+            healingProcedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
+        bool DialogueMatches(Fo1MedicDialogueNode node)
+        {
+            var dialogueExecution = program.ExecuteWithActions(
+                node.Procedure,
+                new ClassicScriptState(),
+                new ClassicScriptContext(false, false, default));
+            return dialogueExecution.Executed && dialogueExecution.DialogueReply.Count == 1 &&
+                dialogueExecution.DialogueOptions.Count == 1 &&
+                dialogueExecution.DialogueReply[0].Message!.Value.MessageId ==
+                    node.ReplyMessageId &&
+                dialogueExecution.DialogueOptions[0].Message.MessageId ==
+                    node.OptionMessageId &&
+                dialogueExecution.DialogueOptions[0].Target == node.OptionTarget &&
+                dialogueExecution.DialogueOptions[0].Reaction == node.OptionReaction;
+        }
+        if (Required(dialogue, "optionSelection") != "decoded-targets-only" ||
+            dialogueNodes.Count == 0 || !dialogueNodes.ContainsKey(dialogueEntryProcedure) ||
+            dialogueNodes.Values.Any(node => !DialogueMatches(node)) ||
+            unsupportedDialogueTargets.Any(string.IsNullOrWhiteSpace) ||
+            effectDialogueTargets.Count != 1 ||
+            !effectDialogueTargets.SetEquals([healingProcedure]) ||
+            !healingExecution.Executed || healingExecution.PlayerHealing != 0 ||
+            healingExecution.PlayerPoisonRemoved != 0 ||
+            healingExecution.GameTimeAdvanceMinutes != 0 ||
+            healingExecution.ClearedPlayerInjuries.Count != 0 ||
+            healingExecution.NextProcedure is not null ||
+            healingExecution.DisplayMessages.Count != 1 ||
+            healingExecution.DisplayMessages[0] !=
+                new ClassicScriptMessage(null, healingMessageId) ||
+            Required(healing, "healAmount") != "dude_max_hp-minus-dude_cur_hp" ||
+            Required(healing, "damageTimeAdvance") !=
+                "reevaluated-player-damage-after-heal-zero" ||
+            gameTimeTicksPerMinute <= 0 ||
+            string.IsNullOrWhiteSpace(radiationFollowupProcedure) ||
+            dialogueNodes.Values.Any(node =>
+                !dialogueNodes.ContainsKey(node.OptionTarget) &&
+                !effectDialogueTargets.Contains(node.OptionTarget) &&
+                !unsupportedDialogueTargets.Contains(node.OptionTarget)) ||
+            dialogueNodes.Keys.Any(unsupportedDialogueTargets.Contains) ||
+            dialogueNodes.Keys.Any(effectDialogueTargets.Contains) ||
+            effectDialogueTargets.Overlaps(unsupportedDialogueTargets))
+            throw new InvalidOperationException(
+                "Fallout Medic dialogue result does not execute its source actions.");
         var route = root.GetProperty("sourceWalkMaskRoute").GetProperty("pathTiles")
             .EnumerateArray().Select(value => value.GetInt32()).ToArray();
         var tile = actor.GetProperty("tile").GetInt32();
@@ -76,7 +179,17 @@ internal sealed record Fo1DestinationMedicLookContract(
             throw new InvalidOperationException("Fallout Medic look descriptor route is not source-adjacent.");
         return new Fo1DestinationMedicLookContract(
             resolved, sha256, actor.GetProperty("serial").GetInt32(), tile, Required(actor, "pid"),
-            Required(actor, "fid"), prototypeSha256, artSha256, messageText, messageId, route);
+            Required(actor, "fid"), prototypeSha256, artSha256, messageText, messageId, route,
+            program,
+            dialogueEntryProcedure,
+            dialogueNodes,
+            effectDialogueTargets,
+            healingProcedure,
+            healingMessageId,
+            healingMessageText,
+            gameTimeTicksPerMinute,
+            radiationFollowupProcedure,
+            unsupportedDialogueTargets);
     }
 
     internal object Report(bool viewed) => new
@@ -91,9 +204,26 @@ internal sealed record Fo1DestinationMedicLookContract(
             messageId = MessageId,
             messageText = MessageText,
             result = DisplayMessageOnly,
-            dialogue = "unimplemented-fail-closed",
+            dialogue = "decoded-bounded-option-results",
             combat = "not-proven-by-look-at-only",
             actionPoints = "not-source-backed"
+        },
+        dialogueResult = new
+        {
+            entryProcedure = DialogueEntryProcedure,
+            nodes = DialogueNodes.Values,
+            effectTargets = EffectDialogueTargets.Order(StringComparer.Ordinal),
+            unsupportedTargets = UnsupportedDialogueTargets.Order(StringComparer.Ordinal),
+            optionSelection = "decoded-targets-only",
+        },
+        healingResult = new
+        {
+            procedure = HealingProcedure,
+            messageId = HealingMessageId,
+            messageText = HealingMessageText,
+            healAmount = "dude_max_hp-minus-dude_cur_hp",
+            gameTimeTicksPerMinute = GameTimeTicksPerMinute,
+            radiationFollowupProcedure = RadiationFollowupProcedure,
         },
         sourceWalkMaskRoute = SourceWalkMaskRoute,
         viewed,

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
 using OpenNV.Runtime.SceneGraph;
@@ -15,6 +16,27 @@ namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal partial class Fo1TacticalSession
 {
+    private string ControlsText() => _firstPersonModeActive
+        ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • I inventory • P Pip-Boy • Esc mouse"
+        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save";
+
+    private void RefreshMobReadability()
+    {
+        var tactical = _camera is null ||
+            _camera.Projection == Camera3D.ProjectionType.Orthogonal;
+        foreach (var mob in _mobs)
+            mob.UpdateReadability(_playerTile, tactical);
+    }
+
+    private static Label HudLabel(Container parent)
+    {
+        var label = new Label();
+        label.AddThemeColorOverride("font_color", new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point68f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point96f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point48f));
+        label.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt16);
+        parent.AddChild(label);
+        return label;
+    }
+
     internal Fo1PipBoy2000 AttachPipBoy(
         Fo1CharacterStartContract contract,
         Fo1CharacterProfile profile)
@@ -295,12 +317,46 @@ internal partial class Fo1TacticalSession
                 "Fallout inventory use requires the owned inventory screen.");
         var flare = _destinationFlareUse;
         if (flare is null || symbol != flare.Symbol || InventoryObjects(symbol) <= 0 ||
+            _destinationFlareExpired || _destinationFlareScriptState.Flag("lit") ||
             _destinationInventoryInteraction is null || !_lootedMapInventoryHostSerials.Contains(flare.HostSerial))
             return false;
-        _destinationFlareLit = true;
-        _status = $"Used {symbol} through its source script; time-based expiry remains fail-closed.";
+        if (!flare.Program.Execute(
+                "use_proc",
+                _destinationFlareScriptState,
+                new ClassicScriptContext(
+                    SourceIsPlayer: true,
+                    CanSeePlayer: false,
+                    GameTime: _classicScriptGameTime)) ||
+            !_destinationFlareScriptState.Flag("lit"))
+            throw new InvalidOperationException(
+                "Fallout flare source-script use did not publish its lit state.");
+        _status = $"Used {symbol} through its source script; its decoded expiry is active.";
         RefreshHud();
         Save();
+        return true;
+    }
+
+    private bool ProcessClassicTimedWorldActions()
+    {
+        var flare = _destinationFlareUse;
+        if (flare is null || _destinationFlareExpired ||
+            !_destinationFlareScriptState.Flag("lit"))
+            return false;
+        var execution = flare.Program.ExecuteWithActions(
+            "start_proc",
+            _destinationFlareScriptState,
+            new ClassicScriptContext(
+                SourceIsPlayer: false,
+                CanSeePlayer: false,
+                GameTime: _classicScriptGameTime));
+        if (!execution.Executed)
+            return false;
+        if (!execution.DestroySelf || InventoryObjects(flare.Symbol) <= 0)
+            throw new InvalidOperationException(
+                "Fallout flare expiry did not execute its decoded destruction.");
+        _inventoryObjects[flare.Symbol] = InventoryObjects(flare.Symbol) - 1;
+        _destinationFlareExpired = true;
+        _status = $"{flare.Symbol} expired and was removed by its source script.";
         return true;
     }
 

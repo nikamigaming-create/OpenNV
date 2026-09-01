@@ -121,6 +121,7 @@ internal partial class CellPlayer : CharacterBody3D
     internal string LastMovementState { get; private set; } = "none";
     internal string LastActivationCollider { get; private set; } = "none";
     internal string LastActivationDoorFormId { get; private set; } = "none";
+    internal int DesktopActivationEdges { get; private set; }
     internal Vector3 LastBlockingNormal { get; private set; }
     internal Node? LastBlockingCollider { get; private set; }
     internal Vector3? LastBlockingPosition { get; private set; }
@@ -181,11 +182,10 @@ internal partial class CellPlayer : CharacterBody3D
         Vector3 targetOriginGameUnits,
         DoorInstance.TeleportDestination destination)
     {
-        var localPosition = new Vector3(
-            destination.PositionGameUnits.X - targetOriginGameUnits.X,
-            destination.PositionGameUnits.Z - targetOriginGameUnits.Z,
-            -(destination.PositionGameUnits.Y - targetOriginGameUnits.Y));
-        var floorPosition = targetRoot.ToGlobal(localPosition);
+        var floorPosition = ResolvePortalArrivalFloorPosition(
+            targetRoot,
+            targetOriginGameUnits,
+            destination);
         var targetBasis = targetRoot.GlobalBasis.Orthonormalized() *
             new Basis(Vector3.Up, destination.YawGodotRadians);
         var bodyPosition = floorPosition +
@@ -201,6 +201,18 @@ internal partial class CellPlayer : CharacterBody3D
         var scale = GlobalBasis.Scale;
         GlobalTransform = new Transform3D(targetBasis.Scaled(scale), bodyPosition);
         Velocity = Vector3.Zero;
+    }
+
+    internal static Vector3 ResolvePortalArrivalFloorPosition(
+        Node3D targetRoot,
+        Vector3 targetOriginGameUnits,
+        DoorInstance.TeleportDestination destination)
+    {
+        var localPosition = new Vector3(
+            destination.PositionGameUnits.X - targetOriginGameUnits.X,
+            destination.PositionGameUnits.Z - targetOriginGameUnits.Z,
+            -(destination.PositionGameUnits.Y - targetOriginGameUnits.Y));
+        return targetRoot.ToGlobal(localPosition);
     }
 
     internal void ClearOwnedNavigation()
@@ -685,6 +697,12 @@ internal partial class CellPlayer : CharacterBody3D
             _session!.OpenContainer(container);
             return true;
         }
+        var craftingStation = Ancestor<CraftingStationInstance>(collider);
+        if (craftingStation is not null)
+        {
+            _session!.OpenCrafting(craftingStation);
+            return true;
+        }
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
         {
@@ -988,6 +1006,7 @@ internal partial class CellPlayer : CharacterBody3D
             DropHeldPickup();
         if (_activationEnabled && Input.IsActionJustPressed(input.Activate.Action))
         {
+            DesktopActivationEdges++;
             bool accepted;
             if (_activePool is null)
                 accepted = Activate(_camera);

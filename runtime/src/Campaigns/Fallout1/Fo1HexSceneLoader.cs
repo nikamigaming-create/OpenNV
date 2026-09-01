@@ -269,6 +269,8 @@ internal static class Fo1HexSceneLoader
         session.Configure(
             sceneSha256,
             RequiredString(sourceMap, "sha256"),
+            source.GetProperty("coverage")
+                .GetProperty("multihexBlockersWithCentralHexOnly").GetInt32() == 0,
             walkable,
             floorIds,
             floorNames,
@@ -420,6 +422,13 @@ internal static class Fo1HexSceneLoader
                     "Fallout restored destination has no explicit exit-grid elevation."),
                 includeSourcePlayer: false);
             destinationViewer.SetStatusVisible(false);
+            if (session.DestinationGenericDoor is { } destinationDoor &&
+                session.DestinationGenericDoorSession is { } doorSession)
+                session.AttachDestinationGenericDoorPlayback(
+                    destinationViewer.BindDoorPlayback(
+                        destinationDoor,
+                        doorSession,
+                        state => session.ApplyDestinationDoorPlaybackState(state)));
             destinationViewer.ActivateCamera();
         }
         var caveCutaway = new Fo1CaveCutaway();

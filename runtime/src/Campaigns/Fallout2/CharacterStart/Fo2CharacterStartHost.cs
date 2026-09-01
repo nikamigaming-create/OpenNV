@@ -1,12 +1,16 @@
 using Godot;
+using System.Text.Json;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Campaigns.Fallout1;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 public sealed partial class Fo2CharacterStartHost : Node3D
 {
+    private const string RetailRandomContractResource =
+        "res://config/classic-retail-random-fo2-1.02-v1.json";
     private Fo2ArroyoCavesPresentationCatalog _arroyo = null!;
     private Fo2TemplePresentationCatalog _temple = null!;
     private Fo2TempleTransitionCatalog _transition = null!;
@@ -20,13 +24,19 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private string? _arrivalVisualProofRoot;
     private string? _villageArrivalCaptureRoot;
     private string _savePath = "";
+    private ClassicRetailRandomContract _retailRandomContract = null!;
+    private ClassicRetailRandomLifecycleState _retailRandomLifecycle = null!;
     private bool _persistenceEnabled;
+    private IReadOnlyList<Fo2AdjacentMapSession> _adjacentSessions =
+        Array.Empty<Fo2AdjacentMapSession>();
+    private Fo2AdjacentMapSession? _activeAdjacentSession;
 
     internal Fo2CharacterPicker Picker { get; private set; } = null!;
     internal Fo2CharacterSelection? SelectedCharacter { get; private set; }
     internal Fo2ArroyoCavesSceneCoverage? Scene { get; private set; }
     internal Fo2TempleSceneCoverage? TempleScene { get; private set; }
     internal Fo2ArvillagSceneCoverage? VillageScene { get; private set; }
+    internal Fo2MapSceneBuildCoverage? AdjacentScene { get; private set; }
     internal Fo2ArroyoClassicGameplayHud? VillageHud { get; private set; }
     internal Fo2TempleConfrontationRuntime? TempleConfrontation { get; private set; }
     internal Fo2TempleTransitionRuntime? TempleExitRuntime { get; private set; }
@@ -38,6 +48,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2OpeningTailHandoff? OpeningHandoff { get; private set; }
     internal Task? OpeningHandoffTask { get; private set; }
     internal string SavePath => _savePath;
+    internal ClassicRetailRandomLifecycleState RetailRandomLifecycle =>
+        _retailRandomLifecycle;
     internal Fo2ArroyoPlayerPresentationSource MalePlayerPresentation =>
         _malePresentation.Source;
 
@@ -46,6 +58,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         try
         {
             var runtimeConfiguration = RuntimeConfiguration.Load();
+            _retailRandomContract = LoadRetailRandomContract();
+            _retailRandomLifecycle =
+                ClassicRetailRandomLifecycle.InitializeFromExactBuildClock(
+                    _retailRandomContract);
             GetWindow().Size = new Vector2I(
                 runtimeConfiguration.Capture.ExpectedWidthPixels,
                 runtimeConfiguration.Capture.ExpectedHeightPixels);
@@ -95,6 +111,31 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     Fo2ArroyoCavesProofOptions.Require(options, "fo2-arvillag-cache"),
                     _trialRoute)
                 : null;
+            var hasAdjacentJoins = options.TryGetValue(
+                "classic-adjacent-map-catalog", out var joinsPath);
+            var adjacentCachePaths = new List<string>();
+            if (options.TryGetValue("fo2-adjacent-map-cache", out var adjacentCachePath))
+                adjacentCachePaths.Add(adjacentCachePath);
+            if (options.TryGetValue("fo2-adjacent-map-caches", out var adjacentCacheList))
+                adjacentCachePaths.AddRange(adjacentCacheList.Split(
+                    Path.PathSeparator,
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            var hasAdjacentCache = adjacentCachePaths.Count > 0;
+            if (hasAdjacentJoins || hasAdjacentCache)
+            {
+                if (!hasAdjacentJoins || !hasAdjacentCache)
+                    throw new InvalidOperationException(
+                        "Fallout 2 adjacent play requires its join catalog and map cache.");
+                var joins = ClassicAdjacentMapCatalog.Load(joinsPath!);
+                _adjacentSessions = adjacentCachePaths
+                    .Select(path => new Fo2AdjacentMapSession(
+                        joins, Fo2AdjacentMapPresentation.Load(path)))
+                    .ToArray();
+                if (_adjacentSessions.Select(row => row.DestinationMapIndex)
+                    .Distinct().Count() != _adjacentSessions.Count)
+                    throw new InvalidOperationException(
+                        "Fallout 2 adjacent cache set duplicates a destination MAP.");
+            }
             _persistenceEnabled =
                 options.ContainsKey("fo2-save") ||
                 (!options.ContainsKey("fo2-character-start-proof") &&
@@ -231,7 +272,12 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 return;
             }
             if (_persistenceEnabled)
-                PersistCurrentState();
+            {
+                if (AdjacentScene is null)
+                    PersistCurrentState();
+                else
+                    WriteAdjacentState();
+            }
             GetTree().Quit();
         }
     }
@@ -246,12 +292,22 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             throw new InvalidOperationException(
                 "Fallout 2 character start may hand off exactly once.");
         character.Validate(_characterStart);
+        _retailRandomLifecycle = restoredState is null
+            ? ClassicRetailRandomLifecycle.ResetForNewGame(
+                _retailRandomLifecycle, _retailRandomContract)
+            : ClassicRetailRandomLifecycle.ResetForLoad(
+                _retailRandomLifecycle, _retailRandomContract);
         SelectedCharacter = character;
         Picker.Visible = false;
         Picker.SetProcessInput(false);
         var selectedPresentation = _characterStart.PresentationFor(
             character,
             _malePresentation);
+        _retailRandomLifecycle = ClassicRetailRandomLifecycle.RequireSourceCall(
+            _retailRandomLifecycle,
+            _retailRandomContract,
+            "arroyo-map-load",
+            "exact-build-engine-script-interleaving-before-source-map-enter-random");
         Scene = Fo2ArroyoCavesScene.Build(_arroyo, this);
         Runtime = Fo2ArroyoCavesPlayerRuntime.Build(
             _arroyo,
@@ -306,6 +362,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 restoredState.CurrentTile,
                 restoredState.Position,
                 restoredState.Rotation);
+            if (_adjacentSessions.Count > 0 && File.Exists(AdjacentSavePath))
+                RestoreAdjacentState(player);
             if (restoredState.MapIndex != 4 &&
                 restoredState.TempleExitTransition is not null)
             {
@@ -370,6 +428,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             $"fid={selectedPresentation.Fid} restored={restoredState is not null}");
     }
 
+    private static ClassicRetailRandomContract LoadRetailRandomContract()
+    {
+        var bytes = Godot.FileAccess.GetFileAsBytes(RetailRandomContractResource);
+        if (bytes.Length == 0)
+            throw new FileNotFoundException(
+                "Fallout 2 retail random contract is missing.",
+                RetailRandomContractResource);
+        using var document = JsonDocument.Parse(bytes);
+        return ClassicRetailRandomContract.Parse(document.RootElement);
+    }
+
     private async Task RunOpeningTail(
         Fo2OpeningTailHandoff handoff,
         Fo2OpeningTailContract contract,
@@ -398,7 +467,133 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         if (player.CurrentMapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
             player.CurrentTile == _arroyo.LiveExit.SourceTile)
             EnterTemple(_arroyo.LiveExit, null);
+        if (_adjacentSessions.Count > 0 && AdjacentScene is null &&
+            player.CurrentMapIndex == Fo2ArvillagPresentationCatalog.MapIndex)
+        {
+            var committed = _adjacentSessions[0].TryCommit(player);
+            if (committed is not null)
+            {
+                _activeAdjacentSession = _adjacentSessions.SingleOrDefault(
+                    row => row.CanActivate(committed.Join.Destination)) ??
+                    throw new InvalidOperationException(
+                        "Fallout 2 adjacent destination has no decoded cache.");
+                PersistCurrentState();
+                AdjacentScene = _activeAdjacentSession.Activate(
+                    this, player, committed.Join.Destination);
+                if (VillageScene is not null)
+                    VillageScene.Root.Visible = false;
+                WriteAdjacentState();
+                return;
+            }
+        }
+        if (_activeAdjacentSession is not null && AdjacentScene is not null)
+        {
+            var committed = _activeAdjacentSession.TryCommit(player);
+            if (committed is not null && committed.Join.Destination.MapIndex ==
+                    Fo2ArvillagPresentationCatalog.MapIndex)
+            {
+                var village = VillageScene ?? throw new InvalidOperationException(
+                    "Fallout 2 adjacent return has no ARVILLAG presentation.");
+                var walkable = VillageWalkable();
+                player.EnterAdjacentMap(
+                    village.Root,
+                    committed.Join.Destination,
+                    walkable,
+                    _village!.WalkMaskSha256,
+                    _village.ManifestSha256);
+                village.Root.Visible = true;
+                AdjacentScene.Root.QueueFree();
+                AdjacentScene = null;
+                _activeAdjacentSession = null;
+                if (File.Exists(AdjacentSavePath))
+                    File.Delete(AdjacentSavePath);
+                PersistCurrentState();
+                return;
+            }
+        }
+        if (AdjacentScene is not null)
+        {
+            WriteAdjacentState();
+            return;
+        }
         PersistCurrentState();
+    }
+
+    private string AdjacentSavePath => _savePath + ".adjacent-map.json";
+
+    private IReadOnlySet<int> VillageWalkable()
+    {
+        var village = _village ?? throw new InvalidOperationException(
+            "Fallout 2 ARVILLAG source presentation is unavailable.");
+        var noBlock = Fo2TempleTopologyProfile.Load(_temple).ObjectNoBlockFlag;
+        var blocked = village.ObjectPlacements
+            .Where(row => row.Tile >= 0 && row.Blocking(noBlock))
+            .Select(row => row.Tile)
+            .ToHashSet();
+        var walkable = Enumerable.Range(0, Fo1HexMath.Width * Fo1HexMath.Height)
+            .Where(tile =>
+                (village.TileEntries[Fo1HexMath.FloorIndex(tile)] &
+                    Fo2MapSceneBuilder.FloorIdMask) !=
+                    Fo2ArvillagPresentationCatalog.DefaultFloorTileId &&
+                !blocked.Contains(tile))
+            .ToHashSet();
+        if (walkable.Count != village.WalkableHexes)
+            throw new InvalidOperationException(
+                "Fallout 2 ARVILLAG runtime walk topology drifted.");
+        return walkable;
+    }
+
+    private void WriteAdjacentState()
+    {
+        var player = Runtime?.Player ?? throw new InvalidOperationException(
+            "Fallout 2 adjacent save has no player.");
+        var session = _activeAdjacentSession ?? throw new InvalidOperationException(
+            "Fallout 2 adjacent save has no session.");
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            schema = "opennv-fo2-adjacent-map-save/v1",
+            joinCatalogSha256 = session.JoinCatalogSha256,
+            destinationCacheSha256 = session.DestinationCacheSha256,
+            mapIndex = player.CurrentMapIndex,
+            mapSha256 = player.CurrentMapSha256,
+            elevation = player.CurrentElevation,
+            tile = player.CurrentTile,
+            rotation = player.Presentation.Direction,
+        });
+        var temporary = AdjacentSavePath + ".tmp";
+        File.WriteAllBytes(temporary, payload);
+        File.Move(temporary, AdjacentSavePath, true);
+    }
+
+    private void RestoreAdjacentState(Fo2ArroyoCavesPlayerBody player)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllBytes(AdjacentSavePath));
+        var state = document.RootElement;
+        if (state.GetProperty("schema").GetString() != "opennv-fo2-adjacent-map-save/v1")
+            throw new InvalidOperationException("Fallout 2 adjacent save provenance drifted.");
+        var endpoint = new ClassicMapEndpoint(
+            state.GetProperty("mapIndex").GetInt32(),
+            null,
+            state.GetProperty("mapSha256").GetString()!,
+            state.GetProperty("tile").GetInt32(),
+            state.GetProperty("elevation").GetInt32(),
+            state.GetProperty("rotation").GetInt32());
+        _activeAdjacentSession = _adjacentSessions.SingleOrDefault(row =>
+            row.CanActivate(endpoint) &&
+            state.GetProperty("joinCatalogSha256").GetString() == row.JoinCatalogSha256 &&
+            state.GetProperty("destinationCacheSha256").GetString() ==
+                row.DestinationCacheSha256) ?? throw new InvalidOperationException(
+                    "Fallout 2 adjacent save provenance drifted.");
+        AdjacentScene = _activeAdjacentSession.Activate(this, player, endpoint);
+        player.Restore(
+            endpoint.Tile,
+            Fo1HexMath.Center(endpoint.Tile) +
+                Vector3.Up * (Runtime?.Profile.SpawnCenterHeightMeters ??
+                    throw new InvalidOperationException(
+                        "Fallout 2 adjacent restore has no player profile.")),
+            endpoint.Rotation!.Value);
+        if (VillageScene is not null)
+            VillageScene.Root.Visible = false;
     }
 
     private void EnterTemple(
@@ -433,6 +628,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 "Fallout 2 Temple confrontation has no selected character."),
             _characterStart.Inventory,
             TempleExitRuntime,
+            _retailRandomContract,
+            () => _retailRandomLifecycle,
+            CommitRetailRandomLifecycle,
             restoredConfrontation);
         if (_persistenceEnabled)
             TempleConfrontation.StateChanged += OnTempleConfrontationStateChanged;
@@ -443,6 +641,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             $"source={exit.SourceMapIndex}:{exit.SourceTile} " +
             $"target={exit.TargetMapIndex}:{exit.TargetTile} " +
             $"elevation={exit.TargetElevation} rotation={exit.TargetRotation}");
+    }
+
+    private void CommitRetailRandomLifecycle(
+        ClassicRetailRandomLifecycleState source,
+        ClassicRetailRandomLifecycleState result)
+    {
+        if (_retailRandomLifecycle != source)
+            throw new InvalidOperationException(
+                "Fallout 2 retail random lifecycle changed during INT dispatch.");
+        result.Validate(_retailRandomContract);
+        _retailRandomLifecycle = result;
     }
 
     internal void EnterTempleAfterTrial()

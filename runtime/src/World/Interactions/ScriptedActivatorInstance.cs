@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Gameplay.Items;
 
 namespace OpenNV.Runtime.World.Interactions;
 
@@ -23,10 +24,7 @@ internal sealed partial class ScriptedActivatorInstance : PickupInstance
         Contract = contract;
         base.Configure(
             referenceFormId,
-            baseFormId,
-            baseEditorId,
-            displayName: null,
-            recordType: "ACTI",
+            new ItemDefinition(baseFormId, baseEditorId, null, "ACTI", null, null),
             count: 0,
             weapon: null);
         Name = $"SCRIPTED_ACTIVATOR_{referenceFormId}_{baseEditorId}";

@@ -35,9 +35,13 @@ internal sealed record OpeningCampaignState(
     OpeningTransformState PlayerTransform,
     OpeningTransformState GuideTransform)
 {
-    internal const string ExpectedSchema = "opennv-opening-campaign-state/v6";
+    internal const string ExpectedSchema = "opennv-opening-campaign-state/v7";
 
     internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
+    internal OpeningGuidePackageState? GuidePackage { get; init; }
+    internal IReadOnlyDictionary<string, OpeningTransformState> OrdinaryActorTransforms
+    { get; init; } = new Dictionary<string, OpeningTransformState>(
+            StringComparer.OrdinalIgnoreCase);
 
     internal static OpeningCampaignState Parse(JsonElement source)
     {
@@ -86,6 +90,16 @@ internal sealed record OpeningCampaignState(
                 weapon.ValueKind == JsonValueKind.Object
                 ? OpeningEquippedWeaponState.Parse(weapon)
                 : null,
+            GuidePackage = OpeningGuidePackageState.Parse(
+                source.GetProperty(nameof(GuidePackage))),
+            OrdinaryActorTransforms = source.TryGetProperty(
+                    nameof(OrdinaryActorTransforms), out var ordinaryTransforms)
+                ? ordinaryTransforms.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => OpeningTransformState.Parse(value.Value),
+                    StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, OpeningTransformState>(
+                    StringComparer.OrdinalIgnoreCase),
         };
         result.Validate();
         return result;
@@ -131,6 +145,13 @@ internal sealed record OpeningCampaignState(
         foreach (var item in Inventory)
             item.Validate();
         EquippedWeapon?.Validate();
+        GuidePackage?.Validate();
+        if (OrdinaryActorTransforms.Keys.Any(value =>
+                FalloutFormId.Normalize(value) != value))
+            throw new InvalidOperationException(
+                "Saved ordinary actor transform identity is invalid.");
+        foreach (var transform in OrdinaryActorTransforms.Values)
+            transform.Validate();
         if (EquippedWeapon is { } weapon &&
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>
@@ -171,6 +192,35 @@ internal sealed record OpeningCampaignState(
         source.EnumerateArray().Select(value => value.GetString()!).ToArray();
 }
 
+internal sealed record OpeningGuidePackageState(
+    string PackageFormId,
+    string AnimationLogicalPath,
+    double AnimationPositionSeconds,
+    bool Arrived)
+{
+    internal static OpeningGuidePackageState? Parse(JsonElement source)
+    {
+        if (source.ValueKind == JsonValueKind.Null)
+            return null;
+        if (source.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Saved guide package state is invalid.");
+        return new OpeningGuidePackageState(
+            source.GetProperty(nameof(PackageFormId)).GetString()!,
+            source.GetProperty(nameof(AnimationLogicalPath)).GetString()!,
+            source.GetProperty(nameof(AnimationPositionSeconds)).GetDouble(),
+            source.GetProperty(nameof(Arrived)).GetBoolean());
+    }
+
+    internal void Validate()
+    {
+        if (FalloutFormId.Normalize(PackageFormId) != PackageFormId ||
+            string.IsNullOrWhiteSpace(AnimationLogicalPath) ||
+            !double.IsFinite(AnimationPositionSeconds) ||
+            AnimationPositionSeconds < 0.0)
+            throw new InvalidOperationException("Saved guide package state is invalid.");
+    }
+}
+
 internal sealed record OpeningCharacterAppearanceState(
     string RaceFormId,
     string HairFormId,
@@ -179,6 +229,8 @@ internal sealed record OpeningCharacterAppearanceState(
     string FaceAsymmetricGeometrySha256,
     string FaceSymmetricTextureSha256,
     IReadOnlyDictionary<string, float> FaceGeometryControlValues,
+    IReadOnlyDictionary<string, float> FaceTextureControlValues,
+    float? FaceAgeRawValue,
     CharacterBodyProportions BodyProportions,
     string PreviewMode)
 {
@@ -205,6 +257,16 @@ internal sealed record OpeningCharacterAppearanceState(
                     value => value.Name,
                     value => value.Value.GetSingle(),
                     StringComparer.Ordinal),
+            source.TryGetProperty(nameof(FaceTextureControlValues), out var textureValues)
+                ? textureValues.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => value.Value.GetSingle(),
+                    StringComparer.Ordinal)
+                : new Dictionary<string, float>(StringComparer.Ordinal),
+            source.TryGetProperty(nameof(FaceAgeRawValue), out var ageValue) &&
+                ageValue.ValueKind != JsonValueKind.Null
+                    ? ageValue.GetSingle()
+                    : null,
             proportions,
             previewMode);
     }
@@ -220,6 +282,9 @@ internal sealed record OpeningCharacterAppearanceState(
             FaceGeometryControlValues.Count == 0 ||
             FaceGeometryControlValues.Keys.Any(string.IsNullOrWhiteSpace) ||
             FaceGeometryControlValues.Values.Any(value => !float.IsFinite(value)) ||
+            FaceTextureControlValues.Keys.Any(string.IsNullOrWhiteSpace) ||
+            FaceTextureControlValues.Values.Any(value => !float.IsFinite(value)) ||
+            FaceAgeRawValue is { } age && !float.IsFinite(age) ||
             PreviewMode is not ("3d" or "2d"))
             throw new InvalidOperationException(
                 "Saved opening character appearance state is invalid.");
@@ -238,6 +303,8 @@ internal sealed record OpeningEquippedWeaponState(
     int ClipSize,
     int AmmoInMagazine)
 {
+    internal int? AnimationType { get; init; }
+
     internal static OpeningEquippedWeaponState Parse(JsonElement source) => new(
         source.GetProperty(nameof(WeaponFormId)).GetString()!,
         source.GetProperty(nameof(AmmoFormId)).ValueKind == JsonValueKind.String
@@ -245,13 +312,20 @@ internal sealed record OpeningEquippedWeaponState(
             : null,
         source.GetProperty(nameof(Damage)).GetInt32(),
         source.GetProperty(nameof(ClipSize)).GetInt32(),
-        source.GetProperty(nameof(AmmoInMagazine)).GetInt32());
+        source.GetProperty(nameof(AmmoInMagazine)).GetInt32())
+    {
+        AnimationType = source.TryGetProperty(nameof(AnimationType), out var animationType) &&
+            animationType.ValueKind != JsonValueKind.Null
+                ? animationType.GetInt32()
+                : null,
+    };
 
     internal void Validate()
     {
         if (FalloutFormId.Normalize(WeaponFormId) != WeaponFormId ||
             AmmoFormId is not null && FalloutFormId.Normalize(AmmoFormId) != AmmoFormId ||
-            Damage <= 0 || ClipSize <= 0 || AmmoInMagazine < 0 || AmmoInMagazine > ClipSize)
+            Damage <= 0 || ClipSize <= 0 || AmmoInMagazine < 0 ||
+            AmmoInMagazine > ClipSize || AnimationType is < 0)
             throw new InvalidOperationException("Saved opening weapon state is invalid.");
     }
 }

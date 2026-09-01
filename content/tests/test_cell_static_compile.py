@@ -174,9 +174,9 @@ class CellStaticCompileTest(unittest.TestCase):
         )
         self.assertEqual(
             set(profile["supportedBaseRecordTypes"]),
-            {"ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "SOUN", "STAT"},
+            {"ACTI", "CONT", "DOOR", "LIGH", "MISC", "MSTT", "SCOL", "SOUN", "STAT"},
         )
-        for record_type in ("ACTI", "CONT", "DOOR", "MSTT", "SCOL", "STAT"):
+        for record_type in ("ACTI", "CONT", "DOOR", "MISC", "MSTT", "SCOL", "STAT"):
             with self.subTest(record_type=record_type):
                 policy = profile["presentationPolicies"][record_type]
                 self.assertEqual(policy["kind"], "static-model")
