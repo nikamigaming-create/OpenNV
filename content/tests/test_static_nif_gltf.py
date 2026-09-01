@@ -47,7 +47,10 @@ from nif_decoder import (  # noqa: E402
     load_nif_decoder_contract,
 )
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
-from scene_asset_pipeline import authored_collision_source  # noqa: E402
+from scene_asset_pipeline import (  # noqa: E402
+    authored_collision_face_selection,
+    authored_collision_source,
+)
 
 
 def identity_transform(target: object) -> None:
@@ -429,6 +432,38 @@ def synthetic_fallout_animation(user_version_2: int, root: object) -> bytes:
 
 
 class StaticNifGltfTest(unittest.TestCase):
+    def test_owned_road_face_selection_is_path_and_collision_source_bound(self) -> None:
+        packed = "NIF-authored-bhk-packed-triangles"
+        self.assertEqual(
+            authored_collision_face_selection(
+                "meshes\\landscape\\roads\\roadchunkcluster01.nif",
+                packed,
+            ),
+            "source-upward-walkable-deck",
+        )
+        self.assertEqual(
+            authored_collision_face_selection(
+                "meshes/scol/scolroadstraightlongbcapped02b.nif",
+                packed,
+            ),
+            "source-upward-walkable-deck",
+        )
+        self.assertEqual(
+            authored_collision_face_selection(
+                "meshes\\architecture\\goodsprings\\roadsidewall.nif",
+                packed,
+            ),
+            "all-source-faces",
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires its packed-triangle source contract",
+        ):
+            authored_collision_face_selection(
+                "meshes\\landscape\\roads\\roadchunk01.nif",
+                "unsupported-or-absent",
+            )
+
     def test_fallout_alternate_animation_identity_is_controller_sequence_only(self) -> None:
         contract = load_nif_decoder_contract()
         for alternate_user_version_2 in contract.animation_user_version_2:

@@ -33,6 +33,18 @@ class FnvExteriorSpatialContractTest(unittest.TestCase):
         self.assertIn("var margin = bounds.Size.Length();", renderer)
         self.assertNotIn("CustomAabb", renderer)
 
+    def test_road_collision_consumes_compiler_face_selection_not_editor_ids(self):
+        loader = (
+            ROOT / "runtime" / "src" / "World" / "Cells" / "CellContentLoader.cs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('collision.GetProperty("faceSelection")', loader)
+        self.assertIn(
+            'collisionFaceSelections[assetId] == "source-upward-walkable-deck"',
+            loader,
+        )
+        self.assertNotIn('baseEditorId.StartsWith(\n                            "WastelandRoad"', loader)
+
 
 if __name__ == "__main__":
     unittest.main()

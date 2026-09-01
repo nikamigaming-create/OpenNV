@@ -316,6 +316,26 @@ def authored_collision_source(coverage: dict[str, object]) -> str:
     return "unsupported-or-absent"
 
 
+def authored_collision_face_selection(
+    logical_path: str,
+    collision_source: str,
+) -> str:
+    """Select the source collision face family without reference-name heuristics."""
+
+    canonical_path = logical_path.replace("/", "\\").lower()
+    is_owned_road = canonical_path.startswith("meshes\\landscape\\roads\\") or (
+        canonical_path.startswith("meshes\\scol\\")
+        and canonical_path.rsplit("\\", 1)[-1].startswith("scolroad")
+    )
+    if is_owned_road:
+        if collision_source != "NIF-authored-bhk-packed-triangles":
+            raise ValueError(
+                "Owned road collision requires its packed-triangle source contract"
+            )
+        return "source-upward-walkable-deck"
+    return "all-source-faces"
+
+
 def reference_selection_reason(
     base: BaseObject,
     recipe: dict[str, object],
@@ -604,6 +624,10 @@ def prepare_scene_assets(
             raise ValueError("Cell assets were produced by different compilers")
         collision_exported = bool(sidecar["coverage"]["collisionExported"])
         collision_source = authored_collision_source(sidecar["coverage"])
+        collision_face_selection = authored_collision_face_selection(
+            member.logical_path,
+            collision_source,
+        )
         assets[model_path] = {
             "id": asset_id,
             "logicalPath": member.logical_path,
@@ -618,6 +642,7 @@ def prepare_scene_assets(
             "collision": {
                 "enabled": collision_exported,
                 "source": collision_source,
+                "faceSelection": collision_face_selection,
                 "blockTypes": sidecar["coverage"]["collisionBlockTypes"],
                 "unsupportedReason": sidecar["coverage"]["collisionUnsupportedReason"],
             },

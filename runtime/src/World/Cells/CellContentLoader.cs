@@ -48,6 +48,7 @@ internal static class CellContentLoader
         var assetLogicalPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var collisionAssets = new HashSet<string>(StringComparer.Ordinal);
         var landscapeCollisionAssets = new HashSet<string>(StringComparer.Ordinal);
+        var collisionFaceSelections = new Dictionary<string, string>(StringComparer.Ordinal);
         var doorArticulations = new Dictionary<string, DoorArticulationContract>(StringComparer.Ordinal);
         try
         {
@@ -97,6 +98,11 @@ internal static class CellContentLoader
                     configuration.ContentCompiler.RetailGrass);
                 SetRenderLayer(loaded.Scene, renderLayer);
                 var collision = asset.GetProperty("collision");
+                var faceSelection = collision.GetProperty("faceSelection").GetString()!;
+                if (faceSelection is not "all-source-faces" and not "source-upward-walkable-deck")
+                    throw new InvalidOperationException(
+                        $"Unsupported authored collision face selection: {faceSelection}");
+                collisionFaceSelections.Add(assetId, faceSelection);
                 if (collision.GetProperty("enabled").GetBoolean())
                 {
                     var collisionSource = collision.GetProperty("source").GetString();
@@ -548,9 +554,7 @@ internal static class CellContentLoader
                     collisionInstance.Name = $"AUTHORED_COLLISION_{assetId}";
                     placement.AddChild(collisionInstance);
                     verifiedAuthoredCollision = collisionInstance;
-                    if (baseEditorId.StartsWith(
-                            "WastelandRoad",
-                            StringComparison.OrdinalIgnoreCase))
+                    if (collisionFaceSelections[assetId] == "source-upward-walkable-deck")
                         collisionMeshes += BuildWalkableRoadCollision(
                             placement,
                             collisionInstance,
