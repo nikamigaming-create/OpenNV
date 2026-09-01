@@ -48,7 +48,7 @@ internal static class OwnedUiTheme
                 glyph.Codepoint,
                 new Vector2(
                     glyph.HorizontalOffsetPixels,
-                    authored.AscentPixels - glyph.VerticalBearingPixels));
+                    -glyph.VerticalBearingPixels));
             font.SetGlyphSize(FontCacheIndex, cacheSize, glyph.Codepoint, glyph.Size);
             font.SetGlyphUVRect(FontCacheIndex, cacheSize, glyph.Codepoint, glyph.UvRect);
             font.SetGlyphTextureIdx(
