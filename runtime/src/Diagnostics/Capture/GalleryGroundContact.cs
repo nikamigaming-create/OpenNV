@@ -115,6 +115,7 @@ internal static class GalleryGroundContact
                     probe + Vector3.Up * rayStartClearance,
                     probe - Vector3.Up * searchRange,
                     collisionMask,
+                    configuration.Proof.WalkableSurfaceNormalYMinimum,
                     "down",
                     probe),
                 Cast(
@@ -122,6 +123,7 @@ internal static class GalleryGroundContact
                     probe - Vector3.Up * rayStartClearance,
                     probe + Vector3.Up * searchRange,
                     collisionMask,
+                    configuration.Proof.WalkableSurfaceNormalYMinimum,
                     "up",
                     probe),
                 Cast(
@@ -129,6 +131,7 @@ internal static class GalleryGroundContact
                     new Vector3(probe.X, root.Y + rayStartClearance, probe.Z),
                     new Vector3(probe.X, root.Y - searchRange, probe.Z),
                     collisionMask,
+                    configuration.Proof.WalkableSurfaceNormalYMinimum,
                     "retail-root-down",
                     probe),
                 Cast(
@@ -136,6 +139,7 @@ internal static class GalleryGroundContact
                     new Vector3(probe.X, root.Y - rayStartClearance, probe.Z),
                     new Vector3(probe.X, root.Y + searchRange, probe.Z),
                     collisionMask,
+                    configuration.Proof.WalkableSurfaceNormalYMinimum,
                     "retail-root-up",
                     probe),
             })
@@ -244,10 +248,10 @@ internal static class GalleryGroundContact
             probe + Vector3.Up * configuration.Proof.SpawnFloorRayStartMeters,
             probe + Vector3.Up * configuration.Proof.SpawnFloorRayEndMeters,
             collisionMask,
+            configuration.Proof.WalkableSurfaceNormalYMinimum,
             "authored-cell-origin-down",
             probe);
-        if (!hit.Hit ||
-            hit.Normal.Y < configuration.Proof.WalkableSurfaceNormalYMinimum)
+        if (!hit.Hit)
             return null;
         GD.Print(
             "OPENNV_GALLERY_GROUND_CELL_SUPPORT " +
@@ -271,29 +275,54 @@ internal static class GalleryGroundContact
         Vector3 from,
         Vector3 to,
         uint collisionMask,
+        float walkableSurfaceNormalYMinimum,
         string direction,
         Vector3 probePosition)
     {
         var query = PhysicsRayQueryParameters3D.Create(from, to, collisionMask);
         query.HitFromInside = true;
-        var result = space.IntersectRay(query);
-        if (result.Count == 0)
-            return new ContactRayHit(
-                false,
-                Vector3.Zero,
-                Vector3.Zero,
-                "",
-                direction,
-                probePosition);
-        var collider = result["collider"].AsGodotObject() as Node;
-        return new ContactRayHit(
-            true,
-            result["position"].AsVector3(),
-            result["normal"].AsVector3(),
-            collider?.GetPath().ToString() ?? "unknown",
-            direction,
-            probePosition);
+        var excluded = new Godot.Collections.Array<Rid>();
+        while (true)
+        {
+            query.Exclude = excluded;
+            var result = space.IntersectRay(query);
+            if (result.Count == 0)
+                return new ContactRayHit(
+                    false,
+                    Vector3.Zero,
+                    Vector3.Zero,
+                    "",
+                    direction,
+                    probePosition);
+            var collider = result["collider"].AsGodotObject() as Node;
+            var normal = result["normal"].AsVector3();
+            if (IsWalkableWorldSupport(collider, normal, walkableSurfaceNormalYMinimum))
+                return new ContactRayHit(
+                    true,
+                    result["position"].AsVector3(),
+                    normal,
+                    collider!.GetPath().ToString(),
+                    direction,
+                    probePosition);
+            if (collider is not CollisionObject3D rejected)
+                return new ContactRayHit(
+                    false,
+                    Vector3.Zero,
+                    Vector3.Zero,
+                    "",
+                    direction,
+                    probePosition);
+            excluded.Add(rejected.GetRid());
+        }
     }
+
+    internal static bool IsWalkableWorldSupport(
+        Node? collider,
+        Vector3 normal,
+        float walkableSurfaceNormalYMinimum) =>
+        collider is StaticBody3D &&
+        normal.IsFinite() &&
+        normal.Y >= walkableSurfaceNormalYMinimum;
 
     private readonly record struct ContactRayHit(
         bool Hit,
