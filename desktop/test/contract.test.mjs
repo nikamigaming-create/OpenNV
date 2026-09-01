@@ -60,6 +60,8 @@ test("New Vegas uses an explicit immutable cache registration", () => {
   assert.match(main, /campaign:\s*"NewVegas"/u);
   assert.match(main, /OPENNV_NEWVEGAS_CACHE_ROOT/u);
   assert.match(html, /id="choose-newvegas-cache"/u);
+  assert.match(main, /opennv-cell-scene\/v14/u);
+  assert.doesNotMatch(main, /opennv-cell-scene\/v13/u);
 });
 
 test("Fallout 2 enables only the matching owned-cache Hex first slice", () => {

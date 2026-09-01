@@ -674,7 +674,7 @@ function readNewVegasProfile(cacheRootOverride = null) {
         true);
     }
     const required = [
-      [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v13"],
+      [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v14"],
       [path.join("generated", "actors", "actor-scenes.json"), "opennv-world-actor-scenes/v2"],
       [path.relative(cacheRoot, openingManifestPath), "opennv-owned-opening-manifest/v1"]
     ];
