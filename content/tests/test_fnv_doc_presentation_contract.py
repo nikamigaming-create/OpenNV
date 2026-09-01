@@ -56,6 +56,32 @@ class FnvDocPresentationContractTest(unittest.TestCase):
         self.assertNotIn('Contains("bed"', exact_resolution)
         self.assertNotIn("OrderBy", exact_resolution)
 
+    def test_doc_package_travel_advances_the_owned_locomotion_clip(self) -> None:
+        source = (
+            ROOT
+            / "runtime"
+            / "src"
+            / "Campaigns"
+            / "NewVegas"
+            / "Opening"
+            / "OpeningQuestRuntime.Guide.cs"
+        ).read_text(encoding="utf-8")
+        start = source[source.index("private void StartGuideLocomotionAnimation") :]
+        update = source[source.index("private void UpdateGuideActor") : source.index(
+            "private static SourceActorAnimation", source.index("private void UpdateGuideActor")
+        )]
+        finish = source[source.index("private void FinishGuideTravel") : source.index(
+            "private void PlayGuidePackageIdle", source.index("private void FinishGuideTravel")
+        )]
+
+        self.assertIn("ActorAnimationPlayback.Start(", start)
+        self.assertIn("locomotion.LogicalPath", start)
+        self.assertIn("locomotion.Sha256", start)
+        self.assertIn("rootMotion.SequenceName", start)
+        self.assertLess(update.index("playback.Advance(delta)"), update.index("travel.Advance(delta)"))
+        self.assertIn("_guideLocomotionPlayback?.Stop()", finish)
+        self.assertIn("AnimationCallbackModeProcess.Idle", source)
+
 
 if __name__ == "__main__":
     unittest.main()

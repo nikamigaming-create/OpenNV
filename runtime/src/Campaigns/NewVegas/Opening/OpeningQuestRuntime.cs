@@ -140,6 +140,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private GamebryoPackageTarget _activeGuidePackageTarget =
         GamebryoPackageTarget.None;
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
+    private ActorAnimationPlayback? _guideLocomotionPlayback;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;
     private OpeningGuidePriorityAnimation.LayeredPlayback?
