@@ -4,12 +4,23 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Campaigns.Classic;
+using OpenNV.Runtime.Gameplay.State;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal partial class Fo1TacticalSession
 {
+    internal RuntimeSaveSlotCatalog CreateSaveSlotCatalog() => new(
+        _savePath,
+        root =>
+        {
+            if (root.GetProperty("schema").GetString() != SaveSchema ||
+                root.GetProperty("sceneSha256").GetString() != _sceneSha256)
+                throw new InvalidOperationException(
+                    "Fallout save slot does not match the active source scene.");
+        });
+
     private void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);

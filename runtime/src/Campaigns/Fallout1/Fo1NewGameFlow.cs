@@ -84,6 +84,55 @@ internal static class Fo1NewGameFlowNumericContracts
 
 internal static partial class Fo1NewGameFlow
 {
+    private const string SaveLoadSelectionMarkerSuffix = ".save-load-selection";
+
+    internal static bool HasSaveLoadSelectionMarker(string savePath) =>
+        File.Exists(SaveLoadSelectionMarker(savePath));
+
+    internal static async Task RunSaveLoadColdRestoreProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string reportPath)
+    {
+        try
+        {
+            var marker = SaveLoadSelectionMarker(loaded.Session.SavePath);
+            var selectedSlot = File.ReadAllText(marker).Trim();
+            if (!loaded.Session.CanContinue ||
+                !loaded.Session.CreateSaveSlotCatalog().ReadSlots().Any(slot => slot.Id == selectedSlot))
+                throw new InvalidOperationException(
+                    "Selected save slot did not cold-restore through the canonical Continue state.");
+            HideWorld(loaded);
+            await ResumeInteractive(host, loaded, contract, null, false, false);
+            await WaitFrames(host, loaded.RuntimeProfile.Showcase.LandingHoldFrames);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(reportPath))!);
+            File.WriteAllText(
+                Path.GetFullPath(reportPath),
+                JsonSerializer.Serialize(new
+                {
+                    schema = "opennv-shared-save-load-proof/v1",
+                    status = "pass",
+                    selectedSlot,
+                    canonicalSave = loaded.Session.SavePath,
+                    continueCompatible = loaded.Session.CanContinue,
+                    restoredCharacter = loaded.Session.RequireRestoredCharacterForContinue().Name,
+                    restoredCamera = loaded.Session.RequireRestoredCameraForContinue().SaveState(),
+                }, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+            File.Delete(marker);
+            GD.Print($"OPENNV_SHARED_SAVE_LOAD_PASS selected={selectedSlot} coldRestore=1");
+            host.GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_SHARED_SAVE_LOAD_FAIL {exception.Message}");
+            host.GetTree().Quit(1);
+        }
+    }
+
+    private static string SaveLoadSelectionMarker(string savePath) =>
+        Path.GetFullPath(savePath) + SaveLoadSelectionMarkerSuffix;
+
     internal static void StartInteractive(
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
@@ -110,7 +159,10 @@ internal static partial class Fo1NewGameFlow
         bool continueGenericDoorProof = false)
     {
         var menu = new Fo1MainMenu();
-        menu.Configure(startPresentation, loaded.Session.CanContinue);
+        menu.Configure(
+            startPresentation,
+            loaded.Session.CanContinue,
+            loaded.Session.CreateSaveSlotCatalog().ReadSlots().Count > 0);
         var selected = false;
         menu.ContinueRequested += () =>
         {
@@ -128,6 +180,14 @@ internal static partial class Fo1NewGameFlow
             menu.QueueFree();
             ShowCharacterSelection(host, loaded, contract, startPresentation);
         };
+        menu.LoadGameRequested += () =>
+        {
+            if (selected)
+                return;
+            selected = true;
+            menu.QueueFree();
+            ShowSaveLoad(host, loaded, contract, startPresentation);
+        };
         menu.OptionsRequested += () =>
         {
             if (selected)
@@ -141,6 +201,29 @@ internal static partial class Fo1NewGameFlow
         if (continueMenuProof)
             _ = RunContinueMenuProof(host, menu);
         GD.Print($"OPENNV_FO1_FRONTEND_READY presentation={startPresentation}");
+    }
+
+    private static void ShowSaveLoad(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string startPresentation)
+    {
+        var view = new RuntimeSaveLoadView();
+        view.Configure(loaded.Session.CreateSaveSlotCatalog(), save: null);
+        view.CloseRequested += () =>
+        {
+            view.QueueFree();
+            ShowMainMenu(host, loaded, contract, startPresentation);
+        };
+        view.LoadRequested += _ =>
+        {
+            view.QueueFree();
+            var error = host.GetTree().ReloadCurrentScene();
+            if (error != Error.Ok)
+                throw new InvalidOperationException($"Fallout save reload failed: {error}.");
+        };
+        host.AddChild(view);
     }
 
     private static void ShowSettings(
@@ -239,7 +322,8 @@ internal static partial class Fo1NewGameFlow
         bool accelerateOpening,
         bool skipOpening,
         string? captureRoot,
-        bool nativeFirstBeatHeadlessProof)
+        bool nativeFirstBeatHeadlessProof,
+        bool saveLoadProof)
     {
         try
         {
@@ -281,7 +365,8 @@ internal static partial class Fo1NewGameFlow
                     default,
                     premadePlayerPreview,
                     captureRoot,
-                    nativeFirstBeatHeadlessProof);
+                    nativeFirstBeatHeadlessProof,
+                    saveLoadProof);
                 return;
             }
             var landing = await RevealWorld(host, loaded, profile, opening, "first-person");
@@ -295,7 +380,8 @@ internal static partial class Fo1NewGameFlow
                 landing,
                 premadePlayerPreview,
                 captureRoot,
-                nativeFirstBeatHeadlessProof);
+                nativeFirstBeatHeadlessProof,
+                saveLoadProof);
         }
         catch (Exception exception)
         {
@@ -824,7 +910,8 @@ internal static partial class Fo1NewGameFlow
         LandingPlayback landing,
         object premadePlayerPreview,
         string? captureRoot,
-        bool nativeFirstBeatHeadlessProof)
+        bool nativeFirstBeatHeadlessProof,
+        bool saveLoadProof)
     {
         var showcase = loaded.RuntimeProfile.Showcase;
         var reportFullPath = Path.GetFullPath(reportPath);
@@ -873,6 +960,26 @@ internal static partial class Fo1NewGameFlow
         await WaitFrames(host, showcase.LandingHoldFrames);
         settingsView.CloseForProof();
         await WaitFrames(host, 1);
+        if (saveLoadProof)
+        {
+            loaded.Session.OpenSaveLoad();
+            await WaitFrames(host, 1);
+            var saveLoad = loaded.Session.FindChild(
+                "OpenNVSaveLoad",
+                recursive: false,
+                owned: false) as RuntimeSaveLoadView ?? throw new InvalidOperationException(
+                    "Fallout session did not open the shared save/load view.");
+            var slot = saveLoad.CreateForProof();
+            if (!File.Exists(slot.Path))
+                throw new InvalidOperationException(
+                    "Shared save/load view did not create an authoritative slot.");
+            GD.Print($"OPENNV_FO1_NEW_GAME_DEMO_PHASE save-slot-selected id={slot.Id}");
+            await WaitFrames(host, showcase.LandingHoldFrames);
+            await WaitFrames(host, showcase.LandingHoldFrames);
+            File.WriteAllText(SaveLoadSelectionMarker(loaded.Session.SavePath), slot.Id);
+            saveLoad.LoadSelectedForProof();
+            return;
+        }
         var inventoryBefore = loaded.Session.InventorySnapshot();
         var inventorySaveSha256Before = FileSha256(loaded.Session.SavePath);
         loaded.Camera._UnhandledInput(new InputEventKey

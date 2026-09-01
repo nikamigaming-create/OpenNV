@@ -37,13 +37,15 @@ internal partial class Fo1MainMenu : CanvasLayer
         Fo1MainMenuNumericContracts.PresentationFloat0Point22f);
     private string _startPresentation = string.Empty;
     private bool _continueAvailable;
+    private bool _loadAvailable;
 
     internal event Action? ContinueRequested;
     internal event Action? NewGameRequested;
+    internal event Action? LoadGameRequested;
     internal event Action? OptionsRequested;
     internal event Action? ExitRequested;
 
-    internal void Configure(string startPresentation, bool continueAvailable)
+    internal void Configure(string startPresentation, bool continueAvailable, bool loadAvailable)
     {
         if (startPresentation is not "hex-tactical" and not "first-person")
             throw new ArgumentException(
@@ -51,6 +53,7 @@ internal partial class Fo1MainMenu : CanvasLayer
                 nameof(startPresentation));
         _startPresentation = startPresentation;
         _continueAvailable = continueAvailable;
+        _loadAvailable = loadAvailable;
         Name = "Fallout1MainMenu";
         Layer = Fo1MainMenuNumericContracts.PresentationInt109;
     }
@@ -117,6 +120,14 @@ internal partial class Fo1MainMenu : CanvasLayer
         var newGame = BuildMenuButton("NEW GAME");
         newGame.Pressed += () => NewGameRequested?.Invoke();
         stack.AddChild(newGame);
+
+        if (_loadAvailable)
+        {
+            var loadGame = BuildMenuButton("LOAD GAME");
+            loadGame.Name = "OpenNVLoadGameButton";
+            loadGame.Pressed += () => LoadGameRequested?.Invoke();
+            stack.AddChild(loadGame);
+        }
 
         var options = BuildMenuButton("OPTIONS");
         options.Name = "OpenNVOptionsButton";

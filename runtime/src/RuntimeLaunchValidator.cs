@@ -219,6 +219,10 @@ internal static class RuntimeLaunchValidator
             !options.ContainsKey("fo1-new-game-demo"))
             throw new ArgumentException(
                 "--fo1-native-first-beat-proof requires --fo1-new-game-demo.");
+        if (options.ContainsKey("fo1-save-load-proof") &&
+            !options.ContainsKey("fo1-new-game-demo"))
+            throw new ArgumentException(
+                "--fo1-save-load-proof requires --fo1-new-game-demo.");
         if (options.ContainsKey("fo1-native-first-beat-proof") &&
             options.ContainsKey("capture-root"))
             throw new ArgumentException(

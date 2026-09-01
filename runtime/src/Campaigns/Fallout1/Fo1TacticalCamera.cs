@@ -334,7 +334,7 @@ internal partial class Fo1TacticalCamera : Node3D
             else if (key.PhysicalKeycode == Key.Space)
                 _session.EndTurn();
             else if (key.PhysicalKeycode == Key.F5)
-                _session.SaveAndNotify();
+                _session.OpenSaveLoad();
             else if (key.PhysicalKeycode == Key.X)
                 _session.AttackSelected();
             else if (key.PhysicalKeycode == Key.Z)

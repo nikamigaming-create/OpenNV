@@ -184,17 +184,29 @@ public partial class RuntimeCoordinator
                         RequireOption(options, "character-reflectron-opening-manifest"),
                         _configuration));
             else if (options.ContainsKey("fo1-new-game-demo"))
-                _ = Fo1NewGameFlow.RunDemo(
-                    this,
-                    loaded,
-                    characterStart,
-                    RequireOption(options, "demo-report"),
-                    options.ContainsKey("fo1-demo-fast-opening"),
-                    options.ContainsKey("fo1-demo-skip-opening"),
-                    options.TryGetValue("capture-root", out var fo1CaptureRoot)
-                        ? fo1CaptureRoot
-                        : null,
-                    options.ContainsKey("fo1-native-first-beat-proof"));
+            {
+                var demoReport = RequireOption(options, "demo-report");
+                if (options.ContainsKey("fo1-save-load-proof") &&
+                    Fo1NewGameFlow.HasSaveLoadSelectionMarker(loaded.Session.SavePath))
+                    _ = Fo1NewGameFlow.RunSaveLoadColdRestoreProof(
+                        this,
+                        loaded,
+                        characterStart,
+                        demoReport);
+                else
+                    _ = Fo1NewGameFlow.RunDemo(
+                        this,
+                        loaded,
+                        characterStart,
+                        demoReport,
+                        options.ContainsKey("fo1-demo-fast-opening"),
+                        options.ContainsKey("fo1-demo-skip-opening"),
+                        options.TryGetValue("capture-root", out var fo1CaptureRoot)
+                            ? fo1CaptureRoot
+                            : null,
+                        options.ContainsKey("fo1-native-first-beat-proof"),
+                        options.ContainsKey("fo1-save-load-proof"));
+            }
             else
                 Fo1NewGameFlow.StartInteractive(
                     this,
