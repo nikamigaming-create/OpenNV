@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -10,6 +11,9 @@ internal sealed partial record OpeningNewGameFlow(
     string QuestFormId,
     string QuestEditorId,
     IReadOnlyDictionary<int, string> Objectives,
+    IReadOnlyDictionary<string, OpeningOrdinaryQuest> OrdinaryQuests,
+    IReadOnlyList<OpeningOrdinaryActor> OrdinaryActors,
+    IReadOnlyList<OpeningHitTargetSet> HitTargetSets,
     int CompletionStage,
     int PsychologyStartStage,
     int OutroStartStage,
@@ -78,14 +82,18 @@ internal sealed partial record OpeningNewGameFlow(
         "controls-runtime-bound-sibling-gamebryo-slider-semantics-corroborated";
     private const string ExpectedFaceGenEngineBuild = "1.4.0.525";
     private const string ExpectedPlayerFaceGenPreviewSchema =
-        "opennv-owned-player-facegen-preview-set/v3";
+        "opennv-owned-player-facegen-preview-set/v5";
     private const string ExpectedPlayerFaceGenPreviewStatus =
-        "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-" +
-        "targets-all-native-geometry-controls-runtime-bound";
+        "compiled-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-" +
+        "with-ctl-egm-targets-all-native-geometry-controls-runtime-bound";
     private const string ExpectedPlayerFaceGenPreviewRuntimeDisposition =
-        "owned-default-male-and-female-selection-preview-hosts-and-all-native-" +
-        "geometry-controls-bound-other-identities-fail-closed-sibling-gamebryo-" +
-        "slider-semantics-corroborated";
+        "owned-playable-race-male-and-female-valid-hair-eye-identity-preview-hosts-" +
+        "and-all-native-geometry-controls-bound-invalid-source-tuples-fail-closed-" +
+        "sibling-gamebryo-slider-semantics-corroborated";
+    private const string ExpectedPlayerFaceGenPreviewSelectionScope =
+        "all-playable-race-sex-valid-hair-eyes-cartesian-product";
+    private const string ExpectedPlayerFaceGenUnsupportedSelectionScope =
+        "invalid-race-sex-hair-eyes-source-tuple";
     private static readonly string[] ExpectedPlayerFaceGenBodyComponentRoles =
         ["body", "left-hand", "right-hand"];
     private const string ExpectedFaceGenPreviewControlSemantics =
@@ -153,6 +161,11 @@ internal sealed partial record OpeningNewGameFlow(
             .ToDictionary(value => value.Role, StringComparer.OrdinalIgnoreCase);
         var referenceCanvas = OpeningManifest.ReadVector(
             uiFlow.GetProperty("referenceCanvasSize"));
+        if (menus.Values.Any(menu =>
+                menu.TextEditMenu is { } textEdit &&
+                textEdit.CanvasSize != referenceCanvas))
+            throw new InvalidOperationException(
+                "Owned TextEditMenu reference canvas differs.");
         var strings = uiFlow.GetProperty("strings").EnumerateObject()
             .ToDictionary(
                 value => value.Name,
@@ -166,6 +179,12 @@ internal sealed partial record OpeningNewGameFlow(
             .ToDictionary(
                 value => value.GetProperty("index").GetInt32(),
                 value => value.GetProperty("text").GetString()!);
+        var ordinaryQuests = source.GetProperty("ordinaryQuests").EnumerateArray()
+            .Select(ParseOrdinaryQuest)
+            .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase);
+        var ordinaryActors = source.GetProperty("ordinaryActors").EnumerateArray()
+            .Select(ParseOrdinaryActor)
+            .ToArray();
         var timerTransitions = quest.GetProperty("timerTransitions").EnumerateArray()
             .Select(value => new OpeningTimerTransition(
                 value.GetProperty("fromStage").GetInt32(),
@@ -213,6 +232,11 @@ internal sealed partial record OpeningNewGameFlow(
             quest.GetProperty("formId").GetString()!,
             quest.GetProperty("editorId").GetString()!,
             objectives,
+            ordinaryQuests,
+            ordinaryActors,
+            source.GetProperty("hitTargetSets").EnumerateArray()
+                .Select(ParseHitTargetSet)
+                .ToArray(),
             quest.GetProperty("completionStage").GetInt32(),
             dialogue.GetProperty("psychologyStartStage").GetInt32(),
             dialogue.GetProperty("outroStartStage").GetInt32(),
@@ -236,6 +260,95 @@ internal sealed partial record OpeningNewGameFlow(
         Validate(result);
         return result;
     }
+
+    private static OpeningOrdinaryQuest ParseOrdinaryQuest(JsonElement source)
+    {
+        var objectives = source.GetProperty("objectives").EnumerateArray()
+            .ToDictionary(
+                value => value.GetProperty("index").GetInt32(),
+                value => value.GetProperty("text").GetString()!);
+        return new OpeningOrdinaryQuest(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            source.GetProperty("scriptFormId").GetString()!,
+            source.GetProperty("scriptEditorId").GetString()!,
+            source.GetProperty("entryStage").GetInt32(),
+            source.GetProperty("variables").EnumerateArray()
+                .ToDictionary(
+                    value => value.GetProperty("index").GetUInt32(),
+                    value => value.GetProperty("name").GetString()!),
+            objectives,
+            source.GetProperty("stages").EnumerateArray()
+                .Select(ParseStage)
+                .ToDictionary(value => value.Stage),
+            ParseCommandContract(source.GetProperty("commandContract")));
+    }
+
+    private static OpeningOrdinaryActor ParseOrdinaryActor(JsonElement source)
+    {
+        var topics = source.GetProperty("topics").EnumerateArray()
+            .Select(ParseTopic)
+            .ToArray();
+        return new OpeningOrdinaryActor(
+            source.GetProperty("role").GetString()!,
+            source.GetProperty("referenceFormId").GetString()!,
+            source.GetProperty("baseFormId").GetString()!,
+            source.GetProperty("packagePriority").EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray(),
+            source.GetProperty("packages").EnumerateArray()
+                .Select(ParseGuidePackage)
+                .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase),
+            source.GetProperty("activationTopicFormId").GetString()!,
+            topics.ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase),
+            ParseDialogueVoice(source.GetProperty("voice")),
+            source.GetProperty("arrivalTransitions").EnumerateArray()
+                .Select(value => new OpeningOrdinaryPackageArrival(
+                    value.GetProperty("packageFormId").GetString()!,
+                    value.GetProperty("scriptFormId").GetString()!,
+                    value.GetProperty("scriptEditorId").GetString()!,
+                    value.GetProperty("actorReferenceFormId").GetString()!,
+                    value.GetProperty("questFormId").GetString()!,
+                    value.GetProperty("fromStage").GetInt32(),
+                    value.GetProperty("toStage").GetInt32()))
+                .ToArray(),
+            source.GetProperty("automaticDialogueTriggers").EnumerateArray()
+                .Select(value => new OpeningOrdinaryDialogueTrigger(
+                    value.GetProperty("scriptFormId").GetString()!,
+                    value.GetProperty("scriptEditorId").GetString()!,
+                    value.GetProperty("triggerReferenceFormId").GetString()!,
+                    value.GetProperty("triggerReferenceEditorId").GetString()!,
+                    ReadVector3(value.GetProperty("positionGameUnits")),
+                    ReadQuaternion(value.GetProperty("rotationGodotQuaternion")),
+                    ReadVector3(value.GetProperty("boundsGameUnits")),
+                    value.GetProperty("questFormId").GetString()!,
+                    value.GetProperty("objectiveIndex").GetInt32(),
+                    value.GetProperty("topicFormId").GetString()!))
+                .ToArray(),
+            ParseCommandContract(source.GetProperty("commandContract")));
+    }
+
+    private static OpeningHitTargetSet ParseHitTargetSet(JsonElement source) => new(
+        source.GetProperty("scriptFormId").GetString()!,
+        source.GetProperty("scriptEditorId").GetString()!,
+        source.GetProperty("enableParentFormId").GetString()!,
+        source.GetProperty("targets").EnumerateArray()
+            .Select(value => new OpeningHitTarget(
+                value.GetProperty("referenceFormId").GetString()!,
+                value.GetProperty("baseFormId").GetString()!))
+            .ToArray(),
+        source.GetProperty("questFormId").GetString()!,
+        source.GetProperty("questVariableIndex").GetInt32(),
+        source.GetProperty("questVariableName").GetString()!,
+        source.GetProperty("weaponAnimationTypeMinimumExclusive").GetInt32(),
+        source.GetProperty("weaponAnimationTypeMaximumExclusive").GetInt32(),
+        source.GetProperty("excludedWeaponFormId").GetString()!,
+        source.GetProperty("reactionTopicFormId").GetString()!,
+        source.GetProperty("speakerReferenceFormId").GetString()!,
+        source.GetProperty("tutorialQuestFormId").GetString()!,
+        source.GetProperty("tutorialStage").GetInt32(),
+        source.GetProperty("threshold").GetInt32(),
+        source.GetProperty("objectiveIndex").GetInt32());
 
     private static OpeningCommandContract ParseCommandContract(JsonElement source) => new(
         source.GetProperty("schema").GetString()!,
@@ -306,6 +419,12 @@ internal sealed partial record OpeningNewGameFlow(
                 : new Dictionary<string, OpeningFlowSemanticRect>(
                     StringComparer.Ordinal),
             background,
+            value.TryGetProperty("dialogueMenuTiles", out var dialogueMenuTiles)
+                ? OwnedGamebryoTileRuntime.ParseDialogueMenu(dialogueMenuTiles)
+                : null,
+            value.TryGetProperty("textEditMenuTiles", out var textEditMenuTiles)
+                ? OwnedGamebryoTileRuntime.ParseTextEditMenu(textEditMenuTiles)
+                : null,
             value.TryGetProperty("raceSexMenuTiles", out var raceSexMenuTiles)
                 ? ParseRaceSexMenuTiles(
                     raceSexMenuTiles,
@@ -737,6 +856,7 @@ internal sealed partial record OpeningNewGameFlow(
             source.GetProperty("sliderRightLabelTrait").GetString()!,
             fontId,
             OpeningManifest.ParseFont(font),
+            OwnedGamebryoTileRuntime.ParseRaceSexControls(source),
             new OpeningRaceSexBackground(
                 background.GetProperty("tile").GetString()!,
                 OpeningManifest.ReadRect(background.GetProperty("rect")),
@@ -1043,6 +1163,16 @@ internal sealed partial record OpeningNewGameFlow(
             source.ListItem.Rect.Size.Y <= 0.0f ||
             source.Slider.Rect.Size.X <= 0.0f ||
             source.Slider.Rect.Size.Y <= 0.0f ||
+            source.SharedControls.Document != source.Document ||
+            source.SharedControls.DocumentSha256 != source.DocumentSha256 ||
+            source.SharedControls.BackgroundRect != source.Background.Rect ||
+            source.SharedControls.FaceGrabRect != source.FaceGrab.Rect ||
+            source.SharedControls.TopBound != source.Background.TopBound ||
+            source.SharedControls.BottomBound != source.Background.BottomBound ||
+            source.SharedControls.List.Rect != source.ListItem.Rect ||
+            source.SharedControls.Slider.Rect != source.Slider.Rect ||
+            source.SharedControls.Back.Text.Text != source.Navigation.Back.Label ||
+            source.SharedControls.Next.Text.Text != source.Navigation.Next.Label ||
             source.ListItem.ActiveListTrait != source.ActiveListTrait ||
             source.Slider.ActiveListTrait != source.ActiveListTrait ||
             source.Navigation.Back.LabelRole != "back" ||
@@ -1200,7 +1330,7 @@ internal sealed partial record OpeningNewGameFlow(
         OptionalString(value, "topicEditorId"),
         OptionalString(value, "speakerEditorId"),
         OptionalString(value, "referenceEditorId"),
-        OptionalString(value, "itemEditorId"),
+        OptionalString(value, "resolvedItemEditorId") ?? OptionalString(value, "itemEditorId"),
         OptionalString(value, "packageEditorId"),
         OptionalString(value, "modifierEditorId"),
         OptionalString(value, "operation"),
@@ -1227,8 +1357,8 @@ internal sealed partial record OpeningNewGameFlow(
         controls.ValueKind == JsonValueKind.Array
             ? controls.EnumerateArray().Select(control => control.GetInt32()).ToArray()
             : Array.Empty<int>(),
-        OptionalString(value, "itemFormId"),
-        OptionalString(value, "itemRecordType"),
+        OptionalString(value, "resolvedItemFormId") ?? OptionalString(value, "itemFormId"),
+        OptionalString(value, "resolvedItemRecordType") ?? OptionalString(value, "itemRecordType"),
         OptionalString(value, "questFormId"),
         OptionalString(value, "questRecordType"),
         OptionalString(value, "globalFormId"),
@@ -1237,7 +1367,25 @@ internal sealed partial record OpeningNewGameFlow(
         OptionalString(value, "ownerFormId"),
         OptionalString(value, "ownerRecordType"),
         OptionalString(value, "referenceFormId"),
-        OptionalString(value, "referenceRecordType"));
+        OptionalString(value, "referenceRecordType"),
+        value.TryGetProperty("guard", out var guard)
+            ? new OpeningCommandGuard(
+                guard.GetProperty("kind").GetString()!,
+                OptionalString(guard, "itemFormId"),
+                OptionalString(guard, "questFormId"),
+                OptionalInt(guard, "stage"))
+            : null,
+        value.TryGetProperty("weapon", out var weapon)
+            ? new OpeningCommandWeapon(
+                weapon.GetProperty("ammoFormId").GetString()!,
+                weapon.GetProperty("ammoEditorId").GetString()!,
+                weapon.GetProperty("damage").GetInt32(),
+                weapon.GetProperty("clipSize").GetInt32(),
+                weapon.GetProperty("animationType").GetInt32())
+            : null,
+        value.TryGetProperty("enableParentChildFormIds", out var enableChildren)
+            ? enableChildren.EnumerateArray().Select(child => child.GetString()!).ToArray()
+            : Array.Empty<string>());
 
     private static OpeningGuideActorAi ParseGuideActorAi(JsonElement source)
     {
@@ -1682,6 +1830,7 @@ internal sealed partial record OpeningNewGameFlow(
             exposure.GetProperty("sourceExecutableSha256").GetString()!,
             exposure.GetProperty("controls").EnumerateArray()
                 .Select(ParseNativeFaceGenGeometryControl).ToArray(),
+            ParseNativeFaceGenAgeControl(source.GetProperty("nativeAgeExposure")),
             ParseFaceGenPreviewControl(source.GetProperty("runtimePreviewControl")),
             source.GetProperty("runtimeDisposition").GetString()!);
     }
@@ -1767,7 +1916,13 @@ internal sealed partial record OpeningNewGameFlow(
         var geometryControlNames = source.GetProperty("geometryControlNames")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
         var geometryControlCount = source.GetProperty("geometryControlCount").GetInt32();
+        var textureControlNames = source.GetProperty("textureControlNames")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var textureControlCount = source.GetProperty("textureControlCount").GetInt32();
         var runtimeDisposition = source.GetProperty("runtimeDisposition").GetString()!;
+        var selectionScope = source.GetProperty("selectionScope").GetString()!;
+        var unsupportedSelectionScope = source.GetProperty("unsupportedSelectionScope")
+            .GetString()!;
         var fullBody = source.GetProperty("fullBody").GetBoolean();
         var bodyComponentRoles = source.GetProperty("bodyComponentRoles")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
@@ -1796,15 +1951,29 @@ internal sealed partial record OpeningNewGameFlow(
                         .Select(part => part.GetString()!).ToArray(),
                     geometryControlNames,
                     geometryControlCount,
+                    textureControlNames,
+                    textureControlCount,
                     outputs.GetProperty("gltf").GetString()!,
                     outputs.GetProperty("gltfSha256").GetString()!,
                     outputs.GetProperty("sidecar").GetString()!,
                     outputs.GetProperty("sidecarSha256").GetString()!,
                     outputs.GetProperty("bufferSha256").GetString()!,
+                    outputs.GetProperty("egt").GetString()!,
+                    outputs.GetProperty("egtSha256").GetString()!,
+                    ParseFloatArray(value.GetProperty("symmetricTexture")),
+                    value.GetProperty("textureControls").EnumerateArray()
+                        .Select(control => new OpeningNativeFaceGenTextureControl(
+                            control.GetProperty("controlIndex").GetInt32(),
+                            control.GetProperty("settingEntity").GetString()!,
+                            control.GetProperty("sourceLabel").GetString()!,
+                            control.GetProperty("axisSha256").GetString()!,
+                            ParseFloatArray(control.GetProperty("axis"))))
+                        .ToArray(),
                     runtimeDisposition,
                     fullBody,
                     bodyComponentRoles,
-                    bodyComponentSourcesBySex);
+                    bodyComponentSourcesBySex,
+                    ParseNativeFaceGenAgeControl(value.GetProperty("ageControl")));
             })
             .ToArray();
         return new OpeningPlayerFaceGenPreviewSet(
@@ -1813,7 +1982,11 @@ internal sealed partial record OpeningNewGameFlow(
             playerFormId,
             geometryControlNames,
             geometryControlCount,
+            textureControlNames,
+            textureControlCount,
             runtimeDisposition,
+            selectionScope,
+            unsupportedSelectionScope,
             fullBody,
             bodyComponentRoles,
             bodyComponentSourcesBySex,

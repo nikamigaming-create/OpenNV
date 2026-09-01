@@ -331,6 +331,9 @@ internal static class ActorModelSlice
                 : RequireSurfaceText(surface, "attachmentNode", sidecarPath);
             var sourceFormId = OptionalSurfaceText(surface, "sourceFormId", sidecarPath);
             var sourceSlot = OptionalSurfaceUInt32(surface, "sourceSlot", sidecarPath);
+            var material = surface.GetProperty("material");
+            var sourceShaderSkin = material.TryGetProperty("skin", out var skin) &&
+                skin.ValueKind == JsonValueKind.Object;
             var rigidShapeTransformBaked = surface.GetProperty(
                 "rigidShapeTransformBaked").GetBoolean();
             var sourceShapeTransformGodotMatrix = surface.GetProperty(
@@ -406,6 +409,7 @@ internal static class ActorModelSlice
                 attachmentNode,
                 sourceFormId,
                 sourceSlot,
+                sourceShaderSkin,
                 retailGeometryName,
                 retailVisualNodePath,
                 declaredMorphTargets,
@@ -893,6 +897,7 @@ internal static class ActorModelSlice
         string? AttachmentNode,
         string? SourceFormId,
         uint? SourceSlot,
+        bool SourceShaderSkin,
         string? RetailGeometryName,
         string? RetailVisualNodePath,
         IReadOnlyList<string> FaceGenMorphTargets,

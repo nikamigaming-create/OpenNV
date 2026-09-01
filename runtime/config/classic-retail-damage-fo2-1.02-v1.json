@@ -1,0 +1,6 @@
+{
+  "schema": "opennv-classic-retail-damage/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "damageMultiplierDivisor": 2,
+  "percentScale": 100
+}

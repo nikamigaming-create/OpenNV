@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
@@ -72,7 +73,7 @@ internal sealed class Fo2TemplePresentationCatalog
     private const int TileIdMask = 0x0fff;
     private const int RoofIdShift = 16;
     private const int MapVersion = 20;
-    private const int Sha256HexCharacters = 64;
+    internal const int Sha256HexCharacters = 64;
     private const string FloorProjectionMode = "classic-fallout-isometric-floor-unproject-v1";
     private const string FloorAlphaFill = "nearest-owned-opaque-pixel-v1";
     private const int FloorSourceWidth = 80;
@@ -95,6 +96,8 @@ internal sealed class Fo2TemplePresentationCatalog
         IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
+        ClassicMapInitialization initialization,
+        ClassicMapIntInitialization intInitialization,
         Fo2TempleConfrontationContract confrontation,
         int inventoryObjects,
         int verifiedResources)
@@ -114,6 +117,8 @@ internal sealed class Fo2TemplePresentationCatalog
         Artifacts = artifacts;
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
+        Initialization = initialization;
+        IntInitialization = intInitialization;
         Confrontation = confrontation;
         InventoryObjects = inventoryObjects;
         VerifiedResources = verifiedResources;
@@ -135,6 +140,8 @@ internal sealed class Fo2TemplePresentationCatalog
     internal IReadOnlyDictionary<string, Fo2MapArtifact> Artifacts { get; }
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
+    internal ClassicMapInitialization Initialization { get; }
+    internal ClassicMapIntInitialization IntInitialization { get; }
     internal Fo2TempleConfrontationContract Confrontation { get; }
     internal int InventoryObjects { get; }
     internal int VerifiedResources { get; }
@@ -263,6 +270,9 @@ internal sealed class Fo2TemplePresentationCatalog
         VerifyTileBindings(
             new Dictionary<int, IReadOnlyList<uint>> { [0] = tileEntries },
             tileBindings);
+        var initialization = ClassicMapInitializationOwner.Parse(map);
+        var intInitialization = ClassicMapIntInitializationOwner.Parse(
+            source.GetProperty("initializationScripts"), initialization);
         var objectRows = FlattenObjects(map.GetProperty("objects"));
         var objectPlacements = LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
@@ -304,6 +314,8 @@ internal sealed class Fo2TemplePresentationCatalog
             artifacts,
             tileBindings,
             objectPlacements,
+            initialization,
+            intInitialization,
             confrontation,
             objectRows.Values.Count(row => !row.TopLevel),
             resources.Length);

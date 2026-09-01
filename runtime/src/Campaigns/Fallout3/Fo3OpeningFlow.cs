@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 
 using OpenNV.Runtime.World.Actors;
@@ -52,15 +53,30 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private bool _characterVideo;
     private Control? _creatorLayer;
     private LineEdit? _activeNameInput;
-    private OptionButton? _activeAppearanceCategory;
+    private Action? _activeAppearanceShowFace;
     private HSlider? _activeFaceControlSlider;
     private Fo3AppearanceSelection? _activeAppearanceSelection;
-    private OpeningPlayerFaceGenPreviewHost? _activeFacePreview;
+    private OwnedGamebryoFaceGenPreviewHost? _activeFacePreview;
     private bool _introCompleted;
     private Fo3OwnedVideoMode _ownedVideoMode;
     private Fo3Cg01Stage0State? _activeCg01MovieState;
     private Fo3Cg01RuntimeContext? _activeCg01MovieContext;
     private Fo3Cg01ToddlerWorldRuntime? _cg01ToddlerWorld;
+    private Fo3SpecialBookMenuRuntime? _cg01SpecialBookMenu;
+    private Action<double>? _cg01Stage50TimerTick;
+    private Action<double>? _cg01DadPackageTravelTick;
+    private Action<double>? _cg01Stage90TimerTick;
+    private Action? _cg02IntroBegin;
+    private Action<double>? _cg02IntroTimerTick;
+    private Action<double>? _cg02CakePackageTick;
+    private Action<double>? _cg02ButchTimerTick;
+    private Action<double>? _cg02ButchPackageTick;
+    private readonly Dictionary<string, CellActorLoader.PlacedActor> _cg02IntroActors =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<GamebryoDialoguePlayback> _cg02IntroDialogue = [];
+    private readonly Dictionary<string, ActorAnimationPlayback> _cg02IntroAnimations =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<AudioStreamPlayer> _cg02IntroSounds = [];
     private string? _cg01ProofMode;
     private string? _cg01ProofReportPath;
     private string? _cg01ProofCapturePath;
@@ -202,6 +218,17 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         UpdateCg00EarlyBirth(delta);
         UpdateCg00EarlyProof();
         UpdateCg01DadLip();
+        _cg01Stage50TimerTick?.Invoke(delta);
+        _cg01DadPackageTravelTick?.Invoke(delta);
+        _cg01Stage90TimerTick?.Invoke(delta);
+        _cg02IntroTimerTick?.Invoke(delta);
+        _cg02CakePackageTick?.Invoke(delta);
+        _cg02ButchTimerTick?.Invoke(delta);
+        _cg02ButchPackageTick?.Invoke(delta);
+        foreach (var dialogue in _cg02IntroDialogue)
+            dialogue.Update();
+        foreach (var animation in _cg02IntroAnimations.Values)
+            animation.Advance(delta);
         if (_vaultStage90Fade is not null && _activeStage90ImageSpaceModifier is not null)
         {
             _stage90ImageSpaceElapsedSeconds += delta;
@@ -385,7 +412,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Cg01Stage10State? resumedCg01Stage10 = null,
         Fo3Cg01Stage12State? resumedCg01Stage12 = null,
         Fo3Cg01ToddlerWorldState? resumedCg01ToddlerWorld = null,
-        Fo3Cg01Stage14State? resumedCg01Stage14 = null)
+        Fo3Cg01Stage14State? resumedCg01Stage14 = null,
+        Fo3Cg01Stage20State? resumedCg01Stage20 = null)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
             "Fallout 3 Vault 101 birth room has no owned presentation contract.");
@@ -396,6 +424,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 birth room does not join the stage-62 package location.");
+        var resumedCg00ActorPackages = CaptureCg00ActorPackageStates();
         if (_vaultPreviewHost is not null)
         {
             _vaultPreviewHost.QueueFree();
@@ -435,7 +464,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             (resumedCg01Stage10 is not null && resumedCg01 is null) ||
             (resumedCg01Stage12 is not null && resumedCg01Stage10 is null) ||
             (resumedCg01ToddlerWorld is not null && resumedCg01Stage12 is null) ||
-            (resumedCg01Stage14 is not null && resumedCg01ToddlerWorld is null))
+            (resumedCg01Stage14 is not null && resumedCg01ToddlerWorld is null) ||
+            (resumedCg01Stage20 is not null && resumedCg01Stage14 is null))
             throw new InvalidOperationException(
                 "Fallout 3 resumed birth-room stage chain is incomplete.");
 
@@ -461,6 +491,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         }
         _vaultPreviewHost = previewHost;
         _vaultBirthCoverage = coverage;
+        RestoreCg00ActorPackageStates(resumedCg00ActorPackages);
         _background.Visible = false;
         _panel.Visible = false;
 
@@ -532,7 +563,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                         resumedCg01Stage10!,
                         resumedCg01ToddlerWorld,
                         acceptanceProof: false,
-                        restoredStage14: resumedCg01Stage14);
+                        restoredStage14: resumedCg01Stage14,
+                        restoredStage20: resumedCg01Stage20);
                 else if (resumedCg01Stage10 is not null)
                     BeginCg01ToddlerWorld(
                         resumedCg01,
@@ -592,46 +624,47 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"dadEnabled={(resumedStage100 is null ? 1 : 0)}");
     }
 
-    private Label AddVaultDialogueOverlay(
+    private Button AddVaultDialogueOverlay(
         string nodeName = "FO3_STAGE65_VAULT101_DIALOGUE")
     {
-        var overlay = new PanelContainer
+        var fonts = OwnedGamebryoTileRuntime.RequireDialogueFonts(
+            _profile.DialogueMenu,
+            _profile.UiFonts);
+        var overlay = new OwnedGamebryoDialogueMenuRuntime(
+            _profile.DialogueMenu,
+            _profile.InterfaceColor,
+            _profile.MenuBackgroundAlpha,
+            OwnedUiTheme.BuildFont(fonts.SpeakerName),
+            OwnedUiTheme.BuildFont(fonts.Body))
         {
             Name = nodeName,
-            AnchorLeft = 0.0f,
-            AnchorTop = 1.0f,
-            AnchorRight = 1.0f,
-            AnchorBottom = 1.0f,
-            OffsetLeft = 150.0f,
-            OffsetTop = -180.0f,
-            OffsetRight = -150.0f,
-            OffsetBottom = -20.0f,
         };
-        overlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.0f, 0.0f, 0.0f, 0.84f),
-            BorderColor = _profile.InterfaceColor,
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-        });
-        var margin = new MarginContainer();
-        foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, Fo3OpeningFlowNumericContracts.SeparationPixels);
-        overlay.AddChild(margin);
-        var subtitle = Label(" ", Fo3OpeningFlowNumericContracts.BodyFontPixels);
-        subtitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        subtitle.Visible = false;
-        margin.AddChild(subtitle);
         AddChild(overlay);
+        overlay.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var subtitle = overlay.SpeakerTextControl;
         _vaultPreviewOverlay = overlay;
         return subtitle;
     }
 
+    private static void ShowVaultDialogue(Button subtitle, string speaker, string text)
+    {
+        if (subtitle.GetParent() is not OwnedGamebryoDialogueMenuRuntime menu)
+            throw new InvalidOperationException(
+                "Fallout 3 DialogueMenu runtime owner is unavailable.");
+        menu.ShowLine(speaker, text, () => { });
+    }
+
+    private static void HideVaultDialogue(Button subtitle)
+    {
+        if (subtitle.GetParent() is not OwnedGamebryoDialogueMenuRuntime menu)
+            throw new InvalidOperationException(
+                "Fallout 3 DialogueMenu runtime owner is unavailable.");
+        menu.HideMenu();
+    }
+
     private void PlayVaultDialogue(
         Fo3Stage80DialogueBranch branch,
-        Label subtitle,
+        Button subtitle,
         string playerName,
         Fo3SexChoice sex,
         Fo3AppearanceSelection selection,
@@ -659,8 +692,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             selection,
             stage65);
         AddChild(_vaultDialogueVoice);
-        subtitle.Text = $"DAD: {branch.Response.Text}";
-        subtitle.Visible = true;
+        ShowVaultDialogue(
+            subtitle,
+            _vaultBirthCoverage?.DadActor.Actor.Name ??
+                throw new InvalidOperationException("Fallout 3 Dad actor is unavailable."),
+            branch.Response.Text);
         _vaultDialogueVoice.Play();
         GD.Print(
             $"OPENNV_FO3_CG00_DAD_CUE_STARTED stage=65 info={branch.InfoFormId} " +
@@ -671,13 +707,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     }
 
     private void CompleteStage65Dialogue(
-        Label subtitle,
+        Button subtitle,
         string playerName,
         Fo3SexChoice sex,
         Fo3AppearanceSelection selection,
         Fo3Stage65AppearanceState stage65)
     {
-        subtitle.Visible = false;
+        HideVaultDialogue(subtitle);
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         _vaultDialogueVoice?.QueueFree();
@@ -752,8 +788,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             stage80,
             stage85);
         AddChild(_vaultDialogueVoice);
-        subtitle.Text = $"DAD: {dialogue.Response.Text}";
-        subtitle.Visible = true;
+        ShowVaultDialogue(
+            subtitle,
+            _vaultBirthCoverage?.DadActor.Actor.Name ??
+                throw new InvalidOperationException("Fallout 3 Dad actor is unavailable."),
+            dialogue.Response.Text);
         _vaultDialogueVoice.Play();
         GD.Print(
             $"OPENNV_FO3_CG00_STAGE90_CUE_STARTED stage=85 info={dialogue.InfoFormId} " +
@@ -765,7 +804,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     }
 
     private void CompleteStage85ProgressionDialogue(
-        Label subtitle,
+        Button subtitle,
         string playerName,
         Fo3SexChoice sex,
         Fo3AppearanceSelection selection,
@@ -773,7 +812,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Stage80State stage80,
         Fo3Stage85State stage85)
     {
-        subtitle.Visible = false;
+        HideVaultDialogue(subtitle);
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         _vaultDialogueVoice?.QueueFree();

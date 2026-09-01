@@ -5,6 +5,7 @@ using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -26,6 +27,7 @@ internal sealed record Fo2TempleConfrontationProfile(
     Fo2TempleConfrontationInput Combat,
     Fo2TempleConfrontationInput Attack,
     Fo2TempleConfrontationInput EndTurn,
+    Fo2TempleConfrontationInput Look,
     Fo2TempleConfrontationInput Loot,
     Fo2TempleConfrontationInput Inventory,
     string Title,
@@ -60,7 +62,7 @@ internal sealed record Fo2TempleConfrontationProfile(
             RequiredString(source, "critterSid") != contract.Critter.Sid ||
             source.GetProperty("lootSerial").GetInt32() != contract.DefeatLoot.Serial ||
             RequiredString(source, "lootPid") != contract.DefeatLoot.Pid ||
-            adapter.GetProperty("targetTurns").GetBoolean() ||
+            !adapter.GetProperty("targetTurns").GetBoolean() ||
             adapter.GetProperty("generalIntScripts").GetBoolean() ||
             !adapter.GetProperty("boundedGuardianDialogue").GetBoolean() ||
             RequiredString(adapter, "playerActionPointFormula") !=
@@ -89,6 +91,7 @@ internal sealed record Fo2TempleConfrontationProfile(
             ReadInput(input, "combat"),
             ReadInput(input, "attack"),
             ReadInput(input, "endTurn"),
+            ReadInput(input, "look"),
             ReadInput(input, "loot"),
             ReadInput(input, "inventory"),
             RequiredString(ui, "title"),
@@ -101,12 +104,13 @@ internal sealed record Fo2TempleConfrontationProfile(
             result.Combat,
             result.Attack,
             result.EndTurn,
+            result.Look,
             result.Loot,
             result.Inventory,
         };
         if (result.Id != "fo2-temple-guardian-bounded-combat-v1" ||
             result.AdapterIdentity !=
-                "source-acklint-dialogue-path-ap-player-turn-melee-no-target-ai-v3" ||
+                "source-acklint-dialogue-path-ap-bounded-target-turn-v4" ||
             result.InteractionRangeHexes != 1 || result.MovementActionPointCost != 1 ||
             result.MovementResolution != "exact-adjacent-source-walk-mask-hex-v1" ||
             result.AttackActionPointCost <= 0 ||
@@ -123,7 +127,7 @@ internal sealed record Fo2TempleConfrontationProfile(
 
     internal void ConfigureInput()
     {
-        foreach (var binding in new[] { Combat, Attack, EndTurn, Loot, Inventory })
+        foreach (var binding in new[] { Combat, Attack, EndTurn, Look, Loot, Inventory })
         {
             if (InputMap.HasAction(binding.Action))
                 InputMap.EraseAction(binding.Action);
@@ -180,9 +184,16 @@ internal sealed record Fo2TempleConfrontationProfile(
 internal sealed record Fo2TempleConfrontationState(
     int TargetHitPoints,
     int PlayerActionPoints,
+    int TargetActionPoints,
+    int TargetTurnCount,
+    ClassicTargetTurnAction? LastTargetTurnAction,
+    ClassicAttackIntent? LastTargetAttack,
+    ClassicTargetPathState? LastTargetPath,
     bool CombatActive,
     bool SpearLooted,
-    bool SpearEquipped)
+    bool SpearEquipped,
+    ClassicScriptState ScriptState,
+    ClassicIntWorldObjectState IntWorldState)
 {
     internal void Validate(
         Fo2TempleConfrontationContract contract,
@@ -190,11 +201,36 @@ internal sealed record Fo2TempleConfrontationState(
     {
         if (TargetHitPoints is < 0 || TargetHitPoints > contract.Critter.CurrentHitPoints ||
             PlayerActionPoints is < 0 || PlayerActionPoints > maximumPlayerActionPoints ||
+            TargetActionPoints is < 0 || TargetActionPoints > contract.Critter.Stats.ActionPoints ||
+            TargetTurnCount < 0 || TargetTurnCount == 0 && LastTargetTurnAction is not null ||
+            TargetTurnCount > 0 && LastTargetTurnAction is null ||
+            LastTargetAttack is not null &&
+                (LastTargetTurnAction != ClassicTargetTurnAction.AdjacentAttackRequired ||
+                 LastTargetAttack.ActorId != $"{contract.Critter.Serial}:{contract.Critter.Pid}" ||
+                 LastTargetAttack.TargetId != "player" ||
+                 LastTargetAttack.ActorActionPoints != TargetActionPoints ||
+                 LastTargetAttack.Boundary != ClassicAttackBoundary.HitRollRequired ||
+                 LastTargetAttack.Source != EquippedAttackSource(contract)) ||
+            LastTargetPath is not null &&
+                (LastTargetTurnAction != ClassicTargetTurnAction.MovementRequired ||
+                 LastTargetPath.CurrentTile != contract.Critter.Tile ||
+                 LastTargetPath.ActionPoints != TargetActionPoints) ||
             CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0 ||
-            SpearEquipped && !SpearLooted)
+            SpearEquipped && !SpearLooted || IntWorldState is null)
             throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation save state is invalid.");
     }
+
+    internal static ClassicAttackSource EquippedAttackSource(
+        Fo2TempleConfrontationContract contract) => new(
+        contract.Critter.EquippedAttack.Pid,
+        contract.Critter.EquippedAttack.MinimumDamage,
+        contract.Critter.EquippedAttack.MaximumDamage,
+        contract.Critter.EquippedAttack.DamageType,
+        contract.Critter.EquippedAttack.MaximumRange,
+        contract.Critter.EquippedAttack.ActionPointCost,
+        contract.Critter.EquippedAttack.AnimationCode,
+        contract.Critter.EquippedAttack.HitResolution);
 }
 
 internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
@@ -215,6 +251,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     private readonly Fo2TempleConfrontationContract _contract;
     private readonly Fo2TempleConfrontationProfile _profile;
     private readonly Fo2ArroyoCavesPlayerBody _player;
+    private readonly Fo2TempleTopologyCoverage _topology;
     private readonly Sprite3D _targetSprite;
     private readonly int _maximumPlayerHitPoints;
     private readonly int _maximumPlayerActionPoints;
@@ -224,6 +261,14 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     private readonly Fo2TempleInventoryScreen _inventory;
     private readonly Fo2TempleGuardianDialogue _dialogue;
     private readonly Fo2TempleTransitionRuntime _transition;
+    private readonly ClassicMapIntProgram _guardianIntProgram;
+    private readonly ClassicRetailRandomContract _randomContract;
+    private readonly Func<ClassicRetailRandomLifecycleState> _readRandomState;
+    private readonly Action<ClassicRetailRandomLifecycleState,
+        ClassicRetailRandomLifecycleState> _commitRandomState;
+    private readonly ClassicIntActorHandleTable _actorHandles = new();
+    private readonly int _playerIntHandle;
+    private readonly int _guardianIntHandle;
     private Fo2TempleConfrontationState _state;
 
     internal event Action? StateChanged;
@@ -293,27 +338,73 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2TempleConfrontationContract contract,
         Fo2TempleConfrontationProfile profile,
         Fo2ArroyoCavesPlayerBody player,
+        Fo2TempleTopologyCoverage topology,
         Sprite3D targetSprite,
         Fo2CharacterSelection character,
         Fo2CharacterStartAsset inventorySource,
         Fo2TempleTransitionRuntime transition,
+        ClassicMapIntProgram guardianIntProgram,
+        ClassicRetailRandomContract randomContract,
+        Func<ClassicRetailRandomLifecycleState> readRandomState,
+        Action<ClassicRetailRandomLifecycleState,
+            ClassicRetailRandomLifecycleState> commitRandomState,
         Fo2TempleConfrontationState? restored)
     {
         _contract = contract;
         _profile = profile;
         _player = player;
+        _topology = topology;
         _targetSprite = targetSprite;
         _transition = transition;
+        _guardianIntProgram = guardianIntProgram;
+        _randomContract = randomContract;
+        _readRandomState = readRandomState;
+        _commitRandomState = commitRandomState;
+        _playerIntHandle = _actorHandles.Register(player);
+        _guardianIntHandle = _actorHandles.Register(targetSprite);
         _maximumPlayerHitPoints = MaximumHitPoints(character);
         _maximumPlayerActionPoints = MaximumActionPoints(character);
         _playerMeleeDamage = MeleeDamage(character);
         _state = restored ?? new Fo2TempleConfrontationState(
             contract.Critter.CurrentHitPoints,
             _maximumPlayerActionPoints,
+            contract.Critter.CurrentActionPoints,
+            0,
+            null,
+            null,
+            null,
             false,
             false,
-            false);
+            false,
+            new ClassicScriptState(),
+            ClassicIntWorldObjectState.Empty);
         _state.Validate(contract, _maximumPlayerActionPoints);
+        if (_actorHandles.Require(player) != _playerIntHandle ||
+            _actorHandles.Require(targetSprite) != _guardianIntHandle ||
+            _state.IntWorldState.AttackRequests.Any(request =>
+                request.ActorHandle != _guardianIntHandle ||
+                request.TargetHandle != _playerIntHandle))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple restored INT actor handles are invalid.");
+        if (_state.LastTargetPath is { } restoredPath)
+        {
+            var expectedPath = ClassicTargetPathOwner.Plan(
+                contract.Critter.Tile,
+                player.CurrentTile,
+                restoredPath.ActionPoints,
+                topology.TargetWalkableTiles,
+                new ClassicTargetPathContract(
+                    topology.MapSha256,
+                    topology.DoorStateComplete,
+                    topology.MultihexCoverageComplete,
+                    null,
+                    null));
+            if (!restoredPath.Path.SequenceEqual(expectedPath.Path) ||
+                restoredPath.Contract != expectedPath.Contract ||
+                restoredPath.Boundary != expectedPath.Boundary)
+                throw new InvalidOperationException(
+                    "Fallout 2 restored target path drifted from source topology.");
+        }
         Name = "FO2_TEMPLE_BOUNDED_CONFRONTATION";
         Layer = HudLayer;
         var panel = new PanelContainer
@@ -332,7 +423,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         content.AddChild(_status);
         content.AddChild(Label("Inventory: press I / controller Y"));
         content.AddChild(Label(
-            "C/X: Combat   Space/A: Attack   Enter/Start: End Turn   E/B: Talk/Loot   I/Y: Inventory"));
+            "C/X: Combat   Space/A: Attack   Enter/Start: End Turn   L/D-pad Up: Look   E/B: Talk/Loot   I/Y: Inventory"));
         AddChild(panel);
         _inventory = new Fo2TempleInventoryScreen(
             inventorySource,
@@ -345,6 +436,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             character.Profile.Name,
             EffectiveIntelligence(character),
             player.GetMeta("character_fid").AsString(),
+            _state.ScriptState,
             profile.WidthPixels,
             profile.FontSizePixels);
         AddChild(_dialogue);
@@ -358,6 +450,10 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2CharacterSelection character,
         Fo2CharacterStartAsset inventorySource,
         Fo2TempleTransitionRuntime transition,
+        ClassicRetailRandomContract randomContract,
+        Func<ClassicRetailRandomLifecycleState> readRandomState,
+        Action<ClassicRetailRandomLifecycleState,
+            ClassicRetailRandomLifecycleState> commitRandomState,
         Fo2TempleConfrontationState? restored = null)
     {
         if (player.CurrentMapIndex != Fo2TemplePresentationCatalog.MapIndex ||
@@ -386,14 +482,22 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             targets[0].GetMeta("source_sha256").AsString() != targetArtifact.SourceSha256)
             throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation target sprite identity is absent.");
+        var guardianIntProgram = catalog.IntInitialization.ScriptSlots.Single(row =>
+            row.ScriptIndex == catalog.Confrontation.Critter.ScriptIndex &&
+            row.Sid == catalog.Confrontation.Critter.Sid).Program;
         var runtime = new Fo2TempleConfrontationRuntime(
             catalog.Confrontation,
             profile,
             player,
+            scene.Topology,
             targets[0],
             character,
             inventorySource,
             transition,
+            guardianIntProgram,
+            randomContract,
+            readRandomState,
+            commitRandomState,
             restored);
         if (!runtime.TargetPlacementExact || runtime.TargetSourceSha256.Length != 64)
             throw new InvalidOperationException(
@@ -426,6 +530,8 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             Attack();
         if (Input.IsActionJustPressed(_profile.EndTurn.Action))
             EndTurn();
+        if (Input.IsActionJustPressed(_profile.Look.Action))
+            LookAtGuardian();
         if (Input.IsActionJustPressed(_profile.Loot.Action))
         {
             if (_state.TargetHitPoints > 0 && !_state.CombatActive)
@@ -502,10 +608,47 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             SetStatus("Talk requires a live, non-hostile adjacent guardian.");
             return false;
         }
+        var script = _contract.GuardianScript;
+        var entry = script.EffectProgram.ExecuteWithActions(
+            "talk_p_proc",
+            _state.ScriptState,
+            new ClassicScriptContext(
+                false,
+                true,
+                default,
+                _player.GetMeta("character_fid").AsString()));
+        if (!entry.Executed || entry.OpenDialogueNode is null)
+            throw new InvalidOperationException(
+                "Fallout 2 guardian talk script did not open an admitted dialogue node.");
         _player.Presentation.StopWalking();
         _player.SetPhysicsProcess(false);
-        _dialogue.Open();
-        SetStatus("Owned ACKlint dialogue active; general INT execution remains disabled.");
+        _dialogue.Open(entry.OpenDialogueNode);
+        SetStatus("Owned ACKlint dialogue procedure active; unsupported INT remains fail-closed.");
+        return true;
+    }
+
+    internal bool LookAtGuardian()
+    {
+        if (_dialogue.IsOpen || _inventory.IsOpen || _state.TargetHitPoints == 0 ||
+            !Adjacent())
+        {
+            SetStatus("Look requires a live adjacent guardian.");
+            return false;
+        }
+        var script = _contract.GuardianScript;
+        var execution = script.EffectProgram.ExecuteWithActions(
+            "look_at_p_proc",
+            _state.ScriptState,
+            new ClassicScriptContext(false, true, default));
+        if (!execution.Executed || !execution.ScriptOverrides ||
+            execution.DisplayMessages.Count != 1 ||
+            execution.DisplayMessages[0].MessageListId != script.MessageListId ||
+            !script.DisplayMessages.TryGetValue(
+                execution.DisplayMessages[0].MessageId, out var message))
+            throw new InvalidOperationException(
+                "Fallout 2 guardian look-at script did not emit an admitted message.");
+        SetStatus(message);
+        Changed();
         return true;
     }
 
@@ -591,6 +734,18 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
 
     internal bool EndTurn()
     {
+        if (_state.LastTargetPath is not null)
+        {
+            SetStatus(
+                "The exact target path is waiting on source move animation/AP-step contracts.");
+            return false;
+        }
+        if (_state.LastTargetAttack is not null)
+        {
+            SetStatus(
+                "The source target attack is waiting on unavailable retail hit/RNG resolution.");
+            return false;
+        }
         if (_state.TargetHitPoints == 0 || !_state.CombatActive)
         {
             SetStatus(_state.TargetHitPoints == 0
@@ -598,14 +753,82 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
                 : "Enter combat before ending the player turn.");
             return false;
         }
-        _state = _state with { PlayerActionPoints = _maximumPlayerActionPoints };
-        SetStatus("Player AP restored. Target turns/AI are not implemented in this adapter.");
+        var targetTurn = ClassicCombatTurnOwner.BeginTargetTurn(
+            _state.TargetActionPoints,
+            _contract.Critter.Stats.ActionPoints,
+            _contract.Critter.RuntimeAiPacket,
+            _contract.Critter.RuntimeTeam,
+            _state.IntWorldState.AttackRequests.Any(request =>
+                request.ActorHandle == _guardianIntHandle &&
+                request.TargetHandle == _playerIntHandle),
+            _contract.Critter.Tile,
+            _player.CurrentTile,
+            Fo1HexMath.Neighbors(_contract.Critter.Tile).ToHashSet());
+        var targetAttack = targetTurn.Action == ClassicTargetTurnAction.AdjacentAttackRequired
+            ? ClassicAttackOwner.Prepare(
+                $"{_contract.Critter.Serial}:{_contract.Critter.Pid}",
+                "player",
+                Fo1HexMath.Distance(_contract.Critter.Tile, _player.CurrentTile),
+                targetTurn.ActionPoints,
+                Fo2TempleConfrontationState.EquippedAttackSource(_contract))
+            : null;
+        var targetPath = targetTurn.Action == ClassicTargetTurnAction.MovementRequired
+            ? ClassicTargetPathOwner.Plan(
+                _contract.Critter.Tile,
+                _player.CurrentTile,
+                targetTurn.ActionPoints,
+                _topology.TargetWalkableTiles,
+                new ClassicTargetPathContract(
+                    _topology.MapSha256,
+                    _topology.DoorStateComplete,
+                    _topology.MultihexCoverageComplete,
+                    null,
+                    null))
+            : null;
+        _state = _state with
+        {
+            PlayerActionPoints = _maximumPlayerActionPoints,
+            TargetActionPoints = targetTurn.ActionPoints,
+            TargetTurnCount = _state.TargetTurnCount + 1,
+            LastTargetTurnAction = targetTurn.Action,
+            LastTargetAttack = targetAttack,
+            LastTargetPath = targetPath,
+        };
+        var randomState = _readRandomState();
+        var randomBoundary = randomState.Boundary ?? randomState.Phase.ToString();
+        SetStatus(targetTurn.Action switch
+        {
+            ClassicTargetTurnAction.AdjacentAttackRequired =>
+                $"Source-equipped {_contract.DefeatLoot.DisplayName} attack is in range and " +
+                $"costs {_contract.Critter.EquippedAttack.ActionPointCost} AP; " +
+                $"retail hit/RNG resolution remains fail-closed at {randomBoundary}.",
+            ClassicTargetTurnAction.MovementRequired =>
+                targetPath?.Boundary switch
+                {
+                    ClassicTargetPathBoundary.MoveAnimationRequired =>
+                        $"Exact source-topology target path has {targetPath.Path.Count - 1} " +
+                        "step(s); source move animation is unavailable, so movement is fail-closed.",
+                    ClassicTargetPathBoundary.StepActionPointCostRequired =>
+                        "Exact source-topology path is ready; source step AP cost is unavailable.",
+                    _ => "Source target path could not be admitted.",
+                },
+            _ => "Source target turn had no ACKlint attack request.",
+        });
         Changed();
         return true;
     }
 
     internal bool Loot()
     {
+        if (_state.TargetHitPoints > 0 && !_state.SpearLooted && Adjacent())
+        {
+            ExecuteGuardianPickupAndCritter();
+            _state = _state with { CombatActive = true };
+            SetStatus(
+                $"{_contract.Critter.DisplayName} becomes hostile and engages combat.");
+            Changed();
+            return false;
+        }
         if (_state.TargetHitPoints != 0 || _state.SpearLooted || !Adjacent())
         {
             SetStatus(_state.TargetHitPoints != 0

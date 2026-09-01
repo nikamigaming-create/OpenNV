@@ -77,6 +77,132 @@ TYPE_DIRECTORIES = {
     4: "tiles",
     5: "misc",
 }
+CRITTER_WEAPON_SUFFIXES = "adefghijklm"
+CRITTER_BASIC_ANIMATION_SUFFIXES = "abcdefghijklmnopqrst"
+CRITTER_DEATH_ANIMATION_SUFFIXES = "abcdefghijklmnop"
+CRITTER_SINGLE_FRAME_DEATH_FIRST = 48
+CRITTER_SINGLE_FRAME_DEATH_CONTIGUOUS_LAST = 60
+CRITTER_SINGLE_FRAME_BLOOD_FIRST = 61
+CRITTER_SINGLE_FRAME_BLOOD_LAST = 62
+CRITTER_CALLED_SHOT_PICTURE = 63
+CRITTER_DEATH_FIRST = 20
+CRITTER_BLOOD_DEATH_FIRST = 34
+MAP_SCRIPT_OBJECT_PROGRAM_WORD = 3
+MAP_SCRIPT_SPATIAL_PROGRAM_WORD = 5
+MAP_SCRIPT_OBJECT_ID_WORD = 5
+
+
+@dataclass(frozen=True)
+class PlacedCritterArtState:
+    logical_path: str
+    source_rotation: int
+    frame_selection: str
+    alias_art_index: int | None = None
+
+
+def critter_fid_fields(fid: int) -> dict[str, int]:
+    return {
+        "animation": (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16)
+        & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF,
+        "weapon": (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_12)
+        & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F,
+        "packedRotation": (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_28)
+        & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_07,
+    }
+
+
+def placed_critter_frm_path(art_filename: str, fid: int) -> str:
+    fields = critter_fid_fields(fid)
+    if (
+        fields["packedRotation"] != 0
+        or fields["weapon"] >= len(CRITTER_WEAPON_SUFFIXES)
+        or fields["animation"] >= len(CRITTER_BASIC_ANIMATION_SUFFIXES)
+    ):
+        raise Fo1ProfileError(
+            f"unsupported placed critter FID art variant: {fid:08x}"
+        )
+    art_base = art_filename.split(",", 1)[0].strip()
+    if not art_base:
+        raise Fo1ProfileError(f"empty critter art base for FID {fid:08x}")
+    return canonical_dat2_path(
+        "art\\critters\\"
+        + art_base
+        + CRITTER_WEAPON_SUFFIXES[fields["weapon"]]
+        + CRITTER_BASIC_ANIMATION_SUFFIXES[fields["animation"]]
+        + ".frm"
+    )
+
+
+def placed_critter_art_state(
+    art_filename: str,
+    fid: int,
+    rotation: int,
+) -> PlacedCritterArtState:
+    fields = critter_fid_fields(fid)
+    if fields["packedRotation"] != 0:
+        raise Fo1ProfileError(
+            f"unsupported packed-rotation critter FID art variant: {fid:08x}"
+        )
+    if fields["animation"] == 0:
+        return PlacedCritterArtState(
+            placed_critter_frm_path(art_filename, fid),
+            rotation,
+            "stored",
+        )
+    if fields["animation"] == CRITTER_CALLED_SHOT_PICTURE:
+        # Published Fallout LST/FID format: animation 63 is the special
+        # called-shot `na.frm` identity; critters.lst supplies its art alias.
+        # https://github.com/rotators/fallout2-docs/blob/master/content/pages/lst.md
+        art_base = art_filename.split(",", 1)[0].strip()
+        if not art_base:
+            raise Fo1ProfileError(f"empty called-shot art base: {fid:08x}")
+        return PlacedCritterArtState(
+            canonical_dat2_path(f"art\\critters\\{art_base}na.frm"),
+            rotation,
+            "stored",
+        )
+    animation = fields["animation"]
+    if (
+        CRITTER_SINGLE_FRAME_DEATH_FIRST
+        <= animation
+        <= CRITTER_SINGLE_FRAME_DEATH_CONTIGUOUS_LAST
+    ):
+        death_animation = (
+            animation - CRITTER_SINGLE_FRAME_DEATH_FIRST + CRITTER_DEATH_FIRST
+        )
+    elif (
+        CRITTER_SINGLE_FRAME_BLOOD_FIRST
+        <= animation
+        <= CRITTER_SINGLE_FRAME_BLOOD_LAST
+    ):
+        death_animation = (
+            animation
+            - CRITTER_SINGLE_FRAME_BLOOD_FIRST
+            + CRITTER_BLOOD_DEATH_FIRST
+        )
+    else:
+        raise Fo1ProfileError(
+            f"unsupported placed critter animation state: {fid:08x}"
+        )
+    art_base = art_filename.split(",", 1)[0].strip()
+    if not art_base or not 0 <= rotation < FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_6:
+        raise Fo1ProfileError(
+            f"invalid single-frame death art state: {fid:08x}/{rotation}"
+        )
+    suffix_index = death_animation - CRITTER_DEATH_FIRST
+    return PlacedCritterArtState(
+        canonical_dat2_path(
+            "art\\critters\\"
+            + art_base
+            + "r"
+            + CRITTER_DEATH_ANIMATION_SUFFIXES[suffix_index]
+            + ".frm"
+        ),
+        rotation,
+        "terminal",
+    )
+
+
 ITEM_SUBTYPES = {
     0: "armor",
     1: "container",
@@ -300,20 +426,46 @@ class Fo1ResourceResolver:
         if object_type != 1:
             return canonical_dat2_path(f"art\\{directory}\\{art_filename}")
 
-        animation = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
-        weapon = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_12) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F
-        packed_rotation = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_28) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_07
-        weapon_suffixes = "adefghij"
-        if animation != 0 or packed_rotation != 0 or weapon >= len(weapon_suffixes):
+        fields = critter_fid_fields(fid)
+        if fields["animation"] != 0:
             raise Fo1ProfileError(
                 f"unsupported placed critter FID for idle FRM transport: {fid:08x}"
             )
-        art_base = art_filename.split(",", 1)[0].strip()
-        if not art_base:
-            raise Fo1ProfileError(f"empty critter art base for FID {fid:08x}")
-        return canonical_dat2_path(
-            f"art\\critters\\{art_base}{weapon_suffixes[weapon]}a.frm"
-        )
+        return placed_critter_frm_path(art_filename, fid)
+
+    def placed_critter_art_state(
+        self,
+        fid: int,
+        rotation: int,
+    ) -> PlacedCritterArtState:
+        art_filename = self.art_filename(fid)
+        if art_filename is None:
+            raise Fo1ProfileError(f"Fallout critter FID has no art identity: {fid:08x}")
+        state = placed_critter_art_state(art_filename, fid, rotation)
+        try:
+            self.read(state.logical_path)
+            return state
+        except FileNotFoundError as primary_error:
+            fields = [field.strip() for field in art_filename.split(",")]
+            art_index = fid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0FFF
+            if len(fields) < 2 or not fields[1].isdigit():
+                raise primary_error
+            alias_index = int(fields[1])
+            if alias_index == art_index:
+                raise primary_error
+            alias_filename = self.art_filename(
+                FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_01000000 | alias_index
+            )
+            if alias_filename is None:
+                raise primary_error
+            alias = placed_critter_art_state(alias_filename, fid, rotation)
+            self.read(alias.logical_path)
+            return PlacedCritterArtState(
+                alias.logical_path,
+                alias.source_rotation,
+                alias.frame_selection,
+                alias_index,
+            )
 
 
 def _read_i32(data: bytes, offset: int, label: str) -> tuple[int, int]:
@@ -335,12 +487,31 @@ def parse_script_section(data: bytes, offset: int) -> tuple[list[dict[str, Any]]
             for slot_index in range(FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16):
                 if offset + 4 > len(data):
                     raise Fo1ProfileError("truncated MAP script slot")
+                record_offset = offset
                 sid = struct.unpack_from(">i", data, offset)[0]
                 sid_type = ((sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF) >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) if sid >= 0 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
                 record_size = FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_72 if sid_type == 1 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68 if sid_type == 2 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_64
                 if offset + record_size > len(data):
                     raise Fo1ProfileError("truncated MAP script record")
-                slots.append({"slot": slot_index, "sid": f"{sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF:08x}", "bytes": record_size})
+                record = struct.unpack_from(f">{record_size // 4}i", data, offset)
+                slots.append(
+                    {
+                        "slot": slot_index,
+                        "sourceOffset": record_offset,
+                        "sid": f"{sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF:08x}",
+                        "bytes": record_size,
+                        "scriptIndex": (
+                            record[MAP_SCRIPT_SPATIAL_PROGRAM_WORD]
+                            if sid_type == 1
+                            else record[MAP_SCRIPT_OBJECT_PROGRAM_WORD]
+                        ),
+                        "objectId": (
+                            None
+                            if sid_type == 1
+                            else record[MAP_SCRIPT_OBJECT_ID_WORD]
+                        ),
+                    }
+                )
                 offset += record_size
             length, offset = _read_i32(data, offset, "script extent length")
             next_value, offset = _read_i32(data, offset, "script extent next")

@@ -30,9 +30,7 @@ internal sealed record OpeningManifest(
     private const string ExpectedFirstSliceClosureSchema =
         "opennv-fnv-first-slice-source-closure/v1";
     private const string ExpectedFirstSliceClosureStatus =
-        "source-accounted-playable-claim-blocked-by-explicit-capability-gap";
-    private const string ExpectedFirstSliceUnsupportedCapability =
-        "non-default-race-hair-eye-live-3d-face-preview";
+        "source-accounted-native-runtime-and-visual-promotion-pending";
     private const int VectorComponents = 2;
     private const int RectComponents = 4;
     private const int RgbComponents = 3;
@@ -75,12 +73,11 @@ internal sealed record OpeningManifest(
         if (sourceClosure.GetProperty("schema").GetString() !=
                 ExpectedFirstSliceClosureSchema ||
             !validClosureStatus ||
-            sourceClosure.GetProperty("playableClaimReady").GetBoolean() ||
+            sourceClosure.GetProperty("playableClaimReady").GetBoolean() !=
+                (omitted.GetArrayLength() == 0) ||
             sourceClosure.GetProperty("unaccountedCount").GetInt32() != 0 ||
             sourceClosure.GetProperty("unaccounted").GetArrayLength() != 0 ||
-            sourceClosure.GetProperty("unsupported").GetArrayLength() != 1 ||
-            sourceClosure.GetProperty("unsupported")[0].GetString() !=
-                ExpectedFirstSliceUnsupportedCapability)
+            sourceClosure.GetProperty("unsupported").GetArrayLength() != 0)
             throw new InvalidOperationException(
                 "Owned opening first-slice source closure is inconsistent.");
 

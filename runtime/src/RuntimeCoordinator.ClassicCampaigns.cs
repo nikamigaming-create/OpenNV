@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Diagnostics.Performance;
 using OpenNV.Runtime.World.Portals;
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Campaigns.TTW;
 using OpenNV.Runtime.Campaigns.Fallout1;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
@@ -262,12 +263,29 @@ public partial class RuntimeCoordinator
                         $"Fallout campaign elevation must be 0, 1, or 2: {requestedElevation}");
                 elevation = parsedElevation;
             }
-            viewer = new Fo1CampaignPresentationViewer();
-            AddChild(viewer);
-            viewCoverage = viewer.Configure(
-                catalog,
-                options.TryGetValue("fo1-map", out var requestedMap) ? requestedMap : null,
-                elevation);
+            var selectedMap = options.TryGetValue("fo1-map", out var requestedMap)
+                ? requestedMap
+                : null;
+            if (options.TryGetValue(
+                    "classic-adjacent-map-catalog", out var adjacentCatalogPath))
+            {
+                var runtime = new Fo1CampaignAdjacentRuntime();
+                AddChild(runtime);
+                viewCoverage = runtime.Configure(
+                    catalog,
+                    ClassicAdjacentMapCatalog.Load(adjacentCatalogPath),
+                    selectedMap ?? throw new ArgumentException(
+                        "Playable Fallout adjacent maps require --fo1-map."),
+                    elevation,
+                    RequireOption(options, "save-path"));
+                viewer = runtime.Viewer;
+            }
+            else
+            {
+                viewer = new Fo1CampaignPresentationViewer();
+                AddChild(viewer);
+                viewCoverage = viewer.Configure(catalog, selectedMap, elevation);
+            }
             GD.Print(
                 $"OPENNV_FO1_CAMPAIGN_MAP_VIEW_PASS map={viewCoverage.MapId} " +
                 $"elevation={viewCoverage.Elevation} " +

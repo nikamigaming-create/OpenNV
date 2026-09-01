@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -31,7 +32,6 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const float SkipButtonOffsetXPixels = -220.0f;
     internal const float SkipButtonOffsetYPixels = 24.0f;
     internal const float SkipButtonWidthPixels = 190.0f;
-    internal const float AppearancePreviewTexturePixels = 150.0f;
     internal const float VaultPreviewMarginPixels = 24.0f;
     internal const float VaultPreviewPanelWidthPixels = 560.0f;
     internal const float BoundaryHorizontalInsetPixels = 120.0f;
@@ -47,6 +47,10 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const int FaceGenAsymmetricGeometryFloats = 30;
     internal const int FaceGenSymmetricTextureFloats = 50;
     internal const int AabbCornerCount = 8;
+    internal const int DialogueConditionEqual = 0;
+    internal const int DialogueConditionGetItemCount = 47;
+    internal const int DialogueConditionGetQuestVariable = 79;
+    internal const int DialogueConditionGetIsCurrentPackage = 161;
     internal const float FaceGenPreviewNormalizedMorphWeightScale = 1.0f;
     internal const float FaceGenSliderSourceMinimum = -5.0f;
     internal const float FaceGenSliderSourceMaximum = 5.0f;
@@ -94,7 +98,8 @@ internal sealed record Fo3FaceGenDefaults(
 internal sealed record Fo3AppearanceNameUi(
     int PanelWidth,
     int PanelHeight,
-    Fo3AppearanceAsset BackgroundTexture);
+    Fo3AppearanceAsset BackgroundTexture,
+    OwnedGamebryoTextEditMenu TextEditMenu);
 
 internal sealed record Fo3AppearancePreviewPresentation(
     float ViewportWidthFraction,
@@ -161,6 +166,7 @@ internal sealed record Fo3AppearanceUi(
     int SliderWidth,
     int SliderHeight,
     Fo3AppearanceAsset BackgroundTexture,
+    OwnedGamebryoRaceSexControls RaceSexControls,
     Fo3AppearanceNameUi Name);
 
 internal sealed record Fo3AppearanceSelection(
@@ -168,7 +174,8 @@ internal sealed record Fo3AppearanceSelection(
     Fo3AppearanceSex Sex,
     Fo3AppearanceOption Hair,
     Fo3AppearanceOption Eyes,
-    IReadOnlyDictionary<string, float> FaceControlValues)
+    IReadOnlyDictionary<string, float> FaceControlValues,
+    IReadOnlyDictionary<string, float> TextureControlValues)
 {
     internal float FaceControlValue(string settingEntity) => FaceControlValues[settingEntity];
 }
@@ -191,17 +198,21 @@ internal sealed record Fo3AppearanceContract(
     private const string ExpectedStatus =
         "source-backed-native-creator-all-native-geometry-controls";
     private const string ExpectedPreview =
-        "owned-default-male-and-female-full-body-live-previews-" +
+        "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-" +
         "all-native-geometry-controls";
     private const string ExpectedPreviewSchema =
-        "opennv-owned-player-facegen-preview-set/v3";
+        "opennv-owned-player-facegen-preview-set/v5";
     private const string ExpectedPreviewStatus =
-        "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-" +
-        "all-native-geometry-controls-runtime-bound";
+        "compiled-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-" +
+        "with-ctl-egm-targets-all-native-geometry-controls-runtime-bound";
     private const string ExpectedPreviewRuntimeDisposition =
-        "owned-default-male-and-female-selection-preview-hosts-and-all-native-geometry-" +
-        "controls-bound-other-identities-fail-closed-sibling-gamebryo-slider-semantics-" +
-        "corroborated";
+        "owned-playable-race-male-and-female-valid-hair-eye-identity-preview-hosts-" +
+        "and-all-native-geometry-controls-bound-invalid-source-tuples-fail-closed-" +
+        "sibling-gamebryo-slider-semantics-corroborated";
+    private const string ExpectedPreviewSelectionScope =
+        "all-playable-race-sex-valid-hair-eyes-cartesian-product";
+    private const string ExpectedUnsupportedPreviewSelectionScope =
+        "invalid-race-sex-hair-eyes-source-tuple";
     private static readonly string[] ExpectedBodyRoles = ["body", "left-hand", "right-hand"];
     private static readonly string[] ExpectedPreviewSexes = ["male", "female"];
 
@@ -222,6 +233,33 @@ internal sealed record Fo3AppearanceContract(
         var defaultRaceFormId = RequiredFormId(player, "defaultRaceFormId");
         var uiSource = RequiredObject(source, "ui");
         var nameSource = RequiredObject(uiSource, "name");
+        var nameWidth = PositiveInteger(nameSource, "panelWidth");
+        var nameHeight = PositiveInteger(nameSource, "panelHeight");
+        var textEditMenu = OwnedGamebryoTileRuntime.ParseTextEditMenu(
+            RequiredObject(nameSource, "textEditMenuTiles"));
+        var raceSexControls = OwnedGamebryoTileRuntime.ParseRaceSexControls(
+            RequiredObject(uiSource, "raceSexMenuTiles"));
+        if (raceSexControls.BackgroundRect != new Rect2(
+                PositiveInteger(uiSource, "panelX"),
+                PositiveInteger(uiSource, "panelY"),
+                PositiveInteger(uiSource, "panelWidth"),
+                PositiveInteger(uiSource, "panelHeight")) ||
+            raceSexControls.FaceGrabRect != new Rect2(
+                PositiveInteger(uiSource, "faceGrabX"),
+                PositiveInteger(uiSource, "faceGrabY"),
+                PositiveInteger(uiSource, "faceGrabWidth"),
+                PositiveInteger(uiSource, "faceGrabHeight")) ||
+            raceSexControls.List.Rect.Size != new Vector2(
+                PositiveInteger(uiSource, "listItemWidth"),
+                PositiveInteger(uiSource, "listItemHeight")) ||
+            raceSexControls.Slider.Rect.Size != new Vector2(
+                PositiveInteger(uiSource, "sliderWidth"),
+                PositiveInteger(uiSource, "sliderHeight")))
+            throw new InvalidOperationException(
+                "Fallout 3 RaceSex shared tile geometry differs.");
+        if (textEditMenu.Panel.Rect.Size != new Vector2(nameWidth, nameHeight))
+            throw new InvalidOperationException(
+                "Fallout 3 TextEditMenu panel dimensions differ.");
         var ui = new Fo3AppearanceUi(
             PositiveInteger(uiSource, "panelX"),
             PositiveInteger(uiSource, "panelY"),
@@ -236,10 +274,12 @@ internal sealed record Fo3AppearanceContract(
             PositiveInteger(uiSource, "sliderWidth"),
             PositiveInteger(uiSource, "sliderHeight"),
             LoadAsset(RequiredObject(uiSource, "backgroundTexture")),
+            raceSexControls,
             new Fo3AppearanceNameUi(
-                PositiveInteger(nameSource, "panelWidth"),
-                PositiveInteger(nameSource, "panelHeight"),
-                LoadAsset(RequiredObject(nameSource, "backgroundTexture"))));
+                nameWidth,
+                nameHeight,
+                LoadAsset(RequiredObject(nameSource, "backgroundTexture")),
+                textEditMenu));
         var playerFaceGen = RequiredObject(RequiredObject(source, "player"), "faceGen");
         var controlSpace = RequiredObject(playerFaceGen, "controlSpace");
         var previewControl = RequiredObject(controlSpace, "runtimePreviewControl");
@@ -339,7 +379,8 @@ internal sealed record Fo3AppearanceContract(
             FaceControls.ToDictionary(
                 value => value.SettingEntity,
                 value => value.ResetValue,
-                StringComparer.Ordinal));
+                StringComparer.Ordinal),
+            TextureDefaults());
     }
 
     internal Fo3AppearanceSelection ResolveSelection(
@@ -360,57 +401,65 @@ internal sealed record Fo3AppearanceContract(
             FaceControls.ToDictionary(
                 value => value.SettingEntity,
                 value => value.ResetValue,
-                StringComparer.Ordinal));
+                StringComparer.Ordinal),
+            TextureDefaults());
     }
+
+    private IReadOnlyDictionary<string, float> TextureDefaults() =>
+        PreviewSet.Previews[0].TextureControls.ToDictionary(
+            value => value.SettingEntity,
+            _ => FaceControl.ResetValue,
+            StringComparer.Ordinal);
 
     internal Fo3AppearanceSelection ApplyFaceControl(
         Fo3AppearanceSelection selection,
         Fo3AppearanceFaceControl control,
         float value)
     {
-        var preview = PreviewSet.Previews.Single(value =>
-            value.RaceFormId.Equals(selection.Race.FormId, StringComparison.OrdinalIgnoreCase) &&
-            value.HairFormId.Equals(selection.Hair.FormId, StringComparison.OrdinalIgnoreCase) &&
-            value.EyesFormId.Equals(selection.Eyes.FormId, StringComparison.OrdinalIgnoreCase));
+        var engineSex = selection.Race.Sex.Single(value => value.Value == selection.Sex).Key;
+        var preview = PreviewFor(selection, engineSex);
         if (selection.Race.FormId != preview.RaceFormId ||
             selection.Hair.FormId != preview.HairFormId ||
             selection.Eyes.FormId != preview.EyesFormId ||
             value < control.Minimum || value > control.Maximum ||
-            !selection.FaceControlValues.TryGetValue(control.SettingEntity, out var priorValue))
+            !selection.FaceControlValues.ContainsKey(control.SettingEntity))
             throw new InvalidOperationException(
-                "Fallout 3 live FaceGen preview supports only owned default sex identities.");
-        var symmetric = selection.Sex.FaceGen.SymmetricGeometry
-            .Zip(
-                control.Axis,
-                (baseline, axis) => baseline +
-                    (value - priorValue) * control.MorphWeightScale * axis)
-            .ToArray();
-        var values = selection.FaceControlValues.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value,
-            StringComparer.Ordinal);
-        values[control.SettingEntity] = value;
+                "Fallout 3 live FaceGen preview control is outside the owned contract.");
+        var state = OwnedGamebryoFaceGenMorphRuntime.Advance(
+            selection.Sex.FaceGen.SymmetricGeometry,
+            FaceControls.Select(value => new OwnedGamebryoFaceGenMorphControl(
+                value.SettingEntity,
+                value.AxisSha256,
+                value.Axis)).ToArray(),
+            selection.FaceControlValues,
+            control.SettingEntity,
+            value,
+            control.Minimum,
+            control.Maximum,
+            control.MorphWeightScale);
         var face = new Fo3FaceGenDefaults(
-            HashFloats(symmetric),
+            state.SymmetricGeometrySha256,
             selection.Sex.FaceGen.AsymmetricGeometrySha256,
             selection.Sex.FaceGen.SymmetricTextureSha256,
-            symmetric,
+            state.SymmetricGeometry,
             selection.Sex.FaceGen.AsymmetricGeometry,
             selection.Sex.FaceGen.SymmetricTexture);
         return selection with
         {
             Sex = selection.Sex with { FaceGen = face },
-            FaceControlValues = values,
+            FaceControlValues = state.ControlValues,
         };
     }
 
     internal OpeningPlayerFaceGenPreview PreviewFor(
         Fo3AppearanceSelection selection,
-        string engineSex) => PreviewSet.Previews.Single(preview =>
-            preview.Sex == engineSex &&
-            preview.RaceFormId.Equals(selection.Race.FormId, StringComparison.OrdinalIgnoreCase) &&
-            preview.HairFormId.Equals(selection.Hair.FormId, StringComparison.OrdinalIgnoreCase) &&
-            preview.EyesFormId.Equals(selection.Eyes.FormId, StringComparison.OrdinalIgnoreCase));
+        string engineSex) =>
+        OwnedGamebryoFaceGenSelectionInventory.Require(
+            PreviewSet,
+            engineSex,
+            selection.Race.FormId,
+            selection.Hair.FormId,
+            selection.Eyes.FormId);
 
     private static OpeningPlayerFaceGenPreviewSet LoadPreviewSet(
         JsonElement source,
@@ -425,7 +474,14 @@ internal sealed record Fo3AppearanceContract(
         var geometryControlNames = RequiredArray(source, "geometryControlNames")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
         var geometryControlCount = RequiredInteger(source, "geometryControlCount");
+        var textureControlNames = RequiredArray(source, "textureControlNames")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var textureControlCount = RequiredInteger(source, "textureControlCount");
         var runtimeDisposition = RequiredString(source, "runtimeDisposition");
+        var selectionScope = RequiredString(source, "selectionScope");
+        var unsupportedSelectionScope = RequiredString(
+            source,
+            "unsupportedSelectionScope");
         var fullBody = source.GetProperty("fullBody").GetBoolean();
         var bodyRoles = RequiredArray(source, "bodyComponentRoles")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
@@ -452,11 +508,26 @@ internal sealed record Fo3AppearanceContract(
                         .Select(part => part.GetString()!).ToArray(),
                     geometryControlNames,
                     geometryControlCount,
+                    textureControlNames,
+                    textureControlCount,
                     VerifiedPath(outputs, "gltf", "gltfSha256"),
                     RequiredString(outputs, "gltfSha256"),
                     VerifiedPath(outputs, "sidecar", "sidecarSha256"),
                     RequiredString(outputs, "sidecarSha256"),
                     RequiredString(outputs, "bufferSha256"),
+                    VerifiedPath(outputs, "egt", "egtSha256"),
+                    RequiredString(outputs, "egtSha256"),
+                    RequiredArray(value, "symmetricTexture").EnumerateArray()
+                        .Select(item => item.GetSingle()).ToArray(),
+                    RequiredArray(value, "textureControls").EnumerateArray()
+                        .Select(control => new OpeningNativeFaceGenTextureControl(
+                            RequiredInteger(control, "controlIndex"),
+                            RequiredString(control, "settingEntity"),
+                            RequiredString(control, "sourceLabel"),
+                            RequiredString(control, "axisSha256"),
+                            RequiredArray(control, "axis").EnumerateArray()
+                                .Select(item => item.GetSingle()).ToArray()))
+                        .ToArray(),
                     runtimeDisposition,
                     fullBody,
                     bodyRoles,
@@ -468,41 +539,66 @@ internal sealed record Fo3AppearanceContract(
             previewPlayerFormId,
             geometryControlNames,
             geometryControlCount,
+            textureControlNames,
+            textureControlCount,
             runtimeDisposition,
+            selectionScope,
+            unsupportedSelectionScope,
             fullBody,
             bodyRoles,
             bodySources,
             previews);
-        var race = races.Single(value => value.FormId == defaultRaceFormId);
         if (schema != ExpectedPreviewSchema ||
             status != ExpectedPreviewStatus ||
             runtimeDisposition != ExpectedPreviewRuntimeDisposition ||
+            selectionScope != ExpectedPreviewSelectionScope ||
+            unsupportedSelectionScope != ExpectedUnsupportedPreviewSelectionScope ||
             !previewPlayerFormId.Equals(playerFormId, StringComparison.OrdinalIgnoreCase) ||
+            !races.Any(value => value.FormId == defaultRaceFormId) ||
             geometryControlCount != faceControls.Count ||
             !geometryControlNames.SequenceEqual(
                 faceControls.Select(value => value.SettingEntity),
                 StringComparer.Ordinal) ||
+            textureControlCount <= 0 ||
+            textureControlCount != textureControlNames.Length ||
             !fullBody ||
             !bodyRoles.SequenceEqual(ExpectedBodyRoles, StringComparer.Ordinal) ||
             !bodySources.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPreviewSexes) ||
-            previews.Length != ExpectedPreviewSexes.Length ||
-            !previews.Select(value => value.Sex).ToHashSet(StringComparer.Ordinal)
-                .SetEquals(ExpectedPreviewSexes) ||
+            !OwnedGamebryoFaceGenSelectionInventory.IsComplete(
+                previewSet,
+                races.SelectMany(race => race.Sex.Select(pair =>
+                    new OwnedGamebryoFaceGenSelectionDomain(
+                        pair.Key,
+                        race.FormId,
+                        pair.Value.HairOptions.Select(value => value.FormId).ToArray(),
+                        pair.Value.EyeOptions.Select(value => value.FormId).ToArray())))) ||
             previews.Any(preview =>
+            {
+                var race = races.SingleOrDefault(value => value.FormId == preview.RaceFormId);
+                return race is null ||
                 !race.Sex.TryGetValue(preview.Sex, out var sex) ||
-                preview.RaceFormId != race.FormId ||
-                preview.HairFormId != sex.DefaultHairFormId ||
-                preview.EyesFormId != sex.DefaultEyesFormId ||
+                sex.HairOptions.All(value => value.FormId != preview.HairFormId) ||
+                sex.EyeOptions.All(value => value.FormId != preview.EyesFormId) ||
                 preview.GeometryControlCount != geometryControlCount ||
                 !preview.GeometryControlNames.SequenceEqual(
                     geometryControlNames,
                     StringComparer.Ordinal) ||
+                preview.TextureControlCount != textureControlCount ||
+                !preview.TextureControlNames.SequenceEqual(
+                    textureControlNames,
+                    StringComparer.Ordinal) ||
+                !preview.TextureControls.Select(value => value.SettingEntity).SequenceEqual(
+                    textureControlNames,
+                    StringComparer.Ordinal) ||
+                preview.TextureControls.Any(value =>
+                    value.Axis.Count != preview.SymmetricTexture.Count) ||
                 !preview.FullBody ||
                 preview.BodyComponentRoles is null ||
                 !preview.BodyComponentRoles.SequenceEqual(
                     bodyRoles,
                     StringComparer.Ordinal) ||
-                !ReferenceEquals(preview.BodyComponentSourcesBySex, bodySources)) ||
+                !ReferenceEquals(preview.BodyComponentSourcesBySex, bodySources);
+            }) ||
             bodySources.Values.Any(rows =>
                 !rows.Select(value => value.Role).SequenceEqual(
                     ExpectedBodyRoles,
@@ -654,15 +750,6 @@ internal sealed record Fo3AppearanceContract(
         if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Fallout 3 FaceGen coordinate hash differs.");
         return (actualSha256, values);
-    }
-
-    private static string HashFloats(IReadOnlyList<float> values)
-    {
-        using var buffer = new MemoryStream();
-        using (var writer = new BinaryWriter(buffer, System.Text.Encoding.UTF8, true))
-            foreach (var value in values)
-                writer.Write(value);
-        return Convert.ToHexString(SHA256.HashData(buffer.ToArray())).ToLowerInvariant();
     }
 
     private static void ValidateFaceControl(Fo3AppearanceFaceControl source)
@@ -821,10 +908,14 @@ internal sealed record Fo3OwnedProfile(
     Fo3Cg01Stage10Transition Cg01Stage10Transition,
     Fo3Cg01Stage12Transition Cg01Stage12Transition,
     Fo3Cg01Stage12DadResponse Cg01Stage12DadResponse,
+    Fo3Cg01PostStage14Transition Cg01PostStage14Transition,
     Fo3Cg01ToddlerWorldContract Cg01ToddlerWorld,
     string MainMenuMusicPath,
     string IntroVideoPath,
-    Color InterfaceColor)
+    Color InterfaceColor,
+    float MenuBackgroundAlpha,
+    OwnedGamebryoDialogueMenu DialogueMenu,
+    IReadOnlyDictionary<int, OwnedBitmapFont> UiFonts)
 {
     private const string ExpectedSchema = "opennv-owned-game-profile/v1";
     private const string ExpectedCampaign = "Fallout3";
@@ -939,6 +1030,12 @@ internal sealed record Fo3OwnedProfile(
                 "postStage12DadResponse"),
             cg01Stage0Transition,
             cg01Stage12Transition);
+        var cg01PostStage14Transition = Fo3Cg01PostStage14Transition.Load(
+            RequiredObject(
+                RequiredObject(cg01Source, "postStage5Transition"),
+                "postStage14Transition"),
+            cg01Stage0Transition,
+            cg01Stage12DadResponse);
         var cg01ToddlerWorld = Fo3Cg01ToddlerWorldContract.Load(
             RequiredObject(cg01Source, "toddlerWorld"),
             cg01Stage0Transition,
@@ -972,6 +1069,18 @@ internal sealed record Fo3OwnedProfile(
             SettingByte(settings, "iSystemColorMainMenuRed") / (float)byte.MaxValue,
             SettingByte(settings, "iSystemColorMainMenuGreen") / (float)byte.MaxValue,
             SettingByte(settings, "iSystemColorMainMenuBlue") / (float)byte.MaxValue);
+        var menuBackgroundAlpha = SettingSingle(settings, "fMenuBackgroundOpacity");
+        if (menuBackgroundAlpha < 0.0f || menuBackgroundAlpha > 1.0f)
+            throw new InvalidOperationException(
+                "Fallout 3 menu background opacity is invalid.");
+        var dialogueMenu = OwnedGamebryoTileRuntime.ParseDialogueMenu(
+            RequiredObject(menu, "dialogueMenuTiles"));
+        var uiFonts = RequiredArray(menu, "fonts")
+            .EnumerateArray()
+            .ToDictionary(
+                value => RequiredInteger(value, "fontId"),
+                OpeningManifest.ParseFont);
+        OwnedGamebryoTileRuntime.RequireDialogueFonts(dialogueMenu, uiFonts);
         var profileSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         var questFormId = RequiredString(quest, "formId");
         if (!ValidHex(questFormId, Fo3OpeningFlowNumericContracts.FormIdHexCharacters))
@@ -1006,10 +1115,14 @@ internal sealed record Fo3OwnedProfile(
             cg01Stage10Transition,
             cg01Stage12Transition,
             cg01Stage12DadResponse,
+            cg01PostStage14Transition,
             cg01ToddlerWorld,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),
-            interfaceColor);
+            interfaceColor,
+            menuBackgroundAlpha,
+            dialogueMenu,
+            uiFonts);
     }
 
     private static void VerifyOwnedVideo(JsonElement runtimeVideo, JsonElement sourceVideo)
@@ -1066,6 +1179,18 @@ internal sealed record Fo3OwnedProfile(
     {
         var row = settings.Single(value => RequiredString(value, "key") == key);
         return byte.Parse(RequiredString(row, "value"), CultureInfo.InvariantCulture);
+    }
+
+    private static float SettingSingle(IEnumerable<JsonElement> settings, string key)
+    {
+        var row = settings.Single(value => RequiredString(value, "key") == key);
+        var result = float.Parse(
+            RequiredString(row, "value"),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture);
+        if (!float.IsFinite(result))
+            throw new InvalidOperationException($"Fallout 3 setting {key} is invalid.");
+        return result;
     }
 
     private static JsonElement RequiredObject(JsonElement parent, string name)
@@ -1143,4 +1268,5 @@ internal enum Fo3OwnedVideoMode
     None,
     Intro,
     Cg01Transition,
+    Cg02Transition,
 }

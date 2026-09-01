@@ -1,0 +1,25 @@
+{
+  "schema": "opennv-classic-retail-random/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "minimumSeed": 1,
+  "modulus": 2147483647,
+  "multiplier": 16807,
+  "quotient": 127773,
+  "remainder": 2836,
+  "shuffleSlots": 32,
+  "warmupSteps": 40,
+  "shuffleIndexMask": 31,
+  "savePolicy": "reset-from-new-seed-on-load",
+  "externalSeed": {
+    "source": "winmm-timeGetTime-u32",
+    "mixerMultiplier": 214013,
+    "mixerIncrement": 2531011,
+    "outputShift": 16,
+    "outputMask": 32767,
+    "wordsPerSeed": 2,
+    "highWordShift": 16,
+    "newGameSeedUnsigned": 3203399405,
+    "newGamePolicy": "explicit-seed-minimum-clamp",
+    "loadPolicy": "next-two-mixer-words"
+  }
+}

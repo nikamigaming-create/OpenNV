@@ -27,12 +27,12 @@ from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from export_static_nif_gltf import export_static_nif
-from facegen_controls import decode_facegen_control_space
+from facegen_controls import FACEGEN_DEMOGRAPHIC_RACE_ORDER, decode_facegen_control_space
 from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
 from player_facegen_preview import (
-    PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
-    PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
     prepare_default_player_facegen_preview,
 )
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
@@ -45,6 +45,8 @@ OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
 OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
 RACE_SEX_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-racesex-menu-tiles/v1"
+TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-textedit-menu-tiles/v1"
+DIALOGUE_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-dialogue-menu-tiles/v1"
 GAMEPLAY_VITALS_SCHEMA = "opennv-owned-gameplay-vitals/v1"
 PLAYER_BASE_EDITOR_ID = "Player"
 PLAYER_BASE_LEVEL_OFFSET = 8
@@ -148,7 +150,10 @@ TEXT_SUBRECORDS = frozenset(
     }
 )
 MANIFEST_FORM_LINK_SUBRECORDS = frozenset(
-    {"SCRO", "SCRI", "NAME", "QSTI", "PKID", "TCLT", "TCLF"}
+    {
+        "SCRO", "SCRI", "NAME", "QSTI", "PKID", "TCLT", "TCLF", "XESP",
+        "NAM0", "LNAM",
+    }
 )
 CONDITION_BYTES = 28
 DIALOGUE_DATA_BYTES = 4
@@ -192,6 +197,14 @@ PACKAGE_IDLE_FORM_BYTES = 4
 PACKAGE_LOCATION_BYTES = 12
 PACKAGE_TARGET_BYTES = 16
 REFERENCE_TRANSFORM_BYTES = 24
+REFERENCE_PRIMITIVE_BYTES = 32
+REFERENCE_PRIMITIVE_FLOAT_COUNT = 7
+LEVELED_ITEM_ENTRY_BYTES = 12
+WEAPON_DATA_BYTES = 15
+WEAPON_DAMAGE_OFFSET = 12
+WEAPON_CLIP_SIZE_OFFSET = 14
+WEAPON_DNAM_BYTES = 204
+WEAPON_ANIMATION_TYPE_OFFSET = 0
 DOC_INITIAL_CHAIR_MARKER_ID = 14
 FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
     "nif-marker-minus-gmst-target-offset-for-actor-placement"
@@ -373,8 +386,8 @@ def emit_player_facegen_preview_set(
 ) -> dict[str, str]:
     """Emit the compiled full-body preview contract for strict sibling consumers."""
     if (
-        preview_set.get("schema") != PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA
-        or preview_set.get("status") != PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS
+        preview_set.get("schema") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA
+        or preview_set.get("status") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
     ):
         raise ValueError("Owned player FaceGen preview-set contract is malformed")
     output = (
@@ -546,6 +559,11 @@ def record_graph_closure(
         for source in reverse_links.get((signature, root), ())
         if source in by_form and by_form[source].signature == "DIAL"
     }
+    dialogue_topics.update(
+        form_id
+        for form_id in root_forms
+        if by_form[form_id].signature == "DIAL"
+    )
     selected.update(dialogue_topics)
     dialogue_children = {
         child
@@ -555,6 +573,15 @@ def record_graph_closure(
     }
     selected.update(dialogue_children)
     add_links(dialogue_children)
+
+    enable_parent_children = {
+        source
+        for root in root_forms
+        for source in reverse_links.get(("XESP", root), ())
+        if source in by_form and by_form[source].signature in {"REFR", "ACHR", "ACRE"}
+    }
+    selected.update(enable_parent_children)
+    add_links(enable_parent_children)
 
     for current in tuple(selected | root_dependencies):
         row = by_form.get(current)
@@ -616,6 +643,9 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
         links: list[dict[str, str]] = []
         conditions: list[dict[str, object]] = []
         dialogue_data = None
+        primitive = None
+        leveled_entries: list[dict[str, object]] = []
+        weapon = None
         inventory: list[dict[str, object]] = []
         for subrecord in iter_subrecords(record):
             inventory.append(
@@ -641,6 +671,62 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                         )
             if subrecord.signature == "CTDA":
                 conditions.append(_condition_manifest(subrecord.data))
+            if subrecord.signature == "XPRM":
+                if len(subrecord.data) != REFERENCE_PRIMITIVE_BYTES or primitive is not None:
+                    raise ValueError(
+                        f"Owned reference primitive differs: {form_id_text(record.form_id)}"
+                    )
+                primitive_values = struct.unpack("<7fI", subrecord.data)
+                primitive = {
+                    "boundsGameUnits": list(primitive_values[:3]),
+                    "colorRgba": list(primitive_values[3:REFERENCE_PRIMITIVE_FLOAT_COUNT]),
+                    "type": primitive_values[REFERENCE_PRIMITIVE_FLOAT_COUNT],
+                }
+            if record.signature == "LVLI" and subrecord.signature == "LVLO":
+                if len(subrecord.data) != LEVELED_ITEM_ENTRY_BYTES:
+                    raise ValueError(
+                        f"Owned leveled item entry differs: {form_id_text(record.form_id)}"
+                    )
+                level, _, item_form_id, count, _ = struct.unpack(
+                    "<HHIHH", subrecord.data
+                )
+                leveled_entries.append(
+                    {
+                        "level": level,
+                        "itemFormId": form_id_text(item_form_id),
+                        "count": count,
+                    }
+                )
+            if record.signature == "WEAP" and subrecord.signature == "DATA":
+                if len(subrecord.data) != WEAPON_DATA_BYTES:
+                    continue
+                if weapon is not None and weapon.get("damage") is not None:
+                    raise ValueError(
+                        f"Owned weapon DATA is duplicated: {form_id_text(record.form_id)}"
+                    )
+                weapon = {
+                    "damage": struct.unpack_from(
+                        "<H", subrecord.data, WEAPON_DAMAGE_OFFSET
+                    )[0],
+                    "clipSize": subrecord.data[WEAPON_CLIP_SIZE_OFFSET],
+                    "ammoFormId": None if weapon is None else weapon["ammoFormId"],
+                }
+            if record.signature == "WEAP" and subrecord.signature == "NAM0":
+                if len(subrecord.data) != FORM_ID_BYTES:
+                    raise ValueError(
+                        f"Owned weapon ammo differs: {form_id_text(record.form_id)}"
+                    )
+                if weapon is None:
+                    weapon = {"damage": None, "clipSize": None, "ammoFormId": None}
+                weapon["ammoFormId"] = form_id_text(struct.unpack("<I", subrecord.data)[0])
+            if record.signature == "WEAP" and subrecord.signature == "DNAM":
+                if len(subrecord.data) != WEAPON_DNAM_BYTES:
+                    continue
+                if weapon is None:
+                    weapon = {"damage": None, "clipSize": None, "ammoFormId": None}
+                weapon["animationType"] = struct.unpack_from(
+                    "<I", subrecord.data, WEAPON_ANIMATION_TYPE_OFFSET
+                )[0]
             if (
                 record.signature == "INFO"
                 and subrecord.signature == "DATA"
@@ -675,6 +761,9 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                 "links": links,
                 "conditions": conditions,
                 "dialogueData": dialogue_data,
+                "primitive": primitive,
+                "leveledEntries": leveled_entries,
+                "weapon": weapon,
                 "questStageScripts": stage_scripts,
                 "questObjectives": quest_objectives,
                 "subrecords": inventory,
@@ -1541,6 +1630,233 @@ def _layout_trait(
         active.remove(identity)
 
 
+def _affine_axis_expression(node: TileNode, trait_name: str) -> dict[str, float]:
+    """Compile the TextEditMenu parent/self affine trait subset without evaluating it."""
+    trait = node.child(trait_name)
+    if trait is None:
+        raise ValueError(
+            f"Owned TextEditMenu trait is absent: {node.name}.{trait_name}"
+        )
+    direct = _direct_number(trait)
+    if direct is not None:
+        return {"parentFactor": 0.0, "selfFactor": 0.0, "constant": direct}
+
+    dimension_trait = "width" if trait_name in {"x", "_x"} else "height"
+    value: list[float] | None = None
+    for operation in trait.children:
+        source = operation.attributes.get("src")
+        source_trait = operation.attributes.get("trait", dimension_trait)
+        if source == "parent()" and source_trait == dimension_trait:
+            operand = [1.0, 0.0, 0.0]
+        elif source == "me()" and source_trait == dimension_trait:
+            operand = [0.0, 1.0, 0.0]
+        elif source is None and not operation.children:
+            operand = [0.0, 0.0, float(operation.text)]
+        else:
+            raise ValueError(
+                f"Owned TextEditMenu affine source is unsupported: "
+                f"{node.name}.{trait_name}.{operation.tag}"
+            )
+        if operation.tag == "copy":
+            value = operand
+        elif value is None:
+            raise ValueError(
+                f"Owned TextEditMenu affine expression begins with {operation.tag}"
+            )
+        elif operation.tag == "add":
+            value = [left + right for left, right in zip(value, operand)]
+        elif operation.tag == "sub":
+            value = [left - right for left, right in zip(value, operand)]
+        elif (
+            operation.tag == "div"
+            and operand[:2] == [0.0, 0.0]
+            and operand[2] != 0.0
+        ):
+            value = [component / operand[2] for component in value]
+        else:
+            raise ValueError(
+                f"Owned TextEditMenu affine operation is unsupported: {operation.tag}"
+            )
+    if value is None or any(not math.isfinite(component) for component in value):
+        raise ValueError("Owned TextEditMenu affine expression is invalid")
+    return dict(zip(("parentFactor", "selfFactor", "constant"), value))
+
+
+def _text_edit_menu_tile_contract(
+    root: TileNode,
+    document: dict[str, object],
+    screen: dict[str, float],
+    selectors: dict[str, object],
+) -> dict[str, object]:
+    menus = [node for node in root.children if node.tag == "menu"]
+    if len(menus) != 1 or menus[0].name != str(selectors["menuName"]):
+        raise ValueError("Owned TextEditMenu document identity differs")
+    menu = menus[0]
+    parents = _tile_parent_index(root)
+    panel = _named_tile(root, str(selectors["panelTile"]))
+    prompt = _named_tile(root, str(selectors["promptTile"]))
+    input_tile = _named_tile(root, str(selectors["inputTile"]))
+    accept = _named_tile(root, str(selectors["acceptTile"]))
+
+    def text_binding(node: TileNode, expected_entity: object) -> dict[str, object]:
+        entity = _entity_name(_required_tile_text(node, "string"))
+        if entity != str(expected_entity):
+            raise ValueError(f"Owned TextEditMenu string binding differs: {node.name}")
+        return {
+            "tile": node.name,
+            "stringEntity": entity,
+            "text": _display_entity(f"&{entity};"),
+            "sourceSha256": str(document["sha256"]),
+        }
+
+    def placement(
+        node: TileNode,
+        x_trait: str = "x",
+        y_trait: str = "y",
+    ) -> dict[str, object]:
+        justify = _required_tile_identity(node, "justify")
+        if justify not in {"left", "center", "right"}:
+            raise ValueError(f"Owned TextEditMenu justification differs: {node.name}")
+        return {
+            "tile": node.name,
+            "x": _affine_axis_expression(node, x_trait),
+            "y": _affine_axis_expression(node, y_trait),
+            "justify": justify,
+        }
+
+    panel_rect = [
+        _layout_trait(panel, trait, root, parents, screen)
+        for trait in ("x", "y", "width", "height")
+    ]
+    if any(not math.isfinite(value) for value in panel_rect) or any(
+        value <= 0.0 for value in panel_rect[2:]
+    ):
+        raise ValueError("Owned TextEditMenu panel geometry is invalid")
+    wrap_width = _required_tile_number(input_tile, "wrapwidth")
+    if wrap_width <= 0.0:
+        raise ValueError("Owned TextEditMenu input wrap width is invalid")
+    return {
+        "schema": TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA,
+        "document": str(document["path"]),
+        "documentSha256": str(document["sha256"]),
+        "menuName": menu.name,
+        "canvasSize": [screen["width"], screen["height"]],
+        "panel": {"tile": panel.name, "rect": panel_rect},
+        "prompt": {
+            **placement(prompt),
+            **text_binding(prompt, selectors["promptEntity"]),
+        },
+        "input": {**placement(input_tile), "wrapWidth": wrap_width},
+        "accept": {
+            **placement(accept, "_x", "_y"),
+            **text_binding(accept, selectors["acceptEntity"]),
+        },
+    }
+
+
+def dialogue_menu_tile_contract(
+    root: TileNode,
+    document: dict[str, object],
+    screen: dict[str, float],
+    template_root: TileNode,
+) -> dict[str, object]:
+    """Compile the shared FO3/FNV DialogMenu source trait subset."""
+    menus = [node for node in root.children if node.tag == "menu"]
+    if len(menus) != 1 or menus[0].name != "DialogMenu":
+        raise ValueError("Owned DialogueMenu document identity differs")
+    menu = menus[0]
+    background = _named_tile(root, "DM_TextBackground")
+    click = _named_tile(root, "DM_ClickRect")
+    speaker_name = _named_tile(root, "DM_SpeakerNameLabel")
+    center = _named_tile(root, "DM_CenterHeight")
+    speaker_text = _named_tile(root, "DM_SpeakerText")
+    topic_list = _named_tile(root, "DM_TopicList")
+    topic = _named_tile(root, "DM_Topic")
+    topic_text = _named_tile(root, "ListItemText")
+    vertical_spacing = _required_tile_number(template_root, "_verticalspacing")
+
+    def direct_operations(node: TileNode, trait: str, operation: str) -> list[float]:
+        source = node.child(trait)
+        if source is None:
+            raise ValueError(
+                f"Owned DialogueMenu trait is absent: {node.name}.{trait}"
+            )
+        return [
+            value
+            for child in source.walk()
+            if child.tag == operation
+            for value in [_direct_number(child)]
+            if value is not None
+        ]
+
+    def one_operation(node: TileNode, trait: str, operation: str) -> float:
+        values = direct_operations(node, trait, operation)
+        if len(values) != 1:
+            raise ValueError(
+                f"Owned DialogueMenu operation is ambiguous: "
+                f"{node.name}.{trait}.{operation} matches={len(values)}"
+            )
+        return values[0]
+
+    texture = _required_tile_texture(background)
+    if set(texture) != {"logicalPath"}:
+        raise ValueError("Owned DialogueMenu background texture is not direct")
+    center_factors = direct_operations(center, "y", "mul")
+    background_y_adds = direct_operations(background, "y", "add")
+    background_y_subs = direct_operations(background, "y", "sub")
+    background_height_adds = direct_operations(background, "height", "add")
+    if (len(center_factors) != 1 or len(background_y_adds) != 2 or
+            len(background_y_subs) != 1 or len(background_height_adds) != 2):
+        raise ValueError("Owned DialogueMenu background vertical traits differ")
+    return {
+        "schema": DIALOGUE_MENU_TILE_CONTRACT_SCHEMA,
+        "document": str(document["path"]),
+        "documentSha256": str(document["sha256"]),
+        "menuName": menu.name,
+        "canvasSize": [screen["width"], screen["height"]],
+        "background": {
+            "tile": background.name,
+            "texture": texture["logicalPath"],
+            "width": _required_tile_number(background, "width"),
+            "brightness": _required_tile_number(background, "brightness"),
+            "topInset": background_y_adds[0],
+            "verticalInset": background_y_subs[0],
+            "heightPadding": background_height_adds[0],
+        },
+        "clickTile": click.name,
+        "speakerName": {
+            "tile": speaker_name.name,
+            "font": int(_required_tile_number(speaker_name, "font")),
+            "rightInset": one_operation(speaker_name, "x", "sub"),
+            "topInset": one_operation(speaker_name, "y", "add"),
+        },
+        "speakerText": {
+            "tile": speaker_text.name,
+            "font": int(_required_tile_number(speaker_text, "font")),
+            "wrapInset": one_operation(speaker_text, "wrapwidth", "sub"),
+            "leftInset": one_operation(speaker_text, "x", "add"),
+            "centerHeightFactor": center_factors[0],
+            "safeBottomInset": direct_operations(speaker_text, "y", "sub")[-1],
+        },
+        "topics": {
+            "tile": topic_list.name,
+            "minimumHeight": _required_tile_number(menu, "_minlistheight"),
+            "widthInset": one_operation(topic_list, "width", "sub"),
+            "leftInset": one_operation(topic_list, "x", "add"),
+            "backgroundHeightPadding": background_height_adds[1],
+            "template": {
+                "tile": topic.name,
+                "textTile": topic_text.name,
+                "font": int(_required_tile_number(topic_text, "font")),
+                "textX": _required_tile_number(topic_text, "x"),
+                "textY": _required_tile_number(topic_text, "y"),
+                "wrapInset": one_operation(topic_text, "wrapwidth", "sub"),
+                "verticalSpacing": vertical_spacing,
+            },
+        },
+    }
+
+
 def _required_tile_number(node: TileNode, trait_name: str) -> float:
     value = _direct_number(node.child(trait_name))
     if value is None:
@@ -2167,6 +2483,20 @@ def _flow_menu_contract(
         if documents[document]["menuName"] == "RaceSexMenu":
             row["raceSexMenuTiles"] = _race_sex_menu_tile_contract(
                 trees[document], documents[document], screen, trees
+            )
+        if documents[document]["menuName"] == "DialogMenu":
+            row["dialogueMenuTiles"] = dialogue_menu_tile_contract(
+                trees[document],
+                documents[document],
+                screen,
+                trees[canonical_ui_path("menus\\prefabs\\list_box_template.xml")],
+            )
+        if "textEditTiles" in definition:
+            row["textEditMenuTiles"] = _text_edit_menu_tile_contract(
+                trees[document],
+                documents[document],
+                screen,
+                dict(definition["textEditTiles"]),
             )
         rows.append(row)
     closure = set()
@@ -3303,7 +3633,7 @@ def _script_code_lines(source: str) -> list[str]:
     return lines
 
 
-def _script_commands(source: str) -> list[dict[str, object]]:
+def _script_commands_unconditional(source: str) -> list[dict[str, object]]:
     commands: list[dict[str, object]] = []
     for line in _script_code_lines(source):
         match = re.fullmatch(r"SetStage\s+(\w+)\s+(\d+)", line, re.IGNORECASE)
@@ -3560,6 +3890,51 @@ def _script_commands(source: str) -> list[dict[str, object]]:
         match = re.fullmatch(r"AddAchievement\s+(\d+)", line, re.IGNORECASE)
         if match:
             commands.append({"kind": "achievement", "index": int(match[1])})
+    return commands
+
+
+def _script_commands(source: str) -> list[dict[str, object]]:
+    commands: list[dict[str, object]] = []
+    guards: list[dict[str, object] | None] = []
+    for line in _script_code_lines(source):
+        item_guard = re.fullmatch(
+            r"if\s*\(?\s*Player\.GetItemCount\s+(\w+)\s*==\s*0\s*\)?",
+            line,
+            re.IGNORECASE,
+        )
+        if item_guard:
+            guards.append(
+                {"kind": "playerItemCountZero", "itemEditorId": item_guard[1]}
+            )
+            continue
+        stage_guard = re.fullmatch(
+            r"if\s*\(?\s*GetStage\s+(\w+)\s*<\s*(\d+)\s*\)?",
+            line,
+            re.IGNORECASE,
+        )
+        if stage_guard:
+            guards.append(
+                {
+                    "kind": "questStageLessThan",
+                    "questEditorId": stage_guard[1],
+                    "stage": int(stage_guard[2]),
+                }
+            )
+            continue
+        if re.fullmatch(r"if\b.*", line, re.IGNORECASE):
+            guards.append(None)
+            continue
+        if re.fullmatch(r"end(?:if)?", line, re.IGNORECASE):
+            if guards:
+                guards.pop()
+            continue
+        parsed = _script_commands_unconditional(line)
+        if parsed and guards and all(guard is not None for guard in guards):
+            if len(guards) != 1:
+                raise ValueError(f"Owned result command guards are nested: {line}")
+            for command in parsed:
+                command["guard"] = guards[0]
+        commands.extend(parsed)
     return commands
 
 
@@ -4129,6 +4504,66 @@ def _compile_facegen_control_space(
         }
         for index in indices
     ]
+    texture_exposure = dict(policy.get("nativeTextureExposure", {}))
+    texture_indices = [
+        int(value) for value in texture_exposure.get("controlIndices", [])
+    ]
+    symmetric_texture = control_space.symmetric_texture
+    if (
+        texture_exposure
+        and (
+            not texture_indices
+            or len(texture_indices) != len(set(texture_indices))
+            or min(texture_indices) < 0
+            or max(texture_indices) >= len(symmetric_texture)
+            or str(texture_exposure.get("sourceExecutableSha256", "")).casefold()
+            != str(exposure["sourceExecutableSha256"]).casefold()
+        )
+    ):
+        raise ValueError("Native FaceGen texture control exposure is invalid")
+    texture_setting_template = str(texture_exposure.get("settingEntityTemplate", ""))
+    native_texture_controls = [
+        {
+            "controlIndex": index,
+            "settingEntity": texture_setting_template.format(
+                oneBasedOrdinal=ordinal + 1
+            ),
+            "sourceLabel": symmetric_texture[index].label,
+            "axisSha256": symmetric_texture[index].axis_sha256,
+        }
+        for ordinal, index in enumerate(texture_indices)
+    ]
+    age_exposure = dict(policy.get("nativeAgeExposure", {}))
+    native_age_control: dict[str, object] | None = None
+    if age_exposure:
+        ages = control_space.demographic_age_by_race
+        if (
+            len(ages) != len(FACEGEN_DEMOGRAPHIC_RACE_ORDER)
+            or any(value != ages[0] for value in ages[1:])
+            or str(age_exposure.get("sourceRace")) != "all"
+            or str(age_exposure.get("sourceExecutableSha256", "")).casefold()
+            != str(exposure["sourceExecutableSha256"]).casefold()
+        ):
+            raise ValueError("Native FaceGen age demographic contract differs")
+        numeric_keys = (
+            "rawMinimum", "rawMaximum", "rawStep", "mappedMinimumYears",
+            "mappedMaximumYears", "mappedMultiplier", "mappedAddend",
+        )
+        numeric = {key: float(age_exposure[key]) for key in numeric_keys}
+        if (
+            not all(math.isfinite(value) for value in numeric.values())
+            or numeric["rawMinimum"] >= numeric["rawMaximum"]
+            or numeric["rawStep"] <= 0.0
+            or numeric["mappedMinimumYears"] >= numeric["mappedMaximumYears"]
+            or not str(age_exposure.get("settingEntity", ""))
+            or not str(age_exposure.get("semantics", ""))
+        ):
+            raise ValueError("Native FaceGen age slider contract is invalid")
+        native_age_control = {
+            **age_exposure,
+            **numeric,
+            **ages[0].manifest(),
+        }
     preview_policy = dict(policy["runtimePreviewControl"])
     preview_index = int(preview_policy["controlIndex"])
     preview_matches = [
@@ -4273,6 +4708,28 @@ def _compile_facegen_control_space(
                 set(range(len(symmetric_geometry))) - set(indices)
             ),
         },
+        **(
+            {
+                "nativeTextureExposure": {
+                    "classification": texture_exposure["classification"],
+                    "engineBuild": texture_exposure["engineBuild"],
+                    "sourceExecutableSha256": str(
+                        texture_exposure["sourceExecutableSha256"]
+                    ).casefold(),
+                    "controls": native_texture_controls,
+                    "unexposedControlIndices": sorted(
+                        set(range(len(symmetric_texture))) - set(texture_indices)
+                    ),
+                }
+            }
+            if texture_exposure
+            else {}
+        ),
+        **(
+            {"nativeAgeExposure": native_age_control}
+            if native_age_control is not None
+            else {}
+        ),
         "runtimePreviewControl": runtime_preview_control,
         "runtimeDisposition": (
             "control-axes-and-default-preview-egm-targets-compiled-all-native-"
@@ -4746,6 +5203,134 @@ def _compile_dialogue(
     }
 
 
+def _compile_topic_closure(
+    records: list[dict[str, object]],
+    root_editor_id: str,
+    scripts: dict[str, tuple[int, str]],
+    quest_editor_id: str,
+) -> tuple[list[dict[str, object]], str]:
+    topics_by_form = {
+        str(record["formId"]): record
+        for record in records
+        if record["recordType"] == "DIAL"
+    }
+    root = _unique_manifest_record(records, root_editor_id, "DIAL")
+    infos_by_topic: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        if record["recordType"] != "INFO":
+            continue
+        for group in record["groups"]:
+            if int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE:
+                infos_by_topic[str(group["label"])].append(record)
+    closure = set()
+    queue = deque([str(root["formId"])])
+    while queue:
+        form_id = queue.popleft()
+        if form_id in closure:
+            continue
+        if form_id not in topics_by_form:
+            raise ValueError(f"Owned ordinary dialogue topic is absent: {form_id}")
+        closure.add(form_id)
+        for info in infos_by_topic.get(form_id, []):
+            queue.extend(
+                link["formId"]
+                for link in info["links"]
+                if link["signature"] == "TCLT"
+            )
+    rows = []
+    for form_id in sorted(closure, key=lambda value: int(value, FORM_ID_RADIX)):
+        topic = topics_by_form[form_id]
+        rows.append(
+            {
+                "formId": form_id,
+                "editorId": _record_editor_id_from_manifest(topic),
+                "prompt": next(iter(_record_text_values(topic, "FULL")), ""),
+                "infos": [
+                    _dialogue_info_manifest(info, scripts, quest_editor_id)
+                    for info in sorted(
+                        infos_by_topic.get(form_id, []),
+                        key=lambda value: int(value["sourceOrder"]),
+                    )
+                ],
+            }
+        )
+    return rows, str(root["formId"])
+
+
+def _compile_actor_dialogue_voice(
+    topics: list[dict[str, object]],
+    role: dict[str, object],
+    sources: FlowSourceCatalog,
+    audio_archives: OwnedArchiveStack,
+    master_path: Path,
+    cache_root: Path,
+) -> dict[str, object]:
+    base = sources.needed[int(str(role["baseFormId"]), FORM_ID_RADIX)]
+    voice_links = [
+        link["formId"] for link in base["links"] if link["signature"] == "VTCK"
+    ]
+    if len(voice_links) != 1:
+        raise ValueError(f"Owned ordinary speaker has no unique voice: {role['role']}")
+    voice_form_id = int(str(voice_links[0]), FORM_ID_RADIX)
+    voice_editor_id = sources.voice_types_by_form.get(voice_form_id)
+    if voice_editor_id is None:
+        raise ValueError("Owned ordinary speaker voice type is absent")
+    namespace = canonical_member_path(
+        f"{VOICE_MEMBER_ROOT}\\{master_path.name}\\{voice_editor_id}"
+    )
+    response_members: dict[tuple[str, int], str] = {}
+    prefix = namespace + "\\"
+    for logical_path in audio_archives.members:
+        if not logical_path.startswith(prefix):
+            continue
+        match = VOICE_RESPONSE_SUFFIX_PATTERN.search(logical_path)
+        if match is not None:
+            response_members[(match.group("form").casefold(), int(match.group("index")))] = logical_path
+    response_count = 0
+    infos = [info for topic in topics for info in topic["infos"]]
+    for info in infos:
+        lines = [str(value) for value in info.pop("lines")]
+        responses = []
+        for index, line in enumerate(lines, start=1):
+            logical_path = response_members.get((str(info["formId"]).casefold(), index))
+            if logical_path is None:
+                raise ValueError(
+                    f"Owned ordinary dialogue voice is absent: {info['formId']} {index}"
+                )
+            lip_path = logical_path.removesuffix(VOICE_AUDIO_EXTENSION) + VOICE_LIP_EXTENSION
+            if lip_path not in audio_archives.members:
+                raise ValueError(
+                    f"Owned ordinary dialogue LIP is absent: {info['formId']} {index}"
+                )
+            responses.append(
+                {
+                    "index": index,
+                    "text": line,
+                    "voice": _prepare_dialogue_asset(
+                        audio_archives.extract(logical_path), cache_root
+                    ),
+                    "lip": _prepare_dialogue_asset(
+                        audio_archives.extract(lip_path), cache_root
+                    ),
+                }
+            )
+            response_count += 1
+        if not responses:
+            raise ValueError(f"Owned ordinary INFO has no responses: {info['formId']}")
+        info["responses"] = responses
+    return {
+        "speakerRole": role["role"],
+        "speakerReferenceFormId": role["referenceFormId"],
+        "speakerBaseFormId": role["baseFormId"],
+        "voiceTypeFormId": form_id_text(voice_form_id),
+        "voiceTypeEditorId": voice_editor_id,
+        "memberNamespace": namespace,
+        "infoCount": len(infos),
+        "responseCount": response_count,
+        "archiveStack": audio_archives.manifest(),
+    }
+
+
 def _prepare_dialogue_asset(
     member: ExtractedMember,
     cache_root: Path,
@@ -4967,7 +5552,9 @@ def _resolve_command_record_identities(
     records: Iterable[dict[str, object]],
 ) -> dict[str, object]:
     records_by_editor: dict[str, list[dict[str, object]]] = defaultdict(list)
+    records_by_form: dict[str, dict[str, object]] = {}
     for record in records:
+        records_by_form[str(record["formId"]).casefold()] = record
         editor_id = _record_editor_id_from_manifest(record)
         if editor_id:
             records_by_editor[editor_id.casefold()].append(record)
@@ -5001,6 +5588,92 @@ def _resolve_command_record_identities(
             command[form_field] = record["formId"]
             command[type_field] = record["recordType"]
             resolved_counts[editor_field] += 1
+            if editor_field == "referenceEditorId" and kind == "referenceEnabled":
+                child_form_ids = sorted(
+                    str(value["formId"])
+                    for value in records_by_form.values()
+                    if any(
+                        link["signature"] == "XESP" and
+                        str(link["formId"]).casefold() ==
+                        str(record["formId"]).casefold()
+                        for link in value.get("links", [])
+                    )
+                )
+                if child_form_ids:
+                    command["enableParentChildFormIds"] = child_form_ids
+            if editor_field == "itemEditorId" and kind == "equipitem" and \
+                    record["recordType"] == "WEAP":
+                weapon = record.get("weapon")
+                if not isinstance(weapon, dict) or weapon.get("damage") is None or \
+                        weapon.get("clipSize") is None or \
+                        weapon.get("ammoFormId") is None or \
+                        weapon.get("animationType") is None:
+                    raise ValueError(f"Owned equipped weapon contract is absent: {editor_id}")
+                ammo = records_by_form.get(str(weapon["ammoFormId"]).casefold())
+                if ammo is not None and ammo["recordType"] == "FLST":
+                    ammo_forms = {
+                        str(link["formId"]).casefold()
+                        for link in ammo.get("links", [])
+                        if link["signature"] == "LNAM"
+                    }
+                    ammo_rows = [
+                        records_by_form[value]
+                        for value in ammo_forms
+                        if value in records_by_form and
+                        records_by_form[value]["recordType"] == "AMMO"
+                    ]
+                    if len(ammo_rows) == 1:
+                        ammo = ammo_rows[0]
+                if ammo is None or ammo["recordType"] != "AMMO":
+                    raise ValueError(f"Owned equipped weapon ammo is absent: {editor_id}")
+                command["weapon"] = {
+                    "damage": weapon["damage"],
+                    "clipSize": weapon["clipSize"],
+                    "ammoFormId": ammo["formId"],
+                    "ammoEditorId": _record_editor_id_from_manifest(ammo),
+                    "animationType": weapon.get("animationType"),
+                }
+            if editor_field == "itemEditorId" and record["recordType"] == "LVLI":
+                entries = record.get("leveledEntries", [])
+                concrete_form_ids = {str(entry["itemFormId"]) for entry in entries}
+                if kind != "additem" or not entries or len(concrete_form_ids) != 1:
+                    raise ValueError(
+                        f"Owned leveled inventory command is unsupported: {editor_id}"
+                    )
+                concrete_form_id = next(iter(concrete_form_ids))
+                concrete_matches = [
+                    value
+                    for values in records_by_editor.values()
+                    for value in values
+                    if str(value["formId"]).casefold() == concrete_form_id.casefold()
+                ]
+                if len(concrete_matches) != 1:
+                    raise ValueError(
+                        f"Owned leveled inventory item is absent: {concrete_form_id}"
+                    )
+                concrete = concrete_matches[0]
+                command["resolvedItemFormId"] = concrete["formId"]
+                command["resolvedItemEditorId"] = _record_editor_id_from_manifest(concrete)
+                command["resolvedItemRecordType"] = concrete["recordType"]
+        guard = command.get("guard")
+        if isinstance(guard, dict):
+            for editor_field, form_field, type_field, allowed_types in COMMAND_RECORD_FIELDS:
+                editor_id = guard.get(editor_field)
+                if editor_id is None:
+                    continue
+                matches = records_by_editor.get(str(editor_id).casefold(), [])
+                if allowed_types is not None:
+                    matches = [
+                        record
+                        for record in matches
+                        if str(record["recordType"]) in allowed_types
+                    ]
+                if len(matches) != 1:
+                    raise ValueError(
+                        f"Owned command guard record is ambiguous: {editor_id}"
+                    )
+                guard[form_field] = matches[0]["formId"]
+                guard[type_field] = matches[0]["recordType"]
 
     return {
         "schema": OPENING_COMMAND_CONTRACT_SCHEMA,
@@ -6095,6 +6768,254 @@ def _interaction_from_script(
     }
 
 
+def _compile_ordinary_quests(
+    records: list[dict[str, object]],
+    editor_ids: Iterable[object],
+    predecessor_editor_id: str,
+    predecessor_completion_stage: int,
+) -> list[dict[str, object]]:
+    ordinary_quests = []
+    for ordinary_editor_id in editor_ids:
+        ordinary_quest = _unique_manifest_record(
+            records, str(ordinary_editor_id), "QUST"
+        )
+        script_form_ids = [
+            str(link["formId"])
+            for link in ordinary_quest["links"]
+            if link["signature"] == "SCRI"
+        ]
+        if len(script_form_ids) != 1:
+            raise ValueError(
+                "Owned ordinary quest has no unique script: "
+                f"{ordinary_editor_id}"
+            )
+        script_matches = [
+            record
+            for record in records
+            if record["recordType"] == "SCPT"
+            and str(record["formId"]).casefold() == script_form_ids[0].casefold()
+        ]
+        if len(script_matches) != 1:
+            raise ValueError(
+                "Owned ordinary quest script record is absent: "
+                f"{ordinary_editor_id} {script_form_ids[0]}"
+            )
+        ordinary_script = script_matches[0]
+        ordinary_sources = _record_text_values(ordinary_script, "SCTX")
+        if len(ordinary_sources) != 1:
+            raise ValueError(
+                f"Owned ordinary quest script source is ambiguous: {ordinary_editor_id}"
+            )
+        ordinary_programs, _, _ = _stage_programs(
+            ordinary_quest, ordinary_sources[0]
+        )
+        variable_names = [
+            match
+            for match in re.findall(
+                r"^\s*(?:short|long|float|ref)\s+([A-Za-z_]\w*)\b",
+                ordinary_sources[0],
+                re.IGNORECASE | re.MULTILINE,
+            )
+        ]
+        if len(variable_names) != len(set(value.casefold() for value in variable_names)):
+            raise ValueError(
+                f"Owned ordinary quest variables are ambiguous: {ordinary_editor_id}"
+            )
+        entry_stages = []
+        for record in records:
+            for source in _record_text_values(record, "SCTX"):
+                commands = _script_commands(source)
+                if not any(
+                    command["kind"] == "setStage"
+                    and str(command.get("questEditorId", "")).casefold()
+                    == predecessor_editor_id.casefold()
+                    and int(command.get("stage", -1))
+                    == predecessor_completion_stage
+                    for command in commands
+                ):
+                    continue
+                entry_stages.extend(
+                    int(command["stage"])
+                    for command in commands
+                    if command["kind"] == "setStage"
+                    and str(command.get("questEditorId", "")).casefold()
+                    == str(ordinary_editor_id).casefold()
+                )
+        if len(entry_stages) != 1:
+            raise ValueError(
+                "Owned ordinary quest entry-stage handoff is ambiguous: "
+                f"{ordinary_editor_id} matches={entry_stages}"
+            )
+        ordinary_commands = [
+            command
+            for program in ordinary_programs
+            for command in program["commands"]
+        ]
+        ordinary_quests.append(
+            {
+                "formId": ordinary_quest["formId"],
+                "editorId": str(ordinary_editor_id),
+                "scriptFormId": ordinary_script["formId"],
+                "scriptEditorId": _record_editor_id_from_manifest(ordinary_script),
+                "entryStage": entry_stages[0],
+                "variables": [
+                    {"index": index, "name": name}
+                    for index, name in enumerate(variable_names, start=1)
+                ],
+                "objectives": ordinary_quest["questObjectives"],
+                "stages": ordinary_programs,
+                "commandContract": _resolve_command_record_identities(
+                    ordinary_commands, records
+                ),
+            }
+        )
+    return ordinary_quests
+
+
+def _compile_hit_target_sets(
+    records: list[dict[str, object]],
+    configurations: Iterable[object],
+    ordinary_quests: list[dict[str, object]],
+    ordinary_actors: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    results = []
+    for source_configuration in configurations:
+        configuration = dict(source_configuration)
+        script = _unique_manifest_record(
+            records, str(configuration["scriptEditorId"]), "SCPT"
+        )
+        script_sources = _record_text_values(script, "SCTX")
+        if len(script_sources) != 1:
+            raise ValueError("Owned hit-target script source is ambiguous")
+        source = script_sources[0]
+        guard = re.search(
+            r"GetQuestRunning\s+(\w+)\s*==\s*1.*?"
+            r"Player\.IsWeaponOut\s*==\s*1.*?"
+            r"Player\.GetWeaponAnimType\s*>\s*(\d+).*?"
+            r"Player\.GetWeaponAnimType\s*<\s*(\d+).*?"
+            r"Player\.GetEquipped\s+(\w+)\s*==\s*0",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        increment = re.search(
+            r"set\s+(\w+)\.n(\w+)\s+to\s+\1\.n\2\s*\+\s*1",
+            source,
+            re.IGNORECASE,
+        )
+        threshold = re.search(
+            r"if\s+\w+\.n\w+\s*>=\s*(\d+).*?"
+            r"SetObjectiveCompleted\s+(\w+)\s+(\d+)\s+1.*?"
+            r"(\w+)\.evp",
+            source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        tutorial = re.search(r"setstage\s+(\w+)\s+(\d+)", source, re.IGNORECASE)
+        reaction = re.search(
+            r"(\w+)\.SayTo\s+player\s+(\w+)", source, re.IGNORECASE
+        )
+        if not all((guard, increment, threshold, tutorial, reaction)):
+            raise ValueError("Owned hit-target script semantics differ")
+        assert guard and increment and threshold and tutorial and reaction
+        quest_editor_id = guard[1]
+        if (
+            increment[1].casefold() != quest_editor_id.casefold()
+            or threshold[2].casefold() != quest_editor_id.casefold()
+            or increment[2].casefold() != "targetcount"
+        ):
+            raise ValueError("Owned hit-target quest counter differs")
+        quest = next(
+            (
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold() == quest_editor_id.casefold()
+            ),
+            None,
+        )
+        if quest is None:
+            raise ValueError("Owned hit-target quest is absent")
+        variables = {str(value["name"]).casefold(): value for value in quest["variables"]}
+        variable = variables.get(f"n{increment[2]}".casefold())
+        if variable is None:
+            raise ValueError("Owned hit-target quest variable is absent")
+        parent = _unique_manifest_record(
+            records, str(configuration["enableParentEditorId"]), "REFR"
+        )
+        target_references = sorted(
+            (
+                record
+                for record in records
+                if record["recordType"] == "REFR"
+                and any(
+                    link["signature"] == "XESP"
+                    and str(link["formId"]).casefold()
+                    == str(parent["formId"]).casefold()
+                    for link in record["links"]
+                )
+            ),
+            key=lambda value: int(str(value["formId"]), FORM_ID_RADIX),
+        )
+        if not target_references:
+            raise ValueError("Owned hit-target enable-parent children are absent")
+        targets = []
+        for reference in target_references:
+            base_links = [
+                link for link in reference["links"] if link["signature"] == "NAME"
+            ]
+            if len(base_links) != 1:
+                raise ValueError("Owned hit-target base identity is ambiguous")
+            base = next(
+                value
+                for value in records
+                if str(value["formId"]).casefold()
+                == str(base_links[0]["formId"]).casefold()
+            )
+            if not any(
+                link["signature"] == "SCRI"
+                and str(link["formId"]).casefold()
+                == str(script["formId"]).casefold()
+                for link in base["links"]
+            ):
+                raise ValueError("Owned hit-target base script differs")
+            targets.append(
+                {"referenceFormId": reference["formId"], "baseFormId": base["formId"]}
+            )
+        excluded_weapon = _unique_manifest_record(records, guard[4], "WEAP")
+        reaction_topic_editor_id = str(configuration["reactionTopicEditorId"])
+        if reaction[2].casefold() != reaction_topic_editor_id.casefold():
+            raise ValueError("Owned hit-target reaction topic differs")
+        reaction_topics = [
+            topic
+            for actor in ordinary_actors
+            for topic in actor["topics"]
+            if str(topic["editorId"]).casefold() == reaction_topic_editor_id.casefold()
+        ]
+        if len(reaction_topics) != 1:
+            raise ValueError("Owned hit-target reaction closure is ambiguous")
+        tutorial_quest = _unique_manifest_record(records, tutorial[1], "QUST")
+        speaker = _unique_manifest_record(records, reaction[1])
+        results.append(
+            {
+                "scriptFormId": script["formId"],
+                "scriptEditorId": configuration["scriptEditorId"],
+                "enableParentFormId": parent["formId"],
+                "targets": targets,
+                "questFormId": quest["formId"],
+                "questVariableIndex": variable["index"],
+                "questVariableName": variable["name"],
+                "weaponAnimationTypeMinimumExclusive": int(guard[2]),
+                "weaponAnimationTypeMaximumExclusive": int(guard[3]),
+                "excludedWeaponFormId": excluded_weapon["formId"],
+                "reactionTopicFormId": reaction_topics[0]["formId"],
+                "speakerReferenceFormId": speaker["formId"],
+                "tutorialQuestFormId": tutorial_quest["formId"],
+                "tutorialStage": int(tutorial[2]),
+                "threshold": int(threshold[1]),
+                "objectiveIndex": int(threshold[3]),
+            }
+        )
+    return results
+
+
 def compile_new_game_flow(
     master_path: Path,
     ui_archive_path: Path,
@@ -6115,6 +7036,23 @@ def compile_new_game_flow(
         raise ValueError("Owned opening quest script source is ambiguous")
     programs, timer_transitions, menu_close_transitions = _stage_programs(
         quest, quest_script_sources[0]
+    )
+    completion_stages = [
+        int(program["stage"])
+        for program in programs
+        if re.search(
+            rf"StopQuest\s+{re.escape(quest_editor_id)}\b",
+            str(program["source"]),
+            re.IGNORECASE,
+        )
+    ]
+    if len(completion_stages) != 1:
+        raise ValueError("Owned opening completion stage is ambiguous")
+    ordinary_quests = _compile_ordinary_quests(
+        records,
+        flow.get("ordinaryQuestEditorIds", []),
+        quest_editor_id,
+        completion_stages[0],
     )
     roles = []
     needed_forms = set()
@@ -6300,10 +7238,242 @@ def compile_new_game_flow(
         configuration,
         str(quest["formId"]),
     )
+    ordinary_actors = []
+    guide_contract = dict(flow["guideActorAi"])
+    for actor_contract_source in flow.get("ordinaryActors", []):
+        actor_contract = dict(actor_contract_source)
+        role_name = str(actor_contract["role"])
+        role = role_by_name.get(role_name)
+        if role is None or role["recordType"] not in {"ACHR", "ACRE"}:
+            raise ValueError(f"Owned ordinary actor role is absent: {role_name}")
+        packages = []
+        for package_editor_id in actor_contract["packageEditorIds"]:
+            package_record = sources.packages_by_editor.get(
+                str(package_editor_id).casefold()
+            )
+            if package_record is None:
+                raise ValueError(
+                    f"Owned ordinary actor package is absent: {package_editor_id}"
+                )
+            package, _ = _compile_guide_package(
+                package_record, guide_contract, sources
+            )
+            packages.append(package)
+        ordinary_quest_editor_id = str(actor_contract["questEditorId"])
+        if not any(
+            str(ordinary["editorId"]).casefold()
+            == ordinary_quest_editor_id.casefold()
+            for ordinary in ordinary_quests
+        ):
+            raise ValueError(
+                f"Owned ordinary actor quest is absent: {ordinary_quest_editor_id}"
+            )
+        activation_topic_editor_id = str(actor_contract["activationTopicEditorId"])
+        topics_by_form = {}
+        topic_roots = {}
+        for topic_editor_id in [
+            activation_topic_editor_id,
+            *actor_contract.get("automaticTopicEditorIds", []),
+        ]:
+            topic_rows, topic_root_form_id = _compile_topic_closure(
+                records,
+                str(topic_editor_id),
+                sources.scripts,
+                ordinary_quest_editor_id,
+            )
+            topic_roots[str(topic_editor_id).casefold()] = topic_root_form_id
+            for topic in topic_rows:
+                topics_by_form[str(topic["formId"])] = topic
+        topics = sorted(
+            topics_by_form.values(),
+            key=lambda value: int(str(value["formId"]), FORM_ID_RADIX),
+        )
+        activation_topic_form_id = topic_roots[
+            activation_topic_editor_id.casefold()
+        ]
+        voice = _compile_actor_dialogue_voice(
+            topics,
+            role,
+            sources,
+            audio_archives,
+            master_path,
+            cache_root,
+        )
+        commands = [
+            command
+            for topic in topics
+            for info in topic["infos"]
+            for command in info["commands"]
+        ]
+        arrivals = []
+        packages_by_editor = {
+            str(package["editorId"]).casefold(): package for package in packages
+        }
+        for transition_source in actor_contract.get("arrivalTransitions", []):
+            transition = dict(transition_source)
+            package_editor_id = str(transition["packageEditorId"])
+            package = packages_by_editor.get(package_editor_id.casefold())
+            if package is None:
+                raise ValueError(
+                    f"Owned ordinary arrival package is absent: {package_editor_id}"
+                )
+            script_editor_id = str(transition["scriptEditorId"])
+            script = _unique_manifest_record(records, script_editor_id, "SCPT")
+            sources_text = _record_text_values(script, "SCTX")
+            if len(sources_text) != 1:
+                raise ValueError(
+                    f"Owned ordinary arrival script is ambiguous: {script_editor_id}"
+                )
+            source_text = sources_text[0]
+            actor_editor_id = str(role["editorId"])
+            if not re.search(
+                rf"BEGIN\s+OnTrigger\s+{re.escape(actor_editor_id)}\b",
+                source_text,
+                re.IGNORECASE,
+            ):
+                raise ValueError(
+                    f"Owned ordinary arrival actor differs: {script_editor_id}"
+                )
+            from_stages = {
+                int(value)
+                for value in re.findall(
+                    rf"GetStage\s+{re.escape(ordinary_quest_editor_id)}\s*==\s*(\d+)",
+                    source_text,
+                    re.IGNORECASE,
+                )
+            }
+            to_stages = {
+                int(value)
+                for value in re.findall(
+                    rf"SetStage\s+{re.escape(ordinary_quest_editor_id)}\s+(\d+)",
+                    source_text,
+                    re.IGNORECASE,
+                )
+            }
+            ordinary_quest = next(
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold()
+                == ordinary_quest_editor_id.casefold()
+            )
+            if len(from_stages) != 1 or len(to_stages) != 1:
+                raise ValueError(
+                    f"Owned ordinary arrival stages are ambiguous: {script_editor_id}"
+                )
+            arrivals.append(
+                {
+                    "packageFormId": package["formId"],
+                    "scriptFormId": script["formId"],
+                    "scriptEditorId": script_editor_id,
+                    "actorReferenceFormId": role["referenceFormId"],
+                    "questFormId": ordinary_quest["formId"],
+                    "fromStage": next(iter(from_stages)),
+                    "toStage": next(iter(to_stages)),
+                }
+            )
+        automatic_triggers = []
+        for trigger_source in actor_contract.get("automaticDialogueTriggers", []):
+            trigger = dict(trigger_source)
+            script_editor_id = str(trigger["scriptEditorId"])
+            script = _unique_manifest_record(records, script_editor_id, "SCPT")
+            script_sources = _record_text_values(script, "SCTX")
+            if len(script_sources) != 1:
+                raise ValueError(
+                    f"Owned ordinary trigger script is ambiguous: {script_editor_id}"
+                )
+            script_source = script_sources[0]
+            if not re.search(
+                r"BEGIN\s+OnTriggerEnter\s+player\b",
+                script_source,
+                re.IGNORECASE,
+            ):
+                raise ValueError(
+                    f"Owned ordinary player trigger differs: {script_editor_id}"
+                )
+            objective_matches = re.findall(
+                rf"GetObjectiveDisplayed\s+{re.escape(ordinary_quest_editor_id)}\s+"
+                r"(\d+)\s*==\s*0",
+                script_source,
+                re.IGNORECASE,
+            )
+            topic_editor_id = str(trigger["topicEditorId"])
+            say_matches = re.findall(
+                rf"{re.escape(str(role['editorId']))}\.SayTo\s+Player\s+(\w+)",
+                script_source,
+                re.IGNORECASE,
+            )
+            if (
+                len(objective_matches) != 1
+                or {value.casefold() for value in say_matches}
+                != {topic_editor_id.casefold()}
+            ):
+                raise ValueError(
+                    f"Owned ordinary trigger result differs: {script_editor_id}"
+                )
+            trigger_reference = _unique_manifest_record(
+                records,
+                str(trigger["triggerReferenceEditorId"]),
+                "REFR",
+            )
+            primitive = trigger_reference["primitive"]
+            source_reference = sources.references_by_form.get(
+                int(str(trigger_reference["formId"]), FORM_ID_RADIX)
+            )
+            if not isinstance(primitive, dict) or source_reference is None:
+                raise ValueError(
+                    f"Owned ordinary trigger volume is absent: {script_editor_id}"
+                )
+            ordinary_quest = next(
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold()
+                == ordinary_quest_editor_id.casefold()
+            )
+            automatic_triggers.append(
+                {
+                    "scriptFormId": script["formId"],
+                    "scriptEditorId": script_editor_id,
+                    "triggerReferenceFormId": trigger_reference["formId"],
+                    "triggerReferenceEditorId": str(
+                        trigger["triggerReferenceEditorId"]
+                    ),
+                    "positionGameUnits": list(source_reference.position_game_units),
+                    "rotationGodotQuaternion": godot_rotation_quaternion(
+                        source_reference.rotation_radians
+                    ),
+                    "boundsGameUnits": primitive["boundsGameUnits"],
+                    "questFormId": ordinary_quest["formId"],
+                    "objectiveIndex": int(objective_matches[0]),
+                    "topicFormId": topic_roots[topic_editor_id.casefold()],
+                }
+            )
+        ordinary_actors.append(
+            {
+                "role": role_name,
+                "referenceFormId": role["referenceFormId"],
+                "baseFormId": role["baseFormId"],
+                "packagePriority": [package["formId"] for package in packages],
+                "packages": packages,
+                "activationTopicFormId": activation_topic_form_id,
+                "topics": topics,
+                "voice": voice,
+                "arrivalTransitions": arrivals,
+                "automaticDialogueTriggers": automatic_triggers,
+                "commandContract": _resolve_command_record_identities(
+                    commands, records
+                ),
+            }
+        )
     _merge_actor_animation_paths(
         actor_animations,
         str(guide_actor_ai["referenceFormId"]),
         guide_animation_paths,
+    )
+    hit_target_sets = _compile_hit_target_sets(
+        records,
+        flow.get("hitTargetSets", []),
+        ordinary_quests,
+        ordinary_actors,
     )
     flow_commands = _all_flow_commands(programs, dialogue)
     command_contract = _resolve_command_record_identities(flow_commands, records)
@@ -6346,13 +7516,14 @@ def compile_new_game_flow(
         raise ValueError(
             f"Owned opening sex message has an unexpected choice count: {len(sex_choices)}"
         )
+    facegen_control_space = _compile_facegen_control_space(
+        ui_archive_path,
+        dict(character_rules["faceGenControlSpace"]),
+    )
     appearance, appearance_texture_paths = _compile_player_appearance(
         sources,
         quest_script_sources[0],
-        _compile_facegen_control_space(
-            ui_archive_path,
-            dict(character_rules["faceGenControlSpace"]),
-        ),
+        facegen_control_space,
     )
     race_sex_list = dict(character_rules["raceSexList"])
     race_sex_header = dict(race_sex_list["header"])
@@ -6378,6 +7549,16 @@ def compile_new_game_flow(
         != str(race_sex_source.get("sourceExecutableSha256", "")).casefold()
     ):
         raise ValueError("Owned RaceSexMenu creator-list contract differs")
+    texture_exposure = dict(facegen_control_space["nativeTextureExposure"])
+    executable_payload = source_executable.read_bytes()
+    if any(
+        executable_payload.count(
+            str(dict(control)["settingEntity"]).encode("ascii")
+        )
+        != 1
+        for control in texture_exposure["controls"]
+    ):
+        raise ValueError("Owned RaceSexMenu tone-control exposure differs")
     race_sex_creator_title = (
         f'{int(race_sex_header["ordinal"])}. {race_sex_header["value"]}'
     )
@@ -6399,6 +7580,11 @@ def compile_new_game_flow(
             str(character_rules["appearancePreviewOutfitFormId"]),
             16,
         ),
+        include_all_playable_race_selections=True,
+    )
+    appearance["preview"] = (
+        "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-"
+        "previews-all-native-geometry-controls"
     )
     tag_menu_commands = [
         command
@@ -6413,17 +7599,6 @@ def compile_new_game_flow(
     ]
     if len(tag_menu_commands) != 1 or len(special_menu_commands) != 1:
         raise ValueError("Owned opening character menu parameters are ambiguous")
-    completion_stages = [
-        int(program["stage"])
-        for program in programs
-        if re.search(
-            rf"StopQuest\s+{re.escape(quest_editor_id)}\b",
-            str(program["source"]),
-            re.IGNORECASE,
-        )
-    ]
-    if len(completion_stages) != 1:
-        raise ValueError("Owned opening completion stage is ambiguous")
     icon_paths = tuple(
         sorted(
             {
@@ -6448,6 +7623,9 @@ def compile_new_game_flow(
                 "menuCloseTransitions": menu_close_transitions,
                 "completionStage": completion_stages[0],
             },
+            "ordinaryQuests": ordinary_quests,
+            "ordinaryActors": ordinary_actors,
+            "hitTargetSets": hit_target_sets,
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
             "guideActorAi": guide_actor_ai,
@@ -6980,6 +8158,23 @@ def prepare_opening_manifest(
     return {"output": str(output.resolve()), "manifest": manifest}
 
 
+def _expected_preview_identities(
+    appearance: dict[str, object],
+) -> set[tuple[str, str, str, str]]:
+    return {
+        (
+            str(engine_sex),
+            str(race["formId"]).casefold(),
+            str(hair["formId"]).casefold(),
+            str(eyes["formId"]).casefold(),
+        )
+        for race in appearance["races"]
+        for engine_sex, sex in dict(race["sex"]).items()
+        for hair in dict(sex)["hairOptions"]
+        for eyes in dict(sex)["eyeOptions"]
+    }
+
+
 def _first_slice_source_closure(
     flow: dict[str, object],
     ui: dict[str, object],
@@ -7002,8 +8197,9 @@ def _first_slice_source_closure(
     dialogue_responses = sum(len(info["responses"]) for info in dialogue_infos)
     voice = dict(dialogue["voice"])
     guide = dict(flow["guideActorAi"])
-    appearance = dict(dict(dict(flow["character"])["appearance"])["player"])
-    facegen = dict(appearance["faceGen"])
+    appearance = dict(dict(flow["character"])["appearance"])
+    player = dict(appearance["player"])
+    facegen = dict(player["faceGen"])
     control_space = dict(facegen["controlSpace"])
     native_geometry = dict(control_space["nativeGeometryExposure"])
     native_geometry_controls = [
@@ -7053,21 +8249,28 @@ def _first_slice_source_closure(
     required_videos = [video for video in videos if video["requiredAtEntry"]]
     if len(required_videos) != 1 or required_videos[0]["runtime"] is None:
         unaccounted.append({"reason": "owned-entry-video-runtime"})
-    if {str(row["sex"]) for row in preview_rows} != {"male", "female"}:
-        unaccounted.append({"reason": "creator-default-sex-preview-closure"})
-    unsupported = ["non-default-race-hair-eye-live-3d-face-preview"]
+    preview_identities = {
+        (
+            str(row["sex"]),
+            str(row["raceFormId"]).casefold(),
+            str(row["hairFormId"]).casefold(),
+            str(row["eyesFormId"]).casefold(),
+        )
+        for row in preview_rows
+    }
+    expected_preview_identities = _expected_preview_identities(appearance)
+
+    if preview_identities != expected_preview_identities:
+        unaccounted.append({"reason": "creator-valid-selection-preview-closure"})
+    unsupported = []
     if unaccounted or omitted:
         closure_status = "incomplete"
-    elif unsupported:
-        closure_status = (
-            "source-accounted-playable-claim-blocked-by-explicit-capability-gap"
-        )
     else:
         closure_status = "source-accounted-native-runtime-and-visual-promotion-pending"
     return {
         "schema": "opennv-fnv-first-slice-source-closure/v1",
         "status": closure_status,
-        "playableClaimReady": not unaccounted and not omitted and not unsupported,
+        "playableClaimReady": not unaccounted and not omitted,
         "admittedBeatOrder": [
             "owned-entry-video-tail",
             "owned-imad-dialogue-transition",

@@ -7,6 +7,7 @@ using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -21,28 +22,51 @@ internal partial class OpeningQuestRuntime
     {
         if (generation != _generation)
             return;
-        if (index >= info.Commands.Count)
+        if (index < info.Commands.Count)
         {
-            if (info.NextTopicFormIds.Count > 0)
-            {
-                ShowTopicChoices(
-                    info.NextTopicFormIds,
-                    topic is null
-                        ? completed
-                        : () => PlayTopic(topic, completed, generation),
-                    generation);
+            var commands = info.Commands.Select((command, sourceIndex) =>
+                new SourceGamebryoResultCommand<OpeningFlowCommand>(
+                    sourceIndex,
+                    ResultCommandKind(command.Kind),
+                    ResultCommandIsTerminal(command),
+                    command)).ToArray();
+            var execution = GamebryoResultCommandExecutor.Execute(
+                commands,
+                index,
+                command => ApplyInfoResultCommand(
+                    command.Value,
+                    completed,
+                    generation));
+            if (execution.Terminal)
                 return;
-            }
-            if (!info.Goodbye && topic is not null)
-            {
-                PlayTopic(topic, completed, generation);
-                return;
-            }
-            CloseModal();
-            completed();
+        }
+
+        if (info.NextTopicFormIds.Count > 0)
+        {
+            ShowTopicChoices(
+                info.NextTopicFormIds,
+                topic is null
+                    ? completed
+                    : () => PlayTopic(topic, completed, generation),
+                generation);
             return;
         }
-        var command = info.Commands[index];
+        if (!info.Goodbye && topic is not null)
+        {
+            PlayTopic(topic, completed, generation);
+            return;
+        }
+        CloseModal();
+        completed();
+    }
+
+    private bool ApplyInfoResultCommand(
+        OpeningFlowCommand command,
+        Action completed,
+        int generation)
+    {
+        if (!ResultCommandGuardPasses(command.Guard))
+            return true;
         switch (command.Kind)
         {
             case "actorValueDelta":
@@ -98,13 +122,16 @@ internal partial class OpeningQuestRuntime
                 ApplyQuestTimer(command);
                 break;
             case "setStage":
-                if (command.QuestFormId?.Equals(
+                var stageResult = GamebryoDialoguePlayback.RequireStageResult(
+                    command.Kind,
+                    command.QuestFormId,
+                    command.Stage);
+                if (stageResult.QuestFormId.Equals(
                     _flow.QuestFormId,
-                    StringComparison.OrdinalIgnoreCase) == true &&
-                    command.Stage is { } nextStage)
+                    StringComparison.OrdinalIgnoreCase))
                 {
-                    SetStage(nextStage);
-                    return;
+                    SetStage(stageResult.Stage);
+                    return true;
                 }
                 ApplyQuestStage(command);
                 break;
@@ -117,14 +144,14 @@ internal partial class OpeningQuestRuntime
                         generation);
                 else
                     PlayTopicEditor(command.TopicEditorId, completed, generation);
-                return;
+                return true;
             case "deferredStage":
                 if (command.Stage is { } deferred && command.Seconds is { } seconds)
                 {
                     CloseModal();
                     _timerTargetStage = deferred;
                     _timerRemainingSeconds = seconds;
-                    return;
+                    return true;
                 }
                 throw new InvalidOperationException(
                     "Owned deferred-stage dialogue command is incomplete.");
@@ -132,25 +159,85 @@ internal partial class OpeningQuestRuntime
                 throw new InvalidOperationException(
                     $"Owned opening dialogue command is unsupported: {command.Kind}");
         }
-        ExecuteInfoCommands(info, topic, completed, generation, index + 1);
+        return true;
     }
+
+    private bool ResultCommandGuardPasses(OpeningCommandGuard? guard)
+    {
+        if (guard is null)
+            return true;
+        return guard.Kind switch
+        {
+            "playerItemCountZero" when guard.ItemFormId is not null =>
+                !_inventory.ContainsKey(guard.ItemFormId),
+            "questStageLessThan" when guard.QuestFormId is not null &&
+                guard.Stage is not null && _quests.TryGetValue(
+                    guard.QuestFormId, out var quest) => quest.Stage < guard.Stage.Value,
+            _ => throw new InvalidOperationException(
+                $"Owned result command guard is unsupported: {guard.Kind}"),
+        };
+    }
+
+    private bool ResultCommandIsTerminal(OpeningFlowCommand command) =>
+        command.Kind is "sayTo" or "deferredStage" ||
+        command.Kind == "setStage" && command.QuestFormId?.Equals(
+            _flow.QuestFormId,
+            StringComparison.OrdinalIgnoreCase) == true;
+
+    private static GamebryoResultCommandKind ResultCommandKind(string kind) => kind switch
+    {
+        "actorValueDelta" => GamebryoResultCommandKind.ActorValueDelta,
+        "setQuestVariable" => GamebryoResultCommandKind.SetQuestVariable,
+        "setDestroyed" => GamebryoResultCommandKind.SetDestroyed,
+        "additem" => GamebryoResultCommandKind.AddItem,
+        "removeitem" => GamebryoResultCommandKind.RemoveItem,
+        "equipitem" => GamebryoResultCommandKind.EquipItem,
+        "playerControls" => GamebryoResultCommandKind.PlayerControls,
+        "addScriptPackage" => GamebryoResultCommandKind.AddScriptPackage,
+        "removeScriptPackage" => GamebryoResultCommandKind.RemoveScriptPackage,
+        "imageSpaceModifier" => GamebryoResultCommandKind.ImageSpaceModifier,
+        "referenceEnabled" => GamebryoResultCommandKind.ReferenceEnabled,
+        "actorIntent" => GamebryoResultCommandKind.ActorIntent,
+        "objective" => GamebryoResultCommandKind.Objective,
+        "startQuest" => GamebryoResultCommandKind.StartQuest,
+        "stopQuest" => GamebryoResultCommandKind.StopQuest,
+        "setGlobal" => GamebryoResultCommandKind.SetGlobal,
+        "autoDisplayObjectives" => GamebryoResultCommandKind.AutoDisplayObjectives,
+        "achievement" => GamebryoResultCommandKind.Achievement,
+        "autosave" => GamebryoResultCommandKind.Autosave,
+        "setTimer" => GamebryoResultCommandKind.SetTimer,
+        "setStage" => GamebryoResultCommandKind.SetStage,
+        "sayTo" => GamebryoResultCommandKind.SayTo,
+        "deferredStage" => GamebryoResultCommandKind.DeferredStage,
+        _ => throw new InvalidOperationException(
+            $"Owned opening dialogue command is unsupported: {kind}"),
+    };
 
     private void ShowTopicChoices(
         IReadOnlyList<string> topicFormIds,
         Action completed,
         int generation)
     {
-        var content = OpenPanel(MenuRect("tagSkills"));
+        var choices = new List<(string Identity, string Text, Action Selected)>();
         foreach (var formId in topicFormIds)
         {
-            if (!_flow.TopicsByFormId.TryGetValue(formId, out var topic))
+            var topic = _flow.TopicsByFormId.GetValueOrDefault(formId) ??
+                _flow.OrdinaryActors.SelectMany(actor => actor.Topics.Values)
+                    .SingleOrDefault(value => value.FormId.Equals(
+                        formId, StringComparison.OrdinalIgnoreCase));
+            if (topic is null)
                 throw new InvalidOperationException($"Owned dialogue choice is absent: {formId}");
-            var button = NewButton(topic.Prompt);
-            button.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            button.Alignment = HorizontalAlignment.Left;
-            button.Pressed += () => PlayTopic(topic, completed, generation);
-            content.AddChild(button);
+            choices.Add((
+                topic.FormId,
+                topic.Prompt,
+                () => PlayTopic(topic, completed, generation)));
         }
+        var ordinarySpeaker = _flow.OrdinaryActors.SingleOrDefault(actor =>
+            topicFormIds.Any(actor.Topics.ContainsKey));
+        var speakerRole = ordinarySpeaker?.Role ?? _flow.DialogueVoice.SpeakerRole;
+        OpenDialogueMenu().ShowTopics(
+            _flow.SceneRoles[speakerRole].DisplayName,
+            choices);
     }
 
     private bool EvaluateCondition(OpeningDialogueCondition condition)
@@ -237,6 +324,9 @@ internal partial class OpeningQuestRuntime
             stage,
             running || existing?.Running == true,
             false);
+        if (_flow.OrdinaryQuests.TryGetValue(formId, out var ordinary) &&
+            ordinary.Stages.ContainsKey(stage))
+            ExecuteOrdinaryQuestStage(ordinary, stage);
     }
 
     private void ApplyQuestLifecycle(OpeningFlowCommand command)
@@ -249,12 +339,69 @@ internal partial class OpeningQuestRuntime
         if (!starting && !stopping)
             throw new InvalidOperationException(
                 $"Owned quest-lifecycle operation is unsupported: {command.Kind}");
+        _flow.OrdinaryQuests.TryGetValue(command.QuestFormId, out var ordinary);
         _quests[command.QuestFormId] = new OpeningQuestState(
             command.QuestFormId,
             command.QuestEditorId,
-            existing?.Stage ?? 0,
+            existing?.Stage ?? (starting && ordinary is not null ? ordinary.EntryStage : 0),
             starting,
             stopping);
+        if (starting && existing is null && ordinary is not null)
+            ExecuteOrdinaryQuestStage(ordinary, ordinary.EntryStage);
+    }
+
+    private void ExecuteOrdinaryQuestStage(OpeningOrdinaryQuest quest, int stage)
+    {
+        if (!quest.Stages.TryGetValue(stage, out var program))
+            throw new InvalidOperationException(
+                $"Owned ordinary quest stage is absent: {quest.EditorId} {stage}");
+        var commands = program.Commands.Select((command, sourceIndex) =>
+            new SourceGamebryoStageCommand<OpeningFlowCommand>(
+                sourceIndex,
+                StageCommandKind(command.Kind),
+                command)).ToArray();
+        for (var index = 0; index < commands.Length; index++)
+        {
+            GamebryoStageCommandExecutor.ExecuteOne(commands, index, sourceCommand =>
+            {
+                var source = sourceCommand.Value;
+                switch (source.Kind)
+                {
+                    case "objective":
+                        ApplyObjective(source);
+                        break;
+                    case "setQuestVariable":
+                        ApplyQuestVariable(source);
+                        break;
+                    case "setStage":
+                        ApplyQuestStage(source);
+                        break;
+                    case "actorIntent":
+                        ApplyOrdinaryActorIntent(source);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            "Owned ordinary quest stage command is not admitted by this handoff.");
+                }
+                return true;
+            });
+        }
+    }
+
+    private void ApplyOrdinaryQuestHandoffs()
+    {
+        foreach (var quest in _flow.OrdinaryQuests.Values)
+        {
+            if (_quests.ContainsKey(quest.FormId))
+                continue;
+            _quests[quest.FormId] = new OpeningQuestState(
+                quest.FormId,
+                quest.EditorId,
+                quest.EntryStage,
+                true,
+                false);
+            ExecuteOrdinaryQuestStage(quest, quest.EntryStage);
+        }
     }
 
     private void ApplyGlobal(OpeningFlowCommand command)
@@ -401,13 +548,20 @@ internal partial class OpeningQuestRuntime
             _eyesFormId,
             CurrentFaceSymmetricGeometrySha256(),
             _flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
-            _flow.Character.Appearance.FaceGen.SymmetricTextureSha256,
+            CurrentFaceSymmetricTextureSha256(),
             _faceGeometryControlValues
                 .OrderBy(value => value.Key, StringComparer.Ordinal)
                 .ToDictionary(
                     value => value.Key,
                     value => value.Value,
                     StringComparer.Ordinal),
+            _faceTextureControlValues
+                .OrderBy(value => value.Key, StringComparer.Ordinal)
+                .ToDictionary(
+                    value => value.Key,
+                    value => value.Value,
+                    StringComparer.Ordinal),
+            _faceAgeRawValue,
             _bodyProportions,
             _appearancePreviewMode),
         _docReaction,
@@ -438,7 +592,18 @@ internal partial class OpeningQuestRuntime
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
         _playerControls.Select(value => value ? EnabledControlValue : DisabledControlValue).ToArray(),
         OpeningTransformState.Capture(_loaded.Player),
-        OpeningTransformState.Capture(_guideActor.Placement));
+        OpeningTransformState.Capture(_guideActor.Placement))
+    {
+        GuidePackage = CaptureGuidePackageState(),
+        EquippedWeapon = _equippedWeaponState,
+        OrdinaryActorTransforms = _flow.OrdinaryActors.ToDictionary(
+            value => value.ReferenceFormId,
+            value => OpeningTransformState.Capture(
+                _loaded.Actors.Single(actor => actor.ReferenceFormId.Equals(
+                    value.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase)).Placement),
+            StringComparer.OrdinalIgnoreCase),
+    };
 
     internal static bool MatchesFlow(
         OpeningNewGameFlow flow,
@@ -523,6 +688,12 @@ internal partial class OpeningQuestRuntime
             state.PlayerControls.Count != PlayerControlCount)
             throw new InvalidOperationException(
                 "Saved opening state does not match the owned New Game flow.");
+        if (state.OrdinaryActorTransforms.Count != 0 &&
+            !state.OrdinaryActorTransforms.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    flow.OrdinaryActors.Select(value => value.ReferenceFormId)))
+            throw new InvalidOperationException(
+                "Saved ordinary actor transforms do not match the owned flow.");
         if (state.Completed)
             ValidateCompletedState(flow, state);
     }
@@ -542,6 +713,14 @@ internal partial class OpeningQuestRuntime
                 flow.Character.Appearance.SexEngineValues[sexIndex],
                 out var sex))
             return false;
+        var age = flow.Character.Appearance.FaceGen.ControlSpace.NativeAgeControl;
+        if (state.FaceAgeRawValue is { } rawAge &&
+            (!float.IsFinite(rawAge) || rawAge < age.RawMinimum ||
+             rawAge > age.RawMaximum ||
+             !Mathf.IsEqualApprox(
+                 (rawAge - age.RawMinimum) / age.RawStep,
+                 MathF.Round((rawAge - age.RawMinimum) / age.RawStep))))
+            return false;
         return sex.HairOptions.Any(value => value.FormId.Equals(
                 state.HairFormId,
                 StringComparison.OrdinalIgnoreCase)) &&
@@ -551,20 +730,63 @@ internal partial class OpeningQuestRuntime
             state.FaceSymmetricGeometrySha256.Equals(
                 FaceSymmetricGeometrySha256(
                     flow.Character.Appearance.FaceGen,
-                    state.FaceGeometryControlValues),
+                    state.FaceGeometryControlValues,
+                    state.FaceTextureControlValues,
+                    state.FaceAgeRawValue),
                 StringComparison.OrdinalIgnoreCase) &&
             state.FaceAsymmetricGeometrySha256.Equals(
                 flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
                 StringComparison.OrdinalIgnoreCase) &&
             state.FaceSymmetricTextureSha256.Equals(
-                flow.Character.Appearance.FaceGen.SymmetricTextureSha256,
+                FaceSymmetricTextureSha256(
+                    flow.Character.Appearance.FaceGen,
+                    state.FaceGeometryControlValues,
+                    state.FaceTextureControlValues,
+                    state.FaceAgeRawValue),
                 StringComparison.OrdinalIgnoreCase);
     }
 
     private string CurrentFaceSymmetricGeometrySha256() =>
         FaceSymmetricGeometrySha256(
             _flow.Character.Appearance.FaceGen,
-            _faceGeometryControlValues);
+            _faceGeometryControlValues,
+            _faceTextureControlValues,
+            _faceAgeRawValue);
+
+    private string CurrentFaceSymmetricTextureSha256() =>
+        FaceSymmetricTextureSha256(
+            _flow.Character.Appearance.FaceGen,
+            _faceGeometryControlValues,
+            _faceTextureControlValues,
+            _faceAgeRawValue);
+
+    private static string FaceSymmetricTextureSha256(
+        OpeningAppearanceFaceGen faceGen,
+        IReadOnlyDictionary<string, float> geometryValues,
+        IReadOnlyDictionary<string, float> values,
+        float? ageRawValue)
+    {
+        var controls = faceGen.PreviewHead.Previews[0].TextureControls;
+        if (values.Count == 0)
+            return faceGen.SymmetricTextureSha256;
+        var policy = faceGen.ControlSpace.PreviewControl;
+        if (values.Count != controls.Count || values.Values.Any(value =>
+                !float.IsFinite(value) ||
+                value < policy.Minimum || value > policy.Maximum))
+            throw new InvalidOperationException(
+                "Saved RaceSexMenu FaceGen tone coordinates are invalid.");
+        var texture = OwnedGamebryoFaceGenTextureRuntime.Coordinates(
+            faceGen.SymmetricTextureValues, controls, values, policy.MorphWeightScale);
+        if (ageRawValue is null)
+            return OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+                faceGen.SymmetricTextureValues, controls, values, policy.MorphWeightScale);
+        var geometry = FaceSymmetricGeometryCoordinates(faceGen, geometryValues);
+        return OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+            faceGen.ControlSpace.NativeAgeControl,
+            geometry,
+            texture,
+            ageRawValue.Value).SymmetricTextureSha256;
+    }
 
     private string FaceGenControlValuesText(
         IReadOnlyList<OpeningNativeFaceGenGeometryControl> controls) =>
@@ -607,6 +829,28 @@ internal partial class OpeningQuestRuntime
 
     private static string FaceSymmetricGeometrySha256(
         OpeningAppearanceFaceGen faceGen,
+        IReadOnlyDictionary<string, float> values,
+        IReadOnlyDictionary<string, float> textureValues,
+        float? ageRawValue)
+    {
+        var geometry = FaceSymmetricGeometryCoordinates(faceGen, values);
+        if (ageRawValue is null)
+            return FloatCoordinatesSha256(geometry);
+        var policy = faceGen.ControlSpace.PreviewControl;
+        var texture = OwnedGamebryoFaceGenTextureRuntime.Coordinates(
+            faceGen.SymmetricTextureValues,
+            faceGen.PreviewHead.Previews[0].TextureControls,
+            textureValues,
+            policy.MorphWeightScale);
+        return OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+            faceGen.ControlSpace.NativeAgeControl,
+            geometry,
+            texture,
+            ageRawValue.Value).SymmetricGeometrySha256;
+    }
+
+    private static IReadOnlyList<float> FaceSymmetricGeometryCoordinates(
+        OpeningAppearanceFaceGen faceGen,
         IReadOnlyDictionary<string, float> values)
     {
         var policy = faceGen.ControlSpace.PreviewControl;
@@ -619,29 +863,31 @@ internal partial class OpeningQuestRuntime
                 value > policy.Maximum))
             throw new InvalidOperationException(
                 "Saved RaceSexMenu FaceGen UI coordinates are invalid.");
-        var sourceControls = controls.Select(control =>
-            faceGen.ControlSpace.SymmetricGeometryControls.Single(source =>
-                source.Index == control.ControlIndex)).ToArray();
-
-        var payload = new byte[faceGen.SymmetricGeometryValues.Count * sizeof(float)];
-        for (var index = 0; index < faceGen.SymmetricGeometryValues.Count; index++)
+        var morphControls = controls.Select(control =>
         {
-            var coordinate = faceGen.SymmetricGeometryValues[index];
-            for (var controlIndex = 0; controlIndex < controls.Count; controlIndex++)
-            {
-                var value = values[controls[controlIndex].SettingEntity];
-                if (value == policy.ResetValue)
-                    continue;
-                coordinate += value * policy.MorphWeightScale *
-                    sourceControls[controlIndex].Axis[index];
-            }
-            if (!float.IsFinite(coordinate))
-                throw new InvalidOperationException(
-                    "Edited FaceGen geometry coordinate is non-finite.");
+            var source = faceGen.ControlSpace.SymmetricGeometryControls.Single(value =>
+                value.Index == control.ControlIndex);
+            return new OwnedGamebryoFaceGenMorphControl(
+                control.SettingEntity,
+                control.AxisSha256,
+                source.Axis);
+        }).ToArray();
+        return OwnedGamebryoFaceGenMorphRuntime.Evaluate(
+            faceGen.SymmetricGeometryValues,
+            morphControls,
+            values,
+            policy.Minimum,
+            policy.Maximum,
+            policy.MorphWeightScale,
+            policy.ResetValue).SymmetricGeometry;
+    }
+
+    private static string FloatCoordinatesSha256(IReadOnlyList<float> values)
+    {
+        var payload = new byte[values.Count * sizeof(float)];
+        for (var index = 0; index < values.Count; index++)
             BinaryPrimitives.WriteSingleLittleEndian(
-                payload.AsSpan(index * sizeof(float), sizeof(float)),
-                coordinate);
-        }
+                payload.AsSpan(index * sizeof(float), sizeof(float)), values[index]);
         return Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
     }
 
@@ -659,6 +905,11 @@ internal partial class OpeningQuestRuntime
         Replace(
             _faceGeometryControlValues,
             state.Appearance.FaceGeometryControlValues);
+        if (state.Appearance.FaceTextureControlValues.Count > 0)
+            Replace(
+                _faceTextureControlValues,
+                state.Appearance.FaceTextureControlValues);
+        _faceAgeRawValue = state.Appearance.FaceAgeRawValue;
         _docReaction = state.DocReaction;
         Replace(_specialValues, state.SpecialValues);
         Replace(_tagSkills, state.TagSkillFormIds);
@@ -671,6 +922,7 @@ internal partial class OpeningQuestRuntime
         Replace(_achievements, state.Achievements);
         Replace(_inventory, state.Inventory, value => value.FormId);
         Replace(_equippedItemFormIds, state.EquippedItemFormIds);
+        _equippedWeaponState = state.EquippedWeapon;
         Replace(_destroyedReferences, state.DestroyedReferenceFormIds);
         Replace(_referenceEnabledStates, state.ReferenceEnabledStates);
         _autoDisplayObjectives = state.AutoDisplayObjectives;
@@ -679,8 +931,24 @@ internal partial class OpeningQuestRuntime
             _playerControls[index] = state.PlayerControls[index] == EnabledControlValue;
         state.PlayerTransform.Apply(_loaded.Player);
         state.GuideTransform.Apply(_guideActor.Placement);
+        foreach (var transform in state.OrdinaryActorTransforms)
+        {
+            var actor = _loaded.Actors.SingleOrDefault(value =>
+                value.ReferenceFormId.Equals(
+                    transform.Key, StringComparison.OrdinalIgnoreCase));
+            if (actor == default)
+                throw new InvalidOperationException(
+                    "Saved ordinary actor transform target is absent.");
+            transform.Value.Apply(actor.Placement);
+        }
+        _restoredGuidePackageState = state.GuidePackage;
         foreach (var reference in _referenceEnabledStates)
             SetReferenceVisibility(reference.Key, reference.Value, false);
+        foreach (var reference in _destroyedReferences)
+            if (_flow.HitTargetSets.Any(set => set.Targets.Any(target =>
+                    target.ReferenceFormId.Equals(
+                        reference, StringComparison.OrdinalIgnoreCase))))
+                SetReferenceVisibility(reference, false, false);
     }
 
     private static void Replace<T>(HashSet<T> target, IEnumerable<T> source)
@@ -728,17 +996,17 @@ internal partial class OpeningQuestRuntime
     private void CompleteOpening()
     {
         _openingQuestCompleted = true;
+        ApplyOrdinaryQuestHandoffs();
         EvaluateGuidePackage();
         _objective.Visible = false;
         CloseModal();
         ApplyStageControlPolicy();
         var state = CaptureState(true);
         _loaded.Session.StoreOpeningState(state);
-        _loaded.Player.SetExternalActivationHandler(null);
         _loaded.Player.ClearOwnedNavigation();
         _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
         _viewport.Visible = false;
-        SetProcess(false);
+        EvaluateOrdinaryActorPackages();
         GD.Print(
             $"OPENNV_NEW_GAME_OPEN_WORLD_READY quest={_flow.QuestEditorId} " +
             $"stage={_stage} name={_playerName} inventory={_inventory.Count} " +
@@ -796,9 +1064,39 @@ internal partial class OpeningQuestRuntime
         return content;
     }
 
+    private Control OpenOwnedTilePanel(
+        OwnedGamebryoTileLayout layout,
+        string menuRole)
+    {
+        var root = OpenModalRoot(menuRole);
+        var panel = new Panel { MouseFilter = Control.MouseFilterEnum.Stop };
+        OwnedGamebryoTileRuntime.ApplyAbsolute(panel, layout);
+        panel.AddThemeStyleboxOverride(
+            "panel",
+            OwnedUiTheme.HighlightedStyle(_opening.MainMenuColor, _opening.Style));
+        if (!_flow.Menus.TryGetValue(menuRole, out var menu) ||
+            menu.Background is not { } background)
+            throw new InvalidOperationException(
+                $"Owned tile panel background is unavailable: {menuRole}");
+        var backgroundTexture = new TextureRect
+        {
+            Name = $"Owned{menu.MenuName}Background",
+            Texture = OwnedUiTheme.LoadTexture(background.Path),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        backgroundTexture.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        panel.AddChild(backgroundTexture);
+        root.AddChild(panel);
+        return panel;
+    }
+
     private Control OpenModalRoot(string? menuRole = null)
     {
         CloseModal(false);
+        _viewport.Visible = true;
+        _viewport.MouseFilter = Control.MouseFilterEnum.Stop;
         var root = new Control
         {
             Name = "OwnedMenu",
@@ -888,6 +1186,11 @@ internal partial class OpeningQuestRuntime
         }
         if (restoreControls)
             ApplyStageControlPolicy();
+        if (_openingQuestCompleted && _activeModal is null)
+        {
+            _viewport.Visible = false;
+            _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
+        }
     }
 
     private void ApplyStageControlPolicy()

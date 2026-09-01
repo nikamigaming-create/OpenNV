@@ -2,6 +2,8 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Gameplay.Containers;
+using OpenNV.Runtime.Gameplay.Crafting;
+using OpenNV.Runtime.Gameplay.Items;
 
 
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -60,12 +62,14 @@ internal partial class GameplaySession : Node
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
     private int _weaponClipSize;
+    private int? _weaponAnimationType;
     private int _ammoInMagazine;
     private int _shotsFired;
     private OpeningCampaignState? _openingState;
     private OwnedGameplayUiPresentation? _gameplayUi;
     private OpeningGameplayVitalsContract? _vitalsContract;
     private GameplayVitals? _vitals;
+    private Func<GamebryoHitscanHit, bool>? _hitscanHitHandler;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -180,6 +184,9 @@ internal partial class GameplaySession : Node
         _containerView = new ContainerInteractionView();
         AddChild(_containerView);
         _containerView.Configure(_useXrHud);
+        _craftingView = new CraftingInteractionView();
+        AddChild(_craftingView);
+        _craftingView.Configure(_useXrHud);
         RefreshHud(
             _useClassicDioramaHud
                 ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"
@@ -284,6 +291,8 @@ internal partial class GameplaySession : Node
                     item.EditorId,
                     item.DisplayName ?? item.EditorId,
                     item.RecordType,
+                    item.Definition.Value,
+                    item.Definition.Weight,
                     item.Count,
                     item.ItemFormId.Equals(_equippedWeaponFormId, StringComparison.OrdinalIgnoreCase)))
                 .ToArray(),
@@ -371,12 +380,7 @@ internal partial class GameplaySession : Node
             return;
         pickup.Drop();
         _pickups.Remove(pickup.ReferenceFormId);
-        AddInventory(
-            pickup.ItemFormId,
-            pickup.EditorId,
-            pickup.DisplayName,
-            pickup.RecordType,
-            pickup.Count);
+        AddInventory(pickup.Item, pickup.Count);
         if (pickup.Weapon is { } weapon)
         {
             _equippedWeaponFormId = pickup.ItemFormId;
@@ -420,19 +424,9 @@ internal partial class GameplaySession : Node
     {
         var available = _containerInventories.Snapshot(referenceFormId).Items.Single(item =>
             item.ItemFormId.Equals(itemFormId, StringComparison.OrdinalIgnoreCase));
-        ValidateInventoryAddition(
-            available.ItemFormId,
-            available.EditorId,
-            available.DisplayName,
-            available.RecordType,
-            1);
+        ValidateInventoryAddition(available.Definition, 1);
         var transfer = _containerInventories.TakeOne(referenceFormId, itemFormId);
-        AddInventory(
-            transfer.ItemFormId,
-            transfer.EditorId,
-            transfer.DisplayName,
-            transfer.RecordType,
-            transfer.Count);
+        AddInventory(transfer.Definition, transfer.Count);
         SynchronizeContainerEmptyMarker(referenceFormId);
         Save();
         _containerView!.Refresh(
@@ -444,20 +438,10 @@ internal partial class GameplaySession : Node
     internal void TakeAllFromContainer(string referenceFormId)
     {
         foreach (var item in _containerInventories.Snapshot(referenceFormId).Items)
-            ValidateInventoryAddition(
-                item.ItemFormId,
-                item.EditorId,
-                item.DisplayName,
-                item.RecordType,
-                item.RemainingCount);
+            ValidateInventoryAddition(item.Definition, item.RemainingCount);
         var transfers = _containerInventories.TakeAll(referenceFormId);
         foreach (var transfer in transfers)
-            AddInventory(
-                transfer.ItemFormId,
-                transfer.EditorId,
-                transfer.DisplayName,
-                transfer.RecordType,
-                transfer.Count);
+            AddInventory(transfer.Definition, transfer.Count);
         SynchronizeContainerEmptyMarker(referenceFormId);
         Save();
         _containerView!.Refresh(
@@ -480,12 +464,7 @@ internal partial class GameplaySession : Node
         var displayName = item.DisplayName;
         _containerInventories.Put(
             referenceFormId,
-            new ContainerTransfer(
-                item.ItemFormId,
-                item.EditorId,
-                displayName,
-                item.RecordType,
-                1));
+            new ContainerTransfer(item.Definition, 1));
         if (item.Count == 1)
         {
             _inventory.Remove(normalizedItemFormId);
@@ -529,8 +508,7 @@ internal partial class GameplaySession : Node
     internal void StoreOpeningState(OpeningCampaignState state)
     {
         state.Validate();
-        var ownedDisplayNames = _inventory.Values
-            .Where(item => !string.IsNullOrWhiteSpace(item.DisplayName))
+        var knownDefinitions = _inventory.Values
             .ToDictionary(
                 item => item.ItemFormId,
                 item => item,
@@ -541,16 +519,19 @@ internal partial class GameplaySession : Node
             _vitals = _vitalsContract.CreateInitial(state);
         foreach (var item in state.Inventory)
         {
-            var displayName = ownedDisplayNames.TryGetValue(item.FormId, out var knownItem) &&
+            var knownDefinition = knownDefinitions.TryGetValue(item.FormId, out var knownItem) &&
                 knownItem.EditorId.Equals(item.EditorId, StringComparison.OrdinalIgnoreCase) &&
                 knownItem.RecordType.Equals(item.RecordType, StringComparison.Ordinal)
-                    ? knownItem.DisplayName
+                    ? knownItem.Definition
                     : null;
             _inventory[item.FormId] = new InventoryEntry(
-                item.FormId,
-                item.EditorId,
-                displayName,
-                item.RecordType,
+                new ItemDefinition(
+                    item.FormId,
+                    item.EditorId,
+                    knownDefinition?.DisplayName,
+                    item.RecordType,
+                    knownDefinition?.Value,
+                    knownDefinition?.Weight),
                 item.Count);
         }
         if (state.EquippedWeapon is { } weapon)
@@ -560,6 +541,7 @@ internal partial class GameplaySession : Node
             _weaponDamage = weapon.Damage;
             _weaponClipSize = weapon.ClipSize;
             _ammoInMagazine = weapon.AmmoInMagazine;
+            _weaponAnimationType = weapon.AnimationType;
         }
         else
             ClearEquippedWeapon();
@@ -574,6 +556,7 @@ internal partial class GameplaySession : Node
         _weaponDamage = 0;
         _weaponClipSize = 0;
         _ammoInMagazine = 0;
+        _weaponAnimationType = null;
         SynchronizeHeldWeaponPresentation();
     }
 
@@ -657,6 +640,11 @@ internal partial class GameplaySession : Node
         var to = from - aimSource.GlobalBasis.Z * _configuration.Player.FireRayDistanceMeters;
         var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(
             PhysicsRayQueryParameters3D.Create(from, to, collisionMask));
+        if (hit.Count != 0 && hit["collider"].AsGodotObject() is Node collider)
+            _hitscanHitHandler?.Invoke(new GamebryoHitscanHit(
+                _equippedWeaponFormId,
+                _weaponAnimationType,
+                collider));
         Save();
         RefreshHud(
             hit.Count == 0
@@ -664,6 +652,9 @@ internal partial class GameplaySession : Node
                 : $"{WeaponLabel} fired ({_weaponDamage} damage profile) • hit {hit["collider"].AsGodotObject()}");
         return true;
     }
+
+    internal void SetHitscanHitHandler(Func<GamebryoHitscanHit, bool>? handler) =>
+        _hitscanHitHandler = handler;
 
     internal bool Reload()
     {
@@ -707,7 +698,18 @@ internal partial class GameplaySession : Node
             activeCellFormId = _activeCellFormId,
             opening = _openingState,
             vitals = _vitals,
-            inventory = _inventory.Values.OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase),
+            inventory = _inventory.Values
+                .OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => new
+                {
+                    entry.ItemFormId,
+                    entry.EditorId,
+                    entry.DisplayName,
+                    entry.RecordType,
+                    Value = entry.Definition.Value,
+                    Weight = entry.Definition.Weight,
+                    entry.Count,
+                }),
             removedReferences = _removedReferences.Order(StringComparer.OrdinalIgnoreCase),
             doorStates = _doorStates
                 .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
@@ -724,6 +726,8 @@ internal partial class GameplaySession : Node
                     editorId = item.EditorId,
                     displayName = item.DisplayName,
                     recordType = item.RecordType,
+                    value = item.Definition.Value,
+                    weight = item.Definition.Weight,
                     remainingCount = item.RemainingCount,
                 }),
             }),
@@ -738,6 +742,7 @@ internal partial class GameplaySession : Node
             weaponAmmoFormId = _weaponAmmoFormId,
             weaponDamage = _weaponDamage,
             weaponClipSize = _weaponClipSize,
+            weaponAnimationType = _weaponAnimationType,
             ammoInMagazine = _ammoInMagazine,
             shotsFired = _shotsFired,
             objectiveStage = (int)ObjectiveStage,
@@ -794,6 +799,7 @@ internal partial class GameplaySession : Node
         weaponAmmoFormId = _weaponAmmoFormId,
         weaponDamage = _weaponDamage,
         weaponClipSize = _weaponClipSize,
+        weaponAnimationType = _weaponAnimationType,
         ammoInMagazine = _ammoInMagazine,
         reserveAmmo = ReserveAmmo,
         shotsFired = _shotsFired,
@@ -852,13 +858,18 @@ internal partial class GameplaySession : Node
         foreach (var item in root.GetProperty("inventory").EnumerateArray())
         {
             var entry = new InventoryEntry(
-                item.GetProperty("ItemFormId").GetString()!,
-                item.GetProperty("EditorId").GetString()!,
-                item.TryGetProperty("DisplayName", out var displayName) &&
-                    displayName.ValueKind == JsonValueKind.String
-                        ? displayName.GetString()
-                        : null,
-                item.GetProperty("RecordType").GetString()!,
+                new ItemDefinition(
+                    item.GetProperty("ItemFormId").GetString()!,
+                    item.GetProperty("EditorId").GetString()!,
+                    item.TryGetProperty("DisplayName", out var displayName) &&
+                        displayName.ValueKind == JsonValueKind.String
+                            ? displayName.GetString()
+                            : null,
+                    item.GetProperty("RecordType").GetString()!,
+                    item.TryGetProperty("Value", out var value) &&
+                        value.ValueKind == JsonValueKind.Number ? value.GetInt32() : null,
+                    item.TryGetProperty("Weight", out var weight) &&
+                        weight.ValueKind == JsonValueKind.Number ? weight.GetSingle() : null),
                 item.GetProperty("Count").GetInt32());
             _inventory.Add(entry.ItemFormId, entry);
         }
@@ -884,6 +895,11 @@ internal partial class GameplaySession : Node
             : null;
         _weaponDamage = root.GetProperty("weaponDamage").GetInt32();
         _weaponClipSize = root.GetProperty("weaponClipSize").GetInt32();
+        _weaponAnimationType = root.TryGetProperty(
+            "weaponAnimationType", out var weaponAnimationType) &&
+            weaponAnimationType.ValueKind != JsonValueKind.Null
+                ? weaponAnimationType.GetInt32()
+                : null;
         _ammoInMagazine = root.GetProperty("ammoInMagazine").GetInt32();
         _shotsFired = root.GetProperty("shotsFired").GetInt32();
         if (schema == SaveSchemaV7)
@@ -1075,7 +1091,10 @@ internal partial class GameplaySession : Node
                 _weaponAmmoFormId,
                 _weaponDamage,
                 _weaponClipSize,
-                _ammoInMagazine);
+                _ammoInMagazine)
+            {
+                AnimationType = _weaponAnimationType,
+            };
         }
         _openingState = opening with
         {
@@ -1101,6 +1120,8 @@ internal partial class GameplaySession : Node
                 item.EditorId,
                 item.DisplayName ?? item.EditorId,
                 item.RecordType,
+                item.Definition.Value,
+                item.Definition.Weight,
                 item.Count,
                 item.ItemFormId.Equals(
                     _equippedWeaponFormId,
@@ -1116,14 +1137,19 @@ internal partial class GameplaySession : Node
         string? displayName,
         string recordType,
         int count)
+        => AddInventory(
+            new ItemDefinition(itemFormId, editorId, displayName, recordType, null, null),
+            count);
+
+    private void AddInventory(ItemDefinition definition, int count)
     {
-        ValidateInventoryAddition(itemFormId, editorId, displayName, recordType, count);
-        var normalizedItemFormId = FalloutFormId.Normalize(itemFormId);
+        ValidateInventoryAddition(definition, count);
+        var normalizedItemFormId = definition.FormId;
         if (_inventory.TryGetValue(normalizedItemFormId, out var current))
         {
             _inventory[normalizedItemFormId] = current with
             {
-                DisplayName = current.DisplayName ?? displayName,
+                Definition = current.Definition.Merge(definition),
                 Count = checked(current.Count + count),
             };
         }
@@ -1132,34 +1158,20 @@ internal partial class GameplaySession : Node
             _inventory.Add(
                 normalizedItemFormId,
                 new InventoryEntry(
-                    normalizedItemFormId,
-                    editorId,
-                    string.IsNullOrWhiteSpace(displayName) ? null : displayName,
-                    recordType,
+                    definition,
                     count));
         }
     }
 
-    private void ValidateInventoryAddition(
-        string itemFormId,
-        string editorId,
-        string? displayName,
-        string recordType,
-        int count)
+    private void ValidateInventoryAddition(ItemDefinition definition, int count)
     {
-        if (count <= 0 || string.IsNullOrWhiteSpace(editorId) ||
-            string.IsNullOrWhiteSpace(recordType))
-            throw new InvalidOperationException($"Inventory item identity is invalid: {itemFormId}.");
-        var normalizedItemFormId = FalloutFormId.Normalize(itemFormId);
+        if (count <= 0)
+            throw new InvalidOperationException(
+                $"Inventory item count is invalid: {definition.FormId}.");
+        var normalizedItemFormId = definition.FormId;
         if (!_inventory.TryGetValue(normalizedItemFormId, out var current))
             return;
-        if (!current.EditorId.Equals(editorId, StringComparison.OrdinalIgnoreCase) ||
-            !current.RecordType.Equals(recordType, StringComparison.Ordinal) ||
-            !string.IsNullOrWhiteSpace(current.DisplayName) &&
-            !string.IsNullOrWhiteSpace(displayName) &&
-            !current.DisplayName.Equals(displayName, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                $"Inventory item identity is ambiguous: {normalizedItemFormId}.");
+        _ = current.Definition.Merge(definition);
         _ = checked(current.Count + count);
     }
 
@@ -1296,12 +1308,13 @@ internal partial class GameplaySession : Node
         string? WeaponDisplayName = null,
         string? AmmoDisplayName = null);
 
-    internal readonly record struct InventoryEntry(
-        string ItemFormId,
-        string EditorId,
-        string? DisplayName,
-        string RecordType,
-        int Count);
+    internal readonly record struct InventoryEntry(ItemDefinition Definition, int Count)
+    {
+        internal string ItemFormId => Definition.FormId;
+        internal string EditorId => Definition.EditorId;
+        internal string? DisplayName => Definition.DisplayName;
+        internal string RecordType => Definition.RecordType;
+    }
 
     internal enum SandboxObjectiveStage
     {

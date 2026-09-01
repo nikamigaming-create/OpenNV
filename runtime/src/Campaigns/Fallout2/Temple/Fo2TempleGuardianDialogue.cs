@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -7,15 +8,18 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
     private readonly Fo2TempleGuardianScript _script;
     private readonly string _playerName;
     private readonly int _playerIntelligence;
+    private readonly ClassicScriptState _scriptState;
     private readonly Label _reply;
     private readonly VBoxContainer _options;
     private readonly List<string> _visitedNodes = [];
+    private IReadOnlyList<Fo2TempleGuardianDialogueOption> _availableOptions = [];
 
     internal Fo2TempleGuardianDialogue(
         Fo2TempleGuardianScript script,
         string playerName,
         int playerIntelligence,
         string playerArtFid,
+        ClassicScriptState scriptState,
         float widthPixels,
         int fontSizePixels)
     {
@@ -28,6 +32,7 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
         _script = script;
         _playerName = playerName;
         _playerIntelligence = playerIntelligence;
+        _scriptState = scriptState;
         Name = "FO2_ACKLINT_SOURCE_DIALOGUE";
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
@@ -63,19 +68,15 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
     internal string ReplyText => _reply.Text;
     internal IReadOnlyList<string> VisitedNodes => _visitedNodes;
     internal IReadOnlyList<Fo2TempleGuardianDialogueOption> AvailableOptions =>
-        string.IsNullOrEmpty(CurrentNodeId)
-            ? []
-            : _script.Nodes[CurrentNodeId].Options
-                .Where(Eligible)
-                .ToArray();
+        _availableOptions.Where(Eligible).ToArray();
 
-    internal void Open()
+    internal void Open(string nodeId)
     {
         if (IsOpen)
             return;
         Visible = true;
         _visitedNodes.Clear();
-        ShowNode(_script.InitialNode);
+        ShowNode(nodeId);
     }
 
     internal bool Choose(int messageId)
@@ -88,8 +89,16 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
         var option = matches[0];
         if (option.Target == _script.TerminalNode)
         {
+            var execution = _script.EffectProgram.ExecuteWithActions(
+                option.Target,
+                _scriptState,
+                new ClassicScriptContext(false, false, default));
+            if (!execution.Executed || !execution.DialogueEnded)
+                throw new InvalidOperationException(
+                    $"Fallout 2 ACKlint terminal did not execute: {option.Target}");
             Visible = false;
             CurrentNodeId = "";
+            _availableOptions = [];
             ClearOptions();
             return true;
         }
@@ -103,6 +112,7 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
             return false;
         Visible = false;
         CurrentNodeId = "";
+        _availableOptions = [];
         ClearOptions();
         return true;
     }
@@ -114,10 +124,32 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
                 $"Fallout 2 ACKlint dialogue node is unavailable: {nodeId}");
         CurrentNodeId = nodeId;
         _visitedNodes.Add(nodeId);
-        _reply.Text = string.Concat(node.Reply.Select(segment =>
-            segment.PlayerName ? _playerName : segment.Text));
+        var execution = _script.EffectProgram.ExecuteWithActions(
+            nodeId,
+            _scriptState,
+            new ClassicScriptContext(false, false, default));
+        if (!execution.Executed || execution.DialogueReply.Count == 0 ||
+            execution.DialogueOptions.Count == 0)
+            throw new InvalidOperationException(
+                $"Fallout 2 ACKlint dialogue node did not execute: {nodeId}");
+        _reply.Text = string.Concat(execution.DialogueReply.Select(segment =>
+            segment.PlayerName
+                ? _playerName
+                : node.Reply.Single(row =>
+                    row.MessageId == segment.Message!.Value.MessageId).Text));
+        _availableOptions = execution.DialogueOptions.Select(option =>
+        {
+            var source = node.Options.Single(row =>
+                row.MessageId == option.Message.MessageId && row.Target == option.Target);
+            if (source.MinimumIntelligence != option.MinimumIntelligence ||
+                source.MaximumIntelligence != option.MaximumIntelligence ||
+                source.Reaction != option.Reaction)
+                throw new InvalidOperationException(
+                    $"Fallout 2 ACKlint dialogue option drifted: {option.Message.MessageId}");
+            return source;
+        }).ToArray();
         ClearOptions();
-        foreach (var option in node.Options.Where(Eligible))
+        foreach (var option in AvailableOptions)
         {
             var button = new Button
             {

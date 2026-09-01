@@ -96,11 +96,23 @@ internal sealed record Fo3Cg00PlayerCameraTransform(
 internal sealed record Fo3Cg00DialogueCue(
     string InfoFormId,
     string SpeakerRole,
+    string VoiceTypeFormId,
+    bool SayOnce,
+    IReadOnlyList<Fo3Cg00DialogueCondition> Conditions,
     string Text,
     string TextSha256,
     Fo3Cg00EarlyAsset Voice,
     Fo3Cg00EarlyAsset Lip,
     IReadOnlyList<string> ResultCommands);
+
+internal sealed record Fo3Cg00DialogueCondition(
+    int OperatorFlags,
+    float ComparisonValue,
+    int Function,
+    int Parameter1,
+    int Parameter2,
+    int RunOn,
+    int Reference);
 
 internal sealed record Fo3Cg00StageSource(
     int Stage,
@@ -507,9 +519,22 @@ internal sealed record Fo3Cg00EarlyBirthSequence(
     {
         var response = RequiredObject(source, "response");
         var audio = RequiredObject(source, "preparedAudio");
+        var voiceType = RequiredObject(source, "voiceType");
         return new Fo3Cg00DialogueCue(
             RequiredFormId(source, "infoFormId"),
             RequiredString(source, "speakerRole"),
+            RequiredFormId(voiceType, "formId"),
+            RequiredBoolean(source, "sayOnce"),
+            RequiredArray(source, "conditions").EnumerateArray()
+                .Select(value => new Fo3Cg00DialogueCondition(
+                    RequiredInteger(value, "operatorFlags"),
+                    RequiredSingle(value, "comparisonValue"),
+                    RequiredInteger(value, "function"),
+                    RequiredInteger(value, "parameter1"),
+                    RequiredInteger(value, "parameter2"),
+                    RequiredInteger(value, "runOn"),
+                    RequiredInteger(value, "reference")))
+                .ToArray(),
             RequiredString(response, "text"),
             RequiredSha256(response, "textSha256"),
             LoadAsset(RequiredObject(audio, "voice")),

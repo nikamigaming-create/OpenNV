@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -344,16 +345,29 @@ internal sealed record Fo3Cg01Stage0Transition(
             stage100.NextBoundary.StageResultCommandCount != ExpectedStage0CommandCount)
             throw new InvalidOperationException("Fallout 3 CG01 runtime trigger state differs.");
 
-        var trace = new List<string>(ExpectedAccountedCommandCount)
+        var execution = new List<(string Label, GamebryoStageCommandKind Kind)>
         {
-            "s0:0:moveToReference",
-            "s0:1:setStage",
+            ("s0:0:moveToReference", GamebryoStageCommandKind.MoveToReference),
+            ("s0:1:setStage", GamebryoStageCommandKind.SetStage),
         };
-        trace.AddRange(ExpectedStage5Kinds.Select((kind, index) => $"s5:{index}:{kind}"));
-        trace.Add("s0:2:setPlayerScale");
-        trace.Add("s0:3:moveToReference");
-        if (trace.Count != ExpectedAccountedCommandCount)
+        execution.AddRange(ExpectedStage5Kinds.Select((kind, index) =>
+            ($"s5:{index}:{kind}", Cg01StageCommandKind(kind))));
+        execution.Add(("s0:2:setPlayerScale", GamebryoStageCommandKind.SetPlayerScale));
+        execution.Add(("s0:3:moveToReference", GamebryoStageCommandKind.MoveToReference));
+        if (execution.Count != ExpectedAccountedCommandCount)
             throw new InvalidOperationException("Fallout 3 CG01 execution trace differs.");
+        var trace = new List<string>(ExpectedAccountedCommandCount);
+        GamebryoStageCommandExecutor.ExecuteAll(
+            execution.Select((command, sourceIndex) =>
+                new SourceGamebryoStageCommand<string>(
+                    sourceIndex,
+                    command.Kind,
+                    command.Label)).ToArray(),
+            command =>
+            {
+                trace.Add(command.Value);
+                return trace.Count == command.SourceIndex + 1;
+            });
 
         return new Fo3Cg01Stage0State(
             stage100.Stage,
@@ -393,6 +407,24 @@ internal sealed record Fo3Cg01Stage0Transition(
             false,
             new Fo3Cg01Boundary(false, NextBoundaryBlocker));
     }
+
+    private static GamebryoStageCommandKind Cg01StageCommandKind(string kind) => kind switch
+    {
+        "setLocationSpecificLoadScreensOnly" =>
+            GamebryoStageCommandKind.SetLocationSpecificLoadScreensOnly,
+        "setInCharGen" => GamebryoStageCommandKind.SetInCharacterGeneration,
+        "enable" => GamebryoStageCommandKind.Enable,
+        "setScriptVariable" => GamebryoStageCommandKind.SetScriptVariable,
+        "enablePlayerControls" => GamebryoStageCommandKind.PlayerControls,
+        "disablePlayerControls" => GamebryoStageCommandKind.PlayerControls,
+        "autoDisplayObjectives" => GamebryoStageCommandKind.AutoDisplayObjectives,
+        "setNoActivationSound" => GamebryoStageCommandKind.SetNoActivationSound,
+        "setPlayerToddler" => GamebryoStageCommandKind.SetPlayerToddler,
+        "setPlayerYoung" => GamebryoStageCommandKind.SetPlayerYoung,
+        "playBink" => GamebryoStageCommandKind.PlayMovie,
+        _ => throw new InvalidOperationException(
+            $"Fallout 3 CG01 stage command is unsupported: {kind}"),
+    };
 
     internal object SavedState(Fo3Cg01Stage0State state) => new
     {
@@ -611,7 +643,7 @@ internal sealed record Fo3Cg01Stage0Transition(
         return sound;
     }
 
-    private static Fo3Cg01OwnedMovie LoadOwnedMovie(
+    internal static Fo3Cg01OwnedMovie LoadOwnedMovie(
         JsonElement source,
         string logicalPath,
         IReadOnlyList<int> arguments)

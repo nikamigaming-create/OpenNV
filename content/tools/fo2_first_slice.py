@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from classic_int_effects import decode_acklint_effects
+from classic_int_initialization import compile_map_int_initialization
 from corpus_io import atomic_json
 from fo1_frm import decode_frm
 from fo1_map_objects import (
@@ -39,13 +41,18 @@ FRM_PALETTE_SIZE = 256
 MAP_WIDTH_TILES = 200
 CONFRONTATION_SCHEMA = "opennv-fo2-temple-confrontation/v1"
 CONFRONTATION_RECIPE_SCHEMA = "opennv-fo2-temple-confrontation-recipe/v1"
+OBJECT_EQUIPPED_RIGHT_HAND_FLAG = 0x02000000
+OBJECT_FLAG_HEX_RADIX = 16
 MESSAGE_ROW = re.compile(r"^\{(-?[0-9]+)\}\{[^}]*\}\{(.*)\}$")
+ACKLINT_MESSAGE_LIST_ID = 751
 CRITTER_PRO_SUPPORTED_SIZES = frozenset({0x19C, 0x1A0})
 CRITTER_PRO_HEADER_OFFSET = 0x20
 CRITTER_PRO_HEADER_FIELD_COUNT = 3
 CRITTER_PRO_BASE_STATS_OFFSET = 0x30
 CRITTER_PRO_BONUS_STATS_OFFSET = 0xBC
+CRITTER_PRO_SKILLS_OFFSET = 0x148
 CRITTER_PRO_STAT_COUNT = 35
+CRITTER_PRO_SKILL_COUNT = 18
 CRITTER_STAT_STRENGTH = 0
 CRITTER_STAT_PERCEPTION = 1
 CRITTER_STAT_ENDURANCE = 2
@@ -60,6 +67,10 @@ CRITTER_STAT_UNARMED_DAMAGE = 10
 CRITTER_STAT_MELEE_DAMAGE = 11
 CRITTER_STAT_SEQUENCE = 13
 CRITTER_STAT_CRITICAL_CHANCE = 15
+CRITTER_STAT_DAMAGE_THRESHOLD_FIRST = 17
+CRITTER_STAT_DAMAGE_THRESHOLD_LAST = 23
+CRITTER_STAT_DAMAGE_RESISTANCE_FIRST = 24
+CRITTER_STAT_DAMAGE_RESISTANCE_LAST = 30
 CRITTER_OBJECT_TYPE = 1
 CRITTER_INSTANCE_VALUE_COUNT = 11
 CRITTER_INSTANCE_CURRENT_AP = 3
@@ -185,94 +196,109 @@ def _compile_guardian_script(
     if (
         message_catalog.logical_path.casefold() != "text\\english\\dialog\\acklint.msg"
         or message_catalog.sha256 != str(catalog_rule["sha256"]).casefold()
-        or int(catalog_rule["messageListId"]) != 751
+        or int(catalog_rule["messageListId"]) != ACKLINT_MESSAGE_LIST_ID
     ):
         raise Fo1ProfileError("Fallout 2 guardian MSG identity drifted")
     messages = _parse_message_catalog(message_catalog.data)
 
-    terminal = str(configured["terminalNode"])
-    nodes = list(configured["nodes"])
-    node_ids = [str(node["id"]) for node in nodes]
-    if (
-        str(configured["initialNode"]) != "Node001"
-        or terminal != "Node999"
-        or len(nodes) != 5
-        or len(set(node_ids)) != len(node_ids)
-        or set(node_ids) != {"Node001", "Node002", "Node003", "Node004", "Node005"}
-        or sorted(str(value).casefold() for value in configured["preTrialPlayerArtFids"])
-        != ["0100003d", "0100003e"]
-    ):
-        raise Fo1ProfileError("Fallout 2 guardian dialogue node identity drifted")
-
-    emitted_nodes = []
+    effect_program = decode_acklint_effects(program.data)
+    talk_rule = effect_program["events"]["talk_p_proc"]
+    if len(talk_rule) != 1 or len(talk_rule[0]["all"]) != 1:
+        raise Fo1ProfileError("Fallout 2 guardian talk entry is unsupported")
+    pre_trial_player_art_fids = list(talk_rule[0]["all"][0]["values"])
+    initial_node = talk_rule[0]["then"][0]["node"]
+    node_ids: list[str] = []
+    terminal_nodes: set[str] = set()
+    pending = [initial_node]
+    while pending:
+        node_id = pending.pop(0)
+        if node_id in node_ids or node_id in terminal_nodes:
+            continue
+        node_rules = effect_program["events"].get(node_id)
+        if node_rules is None:
+            raise Fo1ProfileError(
+                f"Fallout 2 guardian dialogue target is absent: {node_id}"
+            )
+        effects = node_rules[0]["then"] if len(node_rules) == 1 else []
+        if effects == [{"operation": "dialogue-end"}]:
+            terminal_nodes.add(node_id)
+            continue
+        node_ids.append(node_id)
+        pending.extend(
+            operation["target"]
+            for operation in node_rules[0]["then"]
+            if operation["operation"] == "dialogue-option"
+        )
+    if len(terminal_nodes) != 1:
+        raise Fo1ProfileError("Fallout 2 guardian dialogue terminal is not unique")
+    terminal = next(iter(terminal_nodes))
+    emitted_nodes: list[dict[str, Any]] = []
     referenced_messages: set[int] = set()
-    for node in nodes:
+    for node_id in node_ids:
         reply = []
-        for segment in node["reply"]:
-            if set(segment) == {"messageId"}:
-                message_id = int(segment["messageId"])
+        options = []
+        node_rules = effect_program["events"].get(node_id, [])
+        if len(node_rules) != 1 or node_rules[0]["all"]:
+            raise Fo1ProfileError(f"Fallout 2 guardian dialogue node is unsupported: {node_id}")
+        for operation in node_rules[0]["then"]:
+            if operation["operation"] == "dialogue-reply-message":
+                message_id = int(operation["messageId"])
                 text = messages.get(message_id, "")
-                if not text:
+                if operation["messageListId"] != ACKLINT_MESSAGE_LIST_ID or not text:
                     raise Fo1ProfileError(
                         f"Fallout 2 guardian reply message is absent: {message_id}"
                     )
                 referenced_messages.add(message_id)
                 reply.append({"messageId": message_id, "text": text})
-            elif segment == {"playerName": True}:
+            elif operation["operation"] == "dialogue-reply-player-name":
                 reply.append({"playerName": True})
-            else:
-                raise Fo1ProfileError("Fallout 2 guardian reply segment is unsupported")
-        options = []
-        for option in node["options"]:
-            message_id = int(option["messageId"])
-            target = str(option["target"])
-            minimum = option.get("minimumIntelligence")
-            maximum = option.get("maximumIntelligence")
-            text = messages.get(message_id, "")
-            if (
-                not text
-                or target not in {*node_ids, terminal}
-                or (minimum is None) == (maximum is None)
-                or minimum is not None and int(minimum) != 4
-                or maximum is not None and int(maximum) != 3
-                or int(option["reaction"]) != 50
-            ):
-                raise Fo1ProfileError(
-                    f"Fallout 2 guardian option contract drifted: {message_id}"
-                )
-            referenced_messages.add(message_id)
-            options.append(
-                {
+            elif operation["operation"] == "dialogue-option":
+                message_id = int(operation["messageId"])
+                target = str(operation["target"])
+                text = messages.get(message_id, "")
+                if (
+                    operation["messageListId"] != ACKLINT_MESSAGE_LIST_ID
+                    or not text
+                    or target not in {*node_ids, terminal}
+                ):
+                    raise Fo1ProfileError(
+                        f"Fallout 2 guardian option contract drifted: {message_id}"
+                    )
+                referenced_messages.add(message_id)
+                options.append({
                     "messageId": message_id,
                     "text": text,
                     "target": target,
-                    "minimumIntelligence": None if minimum is None else int(minimum),
-                    "maximumIntelligence": None if maximum is None else int(maximum),
-                    "reaction": 50,
-                }
-            )
-        emitted_nodes.append({"id": str(node["id"]), "reply": reply, "options": options})
-    if referenced_messages != set(range(103, 121)):
-        raise Fo1ProfileError("Fallout 2 guardian dialogue message coverage drifted")
+                    "minimumIntelligence": operation.get("minimumIntelligence"),
+                    "maximumIntelligence": operation.get("maximumIntelligence"),
+                    "reaction": int(operation["reaction"]),
+                })
+            else:
+                raise Fo1ProfileError(
+                    f"Fallout 2 guardian dialogue action is unsupported: {operation['operation']}"
+                )
+        emitted_nodes.append({"id": node_id, "reply": reply, "options": options})
+    if not referenced_messages:
+        raise Fo1ProfileError("Fallout 2 guardian dialogue emitted no source messages")
 
-    hostility = dict(configured["hostilityTrigger"])
-    pickup = dict(hostility["pickupProcedure"])
-    critter = dict(hostility["critterProcedure"])
+    look_message_operations = [
+        operation
+        for rule in effect_program["events"]["look_at_p_proc"]
+        for operation in rule["then"]
+        if operation["operation"] == "display-message"
+    ]
     if (
-        pickup != {"requiresSourcePlayer": True, "localVariable": 5, "setValue": 2}
-        or critter
-        != {
-            "localVariable": 5,
-            "requiredValue": 2,
-            "requiresCanSeePlayer": True,
-            "setValueBeforeAttack": 1,
-            "attackPlayer": True,
-        }
+        len(look_message_operations) != 2
+        or any(
+            row["messageListId"] != ACKLINT_MESSAGE_LIST_ID
+            for row in look_message_operations
+        )
+        or any(not messages.get(row["messageId"]) for row in look_message_operations)
     ):
-        raise Fo1ProfileError("Fallout 2 guardian hostility trigger drifted")
+        raise Fo1ProfileError("Fallout 2 guardian look-at messages are unavailable")
     result = {
         "schema": "opennv-fo2-acklint-guardian-script/v1",
-        "authority": "hash-bound owned ACKlint.int control-flow audit plus owned ACKlint.msg rows",
+        "authority": "decoded hash-bound owned ACKlint.int procedures plus owned ACKlint.msg rows",
         "program": {
             "scriptsListIndex": program_index,
             "scriptsListLogicalPath": scripts_list.logical_path,
@@ -283,20 +309,24 @@ def _compile_guardian_script(
             "sha256": program.sha256,
         },
         "messageCatalog": {
-            "messageListId": 751,
+            "messageListId": ACKLINT_MESSAGE_LIST_ID,
             "logicalPath": message_catalog.logical_path,
             "source": message_catalog.source,
             "bytes": len(message_catalog.data),
             "sha256": message_catalog.sha256,
         },
-        "preTrialPlayerArtFids": list(configured["preTrialPlayerArtFids"]),
-        "initialNode": "Node001",
+        "preTrialPlayerArtFids": pre_trial_player_art_fids,
+        "initialNode": initial_node,
         "terminalNode": terminal,
         "nodes": emitted_nodes,
-        "hostilityTrigger": hostility,
+        "displayMessages": [
+            {"messageId": row["messageId"], "text": messages[row["messageId"]]}
+            for row in look_message_operations
+        ],
+        "effectProgram": effect_program,
         "implementedBoundary": {
             "dialogueNodes": True,
-            "pickupToAttackTransition": False,
+            "pickupToAttackTransition": True,
             "generalIntExecution": False,
         },
     }
@@ -318,6 +348,9 @@ def _parse_critter_pro(data: bytes) -> dict[str, int]:
     stats = [
         base[index] + bonus[index] for index in range(CRITTER_PRO_STAT_COUNT)
     ]
+    skills = struct.unpack_from(
+        f">{CRITTER_PRO_SKILL_COUNT}i", data, CRITTER_PRO_SKILLS_OFFSET
+    )
     head_fid, ai_packet, team = struct.unpack_from(
         f">{CRITTER_PRO_HEADER_FIELD_COUNT}i", data, CRITTER_PRO_HEADER_OFFSET
     )
@@ -339,6 +372,19 @@ def _parse_critter_pro(data: bytes) -> dict[str, int]:
         "meleeDamage": stats[CRITTER_STAT_MELEE_DAMAGE],
         "sequence": stats[CRITTER_STAT_SEQUENCE],
         "criticalChance": stats[CRITTER_STAT_CRITICAL_CHANCE],
+        "damageThresholds": list(
+            stats[
+                CRITTER_STAT_DAMAGE_THRESHOLD_FIRST :
+                CRITTER_STAT_DAMAGE_THRESHOLD_LAST + 1
+            ]
+        ),
+        "damageResistances": list(
+            stats[
+                CRITTER_STAT_DAMAGE_RESISTANCE_FIRST :
+                CRITTER_STAT_DAMAGE_RESISTANCE_LAST + 1
+            ]
+        ),
+        "skills": list(skills),
     }
 
 
@@ -428,6 +474,7 @@ def _compile_bounded_confrontation(
     loot_pro = resolver.read(loot_pro_path)
     critter_stats = _parse_critter_pro(critter_pro.data)
     weapon_stats = _parse_weapon_pro(loot_pro.data)
+    loot_flags = int(str(loot["flags"]), OBJECT_FLAG_HEX_RADIX)
     if (
         len(critter["instanceValues"]) != CRITTER_INSTANCE_VALUE_COUNT
         or critter["instanceValues"][CRITTER_INSTANCE_CURRENT_HP] <= 0
@@ -437,6 +484,7 @@ def _compile_bounded_confrontation(
         or weapon_stats["minimumDamage"] <= 0
         or weapon_stats["maximumDamage"] < weapon_stats["minimumDamage"]
         or weapon_stats["actionPointCostPrimary"] <= 0
+        or not loot_flags & OBJECT_EQUIPPED_RIGHT_HAND_FLAG
     ):
         raise Fo1ProfileError("Fallout 2 bounded confrontation gameplay values are invalid")
     catalogs = dict(configured["messageCatalogs"])
@@ -471,6 +519,27 @@ def _compile_bounded_confrontation(
             "currentActionPoints": critter["instanceValues"][CRITTER_INSTANCE_CURRENT_AP],
             "runtimeAiPacket": critter["instanceValues"][CRITTER_INSTANCE_AI_PACKET],
             "runtimeTeam": critter["instanceValues"][CRITTER_INSTANCE_TEAM],
+            "equippedAttack": {
+                "inventorySerial": loot["serial"],
+                "pid": loot["pid"],
+                "objectFlags": loot["flags"],
+                "hand": "right",
+                "minimumDamage": weapon_stats["minimumDamage"],
+                "maximumDamage": weapon_stats["maximumDamage"],
+                "damageType": weapon_stats["damageType"],
+                "maximumRange": weapon_stats["maximumRangePrimary"],
+                "actionPointCost": weapon_stats["actionPointCostPrimary"],
+                "animationCode": weapon_stats["animationCode"],
+                "minimumStrength": weapon_stats["minimumStrength"],
+                "criticalFailureType": weapon_stats["criticalFailureType"],
+                "roundsPerAttack": weapon_stats["roundsPerAttack"],
+                "caliber": weapon_stats["caliber"],
+                "ammunitionPid": struct.pack(
+                    ">i", weapon_stats["ammunitionPid"]
+                ).hex(),
+                "ammunitionCapacity": weapon_stats["ammunitionCapacity"],
+                "hitResolution": "engine-roll-required",
+            },
             "prototype": {
                 "logicalPath": critter_pro.logical_path,
                 "source": critter_pro.source,
@@ -671,6 +740,8 @@ def compile_fo2_first_slice(
                 f"Fallout 2 Temple object graph leaves {len(map_resource.data) - end_offset} trailing bytes"
             )
 
+        initialization_scripts = compile_map_int_initialization(header, scripts, resolver)
+
         flat_objects = _flatten_objects(objects)
         bounded_confrontation = _compile_bounded_confrontation(
             flat_objects,
@@ -779,6 +850,7 @@ def compile_fo2_first_slice(
             "objects": objects,
             "allObjectCount": len(flat_objects),
         },
+        "initializationScripts": initialization_scripts,
         "prototypes": [prototypes[pid] for pid in sorted(prototypes)],
         "frms": frms,
         "boundedConfrontation": bounded_confrontation,

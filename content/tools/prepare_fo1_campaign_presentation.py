@@ -21,7 +21,13 @@ import tempfile
 from typing import Any
 
 from fo1_frm import decode_frm, palette_rgba
-from fo1_map_objects import Fo1ResourceResolver, OBJECT_TYPE_NAMES, TYPE_DIRECTORIES
+from fo1_map_objects import (
+    Fo1ResourceResolver,
+    OBJECT_TYPE_NAMES,
+    TYPE_DIRECTORIES,
+    critter_fid_fields,
+    placed_critter_art_state,
+)
 from fo1_profile import Fo1ProfileError, sha256_path
 from prepare_fo1_hex_scene import (
     floor_index_for_hex,
@@ -96,7 +102,11 @@ def parse_message_catalog(text: str) -> dict[int, str]:
     return result
 
 
-def source_sprite_logical_path(obj: dict[str, Any], map_format: dict[str, Any]) -> str | None:
+def source_sprite_art_state(
+    obj: dict[str, Any],
+    map_format: dict[str, Any],
+    resolver: Fo1ResourceResolver | None = None,
+) -> tuple[str, int, int | None, int | None] | None:
     filename = obj.get("artFilename")
     if not filename:
         return None
@@ -105,19 +115,38 @@ def source_sprite_logical_path(obj: dict[str, Any], map_format: dict[str, Any]) 
     if directory is None:
         return None
     if object_type != 1:
-        return f"art\\{directory}\\{filename}"
+        return (
+            f"art\\{directory}\\{filename}",
+            int(obj["rotation"]),
+            int(obj["frame"]),
+            None,
+        )
     fid = int(obj["fid"], PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16)
-    animation = (fid >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_FF
-    weapon = (fid >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_12) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_0F
-    packed_rotation = (fid >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_28) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_07
-    if (
-        animation != int(map_format["supportedCritterIdleAnimation"])
-        or weapon != int(map_format["supportedCritterIdleWeapon"])
-        or packed_rotation != int(map_format["supportedCritterPackedRotation"])
-    ):
+    fields = critter_fid_fields(fid)
+    if fields["packedRotation"] != int(map_format["supportedCritterPackedRotation"]):
         return None
-    base_name = str(filename).split(",", 1)[0]
-    return f"art\\critters\\{base_name}aa.frm"
+    try:
+        art = (
+            placed_critter_art_state(str(filename), fid, int(obj["rotation"]))
+            if resolver is None
+            else resolver.placed_critter_art_state(fid, int(obj["rotation"]))
+        )
+    except Fo1ProfileError:
+        return None
+    return (
+        art.logical_path,
+        art.source_rotation,
+        None if art.frame_selection == "terminal" else int(obj["frame"]),
+        art.alias_art_index,
+    )
+
+
+def source_sprite_logical_path(
+    obj: dict[str, Any],
+    map_format: dict[str, Any],
+) -> str | None:
+    state = source_sprite_art_state(obj, map_format)
+    return None if state is None else state[0]
 
 
 def resolve_child(root: Path, relative: str) -> Path:
@@ -506,25 +535,33 @@ def prepare(
     def ensure_sprite_artifact(
         logical_path: str,
         rotation: int,
-        frame_index: int,
+        frame_index: int | None,
     ) -> dict[str, Any]:
         resource = resolver.read(logical_path)
-        key = f"{resource.sha256}:{rotation}:{frame_index}"
-        artifact_id = hashlib.sha256(key.encode("ascii")).hexdigest()[:PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_20]
-        artifact = sprite_artifacts.get(artifact_id)
-        if artifact is not None:
-            return artifact
         decoded = decode_frm(resource.data, colors)
         if not 0 <= rotation < len(decoded["directions"]):
             raise Fo1ProfileError(
                 f"Fallout sprite rotation exceeds FRM: {logical_path}/{rotation}"
             )
         frames = decoded["directions"][rotation]["frames"]
+        frame_selection = "terminal" if frame_index is None else "stored"
+        if frame_index is None:
+            frame_index = len(frames) - 1
         if not 0 <= frame_index < len(frames):
             raise Fo1ProfileError(
                 f"Fallout sprite frame exceeds FRM: {logical_path}/{frame_index}"
             )
+        key = f"{resource.sha256}:{rotation}:{frame_index}"
+        artifact_id = hashlib.sha256(key.encode("ascii")).hexdigest()[:PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_20]
+        artifact = sprite_artifacts.get(artifact_id)
+        if artifact is not None:
+            if artifact["frameSelection"] != frame_selection:
+                raise Fo1ProfileError(
+                    f"Fallout sprite frame-selection identity drifted: {logical_path}"
+                )
+            return artifact
         frame = frames[frame_index]
+        direction = decoded["directions"][rotation]
         relative = f"assets/sprites/{artifact_id}.png"
         artifact = {
             "id": artifact_id,
@@ -533,7 +570,13 @@ def prepare(
             "sourceSha256": resource.sha256,
             "rotation": rotation,
             "frame": frame_index,
+            "frameSelection": frame_selection,
             "frameOffset": [frame["x"], frame["y"]],
+            "directionOffset": [direction["xOffset"], direction["yOffset"]],
+            "framesPerSecond": decoded["fps"],
+            "actionFrame": decoded["actionFrame"],
+            "framesPerDirection": decoded["framesPerDirection"],
+            "directionCount": len(decoded["directions"]),
             "averageOpaqueColor": average_opaque_rgba(
                 frame["image"],
                 float(viewer["wallGeometry"]["sourceAlphaThreshold"]),
@@ -628,8 +671,8 @@ def prepare(
                             {"serial": obj["serial"], "reason": "OBJECT_HIDDEN"}
                         )
                         continue
-                    logical_path = source_sprite_logical_path(obj, map_format)
-                    if logical_path is None:
+                    art_state = source_sprite_art_state(obj, map_format, resolver)
+                    if art_state is None:
                         skipped.append(
                             {
                                 "serial": obj["serial"],
@@ -638,9 +681,9 @@ def prepare(
                         )
                         continue
                     artifact = ensure_sprite_artifact(
-                        logical_path,
-                        int(obj["rotation"]),
-                        int(obj["frame"]),
+                        art_state[0],
+                        art_state[1],
+                        art_state[2],
                     )
                     placement = {
                         "serial": obj["serial"],
@@ -659,6 +702,14 @@ def prepare(
                         "artFilename": obj["artFilename"],
                         "artifactId": artifact["id"],
                     }
+                    if object_type == 1:
+                        placement["critterFidState"] = critter_fid_fields(
+                            int(
+                                obj["fid"],
+                                PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16,
+                            )
+                        )
+                        placement["critterFidState"]["artAliasListIndex"] = art_state[3]
                     placements.append(placement)
                     if obj["prototype"]["subtype_name"] == "door":
                         doors.append(

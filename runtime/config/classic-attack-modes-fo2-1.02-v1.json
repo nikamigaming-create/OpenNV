@@ -1,0 +1,20 @@
+{
+  "schema": "opennv-classic-attack-modes/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "modes": [
+    {
+      "id": "basic-punch",
+      "hitMode": 4,
+      "skillIndex": 3,
+      "minimumDamage": 1,
+      "maximumDamageDerivedStat": "melee-damage",
+      "maximumDamageBonus": 2,
+      "maximumRangeHexes": 1,
+      "actionPointCost": 3,
+      "animationCode": 16,
+      "damageType": 0,
+      "criticalFailureType": 0,
+      "ammunitionPerAttack": 0
+    }
+  ]
+}

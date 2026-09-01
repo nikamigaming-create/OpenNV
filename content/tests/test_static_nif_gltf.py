@@ -431,23 +431,27 @@ def synthetic_fallout_animation(user_version_2: int, root: object) -> bytes:
 class StaticNifGltfTest(unittest.TestCase):
     def test_fallout_alternate_animation_identity_is_controller_sequence_only(self) -> None:
         contract = load_nif_decoder_contract()
-        alternate_user_version_2 = next(iter(contract.animation_user_version_2))
-        decoded = decode_nif(
-            synthetic_fallout_animation(
-                alternate_user_version_2,
-                NifFormat.NiControllerSequence(),
-            )
-        )
-        self.assertTrue(decoded.format_matched)
-        self.assertEqual(decoded.document.user_version_2, alternate_user_version_2)
-
-        with self.assertRaisesRegex(ValueError, "alternate animation identity"):
-            decode_nif(
-                synthetic_fallout_animation(
-                    alternate_user_version_2,
-                    NifFormat.NiNode(),
+        for alternate_user_version_2 in contract.animation_user_version_2:
+            with self.subTest(user_version_2=alternate_user_version_2):
+                decoded = decode_nif(
+                    synthetic_fallout_animation(
+                        alternate_user_version_2,
+                        NifFormat.NiControllerSequence(),
+                    )
                 )
-            )
+                self.assertTrue(decoded.format_matched)
+                self.assertEqual(
+                    decoded.document.user_version_2,
+                    alternate_user_version_2,
+                )
+
+                with self.assertRaisesRegex(ValueError, "alternate animation identity"):
+                    decode_nif(
+                        synthetic_fallout_animation(
+                            alternate_user_version_2,
+                            NifFormat.NiNode(),
+                        )
+                    )
 
     def test_fallout_uv_count_is_recovered_only_by_exact_block_parse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

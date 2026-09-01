@@ -35,10 +35,8 @@ internal partial class Fo3OpeningFlow
                 _activeNameInput!.Text = "Lone Wanderer";
                 var nameCapture = await CaptureAppearanceFrame("fo3-name-entry.png");
                 AcceptName(_activeNameInput);
-                _activeAppearanceCategory!.Select(3);
-                _activeAppearanceCategory.EmitSignal(
-                    OptionButton.SignalName.ItemSelected,
-                    3);
+                (_activeAppearanceShowFace ?? throw new InvalidOperationException(
+                    "Fallout 3 creator proof cannot open the source face controls."))();
                 var defaultCapture = await CaptureAppearanceFrame(
                     "fo3-creator-default.png");
                 _activeFaceControlSlider!.Value =
@@ -140,16 +138,13 @@ internal partial class Fo3OpeningFlow
             _activeNameInput!.Text = "LONE WANDERER";
             await WaitForCharacterVideoDraws(55);
             AcceptName(_activeNameInput);
-            var appearanceCategory = _activeAppearanceCategory ??
+            var showFace = _activeAppearanceShowFace ??
                 throw new InvalidOperationException(
                     "Fallout 3 generated character did not open the appearance categories.");
             var faceControlSlider = _activeFaceControlSlider ??
                 throw new InvalidOperationException(
                     "Fallout 3 generated character did not open the live face controls.");
-            appearanceCategory.Select(3);
-            appearanceCategory.EmitSignal(
-                OptionButton.SignalName.ItemSelected,
-                3);
+            showFace();
             faceControlSlider.Value =
                 _profile.Appearance.FaceControl.AcceptanceValue;
             await WaitForCharacterVideoDraws(55);

@@ -22,6 +22,12 @@ from prepare_fo3_profile import (  # noqa: E402
     _cg00_package_playback_contract,
     _cg00_package_stage_condition,
     _compile_cg01_stage0_transition,
+    _compile_cg02_dad_speech_runtime,
+    _compile_cg02_dad_party_runtime,
+    _compile_cg02_birthday_interactions_runtime,
+    _compile_cg02_butch_runtime,
+    _compile_cg02_cake_runtime,
+    _compile_cg02_overseer_speech_runtime,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
     _compile_post_stage80_dialogue,
@@ -30,6 +36,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_stage100_transition,
     _fallout_default_fov_projection,
     _float_contract,
+    _special_book_menu_tile_contract,
     load_recipe,
 )
 
@@ -63,6 +70,9 @@ FO3_OPENING_FLOW = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
 FO3_CG00_EARLY_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
     "Campaigns/Fallout3/Fo3Cg00EarlyBirthRuntime.cs"
 )
+FO3_CG01_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg01.cs"
+)
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -84,6 +94,7 @@ def condition(
     function: int,
     parameter1: int,
     *,
+    parameter2: int = 0,
     operator_flags: int = 0,
     comparison: float = 1.0,
     run_on: int = 0,
@@ -94,7 +105,7 @@ def condition(
         comparison,
         function,
         parameter1,
-        0,
+        parameter2,
         run_on,
         0,
     )
@@ -166,6 +177,501 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_compiles_cg02_overseer_speech_through_stage10(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        topic = Record("DIAL", 0x30992, 0,
+                       subrecord("EDID", b"CG02OverseerSpeech\0"), ())
+        voice = Record("VTYP", 0x61EA4, 0,
+                       subrecord("EDID", b"Vault101OverseerVoice\0"), ())
+        script_source = ("if doTalk == 1 && talking == 0\nif timer > 0\n"
+                         "set timer to timer - GetSecondsPassed\nelse\n"
+                         "SayTo player CG02OverseerSpeech 1\nset talking to 1\nendif\n"
+                         "begin SayToDone CG02OverseerSpeech\nset talking to 0")
+        script = Record("SCPT", 0x3099F, 0,
+                        subrecord("EDID", b"CG02OverseerSCRIPT\0") +
+                        subrecord("SCTX", script_source.encode() + b"\0"), ())
+        base = Record("NPC_", 0x300F0, 0,
+                      subrecord("EDID", b"CG02Overseer\0") +
+                      subrecord("VTCK", struct.pack("<I", voice.form_id)) +
+                      subrecord("SCRI", struct.pack("<I", script.form_id)), ())
+        overseer = Record("ACHR", 0x300F1, 0,
+                          subrecord("EDID", b"CG02OverseerREF\0") +
+                          subrecord("NAME", struct.pack("<I", base.form_id)), ())
+        dad = Record("ACHR", 0x300EF, 0,
+                     subrecord("EDID", b"CG02DadREF\0") +
+                     subrecord("NAME", struct.pack("<I", 0x2FDCF)), ())
+        amata = Record("ACHR", 0x2FDE0, 0,
+                       subrecord("EDID", b"CG02AmataREF\0") +
+                       subrecord("NAME", struct.pack("<I", 0x2FDDF)), ())
+        pipboy = Record("ARMO", 0x15038, 0, subrecord("EDID", b"pipboy\0"), ())
+        presentation_idle = idle(0x59444, "GivePipBoy", r"Characters\_Male\give.kf")
+
+        def info(form_id: int, text: str, sex: int | None, results: list[str],
+                 use_idle: bool = False) -> Record:
+            data = subrecord("DATA", bytes.fromhex("01000400"))
+            data += subrecord("NAM1", text.encode() + b"\0")
+            if use_idle:
+                data += subrecord("SNAM", struct.pack("<I", presentation_idle.form_id))
+            data += subrecord("CTDA", condition(72, base.form_id))
+            if sex is not None:
+                data += subrecord("CTDA", condition(131, sex))
+            data += b"".join(subrecord("SCTX", value.encode() + b"\0") for value in results)
+            return Record("INFO", form_id, 0, data,
+                          (GroupContext(struct.pack("<I", topic.form_id), 7),))
+
+        records = (
+            quest, topic, voice, script, base, overseer, dad, amata, pipboy,
+            presentation_idle,
+            info(0x30993, "Congratulations, young man!", 0,
+                 ["CG02DadREF.look CG02OverseerREF", "look player"]),
+            info(0x30994, "Congratulations, young lady!", 1,
+                 ["CG02DadREF.look CG02OverseerREF", "look player"]),
+            info(0x30995, "Your first official responsibilities.", None,
+                 ["setstage CG02 8", "look player"]),
+            info(0x30996, "Your very own Pip-Boy 3000!", None,
+                 ["CG02DadREF.look player", "look player"], True),
+            info(0x30997, "Your first work assignment tomorrow.", None,
+                 ["set CG02OverseerREF.doTalk to 0",
+                  "CG02DadREF.look CG02OverseerREF", "setstage CG02 10"]),
+        )
+        definition = {"cg02OverseerSpeech": {
+            "overseerReferenceFormId": "000300f1", "overseerBaseFormId": "000300f0",
+            "overseerScriptFormId": "0003099f",
+            "actorRecipeId": "fo3-vault101-cg02-overseer-actor-v1",
+            "playerReferenceFormId": "00000014",
+            "topicEditorId": "CG02OverseerSpeech", "topicFormId": "00030992",
+            "infoFormIds": ["00030993", "00030994", "00030995", "00030996", "00030997"],
+            "sourceStage": 7, "pipBoyStage": 8, "targetStage": 10}}
+        stop_look = "\n".join(f"{name}.stoplook" for name in (
+            "CG02AmataREF", "CG02DadREF", "CG02OverseerREF", "CG02AmataREF",
+            "CG02DadREF", "CG02OverseerREF", "CG02AmataREF", "CG02DadREF"))
+        result = _compile_cg02_overseer_speech_runtime(
+            records, quest, {8: ["CG02OverseerREF.evp"], 10: [
+                "player.additem pipboy 1\nResetPipboyManager\nCG02DadREF.evp",
+                stop_look, "addachievement 1"]}, definition)
+
+        self.assertEqual([0, 0, 1, 2, 3],
+                         [row["sequence"] for row in result["dialogue"]["branches"]])
+        self.assertEqual(["evaluatePackage"],
+                         [row["kind"] for row in result["stageResults"]["8"]["commands"]])
+        self.assertEqual("addAchievement",
+                         result["stageResults"]["10"]["commands"][-1]["kind"])
+
+        dad_topic = Record("DIAL", 0x1F574, 0,
+                           subrecord("EDID", b"CG02DadSpeech\0"), ())
+        party_package = Record(
+            "PACK", 0x309A5, 0,
+            subrecord("EDID", b"CG02DadTowardsPlayerInDiner\0") +
+            subrecord("PTDT", struct.pack("<IIiI", 0, 0x14, 120, 0)) +
+            subrecord("CTDA", condition(58, quest.form_id,
+                                        operator_flags=96, comparison=10.0)), ())
+        dad_base = Record("NPC_", 0x2FDCF, 0,
+                          subrecord("EDID", b"CG02Dad\0") +
+                          subrecord("VTCK", struct.pack("<I", voice.form_id)) +
+                          subrecord("PKID", struct.pack("<I", party_package.form_id)), ())
+        dad_party_ref = Record(
+            "ACHR", 0x300EF, 0,
+            subrecord("EDID", b"CG02DadREF\0") +
+            subrecord("NAME", struct.pack("<I", dad_base.form_id)) +
+            subrecord("DATA", struct.pack("<6f", 1815.0, -10371.0, 7552.0,
+                                           0.0, 0.0, 0.0)), ())
+        player_marker = Record(
+            "REFR", 0x30768, 0,
+            subrecord("EDID", b"CG02PlayerStartMarker\0") +
+            subrecord("DATA", struct.pack("<6f", 1888.0, -10361.0, 7552.0,
+                                           0.0, 0.0, 0.0)), ())
+        dad_party_idle = idle(0x61212, "DadParty", r"Characters\_Male\party.kf")
+        dad_party_info = Record(
+            "INFO", 0x1F9C2, 0,
+            subrecord("NAM1", b"Enjoy your party!\0") +
+            subrecord("SNAM", struct.pack("<I", dad_party_idle.form_id)) +
+            subrecord("SCTX", b"setstage CG02 12\0"),
+            (GroupContext(struct.pack("<I", dad_topic.form_id), 7),))
+        tutorial = Record("QUST", 0x59C85, 0,
+                          subrecord("EDID", b"CGTutorial\0"), ())
+        radio = Record("REFR", 0x31A00, 0,
+                       subrecord("EDID", b"RadioVault101REF\0") +
+                       subrecord("NAME", struct.pack("<I", 0x31A01)), ())
+        party_definition = {"cg02DadPartySpeech": {
+            "packageFormId": "000309a5", "dadReferenceFormId": "000300ef",
+            "dadBaseFormId": "0002fdcf", "playerReferenceFormId": "00000014",
+            "playerMarkerFormId": "00030768", "topicFormId": "0001f574",
+            "infoFormId": "0001f9c2", "sourceStage": 10, "targetStage": 12}}
+        party = _compile_cg02_dad_party_runtime(
+            (*records, dad_topic, party_package, dad_base, dad_party_ref, player_marker,
+             dad_party_idle, dad_party_info, tutorial, radio), quest,
+            {12: ["EnablePlayerControls 1 1 0 1 1 1\nautosave\n"
+                  "setObjectiveDisplayed CG02 10 1\nRadioVault101REF.enable\n"
+                  "CG02AmataREF.evp\nsetstage CGTutorial 50\n"
+                  "ForceRadioStationUpdate"]}, party_definition)
+        self.assertTrue(party["package"]["arrivedAtStart"])
+        self.assertEqual(7, len(party["stageResult"]["commands"]))
+
+    def test_compiles_cg02_stage12_source_dialogue_graph_and_gifts(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        voice = Record("VTYP", 0x19FDF, 0, subrecord("EDID", b"VoiceAmata\0"), ())
+        base = Record(
+            "NPC_", 0x300E9, 0,
+            subrecord("EDID", b"CG02Amata\0") +
+            subrecord("FULL", b"Amata\0") +
+            subrecord("VTCK", struct.pack("<I", voice.form_id)), ())
+        reference = Record(
+            "ACHR", 0x300F2, 0,
+            subrecord("EDID", b"CG02AmataREF\0") +
+            subrecord("NAME", struct.pack("<I", base.form_id)), ())
+        timer = Record(
+            "GLOB", 0x8A3C9, 0,
+            subrecord("EDID", b"CG02FailsafeTimer\0") +
+            subrecord("FLTV", struct.pack("<f", 60.0)), ())
+        topics = tuple(
+            Record("DIAL", form_id, 0,
+                   subrecord("EDID", f"Gift{stage}".encode() + b"\0") +
+                   subrecord("FULL", f"Gift choice {stage}".encode() + b"\0"), ())
+            for stage, form_id in zip((21, 22, 23), (0x784A1, 0x784A2, 0x784A3)))
+        greeting_topic = Record(
+            "DIAL", 0xC8, 0, subrecord("EDID", b"GREETING\0"), ())
+        greeting = Record(
+            "INFO", 0x319BD, 0,
+            subrecord("NAM1", b"Happy birthday!\0") +
+            subrecord("CTDA", condition(72, base.form_id)) +
+            b"".join(subrecord("TCLT", struct.pack("<I", topic.form_id))
+                     for topic in topics) +
+            subrecord("SCTX", b"set CG02.timer to CG02FailsafeTimer\0"),
+            (GroupContext(struct.pack("<I", greeting_topic.form_id), 7),))
+        gift_infos = tuple(
+            Record(
+                "INFO", 0x79000 + stage, 0,
+                subrecord("NAM1", f"Gift {stage}.".encode() + b"\0") +
+                subrecord("CTDA", condition(72, base.form_id)) +
+                subrecord("SCTX", f"setstage CG02 {stage}".encode() + b"\0"),
+                (GroupContext(struct.pack("<I", topic.form_id), 7),))
+            for stage, topic in zip((21, 22, 23), topics))
+        gifts = (
+            Record("BOOK", 0x34040, 0, subrecord("EDID", b"BookSkillMelee\0"), ()),
+            Record("NOTE", 0x744B7, 0, subrecord("EDID", b"CG02Note\0"), ()),
+            Record("ARMO", 0x340C1, 0,
+                   subrecord("EDID", b"KIDHatPrewarCapKid\0"), ()),
+        )
+        definition = {"cg02BirthdayInteractions": {
+            "sourceStage": 12,
+            "failsafeTimerFormId": "0008a3c9",
+            "participants": [{
+                "referenceFormId": "000300f2",
+                "baseFormId": "000300e9",
+                "greetingInfoFormIds": ["000319bd"],
+            }],
+            "giftStages": [21, 22, 23],
+        }}
+        result = _compile_cg02_birthday_interactions_runtime(
+            (quest, voice, base, reference, timer, greeting_topic, *topics,
+             greeting, *gift_infos, *gifts), quest,
+            {
+                21: ["player.additem BookSkillMelee 1\nsetstage CG02 34"],
+                22: ["player.addNote CG02Note"],
+                23: ["player.additem KIDHatPrewarCapKid 1\nsetstage CG02 34"],
+            }, definition)
+        self.assertEqual(34, result["aggregateStage"])
+        self.assertEqual(4, len(result["participants"][0]["dialogue"]["nodes"]))
+        self.assertEqual(
+            ["addItem", "addNote", "addItem"],
+            [result["stageResults"][str(stage)]["kind"]
+             for stage in (21, 22, 23)])
+
+    def test_compiles_cg02_source_cake_trigger_package_and_dialogue(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        trigger_script = Record(
+            "SCPT", 0x9F64E, 0,
+            subrecord("EDID", b"CG02CakeTriggerSCRIPT\0") +
+            subrecord("SCTX", b"begin OnTriggerEnter player\n"
+                      b"SetStage CG02 15\nend\0"), ())
+        trigger_base = Record(
+            "ACTI", 0x9FB07, 0,
+            subrecord("SCRI", struct.pack("<I", trigger_script.form_id)), ())
+        trigger = Record(
+            "REFR", 0x9F64F, 0,
+            subrecord("NAME", struct.pack("<I", trigger_base.form_id)) +
+            subrecord("DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0)) +
+            subrecord("XPRM", struct.pack("<7fI", 106.5, 176, 70,
+                                           .5, 0, 1, .15, 1)), ())
+        voice = Record("VTYP", 0x19FDF, 0, subrecord("EDID", b"VoiceTest\0"), ())
+        idle_record = idle(0x9E687, "CutCake",
+                           r"Creatures\MisterGutsy\IdleAnims\SpecialIdle_CutCake.kf")
+        package = Record(
+            "PACK", 0x9F64C, 0,
+            subrecord("PLDT", struct.pack("<IiI", 0, 0x20458, 1)) +
+            subrecord("INAM", struct.pack("<I", idle_record.form_id)) +
+            subrecord("SCTX", b"CG02AndyREF.SayTo player CG02CakeSpeech\n"
+                      b"setstage CG02 16\0"), ())
+        andy_base = Record(
+            "CREA", 0x20456, 0,
+            subrecord("EDID", b"CG02Andy\0") +
+            subrecord("PKID", struct.pack("<I", package.form_id)) +
+            subrecord("VTCK", struct.pack("<I", voice.form_id)), ())
+        andy = Record("ACRE", 0x9D1BB, 0,
+                      subrecord("NAME", struct.pack("<I", andy_base.form_id)), ())
+        amata = Record(
+            "NPC_", 0x300E9, 0,
+            subrecord("EDID", b"CG02Amata\0") +
+            subrecord("VTCK", struct.pack("<I", voice.form_id)), ())
+        marker = Record("REFR", 0x20458, 0,
+                        subrecord("DATA", struct.pack("<6f", 4, 5, 6, 0, 0, 0)), ())
+        cake = Record("REFR", 0x9FE60, 0,
+                      subrecord("NAME", struct.pack("<I", 0x9FE61)), ())
+        topic = Record("DIAL", 0x9EE18, 0,
+                       subrecord("EDID", b"CG02CakeSpeech\0"), ())
+        speakers = (andy_base, amata, amata)
+        infos = tuple(
+            Record(
+                "INFO", form_id, 0,
+                subrecord("NAM1", f"Cake line {index}".encode() + b"\0") +
+                subrecord("CTDA", condition(72, speaker.form_id)) +
+                (subrecord("SCTX", b"CG02AmataREF.SayTo CG02AndyREF CG02CakeSpeech\0")
+                 if index == 0 else b""),
+                (GroupContext(struct.pack("<I", topic.form_id), 7),))
+            for index, (form_id, speaker) in enumerate(
+                zip((0x9F646, 0x9F647, 0xBB784), speakers)))
+        definition = {
+            "sourceStage": 12, "triggerStage": 15, "targetStage": 16,
+            "triggerReferenceFormId": "0009f64f",
+            "triggerBaseFormId": "0009fb07",
+            "triggerScriptFormId": "0009f64e",
+            "andyReferenceFormId": "0009d1bb", "andyBaseFormId": "00020456",
+            "andyActorRecipeId": "fo3-vault101-cg02-andy-actor-v1",
+            "packageFormId": "0009f64c", "targetMarkerFormId": "00020458",
+            "cakeReferenceFormId": "0009fe60", "topicFormId": "0009ee18",
+            "infoFormIds": ["0009f646", "0009f647", "000bb784"],
+            "locomotionPath": r"meshes\creatures\mistergutsy\mtforward.kf",
+        }
+        result = _compile_cg02_cake_runtime(
+            (quest, trigger_script, trigger_base, trigger, voice, idle_record,
+             package, andy_base, andy, amata, marker, cake, topic, *infos),
+            quest,
+            {15: ["CG02AndyREF.evp\nCG02.timer to 1"],
+             16: ["CG02CakeREF.playgroup forward 1\n"
+                  "CG02AmataREF.SayTo CG02AndyREF CG02CakeSpeech\n"
+                  "set CG02.runTimer to 1"]},
+            definition)
+        self.assertEqual("0009f64f", result["trigger"]["referenceFormId"])
+        self.assertEqual("00020458", result["package"]["targetMarkerFormId"])
+        self.assertEqual(3, len(result["dialogue"]["cues"]))
+
+    def test_compiles_cg02_butch_package_and_intercom_handoff(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        script = Record(
+            "SCPT", 0x31642, 0,
+            subrecord("EDID", b"CG02ButchSCRIPT\0") +
+            subrecord("SCTX", b"begin OnStartCombat player\n"
+                      b"CG02Vault101Security04REF.evp\nend\n"
+                      b"SayTo player CG02ButchSpeech\0"), ())
+        package = Record(
+            "PACK", 0x3135C, 0,
+            subrecord("EDID", b"CG02ButchFindPlayer\0") +
+            subrecord("PTDT", struct.pack("<IiII", 0, 0x14, 150, 0)) +
+            b"".join(subrecord("CTDA", condition(
+                         59, quest.form_id, parameter2=stage,
+                         comparison=comparison))
+                     for stage, comparison in ((20, 1), (16, 1), (30, 0), (35, 0))) +
+            subrecord("SCTX", b"CG02PaulHannonREF.evp\0"), ())
+        base = Record(
+            "NPC_", 0x300EA, 0,
+            subrecord("EDID", b"CG02Butch\0") +
+            subrecord("SCRI", struct.pack("<I", script.form_id)) +
+            subrecord("PKID", struct.pack("<I", package.form_id)), ())
+        reference = Record(
+            "ACHR", 0x300F3, 0,
+            subrecord("EDID", b"CG02ButchREF\0") +
+            subrecord("NAME", struct.pack("<I", base.form_id)), ())
+        sweetroll = Record("ALCH", 0x30A23, 0,
+                           subrecord("EDID", b"CG02Sweetroll\0"), ())
+        def actor(form_id: int, editor_id: str, signature: str = "ACHR") -> Record:
+            return Record(signature, form_id, 0,
+                          subrecord("EDID", editor_id.encode() + b"\0"), ())
+        stage_actors = (
+            actor(0x300EF, "CG02DadREF"),
+            actor(0x300F5, "CG02Vault101Security02REF"),
+            actor(0x300F2, "CG02AmataREF"),
+            actor(0x30A00, "CG02DinerIntercomREF", "REFR"),
+            actor(0x300EE, "CG02JonasREF"),
+        )
+        result = _compile_cg02_butch_runtime(
+            (quest, script, package, base, reference, sweetroll, *stage_actors),
+            quest,
+            {34: ["set CG02.timer to 10"],
+             35: ["CG02DadREF.evp\nCG02Vault101Security02REF.evp\n"
+                  "CG02AmataREF.evp\n"
+                  "CG02DinerIntercomREF.setTalkingActivatorActor CG02JonasREF\n"
+                  "set CG02.intercomBeep to 1\nset CG02.runTimer to 1"]},
+            {"referenceFormId": "000300f3", "baseFormId": "000300ea",
+             "scriptFormId": "00031642",
+             "actorRecipeId": "fo3-vault101-cg02-butch-actor-v1",
+             "findPlayerPackageFormId": "0003135c",
+             "playerReferenceFormId": "00000014",
+             "sweetrollFormId": "00030a23", "sourceStage": 20,
+             "requiredCakeStage": 16, "sceneDoneStage": 30,
+             "aggregateStage": 34, "intercomStage": 35})
+        self.assertEqual(150, result["findPlayerPackage"]["radiusGameUnits"])
+        self.assertEqual(6, len(result["stage35"]["commands"]))
+
+    def test_post_intercom_runtime_is_source_configured_and_fail_closed(self) -> None:
+        recipe = json.loads(FO3_RECIPE.read_text(encoding="utf-8"))
+        post = recipe["opening"]["characterSelection"]["cg01Stage0Transition"][
+            "cg02BirthdayInteractions"]["butch"]["postIntercom"]
+        self.assertEqual(
+            [35, 36, 38, 40],
+            [post[key] for key in (
+                "sourceStage", "answerStage", "goodbyeStage", "targetStage")],
+        )
+        self.assertEqual("000300e8", post["jonasReferenceFormId"])
+        self.assertEqual("00031d48", post["intercomReferenceFormId"])
+        gift = post["reactorGift"]
+        self.assertEqual([40, 42, 44, 50, 55], [
+            gift["sourceStage"], gift["jonasStage"], gift["targetStage"],
+            gift["rangeStage"], gift["hitStage"]])
+        self.assertEqual(
+            ["000304eb", "0007674b", "00076746"],
+            gift["targetReferenceFormIds"],
+        )
+        self.assertEqual("000c0327", gift["bbGunFormId"])
+        self.assertEqual("0002935b", gift["bbAmmoFormId"])
+        source = read_csharp_source_module(FO3_CG01_RUNTIME)
+        self.assertIn("postIntercom.StageResults[stage]", source)
+        self.assertIn("reactorGift.StageResults[stage]", source)
+        self.assertIn("StartReactorGiftParticipant", source)
+        self.assertIn("ConfigureSourceFormActivations(activations)", source)
+        self.assertIn("ConfigureSourceHitscan", source)
+        self.assertIn("Cg02TargetHitFormIds", source)
+        self.assertNotIn('InfoFormId.Equals("00031d3c"', source)
+
+    def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
+        quest = Record(
+            "QUST", 0x00014E84, 0, subrecord("EDID", b"CG02\0"), ())
+        topic = Record(
+            "DIAL", 0x0001F574, 0,
+            subrecord("EDID", b"CG02DadSpeech\0"), ())
+        voice = Record(
+            "VTYP", 0x00019FDF, 0, subrecord("EDID", b"VoiceDad\0"), ())
+        script_source = """scn CG02DadSCRIPT
+begin gamemode
+if doTalk == 1 && talking == 0
+if timer > 0
+set timer to timer - GetSecondsPassed
+else
+SayTo player CG02DadSpeech 1
+set talking to 1
+endif
+endif
+end
+begin SayToDone CG02DadSpeech
+set talking to 0
+end"""
+        script = Record(
+            "SCPT", 0x000304DA, 0,
+            subrecord("EDID", b"CG02DadSCRIPT\0")
+            + subrecord("SCTX", script_source.encode("cp1252") + b"\0"), ())
+        dad = Record(
+            "NPC_", 0x0002FDCF, 0,
+            subrecord("EDID", b"CG02Dad\0")
+            + subrecord("VTCK", struct.pack("<I", voice.form_id))
+            + subrecord("SCRI", struct.pack("<I", script.form_id)), ())
+        dad_ref = Record(
+            "ACHR", 0x000300EF, 0,
+            subrecord("EDID", b"CG02DadREF\0")
+            + subrecord("NAME", struct.pack("<I", dad.form_id)), ())
+        overseer_ref = Record(
+            "ACHR", 0x000300F1, 0,
+            subrecord("EDID", b"CG02OverseerREF\0")
+            + subrecord("NAME", struct.pack("<I", 0x000300F0)), ())
+        idles = (
+            idle(0x00059447, "TalkHappy", r"Characters\_Male\happy.kf"),
+            idle(0x00059446, "TalkSad", r"Characters\_Male\sad.kf"),
+        )
+
+        def info(form_id: int, text: str, idle_id: int, sex: int | None,
+                 result: str | None) -> Record:
+            payload = subrecord("DATA", bytes.fromhex("01000400"))
+            payload += subrecord("NAM1", text.encode("cp1252") + b"\0")
+            payload += subrecord("SNAM", struct.pack("<I", idle_id))
+            payload += subrecord("CTDA", condition(72, dad.form_id))
+            if sex is not None:
+                payload += subrecord("CTDA", condition(131, sex))
+            if result is not None:
+                payload += subrecord("SCTX", result.encode("cp1252") + b"\0")
+            return Record(
+                "INFO", form_id, 0, payload,
+                (GroupContext(struct.pack("<I", topic.form_id), 7),))
+
+        records = (
+            quest, topic, voice, script, dad, dad_ref, overseer_ref, *idles,
+            info(0x0001F954, "Happy birthday, pal!", idles[0].form_id, 0, None),
+            info(0x0001F953, "Happy birthday, honey!", idles[0].form_id, 1, None),
+            info(0x00031629, "If only your mother....", idles[1].form_id,
+                 None, "setstage CG02 7"),
+        )
+        definition = {
+            "cg02DadSpeech": {
+                "dadReferenceFormId": "000300ef",
+                "dadBaseFormId": "0002fdcf",
+                "dadScriptFormId": "000304da",
+                "topicEditorId": "CG02DadSpeech",
+                "topicFormId": "0001f574",
+                "infoFormIds": ["0001f954", "0001f953", "00031629"],
+                "targetStage": 7,
+            }
+        }
+        stage_sources = {7: [
+            "set CG02DadREF.doTalk to 0\nCG02OverseerREF.evp\n"
+            "set CG02OverseerREF.doTalk to 1\n"
+            "set CG02OverseerREF.timer to .25"
+        ]}
+        result = _compile_cg02_dad_speech_runtime(
+            records, quest, stage_sources, definition)
+
+        self.assertEqual(
+            ["male", "female", None],
+            [row["engineSex"] for row in result["dialogue"]["branches"]])
+        self.assertEqual(
+            ["setActorVariable", "evaluatePackage", "setActorVariable",
+             "setActorVariable"],
+            [row["kind"] for row in result["stageResult"]["commands"]])
+        self.assertEqual(0.25, result["stageResult"]["commands"][3]["value"])
+        self.assertEqual(
+            "fo3-cg02-stage-7-overseer-speech-runtime-not-implemented",
+            result["nextBoundary"]["blocker"])
+
+    def test_compiles_owned_special_book_menu_tile_hierarchy(self) -> None:
+        bindings = "".join(
+            f'<{action}><ref src="{tile}" trait="clicked"/></{action}>'
+            for action, tile in (
+                ("xbuttonrt", "next_page"), ("xbuttonlt", "previous_page"),
+                ("xright", "increase_value"), ("xleft", "decrease_value"),
+                ("xup", "index_up"), ("xdown", "index_down"),
+                ("xbuttonx", "exit_menu"),
+            )
+        )
+        controls = "".join(
+            f'<{kind} name="{name}"><id>{index}</id><width>1</width><height>1</height>'
+            f'<_x>100</_x><_y>200</_y><visible>&true;</visible><target>&true;</target>'
+            f'</{kind}>'
+            for index, (kind, name) in enumerate((
+                ("hotrect", "index_up"), ("hotrect", "index_down"),
+                ("hotrect", "clickable"), ("image", "next_page"),
+                ("image", "previous_page"), ("image", "increase_value"),
+                ("image", "decrease_value"), ("image", "exit_menu"),
+            ))
+        )
+        payload = (
+            '<menu name="SPECIALBookMenu"><class>&SPECIALBookMenu;</class>'
+            '<stackingtype>&no_click_past;</stackingtype><alpha>0</alpha>'
+            '<locus>&true;</locus><menufade>0.25</menufade>'
+            '<systemcolor>&hudmain;</systemcolor>' + bindings + controls + '</menu>'
+        ).encode("cp1252")
+        contract = _special_book_menu_tile_contract(
+            SimpleNamespace(data=payload, sha256="a" * 64))
+        self.assertEqual("SPECIALBookMenu", contract["menuName"])
+        self.assertEqual(8, len(contract["controls"]))
+        self.assertEqual(7, len(contract["bindings"]))
+        self.assertEqual("increase_value", contract["bindings"][2]["tile"])
+
     def test_capture_creates_fresh_output_directory_before_png_write(self) -> None:
         source = read_csharp_source_module(FO3_OPENING_FLOW)
         capture = source[source.index("private async Task<Fo3AppearanceProofCapture>") :]
@@ -234,8 +740,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
     def test_cg00_actor_packages_switch_by_stage_condition_not_idle_stop(self) -> None:
         source = FO3_CG00_EARLY_RUNTIME.read_text(encoding="utf-8")
 
-        self.assertIn("value.ActivationCondition?.Stage == stage", source)
-        self.assertIn("selected.AnimationStartSeconds", source)
+        self.assertIn("GamebryoPackageSelector.SelectFirst", source)
+        self.assertIn("GamebryoPackageComparison.Equal", source)
+        self.assertIn("selected.Value.AnimationStartSeconds", source)
         self.assertNotIn("section == 0 && _cg00ActorPackages.Count == 0", source)
         self.assertNotIn(
             "while (playback.ElapsedSeconds >= playback.Contract.AnimationStopSeconds)",
@@ -642,6 +1149,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                         "endif",
                         "endif",
                         "end",
+                        "begin OnPackageDone CG01DadCloseDoor",
+                        "setstage CG01 18",
+                        "end",
+                        "begin OnPackageDone CG01DadReturn",
+                        "setstage CG01 72",
+                        "end",
                         "begin SayToDone CG01DadSpeech",
                         "set talking to 0",
                         "look player",
@@ -659,7 +1172,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "SCPT",
             0x00030769,
             0,
-            subrecord("EDID", b"CG01SCRIPT\0") + subrecord("SCTX", b"short runTimer\0"),
+            subrecord("EDID", b"CG01SCRIPT\0") + subrecord("SCTX", (
+                b"float timer\nshort runTimer\nbegin gamemode\nif runTimer == 1\n"
+                b"if timer > 0\nset timer to timer - GetSecondsPassed\nelse\n"
+                b"if getstageDone CG01 50 == 1 && getstageDone CG01 70 == 0\n"
+                b"setstage CG01 70\nendif\n"
+                b"if getstage CG01 == 90\nsetstage CG01 100\nendif\n"
+                b"endif\nendif\nend\0")),
             (),
         )
         cg01_dad_base = Record(
@@ -668,7 +1187,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0,
             subrecord("EDID", b"CG01Dad\0")
             + subrecord("VTCK", struct.pack("<I", VOICE_FORM))
-            + subrecord("SCRI", struct.pack("<I", cg01_dad_script.form_id)),
+            + subrecord("SCRI", struct.pack("<I", cg01_dad_script.form_id))
+            + subrecord("PKID", struct.pack("<I", 0x0002EAAF))
+            + subrecord("PKID", struct.pack("<I", 0x000457C4))
+            + subrecord("PKID", struct.pack("<I", 0x000C6DE4))
+            + subrecord("PKID", struct.pack("<I", 0x0002ECC3))
+            + subrecord("PKID", struct.pack("<I", 0x0003A181))
+            + subrecord("PKID", struct.pack("<I", 0x0002ECC4)),
             (),
         )
         cg02_dad_base = Record(
@@ -709,6 +1234,105 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0x00000400,
             (-2582.588, -5798.251, 7424.0, 0.0, 0.0, 0.0460234),
         )
+        cg01_close_gate_target = placed_reference(
+            "REFR", 0x000457C2, "CG01DadExitPlaypenMarker2", marker_base.form_id, 0,
+            (-2644.5, -5710.0, 7424.0, 0.0, 0.0, 0.092),
+        )
+        cg01_close_door_target = placed_reference(
+            "REFR", 0x000457C0, "CG01DadExitRoomMarker", marker_base.form_id, 0,
+            (-2686.3, -5948.4, 7424.0, 0.0, 0.0, 3.275),
+        )
+        cg01_leave_room_target = placed_reference(
+            "REFR", 0x0002EA4B, "CG01DadGoneMarker", marker_base.form_id, 0,
+            (-3168.0, -5888.0, 7424.0, 0.0, 0.0, 3.188),
+        )
+        cg01_playpen_gate = placed_reference(
+            "REFR", 0x00047803, "CG01PlaypenGateREF", marker_base.form_id, 0,
+            (-2645.0, -5590.6, 7425.0, 0.0, 0.0, 1.571),
+        )
+        cg01_playroom_door = placed_reference(
+            "REFR", 0x0002EA4A, "CG01PlayroomDoor", marker_base.form_id, 0,
+            (-2688.0, -5888.0, 7424.0, 0.0, 0.0, 2.750),
+        )
+        cg01_main_door = placed_reference(
+            "REFR", 0x0002EA49, "CG01MainDoor", marker_base.form_id, 0,
+            (-2800.0, -6000.0, 7424.0, 0.0, 0.0, 0.0),
+        )
+        cg01_return_target = placed_reference(
+            "REFR", 0x000401BA, "CG01DadReturnMarker", marker_base.form_id, 0,
+            (-2700.0, -5800.0, 7424.0, 0.0, 0.0, 0.3),
+        )
+        cg01_bible_target = placed_reference(
+            "REFR", 0x0003A180, "CG01DadBibleVerseMarker", marker_base.form_id, 0,
+            (-2550.0, -5816.0, 7424.0, 0.0, 0.0, 0.1),
+        )
+        cg01_lead_target = placed_reference(
+            "REFR", 0x0002ECC1, "CG01DadFollowMeMarker", marker_base.form_id, 0,
+            (-3168.0, -5664.0, 7424.0, 0.0, 0.0, 3.15),
+        )
+
+        def cg01_package(
+            form_id: int,
+            editor_id: str,
+            stage: int,
+            target_form_id: int,
+            end_source: str | None = None,
+            package_type: int = 0,
+            escort_target: int | None = None,
+        ) -> Record:
+            events = subrecord("POBA") + subrecord("POEA")
+            if end_source is not None:
+                events += subrecord("SCTX", end_source.encode("cp1252") + b"\0")
+            events += subrecord("POCA")
+            return Record(
+                "PACK",
+                form_id,
+                0,
+                subrecord("EDID", editor_id.encode("ascii") + b"\0")
+                + subrecord("PKDT", bytes(4) + bytes([package_type]) + bytes(7))
+                + subrecord("PLDT", struct.pack("<iIi", 0, target_form_id, 0))
+                + (b"" if escort_target is None else subrecord(
+                    "PTDT", struct.pack("<IIII", 0, escort_target, 0, 0)))
+                + subrecord(
+                    "CTDA",
+                    condition(
+                        58,
+                        0x00014E83,
+                        operator_flags=0x60,
+                        comparison=float(stage),
+                    ),
+                )
+                + events,
+                (),
+            )
+
+        cg01_close_gate_package = cg01_package(
+            0x000C6DE4,
+            "CG01DadCloseGate",
+            14,
+            cg01_close_gate_target.form_id,
+            "setstage CG01 16",
+        )
+        cg01_close_door_package = cg01_package(
+            0x000457C4,
+            "CG01DadCloseDoor",
+            16,
+            cg01_close_door_target.form_id,
+        )
+        cg01_leave_room_package = cg01_package(
+            0x0002EAAF,
+            "CG01DadLeaveRoom",
+            20,
+            cg01_leave_room_target.form_id,
+        )
+        cg01_return_package = cg01_package(
+            0x0002ECC3, "CG01DadReturn", 70, cg01_return_target.form_id)
+        cg01_bible_package = cg01_package(
+            0x0003A181, "CG01DadShowBibleVerse", 73,
+            cg01_bible_target.form_id, "setstage CG01 74", package_type=6)
+        cg01_lead_package = cg01_package(
+            0x0002ECC4, "CG01DadLeaveRoom2", 75,
+            cg01_lead_target.form_id, package_type=2, escort_target=0x14)
         cg02_dad_ref = placed_reference(
             "ACHR",
             0x000300EF,
@@ -717,6 +1341,30 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0x00000C00,
             (1815.2443, -10371.58, 7552.0, 0.0, 0.0, 0.2124003),
         )
+        cg02_player_marker = placed_reference(
+            "REFR", 0x00030768, "CG02PlayerStartMarker", marker_base.form_id, 0,
+            (1680.0, -10240.0, 7552.0, 0.0, 0.0, 0.2),
+        )
+        cg02_actor_names = (
+            "CG02AmataREF", "CG02ButchREF", "CG02OldLadyPalmerREF",
+            "CG02OverseerREF", "CG02PaulHannonREF", "CG02Vault101Security04REF",
+            "CG02WallyMackREF", "CG02JonasREF", "CG02StanleyREF",
+            "CG02AndyREF", "CG02Vault101Security02REF",
+        )
+        cg02_actor_refs = tuple(
+            placed_reference(
+                "ACRE" if name == "CG02AndyREF" else "ACHR",
+                0x00100000 + index,
+                name,
+                0x00200000 + index,
+                0,
+                (1700.0 + index, -10240.0, 7552.0, 0.0, 0.0, 0.0),
+            )
+            for index, name in enumerate(cg02_actor_names)
+        )
+        kid_suit = Record(
+            "ARMO", 0x000340ED, 0, subrecord("EDID", b"KIDVaultSuitChild101\0"), ())
+        pipboy = Record("ARMO", 0x00015038, 0, subrecord("EDID", b"pipboy\0"), ())
         baby_babble = Record(
             "SOUN",
             0x00089B4C,
@@ -768,6 +1416,52 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             )
         )
         cg01_stage14_source = "CG01DadREF.evp"
+        cg01_stage16_source = "\n".join(
+            ("set CG01DadREF.doTalk to 1", "CG01PlaypenGateREF.setOpenState 0")
+        )
+        cg01_stage18_source = "\n".join(
+            (
+                "set CG01DadREF.doTalk to 0",
+                "CG01PlayroomDoor.setOpenState 0",
+                "CG01PlayroomDoor.Lock 100",
+                "CG01PlaypenGateREF.setOpenState 0",
+                "setstage CG01 20",
+            )
+        )
+        cg01_stage20_source = "\n".join(
+            (
+                "CG01DadREF.evp",
+                "EnablePlayerControls 1 0 0 0 1 1 0",
+                "setObjectiveDisplayed CG01 20 1",
+            )
+        )
+        cg01_stage30_source = "\n".join((
+            "setObjectiveCompleted CG01 20 1", "setObjectiveDisplayed CG01 30 1",
+            "CG01PlayroomDoor.setOpenState 0", "CG01PlayroomDoor.Lock 100"))
+        cg01_stage40_source = "\n".join((
+            "setObjectiveCompleted CG01 30 1", "setObjectiveDisplayed CG01 40 1",
+            "CG01PlayroomDoor.setOpenState 0", "CG01PlayroomDoor.Lock 100"))
+        cg01_stage50_source = "\n".join((
+            "setObjectiveCompleted CG01 40 1", "set CG01.timer to 10", "set CG01.runTimer to 1"))
+        cg01_stage70_source = "\n".join(("set CG01.runTimer to 0", "CG01DadREF.evp"))
+        cg01_stage72_source = "\n".join((
+            "set CG01DadREF.timer to 1", "set CG01DadREF.doTalk to 1",
+            "CG01PlayroomDoor.Unlock", "CG01PlayroomDoor.setOpenState 1",
+            "CG01MainDoor.Lock 100", "CG01MainDoor.setOpenState 0"))
+        cg01_stage73_source = "CG01DadREF.evp"
+        cg01_stage74_source = "set CG01DadREF.doTalk to 1"
+        cg01_stage75_source = "\n".join((
+            "set CG01DadREF.doTalk to 0", "CG01MainDoor.Unlock"))
+        cg01_stage80_source = "\n".join((
+            "setObjectiveDisplayed CG01 80 1", "CG01DadREF.evp"))
+        cg01_stage90_source = "\n".join((
+            "set CG01.timer to 2.2", "set CG01.runTimer to 1",
+            "completeAllObjectives CG01", "AutoDisplayObjectives 0",
+            "KillQuestUpdates", "imod FadeToWhiteAndBackISFX",
+            "playSound QSTFadeToWhiteB"))
+        cg01_stage100_source = "\n".join((
+            "stopQuest CG01", "CG01DadRef.disable", "player.setscale 1",
+            "SetPCToddler 0", "ClearNoActivationSound", "setstage CG02 0"))
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -784,6 +1478,34 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage12_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 14))
             + subrecord("SCTX", cg01_stage14_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 16))
+            + subrecord("SCTX", cg01_stage16_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 18))
+            + subrecord("SCTX", cg01_stage18_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 20))
+            + subrecord("SCTX", cg01_stage20_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 30))
+            + subrecord("SCTX", cg01_stage30_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 40))
+            + subrecord("SCTX", cg01_stage40_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 50))
+            + subrecord("SCTX", cg01_stage50_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 70))
+            + subrecord("SCTX", cg01_stage70_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 72))
+            + subrecord("SCTX", cg01_stage72_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 73))
+            + subrecord("SCTX", cg01_stage73_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 74))
+            + subrecord("SCTX", cg01_stage74_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 75))
+            + subrecord("SCTX", cg01_stage75_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 80))
+            + subrecord("SCTX", cg01_stage80_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 90))
+            + subrecord("SCTX", cg01_stage90_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 100))
+            + subrecord("SCTX", cg01_stage100_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -840,6 +1562,61 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             ),
             cell_groups,
         )
+        def scripted_interaction(script_form, script_editor, source, base_form, base_editor,
+                                 ref_form, signature="ACTI", full=None, model=b"Triggers\\TrigPlayerWall01.NIF\0",
+                                 primitive=None):
+            script = Record("SCPT", script_form, 0,
+                subrecord("EDID", script_editor.encode() + b"\0") +
+                subrecord("SCTX", source.encode("cp1252") + b"\0"), ())
+            base_data = subrecord("EDID", base_editor.encode() + b"\0")
+            if full is not None:
+                base_data += subrecord("FULL", full.encode("cp1252") + b"\0")
+            base_data += subrecord("MODL", model) + subrecord("SCRI", struct.pack("<I", script_form))
+            base = Record(signature, base_form, 0, base_data, ())
+            reference_editor = {
+                0x00047803: "CG01PlaypenGateREF",
+                0x0002EA53: "CG01ExitCribTriggerREF",
+                0x0002ECC0: "CG01SpecialBookREF",
+            }[ref_form]
+            ref_data = subrecord("EDID", reference_editor.encode() + b"\0") + subrecord("NAME", struct.pack("<I", base_form))
+            if primitive is not None:
+                ref_data += subrecord("XPRM", struct.pack("<7fI", *primitive, 1))
+            ref_data += subrecord("DATA", struct.pack("<6f", *CG01_TRIGGER_TRANSFORM))
+            return script, base, Record("REFR", ref_form, 0, ref_data, cell_groups)
+
+        playpen_records = scripted_interaction(
+            0x0002EA3C, "CG01PlaypenGateSCRIPT",
+            "begin OnActivate\nif IsActionRef player == 1 && getStage CG01 == 20\nsetstage CG01 30\nendif\nActivate\nend",
+            0x000479D3, "CG01PlayPenGateNew", 0x00047803, "DOOR", "Gate Door",
+            b"Dungeons\\Vault\\Accessories\\VPlaypenDoor01.NIF\0")
+        exit_records = scripted_interaction(
+            0x0002ECBA, "CG01ExitCribTriggerSCRIPT",
+            "begin onTriggerEnter\nif IsActionRef player == 1 && getStage CG01 == 30\nsetstage CG01 40\nendif\nEnd",
+            0x0002EA40, "CG01ExitCribTrigger", 0x0002EA53,
+            primitive=(241.0, 24.0, 111.0, 0.8, 0.3, 0.2, 0.15))
+        book_records = scripted_interaction(
+            0x0002ECB9, "CG01SpecialBookSCRIPT",
+            "begin OnActivate\nif getStage CG01 >= 30 && getStageDone CG01 50 == 0\nsetstage CG01 50\nssbmp 40\nendif\nend",
+            0x00061215, "BabyBookActivator", 0x0002ECC0, full="You're SPECIAL!",
+            model=b"Clutter\\BabyBookSmall01.NIF\0")
+        special_names = (
+            (0x3E8, "AVStrength", "Strength"),
+            (0x3E9, "AVPerception", "Perception"),
+            (0x3EA, "AVEndurance", "Endurance"),
+            (0x3EB, "AVCharisma", "Charisma"),
+            (0x3EC, "AVIntelligence", "Intelligence"),
+            (0x3ED, "AVAgility", "Agility"),
+            (0x3EE, "AVLuck", "Luck"),
+        )
+        special_values = tuple(Record(
+            "AVIF", form_id, 0,
+            subrecord("EDID", editor.encode() + b"\0") +
+            subrecord("FULL", label.encode() + b"\0") +
+            subrecord("DESC", (label + " description").encode() + b"\0"), ())
+            for form_id, editor, label in special_names)
+        player_base = Record(
+            "NPC_", 0x00000007, 0,
+            subrecord("EDID", b"Player\0") + subrecord("DATA", b"\x64\0\0\0" + bytes([5] * 7)), ())
         tutorial = Record(
             "QUST",
             0x00059C85,
@@ -953,11 +1730,148 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
             ),
         )
+        cg01_stage16_dad_infos = (
+            Record(
+                "INFO",
+                0x0001F3DE,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"Listen, kiddo, Daddy needs to leave for a minute.\0")
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id)),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+            Record(
+                "INFO",
+                0x0001F3DD,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"You'll be okay, pal. I'll be back in a bit.\0")
+                + subrecord("CTDA", condition(131, 0))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + subrecord("SCTX", b"set CG01DadREF.doTalk to 0\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+            Record(
+                "INFO",
+                0x0001F3DC,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"You'll be okay, honey. I'll be back in a bit.\0")
+                + subrecord("CTDA", condition(131, 1))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + subrecord("SCTX", b"set CG01DadREF.doTalk to 0\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+        )
+        cg01_return_infos = (
+            Record("INFO", 0x0002016A, 0,
+                subrecord("NAM1", b"Quite the little explorer.\0") +
+                subrecord("CTDA", condition(72, cg01_dad_base.form_id)) +
+                subrecord("SCTX", b"setstage CG01 73\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),)),
+            Record("INFO", 0x0001F3DA, 0,
+                subrecord("NAM1", b"Let's go see Amata.\0") +
+                subrecord("CTDA", condition(72, cg01_dad_base.form_id)) +
+                subrecord("SCTX", b"setstage CG01 75\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),)),
+        )
+        end_trigger_script = Record(
+            "SCPT", 0x0002ECBB, 0,
+            subrecord("EDID", b"CG01EndQuestTriggerSCRIPT\0")
+            + subrecord("SCTX", b"begin OnTrigger\nif getStage CG01 == 80\nsetstage CG01 90\nendif\nend\0"),
+            (),
+        )
+        end_trigger_base = Record(
+            "ACTI", 0x0002ECBC, 0,
+            subrecord("EDID", b"CG01EndQuestTrigger\0")
+            + subrecord("SCRI", struct.pack("<I", end_trigger_script.form_id)),
+            (),
+        )
+        end_trigger_ref = Record(
+            "REFR", 0x0002ECC2, 0,
+            subrecord("NAME", struct.pack("<I", end_trigger_base.form_id))
+            + subrecord("XPRM", struct.pack("<7fI", 100.0, 100.0, 100.0, 0.8, 0.3, 0.2, 0.15, 1))
+            + subrecord("DATA", struct.pack("<6f", -3212.0, -5770.0, 7520.0, 0.0, 0.0, 0.0)),
+            cell_groups,
+        )
+        navmesh = Record(
+            "NAVM", 0x00056A9A, 0,
+            subrecord("NVER", struct.pack("<I", 11))
+            + subrecord("DATA", struct.pack("<6I", 0x00028138, 4, 2, 0, 0, 0))
+            + subrecord("NVVX", b"".join(struct.pack("<3f", *value) for value in (
+                (-2700.0, -5800.0, 7424.0), (-2500.0, -5800.0, 7424.0),
+                (-2500.0, -5600.0, 7424.0), (-3300.0, -5600.0, 7424.0))))
+            + subrecord("NVTR", struct.pack("<3H3hI", 0, 1, 2, -1, -1, 1, 0)
+                + struct.pack("<3H3hI", 0, 2, 3, 0, -1, -1, 0))
+            + subrecord("NVGD", struct.pack(
+                "<I8f3H", 1, 800.0, 200.0, -3300.0, -5800.0,
+                7424.0, -2500.0, -5600.0, 7424.0, 2, 0, 1)),
+            cell_groups,
+        )
         modifier = Record(
             "IMAD",
             0x00035A20,
             0,
             subrecord("EDID", b"CG00BirthBaseISFX\0"),
+            (),
+        )
+        cg01_fade = Record(
+            "IMAD", 0x0002D14C, 0,
+            subrecord("EDID", b"FadeToWhiteAndBackISFX\0")
+            + subrecord("DNAM", struct.pack("<If", 1, 8.0))
+            + subrecord("NAM3", struct.pack(
+                "<10f", 0.0, 1.0, 1.0, 1.0, 0.0,
+                1.0, 1.0, 1.0, 1.0, 0.0)),
+            (),
+        )
+        cg01_fade_sound = Record(
+            "SOUN", 0x000BC425, 0,
+            subrecord("EDID", b"QSTFadeToWhiteB\0")
+            + subrecord("FNAM", b"fx\\qst\\qst_fadetowhite_b.wav\0")
+            + subrecord("SNDD", bytes(36)),
+            (),
+        )
+        cg02_script = Record(
+            "SCPT", 0x000304D9, 0,
+            subrecord("EDID", b"CG02SCRIPT\0")
+            + subrecord("SCTX", b"float timer\nshort runTimer\nshort intro\n\0"),
+            (),
+        )
+        cg02_stage0_source = "setstage CG02 5\nplayer.moveto CG02PlayerStartMarker"
+        cg02_stage5_sources = (
+            "\n".join((
+                "SetLocationSpecificLoadScreensOnly 1", "SetInCharGen 1",
+                "set gameyear to 2268", "set gamemonth to 6", "set gameday to 13",
+                "set gamehour to 16", "DisablePlayerControls 1 1 1 1 0 1",
+                "SetPCYoung 1", "player.AgeRace -1", "player.removeallitems",
+                "player.additem KIDVaultSuitChild101 1 1",
+                "player.equipitem KIDVaultSuitChild101 0 1",
+                "player.equipitem pipboy 0 1", "CG02DadRef.enable",
+                "set CG02.timer to 1", "set CG02.runTimer to 1", "set CG02.intro to 1",
+                'playBink "9 years later.bik" 0 0 1 0')),
+            "\n".join(f"{name}.look player" for name in (
+                "CG02AmataREF", "CG02ButchREF", "CG02DadREF",
+                "CG02OldLadyPalmerREF", "CG02OverseerREF", "CG02PaulHannonREF",
+                "CG02Vault101Security04REF", "CG02WallyMackREF")),
+            "\n".join(f"{name}.IgnoreCrime 1" for name in (
+                "CG02DadREF", "CG02JonasREF", "CG02AmataREF", "CG02StanleyREF",
+                "CG02AndyREF", "CG02OverseerREF", "CG02OldLadyPalmerREF",
+                "CG02Vault101Security02REF", "CG02Vault101Security04REF",
+                "CG02ButchREF", "CG02PaulHannonREF", "CG02WallyMackREF")),
+        )
+        cg02 = Record(
+            "QUST", 0x00014E84, 0,
+            subrecord("EDID", b"CG02\0")
+            + subrecord("SCRI", struct.pack("<I", cg02_script.form_id))
+            + subrecord("INDX", struct.pack("<H", 0))
+            + subrecord("SCTX", cg02_stage0_source.encode("cp1252") + b"\0")
+            + b"".join(
+                subrecord("INDX", struct.pack("<H", 5))
+                + subrecord("SCTX", source.encode("cp1252") + b"\0")
+                for source in cg02_stage5_sources),
             (),
         )
         stage100_source = "\n".join(
@@ -1001,6 +1915,30 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
                 "stage12DadResponseInfoFormIds": ["0001f3e0", "0001f3df"],
                 "stage12DadResponseTargetStage": 14,
+                "postStage14Transition": {
+                    "stage16": 16,
+                    "stage18": 18,
+                    "stage20": 20,
+                    "closeGatePackageFormId": "000c6de4",
+                    "closeDoorPackageFormId": "000457c4",
+                    "leaveRoomPackageFormId": "0002eaaf",
+                    "closeGateTargetFormId": "000457c2",
+                    "closeDoorTargetFormId": "000457c0",
+                    "leaveRoomTargetFormId": "0002ea4b",
+                    "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"],
+                    "playpenGateReferenceFormId": "00047803",
+                    "exitCribTriggerReferenceFormId": "0002ea53",
+                    "specialBookReferenceFormId": "0002ecc0",
+                    "stage30": 30,
+                    "stage40": 40,
+                    "stage50": 50,
+                    "dadLeadLocomotion": {
+                        "rootNode": "Bip01",
+                        "walkLogicalPath": r"meshes\characters\_male\locomotion\male\mtforward.kf",
+                        "playerReferenceFormId": "00000014",
+                        "playerBaseFormId": "00000007",
+                    },
+                },
                 "tutorialQuestEditorId": "CGTutorial",
                 "tutorialQuestFormId": "00059c85",
                 "tutorialQuestStage": 2,
@@ -1022,12 +1960,23 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_dad_trigger_script,
             cg01_dad_trigger_base,
             cg01_dad_trigger_reference,
+            *playpen_records,
+            *exit_records,
+            *book_records,
+            *special_values,
+            player_base,
             cg01_dad_script,
             cg01_dad_base,
             voice,
             cg01_dad_topic,
             *cg01_dad_infos,
             *cg01_stage12_dad_infos,
+            *cg01_stage16_dad_infos,
+            *cg01_return_infos,
+            end_trigger_script,
+            end_trigger_base,
+            end_trigger_ref,
+            navmesh,
             idle(
                 CG01_DAD_TALK_IDLE_FORM,
                 "ttnpcNTRLHandsDownTalkA",
@@ -1053,9 +2002,31 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_dad_ref,
             cg01_dad_marker,
             cg01_player_marker,
+            cg01_close_gate_target,
+            cg01_close_door_target,
+            cg01_leave_room_target,
+            cg01_playroom_door,
+            cg01_main_door,
+            cg01_return_target,
+            cg01_bible_target,
+            cg01_lead_target,
+            cg01_close_gate_package,
+            cg01_close_door_package,
+            cg01_leave_room_package,
+            cg01_return_package,
+            cg01_bible_package,
+            cg01_lead_package,
             cg02_dad_ref,
             baby_babble,
             modifier,
+            cg01_fade,
+            cg01_fade_sound,
+            cg02_script,
+            cg02,
+            cg02_player_marker,
+            *cg02_actor_refs,
+            kid_suit,
+            pipboy,
         )
         contract = _compile_stage100_transition(
             records,
@@ -1182,6 +2153,95 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "evaluatePackage",
             stage12_response["stageResult"]["commands"][0]["kind"],
         )
+        post_stage14 = post_stage5["postStage14Transition"]
+        self.assertEqual(
+            "opennv-fo3-cg01-stage-14-to-20-runtime/v1",
+            post_stage14["schema"],
+        )
+        self.assertEqual(20, post_stage14["targetStage"])
+        self.assertEqual(
+            ["000c6de4", "000457c4", "0002eaaf"],
+            [
+                post_stage14["packages"][name]["formId"]
+                for name in ("closeGate", "closeDoor", "leaveRoom")
+            ],
+        )
+        self.assertEqual(
+            ["0001f3de", "0001f3dd", "0001f3dc"],
+            [row["infoFormId"] for row in post_stage14["dialogue"]["branches"]],
+        )
+        self.assertTrue(post_stage14["nextBoundary"]["applied"])
+        interaction = post_stage14["stage20Interaction"]
+        self.assertEqual([30, 40, 50], [row["stage"] for row in interaction["stageResults"]])
+        self.assertEqual("00047803", interaction["gate"]["referenceFormId"])
+        self.assertEqual("0002ea53", interaction["exitTrigger"]["referenceFormId"])
+        self.assertEqual("0002ecc0", interaction["specialBook"]["referenceFormId"])
+        self.assertEqual(40, interaction["specialBook"]["menuPoints"])
+        self.assertEqual(
+            [5] * 7,
+            [row["initialValue"] for row in interaction["specialBook"]["actorValues"]],
+        )
+        self.assertEqual(
+            [
+                ["setObjectiveCompleted", "setObjectiveDisplayed", "setOpenState", "lock"],
+                ["setObjectiveCompleted", "setObjectiveDisplayed", "setOpenState", "lock"],
+                ["setObjectiveCompleted", "setQuestVariable", "setQuestVariable"],
+            ],
+            [[command["kind"] for command in row["commands"]]
+             for row in interaction["stageResults"]],
+        )
+        self.assertTrue(interaction["nextBoundary"]["applied"])
+        timer = interaction["timerTransition"]
+        self.assertEqual((50, 70), (timer["sourceStage"], timer["targetStage"]))
+        self.assertEqual(10.0, timer["timerVariable"]["initialSeconds"])
+        self.assertEqual(
+            ["setQuestVariable", "evaluatePackage"],
+            [row["kind"] for row in timer["targetResult"]["commands"]],
+        )
+        self.assertTrue(timer["nextBoundary"]["applied"])
+        dad_return = timer["dadReturn"]
+        self.assertEqual("0002ecc3", dad_return["package"]["formId"])
+        self.assertEqual("000401ba", dad_return["package"]["target"]["formId"])
+        self.assertEqual(72, dad_return["package"]["completionStage"])
+        self.assertEqual(75, dad_return["targetStage"])
+        self.assertTrue(dad_return["nextBoundary"]["applied"])
+        self.assertIsNone(dad_return["nextBoundary"]["blocker"])
+        self.assertEqual("0003a181", dad_return["bibleTravel"]["formId"])
+        self.assertEqual(74, dad_return["bibleTravel"]["completionStage"])
+        dad_lead = dad_return["dadLead"]
+        self.assertEqual("0002ecc4", dad_lead["formId"])
+        self.assertEqual("00000014", dad_lead["escortTarget"]["formId"])
+        self.assertEqual((75, 80), (dad_return["targetStage"], dad_lead["sayToDoneStage"]))
+        self.assertEqual(90, dad_lead["endTrigger"]["targetStage"])
+        self.assertTrue(dad_lead["nextBoundary"]["applied"])
+        self.assertIsNone(dad_lead["nextBoundary"]["blocker"])
+        completion = dad_lead["completion"]
+        self.assertEqual((90, 100), (
+            completion["sourceStage"], completion["timer"]["targetStage"]))
+        self.assertEqual(
+            [
+                "setQuestVariable", "setQuestVariable", "completeAllObjectives",
+                "autoDisplayObjectives", "killQuestUpdates",
+                "applyImageSpaceModifier", "playSound",
+            ],
+            [command["kind"] for command in completion["stage90Result"]["commands"]],
+        )
+        self.assertEqual(
+            [
+                "stopQuest", "disable", "setPlayerScale", "setPlayerToddler",
+                "clearNoActivationSound", "setStage",
+            ],
+            [command["kind"] for command in completion["stage100Result"]["commands"]],
+        )
+        self.assertEqual(
+            "fo3-cg02-stage-5-intro-timer-dialogue-runtime-not-implemented",
+            completion["nextBoundary"]["blocker"],
+        )
+        cg02_stage0 = completion["cg02Stage0"]
+        self.assertEqual((0, 5), (
+            cg02_stage0["sourceStage"], cg02_stage0["targetStage"]))
+        self.assertEqual("00030768", cg02_stage0["playerMove"]["referenceFormId"])
+        self.assertEqual(38, len(cg02_stage0["stage5Commands"]))
         self.assertEqual(
             [
                 "setObjectiveDisplayed",

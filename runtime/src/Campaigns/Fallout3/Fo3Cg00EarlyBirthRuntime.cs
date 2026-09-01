@@ -11,15 +11,19 @@ namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow
 {
+    private const int GetIsVoiceTypeConditionFunction = 427;
+    private const int EqualConditionOperator = 0;
+    private const int SubjectConditionRunOn = 0;
+    private const int NullConditionParameter = 0;
+    private const float ConditionTrue = 1.0f;
     private Fo3Cg00EarlyBirthSequence? _cg00EarlySequence;
     private int? _cg00EarlyStage;
     private double _cg00EarlyTimerSeconds;
     private int? _cg00EarlyTimerTargetStage;
     private readonly List<Fo3Cg00ImageSpaceLayer> _cg00EarlyImageSpaceLayers = [];
-    private Label? _cg00EarlySubtitle;
+    private Button? _cg00EarlySubtitle;
     private AudioStreamPlayer? _cg00EarlyVoice;
-    private FaceGenLipAnimation? _cg00EarlyLip;
-    private FaceGenMorphController? _cg00EarlyFace;
+    private GamebryoDialoguePlayback? _cg00EarlyDialogue;
     private string? _cg00EarlyInfoFormId;
     private string? _cg00EarlyPlayerName;
     private bool _cg00EarlySexMenuActive;
@@ -51,11 +55,23 @@ internal partial class Fo3OpeningFlow
 
     private sealed class Fo3Cg00ActorPackagePlayback(
         Fo3Cg00PackageSection contract,
-        double elapsedSeconds)
+        ActorAnimationPlayback animation,
+        GamebryoPackageTravel? travel)
     {
         internal Fo3Cg00PackageSection Contract { get; set; } = contract;
-        internal double ElapsedSeconds { get; set; } = elapsedSeconds;
+        internal ActorAnimationPlayback Animation { get; } = animation;
+        internal GamebryoPackageTravel? Travel { get; } = travel;
+        internal double ElapsedSeconds => Animation.PositionSeconds;
     }
+
+    private sealed record Fo3Cg00ActorPackageState(
+        string PackageFormId,
+        double AnimationPositionSeconds,
+        GamebryoPackageTravelState? Travel);
+
+    private sealed record Fo3Cg00EvaluatedDialogueCondition(
+        string VoiceTypeFormId,
+        Fo3Cg00DialogueCondition Source);
 
     private void StartCg00EarlyBirthSequence()
     {
@@ -72,6 +88,11 @@ internal partial class Fo3OpeningFlow
         _cg00ActorPackages.Clear();
         _cg00Stage10Projection.Clear();
         _cg00RetailStage10Telemetry = null;
+        _cg00EarlyVoice = new AudioStreamPlayer { Name = "FO3_CG00_EARLY_VOICE" };
+        AddChild(_cg00EarlyVoice);
+        _cg00EarlyDialogue = new GamebryoDialoguePlayback(
+            _cg00EarlyVoice,
+            _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
         EnsureCg00EarlyWorld();
         ApplyCg00EarlyStage(_cg00EarlySequence.Stages.Keys.Min());
     }
@@ -122,15 +143,7 @@ internal partial class Fo3OpeningFlow
         UpdateCg00ActorPackages(delta);
         UpdateCg00PlayerCamera(delta);
         UpdateCg00ImageSpace(delta);
-        if (_cg00EarlyVoice is not null && _cg00EarlyVoice.Playing &&
-            _cg00EarlyLip is not null && _cg00EarlyFace is not null)
-        {
-            if (_cg00EarlyVoice.GetMeta("opennv_info_form_id").AsString() !=
-                _cg00EarlyInfoFormId)
-                throw new InvalidOperationException(
-                    "Fallout 3 early CG00 voice and LIP INFO clocks diverged.");
-            _cg00EarlyFace.Apply(_cg00EarlyLip, _cg00EarlyVoice.GetPlaybackPosition());
-        }
+        _cg00EarlyDialogue?.Update();
         if (_cg00EarlyTimerTargetStage is null)
             return;
         _cg00EarlyTimerSeconds = Math.Max(0.0, _cg00EarlyTimerSeconds - delta);
@@ -163,9 +176,6 @@ internal partial class Fo3OpeningFlow
         GD.Print(
             $"OPENNV_FO3_CG00_EARLY_STAGE_APPLIED stage={stage} " +
             $"source={source.SourceSha256} commands={source.Commands.Count}");
-
-        if (stage == sequence.Stages.Keys.Min())
-            ApplyCg00ParticipantStartMarkers();
 
         foreach (var command in source.Commands.Where(value =>
                      value.StartsWith("imod ", StringComparison.OrdinalIgnoreCase)))
@@ -304,55 +314,62 @@ internal partial class Fo3OpeningFlow
 
     private void PlayCg00Dialogue(IReadOnlyList<Fo3Cg00DialogueCue> cues, int index)
     {
-        if (index < 0 || index >= cues.Count)
+        var selection = GamebryoDialoguePlayback.SelectFirstInfo(
+            cues.Select((cue, sourceOrder) =>
+                new SourceDialogueInfoCandidate<
+                    Fo3Cg00DialogueCue,
+                    Fo3Cg00EvaluatedDialogueCondition>(
+                    cue.InfoFormId,
+                    sourceOrder,
+                    cue.SayOnce,
+                    cue.Conditions.Select(condition =>
+                        new Fo3Cg00EvaluatedDialogueCondition(
+                            cue.VoiceTypeFormId,
+                            condition)).ToArray(),
+                    cue)).ToArray(),
+            index,
+            _cg00EarlyInfoHistory,
+            EvaluateCg00DialogueCondition);
+        if (selection is null)
             throw new InvalidOperationException("Fallout 3 early CG00 dialogue cursor differs.");
-        var cue = cues[index];
-        if (!_cg00EarlyInfoHistory.Add(cue.InfoFormId))
-            throw new InvalidOperationException("Fallout 3 early CG00 INFO replayed.");
-        _cg00EarlyVoice?.Stop();
-        _cg00EarlyVoice?.QueueFree();
-        _cg00EarlyFace?.Clear();
-        _cg00EarlyLip = FaceGenLipAnimation.Load(
-            cue.Lip.SourcePath,
-            _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
+        var cue = selection.Value;
+        _cg00EarlyInfoHistory.Add(cue.InfoFormId);
         _cg00EarlyInfoFormId = cue.InfoFormId;
         var actor = ActorForCg00Role(cue.SpeakerRole);
-        _cg00EarlyFace = new FaceGenMorphController(
+        var face = new FaceGenMorphController(
             actor.Actor,
             _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-        var stream = AudioStreamOggVorbis.LoadFromFile(cue.Voice.SourcePath)
-            ?? throw new InvalidOperationException("Fallout 3 early CG00 voice could not be decoded.");
-        _cg00EarlyVoice = new AudioStreamPlayer
+        var dialogue = _cg00EarlyDialogue ?? throw new InvalidOperationException(
+            "Fallout 3 early CG00 dialogue playback is absent.");
+        dialogue.Start(
+            new SourceDialogueLine(
+                cue.InfoFormId,
+                1,
+                cue.SpeakerRole,
+                cue.Text,
+                new SourceDialogueAsset(cue.Voice.LogicalPath, cue.Voice.SourcePath, cue.Voice.Sha256),
+                new SourceDialogueAsset(cue.Lip.LogicalPath, cue.Lip.SourcePath, cue.Lip.Sha256)),
+            face,
+            () =>
         {
-            Name = $"FO3_CG00_{cue.InfoFormId}_VOICE",
-            Stream = stream,
-        };
-        _cg00EarlyVoice.SetMeta("opennv_info_form_id", cue.InfoFormId);
-        _cg00EarlyVoice.SetMeta("opennv_speaker_role", cue.SpeakerRole);
-        _cg00EarlyVoice.Finished += () =>
-        {
-            _cg00EarlyFace?.Clear();
-            _cg00EarlyLip = null;
             _cg00EarlyInfoFormId = null;
-            _cg00EarlyVoice?.QueueFree();
-            _cg00EarlyVoice = null;
-            if (index + 1 < cues.Count)
+            if (selection.NextCursor < cues.Count)
             {
-                PlayCg00Dialogue(cues, index + 1);
+                PlayCg00Dialogue(cues, selection.NextCursor);
                 return;
             }
             CompleteCg00Dialogue(cues[^1]);
-        };
-        AddChild(_cg00EarlyVoice);
+        });
         _cg00EarlySubtitle ??= AddVaultDialogueOverlay("FO3_CG00_EARLY_DIALOGUE");
-        _cg00EarlySubtitle.Text = $"{actor.Actor.Name.ToUpperInvariant()}: {cue.Text}";
-        _cg00EarlySubtitle.Visible = true;
+        ShowVaultDialogue(
+            _cg00EarlySubtitle,
+            actor.Actor.Name.ToUpperInvariant(),
+            cue.Text);
         _vaultPreviewOverlay?.MoveToFront();
         if (_cg00EarlyImageSpaceLayers.Any(layer =>
                 layer.Surface.GetIndex() >= _vaultPreviewOverlay?.GetIndex()))
             throw new InvalidOperationException(
                 "Fallout 3 early CG00 subtitle is below the image-space layer.");
-        _cg00EarlyVoice.Play();
         GD.Print(
             $"OPENNV_FO3_CG00_INFO_STARTED stage={_cg00EarlyStage} info={cue.InfoFormId} " +
             $"speaker={cue.SpeakerRole} voice={cue.Voice.Sha256} lip={cue.Lip.Sha256}");
@@ -360,12 +377,40 @@ internal partial class Fo3OpeningFlow
 
     private void CompleteCg00Dialogue(Fo3Cg00DialogueCue cue)
     {
-        var stageCommand = cue.ResultCommands.LastOrDefault(value =>
-            value.StartsWith("setstage CG00 ", StringComparison.OrdinalIgnoreCase));
-        if (stageCommand is null)
-            throw new InvalidOperationException("Fallout 3 early CG00 dialogue has no stage result.");
-        var target = int.Parse(stageCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries)[2]);
-        ApplyCg00EarlyStage(target);
+        const int firstResultCommandIndex = 0;
+        var result = GamebryoDialoguePlayback.RequireStageResult(cue.ResultCommands);
+        if (!result.QuestEditorId.Equals("CG00", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 early CG00 dialogue targets another quest.");
+        GamebryoResultCommandExecutor.Execute(
+            [new SourceGamebryoResultCommand<int>(
+                firstResultCommandIndex,
+                GamebryoResultCommandKind.SetStage,
+                true,
+                result.Stage)],
+            firstResultCommandIndex,
+            command =>
+            {
+                ApplyCg00EarlyStage(command.Value);
+                return _cg00EarlyStage == command.Value;
+            });
+    }
+
+    private static bool EvaluateCg00DialogueCondition(
+        Fo3Cg00EvaluatedDialogueCondition condition)
+    {
+        var source = condition.Source;
+        if (source.Function != GetIsVoiceTypeConditionFunction ||
+            source.OperatorFlags != EqualConditionOperator ||
+            !Mathf.IsEqualApprox(source.ComparisonValue, ConditionTrue) ||
+            source.Parameter2 != NullConditionParameter ||
+            source.RunOn != SubjectConditionRunOn ||
+            source.Reference != NullConditionParameter)
+            throw new InvalidOperationException(
+                "Fallout 3 early CG00 dialogue condition semantics are unsupported.");
+        return source.Parameter1.ToString("x8").Equals(
+            condition.VoiceTypeFormId,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void EvaluateCg00ParticipantPackages(
@@ -383,14 +428,140 @@ internal partial class Fo3OpeningFlow
                 "Fallout 3 early CG00 participant package evaluation set differs.");
         foreach (var role in sequence.SceneParticipants.Keys)
         {
-            var selected = sequence.PackageSections[role].SingleOrDefault(value =>
-                value.ActivationCondition?.Stage == stage);
+            var participant = sequence.SceneParticipants[role];
+            var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+                "Fallout 3 package selection has no Vault world.");
+            var candidates = sequence.PackageSections[role]
+                .Select(package => new GamebryoPackageCandidate<Fo3Cg00PackageSection>(
+                    package.PackageFormId,
+                    package.ActivationCondition is { } condition
+                        ? [new GamebryoPackageCondition(
+                            "getStage",
+                            GamebryoPackageComparison.Equal,
+                            condition.Stage,
+                            condition.QuestFormId,
+                            0,
+                            (uint)condition.RunOn,
+                            "")]
+                        : [],
+                    Cg00PackageTarget(package, participant, coverage),
+                    Cg00PackageAnimation(package),
+                    package))
+                .ToArray();
+            var selected = GamebryoPackageSelector.SelectFirst(
+                candidates,
+                new GamebryoPackageState(
+                    new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [sequence.QuestFormId] = stage,
+                    },
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)),
+                requireMatch: false);
             if (selected is null)
                 continue;
             if (_cg00ActorPackages.TryGetValue(role, out var current) &&
-                current.Contract.PackageFormId == selected.PackageFormId)
+                current.Contract.PackageFormId == selected.Value.PackageFormId)
                 continue;
-            StartCg00ActorPackage(role, selected, selected.AnimationStartSeconds);
+            GamebryoPackageTravel? travel = null;
+            if (selected.Target.Placement is { } placement)
+            {
+                var actor = ActorForCg00Role(role);
+                if (!actor.ReferenceFormId.Equals(
+                        participant.ReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        $"Fallout 3 CG00 {role} package placement identity differs.");
+                travel = GamebryoPackageTravel.ArriveAtSourceTarget(
+                    selected.Value.PackageFormId,
+                    placement,
+                    actor.Placement.Transform,
+                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+                travel.Publish(actor.Placement);
+                GD.Print(
+                    $"OPENNV_FO3_CG00_MARKER_APPLIED role={role} " +
+                    $"reference={participant.ReferenceFormId} " +
+                    $"marker={participant.StartMarkerFormId} " +
+                    $"position={actor.Placement.Position} yaw={actor.Placement.Rotation.Y:R}");
+            }
+            StartCg00ActorPackage(
+                role,
+                selected.Value,
+                selected.Animation ?? throw new InvalidOperationException(
+                    "Fallout 3 selected actor package has no source animation."),
+                selected.Value.AnimationStartSeconds,
+                travel);
+        }
+    }
+
+    private static GamebryoPackageTarget Cg00PackageTarget(
+        Fo3Cg00PackageSection package,
+        Fo3Cg00SceneParticipant participant,
+        Fo3Vault101BirthSceneCoverage coverage) => package.Section == 0
+        ? new GamebryoPackageTarget(
+            "referenceMarker",
+            participant.StartMarkerFormId,
+            GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
+                participant.StartMarkerFormId,
+                participant.StartMarkerTransform.PositionGameUnits,
+                participant.StartMarkerTransform.RotationRadians,
+                participant.ReferenceTransform.Scale,
+                coverage.Contract.EntryPositionGameUnits))
+        : GamebryoPackageTarget.None;
+
+    private static SourceActorAnimation Cg00PackageAnimation(
+        Fo3Cg00PackageSection package) => new(
+        package.AnimationLogicalPath,
+        package.AnimationSha256,
+        package.AnimationSequenceName,
+        (float)package.AnimationStartSeconds,
+        (float)package.AnimationStopSeconds,
+        package.AnimationCycleType,
+        "owned-world-root-authoritative-zero-local-translation");
+
+    private IReadOnlyDictionary<string, Fo3Cg00ActorPackageState>
+        CaptureCg00ActorPackageStates() => _cg00ActorPackages.ToDictionary(
+            value => value.Key,
+            value => new Fo3Cg00ActorPackageState(
+                value.Value.Contract.PackageFormId,
+                value.Value.Animation.PositionSeconds,
+                value.Value.Travel?.CaptureState()),
+            StringComparer.Ordinal);
+
+    private void RestoreCg00ActorPackageStates(
+        IReadOnlyDictionary<string, Fo3Cg00ActorPackageState> states)
+    {
+        if (states.Count == 0)
+            return;
+        var sequence = _profile.EarlyBirthSequence;
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 package restore has no Vault world.");
+        _cg00ActorPackages.Clear();
+        foreach (var (role, state) in states.OrderBy(value => value.Key, StringComparer.Ordinal))
+        {
+            if (!sequence.SceneParticipants.TryGetValue(role, out var participant) ||
+                !sequence.PackageSections.TryGetValue(role, out var packages))
+                throw new InvalidOperationException(
+                    $"Saved Fallout 3 package role is absent: {role}");
+            var contract = packages.SingleOrDefault(value => value.PackageFormId.Equals(
+                state.PackageFormId,
+                StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidOperationException(
+                    $"Saved Fallout 3 package is absent for {role}: {state.PackageFormId}");
+            var target = Cg00PackageTarget(contract, participant, coverage);
+            GamebryoPackageTravel? travel = null;
+            if (state.Travel is not null)
+            {
+                var placement = target.Placement ?? throw new InvalidOperationException(
+                    $"Saved Fallout 3 package travel target is absent for {role}.");
+                travel = GamebryoPackageTravel.Restore(state.Travel, placement);
+                travel.Publish(ActorForCg00Role(role).Placement);
+            }
+            StartCg00ActorPackage(
+                role,
+                contract,
+                Cg00PackageAnimation(contract),
+                state.AnimationPositionSeconds,
+                travel);
         }
     }
 
@@ -421,37 +592,35 @@ internal partial class Fo3OpeningFlow
         foreach (var role in _cg00ActorPackages.Keys.ToArray())
         {
             var playback = _cg00ActorPackages[role];
-            playback.ElapsedSeconds = Math.Min(
-                playback.Contract.AnimationStopSeconds,
-                playback.ElapsedSeconds + delta);
+            if (playback.Travel is { } travel && !travel.Arrived)
+            {
+                travel.Advance(delta);
+                travel.Publish(ActorForCg00Role(role).Placement);
+            }
+            playback.Animation.Advance(delta);
         }
     }
 
     private void StartCg00ActorPackage(
         string role,
         Fo3Cg00PackageSection contract,
-        double elapsedSeconds)
+        SourceActorAnimation animation,
+        double elapsedSeconds,
+        GamebryoPackageTravel? travel)
     {
         if (elapsedSeconds < contract.AnimationStartSeconds ||
             elapsedSeconds >= contract.AnimationStopSeconds)
             throw new InvalidOperationException(
                 "Fallout 3 early CG00 package start clock differs.");
         var actor = ActorForCg00Role(role);
-        var animation = actor.Actor.LoadedAnimations.Single(value =>
-            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                ActorModelSlice.NormalizeAnimationPath(contract.AnimationLogicalPath),
-                StringComparison.OrdinalIgnoreCase) &&
-            value.SourceSha256.Equals(contract.AnimationSha256, StringComparison.OrdinalIgnoreCase));
-        foreach (var player in actor.Actor.LoadedAnimations.Select(value => value.Player).Distinct())
-            player.Stop();
-        animation.Player.Play(animation.RuntimeName);
-        animation.Player.Advance(elapsedSeconds);
-        if (animation.Player.CurrentAnimation.ToString() != animation.RuntimeName)
-            throw new InvalidOperationException(
-                "Fallout 3 early CG00 package animation was not published.");
+        var playback = ActorAnimationPlayback.Start(
+            actor.Actor,
+            animation,
+            elapsedSeconds);
         _cg00ActorPackages[role] = new Fo3Cg00ActorPackagePlayback(
             contract,
-            elapsedSeconds);
+            playback,
+            travel);
         GD.Print(
             $"OPENNV_FO3_CG00_PACKAGE_PUBLISHED stage={_cg00EarlyStage} role={role} " +
             $"section={contract.Section} package={contract.PackageFormId} " +
@@ -584,45 +753,6 @@ internal partial class Fo3OpeningFlow
                 weight),
             lower.Rotation.Slerp(upper.Rotation, weight).Normalized());
     }
-
-    private void ApplyCg00ParticipantStartMarkers()
-    {
-        var sequence = _cg00EarlySequence ?? throw new InvalidOperationException(
-            "Fallout 3 early CG00 marker application has no sequence.");
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 early CG00 marker application has no Vault world.");
-        foreach (var participant in sequence.SceneParticipants.Values)
-        {
-            var actor = ActorForCg00Role(participant.Role);
-            if (!actor.ReferenceFormId.Equals(
-                    participant.ReferenceFormId,
-                    StringComparison.OrdinalIgnoreCase) ||
-                !Mathf.IsZeroApprox(participant.StartMarkerTransform.RotationRadians.X) ||
-                !Mathf.IsZeroApprox(participant.StartMarkerTransform.RotationRadians.Y))
-                throw new InvalidOperationException(
-                    $"Fallout 3 CG00 {participant.Role} marker join differs.");
-            actor.Placement.Position = ParticipantMarkerLocal(participant, coverage);
-            actor.Placement.Rotation = new Vector3(
-                0.0f,
-                -participant.StartMarkerTransform.RotationRadians.Z,
-                0.0f);
-            actor.Placement.Scale = Vector3.One * participant.ReferenceTransform.Scale;
-            actor.Placement.SetMeta(
-                "opennv_cg00_start_marker_form_id",
-                participant.StartMarkerFormId);
-            GD.Print(
-                $"OPENNV_FO3_CG00_MARKER_APPLIED role={participant.Role} " +
-                $"reference={participant.ReferenceFormId} marker={participant.StartMarkerFormId} " +
-                $"position={actor.Placement.Position} yaw={actor.Placement.Rotation.Y:R}");
-        }
-    }
-
-    private static Vector3 ParticipantMarkerLocal(
-        Fo3Cg00SceneParticipant participant,
-        Fo3Vault101BirthSceneCoverage coverage) =>
-        GamebryoCoordinate.ConvertVector(
-            participant.StartMarkerTransform.PositionGameUnits -
-            coverage.Contract.EntryPositionGameUnits);
 
     private CellActorLoader.PlacedActor ActorForCg00Role(string role) => role switch
     {
@@ -1028,7 +1158,8 @@ internal partial class Fo3OpeningFlow
         {
             _cg00Stage10Projection[value.Key] = value.Value;
             if (_cg00ActorPackages.TryGetValue(value.Key, out var playback))
-                playback.ElapsedSeconds = value.Value.ObservedControllerPhaseSeconds;
+                playback.Animation.PublishPhase(
+                    value.Value.ObservedControllerPhaseSeconds);
         }
         _cg00RetailStage10Telemetry = joined;
         if (_ttwCg00Stage10SurfaceContract is null && !joined.FullNearPlaneSeparation)

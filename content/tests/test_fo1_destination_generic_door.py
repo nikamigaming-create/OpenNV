@@ -18,7 +18,8 @@ class Fo1DestinationGenericDoorTest(unittest.TestCase):
         self.assertIn("generic-door supplied master.dat does not match the transport input hash", tool)
         self.assertIn("Fo1ResourceResolver", tool)
         self.assertIn("frm_summary", tool)
-        self.assertIn("unsupported-fail-closed", tool)
+        self.assertIn("decode_classic_door", tool)
+        self.assertIn("materialize_classic_door_assets", tool)
         self.assertIn("refusing to overwrite destination generic-door descriptor", tool)
 
     def test_runtime_requires_explicit_hash_bound_door_and_persists_only_passability(self) -> None:
@@ -38,7 +39,23 @@ class Fo1DestinationGenericDoorTest(unittest.TestCase):
         self.assertIn("movedThroughOpenedBlocker", flow)
         self.assertIn("fo1-continue-generic-door-proof", coordinator)
         self.assertIn("DestinationGenericDoor", wrapper)
-        self.assertIn("unsupported-fail-closed", wrapper)
+        self.assertIn("framesPerSecond", wrapper)
+        self.assertIn("sourceFrame", wrapper)
+        self.assertIn("ClassicDoorSession", session)
+        self.assertIn("ClassicDoorPlayback", session)
+        self.assertIn("BeginOpening", session)
+        playback = (
+            ROOT / "runtime/src/Campaigns/Classic/ClassicDoorPlayback.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_session.Advance(delta)", playback)
+        self.assertIn("AudioStreamWav.LoadFromFile", playback)
+        self.assertIn("_sprite.Texture = _textures[state.Frame]", playback)
+        self.assertIn("sourcePresentationState", (
+            FO1 / "Fo1TacticalSession.Persistence.cs"
+        ).read_text(encoding="utf-8"))
+        self.assertIn("ClassicDoorState.Restore", (
+            FO1 / "Fo1TacticalSession.Persistence.cs"
+        ).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

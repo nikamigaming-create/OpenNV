@@ -203,6 +203,8 @@ def prepare_fo2_map_presentation(
     map_name: str = "ARTEMPLE.MAP",
     map_logical_path: str = "maps\\artemple.map",
     map_label: str = "Temple",
+    source_map_index: int | None = None,
+    recipe_schema: str = RECIPE_SCHEMA,
     cache_enricher: Callable[[Path, dict[str, Any], dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     profile_path = profile_path.resolve()
@@ -212,11 +214,16 @@ def prepare_fo2_map_presentation(
         raise Fo1ProfileError(f"refusing to overwrite Fallout 2 {map_label} cache: {output_root}")
     profile = _load_json(profile_path)
     recipe_path = (recipe_path or default_recipe_path()).resolve()
-    recipe = _load_recipe(recipe_path)
+    recipe = (
+        _load_recipe(recipe_path)
+        if recipe_schema == RECIPE_SCHEMA
+        else _load_json(recipe_path)
+    )
     source_manifest = _load_json(source_manifest_path)
     if (
         profile.get("schema") != PROFILE_SCHEMA
-        or recipe.get("schema") != RECIPE_SCHEMA
+        or recipe.get("schema") != recipe_schema
+        or recipe.get("campaign") != "Fallout2"
         or source_manifest.get("schema") != source_schema
         or source_manifest.get("status") != source_status
         or source_manifest.get("campaign") != "Fallout2"
@@ -238,7 +245,20 @@ def prepare_fo2_map_presentation(
         raise Fo1ProfileError(f"Fallout 2 {map_label} source/profile binding drift")
     if source_manifest.get("overlayOrderHighToLow") != recipe["overlayOrderHighToLow"]:
         raise Fo1ProfileError(f"Fallout 2 {map_label} source overlay order drift")
-    source_map = source_manifest.get("map", {})
+    if source_map_index is None:
+        source_map = source_manifest.get("map", {})
+    else:
+        matching_maps = [
+            row
+            for row in source_manifest.get("maps", [])
+            if int(row.get("mapIndex", -1)) == source_map_index
+        ]
+        if len(matching_maps) != 1:
+            raise Fo1ProfileError(
+                f"Fallout 2 {map_label} adjacent source MAP is absent or duplicated"
+            )
+        source_map = matching_maps[0]
+    source_frms = source_map.get("frms", source_manifest.get("frms", []))
     source_header = source_map.get("header", {})
     if (
         str(source_map.get("logicalPath", "")).casefold() != map_logical_path.casefold()
@@ -280,7 +300,7 @@ def prepare_fo2_map_presentation(
                     f"Fallout 2 {map_label} source MAP graph differs from owned bytes"
                 )
             manifest_placements: dict[str, list[dict[str, Any]]] = {}
-            for frm in source_manifest.get("frms", []):
+            for frm in source_frms:
                 logical_path = str(frm.get("logicalPath", "")).casefold()
                 if not logical_path or logical_path in manifest_placements:
                     raise Fo1ProfileError(
@@ -348,7 +368,7 @@ def prepare_fo2_map_presentation(
 
             object_artifacts: dict[str, dict[str, Any]] = {}
             object_bindings = []
-            for frm in source_manifest.get("frms", []):
+            for frm in source_frms:
                 logical_path = str(frm.get("logicalPath", ""))
                 resource = resolver.read(logical_path)
                 if (
@@ -408,7 +428,10 @@ def prepare_fo2_map_presentation(
             "sourceManifest": {
                 "file": str(source_manifest_path),
                 "schema": source_manifest["schema"],
-                "mapSha256": source_manifest["map"]["sha256"],
+                "mapSha256": source_map["mapSha256"]
+                if source_map_index is not None
+                else source_map["sha256"],
+                "mapIndex": map_index,
                 "sha256": file_sha256(source_manifest_path),
             },
             "overlayOrderHighToLow": recipe["overlayOrderHighToLow"],
@@ -446,7 +469,7 @@ def prepare_fo2_map_presentation(
             "counts": {
                 "tileIds": len(tile_usage),
                 "tileArtifacts": len(tile_usage),
-                "objectFrmIdentities": len(source_manifest["frms"]),
+                "objectFrmIdentities": len(source_frms),
                 "objectArtifacts": len(object_artifacts),
                 "pngArtifacts": len(artifacts),
             },

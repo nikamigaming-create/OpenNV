@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 
 using OpenNV.Runtime.World.Cells;
@@ -12,6 +13,14 @@ namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow
 {
+    private enum AppearanceCategory
+    {
+        Race,
+        Hair,
+        Eyes,
+        Face,
+    }
+
     private void BuildShell()
     {
         _background = new ColorRect { Color = Colors.Black };
@@ -160,6 +169,9 @@ internal partial class Fo3OpeningFlow
             case Fo3OwnedVideoMode.Cg01Transition:
                 CompleteCg01TransitionMovie(skipped);
                 break;
+            case Fo3OwnedVideoMode.Cg02Transition:
+                CompleteCg02TransitionMovie(skipped);
+                break;
         }
     }
 
@@ -256,15 +268,14 @@ internal partial class Fo3OpeningFlow
     private void ShowSexSelection()
     {
         ClearContent();
-        if (_cg00EarlySequence is null)
-            _content.AddChild(Label(
-                "FALLOUT 3  •  CG00",
-                Fo3OpeningFlowNumericContracts.TitleFontPixels));
         _content.AddChild(Label(_profile.SexTitle, Fo3OpeningFlowNumericContracts.BodyFontPixels));
         foreach (var choice in _profile.SexChoices)
         {
             var captured = choice;
             var button = Button(choice.Label);
+            var source = _profile.Appearance.Ui.RaceSexControls.List;
+            button.Name = $"{source.Tile}_sex_{choice.EngineSex}";
+            button.CustomMinimumSize = source.Rect.Size;
             button.Pressed += () =>
             {
                 if (_cg00EarlySequence is null)
@@ -286,36 +297,46 @@ internal partial class Fo3OpeningFlow
         EnsureCreatorVaultBackdrop(sex);
         ClearContent();
         var nameUi = _profile.Appearance.Ui.Name;
+        var source = nameUi.TextEditMenu;
         var panel = CreatorSurface(
-            (Fo3OpeningFlowNumericContracts.Center -
-                nameUi.PanelWidth /
-                    (2.0f * Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels)),
-            (Fo3OpeningFlowNumericContracts.Center -
-                nameUi.PanelHeight /
-                    (2.0f * Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels)),
-            nameUi.PanelWidth /
-                (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
-            nameUi.PanelHeight /
-                (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels,
+            source.Panel,
             nameUi.BackgroundTexture,
-            "FO3_TextEditMenu_TEM_MainRect");
-        var content = CreatorColumn(
-            panel,
-            (int)Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels);
-        content.AddChild(Label("ENTER NAME", Fo3OpeningFlowNumericContracts.BodyFontPixels));
+            source.CanvasSize);
+        var prompt = Label("", Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        OwnedGamebryoTileRuntime.BindText(prompt, source.Prompt.Text);
+        var promptSize = prompt.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            prompt,
+            source.Prompt.Placement,
+            source.Panel.Rect.Size,
+            promptSize);
+        panel.AddChild(prompt);
         var name = new LineEdit
         {
-            PlaceholderText = "Name",
+            PlaceholderText = source.Prompt.Text.Text,
+            Alignment = HorizontalAlignment.Center,
             CustomMinimumSize = new Vector2(
-                0.0f,
+                source.InputWrapWidth,
                 Fo3OpeningFlowNumericContracts.ButtonMinimumHeightPixels),
         };
         name.AddThemeFontSizeOverride("font_size", Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            name,
+            source.Input,
+            source.Panel.Rect.Size,
+            name.CustomMinimumSize);
         name.TextSubmitted += _ => AcceptName(name);
-        content.AddChild(name);
-        var accept = Button("ACCEPT");
+        panel.AddChild(name);
+        var accept = Button("");
+        OwnedGamebryoTileRuntime.BindText(accept, source.Accept.Text);
+        var acceptSize = accept.GetCombinedMinimumSize();
+        OwnedGamebryoTileRuntime.ApplyTraitPosition(
+            accept,
+            source.Accept.Placement,
+            source.Panel.Rect.Size,
+            acceptSize);
         accept.Pressed += () => AcceptName(name);
-        content.AddChild(accept);
+        panel.AddChild(accept);
         _activeNameInput = name;
         Callable.From(name.GrabFocus).CallDeferred();
         GD.Print(
@@ -414,7 +435,8 @@ internal partial class Fo3OpeningFlow
                 stage != _profile.Cg01Stage0Transition.ResultingStage &&
                 stage != _profile.Cg01Stage10Transition.TargetStage &&
                 stage != _profile.Cg01Stage12Transition.TargetStage &&
-                stage != _profile.Cg01Stage12DadResponse.TargetStage)
+                stage != _profile.Cg01Stage12DadResponse.TargetStage &&
+                stage != _profile.Cg01PostStage14Transition.TargetStage)
                 throw new InvalidOperationException("Saved Fallout 3 CG00 stage is unsupported.");
             var savedAppearance = RequiredSaveObject(root, "appearance");
             if (RequiredSaveString(savedAppearance, "sourceContract") !=
@@ -533,6 +555,7 @@ internal partial class Fo3OpeningFlow
             Fo3Cg01Stage12State? cg01Stage12 = null;
             Fo3Cg01ToddlerWorldState? cg01ToddlerWorld = null;
             Fo3Cg01Stage14State? cg01Stage14 = null;
+            Fo3Cg01Stage20State? cg01Stage20 = null;
             if (root.TryGetProperty("cg01Stage0Transition", out var savedCg01) &&
                 savedCg01.ValueKind == JsonValueKind.Object)
             {
@@ -568,11 +591,25 @@ internal partial class Fo3OpeningFlow
                             _profile.Cg01Stage12DadResponse.ValidateSavedState(
                                 savedCg01Stage14,
                                 cg01Stage14);
+                            if (root.TryGetProperty(
+                                    "cg01PostStage14Transition",
+                                    out var savedCg01Stage20) &&
+                                savedCg01Stage20.ValueKind == JsonValueKind.Object)
+                            {
+                                var baselineStage20 = _profile.Cg01PostStage14Transition.Apply(
+                                    cg01Stage14,
+                                    _selectedSex.EngineSex);
+                                cg01Stage20 = _profile.Cg01PostStage14Transition.LoadSavedState(
+                                    savedCg01Stage20,
+                                    baselineStage20);
+                            }
                         }
                     }
                     ValidateBirthRuntimeState(
                         RequiredSaveObject(root, "birthRuntime"),
-                        cg01Stage14 is not null
+                        cg01Stage20 is not null
+                            ? "cg01-stage20-package-dialogue-sequence-applied"
+                        : cg01Stage14 is not null
                             ? "cg01-stage14-dad-response-applied-package-evaluated"
                         : cg01Stage12 is null
                             ? "cg01-stage10-toddler-world-active"
@@ -604,7 +641,8 @@ internal partial class Fo3OpeningFlow
                 cg01Stage10,
                 cg01Stage12,
                 cg01ToddlerWorld,
-                cg01Stage14);
+                cg01Stage14,
+                cg01Stage20);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
         {
@@ -617,6 +655,7 @@ internal partial class Fo3OpeningFlow
     {
         ClearContent();
         var ui = _profile.Appearance.Ui;
+        var sourceControls = ui.RaceSexControls;
         var characterReflectron = _characterReflectron ??
             throw new InvalidOperationException(
                 "Fallout 3 character creation requires the shared owned Reflectron manifest.");
@@ -662,7 +701,7 @@ internal partial class Fo3OpeningFlow
             creatorLighting,
             _birthPresentation.UnitsToMeters);
         var panel = _reflectron.CreateMenuPresentationHost(
-            new Rect2(0.0f, 0.0f, 340.0f, 500.0f));
+            sourceControls.BackgroundRect);
         var content = CreatorColumn(
             panel,
             Fo3OpeningFlowNumericContracts.CreatorPanelMarginPixels);
@@ -673,19 +712,6 @@ internal partial class Fo3OpeningFlow
             $"{playerName}{System.Environment.NewLine}{sex.Label.ToUpperInvariant()}",
             Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels));
 
-        var scaledListItemHeight = ui.ListItemHeight;
-        var categorySelect = new OptionButton
-        {
-            CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight),
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        };
-        foreach (var category in new[] { "RACE", "HAIR", "EYES", "FACE" })
-            categorySelect.AddItem(category);
-        categorySelect.AddThemeFontSizeOverride(
-            "font_size",
-            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
-        content.AddChild(categorySelect);
-        _activeAppearanceCategory = categorySelect;
         var selectors = new GridContainer { Columns = 1 };
         selectors.AddThemeConstantOverride(
             "h_separation",
@@ -702,69 +728,78 @@ internal partial class Fo3OpeningFlow
         content.AddChild(selectors);
 
         var defaultSelection = _profile.Appearance.DefaultSelection(sex.EngineSex);
-        FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId, "RACE");
+        FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId);
         var faceFrame = _reflectron.CreateFacePresentationHost();
         var previewSource = _profile.Appearance.PreviewFor(
             defaultSelection,
             sex.EngineSex);
         var control = _profile.Appearance.FaceControl;
         var activeControl = control;
-        _activeFacePreview = OpeningPlayerFaceGenPreviewHost.Load(
-            previewSource,
-            _profile.Appearance.FaceControls.Select(value =>
+        var previewControls = _profile.Appearance.FaceControls.Select(value =>
                 new OpeningNativeFaceGenGeometryControl(
                     value.ControlIndex,
                     value.SettingEntity,
                     value.SourceLabel,
-                    value.AxisSha256)).ToArray(),
-            new OpeningFaceGenPreviewControl(
-                control.ControlIndex,
-                control.SettingEntity,
-                control.SourceLabel,
-                control.AxisSha256,
-                control.Minimum,
-                control.Maximum,
-                control.Step,
-                control.Jump,
-                control.MorphWeightScale,
-                control.ResetValue,
-                control.AcceptanceValue,
-                new OpeningFaceGenSliderSemanticsEvidence(
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceClassification,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceEngineBuild,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Prefix +
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Suffix,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMinimum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMaximum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiScale,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiMinimum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiMaximum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderOrdinaryIncrement,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderJump,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderMorphWeightScale,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderLowGlobalAddress,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderHighGlobalAddress,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementTrait,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementDefaultThreshold),
-                new OpeningFaceGenPreviewPresentation(
-                    control.Presentation.ViewportWidthFraction,
-                    control.Presentation.ViewportHeightFraction,
-                    control.Presentation.VerticalFovHalfAngleFactor,
-                    control.Presentation.DepthExtentFraction,
-                    control.Presentation.FullInVerticalOffsetGameUnits,
-                    control.Presentation.FullInDistanceGameUnits,
-                    control.Presentation.FullInYawRadians,
-                    control.Presentation.FullOutVerticalOffsetGameUnits,
-                    control.Presentation.FullOutDistanceGameUnits,
-                    control.Presentation.FullOutYawRadians,
-                    control.Presentation.StartingZoomFraction),
-                control.Semantics),
-            faceFrame,
-            _runtimeConfiguration,
-            creatorLighting,
-            _birthPresentation.UnitsToMeters,
-            faceFrame.Size,
-            renderedDevice);
+                    value.AxisSha256)).ToArray();
+        var previewPolicy = new OpeningFaceGenPreviewControl(
+            control.ControlIndex,
+            control.SettingEntity,
+            control.SourceLabel,
+            control.AxisSha256,
+            control.Minimum,
+            control.Maximum,
+            control.Step,
+            control.Jump,
+            control.MorphWeightScale,
+            control.ResetValue,
+            control.AcceptanceValue,
+            new OpeningFaceGenSliderSemanticsEvidence(
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceClassification,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceEngineBuild,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Prefix +
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Suffix,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMinimum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMaximum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiScale,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiMinimum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiMaximum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderOrdinaryIncrement,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderJump,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderMorphWeightScale,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderLowGlobalAddress,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderHighGlobalAddress,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementTrait,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementDefaultThreshold),
+            new OpeningFaceGenPreviewPresentation(
+                control.Presentation.ViewportWidthFraction,
+                control.Presentation.ViewportHeightFraction,
+                control.Presentation.VerticalFovHalfAngleFactor,
+                control.Presentation.DepthExtentFraction,
+                control.Presentation.FullInVerticalOffsetGameUnits,
+                control.Presentation.FullInDistanceGameUnits,
+                control.Presentation.FullInYawRadians,
+                control.Presentation.FullOutVerticalOffsetGameUnits,
+                control.Presentation.FullOutDistanceGameUnits,
+                control.Presentation.FullOutYawRadians,
+                control.Presentation.StartingZoomFraction),
+            control.Semantics);
+        OwnedGamebryoFaceGenPreviewHost LoadPreview(
+            OpeningPlayerFaceGenPreview source) =>
+            OwnedGamebryoFaceGenPreviewHost.Load(
+                source,
+                previewControls,
+                previewPolicy,
+                faceFrame,
+                _runtimeConfiguration,
+                creatorLighting,
+                _birthPresentation.UnitsToMeters,
+                faceFrame.Size,
+                renderedDevice.FaceGenPreviewDevice);
+        _activeFacePreview = LoadPreview(previewSource);
+        foreach (var tone in previewSource.TextureControls)
+            _activeFacePreview.ApplyTexture(
+                tone.SettingEntity,
+                defaultSelection.TextureControlValues[tone.SettingEntity]);
         var previewProportions =
             CharacterBodyProportions.Neutral("fo3-custom-live-v1");
         var faceFraming = true;
@@ -782,28 +817,27 @@ internal partial class Fo3OpeningFlow
                 faceEnabled: faceFraming);
         }
         RefreshProjection();
-        var liveStatus = Label(
-            "SCULPT FACE",
-            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
-        content.AddChild(liveStatus);
-        var faceControlSelect = new OptionButton();
+        var faceControlSelect = new OptionButton
+        {
+            Name = $"{sourceControls.List.Tile}_face",
+            CustomMinimumSize = sourceControls.List.Rect.Size,
+        };
         foreach (var faceControl in _profile.Appearance.FaceControls)
             faceControlSelect.AddItem(faceControl.SourceLabel);
+        foreach (var tone in previewSource.TextureControls)
+            faceControlSelect.AddItem(tone.SourceLabel);
         faceControlSelect.Select(Array.IndexOf(
             _profile.Appearance.FaceControls.ToArray(),
             control));
         content.AddChild(faceControlSelect);
         var slider = new HSlider
         {
-            Name = "FO3_RaceSexMenu_RSM_slider_option",
+            Name = sourceControls.Slider.Tile,
             MinValue = control.Minimum,
             MaxValue = control.Maximum,
             Step = control.Step,
             Value = control.ResetValue,
-            CustomMinimumSize = new Vector2(
-                0.0f,
-                ui.SliderHeight * GetViewport().GetVisibleRect().Size.Y /
-                    Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels),
+            CustomMinimumSize = sourceControls.Slider.Rect.Size,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         content.AddChild(slider);
@@ -812,8 +846,8 @@ internal partial class Fo3OpeningFlow
         void SelectRaceDefaults(Fo3AppearanceRace race)
         {
             var raceSex = race.Sex[sex.EngineSex];
-            FillOptions(hairSelect, raceSex.HairOptions, raceSex.DefaultHairFormId, "HAIR");
-            FillOptions(eyesSelect, raceSex.EyeOptions, raceSex.DefaultEyesFormId, "EYES");
+            FillOptions(hairSelect, raceSex.HairOptions, raceSex.DefaultHairFormId);
+            FillOptions(eyesSelect, raceSex.EyeOptions, raceSex.DefaultEyesFormId);
             SelectCurrent();
         }
 
@@ -829,23 +863,34 @@ internal partial class Fo3OpeningFlow
                 _profile.Appearance.FaceControls.ToDictionary(
                     value => value.SettingEntity,
                     value => value.ResetValue,
+                    StringComparer.Ordinal),
+                previewSource.TextureControls.ToDictionary(
+                    value => value.SettingEntity,
+                    _ => control.ResetValue,
                     StringComparer.Ordinal));
-            var previewSupported = sex.EngineSex == previewSource.Sex &&
-                selection.Race.FormId == previewSource.RaceFormId &&
-                selection.Hair.FormId == previewSource.HairFormId &&
-                selection.Eyes.FormId == previewSource.EyesFormId;
-            slider.Editable = previewSupported;
+            var selectedPreview = _profile.Appearance.PreviewFor(selection, sex.EngineSex);
+            if (selectedPreview.GltfSha256 != previewSource.GltfSha256 ||
+                selectedPreview.SidecarSha256 != previewSource.SidecarSha256)
+            {
+                _activeFacePreview.DisposeOwnedTree();
+                previewSource = selectedPreview;
+                _activeFacePreview = LoadPreview(previewSource);
+                RefreshProjection();
+            }
+            slider.Editable = true;
             foreach (var faceControl in _profile.Appearance.FaceControls)
-                _activeFacePreview.Apply(faceControl.SettingEntity, faceControl.ResetValue);
+                OwnedGamebryoFaceGenMorphRuntime.Publish(
+                    _activeFacePreview,
+                    faceControl.SettingEntity,
+                    faceControl.ResetValue);
+            foreach (var tone in selectedPreview.TextureControls)
+                _activeFacePreview.ApplyTexture(tone.SettingEntity, control.ResetValue);
             activeControl = control;
             faceControlSelect.Select(Array.IndexOf(
                 _profile.Appearance.FaceControls.ToArray(),
                 control));
             slider.Value = activeControl.ResetValue;
-            _activeFacePreview.Control.Visible = previewSupported;
-            liveStatus.Text = previewSupported
-                ? "SCULPT FACE"
-                : "3D PREVIEW NOT AVAILABLE FOR THIS SELECTION";
+            _activeFacePreview.Control.Visible = true;
             _activeAppearanceSelection = selection;
         }
 
@@ -856,61 +901,99 @@ internal partial class Fo3OpeningFlow
         {
             if (!slider.Editable || _activeAppearanceSelection is null)
                 return;
-            _activeFacePreview.Apply(
+            if (faceControlSelect.Selected >= _profile.Appearance.FaceControls.Count)
+            {
+                var tone = previewSource.TextureControls[
+                    faceControlSelect.Selected - _profile.Appearance.FaceControls.Count];
+                _activeFacePreview.ApplyTexture(tone.SettingEntity, (float)value);
+                var values = _activeAppearanceSelection.TextureControlValues.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.Ordinal);
+                values[tone.SettingEntity] = (float)value;
+                var textureSha256 = OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+                    previewSource.SymmetricTexture,
+                    previewSource.TextureControls,
+                    values,
+                    control.MorphWeightScale);
+                _activeAppearanceSelection = _activeAppearanceSelection with
+                {
+                    Sex = _activeAppearanceSelection.Sex with
+                    {
+                        FaceGen = _activeAppearanceSelection.Sex.FaceGen with
+                        {
+                            SymmetricTextureSha256 = textureSha256,
+                        },
+                    },
+                    TextureControlValues = values,
+                };
+                return;
+            }
+            OwnedGamebryoFaceGenMorphRuntime.Publish(
+                _activeFacePreview,
                 activeControl.SettingEntity,
-                (float)value * activeControl.MorphWeightScale);
+                (float)value);
             _activeAppearanceSelection = _profile.Appearance.ApplyFaceControl(
                 _activeAppearanceSelection,
                 activeControl,
                 (float)value);
-            liveStatus.Text =
-                $"{activeControl.SourceLabel}{System.Environment.NewLine}" +
-                $"{(float)value:+0.00;-0.00;0.00}";
         };
         faceControlSelect.ItemSelected += index =>
         {
-            activeControl = _profile.Appearance.FaceControls[(int)index];
-            slider.MinValue = activeControl.Minimum;
-            slider.MaxValue = activeControl.Maximum;
-            slider.Step = activeControl.Step;
-            slider.Value = _activeAppearanceSelection?.FaceControlValue(
-                activeControl.SettingEntity) ?? activeControl.ResetValue;
-            liveStatus.Text = activeControl.SourceLabel;
+            var controlIndex = (int)index;
+            if (controlIndex < _profile.Appearance.FaceControls.Count)
+            {
+                activeControl = _profile.Appearance.FaceControls[controlIndex];
+                slider.Value = _activeAppearanceSelection?.FaceControlValue(
+                    activeControl.SettingEntity) ?? activeControl.ResetValue;
+            }
+            else
+            {
+                var tone = previewSource.TextureControls[
+                    controlIndex - _profile.Appearance.FaceControls.Count];
+                slider.Value = _activeAppearanceSelection?.TextureControlValues[
+                    tone.SettingEntity] ?? control.ResetValue;
+            }
+            slider.MinValue = control.Minimum;
+            slider.MaxValue = control.Maximum;
+            slider.Step = control.Step;
         };
         SelectRaceDefaults(defaultSelection.Race);
-        void ShowCategory(long index)
+        void ShowCategory(AppearanceCategory category)
         {
-            raceSelect.Visible = index == 0;
-            hairSelect.Visible = index == 1;
-            eyesSelect.Visible = index == 2;
-            slider.Visible = index == 3;
-            faceControlSelect.Visible = index == 3;
-            liveStatus.Visible = index == 3;
-            _reflectron.SetActiveList(index switch
+            raceSelect.Visible = category == AppearanceCategory.Race;
+            hairSelect.Visible = category == AppearanceCategory.Hair;
+            eyesSelect.Visible = category == AppearanceCategory.Eyes;
+            slider.Visible = category == AppearanceCategory.Face;
+            faceControlSelect.Visible = category == AppearanceCategory.Face;
+            _reflectron.SetActiveList(category switch
             {
-                0 => "race",
-                1 => "hair",
-                2 => "eyes",
-                _ => "face",
+                AppearanceCategory.Race => "race",
+                AppearanceCategory.Hair => "hair",
+                AppearanceCategory.Eyes => "eyes",
+                AppearanceCategory.Face => "face",
+                _ => throw new InvalidOperationException(
+                    $"Fallout 3 RaceSex category is unsupported: {category}"),
             });
         }
-        categorySelect.ItemSelected += ShowCategory;
-        ShowCategory(0);
-        void SelectCategory(int index)
+        var activeCategory = AppearanceCategory.Race;
+        ShowCategory(activeCategory);
+        void SelectCategory(AppearanceCategory category)
         {
-            categorySelect.Select(index);
-            ShowCategory(index);
+            activeCategory = category;
+            ShowCategory(category);
         }
+        _activeAppearanceShowFace = () => SelectCategory(AppearanceCategory.Face);
         _reflectron.ConfigureCharacterControls(
             characterReflectron.Font,
             () => { },
-            () => SelectCategory(0),
-            () => SelectCategory(3),
-            () => SelectCategory(1),
+            () => SelectCategory(AppearanceCategory.Race),
+            () => SelectCategory(AppearanceCategory.Face),
+            () => SelectCategory(AppearanceCategory.Hair),
             () =>
             {
                 faceFraming = true;
-                SelectCategory(3);
+                SelectCategory(AppearanceCategory.Face);
                 RefreshProjection();
             },
             () =>
@@ -925,10 +1008,80 @@ internal partial class Fo3OpeningFlow
             });
         RefreshProjection();
 
-        var accept = Button("ACCEPT APPEARANCE");
-        accept.CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight);
-        accept.Pressed += () => AcceptAppearance(playerName, sex);
-        content.AddChild(accept);
+        Button NavigationButton(
+            OwnedGamebryoRaceSexNavigation navigation,
+            Action action)
+        {
+            var button = Button("");
+            button.Name = navigation.Tile;
+            var label = Label("", Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
+            OwnedGamebryoTileRuntime.BindText(label, navigation.Text);
+            var textSize = label.GetCombinedMinimumSize();
+            var rect = OwnedGamebryoTileRuntime.NavigationRect(
+                navigation,
+                textSize);
+            button.Position = rect.Position;
+            button.Size = rect.Size;
+            button.Text = "";
+            var empty = new StyleBoxEmpty();
+            foreach (var state in new[] { "normal", "disabled", "hover", "pressed", "focus" })
+                button.AddThemeStyleboxOverride(state, empty);
+            label.Position = new Vector2(
+                navigation.Buffer.X * OwnedUiTheme.CenteringFactor,
+                (rect.Size.Y - textSize.Y) / navigation.VerticalCenterDivisor +
+                    navigation.BaseTextYOffset + navigation.TextYAdjust);
+            label.Size = textSize;
+            button.AddChild(label);
+            button.Pressed += action;
+            panel.AddChild(button);
+            return button;
+        }
+        NavigationButton(
+            sourceControls.Back,
+            () =>
+            {
+                switch (activeCategory)
+                {
+                    case AppearanceCategory.Race:
+                        ShowNameSelection(sex);
+                        break;
+                    case AppearanceCategory.Hair:
+                        SelectCategory(AppearanceCategory.Race);
+                        break;
+                    case AppearanceCategory.Eyes:
+                        SelectCategory(AppearanceCategory.Hair);
+                        break;
+                    case AppearanceCategory.Face:
+                        SelectCategory(AppearanceCategory.Eyes);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"Fallout 3 RaceSex category is unsupported: {activeCategory}");
+                }
+            });
+        NavigationButton(
+            sourceControls.Next,
+            () =>
+            {
+                switch (activeCategory)
+                {
+                    case AppearanceCategory.Race:
+                        SelectCategory(AppearanceCategory.Hair);
+                        break;
+                    case AppearanceCategory.Hair:
+                        SelectCategory(AppearanceCategory.Eyes);
+                        break;
+                    case AppearanceCategory.Eyes:
+                        SelectCategory(AppearanceCategory.Face);
+                        break;
+                    case AppearanceCategory.Face:
+                        AcceptAppearance(playerName, sex);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"Fallout 3 RaceSex category is unsupported: {activeCategory}");
+                }
+            });
         Callable.From(raceSelect.GrabFocus).CallDeferred();
         GD.Print(
             $"OPENNV_FO3_CG00_APPEARANCE_READY profile={_profile.ProfileId} " +
@@ -956,7 +1109,9 @@ internal partial class Fo3OpeningFlow
         if (_birthPresentation is null)
             ShowAppearanceAccepted(playerName, sex, selection);
         else if (_profile.Appearance.FaceControls.Any(control =>
-                     selection.FaceControlValue(control.SettingEntity) != control.ResetValue))
+                     selection.FaceControlValue(control.SettingEntity) != control.ResetValue) ||
+                 selection.TextureControlValues.Values.Any(value =>
+                     value != _profile.Appearance.FaceControl.ResetValue))
             ShowVault101BirthRoomBeforeStage65(
                 playerName,
                 sex,

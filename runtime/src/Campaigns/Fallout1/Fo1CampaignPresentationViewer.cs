@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -9,6 +10,7 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     private Fo1CameraProfile _cameraProfile = null!;
     private Node3D _mapRoot = null!;
     private Node3D _spriteRoot = null!;
+    private Sprite3D? _playablePlayer;
     private Node3D _yawPivot = null!;
     private Node3D _pitchPivot = null!;
     private Camera3D _camera = null!;
@@ -70,7 +72,86 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
 
     internal void SetStatusVisible(bool visible) => _statusLayer.Visible = visible;
 
+    internal Fo1CampaignMapPresentation CurrentMap => _currentMap;
+    internal Fo1CampaignElevationPresentation CurrentElevation =>
+        _currentMap.Elevations[_elevationIndex];
+
+    internal Fo1CampaignMapViewCoverage LoadPlayableMap(
+        string mapName,
+        int elevation,
+        int tile,
+        int rotation)
+    {
+        var mapId = Path.GetFileNameWithoutExtension(mapName);
+        var index = _catalog.Maps.ToList().FindIndex(row =>
+            row.Id.Equals(mapId, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            throw new InvalidOperationException(
+                $"Fallout playable adjacent MAP is absent: {mapName}");
+        LoadMap(index, elevation);
+        SetPlayablePlayer(tile, rotation);
+        return _coverage;
+    }
+
+    internal void SetPlayablePlayer(int tile, int rotation)
+    {
+        if (!CurrentElevation.FloorIds.Any() ||
+            !Walkable(CurrentElevation).Contains(tile) ||
+            !_catalog.PlayerArtifacts.TryGetValue(rotation, out var artifactId))
+            throw new InvalidOperationException(
+                "Fallout playable player state is outside source MAP topology.");
+        var artifact = _catalog.SpriteArtifacts[artifactId];
+        _playablePlayer ??= BuildPlayablePlayer();
+        _playablePlayer.Texture = LoadTexture(
+            artifact.Path, artifact.Width, artifact.Height);
+        _playablePlayer.Offset = new Vector2(
+            artifact.DirectionOffset.X + artifact.FrameOffset.X,
+            -(artifact.DirectionOffset.Y + artifact.FrameOffset.Y) +
+                artifact.Height / 2.0f);
+        _playablePlayer.Position = Fo1HexMath.Center(tile) +
+            Vector3.Up * _catalog.GroundAnchorMeters;
+        _playablePlayer.SetMeta("source_tile", tile);
+        _playablePlayer.SetMeta("source_rotation", rotation);
+    }
+
+    internal IReadOnlySet<int> Walkable(Fo1CampaignElevationPresentation elevation)
+    {
+        var blocked = elevation.Blockers.Select(row => row.Tile).ToHashSet();
+        return Enumerable.Range(0, Fo1HexMath.Width * Fo1HexMath.Height)
+            .Where(tile => elevation.FloorIds[Fo1HexMath.FloorIndex(tile)] !=
+                    CurrentMap.DefaultTileId &&
+                !blocked.Contains(tile))
+            .ToHashSet();
+    }
+
+    internal int TileAtScreen(Vector2 screenPosition)
+    {
+        var origin = _camera.ProjectRayOrigin(screenPosition);
+        var direction = _camera.ProjectRayNormal(screenPosition);
+        if (Mathf.IsZeroApprox(direction.Y))
+            return -1;
+        var distance = -origin.Y / direction.Y;
+        return distance >= 0.0f
+            ? Fo1HexMath.NearestTile(origin + direction * distance)
+            : -1;
+    }
+
     internal void ActivateCamera() => _camera.Current = true;
+
+    internal ClassicDoorPlayback BindDoorPlayback(
+        Fo1DestinationGenericDoorContract contract,
+        ClassicDoorSession session,
+        Action<ClassicDoorState> stateChanged)
+    {
+        var prefix = $"Object_{contract.Door.Serial}_";
+        var sprite = _spriteRoot.GetChildren().OfType<Sprite3D>().SingleOrDefault(row =>
+            row.Name.ToString().StartsWith(prefix, StringComparison.Ordinal)) ??
+            throw new InvalidOperationException(
+                "Fallout destination generic-door sprite is absent from its owned presentation.");
+        var playback = new ClassicDoorPlayback(session, sprite, stateChanged);
+        sprite.AddChild(playback);
+        return playback;
+    }
 
     internal void SetCaptureSize(float sizeMeters)
     {
@@ -306,9 +387,10 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     {
         var artifact = _catalog.SpriteArtifacts[placement.ArtifactId];
         var offset = new Vector2(
-            placement.PixelOffset.X + artifact.FrameOffset.X,
-            -(placement.PixelOffset.Y + artifact.FrameOffset.Y) + artifact.Height / 2.0f);
-        root.AddChild(new Sprite3D
+            placement.PixelOffset.X + artifact.DirectionOffset.X + artifact.FrameOffset.X,
+            -(placement.PixelOffset.Y + artifact.DirectionOffset.Y + artifact.FrameOffset.Y) +
+                artifact.Height / 2.0f);
+        var sprite = new Sprite3D
         {
             Name = $"Object_{placement.Serial}_{NodeIdentifier(placement.ArtFilename)}",
             Texture = LoadTexture(artifact.Path, artifact.Width, artifact.Height),
@@ -328,7 +410,23 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
             Modulate = _catalog.Viewer.Scene.SourceColorMultiplier,
-        });
+        };
+        if (placement.CritterFidState is { } critter)
+        {
+            sprite.SetMeta("source_fid_animation", critter.Animation);
+            sprite.SetMeta("source_fid_weapon", critter.Weapon);
+            sprite.SetMeta("source_fid_packed_rotation", critter.PackedRotation);
+            if (critter.ArtAliasListIndex is { } alias)
+                sprite.SetMeta("source_fid_art_alias_list_index", alias);
+            sprite.SetMeta("source_frm_fps", artifact.FramesPerSecond);
+            sprite.SetMeta("source_frm_action_frame", artifact.ActionFrame);
+            sprite.SetMeta("source_frm_frames_per_direction", artifact.FramesPerDirection);
+            sprite.SetMeta("source_frm_direction_count", artifact.DirectionCount);
+            sprite.SetMeta("source_frm_frame_selection", artifact.FrameSelection);
+            sprite.SetMeta("source_frm_rotation", artifact.Rotation);
+            sprite.SetMeta("source_frm_frame", artifact.Frame);
+        }
+        root.AddChild(sprite);
     }
 
     private void BuildPlayer(Node3D root, Fo1CampaignMapEntry entry, bool visible)
@@ -341,8 +439,9 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             PixelSize = 1.0f / _catalog.PixelsPerMeter,
             Position = entry.WorldMeters + Vector3.Up * _catalog.GroundAnchorMeters,
             Offset = new Vector2(
-                artifact.FrameOffset.X,
-                -artifact.FrameOffset.Y + artifact.Height / 2.0f),
+                artifact.DirectionOffset.X + artifact.FrameOffset.X,
+                -(artifact.DirectionOffset.Y + artifact.FrameOffset.Y) +
+                    artifact.Height / 2.0f),
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             Shaded = false,
             DoubleSided = true,
@@ -351,6 +450,23 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             Modulate = _catalog.Viewer.Scene.SourceColorMultiplier,
             Visible = visible,
         });
+    }
+
+    private Sprite3D BuildPlayablePlayer()
+    {
+        var player = new Sprite3D
+        {
+            Name = "VaultDwellerPlayable",
+            PixelSize = 1.0f / _catalog.PixelsPerMeter,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            DoubleSided = true,
+            AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            Modulate = _catalog.Viewer.Scene.SourceColorMultiplier,
+        };
+        AddChild(player);
+        return player;
     }
 
     private Texture2D LoadTexture(string path, int expectedWidth, int expectedHeight)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -193,18 +194,81 @@ internal sealed record Fo3Stage100Transition(
             timerRemainingSeconds > 0.0 ||
             !double.IsFinite(timerRemainingSeconds))
             throw new InvalidOperationException("Fallout 3 stage-100 timer state differs.");
+        var sourceIndex = 0;
+        var commandList = new List<SourceGamebryoStageCommand<object>>
+        {
+            new(sourceIndex++, GamebryoStageCommandKind.RemoveScriptPackage, "player"),
+        };
+        commandList.AddRange(ScriptVariables.Select(variable =>
+            new SourceGamebryoStageCommand<object>(
+                sourceIndex++,
+                GamebryoStageCommandKind.SetScriptVariable,
+                variable)));
+        commandList.Add(new SourceGamebryoStageCommand<object>(
+            sourceIndex++,
+            GamebryoStageCommandKind.RemoveImageSpaceModifier,
+            RemovedImageSpaceModifier));
+        commandList.Add(new SourceGamebryoStageCommand<object>(
+            sourceIndex++, GamebryoStageCommandKind.Disable, DisabledDad));
+        commandList.Add(new SourceGamebryoStageCommand<object>(
+            sourceIndex++, GamebryoStageCommandKind.StopQuest, "CG00"));
+        commandList.Add(new SourceGamebryoStageCommand<object>(
+            sourceIndex++, GamebryoStageCommandKind.SetPlayerYoung, true));
+        commandList.Add(new SourceGamebryoStageCommand<object>(
+            sourceIndex, GamebryoStageCommandKind.SetStage, NextBoundary));
+        var commands = commandList.ToArray();
+        var playerScriptPackageActive = true;
+        var variables = new List<Fo3Stage100Variable>();
+        Fo3Stage100ImageSpaceModifier? removedModifier = null;
+        Fo3Stage100Reference? disabledDad = null;
+        var cg00Running = true;
+        var playerYoung = false;
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecutePrefix(
+            commands,
+            AppliedCommandCount,
+            command =>
+            {
+                switch (command.Kind)
+                {
+                    case GamebryoStageCommandKind.RemoveScriptPackage:
+                        playerScriptPackageActive = false;
+                        break;
+                    case GamebryoStageCommandKind.SetScriptVariable:
+                        variables.Add((Fo3Stage100Variable)command.Value);
+                        break;
+                    case GamebryoStageCommandKind.RemoveImageSpaceModifier:
+                        removedModifier = (Fo3Stage100ImageSpaceModifier)command.Value;
+                        break;
+                    case GamebryoStageCommandKind.Disable:
+                        disabledDad = (Fo3Stage100Reference)command.Value;
+                        break;
+                    case GamebryoStageCommandKind.StopQuest:
+                        cg00Running = false;
+                        break;
+                    case GamebryoStageCommandKind.SetPlayerYoung:
+                        playerYoung = (bool)command.Value;
+                        break;
+                    default:
+                        return false;
+                }
+                applied++;
+                return applied == command.SourceIndex + 1;
+            });
         return new Fo3Stage100State(
             Stage,
-            AccountedCommandCount,
-            AppliedCommandCount,
+            commands.Length,
+            applied,
             0.0,
             false,
-            false,
-            ScriptVariables,
-            RemovedImageSpaceModifier,
-            DisabledDad,
-            false,
-            true,
+            playerScriptPackageActive,
+            variables,
+            removedModifier ?? throw new InvalidOperationException(
+                "Fallout 3 stage-100 IMAD removal was not persisted."),
+            disabledDad ?? throw new InvalidOperationException(
+                "Fallout 3 stage-100 Dad disable was not persisted."),
+            cg00Running,
+            playerYoung,
             NextBoundary);
     }
 

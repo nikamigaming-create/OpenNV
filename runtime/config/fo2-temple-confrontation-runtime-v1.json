@@ -11,7 +11,7 @@
     "lootPid": "00000007"
   },
   "adapter": {
-    "identity": "source-acklint-dialogue-path-ap-player-turn-melee-no-target-ai-v3",
+    "identity": "source-acklint-dialogue-path-ap-bounded-target-turn-v4",
     "interactionRangeHexes": 1,
     "movementActionPointCost": 1,
     "movementResolution": "exact-adjacent-source-walk-mask-hex-v1",
@@ -20,7 +20,7 @@
     "playerMeleeDamageFormula": "1 + max(1, effectiveStrength - 5) + heavyHandedBonus",
     "attackActionPointCost": 4,
     "hitResolution": "deterministic-hit-no-roll",
-    "targetTurns": false,
+    "targetTurns": true,
     "generalIntScripts": false,
     "boundedGuardianDialogue": true
   },
@@ -28,12 +28,13 @@
     "combat": { "action": "fo2_temple_combat", "physicalKey": "C", "joyButton": "X" },
     "attack": { "action": "fo2_temple_attack", "physicalKey": "Space", "joyButton": "A" },
     "endTurn": { "action": "fo2_temple_end_turn", "physicalKey": "Enter", "joyButton": "Start" },
+    "look": { "action": "fo2_temple_look", "physicalKey": "L", "joyButton": "DpadUp" },
     "loot": { "action": "fo2_temple_loot", "physicalKey": "E", "joyButton": "B" },
     "inventory": { "action": "fo2_temple_inventory", "physicalKey": "I", "joyButton": "Y" }
   },
   "ui": {
     "title": "TEMPLE CONFRONTATION",
-    "boundary": "Owned ACKlint dialogue nodes + source-path AP combat — engine AI/rolls remain unsupported",
+    "boundary": "Owned ACKlint dialogue + source AP target scheduling — AI packet pathing and attack rolls remain unsupported",
     "offsetPixels": [20, 20],
     "widthPixels": 520,
     "fontSizePixels": 18

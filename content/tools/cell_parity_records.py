@@ -9,6 +9,9 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 
 from cell_catalog import (
+    ENABLE_PARENT_BYTES,
+    ENABLE_PARENT_OPPOSITE_OFFSET,
+    ENABLE_PARENT_OPPOSITE_FLAG,
     INITIALLY_DISABLED_RECORD_FLAG,
     REFERENCE_TRANSFORM_BYTES,
     TELEPORT_DESTINATION_BYTES,
@@ -237,13 +240,19 @@ def child_row(
     enable_parent = None
     enable_parent_data = _single_payload(values, "XESP", gaps)
     if enable_parent_data is not None:
-        if len(enable_parent_data) < FORM_ID_BYTES:
-            gaps.append("short-xesp")
+        if len(enable_parent_data) != ENABLE_PARENT_BYTES:
+            gaps.append("unsupported-xesp-size")
         else:
             enable_parent = form_link(
                 context,
                 parse_form_id(enable_parent_data, record, "XESP"),
                 load_order_indices,
+            )
+            enable_parent["opposite"] = bool(
+                struct.unpack_from(
+                    "<I", enable_parent_data, ENABLE_PARENT_OPPOSITE_OFFSET
+                )[0]
+                & ENABLE_PARENT_OPPOSITE_FLAG
             )
 
     radius_game_units = None

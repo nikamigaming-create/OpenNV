@@ -56,7 +56,8 @@ internal static class CellActorLoader
         Node3D cellRoot,
         Vector3 cellOriginGameUnits,
         RuntimeConfiguration configuration,
-        bool proofEnableInitiallyDisabled)
+        bool proofEnableInitiallyDisabled,
+        bool materializeInitiallyDisabled = false)
     {
         var resolvedManifest = VerifiedGltfLoader.ResolvePath(actorScenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedManifest));
@@ -69,7 +70,7 @@ internal static class CellActorLoader
             throw new InvalidOperationException("Actor scene belongs to another CELL.");
         var reference = root.GetProperty("reference");
         var initiallyDisabled = reference.GetProperty("initiallyDisabled").GetBoolean();
-        if (initiallyDisabled && !proofEnableInitiallyDisabled)
+        if (initiallyDisabled && !proofEnableInitiallyDisabled && !materializeInitiallyDisabled)
             return null;
         var authoredPosition = ReadVector(reference.GetProperty("positionGameUnits"));
         var position = new Vector3(
@@ -113,6 +114,12 @@ internal static class CellActorLoader
             recordType == "CREA"
                 ? ActorModelSlice.BoundsContract.AnyActor
                 : ActorModelSlice.BoundsContract.Humanoid);
+        if (initiallyDisabled && materializeInitiallyDisabled && !proofEnableInitiallyDisabled)
+        {
+            placement.Visible = false;
+            placement.ProcessMode = Node.ProcessModeEnum.Disabled;
+            placement.SetMeta("opennv_enabled", 0);
+        }
         return new PlacedActor(
             placement,
             reference.GetProperty("formId").GetString()!,

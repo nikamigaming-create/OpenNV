@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Campaigns.Classic;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -40,20 +41,32 @@ internal partial class Fo1TacticalSession
             equippedWeaponSymbol = EquippedWeaponSymbol,
             tagInventoryApplied = _tagInventoryApplied,
             inventoryObjects = _inventoryObjects,
+            classicPlayerStatus = new
+            {
+                state = _classicPlayerStatus.Save(),
+                gameTime = _classicScriptGameTime,
+            },
             destinationFlare = _destinationFlareUse is null ? null : new
             {
                 descriptorSha256 = _destinationFlareUse.Sha256,
-                lit = _destinationFlareLit,
+                scriptState = _destinationFlareScriptState.Save(),
+                gameTime = _classicScriptGameTime,
+                expiryLocalIndex = _destinationFlareUse.ExpiryLocalIndex,
+                expiryDurationGameTicks = _destinationFlareUse.ExpiryDurationGameTicks,
+                expired = _destinationFlareExpired,
+                expiry = "decoded-destroy-self",
             },
             destinationGenericDoor = _destinationGenericDoor is null ? null : new
             {
                 descriptorSha256 = _destinationGenericDoor.Sha256,
                 open = _destinationGenericDoorOpen,
+                sourcePresentationState = _destinationGenericDoorSession?.State.Save(),
             },
             destinationMedicLook = _destinationMedicLook is null ? null : new
             {
                 descriptorSha256 = _destinationMedicLook.Sha256,
                 viewed = _destinationMedicLookViewed,
+                dialogueProcedure = _destinationMedicDialogueProcedure,
             },
             destinationReturnExitGrid = _destinationReturnExitGrid is null ? null : new
             {
@@ -229,13 +242,45 @@ internal partial class Fo1TacticalSession
                 _inventoryObjects[row.Name] = objects;
             }
         }
+        if (root.TryGetProperty("classicPlayerStatus", out var classicPlayerStatus))
+        {
+            _classicPlayerStatus = ClassicPlayerStatusState.Restore(
+                classicPlayerStatus.GetProperty("state"));
+            _classicScriptGameTime = classicPlayerStatus.GetProperty("gameTime").GetInt32();
+            if (_classicScriptGameTime < 0)
+                throw new InvalidOperationException(
+                    "Fallout save classic player status state is invalid.");
+        }
         if (root.TryGetProperty("destinationFlare", out var destinationFlare) &&
             destinationFlare.ValueKind != JsonValueKind.Null)
         {
             if (_destinationFlareUse is null ||
                 destinationFlare.GetProperty("descriptorSha256").GetString() != _destinationFlareUse.Sha256)
                 throw new InvalidOperationException("Fallout save flare state does not match its descriptor.");
-            _destinationFlareLit = destinationFlare.GetProperty("lit").GetBoolean();
+            _destinationFlareScriptState = ClassicScriptState.Restore(
+                destinationFlare.GetProperty("scriptState"));
+            var savedFlareGameTime = destinationFlare.GetProperty("gameTime").GetInt32();
+            if (_classicScriptGameTime != 0 && _classicScriptGameTime != savedFlareGameTime)
+                throw new InvalidOperationException(
+                    "Fallout saved flare game time conflicts with shared classic time.");
+            _classicScriptGameTime = savedFlareGameTime;
+            if (destinationFlare.GetProperty("expiryLocalIndex").GetInt32() !=
+                    _destinationFlareUse.ExpiryLocalIndex ||
+                destinationFlare.GetProperty("expiryDurationGameTicks").GetInt32() !=
+                    _destinationFlareUse.ExpiryDurationGameTicks ||
+                destinationFlare.GetProperty("expiry").GetString() !=
+                    "decoded-destroy-self")
+                throw new InvalidOperationException(
+                    "Fallout saved flare script state is invalid.");
+            _destinationFlareExpired = destinationFlare.GetProperty("expired").GetBoolean();
+            var savedExpiry = _destinationFlareUse.Program.ExecuteWithActions(
+                "start_proc",
+                _destinationFlareScriptState,
+                new ClassicScriptContext(false, false, _classicScriptGameTime));
+            if (_destinationFlareExpired != savedExpiry.DestroySelf ||
+                _destinationFlareExpired && !_destinationFlareScriptState.Flag("lit"))
+                throw new InvalidOperationException(
+                    "Fallout saved flare destruction state is invalid.");
         }
         if (root.TryGetProperty("destinationGenericDoor", out var destinationGenericDoor) &&
             destinationGenericDoor.ValueKind != JsonValueKind.Null)
@@ -244,8 +289,20 @@ internal partial class Fo1TacticalSession
                 destinationGenericDoor.GetProperty("descriptorSha256").GetString() != _destinationGenericDoor.Sha256)
                 throw new InvalidOperationException("Fallout save generic-door state does not match its descriptor.");
             _destinationGenericDoorOpen = destinationGenericDoor.GetProperty("open").GetBoolean();
-            if (_destinationGenericDoorOpen)
-                _walkable[_destinationGenericDoor.Door.Tile] = true;
+            var restoredDoorState = destinationGenericDoor.TryGetProperty(
+                    "sourcePresentationState", out var sourcePresentationState) &&
+                sourcePresentationState.ValueKind == JsonValueKind.Object
+                    ? ClassicDoorState.Restore(sourcePresentationState)
+                    : _destinationGenericDoorOpen
+                        ? ClassicDoorSession.OpenTerminal(_destinationGenericDoor.Presentation)
+                        : ClassicDoorSession.Closed(_destinationGenericDoor.Presentation);
+            _destinationGenericDoorSession = new ClassicDoorSession(
+                _destinationGenericDoor.Presentation,
+                restoredDoorState);
+            if (_destinationGenericDoorOpen != restoredDoorState.Open)
+                throw new InvalidOperationException(
+                    "Fallout save generic-door source presentation state drifted.");
+            _walkable[_destinationGenericDoor.Door.Tile] = !restoredDoorState.Blocked;
         }
         if (root.TryGetProperty("destinationMedicLook", out var destinationMedicLook) &&
             destinationMedicLook.ValueKind != JsonValueKind.Null)
@@ -254,6 +311,16 @@ internal partial class Fo1TacticalSession
                 destinationMedicLook.GetProperty("descriptorSha256").GetString() != _destinationMedicLook.Sha256)
                 throw new InvalidOperationException("Fallout save Medic look state does not match its descriptor.");
             _destinationMedicLookViewed = destinationMedicLook.GetProperty("viewed").GetBoolean();
+            if (destinationMedicLook.TryGetProperty("dialogueProcedure", out var procedure) &&
+                procedure.ValueKind != JsonValueKind.Null)
+            {
+                var savedProcedure = procedure.GetString() ?? "";
+                if (!_destinationMedicLook.DialogueNodes.ContainsKey(savedProcedure) &&
+                    savedProcedure != _destinationMedicLook.RadiationFollowupProcedure)
+                    throw new InvalidOperationException(
+                        "Fallout save Medic dialogue procedure is not decoded by its descriptor.");
+                _destinationMedicDialogueProcedure = savedProcedure;
+            }
         }
         if (root.TryGetProperty("destinationReturnExitGrid", out var destinationReturnExitGrid) &&
             destinationReturnExitGrid.ValueKind != JsonValueKind.Null)

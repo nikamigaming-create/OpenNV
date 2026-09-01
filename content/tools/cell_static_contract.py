@@ -25,6 +25,7 @@ BLOCKERS_FILE_NAME = "blockers.jsonl"
 INTERIOR_ORIGIN_POLICY = "game-origin"
 EXTERIOR_ORIGIN_POLICY = "cell-grid-origin"
 BLOCKED_POLICY = "blocked"
+COMPILED_SOURCE_STATE_POLICY = "compiled-source-state"
 POSITION_COMPONENTS = 3
 MESH_ROOT = "meshes"
 PASS_PRESENTATION_STATUS = "static-assets-compiled-runtime-pending"
@@ -239,8 +240,8 @@ def load_profile(path: Path) -> dict[str, object]:
         raise ValueError("Static CELL compiler profile origin policy is invalid")
     state = document.get("statePolicy")
     if not isinstance(state, dict) or state != {
-        "initiallyDisabled": BLOCKED_POLICY,
-        "enableParent": BLOCKED_POLICY,
+        "initiallyDisabled": COMPILED_SOURCE_STATE_POLICY,
+        "enableParent": COMPILED_SOURCE_STATE_POLICY,
         "teleport": BLOCKED_POLICY,
     }:
         raise ValueError("Static CELL compiler profile state policy is invalid")

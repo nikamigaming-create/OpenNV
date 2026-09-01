@@ -39,6 +39,9 @@ from runtime_configuration import RuntimeConfiguration
 
 PLAYER_FACEGEN_PREVIEW_SCHEMA = "opennv-owned-player-facegen-preview/v1"
 PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA = "opennv-owned-player-facegen-preview-set/v3"
+PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA = (
+    "opennv-owned-player-facegen-preview-set/v5"
+)
 PLAYER_FACEGEN_PREVIEW_STATUS = (
     "compiled-default-male-head-with-ctl-egm-targets-all-native-geometry-controls-"
     "runtime-bound"
@@ -51,6 +54,21 @@ PLAYER_FACEGEN_FULL_BODY_RUNTIME_DISPOSITION = (
     "owned-default-male-and-female-selection-preview-hosts-and-all-native-geometry-"
     "controls-bound-other-identities-fail-closed-sibling-gamebryo-slider-semantics-"
     "corroborated"
+)
+PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS = (
+    "compiled-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-"
+    "with-ctl-egm-targets-all-native-geometry-controls-runtime-bound"
+)
+PLAYER_FACEGEN_PLAYABLE_RACE_RUNTIME_DISPOSITION = (
+    "owned-playable-race-male-and-female-valid-hair-eye-identity-preview-hosts-"
+    "and-all-native-geometry-controls-bound-invalid-source-tuples-fail-closed-"
+    "sibling-gamebryo-slider-semantics-corroborated"
+)
+PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE = (
+    "all-playable-race-sex-valid-hair-eyes-cartesian-product"
+)
+PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE = (
+    "invalid-race-sex-hair-eyes-source-tuple"
 )
 PLAYER_FACEGEN_HEAD_RUNTIME_DISPOSITION = (
     "owned-default-male-preview-host-and-all-native-geometry-controls-bound-"
@@ -121,6 +139,59 @@ def _player_preview_selections(
     if len(identities) != len(selections):
         raise ValueError("Owned player preview selection identities are not unique")
     return selections
+
+
+def _playable_race_preview_selections(
+    appearance: dict[str, object],
+    player_form_id: int,
+) -> tuple[PlayerPreviewSelection, ...]:
+    player = dict(appearance["player"])
+    if int(str(player["formId"]), FORM_ID_RADIX) != player_form_id:
+        raise ValueError(
+            "Owned player preview base differs from the appearance contract"
+        )
+    selections = []
+    for race in sorted(
+        (dict(row) for row in appearance["races"]),
+        key=lambda row: int(str(row["formId"]), FORM_ID_RADIX),
+    ):
+        race_form_id = int(str(race["formId"]), FORM_ID_RADIX)
+        sex_contracts = dict(race["sex"])
+        if set(sex_contracts) != set(PLAYER_PREVIEW_SEXES):
+            raise ValueError(
+                "Owned player preview playable race sex selections are incomplete"
+            )
+        for sex in PLAYER_PREVIEW_SEXES:
+            source = dict(sex_contracts[sex])
+            hair_ids = sorted(
+                int(str(dict(row)["formId"]), FORM_ID_RADIX)
+                for row in source["hairOptions"]
+            )
+            eye_ids = sorted(
+                int(str(dict(row)["formId"]), FORM_ID_RADIX)
+                for row in source["eyeOptions"]
+            )
+            if (
+                not hair_ids
+                or not eye_ids
+                or len(set(hair_ids)) != len(hair_ids)
+                or len(set(eye_ids)) != len(eye_ids)
+            ):
+                raise ValueError(
+                    "Owned player preview valid hair/eye inventory is incomplete"
+                )
+            selections.extend(
+                PlayerPreviewSelection(sex, race_form_id, hair_form_id, eyes_form_id)
+                for hair_form_id in hair_ids
+                for eyes_form_id in eye_ids
+            )
+    identities = {
+        (row.sex, row.race_form_id, row.hair_form_id, row.eyes_form_id)
+        for row in selections
+    }
+    if not selections or len(identities) != len(selections):
+        raise ValueError("Owned player preview valid identities are not unique")
+    return tuple(selections)
 
 
 def _player_body_component_sources(
@@ -236,14 +307,22 @@ def prepare_default_player_facegen_preview(
     include_full_body: bool = False,
     presentation_outfit_form_id: int | None = None,
     include_locomotion_animation: bool = False,
+    include_all_playable_race_selections: bool = False,
 ) -> dict[str, object]:
-    """Export exact default Player selection previews and native geometry controls."""
+    """Export exact Player previews for the requested owned selection scope."""
     catalog = scan_actor_catalog(master_path)
     player = catalog.actors.get(PLAYER_RECORD_FORM_ID)
     if player is None or player.female or player.race_form_id is None:
         raise ValueError("Owned Player base is not the expected default male humanoid")
     player_contract = dict(appearance["player"])
-    if include_full_body:
+    if include_all_playable_race_selections and not include_full_body:
+        raise ValueError("Playable-race FaceGen previews require full-body assembly")
+    if include_all_playable_race_selections:
+        selections = _playable_race_preview_selections(
+            appearance,
+            player.form_id,
+        )
+    elif include_full_body:
         selections = _player_preview_selections(appearance, player.form_id)
     else:
         if int(str(player_contract["formId"]), FORM_ID_RADIX) != player.form_id:
@@ -266,17 +345,32 @@ def prepare_default_player_facegen_preview(
                 int(str(sex_contract["defaultEyesFormId"]), FORM_ID_RADIX),
             ),
         )
-    if len(selections) != (len(PLAYER_PREVIEW_SEXES) if include_full_body else 1):
+    expected_selection_count = (
+        sum(
+            len(dict(sex)["hairOptions"]) * len(dict(sex)["eyeOptions"])
+            for race in appearance["races"]
+            for sex in dict(dict(race)["sex"]).values()
+        )
+        if include_all_playable_race_selections
+        else len(PLAYER_PREVIEW_SEXES) if include_full_body else 1
+    )
+    if len(selections) != expected_selection_count:
         raise ValueError("Owned player preview selection inventory is incomplete")
-    race = catalog.races.get(player.race_form_id)
-    if race is None:
+    default_race = catalog.races.get(player.race_form_id)
+    if default_race is None:
         raise ValueError("Owned player preview race is absent")
-    if any(row.race_form_id != race.form_id for row in selections):
-        raise ValueError("Owned player preview race differs from the selection contract")
-    male_selection = next(row for row in selections if row.sex == PLAYER_PREVIEW_SEX)
-    if (
-        male_selection.hair_form_id != player.hair_form_id
-        or male_selection.eyes_form_id != player.eyes_form_id
+    selection_races = {
+        row.race_form_id: catalog.races.get(row.race_form_id)
+        for row in selections
+    }
+    if any(race is None for race in selection_races.values()):
+        raise ValueError("Owned player preview playable race is absent")
+    if not any(
+        row.sex == PLAYER_PREVIEW_SEX
+        and row.race_form_id == player.race_form_id
+        and row.hair_form_id == player.hair_form_id
+        and row.eyes_form_id == player.eyes_form_id
+        for row in selections
     ):
         raise ValueError("Owned default male player hair/eyes contract differs")
 
@@ -295,12 +389,48 @@ def prepare_default_player_facegen_preview(
         tuple(float(value) for value in source_controls[int(row["controlIndex"])]["axis"])
         for row in exposed
     )
+    raw_age_control = control_space.get("nativeAgeExposure")
+    age_control = None if raw_age_control is None else dict(raw_age_control)
+    age_geometry_axis = () if age_control is None else tuple(
+        float(value) for value in age_control["geometryAxis"]
+    )
+    age_texture_axis = () if age_control is None else tuple(
+        float(value) for value in age_control["textureAxis"]
+    )
+    age_control_names = () if age_control is None else (
+        str(age_control["settingEntity"]),
+    )
+    age_geometry_axes = () if age_control is None else (age_geometry_axis,)
     if (
         not control_names
         or len(control_names) != len(set(control_names))
         or any(len(axis) != FACEGEN_CONTROL_AXIS_FLOATS for axis in control_axes)
     ):
         raise ValueError("Owned player preview FaceGen controls are incomplete")
+    source_texture_controls = {
+        int(row["index"]): dict(row)
+        for row in dict(control_space["format"])["controls"]["symmetricTexture"]
+    }
+    exposed_texture = [
+        dict(row)
+        for row in dict(control_space["nativeTextureExposure"])["controls"]
+    ]
+    texture_control_names = tuple(
+        str(row["settingEntity"]) for row in exposed_texture
+    )
+    texture_control_axes = tuple(
+        tuple(
+            float(value)
+            for value in source_texture_controls[int(row["controlIndex"])]["axis"]
+        )
+        for row in exposed_texture
+    )
+    if (
+        not texture_control_names
+        or len(texture_control_names) != len(set(texture_control_names))
+        or any(len(axis) != FACEGEN_CONTROL_AXIS_FLOATS for axis in texture_control_axes)
+    ):
+        raise ValueError("Owned player preview FaceGen texture controls are incomplete")
 
     extracted: dict[str, ExtractedMember] = {}
 
@@ -377,16 +507,24 @@ def prepare_default_player_facegen_preview(
             model.data,
             egm_path=egm.logical_path,
             egm_payload=egm.data,
-            egm_symmetric_control_names=control_names,
-            egm_symmetric_control_axes=control_axes,
+            egm_symmetric_control_names=control_names + age_control_names,
+            egm_symmetric_control_axes=control_axes + age_geometry_axes,
             **tri(model_path),
             **options,
         )
 
     body_components_by_sex = {
-        sex: _player_body_component_sources(race, sex)
+        sex: _player_body_component_sources(default_race, sex)
         for sex in PLAYER_PREVIEW_SEXES
     }
+    for race in selection_races.values():
+        if race is None:
+            raise ValueError("Owned player preview playable race is absent")
+        for sex in PLAYER_PREVIEW_SEXES:
+            if _player_body_component_sources(race, sex) != body_components_by_sex[sex]:
+                raise ValueError(
+                    "Owned playable races do not share one source body contract"
+                )
     if presentation_outfit_form_id is not None:
         outfit = catalog.armor.get(presentation_outfit_form_id)
         if outfit is None:
@@ -418,6 +556,9 @@ def prepare_default_player_facegen_preview(
     rig = configuration.actor_rig.profiles["NPC_"]
     preview_rows = []
     for selection in selections:
+        race = selection_races[selection.race_form_id]
+        if race is None:
+            raise ValueError("Owned player preview playable race is absent")
         hair = catalog.parts.get(selection.hair_form_id)
         eyes = catalog.parts.get(selection.eyes_form_id)
         if (
@@ -540,9 +681,18 @@ def prepare_default_player_facegen_preview(
             / "player-facegen-preview"
             / selection.sex
         )
+        if include_all_playable_race_selections:
+            output_root /= (
+                f"{selection.race_form_id:08x}-"
+                f"{selection.hair_form_id:08x}-"
+                f"{selection.eyes_form_id:08x}"
+            )
         output_name = "player-full-body" if include_full_body else "player-head"
         gltf_path = output_root / f"{output_name}.gltf"
         sidecar_path = output_root / f"{output_name}.opennv.json"
+        egt_path = output_root / "player-head.egt"
+        egt_path.parent.mkdir(parents=True, exist_ok=True)
+        egt_path.write_bytes(head_egt.data)
         locomotion_animations: tuple[ActorAnimation, ...] = ()
         if include_full_body and include_locomotion_animation:
             locomotion = mesh(
@@ -593,6 +743,24 @@ def prepare_default_player_facegen_preview(
                         sidecar_path.read_bytes()
                     ).hexdigest(),
                     "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
+                    "egt": str(egt_path.resolve()),
+                    "egtSha256": head_egt.sha256,
+                },
+                "symmetricTexture": list(symmetric_texture),
+                "textureControls": [
+                    {
+                        "controlIndex": int(row["controlIndex"]),
+                        "settingEntity": str(row["settingEntity"]),
+                        "sourceLabel": str(row["sourceLabel"]),
+                        "axisSha256": str(row["axisSha256"]),
+                        "axis": list(axis),
+                    }
+                    for row, axis in zip(exposed_texture, texture_control_axes)
+                ],
+                "ageControl": None if age_control is None else {
+                    **age_control,
+                    "geometryAxis": list(age_geometry_axis),
+                    "textureAxis": list(age_texture_axis),
                 },
             }
         )
@@ -601,6 +769,8 @@ def prepare_default_player_facegen_preview(
         "playerFormId": f"{player.form_id:08x}",
         "geometryControlNames": list(control_names),
         "geometryControlCount": len(control_names),
+        "textureControlNames": list(texture_control_names),
+        "textureControlCount": len(texture_control_names),
         "fullBody": include_full_body,
         "presentationOutfitFormId": (
             f"{presentation_outfit_form_id:08x}"
@@ -623,12 +793,35 @@ def prepare_default_player_facegen_preview(
         ],
     }
     if include_full_body:
+        expanded = include_all_playable_race_selections
         return {
-            "schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
-            "status": PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+            "schema": (
+                PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA
+                if expanded
+                else PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA
+            ),
+            "status": (
+                PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
+                if expanded
+                else PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS
+            ),
             **common,
+            **(
+                {
+                    "selectionScope": PLAYER_FACEGEN_PLAYABLE_RACE_SELECTION_SCOPE,
+                    "unsupportedSelectionScope": (
+                        PLAYER_FACEGEN_PLAYABLE_RACE_UNSUPPORTED_SCOPE
+                    ),
+                }
+                if expanded
+                else {}
+            ),
             "previews": preview_rows,
-            "runtimeDisposition": PLAYER_FACEGEN_FULL_BODY_RUNTIME_DISPOSITION,
+            "runtimeDisposition": (
+                PLAYER_FACEGEN_PLAYABLE_RACE_RUNTIME_DISPOSITION
+                if expanded
+                else PLAYER_FACEGEN_FULL_BODY_RUNTIME_DISPOSITION
+            ),
         }
     return {
         "schema": PLAYER_FACEGEN_PREVIEW_SCHEMA,

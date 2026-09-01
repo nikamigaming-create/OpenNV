@@ -2,6 +2,7 @@ using Godot;
 
 
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.Items;
 
 namespace OpenNV.Runtime.World.Interactions;
 
@@ -12,10 +13,11 @@ internal partial class PickupInstance : RigidBody3D
     private uint _worldCollisionMask;
 
     internal string ReferenceFormId { get; private set; } = "";
-    internal string ItemFormId { get; private set; } = "";
-    internal string EditorId { get; private set; } = "";
-    internal string? DisplayName { get; private set; }
-    internal string RecordType { get; private set; } = "";
+    internal ItemDefinition Item { get; private set; } = null!;
+    internal string ItemFormId => Item.FormId;
+    internal string EditorId => Item.EditorId;
+    internal string? DisplayName => Item.DisplayName;
+    internal string RecordType => Item.RecordType;
     internal int Count { get; private set; }
     internal WeaponProfile? Weapon { get; private set; }
     internal string PhysicsSource { get; private set; } = "unsupported";
@@ -25,21 +27,15 @@ internal partial class PickupInstance : RigidBody3D
 
     internal void Configure(
         string referenceFormId,
-        string itemFormId,
-        string editorId,
-        string? displayName,
-        string recordType,
+        ItemDefinition item,
         int count,
         WeaponProfile? weapon)
     {
         ReferenceFormId = referenceFormId;
-        ItemFormId = itemFormId;
-        EditorId = editorId;
-        DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
-        RecordType = recordType;
+        Item = item;
         Count = count;
         Weapon = weapon;
-        Name = $"PICKUP_{referenceFormId}_{editorId}";
+        Name = $"PICKUP_{referenceFormId}_{item.EditorId}";
     }
 
     internal void ConfigurePhysics(

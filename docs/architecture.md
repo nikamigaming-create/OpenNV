@@ -219,9 +219,11 @@ flowchart TD
     Player -->|E collect ray| Pickup[PickupInstance]
     Player -->|Z or XR primary hold ray| Pickup
     Player -->|E ray| Container[ContainerInstance]
+    Player -->|E ray| Crafting[CraftingStationInstance]
     Player -->|fire ray| Collision
     Pickup --> Session[GameplaySession]
     Container --> Session
+    Crafting --> Session
     Door --> Session
     Session --> UiModel[Authoritative status / inventory / quest / map snapshot]
     UiModel --> Hud[Owned-contract flat HUD / Pip-Boy shell]
@@ -456,6 +458,7 @@ retail data, or promotion verdict.
 | `plugin_records.py` | Bounded TES4-family headers, groups, compression, subrecords | Cell or rendering semantics |
 | `plugin_stack.py` | Master-aware stable FormIDs, official load-order mapping, and source identity | Actor, cell, or rendering semantics |
 | `cell_catalog.py` | CELL/base/REFR relationships plus bounded CELL and linked `LIGH` field decoding | BSA/NIF/Godot behavior |
+| `crafting_catalog.py` | Exact RCCT/RCPE category, recipe, input/output quantity, condition-byte, and `ShowRecipeMenu` source relationships | Runtime inventory mutation, CTDA interpretation, or UI |
 | `cell_parity_records.py` | Canonical CELL/child rows, `XRDS` reference radius, linked light contracts, source accounting, and effective override/deletion merge | Resource compilation, runtime streaming, or parity verdicts |
 | `cell_parity_corpus.py` | Official-stack CELL graph, implicit-base/source-anomaly contracts, relationship closure, and complete pending review ledger | Runtime implementation or parity promotion |
 | `validate_cell_parity_corpus.py` | Artifact hashes, raw/effective conservation, relationship closure, pending-state enforcement, and exact actor-placement join | Content compilation or visual approval |
@@ -556,6 +559,9 @@ retail data, or promotion verdict.
 | `runtime/src/World/Interactions/DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
 | `runtime/src/World/Interactions/PickupInstance.cs` | One authored pickup's identity, owned dynamic rigid body, and held/dropped transform | Inventory ownership or input polling |
 | `runtime/src/World/Interactions/ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
+| `runtime/src/World/Interactions/CraftingStationInstance.cs` | One source-script/category-bound station and its admitted recipes | Inventory mutation, recipe parsing, or UI |
+| `runtime/src/Gameplay/Crafting/*` | Strict crafting manifest contracts plus the flat/XR-shared recipe-selection presentation | ESM parsing, save ownership, or speculative CTDA/skill semantics |
+| `runtime/src/Gameplay/State/GameplaySession.Crafting.cs` | One atomic ingredient-to-output inventory transaction over authoritative campaign state | Recipe selection, source parsing, or presentation layout |
 | `runtime/src/World/Interactions/PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
 | `runtime/src/World/Interactions/PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
 | `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, active-CELL identity, objective state, opening-completion envelope, movable-pickup and pool snapshots, and atomic save/reload | Asset parsing, portal geometry, or opening progression |
@@ -708,6 +714,14 @@ verified atmosphere/cloud pair. The accepted Goodsprings proof selects
 texture layers. Exterior surface/directional lighting remains the existing
 provisional compiled adapter; this is source-backed sky presentation, not a
 complete WTHR lighting application, dynamic weather, or retail parity.
+The same owned-data path now compiles exact item value/weight only for admitted
+MISC/KEYM/IMOD, ARMO, and WEAP DATA layouts; other item economics remain
+unknown rather than zero. The Goodsprings Source campfire `000cdb59` joins its
+ACTI/script/RCCT/RCPE graph to the unconditioned zero-skill Healing Powder
+recipe. Activating it opens a shared-state crafting view, atomically consumes
+one Xander Root plus one Broc Flower, adds one Healing Powder, and persists the
+result through the campaign inventory. Skill-gated and CTDA-conditioned recipes,
+ingredient harvesting, and general crafting categories remain unexecuted.
 Campaign save v6 owns saloon CELL `00106185`, container remaining counts, and
 the player transform.
 The lifecycle is not demand streaming or unloading: all three prepared spaces

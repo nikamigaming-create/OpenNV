@@ -60,6 +60,16 @@ $contentRoot = Join-Path $repoRoot "content"
 $solution = Join-Path $runtimeRoot "OpenNV.sln"
 $containerInventoryProbe = Join-Path $repoRoot `
     "contract-tests\ContainerInventoryContractProbe\ContainerInventoryContractProbe.csproj"
+$actorAnimationPlaybackProbe = Join-Path $repoRoot `
+    "contract-tests\ActorAnimationPlaybackProbe\ActorAnimationPlaybackProbe.csproj"
+$actorComplexionProbe = Join-Path $repoRoot `
+    "contract-tests\ActorComplexionContractProbe\ActorComplexionContractProbe.csproj"
+$gamebryoPackageSelectionProbe = Join-Path $repoRoot `
+    "contract-tests\GamebryoPackageSelectionProbe\GamebryoPackageSelectionProbe.csproj"
+$gamebryoUiTileProbe = Join-Path $repoRoot `
+    "contract-tests\GamebryoUiTileContractProbe\GamebryoUiTileContractProbe.csproj"
+$gamebryoPackagePlacementProbe = Join-Path $repoRoot `
+    "contract-tests\GamebryoPackagePlacementProbe\GamebryoPackagePlacementProbe.csproj"
 $exporter = Join-Path $contentRoot "tools\export_static_nif_gltf.py"
 $preparer = Join-Path $contentRoot "tools\prepare_legal_assets.py"
 $reportValidator = Join-Path $contentRoot "tools\validate_runtime_report.py"
@@ -94,7 +104,7 @@ function Resolve-OwnedDataRoot(
     throw "Select either the configured game installation folder or its data folder."
 }
 
-foreach ($path in @($Godot, $solution, $containerInventoryProbe, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
+foreach ($path in @($Godot, $solution, $containerInventoryProbe, $actorAnimationPlaybackProbe, $actorComplexionProbe, $gamebryoPackageSelectionProbe, $gamebryoUiTileProbe, $gamebryoPackagePlacementProbe, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Missing OpenNV Godot gate input: $path"
     }
@@ -143,6 +153,16 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV C# format/analyzer gate failed." }
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Godot Debug build failed." }
 & dotnet run --project $containerInventoryProbe --configuration Release
 if ($LASTEXITCODE -ne 0) { throw "Container inventory contract probe failed." }
+& dotnet run --project $actorAnimationPlaybackProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Actor animation playback contract probe failed." }
+& dotnet run --project $actorComplexionProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Actor complexion contract probe failed." }
+& dotnet run --project $gamebryoPackageSelectionProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Gamebryo package selection contract probe failed." }
+& dotnet run --project $gamebryoUiTileProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Gamebryo UI tile contract probe failed." }
+& dotnet run --project $gamebryoPackagePlacementProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Gamebryo package placement contract probe failed." }
 
 $startupOutput = & $Godot --headless --xr-mode off --path $runtimeRoot 2>&1
 if ($LASTEXITCODE -ne 0 -or ($startupOutput | Out-String) -notmatch "OPENNV_GODOT_EXPERIMENTAL_READY playable=0") {

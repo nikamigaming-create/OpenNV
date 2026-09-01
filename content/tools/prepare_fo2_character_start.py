@@ -64,6 +64,8 @@ SKILL_NAMES = [
     "Gambling",
     "Outdoorsman",
 ]
+GCD_SKILL_BONUS_START = 71
+GCD_SKILL_BONUS_COUNT = len(SKILL_NAMES)
 TRAIT_NAMES = [
     "Fast Metabolism",
     "Bruiser",
@@ -349,6 +351,12 @@ def parse_fo2_premade_gcd(data: bytes) -> dict[str, object]:
     except UnicodeDecodeError as error:
         raise Fo1ProfileError("Fallout 2 premade name is not cp1252") from error
     special = list(values[1:8])
+    skill_bonuses = list(
+        values[
+            GCD_SKILL_BONUS_START :
+            GCD_SKILL_BONUS_START + GCD_SKILL_BONUS_COUNT
+        ]
+    )
     age = values[34]
     sex_index = values[35]
     tags = list(values[101:104])
@@ -359,6 +367,7 @@ def parse_fo2_premade_gcd(data: bytes) -> dict[str, object]:
         or len(name) > 11
         or any(ord(character) < 32 for character in name)
         or any(value < 1 or value > 10 for value in special)
+        or any(value < 0 for value in skill_bonuses)
         or sum(special) != 40
         or age < 16
         or age > 35
@@ -376,6 +385,7 @@ def parse_fo2_premade_gcd(data: bytes) -> dict[str, object]:
         "age": age,
         "sex": "Female" if sex_index == 1 else "Male",
         "allocatedSpecial": special,
+        "skillBonuses": skill_bonuses,
         "taggedSkillIndices": tags,
         "taggedSkills": [SKILL_NAMES[value] for value in tags],
         "traitIndices": traits,

@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Gameplay.Items;
 
 namespace OpenNV.Runtime.World.Interactions;
 
@@ -24,9 +25,12 @@ internal partial class ContainerInstance : Node3D
 
     internal readonly record struct Entry(
         string ItemFormId,
-        string EditorId,
-        string DisplayName,
-        string RecordType,
+        ItemDefinition? Definition,
         int Count,
-        bool Resolved);
+        bool Resolved)
+    {
+        internal string EditorId => Definition?.EditorId ?? "";
+        internal string DisplayName => Definition?.DisplayName ?? "";
+        internal string RecordType => Definition?.RecordType ?? "";
+    }
 }

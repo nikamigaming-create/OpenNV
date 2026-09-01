@@ -70,7 +70,12 @@
       "menus\\options\\main_menu.xml",
       "menus\\message_menu.xml",
       "menus\\dialog\\texteditmenu.xml",
+      "menus\\dialog\\dialog_menu.xml",
+      "menus\\prefabs\\list_box_template.xml",
       "menus\\chargen\\race_sex_menu.xml",
+      "menus\\prefabs\\text_box.xml",
+      "menus\\levelup_menu.xml",
+      "menus\\tutorial_menu.xml",
       "menus\\chargen\\specialbookmenu.xml"
     ],
     "requiredTextureMembers": [
@@ -78,13 +83,15 @@
       "textures\\interface\\main\\main_background.dds"
     ],
     "musicSetting": { "section": "General", "key": "SMainMenuMusicTrack" },
+    "fonts": { "section": "Fonts", "keyTemplate": "sFontFile_{id}" },
     "musicDirectoryName": "Music",
     "iniSettings": [
       { "section": "General", "key": "SMainMenuMusicTrack" },
       { "section": "Loading", "key": "sMainMenuBackground" },
       { "section": "Interface", "key": "iSystemColorMainMenuRed" },
       { "section": "Interface", "key": "iSystemColorMainMenuGreen" },
-      { "section": "Interface", "key": "iSystemColorMainMenuBlue" }
+      { "section": "Interface", "key": "iSystemColorMainMenuBlue" },
+      { "section": "Interface", "key": "fMenuBackgroundOpacity" }
     ]
   },
   "opening": {
@@ -218,6 +225,164 @@
         "nextQuestStage": 0
       },
       "cg01Stage0Transition": {
+        "cg02IntroActorRecipes": [
+          "fo3-vault101-cg02-amata-actor-v1",
+          "fo3-vault101-cg02-beatrice-actor-v1",
+          "fo3-vault101-cg02-dad-actor-v1",
+          "fo3-vault101-cg02-old-lady-palmer-actor-v1",
+          "fo3-vault101-cg02-stanley-actor-v1",
+          "fo3-vault101-cg02-paul-hannon-actor-v1",
+          "fo3-vault101-cg02-security04-actor-v1"
+        ],
+        "cg02DadSpeech": {
+          "dadReferenceFormId": "000300ef",
+          "dadBaseFormId": "0002fdcf",
+          "dadScriptFormId": "000304da",
+          "topicEditorId": "CG02DadSpeech",
+          "topicFormId": "0001f574",
+          "infoFormIds": ["0001f954", "0001f953", "00031629"],
+          "targetStage": 7
+        },
+        "cg02OverseerSpeech": {
+          "overseerReferenceFormId": "000300f1",
+          "overseerBaseFormId": "000300f0",
+          "overseerScriptFormId": "0003099f",
+          "actorRecipeId": "fo3-vault101-cg02-overseer-actor-v1",
+          "playerReferenceFormId": "00000014",
+          "topicEditorId": "CG02OverseerSpeech",
+          "topicFormId": "00030992",
+          "infoFormIds": ["00030993", "00030994", "00030995", "00030996", "00030997"],
+          "sourceStage": 7,
+          "pipBoyStage": 8,
+          "targetStage": 10
+        },
+        "cg02DadPartySpeech": {
+          "packageFormId": "000309a5",
+          "dadReferenceFormId": "000300ef",
+          "dadBaseFormId": "0002fdcf",
+          "playerReferenceFormId": "00000014",
+          "playerMarkerFormId": "00030768",
+          "topicFormId": "0001f574",
+          "infoFormId": "0001f9c2",
+          "sourceStage": 10,
+          "targetStage": 12
+        },
+        "cg02BirthdayInteractions": {
+          "sourceStage": 12,
+          "failsafeTimerFormId": "0008a3c9",
+          "participants": [
+            {
+              "referenceFormId": "000309a8",
+              "baseFormId": "000309a7",
+              "greetingInfoFormIds": ["00030a19"]
+            },
+            {
+              "referenceFormId": "000300f2",
+              "baseFormId": "000300e9",
+              "greetingInfoFormIds": ["000319bd"]
+            },
+            {
+              "referenceFormId": "000309ad",
+              "baseFormId": "000309ac",
+              "greetingInfoFormIds": ["000784d9"]
+            },
+            {
+              "referenceFormId": "00031649",
+              "baseFormId": "00031648",
+              "greetingInfoFormIds": ["000319b9", "000784dc"]
+            },
+            {
+              "referenceFormId": "000300f3",
+              "baseFormId": "000300ea",
+              "actorRecipeId": "fo3-vault101-cg02-butch-actor-v1",
+              "greetingInfoFormIds": ["00030a1e"]
+            }
+          ],
+          "giftStages": [20, 21, 22, 23],
+          "cake": {
+            "triggerReferenceFormId": "0009f64f",
+            "triggerBaseFormId": "0009fb07",
+            "triggerScriptFormId": "0009f64e",
+            "sourceStage": 12,
+            "triggerStage": 15,
+            "andyReferenceFormId": "0009d1bb",
+            "andyBaseFormId": "00020456",
+            "andyActorRecipeId": "fo3-vault101-cg02-andy-actor-v1",
+            "packageFormId": "0009f64c",
+            "locomotionPath": "meshes\\creatures\\mistergutsy\\mtforward.kf",
+            "targetMarkerFormId": "00020458",
+            "cakeReferenceFormId": "0009fe60",
+            "topicFormId": "0009ee18",
+            "infoFormIds": ["0009f646", "0009f647", "000bb784"],
+            "targetStage": 16
+          },
+          "butch": {
+            "referenceFormId": "000300f3",
+            "baseFormId": "000300ea",
+            "scriptFormId": "00031642",
+            "actorRecipeId": "fo3-vault101-cg02-butch-actor-v1",
+            "findPlayerPackageFormId": "0003135c",
+            "playerReferenceFormId": "00000014",
+            "sweetrollFormId": "00030a23",
+            "sourceStage": 20,
+            "requiredCakeStage": 16,
+            "sceneDoneStage": 30,
+            "aggregateStage": 34,
+            "intercomStage": 35,
+            "postIntercom": {
+              "dadReferenceFormId": "000300ef",
+              "dadBaseFormId": "0002fdcf",
+              "playerReferenceFormId": "00000014",
+              "jonasReferenceFormId": "000300e8",
+              "jonasBaseFormId": "000300e7",
+              "jonasActorRecipeId": "fo3-vault101-cg02-jonas-actor-v1",
+              "intercomReferenceFormId": "00031d48",
+              "intercomMarkerFormId": "000309a0",
+              "dadToIntercomPackageFormId": "00071f90",
+              "dadTalkToJonasPackageFormId": "00031d49",
+              "dadToPlayerPackageFormId": "000319bf",
+              "conversationTopicFormId": "00031d3b",
+              "dadCallInfoFormId": "00031d3c",
+              "jonasReplyInfoFormId": "00031d3d",
+              "maleGoodbyeInfoFormId": "00031d43",
+              "femaleGoodbyeInfoFormId": "00063aa4",
+              "dadGreetingInfoFormId": "000319b7",
+              "sourceStage": 35,
+              "answerStage": 36,
+              "goodbyeStage": 38,
+              "targetStage": 40,
+              "reactorGift": {
+                "sourceStage": 40,
+                "jonasStage": 42,
+                "targetStage": 44,
+                "playerReferenceFormId": "00000014",
+                "jonasReferenceFormId": "000300e8",
+                "jonasBaseFormId": "000300e7",
+                "jonasGreetPackageFormId": "00063aa6",
+                "jonasMarkerFormId": "00075335",
+                "jonasGreetingInfoFormIds": ["00063a9e", "00063a9f"],
+                "dadReferenceFormId": "000300ef",
+                "dadBaseFormId": "0002fdcf",
+                "dadGreetPackageFormId": "000304e1",
+                "dadGreetingInfoFormIds": ["0001f9cb", "0001f9c9"],
+                "dadMoveMarkerFormId": "00063aa7",
+                "reactorStairDoorFormId": "000744b8",
+                "targetRangeDoorFormId": "000297bb",
+                "partyHatFormId": "00050e44",
+                "bbGunFormId": "000c0327",
+                "bbAmmoFormId": "0002935b",
+                "rangeStage": 50,
+                "hitStage": 55,
+                "targetBaseFormId": "000304db",
+                "targetScriptFormId": "000304d8",
+                "targetReferenceFormIds": ["000304eb", "0007674b", "00076746"],
+                "dadToRangePackageFormId": "000304e2",
+                "dadWaitPackageFormId": "000304e4",
+                "jonasWaitPackageFormId": "000306d6"
+              }
+            }
+          }
+        },
         "questEditorId": "CG01",
         "questFormId": "00014e83",
         "entryStage": 0,
@@ -236,6 +401,30 @@
         "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
         "stage12DadResponseInfoFormIds": ["0001f3e0", "0001f3df"],
         "stage12DadResponseTargetStage": 14,
+        "postStage14Transition": {
+          "stage16": 16,
+          "stage18": 18,
+          "stage20": 20,
+          "closeGatePackageFormId": "000c6de4",
+          "closeDoorPackageFormId": "000457c4",
+          "leaveRoomPackageFormId": "0002eaaf",
+          "closeGateTargetFormId": "000457c2",
+          "closeDoorTargetFormId": "000457c0",
+          "leaveRoomTargetFormId": "0002ea4b",
+          "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"],
+          "playpenGateReferenceFormId": "00047803",
+          "exitCribTriggerReferenceFormId": "0002ea53",
+          "specialBookReferenceFormId": "0002ecc0",
+          "stage30": 30,
+          "stage40": 40,
+          "stage50": 50,
+          "dadLeadLocomotion": {
+            "rootNode": "Bip01",
+            "walkLogicalPath": "meshes\\characters\\_male\\locomotion\\male\\mtforward.kf",
+            "playerReferenceFormId": "00000014",
+            "playerBaseFormId": "00000007"
+          }
+        },
         "tutorialQuestEditorId": "CGTutorial",
         "tutorialQuestFormId": "00059c85",
         "tutorialQuestStage": 2,
@@ -249,6 +438,8 @@
       }
     },
     "appearanceUi": {
+      "sourceCanvasWidth": 1600,
+      "sourceCanvasHeight": 1200,
       "document": "menus\\chargen\\race_sex_menu.xml",
       "menuName": "RaceSexMenu",
       "panelName": "NOGLOW_BRANCH",
@@ -268,6 +459,13 @@
       "nameDocument": "menus\\dialog\\texteditmenu.xml",
       "nameMenuName": "TextEditMenu",
       "namePanelName": "TEM_MainRect",
+      "namePromptTile": "textedit_prompt",
+      "namePromptEntity": "-sEnterName",
+      "nameInputTile": "textedit_text",
+      "nameAcceptTile": "textedit_button_ok",
+      "nameAcceptEntity": "-sOk",
+      "appearanceBackEntity": "-sBack",
+      "appearanceNextEntity": "-sNext",
       "namePanelWidth": 720,
       "namePanelHeight": 180,
       "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds"
@@ -302,6 +500,16 @@
           0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
           17, 18, 19, 20, 21, 26, 29, 31, 32, 34, 35, 36, 37, 38, 39,
           40, 41, 42, 44, 45, 46, 47, 49, 50, 52, 53, 54
+        ]
+      },
+      "nativeTextureExposure": {
+        "classification": "owned-fo3-1.7.0.4-static-setting-string-contract",
+        "engineBuild": "1.7.0.4",
+        "sourceExecutableSha256": "c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e",
+        "settingEntityTemplate": "sRSMToneOption{oneBasedOrdinal:02d}",
+        "controlIndices": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 17, 18,
+          19, 20, 21, 23, 24, 25, 26, 29, 30, 31
         ]
       },
       "runtimePreviewControl": {

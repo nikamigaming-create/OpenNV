@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
 
@@ -113,16 +114,53 @@ internal partial class OpeningQuestRuntime
     {
         if (!_guideActorResolved)
             return;
-        var package = _flow.GuideActorAi.PackagePriority
+        var furniture = _flow.GuideActorAi.FurnitureOccupancy;
+        var candidates = _flow.GuideActorAi.PackagePriority
             .Select(formId => _flow.GuideActorAi.Packages[formId])
-            .FirstOrDefault(value => value.Conditions.All(EvaluateGuideCondition))
-            ?? throw new InvalidOperationException(
-                "Owned opening guide has no eligible AI package.");
+            .Select(package => new GamebryoPackageCandidate<OpeningGuidePackage>(
+                package.FormId,
+                package.Conditions.Select(PackageCondition).ToArray(),
+                PackageTarget(package),
+                package.FormId.Equals(
+                    furniture.InitialPackageFormId,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? SourceAnimation(
+                        furniture.SeatedLoop,
+                        ZeroedAccumulationRootTranslation)
+                    : package.FormId.Equals(
+                        furniture.ReleasePackageFormId,
+                        StringComparison.OrdinalIgnoreCase)
+                        ? SourceAnimation(
+                            furniture.Exit,
+                            RetainedAccumulationRootTranslation)
+                        : null,
+                package))
+            .ToArray();
+        var selected = GamebryoPackageSelector.SelectFirst(
+            candidates,
+            new GamebryoPackageState(
+                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [_flow.GuideActorAi.QuestFormId] = _stage,
+                },
+                _openingQuestCompleted
+                    ? new HashSet<string>(
+                        [_flow.GuideActorAi.QuestFormId],
+                        StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                _questVariables.ToDictionary(
+                    value => value.Key,
+                    value => (double)value.Value,
+                    StringComparer.OrdinalIgnoreCase)),
+            requireMatch: true)!;
+        var package = selected.Value;
         if (!force && _activeGuidePackage?.FormId.Equals(
                 package.FormId,
                 StringComparison.OrdinalIgnoreCase) == true)
             return;
         _activeGuidePackage = package;
+        _activeGuidePackageAnimation = selected.Animation;
+        _activeGuidePackageTarget = selected.Target;
         _guideLookAtPlayer = false;
         BeginGuidePackage(package);
         GD.Print(
@@ -131,44 +169,114 @@ internal partial class OpeningQuestRuntime
             $"alwaysRun={package.AlwaysRun}");
     }
 
-    private bool EvaluateGuideCondition(OpeningGuideCondition condition)
+    private static GamebryoPackageCondition PackageCondition(
+        OpeningGuideCondition condition) => new(
+        condition.FunctionName,
+        PackageComparison(condition.OperatorFlags),
+        condition.ComparisonValue,
+        condition.Parameter1,
+        condition.Parameter2,
+        condition.RunOn,
+        condition.Reference);
+
+    private static GamebryoPackageComparison PackageComparison(int operatorFlags) =>
+        (operatorFlags & ConditionOperatorMask) switch
+        {
+            ConditionEqual => GamebryoPackageComparison.Equal,
+            ConditionNotEqual => GamebryoPackageComparison.NotEqual,
+            ConditionGreater => GamebryoPackageComparison.Greater,
+            ConditionGreaterOrEqual => GamebryoPackageComparison.GreaterOrEqual,
+            ConditionLess => GamebryoPackageComparison.Less,
+            ConditionLessOrEqual => GamebryoPackageComparison.LessOrEqual,
+            _ => throw new InvalidOperationException(
+                $"Owned package comparison is unsupported: {operatorFlags}"),
+        };
+
+    private GamebryoPackageTarget PackageTarget(OpeningGuidePackage package)
     {
-        float actual;
-        if (condition.FunctionName.Equals("getStage", StringComparison.OrdinalIgnoreCase))
-        {
-            actual = condition.Parameter1.Equals(
-                _flow.GuideActorAi.QuestFormId,
+        if (package.Target is not null)
+            return new GamebryoPackageTarget(
+                $"packageTarget:{package.Target.TypeName}",
+                package.Target.FormId,
+                null);
+        if (package.Location is null)
+            return GamebryoPackageTarget.None;
+        if (package.Location is not
+            {
+                TypeName: "nearReference",
+                Reference: { } reference,
+            })
+            return new GamebryoPackageTarget(
+                package.Location.TypeName,
+                package.Location.Reference?.FormId,
+                null);
+        var furniture = _flow.GuideActorAi.FurnitureOccupancy;
+        var placement = reference.FormId.Equals(
+                furniture.ReferenceFormId,
                 StringComparison.OrdinalIgnoreCase)
-                ? _stage
-                : 0.0f;
-        }
-        else if (condition.FunctionName.Equals(
-            "getQuestCompleted",
-            StringComparison.OrdinalIgnoreCase))
-        {
-            actual = condition.Parameter1.Equals(
-                    _flow.GuideActorAi.QuestFormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                _openingQuestCompleted
-                    ? 1.0f
-                    : 0.0f;
-        }
-        else if (condition.FunctionName.Equals(
-            "getQuestVariable",
-            StringComparison.OrdinalIgnoreCase))
-        {
-            actual = _questVariables.GetValueOrDefault(
-                $"{condition.Parameter1}.{condition.Parameter2}");
-        }
-        else
-        {
+            ? ResolveGuideFurniturePlacement(reference.FormId)
+            : GamebryoPackagePlacement.FromCellReference(
+                "nearReference",
+                reference.FormId,
+                _loaded.GameToCellUnits(reference.PositionGameUnits),
+                reference.RotationGodot,
+                _guideActor.Placement.Scale);
+        return new GamebryoPackageTarget(
+            package.Location.TypeName,
+            reference.FormId,
+            placement);
+    }
+
+    private SourcePackagePlacement ResolveGuideFurniturePlacement(string referenceFormId)
+        => GamebryoFurnitureSession.PlacementFromSource(
+            ResolveGuideFurnitureSource(referenceFormId));
+
+    private SourceGamebryoFurniture ResolveGuideFurnitureSource(string referenceFormId)
+    {
+        var contract = _flow.GuideActorAi.FurnitureOccupancy.Furniture;
+        var furniture = _loaded.MainContent.PlacedReferences.Where(value =>
+                value.FormId.Equals(referenceFormId, StringComparison.OrdinalIgnoreCase) &&
+                value.BaseFormId.Equals(contract.BaseFormId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (furniture.Length != 1)
             throw new InvalidOperationException(
-                $"Owned guide condition function is unsupported: {condition.FunctionName}");
-        }
-        return CompareCondition(
-            condition.OperatorFlags,
-            actual,
-            condition.ComparisonValue);
+                "Owned package furniture target is absent or ambiguous: " +
+                referenceFormId);
+        var marker = contract.Marker;
+        var occupancy = _flow.GuideActorAi.FurnitureOccupancy;
+        var packageLoop = FurniturePackageLoopAnimation(occupancy);
+        var exitRoot = occupancy.Exit.RootMotion ?? throw new InvalidOperationException(
+            "Owned furniture exit has no root-motion contract.");
+        return new SourceGamebryoFurniture(
+            referenceFormId,
+            occupancy.MarkerId,
+            furniture[0].Placement.Transform,
+            marker.OffsetGodotGameUnits,
+            marker.RotationGodot,
+            marker.ActorPlacementOffset.OffsetGodotGameUnits,
+            marker.ActorForwardHeadingDelta.RotationGodot,
+            _guideActor.Placement.Scale,
+            SourceAnimation(occupancy.SeatedLoop, ZeroedAccumulationRootTranslation),
+            packageLoop,
+            SourceAnimation(occupancy.Exit, RetainedAccumulationRootTranslation),
+            exitRoot.DisplacementGodotGameUnits);
+    }
+
+    private SourceActorAnimation FurniturePackageLoopAnimation(
+        OpeningGuideFurnitureOccupancy furniture)
+    {
+        var animationObject = _flow.GuideActorAi.AnimationObjects.Single(value =>
+            value.IdleAnimationFormId.Equals(
+                furniture.AnimationObjectIdleFormId,
+                StringComparison.OrdinalIgnoreCase));
+        return new SourceActorAnimation(
+            animationObject.IdleAnimationLogicalPath,
+            animationObject.IdleAnimationSha256,
+            animationObject.IdleAnimationSequenceName,
+            animationObject.IdleAnimationStartSeconds,
+            animationObject.IdleAnimationStopSeconds,
+            animationObject.IdleAnimationCycleType,
+            ZeroedAccumulationRootTranslation);
     }
 
     private void BeginGuidePackage(OpeningGuidePackage package)
@@ -179,8 +287,7 @@ internal partial class OpeningQuestRuntime
         {
             _guidePackageBegan = true;
             _guideMoving = false;
-            _guidePathCellUnits = Array.Empty<Vector3>();
-            _guidePathIndex = 0;
+            _guidePackageTravel = null;
             _activeGuideLocomotion = null;
             PlayGuideFurnitureSeatedLoop();
             return;
@@ -199,27 +306,51 @@ internal partial class OpeningQuestRuntime
         if (_guideDestinationReference is not { } destination)
         {
             _guideMoving = false;
-            _guidePathCellUnits = Array.Empty<Vector3>();
-            _guidePathIndex = 0;
+            _guidePackageTravel = null;
             _activeGuideLocomotion = null;
             PlayGuidePackageIdle(package);
             return;
         }
-        _guideDestinationCellUnits = GameplayActorGrounding.ApplyGroundOffset(
+        var targetPlacement = _activeGuidePackageTarget.Placement ??
+            throw new InvalidOperationException(
+                "Owned guide package destination has no source placement.");
+        if (!targetPlacement.TargetFormId.Equals(
+                destination.FormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Owned guide package destination placement differs.");
+        var groundedPosition = GameplayActorGrounding.ApplyGroundOffset(
             _guideActor,
-            _loaded.GameToCellUnits(destination.PositionGameUnits));
+            targetPlacement.SourceTransform.Origin);
+        var groundedTarget = GamebryoPackagePlacement.AdjustSupportHeight(
+            targetPlacement.SourceTransform,
+            groundedPosition.Y - targetPlacement.SourceTransform.Origin.Y);
+        var groundedPlacement = new SourcePackagePlacement(
+            targetPlacement.Kind,
+            targetPlacement.TargetFormId,
+            groundedTarget);
         _activeGuideLocomotion = package.AlwaysRun
             ? _flow.GuideActorAi.Locomotion.Run
             : _flow.GuideActorAi.Locomotion.Walk;
-        if (_guideActor.Placement.Position == _guideDestinationCellUnits)
+        if (_guideActor.Placement.Position == groundedTarget.Origin)
         {
-            _guidePathCellUnits = Array.Empty<Vector3>();
-            _guidePathIndex = 0;
+            _guidePackageTravel = _restoringGuidePackage
+                ? GamebryoPackageTravel.RestoreSettledAtSourceTarget(
+                    package.FormId,
+                    groundedPlacement,
+                    _guideActor.Placement.Transform,
+                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits)
+                : GamebryoPackageTravel.ArriveAtSourceTarget(
+                    package.FormId,
+                    groundedPlacement,
+                    _guideActor.Placement.Transform,
+                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+            _guidePackageTravel.Publish(_guideActor.Placement);
             _guideMoving = false;
             FinishGuideTravel();
             return;
         }
-        _guidePathCellUnits = _loaded.MainContent.Navigation.FindPath(
+        var path = _loaded.MainContent.Navigation.FindPath(
                 _loaded.CellToGameUnits(_guideActor.Placement.Position),
                 destination.PositionGameUnits)
             .Select(_loaded.GameToCellUnits)
@@ -227,7 +358,7 @@ internal partial class OpeningQuestRuntime
                 _guideActor,
                 position))
             .ToArray();
-        if (_guidePathCellUnits.Count == 0)
+        if (path.Length == 0)
             throw new InvalidOperationException(
                 "Owned opening guide navigation returned no waypoints.");
         GD.Print(
@@ -235,14 +366,20 @@ internal partial class OpeningQuestRuntime
             $"navmeshes={_loaded.MainContent.Navigation.NavMeshes} " +
             $"vertices={_loaded.MainContent.Navigation.Vertices} " +
             $"triangles={_loaded.MainContent.Navigation.Triangles} " +
-            $"waypoints={_guidePathCellUnits.Count}");
-        _guidePathIndex = 0;
-        _guideDestinationCellUnits = _guidePathCellUnits[_guidePathIndex];
+            $"waypoints={path.Length}");
+        _guidePackageTravel = GamebryoPackageTravel.Start(
+            package.FormId,
+            groundedPlacement,
+            _guideActor.Placement.Transform,
+            path,
+            _activeGuideLocomotion.RootMotion.SpeedGameUnitsPerSecond,
+            GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
         _guideMoving = true;
         PlayGuideAnimation(
             _activeGuideLocomotion.LogicalPath,
             _activeGuideLocomotion.Sha256,
             restart: true);
+        RestoreGuideLocomotionAnimation(package);
     }
 
     private bool TryPreserveInitialFurnitureOccupancy(OpeningGuidePackage package)
@@ -297,30 +434,27 @@ internal partial class OpeningQuestRuntime
                 "Owned initial furniture package destination is absent or ambiguous: " +
                 destination.FormId);
         var marker = contract.Furniture.Marker;
-        var actorRootOffset = marker.OffsetGodotGameUnits -
-            marker.ActorPlacementOffset.OffsetGodotGameUnits;
-        var markerTransform = furniture[0].Placement.Transform * new Transform3D(
-            new Basis(marker.RotationGodot),
-            actorRootOffset);
-        var actorTransform = markerTransform * new Transform3D(
-            new Basis(marker.ActorForwardHeadingDelta.RotationGodot),
-            Vector3.Zero);
-        if (!markerTransform.Origin.IsFinite() ||
-            !markerTransform.Basis.IsFinite() ||
-            !actorTransform.Basis.IsFinite())
+        var placement = _activeGuidePackageTarget.Placement ??
             throw new InvalidOperationException(
-                "Owned initial furniture marker produced a non-finite transform.");
-        var actorScale = _guideActor.Placement.Scale;
-        _guideActor.Placement.Position = markerTransform.Origin;
-        _guideActor.Placement.Basis = actorTransform.Basis
-            .Orthonormalized()
-            .Scaled(actorScale);
+                "Owned furniture package has no selected marker placement.");
+        var furnitureSource = ResolveGuideFurnitureSource(source.FormId);
+        _guideFurnitureSession = GamebryoFurnitureSession.Occupy(
+            _guideActor,
+            furnitureSource,
+            furnitureSource.Loop.StartSeconds,
+            furnitureSource.PackageLoop?.StartSeconds);
+        if (!_guideFurnitureSession.Placement.SourceTransform.IsEqualApprox(
+                placement.SourceTransform) ||
+            !_guideFurnitureSession.Placement.TargetFormId.Equals(
+                placement.TargetFormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Owned furniture session placement differs from its selected package.");
         _loaded.ActorGrounding.RegisterOwnedFurnitureMarkerOccupancy(
             _guideActor,
             furniture[0].Placement,
-            markerTransform.Origin);
+            placement.SourceTransform.Origin);
         _guideFurnitureOccupied = true;
-        _guideFurnitureExitRootMotionApplied = false;
         _guideFurnitureReferenceFormId = source.FormId;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_OCCUPIED " +
@@ -330,7 +464,7 @@ internal partial class OpeningQuestRuntime
             $"markerCell={_guideActor.Placement.Position} " +
             $"markerNifOffset={marker.OffsetNifGameUnits} " +
             $"targetGmstOffset={marker.ActorPlacementOffset.OffsetNifGameUnits} " +
-            $"actorRootOffset={actorRootOffset} " +
+            $"actorRootOffset={marker.OffsetGodotGameUnits - marker.ActorPlacementOffset.OffsetGodotGameUnits} " +
             $"headingDeltaGmst={marker.ActorForwardHeadingDelta.EditorId} " +
             $"headingDeltaRadians={marker.ActorForwardHeadingDelta.ValueRadians:F7} " +
             $"transform=owned-furniture-nif-marker-minus-gmst-target-offset-and-" +
@@ -345,14 +479,15 @@ internal partial class OpeningQuestRuntime
             value.IdleAnimationFormId.Equals(
                 furniture.AnimationObjectIdleFormId,
                 StringComparison.OrdinalIgnoreCase));
-        var seated = ResolveGuideAnimation(
-            furniture.SeatedLoop.LogicalPath,
-            furniture.SeatedLoop.Sha256,
-            ZeroedAccumulationRootTranslation);
-        var smoking = ResolveGuideAnimation(
-            animationObject.IdleAnimationLogicalPath,
-            animationObject.IdleAnimationSha256,
-            ZeroedAccumulationRootTranslation);
+        var seatedSource = _activeGuidePackageAnimation ??
+            throw new InvalidOperationException(
+                "Owned seated package has no selected source animation.");
+        var seated = ActorAnimationPlayback.Resolve(
+            _guideActor.Actor,
+            seatedSource);
+        var smoking = ActorAnimationPlayback.Resolve(
+            _guideActor.Actor,
+            FurniturePackageLoopAnimation(furniture));
         if (smoking.SequenceName != animationObject.IdleAnimationSequenceName ||
             smoking.StartSeconds != animationObject.IdleAnimationStartSeconds ||
             smoking.StopSeconds != animationObject.IdleAnimationStopSeconds ||
@@ -370,6 +505,12 @@ internal partial class OpeningQuestRuntime
                 animationObject.AttachmentNode);
         var layered = _guideFurnitureLayeredSeatedAnimation;
         layered.Play();
+        (_guideFurnitureSession ?? throw new InvalidOperationException(
+            "Owned seated guide has no furniture session."))
+            .PublishLoopPhase(
+                _guideActor,
+                layered.FurniturePositionSeconds,
+                layered.PackagePositionSeconds);
         _activeGuideIdleAnimation = null;
         SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
         _activeGuideAnimation = layered.ActiveAnimation;
@@ -386,7 +527,7 @@ internal partial class OpeningQuestRuntime
     private void BeginGuideFurnitureExit(OpeningGuidePackage package)
     {
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
-        if (_guideFurnitureExiting || _guideFurnitureExitRootMotionApplied ||
+        if (_guideFurnitureExiting ||
             _stage != furniture.ReleaseStage ||
             !package.FormId.Equals(
                 furniture.ReleasePackageFormId,
@@ -397,17 +538,18 @@ internal partial class OpeningQuestRuntime
         _guideFurnitureLayeredSeatedAnimation?.Stop();
         _guideFurnitureExitPackage = package;
         _guideMoving = false;
-        _guidePathCellUnits = Array.Empty<Vector3>();
-        _guidePathIndex = 0;
+        _guidePackageTravel = null;
         _activeGuideLocomotion = null;
-        PlayGuideAnimation(
-            furniture.Exit.LogicalPath,
-            furniture.Exit.Sha256,
-            restart: true,
-            idleAnimationFormId: furniture.AnimationObjectIdleFormId,
-            loopMode: Animation.LoopModeEnum.None,
-            expectedAccumulationRootDisposition:
-                RetainedAccumulationRootTranslation);
+        if (_activeGuidePackageAnimation is null)
+            throw new InvalidOperationException(
+                "Owned furniture-exit package has no selected source animation.");
+        var exitPlayback = (_guideFurnitureSession ??
+            throw new InvalidOperationException(
+                "Owned furniture-exit package has no furniture session."))
+            .BeginExit(_guideActor);
+        _activeGuideIdleAnimation = null;
+        SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
+        _activeGuideAnimation = exitPlayback.Animation;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_EXIT_BEGIN " +
             $"reference={_guideFurnitureReferenceFormId} " +
@@ -421,26 +563,24 @@ internal partial class OpeningQuestRuntime
             ?? throw new InvalidOperationException(
                 "Owned guide furniture exit has no pending package.");
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
-        if (_guideFurnitureExitRootMotionApplied ||
-            furniture.Exit.RootMotion is not { } rootMotion)
+        if (furniture.Exit.RootMotion is not { } rootMotion)
             throw new InvalidOperationException(
-                "Owned guide furniture exit root motion is absent or already applied.");
-        var rootBefore = _guideActor.Placement.Position;
-        var displacementCell = _guideActor.Placement.Basis
-            .Orthonormalized() * rootMotion.DisplacementGodotGameUnits;
-        var rootAfter = rootBefore + displacementCell;
-        if (!displacementCell.IsFinite() || !rootAfter.IsFinite())
+                "Owned guide furniture exit root motion is absent.");
+        var session = _guideFurnitureSession ?? throw new InvalidOperationException(
+            "Owned guide furniture exit has no furniture session.");
+        var transfer = session.CompleteExit(_guideActor);
+        var expectedDisplacement = transfer.Before.Basis.Orthonormalized() *
+            rootMotion.DisplacementGodotGameUnits;
+        if (!transfer.AppliedDisplacement.IsEqualApprox(expectedDisplacement))
             throw new InvalidOperationException(
-                "Owned guide furniture exit produced a non-finite root transform.");
-        _guideActor.Placement.Position = rootAfter;
-        _guideFurnitureExitRootMotionApplied = true;
+                "Owned guide furniture exit root differs from its source animation.");
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_EXIT_ROOT " +
             $"reference={_guideFurnitureReferenceFormId} " +
-            $"sequence={rootMotion.SequenceName} rootBefore={rootBefore} " +
-            $"rootAfter={rootAfter} sourceDisplacement=" +
+            $"sequence={rootMotion.SequenceName} rootBefore={transfer.Before.Origin} " +
+            $"rootAfter={transfer.After.Origin} sourceDisplacement=" +
             $"{rootMotion.DisplacementGodotGameUnits} " +
-            $"cellDisplacement={displacementCell}");
+            $"cellDisplacement={transfer.AppliedDisplacement}");
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_RELEASED " +
             $"reference={_guideFurnitureReferenceFormId} " +
@@ -449,6 +589,7 @@ internal partial class OpeningQuestRuntime
         _guideFurnitureExiting = false;
         _guideFurnitureReferenceFormId = null;
         _guideFurnitureExitPackage = null;
+        _guideFurnitureSession = null;
         _activeGuideAnimation = null;
         ContinueGuidePackage(package);
     }
@@ -459,18 +600,27 @@ internal partial class OpeningQuestRuntime
             return;
         if (_guideFurnitureExiting)
         {
-            if (_activeGuideAnimation is not { } exit)
+            var session = _guideFurnitureSession ?? throw new InvalidOperationException(
+                "Owned guide furniture exit has no furniture session.");
+            if (session.ExitPlayback is not { } exit)
                 throw new InvalidOperationException(
                     "Owned guide furniture exit has no active animation.");
-            if (exit.Player.IsPlaying() && exit.Player.CurrentAnimation.ToString().Equals(
-                    exit.RuntimeName,
-                    StringComparison.Ordinal))
+            var terminal = session.AdvanceExit(_guideActor, delta);
+            if (!terminal || !exit.Terminal)
                 return;
             FinishGuideFurnitureExit();
             return;
         }
         if (_guideFurnitureOccupied)
         {
+            _guideFurnitureLayeredSeatedAnimation?.Advance(delta);
+            if (_guideFurnitureLayeredSeatedAnimation is { } layered)
+                (_guideFurnitureSession ?? throw new InvalidOperationException(
+                    "Owned seated guide has no furniture session."))
+                    .PublishLoopPhase(
+                        _guideActor,
+                        layered.FurniturePositionSeconds,
+                        layered.PackagePositionSeconds);
             if (_activeGuideAnimation is not { } seatedAnimation ||
                 !seatedAnimation.Player.IsPlaying() ||
                 !seatedAnimation.Player.CurrentAnimation.ToString().Equals(
@@ -493,39 +643,39 @@ internal partial class OpeningQuestRuntime
                 locomotion.LogicalPath,
                 locomotion.Sha256,
                 restart: true);
-        var travelRemaining =
-            locomotion.RootMotion.SpeedGameUnitsPerSecond * (float)delta;
-        while (_guideMoving)
-        {
-            var current = _guideActor.Placement.Position;
-            var offset = _guideDestinationCellUnits - current;
-            var distance = offset.Length();
-            if (travelRemaining < distance)
-            {
-                _guideActor.Placement.Position =
-                    current + offset / distance * travelRemaining;
-                FaceGuideTowardCellPosition(_guideDestinationCellUnits);
-                return;
-            }
-            _guideActor.Placement.Position = _guideDestinationCellUnits;
-            travelRemaining -= distance;
-            _guidePathIndex++;
-            if (_guidePathIndex >= _guidePathCellUnits.Count)
-            {
-                FinishGuideTravel();
-                return;
-            }
-            _guideDestinationCellUnits = _guidePathCellUnits[_guidePathIndex];
-            FaceGuideTowardCellPosition(_guideDestinationCellUnits);
-        }
+        var travel = _guidePackageTravel ?? throw new InvalidOperationException(
+            "Owned opening guide is moving without source package travel state.");
+        var arrived = travel.Advance(delta);
+        travel.Publish(_guideActor.Placement);
+        if (travel.NextWaypoint is { } nextWaypoint)
+            FaceGuideTowardCellPosition(nextWaypoint);
+        if (arrived)
+            FinishGuideTravel();
     }
+
+    private static SourceActorAnimation SourceAnimation(
+        OpeningGuideFurnitureAnimation source,
+        string rootDisposition) => new(
+        source.LogicalPath,
+        source.Sha256,
+        source.SequenceName,
+        source.StartSeconds,
+        source.StopSeconds,
+        source.CycleType,
+        rootDisposition);
 
     private void FinishGuideTravel()
     {
         _guideMoving = false;
         _activeGuideLocomotion = null;
-        if (_guideDestinationReference is { } destination)
-            _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
+        var travel = _guidePackageTravel;
+        if (_guideDestinationReference is not null)
+        {
+            if (travel is null || !travel.Arrived)
+                throw new InvalidOperationException(
+                    "Owned guide package arrival was not completed.");
+            travel.Publish(_guideActor.Placement);
+        }
         if (_guideLookAtPlayer)
             FaceGuideToward(_loaded.Player.GlobalPosition);
         if (_activeGuidePackage is { } package)
@@ -556,6 +706,64 @@ internal partial class OpeningQuestRuntime
             idleAnimationFormId: idleFormId);
         _activeGuideIdleAnimation = _activeGuideAnimation;
         _activeGuideAnimation = null;
+        RestoreGuidePackageAnimation(package);
+    }
+
+    private OpeningGuidePackageState? CaptureGuidePackageState()
+    {
+        var animation = _activeGuideIdleAnimation ?? _activeGuideAnimation;
+        if (_activeGuidePackage is null || animation is null)
+            return null;
+        var active = animation.Value;
+        var state = new OpeningGuidePackageState(
+            _activeGuidePackage.FormId,
+            active.LogicalPath,
+            active.Player.CurrentAnimationPosition,
+            _guidePackageTravel?.Arrived ?? !_guideMoving);
+        state.Validate();
+        return state;
+    }
+
+    private void RestoreGuidePackageAnimation(OpeningGuidePackage package)
+    {
+        if (!_restoringGuidePackage)
+            return;
+        var state = _restoredGuidePackageState ?? throw new InvalidOperationException(
+            "Saved opening checkpoint has no guide package state.");
+        var animation = _activeGuideIdleAnimation ?? throw new InvalidOperationException(
+            "Saved opening guide package has no resolved animation.");
+        if (!state.Arrived ||
+            !state.PackageFormId.Equals(package.FormId, StringComparison.OrdinalIgnoreCase) ||
+            !ActorModelSlice.NormalizeAnimationPath(state.AnimationLogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath),
+                StringComparison.OrdinalIgnoreCase) ||
+            state.AnimationPositionSeconds < animation.StartSeconds ||
+            state.AnimationPositionSeconds > animation.StopSeconds)
+            throw new InvalidOperationException(
+                "Saved opening guide package state differs from its owned package.");
+        animation.Player.Seek(state.AnimationPositionSeconds, update: true);
+        _restoredGuidePackageState = null;
+    }
+
+    private void RestoreGuideLocomotionAnimation(OpeningGuidePackage package)
+    {
+        if (!_restoringGuidePackage)
+            return;
+        var state = _restoredGuidePackageState ?? throw new InvalidOperationException(
+            "Saved opening checkpoint has no guide package state.");
+        var animation = _activeGuideAnimation ?? throw new InvalidOperationException(
+            "Saved opening guide travel has no resolved animation.");
+        if (state.Arrived ||
+            !state.PackageFormId.Equals(package.FormId, StringComparison.OrdinalIgnoreCase) ||
+            !ActorModelSlice.NormalizeAnimationPath(state.AnimationLogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath),
+                StringComparison.OrdinalIgnoreCase) ||
+            state.AnimationPositionSeconds < animation.StartSeconds ||
+            state.AnimationPositionSeconds > animation.StopSeconds)
+            throw new InvalidOperationException(
+                "Saved opening guide travel state differs from its owned package.");
+        animation.Player.Seek(state.AnimationPositionSeconds, update: true);
+        _restoredGuidePackageState = null;
     }
 
     private void PlayGuideAnimation(
@@ -694,6 +902,8 @@ internal partial class OpeningQuestRuntime
 
     private bool HandleExternalActivation(Node? collider)
     {
+        if (_openingQuestCompleted && HandleOrdinaryActorActivation(collider))
+            return true;
         foreach (var role in _flow.SceneRoles.Values)
         {
             if (!_destroyedReferences.Contains(role.ReferenceFormId) ||

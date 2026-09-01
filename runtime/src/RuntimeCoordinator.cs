@@ -640,7 +640,7 @@ public partial class RuntimeCoordinator : Node3D
                 restoredOpening is not null &&
                 OpeningQuestRuntime.GameplayUiEnabled(restoredOpening));
         OpeningQuestRuntime? openingFlow = null;
-        if (startsNewGame || restoredOpening is { Completed: false })
+        if (startsNewGame || restoredOpening is not null)
         {
             if (openingManifest is null)
                 throw new InvalidOperationException(
@@ -942,6 +942,7 @@ public partial class RuntimeCoordinator : Node3D
                     {
                         fromDoorReferenceFormId = portal.FromDoorReferenceFormId,
                         toDoorReferenceFormId = portal.ToDoorReferenceFormId,
+                        traversalMode = portal.TraversalMode,
                         closedHit = portal.ClosedHit,
                         closedHitDoor = portal.ClosedHitDoor,
                         openBlockedByPortalDoor = portal.OpenBlockedByPortalDoor,
@@ -950,6 +951,7 @@ public partial class RuntimeCoordinator : Node3D
                         floorHit = portal.FloorHit,
                         floorWalkable = portal.FloorWalkable,
                         floorY = portal.FloorY,
+                        floorOwnedCellCollision = portal.FloorOwnedCellCollision,
                         capsuleWalkForward = portal.CapsuleWalkForward,
                         capsuleWalkBackward = portal.CapsuleWalkBackward,
                         capsuleWalkThrough = portal.CapsuleWalkThrough,
@@ -1232,6 +1234,7 @@ public partial class RuntimeCoordinator : Node3D
     private readonly record struct PortalTraversalProof(
         string FromDoorReferenceFormId,
         string? ToDoorReferenceFormId,
+        string TraversalMode,
         bool ClosedHit,
         bool ClosedHitDoor,
         bool OpenBlockedByPortalDoor,
@@ -1240,9 +1243,10 @@ public partial class RuntimeCoordinator : Node3D
         bool FloorHit,
         bool FloorWalkable,
         float FloorY,
-        bool CapsuleWalkForward,
-        bool CapsuleWalkBackward,
-        bool CapsuleWalkThrough)
+        bool FloorOwnedCellCollision,
+        bool? CapsuleWalkForward,
+        bool? CapsuleWalkBackward,
+        bool? CapsuleWalkThrough)
     {
         internal bool Passed =>
             ClosedHit &&
@@ -1252,8 +1256,14 @@ public partial class RuntimeCoordinator : Node3D
             ProjectilePortalClear &&
             FloorHit &&
             FloorWalkable &&
-            CapsuleWalkForward &&
-            CapsuleWalkBackward &&
-            CapsuleWalkThrough;
+            FloorOwnedCellCollision &&
+            (TraversalMode == "xtel-activation"
+                ? CapsuleWalkForward is null &&
+                    CapsuleWalkBackward is null &&
+                    CapsuleWalkThrough is null
+                : TraversalMode == "continuous-aperture" &&
+                    CapsuleWalkForward is true &&
+                    CapsuleWalkBackward is true &&
+                    CapsuleWalkThrough is true);
     }
 }

@@ -1,8 +1,8 @@
 """Decode FaceGen CTL control axes from an owned archive member.
 
 The binary layout implemented here follows FaceGen's published CTL file format.
-Only the four linear control tables are decoded.  The demographic tail remains
-opaque and hash-bound because the Doc Mitchell slider surface does not consume it.
+The four linear control tables and the published age/gender offset-linear
+controls are decoded. Distribution densities remain opaque and hash-bound.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ FACEGEN_CTL_HEADER = struct.Struct(
 FACEGEN_CTL_COUNT = struct.Struct("<I")
 FACEGEN_CTL_FLOAT_BYTES = struct.calcsize("<f")
 FACEGEN_CTL_TEXT_ENCODING = "utf-8"
+FACEGEN_DEMOGRAPHIC_RACE_ORDER = ("all", "afro", "asia", "eind", "euro")
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,26 @@ class FaceGenLinearControl:
 
 
 @dataclass(frozen=True)
+class FaceGenOffsetLinearControl:
+    """One published FaceGen demographic axis in geometry and texture space."""
+
+    geometry_axis: tuple[float, ...]
+    geometry_offset: float
+    texture_axis: tuple[float, ...]
+    texture_offset: float
+
+    def manifest(self) -> dict[str, object]:
+        return {
+            "geometryAxis": list(self.geometry_axis),
+            "geometryAxisSha256": _float_sha256(self.geometry_axis),
+            "geometryOffset": self.geometry_offset,
+            "textureAxis": list(self.texture_axis),
+            "textureAxisSha256": _float_sha256(self.texture_axis),
+            "textureOffset": self.texture_offset,
+        }
+
+
+@dataclass(frozen=True)
 class FaceGenControlSpace:
     """The exact linear control portion of one FaceGen CTL payload."""
 
@@ -56,6 +77,8 @@ class FaceGenControlSpace:
     asymmetric_geometry: tuple[FaceGenLinearControl, ...]
     symmetric_texture: tuple[FaceGenLinearControl, ...]
     asymmetric_texture: tuple[FaceGenLinearControl, ...]
+    demographic_age_by_race: tuple[FaceGenOffsetLinearControl, ...]
+    demographic_gender_by_race: tuple[FaceGenOffsetLinearControl, ...]
     linear_bytes: int
     opaque_tail_bytes: int
     opaque_tail_sha256: str
@@ -95,6 +118,15 @@ class FaceGenControlSpace:
                 ],
                 "asymmetricTexture": [
                     control.manifest() for control in self.asymmetric_texture
+                ],
+            },
+            "demographicControls": {
+                "raceOrder": list(FACEGEN_DEMOGRAPHIC_RACE_ORDER),
+                "ageByRace": [
+                    control.manifest() for control in self.demographic_age_by_race
+                ],
+                "genderByRace": [
+                    control.manifest() for control in self.demographic_gender_by_race
                 ],
             },
         }
@@ -153,6 +185,37 @@ def _decode_linear_controls(
     return tuple(controls)
 
 
+def _float_sha256(values: tuple[float, ...]) -> str:
+    return hashlib.sha256(struct.pack(f"<{len(values)}f", *values)).hexdigest()
+
+
+def _decode_offset_linear_control(
+    cursor: _Cursor,
+    geometry_count: int,
+    texture_count: int,
+    role: str,
+) -> FaceGenOffsetLinearControl:
+    geometry = struct.unpack(
+        f"<{geometry_count}f",
+        cursor.read(geometry_count * FACEGEN_CTL_FLOAT_BYTES, f"{role} geometry axis"),
+    )
+    geometry_offset = struct.unpack(
+        "<f", cursor.read(FACEGEN_CTL_FLOAT_BYTES, f"{role} geometry offset")
+    )[0]
+    texture = struct.unpack(
+        f"<{texture_count}f",
+        cursor.read(texture_count * FACEGEN_CTL_FLOAT_BYTES, f"{role} texture axis"),
+    )
+    texture_offset = struct.unpack(
+        "<f", cursor.read(FACEGEN_CTL_FLOAT_BYTES, f"{role} texture offset")
+    )[0]
+    if not all(math.isfinite(value) for value in (*geometry, geometry_offset, *texture, texture_offset)):
+        raise ValueError(f"FaceGen CTL {role} is non-finite")
+    return FaceGenOffsetLinearControl(
+        tuple(geometry), geometry_offset, tuple(texture), texture_offset
+    )
+
+
 def decode_facegen_control_space(payload: bytes) -> FaceGenControlSpace:
     """Decode and validate the linear control tables in one owned CTL payload."""
     if len(payload) < FACEGEN_CTL_HEADER.size:
@@ -201,6 +264,15 @@ def decode_facegen_control_space(payload: bytes) -> FaceGenControlSpace:
         asymmetric_texture_basis_count,
         "asymmetric texture",
     )
+    ages = []
+    genders = []
+    for race in FACEGEN_DEMOGRAPHIC_RACE_ORDER:
+        ages.append(_decode_offset_linear_control(
+            cursor, symmetric_geometry_basis_count,
+            symmetric_texture_basis_count, f"{race} age control"))
+        genders.append(_decode_offset_linear_control(
+            cursor, symmetric_geometry_basis_count,
+            symmetric_texture_basis_count, f"{race} gender control"))
     tail = payload[cursor.offset :]
     return FaceGenControlSpace(
         geometry_basis_version,
@@ -213,6 +285,8 @@ def decode_facegen_control_space(payload: bytes) -> FaceGenControlSpace:
         asymmetric_geometry,
         symmetric_texture,
         asymmetric_texture,
+        tuple(ages),
+        tuple(genders),
         cursor.offset,
         len(tail),
         hashlib.sha256(tail).hexdigest(),

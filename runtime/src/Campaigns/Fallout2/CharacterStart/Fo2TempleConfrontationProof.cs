@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -276,9 +277,10 @@ internal static class Fo2TempleConfrontationProof
                     ["Node001", "Node003", "Node005"]))
                 throw new InvalidOperationException(
                     "Fallout 2 ACKlint dialogue did not converge through the owned terminal branch.");
-            if (!confrontation.ToggleCombat())
+            if (confrontation.Loot() || !confrontation.State.CombatActive ||
+                confrontation.State.IntWorldState.AttackRequests.Count != 1)
                 throw new InvalidOperationException(
-                    "Fallout 2 confrontation could not enter bounded combat after dialogue.");
+                    "Fallout 2 ACKlint pickup procedure did not enter hostile combat.");
             var attempts = 0;
             var attackEndTurns = 0;
             while (confrontation.State.TargetHitPoints > 0 &&
@@ -1044,8 +1046,30 @@ internal static class Fo2TempleConfrontationProof
         Fo2TempleConfrontationState right) =>
         left.TargetHitPoints == right.TargetHitPoints &&
         left.PlayerActionPoints == right.PlayerActionPoints &&
+        left.TargetActionPoints == right.TargetActionPoints &&
+        left.TargetTurnCount == right.TargetTurnCount &&
+        left.LastTargetTurnAction == right.LastTargetTurnAction &&
+        left.LastTargetAttack == right.LastTargetAttack &&
+        SameTargetPath(left.LastTargetPath, right.LastTargetPath) &&
         left.CombatActive == right.CombatActive &&
-        left.SpearLooted == right.SpearLooted;
+        left.SpearLooted == right.SpearLooted &&
+        left.ScriptState.Equals(right.ScriptState) &&
+        JsonSerializer.Serialize(left.IntWorldState.Save()) ==
+            JsonSerializer.Serialize(right.IntWorldState.Save());
+
+    private static bool SameTargetPath(
+        ClassicTargetPathState? left,
+        ClassicTargetPathState? right) =>
+        left is null && right is null ||
+        left is not null && right is not null &&
+        left.CurrentTile == right.CurrentTile &&
+        left.TargetTile == right.TargetTile &&
+        left.ActionPoints == right.ActionPoints &&
+        left.Rotation == right.Rotation &&
+        left.CompletedSteps == right.CompletedSteps &&
+        left.Path.SequenceEqual(right.Path) &&
+        left.Contract == right.Contract &&
+        left.Boundary == right.Boundary;
 
     private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
 

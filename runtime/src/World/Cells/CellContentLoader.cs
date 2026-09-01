@@ -11,6 +11,8 @@ using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.Presentation.OpenXR;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Gameplay.Items;
+using OpenNV.Runtime.Gameplay.Crafting;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -225,8 +227,19 @@ internal static class CellContentLoader
                 : null;
             foreach (var reference in source.GetProperty("references").EnumerateArray())
             {
-                if (reference.GetProperty("initiallyDisabled").GetBoolean())
-                    continue;
+                var initiallyDisabled = reference.GetProperty("initiallyDisabled").GetBoolean();
+                var enableParentFormId = reference.TryGetProperty(
+                    "enableParentFormId", out var enableParentSource) &&
+                    enableParentSource.ValueKind == JsonValueKind.String
+                        ? enableParentSource.GetString()
+                        : null;
+                var enableParentInitiallyDisabled = enableParentFormId is not null &&
+                    reference.GetProperty("enableParentInitiallyDisabled").GetBoolean();
+                var enableParentOpposite = enableParentFormId is not null &&
+                    reference.GetProperty("enableParentOpposite").GetBoolean();
+                var initiallyEnabled = !initiallyDisabled &&
+                    (enableParentFormId is null ||
+                        enableParentInitiallyDisabled == enableParentOpposite);
                 var referenceFormId = reference.GetProperty("formId").GetString()!;
                 var yaw = reference.GetProperty("yawGodotRadians").GetSingle();
                 var rotation = ReadQuaternion(reference.GetProperty("rotationGodotQuaternion"));
@@ -342,12 +355,7 @@ internal static class CellContentLoader
                     var pickup = new PickupInstance();
                     pickup.Configure(
                         referenceFormId,
-                        interaction.GetProperty("itemFormId").GetString()!,
-                        interaction.GetProperty("itemEditorId").GetString()!,
-                        interaction.TryGetProperty("itemDisplayName", out var pickupDisplayName)
-                            ? pickupDisplayName.GetString()
-                            : null,
-                        interaction.GetProperty("itemRecordType").GetString()!,
+                        ReadItemDefinition(interaction),
                         interaction.GetProperty("count").GetInt32(),
                         weapon);
                     var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
@@ -378,19 +386,30 @@ internal static class CellContentLoader
                     activator.Basis = new Basis(rotation);
                     placement = activator;
                 }
+                else if (interactionType == "crafting-station" &&
+                    interaction.GetProperty("support").GetString() == "unconditioned-zero-skill-recipes")
+                {
+                    var station = new CraftingStationInstance();
+                    station.Configure(
+                        referenceFormId,
+                        baseEditorId,
+                        CraftingStationContract.Read(interaction));
+                    station.Basis = new Basis(rotation);
+                    placement = station;
+                }
                 else if (interactionType == "container")
                 {
                     var entries = interaction.GetProperty("items")
                         .EnumerateArray()
-                        .Select(item => new ContainerInstance.Entry(
-                            item.GetProperty("itemFormId").GetString()!,
-                            item.GetProperty("itemEditorId").GetString()!,
-                            item.TryGetProperty("itemDisplayName", out var itemDisplayName)
-                                ? itemDisplayName.GetString() ?? ""
-                                : "",
-                            item.GetProperty("itemRecordType").GetString()!,
-                            item.GetProperty("count").GetInt32(),
-                            item.GetProperty("resolved").GetBoolean()))
+                        .Select(item =>
+                        {
+                            var resolved = item.GetProperty("resolved").GetBoolean();
+                            return new ContainerInstance.Entry(
+                                item.GetProperty("itemFormId").GetString()!,
+                                resolved ? ReadItemDefinition(item) : null,
+                                item.GetProperty("count").GetInt32(),
+                                resolved);
+                        })
                         .ToArray();
                     var container = new ContainerInstance();
                     container.Configure(
@@ -588,6 +607,7 @@ internal static class CellContentLoader
                     loadedPickup.CaptureAuthoredTransform();
                     session.RegisterPickup(loadedPickup);
                 }
+                GamebryoReferenceEnableRuntime.Apply(placement, initiallyEnabled);
                 loadedReferences++;
             }
 
@@ -726,6 +746,9 @@ internal static class CellContentLoader
         }
     }
 
+    private static ItemDefinition ReadItemDefinition(JsonElement source) =>
+        ItemDefinition.ReadCompiled(source);
+
     private static SourceReference ReadSourceReference(JsonElement reference) => new(
         reference.GetProperty("formId").GetString()!,
         reference.GetProperty("baseFormId").GetString()!,
@@ -734,7 +757,13 @@ internal static class CellContentLoader
         reference.GetProperty("assetId").GetString()!,
         reference.GetProperty("cellFormId").GetString()!,
         ReadVector(reference.GetProperty("positionGodotUnits")),
-        reference.GetProperty("initiallyDisabled").GetBoolean());
+        reference.GetProperty("initiallyDisabled").GetBoolean(),
+        reference.TryGetProperty("enableParentFormId", out var enableParent) &&
+            enableParent.ValueKind == JsonValueKind.String
+                ? enableParent.GetString()
+                : null,
+        reference.TryGetProperty("enableParentOpposite", out var opposite) &&
+            opposite.GetBoolean());
 
     private static LodCoverageContract? ReadLodCoverage(
         JsonElement source,
@@ -1668,7 +1697,9 @@ internal static class CellContentLoader
         string AssetId,
         string SourceCellFormId,
         Vector3 PositionGodotUnits,
-        bool InitiallyDisabled);
+        bool InitiallyDisabled,
+        string? EnableParentFormId,
+        bool EnableParentOpposite);
 
     internal readonly record struct GeometryCounts(
         int Surfaces,

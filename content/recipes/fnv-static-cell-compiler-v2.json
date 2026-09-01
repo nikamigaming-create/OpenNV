@@ -4,7 +4,7 @@
   "archiveRecipe": "fnv-official-visual-archives-v1.json",
   "supportedChildRecordTypes": ["LAND", "NAVM", "REFR"],
   "baseLinkedChildRecordTypes": ["REFR"],
-  "supportedBaseRecordTypes": ["ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "SOUN", "STAT"],
+  "supportedBaseRecordTypes": ["ACTI", "CONT", "DOOR", "LIGH", "MISC", "MSTT", "SCOL", "SOUN", "STAT"],
   "presentationPolicies": {
     "ACTI": {
       "kind": "static-model",
@@ -25,6 +25,11 @@
       "kind": "point-light",
       "modelPathCount": 0,
       "supportedReferenceSubrecords": ["DATA", "NAME", "XRDS"]
+    },
+    "MISC": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XESP", "XSCL"]
     },
     "MSTT": {
       "kind": "static-model",
@@ -77,8 +82,8 @@
     "exteriorCellSizeGameUnits": 4096.0
   },
   "statePolicy": {
-    "initiallyDisabled": "blocked",
-    "enableParent": "blocked",
+    "initiallyDisabled": "compiled-source-state",
+    "enableParent": "compiled-source-state",
     "teleport": "blocked"
   },
   "promotion": {

@@ -686,7 +686,16 @@ def prepare_exterior_scene(
         terrain_rows.append((loaded_cell, landscape, landscape_export))
 
     references = []
+    references_by_form = {value.form_id: value for value in catalog.references}
     for reference, base in selected:
+        if (
+            reference.enable_parent_form_id is not None
+            and reference.enable_parent_form_id not in references_by_form
+        ):
+            raise ValueError(
+                f"Reference {reference.form_id:08x} enable parent is absent: "
+                f"{reference.enable_parent_form_id:08x}"
+            )
         asset = assets[base.model_path]
         references.append(
             {
@@ -703,6 +712,20 @@ def prepare_exterior_scene(
                 "rotationGodotQuaternion": godot_rotation_quaternion(reference.transform.rotation_radians),
                 "scale": reference.scale,
                 "initiallyDisabled": bool(reference.flags & INITIALLY_DISABLED_RECORD_FLAG),
+                "enableParentFormId": (
+                    form_id(reference.enable_parent_form_id)
+                    if reference.enable_parent_form_id is not None
+                    else None
+                ),
+                "enableParentInitiallyDisabled": (
+                    bool(
+                        references_by_form[reference.enable_parent_form_id].flags
+                        & INITIALLY_DISABLED_RECORD_FLAG
+                    )
+                    if reference.enable_parent_form_id is not None
+                    else None
+                ),
+                "enableParentOpposite": reference.enable_parent_opposite,
                 "teleportDestinationFormId": (
                     form_id(reference.teleport_destination_form_id)
                     if reference.teleport_destination_form_id is not None
