@@ -382,6 +382,16 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
             "VCG02SunnySneakCloserToWell",
             recipe["newGameFlow"]["ordinaryActors"][0]["packageEditorIds"],
         )
+        self.assertIn(
+            "VCG02SunnySmilesDialogueSneakEnd",
+            recipe["newGameFlow"]["ordinaryActors"][0]["packageEditorIds"],
+        )
+        self.assertIn(
+            {"packageEditorId": "VCG02SunnySmilesDialogueSneakEnd"},
+            recipe["newGameFlow"]["ordinaryActors"][0][
+                "automaticPackageDialogues"
+            ],
+        )
 
     def test_compiles_ordered_activation_topic_info_and_source_results(self) -> None:
         topic = record("DIAL", "0010a1e1", "VFreeformGoodspringsGSSunnySmilesTopic019")

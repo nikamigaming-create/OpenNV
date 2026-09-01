@@ -247,7 +247,11 @@ internal static class ActorModelSlice
             cycleType,
             priorities,
             runtime.Name,
-            runtime.Player);
+            runtime.Player,
+            source.TryGetProperty("role", out var roleSource) &&
+                roleSource.ValueKind == JsonValueKind.String
+                ? roleSource.GetString()
+                : null);
     }
 
     private static string RequireAnimationText(
@@ -879,7 +883,8 @@ internal static class ActorModelSlice
         int CycleType,
         IReadOnlyDictionary<string, int> TransformPrioritiesByNode,
         string RuntimeName,
-        AnimationPlayer Player);
+        AnimationPlayer Player,
+        string? Role = null);
 
     internal readonly record struct PosedTriangle(Vector3 A, Vector3 B, Vector3 C);
 

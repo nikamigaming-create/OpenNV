@@ -19,6 +19,7 @@
     "VCG02SunnyTravelToWell1",
     "VCG02SunnySmilesDialogueSneakStart",
     "VCG02SunnySneakCloserToWell",
+    "VCG02SunnySmilesDialogueSneakEnd",
     "VCG02SunnyPatrolTriggerSCRIPT",
     "VCG02SunnyPatrolTriggerREF",
     "VCG02SunnyBark",
@@ -415,7 +416,8 @@
           "VCG02SunnySmilesDialogueStart",
           "VCG02SunnyTravelToWell1",
           "VCG02SunnySmilesDialogueSneakStart",
-          "VCG02SunnySneakCloserToWell"
+          "VCG02SunnySneakCloserToWell",
+          "VCG02SunnySmilesDialogueSneakEnd"
         ],
         "arrivalTransitions": [
           {
@@ -437,6 +439,9 @@
           },
           {
             "packageEditorId": "VCG02SunnySmilesDialogueSneakStart"
+          },
+          {
+            "packageEditorId": "VCG02SunnySmilesDialogueSneakEnd"
           }
         ],
         "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"

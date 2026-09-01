@@ -145,6 +145,7 @@ class ActorAnimation:
     logical_path: str
     payload: bytes
     retain_accumulation_root_translation: bool = False
+    role: str | None = None
 
 
 @dataclass(frozen=True)
@@ -874,6 +875,9 @@ def export_actor_gltf(
                 ),
                 "nonAccumOriginGodotUnits": (
                     list(animation_origin) if animation_origin else None
+                ),
+                "role": animation_source.role or (
+                    "idle" if animation_source is animation_sources[0] else None
                 ),
             }
         )

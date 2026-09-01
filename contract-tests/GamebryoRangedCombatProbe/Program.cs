@@ -48,6 +48,8 @@ using var savedCampaign = JsonDocument.Parse(JsonSerializer.Serialize(emptyCampa
 if (!savedCampaign.RootElement.TryGetProperty(
         nameof(OpeningCampaignState.CombatHealthByReferenceFormId), out _) ||
     !savedCampaign.RootElement.TryGetProperty(
+        nameof(OpeningCampaignState.CombatActorAnimations), out _) ||
+    !savedCampaign.RootElement.TryGetProperty(
         nameof(OpeningCampaignState.OrdinaryActorTransforms), out _) ||
     !savedCampaign.RootElement.TryGetProperty(
         nameof(OpeningCampaignState.GuidePackage), out _))

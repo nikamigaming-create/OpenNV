@@ -1172,7 +1172,12 @@
       },
       "CREA": {
         "mode": "skeleton-directory",
-        "fileName": "mtidle.kf"
+        "fileName": "mtidle.kf",
+        "roles": {
+          "locomotion": "locomotion\\mtfastforward.kf",
+          "melee": "h2hattackforwardpower.kf",
+          "hit": "idleanims\\hitreaction_torso.kf"
+        }
       }
     },
     "rigidAttachment": {

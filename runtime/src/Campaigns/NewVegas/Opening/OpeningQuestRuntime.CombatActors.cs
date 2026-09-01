@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Interactions;
 
@@ -6,6 +7,9 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class OpeningQuestRuntime
 {
+    private readonly Dictionary<string, GamebryoCreatureAnimationPlayback>
+        _combatActorAnimations = new(StringComparer.OrdinalIgnoreCase);
+
     private void InitializeCombatActors()
     {
         foreach (var target in _flow.CombatEncounters.SelectMany(value => value.Targets))
@@ -20,6 +24,9 @@ internal partial class OpeningQuestRuntime
                 string.Join(",", target.PackageFormIds));
             actor.Placement.SetMeta("opennv_attack_damage", target.AttackDamage);
             actor.Placement.SetMeta("opennv_maximum_health", target.MaximumHealth);
+            _combatActorAnimations.Add(
+                target.ReferenceFormId,
+                GamebryoCreatureAnimationPlayback.Start(actor.Actor));
         }
         PublishCombatActors();
     }
@@ -53,6 +60,8 @@ internal partial class OpeningQuestRuntime
                         currentHealth == 0));
                 _combatHealthByReferenceFormId[target.ReferenceFormId] =
                     outcome.Target.CurrentHealth;
+                _combatActorAnimations[target.ReferenceFormId].Play(
+                    GamebryoCreatureAnimationPlayback.HitRole);
                 PublishCombatActor(target);
                 if (outcome.Died)
                     ExecuteCombatDeath(encounter, target);
@@ -111,6 +120,16 @@ internal partial class OpeningQuestRuntime
         CombatActor(target).Placement.SetMeta(
             "opennv_death_script_form_id",
             encounter.DeathScriptFormId);
+        _combatActorAnimations[target.ReferenceFormId].Stop();
+        CombatActor(target).Placement.SetMeta(
+            "opennv_death_presentation",
+            "source-havok-ragdoll-not-kf");
+    }
+
+    private void UpdateCombatActorAnimations(double delta)
+    {
+        foreach (var animation in _combatActorAnimations.Values)
+            animation.Advance(delta);
     }
 
     private void PublishCombatActors()
@@ -125,6 +144,8 @@ internal partial class OpeningQuestRuntime
         var actor = CombatActor(target);
         actor.Placement.SetMeta("opennv_current_health", health);
         actor.Placement.SetMeta("opennv_dead", health == 0);
+        if (health == 0)
+            _combatActorAnimations[target.ReferenceFormId].Stop();
     }
 
     private CellActorLoader.PlacedActor CombatActor(OpeningCombatTarget target)

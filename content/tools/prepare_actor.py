@@ -603,9 +603,18 @@ def _prepare_creature_actor(
     primary_animation_path = str(
         PureWindowsPath(canonical_member_path(skeleton_path)).parent / idle_name
     )
+    creature_animation_roles = {
+        str(role): _mesh_logical_path(
+            str(PureWindowsPath(canonical_member_path(skeleton_path)).parent / str(path))
+        )
+        for role, path in dict(animation_profile.get("roles", {})).items()
+    }
+    if set(creature_animation_roles) != {"locomotion", "melee", "hit"}:
+        raise ValueError("CREA animation profile has incomplete source roles")
     requested_animation_paths: list[str] = []
     for path in (
         primary_animation_path,
+        *creature_animation_roles.values(),
         *runtime_animation_paths,
         *(str(row["path"]) for row in recipe.get("additionalAnimations", [])),
     ):
@@ -670,7 +679,18 @@ def _prepare_creature_actor(
             rigid_attachment_node=rig_profile.unparented_rigid_node,
             biped_head_node=actor_rig.biped_head_node,
             additional_animations=tuple(
-                ActorAnimation(member.logical_path, member.data)
+                ActorAnimation(
+                    member.logical_path,
+                    member.data,
+                    role=next(
+                        (
+                            role
+                            for role, path in creature_animation_roles.items()
+                            if path.casefold() == member.logical_path.casefold()
+                        ),
+                        None,
+                    ),
+                )
                 for _archive, member in animations[1:]
             ),
         ),

@@ -648,6 +648,14 @@ internal partial class OpeningQuestRuntime
                 value => value.Key,
                 value => value.Value,
                 StringComparer.OrdinalIgnoreCase),
+        CombatActorAnimations = _combatActorAnimations
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                value => value.Key,
+                value => new OpeningActorAnimationState(
+                    value.Value.Role,
+                    value.Value.PositionSeconds),
+                StringComparer.OrdinalIgnoreCase),
     };
 
     internal static bool MatchesFlow(
@@ -750,6 +758,11 @@ internal partial class OpeningQuestRuntime
                  value.Value > combatTargets[value.Key].MaximumHealth)))
             throw new InvalidOperationException(
                 "Saved ordinary combat health does not match the owned flow.");
+        if (state.CombatActorAnimations.Count != 0 &&
+            !state.CombatActorAnimations.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(combatTargets.Keys))
+            throw new InvalidOperationException(
+                "Saved combat actor animations do not match the owned flow.");
         if (state.Completed)
             ValidateCompletedState(flow, state);
     }
@@ -983,6 +996,25 @@ internal partial class OpeningQuestRuntime
             Replace(
                 _combatHealthByReferenceFormId,
                 state.CombatHealthByReferenceFormId);
+        if (state.CombatActorAnimations.Count != 0)
+        {
+            if (!state.CombatActorAnimations.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    _combatActorAnimations.Keys))
+                throw new InvalidOperationException(
+                    "Saved combat actor animation identities differ.");
+            foreach (var saved in state.CombatActorAnimations)
+            {
+                var actor = _flow.CombatEncounters.SelectMany(value => value.Targets)
+                    .Single(value => value.ReferenceFormId.Equals(
+                        saved.Key, StringComparison.OrdinalIgnoreCase));
+                _combatActorAnimations[saved.Key] =
+                    GamebryoCreatureAnimationPlayback.Start(
+                        CombatActor(actor).Actor,
+                        saved.Value.Role,
+                        saved.Value.PositionSeconds);
+            }
+        }
         Replace(_destroyedReferences, state.DestroyedReferenceFormIds);
         Replace(_referenceEnabledStates, state.ReferenceEnabledStates);
         _autoDisplayObjectives = state.AutoDisplayObjectives;
