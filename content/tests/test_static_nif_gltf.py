@@ -760,6 +760,46 @@ class StaticNifGltfTest(unittest.TestCase):
             self.assertEqual(first_gltf["accessors"][0]["min"], [-1.0, 0.0, -0.0])
             self.assertEqual(first_gltf["accessors"][0]["max"], [1.0, 2.0, -0.0])
 
+    def test_single_source_transform_sequence_exports_playable_scene_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            source = directory / "source-loop.nif"
+            source.write_bytes(b"synthetic source transform loop")
+            document, _collision = synthetic_controller_door_document()
+            manager = next(
+                block
+                for block in document.get_global_iterator()
+                if isinstance(block, NifFormat.NiControllerManager)
+            )
+            manager.num_controller_sequences = 1
+            manager.controller_sequences.update_size()
+            decoded = SimpleNamespace(
+                document=document,
+                evidence=lambda: {"status": "synthetic-in-memory-contract"},
+            )
+            with patch("export_static_nif_gltf.decode_nif", return_value=decoded):
+                result = export_static_nif(
+                    source,
+                    "meshes/open-nv-tests/source-loop.nif",
+                    directory / "source-loop.gltf",
+                    directory / "source-loop.opennv.json",
+                    load_runtime_configuration().content_compiler,
+                    strict=False,
+                )
+
+            playback = result["coverage"]["sourceControllerPlayback"]
+            self.assertEqual(playback["status"], "source-looping-transform-complete")
+            self.assertEqual(playback["sequence"], "Open")
+            self.assertEqual(playback["channels"], 1)
+            gltf = json.loads((directory / "source-loop.gltf").read_text())
+            self.assertEqual(len(gltf["animations"]), 1)
+            self.assertEqual(gltf["animations"][0]["name"], "Open")
+            controlled = next(
+                node for node in gltf["nodes"] if node["name"] == "BGate"
+            )
+            self.assertTrue(controlled["children"])
+            self.assertEqual(len(gltf["animations"][0]["channels"]), 1)
+
     def test_controller_door_groups_only_authored_target_visual_and_collision(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
             directory = Path(raw_directory)

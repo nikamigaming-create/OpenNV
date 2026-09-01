@@ -639,6 +639,9 @@ def prepare_scene_assets(
             "surfaces": sidecar["coverage"]["surfaces"],
             "compiler": sidecar["compiler"],
             "presentationClip": sidecar["coverage"].get("presentationClip"),
+            "controllerPlayback": sidecar["coverage"].get(
+                "sourceControllerPlayback"
+            ),
             "collision": {
                 "enabled": collision_exported,
                 "source": collision_source,

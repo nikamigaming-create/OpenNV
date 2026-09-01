@@ -402,6 +402,176 @@ def _node_local_transform(node: object) -> dict[str, object]:
     }
 
 
+def _source_looping_transform_sequence(
+    blocks: list[object],
+    root: object,
+) -> dict[str, object] | None:
+    managers = [block for block in blocks if isinstance(block, NifFormat.NiControllerManager)]
+    controllers = [block for block in blocks if isinstance(block, NifFormat.NiTimeController)]
+    if not managers:
+        return None
+    if len(managers) != 1 or managers[0].target is not root:
+        return None
+    sequences = list(managers[0].controller_sequences)
+    if len(sequences) != 1 or not isinstance(sequences[0], NifFormat.NiControllerSequence):
+        return None
+    supported = (NifFormat.NiControllerManager, NifFormat.NiMultiTargetTransformController)
+    if any(not isinstance(controller, supported) for controller in controllers):
+        return None
+    sequence = sequences[0]
+    if int(sequence.cycle_type) != int(NifFormat.CycleType.CYCLELOOP):
+        return None
+    controlled = list(sequence.controlled_blocks)
+    if not controlled or any(
+        decode_text(row.controller_type) != "NiTransformController"
+        or not isinstance(row.interpolator, NifFormat.NiTransformInterpolator)
+        for row in controlled
+    ):
+        return None
+    node_names = [decode_text(row.get_node_name()) for row in controlled]
+    nodes = {
+        decode_text(node.name): node
+        for node in blocks
+        if isinstance(node, NifFormat.NiNode) and decode_text(node.name) in node_names
+    }
+    if len(nodes) != len(set(node_names)) or len(node_names) != len(set(node_names)):
+        return None
+    start = float(sequence.start_time)
+    stop = float(sequence.stop_time)
+    if not math.isfinite(start) or not math.isfinite(stop) or stop <= start:
+        return None
+    return {
+        "sequence": sequence,
+        "controlled": controlled,
+        "nodes": nodes,
+        "start": start,
+        "stop": stop,
+    }
+
+
+def _sample_scalar_group(group: object, time_seconds: float) -> float:
+    keys = list(group.keys)
+    if not keys:
+        raise ValueError("Source transform animation scalar channel has no keys")
+    if time_seconds <= float(keys[0].time):
+        return float(keys[0].value)
+    if time_seconds >= float(keys[-1].time):
+        return float(keys[-1].value)
+    for first, second in zip(keys, keys[1:], strict=False):
+        first_time = float(first.time)
+        second_time = float(second.time)
+        if first_time <= time_seconds <= second_time:
+            amount = (time_seconds - first_time) / (second_time - first_time)
+            first_value = float(first.value)
+            second_value = float(second.value)
+            interpolation = int(group.interpolation)
+            if interpolation == int(NifFormat.KeyType.LINEARKEY):
+                return first_value + amount * (second_value - first_value)
+            if interpolation == int(NifFormat.KeyType.QUADRATICKEY):
+                squared = amount * amount
+                cubed = squared * amount
+                return (
+                    first_value * (2.0 * cubed - 3.0 * squared + 1.0)
+                    + second_value * (-2.0 * cubed + 3.0 * squared)
+                    + float(first.backward) * (cubed - 2.0 * squared + amount)
+                    + float(second.forward) * (cubed - squared)
+                )
+            raise ValueError(
+                f"Unsupported source transform scalar interpolation: {interpolation}"
+            )
+    raise ValueError("Source transform animation scalar interval was not found")
+
+
+def _sample_xyz_rotation(groups: object, time_seconds: float) -> list[float]:
+    channels = list(groups)
+    if len(channels) != 3:
+        raise ValueError("Source XYZ transform animation must have three channels")
+    return list(
+        _converted_nif_quaternion(
+            _euler_xyz_quaternion(
+                tuple(_sample_scalar_group(channel, time_seconds) for channel in channels)
+            )
+        )
+    )
+
+
+def _append_source_transform_animation(
+    source: dict[str, object],
+    node_by_name: dict[str, int],
+    builder: BufferBuilder,
+    samples_per_second: float,
+) -> dict[str, object]:
+    start = float(source["start"])
+    stop = float(source["stop"])
+    frame_count = round((stop - start) * samples_per_second) + 1
+    times = [start + frame / samples_per_second for frame in range(frame_count)]
+    times[-1] = stop
+    time_accessor = builder.add(
+        struct.pack(f"<{len(times)}f", *times),
+        component_type=GL_FLOAT,
+        count=len(times),
+        value_type="SCALAR",
+        target=None,
+        minimum=[start],
+        maximum=[stop],
+    )
+    samplers = []
+    channels = []
+    for controlled in source["controlled"]:
+        node_name = decode_text(controlled.get_node_name())
+        data = controlled.interpolator.data
+        if not isinstance(data, NifFormat.NiTransformData) or int(data.rotation_type) != int(
+            NifFormat.KeyType.XYZROTATIONKEY
+        ):
+            raise ValueError(
+                f"Source transform animation requires XYZ rotation data on {node_name}"
+            )
+        if list(data.translations.keys):
+            raise ValueError(
+                f"Source transform animation translation is not admitted on {node_name}"
+            )
+        scale_keys = list(data.scales.keys)
+        if scale_keys and any(
+            not math.isclose(float(key.value), float(scale_keys[0].value))
+            for key in scale_keys[1:]
+        ):
+            raise ValueError(
+                f"Source transform animation scale is not constant on {node_name}"
+            )
+        if scale_keys and not math.isclose(
+            float(scale_keys[0].value),
+            float(source["nodes"][node_name].scale),
+        ):
+            raise ValueError(
+                f"Source transform animation constant scale differs on {node_name}"
+            )
+        rotations = [_sample_xyz_rotation(data.xyz_rotations, value) for value in times]
+        for index in range(1, len(rotations)):
+            if sum(
+                previous * current
+                for previous, current in zip(rotations[index - 1], rotations[index], strict=True)
+            ) < 0.0:
+                rotations[index] = [-value for value in rotations[index]]
+        output = builder.add(
+            pack_floats(rotations),
+            component_type=GL_FLOAT,
+            count=len(rotations),
+            value_type="VEC4",
+            target=None,
+        )
+        sampler = len(samplers)
+        samplers.append({"input": time_accessor, "output": output, "interpolation": "LINEAR"})
+        channels.append(
+            {"sampler": sampler, "target": {"node": node_by_name[node_name], "path": "rotation"}}
+        )
+    sequence = source["sequence"]
+    return {
+        "name": decode_text(sequence.name),
+        "samplers": samplers,
+        "channels": channels,
+    }
+
+
 def _euler_xyz_quaternion(
     angles: tuple[float, float, float],
 ) -> tuple[float, float, float, float]:
@@ -1112,6 +1282,11 @@ def export_static_nif(
         compiler.stable_id_hex_characters,
         required=require_door_articulation,
     )
+    source_transform_animation = (
+        _source_looping_transform_sequence(blocks, root)
+        if articulation is None and presentation_clip is None
+        else None
+    )
     all_shapes = [
         block
         for block in blocks
@@ -1250,7 +1425,8 @@ def export_static_nif(
         if articulation is not None and id(shape) in articulation["descendantIds"]:
             articulation_target_id = articulation["contract"]["target"]["targetId"]
             transform_parent = articulation["target"]
-        matrix = shape.get_transform(transform_parent)
+        preserve_source_graph = source_transform_animation is not None
+        matrix = shape.get_transform(shape) if preserve_source_graph else shape.get_transform(transform_parent)
         positions = [transform_xyz(value, matrix, direction=False) for value in source_vertices]
         triangles = [tuple(int(index) for index in triangle) for triangle in mesh.get_triangles()]
         if not triangles:
@@ -1391,6 +1567,7 @@ def export_static_nif(
                 "primitive": primitive,
                 "stableId": stable_id,
                 "articulationTargetId": articulation_target_id,
+                "sourceShape": shape,
             }
         )
         surface_rows.append({
@@ -1403,7 +1580,7 @@ def export_static_nif(
             "propertyTypes": property_types,
             "textures": texture_paths(shape),
             "material": surface_material,
-            "transformBakedToRoot": articulation_target_id is None,
+            "transformBakedToRoot": articulation_target_id is None and not preserve_source_graph,
             "articulationTargetId": articulation_target_id,
             "skinSourcePoseBaked": skin_source_pose_baked,
             "tangentSource": tangent_source,
@@ -1470,7 +1647,79 @@ def export_static_nif(
     meshes: list[dict[str, object]] = []
     nodes: list[dict[str, object]] = []
     scene_nodes: list[int] = []
-    if articulation_contract is None:
+    animations: list[dict[str, object]] = []
+    if source_transform_animation is not None:
+        parent_by_child = {
+            id(child): parent
+            for parent in blocks
+            if isinstance(parent, NifFormat.NiNode)
+            for child in parent.children
+            if child is not None
+        }
+        required_nodes = {id(root): root}
+        for row in primitive_rows:
+            current = row["sourceShape"]
+            while id(current) in parent_by_child:
+                current = parent_by_child[id(current)]
+                required_nodes[id(current)] = current
+        source_nodes = [
+            node
+            for node in blocks
+            if isinstance(node, NifFormat.NiNode) and id(node) in required_nodes
+        ]
+        node_index_by_id: dict[int, int] = {}
+        for source_node in source_nodes:
+            transform = _node_local_transform(source_node)
+            node_index_by_id[id(source_node)] = len(nodes)
+            nodes.append(
+                {
+                    "name": decode_text(source_node.name),
+                    "translation": transform["translationGodotUnits"],
+                    "rotation": transform["rotationGodotQuaternion"],
+                    "scale": [transform["scale"]] * 3,
+                    "children": [],
+                }
+            )
+        for source_node in source_nodes:
+            node_index = node_index_by_id[id(source_node)]
+            parent = parent_by_child.get(id(source_node))
+            if parent is None or id(parent) not in node_index_by_id:
+                scene_nodes.append(node_index)
+            else:
+                nodes[node_index_by_id[id(parent)]]["children"].append(node_index)
+        for row in primitive_rows:
+            shape = row["sourceShape"]
+            mesh_index = len(meshes)
+            meshes.append({"name": decode_text(shape.name), "primitives": [row["primitive"]]})
+            transform = _node_local_transform(shape)
+            mesh_node_index = len(nodes)
+            nodes.append(
+                {
+                    "name": f"OPENNV_SOURCE_SURFACE_{row['stableId']}",
+                    "mesh": mesh_index,
+                    "translation": transform["translationGodotUnits"],
+                    "rotation": transform["rotationGodotQuaternion"],
+                    "scale": [transform["scale"]] * 3,
+                }
+            )
+            parent = parent_by_child.get(id(shape))
+            if parent is None or id(parent) not in node_index_by_id:
+                scene_nodes.append(mesh_node_index)
+            else:
+                nodes[node_index_by_id[id(parent)]]["children"].append(mesh_node_index)
+        node_by_name = {
+            decode_text(node.name): node_index_by_id[id(node)]
+            for node in source_transform_animation["nodes"].values()
+        }
+        animations.append(
+            _append_source_transform_animation(
+                source_transform_animation,
+                node_by_name,
+                builder,
+                compiler.animation_samples_per_second,
+            )
+        )
+    elif articulation_contract is None:
         meshes.append({"name": Path(logical_path).stem, "primitives": primitives})
         nodes.append({"name": Path(logical_path).stem, "mesh": 0})
         scene_nodes.append(0)
@@ -1534,6 +1783,8 @@ def export_static_nif(
         "accessors": builder.accessors,
         "extras": {"openNvSchema": SCHEMA, "sourceSha256": source_hash},
     }
+    if animations:
+        gltf["animations"] = animations
     gltf_bytes = (json.dumps(gltf, indent=2, sort_keys=True) + "\n").encode()
     binary_bytes = bytes(builder.data)
     atomic_write(gltf_path.with_suffix(".bin"), binary_bytes)
@@ -1619,6 +1870,18 @@ def export_static_nif(
             "dynamicPhysicsUnsupportedReasons": physics_unsupported,
             "dynamicPhysicsBodies": physics_bodies,
             "controllers": sorted(set(controllers)),
+            "sourceControllerPlayback": (
+                {
+                    "status": "source-looping-transform-complete",
+                    "sequence": decode_text(source_transform_animation["sequence"].name),
+                    "startSeconds": source_transform_animation["start"],
+                    "stopSeconds": source_transform_animation["stop"],
+                    "samplesPerSecond": compiler.animation_samples_per_second,
+                    "channels": len(source_transform_animation["controlled"]),
+                }
+                if source_transform_animation is not None
+                else None
+            ),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
             "excludedNonPresentationSurfaces": excluded_non_presentation,
             "includedShapePrefixes": list(include_shape_prefixes or ()),
