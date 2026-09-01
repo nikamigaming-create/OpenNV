@@ -847,6 +847,7 @@ class StaticNifGltfTest(unittest.TestCase):
                 for block in document.get_global_iterator()
                 if isinstance(block, NifFormat.NiTriShape) and block.name == b"BGate:0"
             )
+            morph_shape.translation.y = 3.0
             morpher = NifFormat.NiGeomMorpherController()
             morpher.flags = 76
             morpher.frequency = 1.0
@@ -954,6 +955,15 @@ class StaticNifGltfTest(unittest.TestCase):
                 node for node in gltf["nodes"] if node["name"] == "BGate"
             )
             self.assertTrue(controlled["children"])
+            controlled_surface = gltf["nodes"][controlled["children"][0]]
+            self.assertEqual(controlled_surface["translation"], [0.0, 0.0, -3.0])
+            controlled_position = gltf["accessors"][
+                gltf["meshes"][controlled_surface["mesh"]]["primitives"][0]["attributes"][
+                    "POSITION"
+                ]
+            ]
+            self.assertEqual(controlled_position["min"], [0.0, 0.0, -0.0])
+            self.assertEqual(controlled_position["max"], [1.0, 1.0, -0.0])
             self.assertEqual(len(gltf["animations"][0]["channels"]), 2)
             self.assertEqual(
                 sorted(channel["target"]["path"] for channel in gltf["animations"][0]["channels"]),

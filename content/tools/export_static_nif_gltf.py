@@ -1201,6 +1201,17 @@ def transform_xyz(value: object, matrix: object, *, direction: bool) -> tuple[fl
     return tuple(component / length for component in result)
 
 
+def convert_local_xyz(value: object, *, direction: bool) -> tuple[float, float, float]:
+    """Convert an untransformed NIF vector into Godot axis convention."""
+    result = (float(value.x), float(value.z), -float(value.y))
+    if not direction:
+        return result
+    length = math.sqrt(sum(component * component for component in result))
+    if length <= NORMALIZATION_EPSILON:
+        raise ValueError("NIF contains a zero normal")
+    return tuple(component / length for component in result)
+
+
 def texture_uv(value: object) -> tuple[float, float]:
     return float(value.u), float(value.v)
 
@@ -1702,13 +1713,23 @@ def export_static_nif(
             articulation_target_id = articulation["contract"]["target"]["targetId"]
             transform_parent = articulation["target"]
         preserve_source_graph = source_transform_animation is not None
-        matrix = shape.get_transform(shape) if preserve_source_graph else shape.get_transform(transform_parent)
-        positions = [transform_xyz(value, matrix, direction=False) for value in source_vertices]
+        matrix = None if preserve_source_graph else shape.get_transform(transform_parent)
+        positions = [
+            convert_local_xyz(value, direction=False)
+            if matrix is None
+            else transform_xyz(value, matrix, direction=False)
+            for value in source_vertices
+        ]
         triangles = [tuple(int(index) for index in triangle) for triangle in mesh.get_triangles()]
         if not triangles:
             raise ValueError(f"Shape has no triangles: {decode_text(shape.name)}")
         if len(source_normals) == vertex_count:
-            normals = [transform_xyz(value, matrix, direction=True) for value in source_normals]
+            normals = [
+                convert_local_xyz(value, direction=True)
+                if matrix is None
+                else transform_xyz(value, matrix, direction=True)
+                for value in source_normals
+            ]
             normal_source = "nif"
         else:
             normals = generate_vertex_normals(positions, triangles)
@@ -1781,8 +1802,16 @@ def export_static_nif(
             ):
                 try:
                     for normal, tangent, bitangent in zip(normals, mesh.tangents, mesh.bitangents):
-                        tangent_xyz = transform_xyz(tangent, matrix, direction=True)
-                        bitangent_xyz = transform_xyz(bitangent, matrix, direction=True)
+                        tangent_xyz = (
+                            convert_local_xyz(tangent, direction=True)
+                            if matrix is None
+                            else transform_xyz(tangent, matrix, direction=True)
+                        )
+                        bitangent_xyz = (
+                            convert_local_xyz(bitangent, direction=True)
+                            if matrix is None
+                            else transform_xyz(bitangent, matrix, direction=True)
+                        )
                         cross = (
                             normal[1] * tangent_xyz[2] - normal[2] * tangent_xyz[1],
                             normal[2] * tangent_xyz[0] - normal[0] * tangent_xyz[2],
