@@ -832,6 +832,9 @@ internal static partial class Fo1NewGameFlow
             string.IsNullOrWhiteSpace(inventory.SelectedSymbol))
             throw new InvalidOperationException(
                 "Fallout classic inventory failed to open from its configured input.");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE inventory-open");
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        await WaitFrames(host, showcase.LandingHoldFrames);
         var rangedSymbolBeforeInventory = loaded.Session.EquippedWeaponSymbol;
         object? inventoryCapture = null;
         var requiresMeleeInventorySelection =
@@ -850,6 +853,9 @@ internal static partial class Fo1NewGameFlow
                 inventory.EquipmentChangedCount != 1)
                 throw new InvalidOperationException(
                     "Fallout classic inventory melee active-hand control did not mutate equipment state.");
+            GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE inventory-equipped-melee");
+            await WaitFrames(host, showcase.LandingHoldFrames);
+            await WaitFrames(host, showcase.LandingHoldFrames);
             if (captureFullPath is not null)
                 inventoryCapture = SaveNativeCapture(
                     host,
@@ -926,6 +932,13 @@ internal static partial class Fo1NewGameFlow
             return;
         }
         loaded.Session.TogglePipBoy();
+        loaded.Session.PipBoy!.ShowPage("STATUS");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE pipboy-status");
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        await WaitFrames(host, showcase.LandingHoldFrames);
+        loaded.Session.PipBoy.ShowPage("ARCHIVES");
+        GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE pipboy-archives");
+        await WaitFrames(host, showcase.LandingHoldFrames);
         await WaitFrames(host, showcase.LandingHoldFrames);
         loaded.Session.TogglePipBoy();
 
