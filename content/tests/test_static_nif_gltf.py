@@ -1460,10 +1460,20 @@ class StaticNifGltfTest(unittest.TestCase):
     def test_sky_shader_authored_texture_survives(self) -> None:
         shape = NifFormat.NiTriShape()
         shader = NifFormat.SkyShaderProperty()
+        shader.sky_object_type = NifFormat.SkyObjectType.BSSMSKYSTARS
         shader.file_name = r"Textures\Sky\SkyStars.dds"
         shape.add_property(shader)
 
         self.assertEqual(texture_paths(shape), [r"textures\sky\skystars.dds"])
+
+    def test_weather_cloud_placeholder_is_not_a_static_texture_binding(self) -> None:
+        shape = NifFormat.NiTriShape()
+        shader = NifFormat.SkyShaderProperty()
+        shader.sky_object_type = NifFormat.SkyObjectType.BSSMSKYCLOUDS
+        shader.file_name = r"Textures\Sky\CloudClear.dds"
+        shape.add_property(shader)
+
+        self.assertEqual(texture_paths(shape), [])
 
     def test_self_illum_requires_the_material_color_controller(self) -> None:
         shape = NifFormat.NiTriShape()
