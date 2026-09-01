@@ -41,6 +41,7 @@ internal sealed record Fo3Cg01Stage20State(
     bool SpecialBookAccepted,
     double TimerRemainingSeconds,
     bool TimerAdvancing,
+    IReadOnlyList<string> Cg02TargetHitFormIds,
     double ImageSpaceElapsedSeconds,
     bool Stage90SoundStarted,
     Fo3Cg01Stage12Boundary NextBoundary);
@@ -274,70 +275,6 @@ internal sealed record Fo3Cg02ButchStage35Command(
     string ActorReferenceFormId,
     string Variable,
     int Value);
-
-internal sealed record Fo3Cg02PostIntercomPackage(
-    string FormId,
-    string TargetKind,
-    string TargetFormId,
-    Fo3Cg01Transform? TargetTransform,
-    int RadiusGameUnits);
-
-internal sealed record Fo3Cg02PostIntercomCue(
-    string InfoFormId,
-    string? EngineSex,
-    string SpeakerBaseFormId,
-    IReadOnlyList<Fo3OwnedDialogueResponse> Responses,
-    int? TargetStage);
-
-internal sealed record Fo3Cg02PostIntercomCommand(
-    string Kind,
-    string ReferenceFormId,
-    string Variable,
-    int Value,
-    int ObjectiveIndex,
-    string QuestFormId,
-    int Stage);
-
-internal sealed record Fo3Cg02PostIntercomRuntime(
-    int SourceStage,
-    int AnswerStage,
-    int GoodbyeStage,
-    int TargetStage,
-    string DadReferenceFormId,
-    string DadBaseFormId,
-    string JonasReferenceFormId,
-    string JonasBaseFormId,
-    string JonasActorScenePath,
-    string JonasActorSceneSha256,
-    string IntercomReferenceFormId,
-    Fo3Cg02PostIntercomPackage DadToIntercomPackage,
-    Fo3Cg02PostIntercomPackage DadTalkToJonasPackage,
-    Fo3Cg02PostIntercomPackage DadToPlayerPackage,
-    IReadOnlyList<Fo3Cg02PostIntercomCue> Cues,
-    IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02PostIntercomCommand>> StageResults,
-    Fo3Cg02ReactorGiftRuntime? ReactorGiftRuntime,
-    string NextBoundaryBlocker);
-
-internal sealed record Fo3Cg02ReactorGiftCommand(
-    string Kind,
-    string ReferenceFormId,
-    string ItemFormId,
-    string TargetFormId,
-    Fo3Cg01Transform? TargetTransform,
-    int Count,
-    int Value,
-    int ObjectiveIndex,
-    IReadOnlyList<int> Arguments);
-
-internal sealed record Fo3Cg02ReactorGiftRuntime(
-    int SourceStage,
-    int JonasStage,
-    int TargetStage,
-    IReadOnlyList<Fo3Cg02BirthdayParticipant> Participants,
-    string JonasGreetPackageFormId,
-    string DadGreetPackageFormId,
-    IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02ReactorGiftCommand>> StageResults,
-    string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02ButchRuntime(
     int SourceStage,
@@ -1507,16 +1444,36 @@ internal sealed record Fo3Cg01Stage50Timer(
                             row.TryGetProperty("arguments", out var arguments)
                                 ? arguments.EnumerateArray().Select(value =>
                                     value.GetInt32()).ToArray()
-                                : [])).ToArray());
+                                : [],
+                            row.TryGetProperty("questFormId", out var quest)
+                                ? quest.GetString()! : "",
+                            row.TryGetProperty("stage", out var stage)
+                                ? stage.GetInt32() : 0)).ToArray());
         return new Fo3Cg02ReactorGiftRuntime(
             source.GetProperty("sourceStage").GetInt32(),
             source.GetProperty("jonasStage").GetInt32(),
             source.GetProperty("targetStage").GetInt32(),
+            source.GetProperty("rangeStage").GetInt32(),
+            source.GetProperty("hitStage").GetInt32(),
             participants,
             source.GetProperty("packages").GetProperty("jonasGreet")
                 .GetProperty("formId").GetString()!,
             source.GetProperty("packages").GetProperty("dadGreet")
                 .GetProperty("formId").GetString()!,
+            source.GetProperty("packages").GetProperty("dadToRange")
+                .GetProperty("formId").GetString()!,
+            source.GetProperty("packages").GetProperty("dadWait")
+                .GetProperty("formId").GetString()!,
+            source.GetProperty("packages").GetProperty("jonasWait")
+                .GetProperty("formId").GetString()!,
+            source.GetProperty("targets").GetProperty("references").EnumerateArray()
+                .Select(value => value.GetProperty("referenceFormId").GetString()!)
+                .ToArray(),
+            source.GetProperty("targets").GetProperty("animationGroup").GetString()!,
+            source.GetProperty("targets").GetProperty("requiredHitCount").GetInt32(),
+            source.GetProperty("targets").GetProperty("tutorialStage").GetInt32(),
+            source.GetProperty("targets").GetProperty("requiredWeaponFormId")
+                .GetString()!,
             stageResults,
             source.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
     }
@@ -2042,6 +1999,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
             false,
             Stage20Interaction.TimerTransition.InitialSeconds,
             false,
+            [],
             0.0,
             false,
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
@@ -2074,6 +2032,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
         specialBookAccepted = state.SpecialBookAccepted,
         timerRemainingSeconds = state.TimerRemainingSeconds,
         timerAdvancing = state.TimerAdvancing,
+        cg02TargetHitFormIds = state.Cg02TargetHitFormIds,
         imageSpaceElapsedSeconds = state.ImageSpaceElapsedSeconds,
         stage90SoundStarted = state.Stage90SoundStarted,
         nextBoundary = new { applied = false, blocker = state.NextBoundary.Blocker },
@@ -2101,6 +2060,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
         var savedCg02InfoFormIds = savedInfoFormIds.Skip(baselineInfoCount).ToArray();
         var savedPackageFormIds = RequiredArray(source, "appliedPackageFormIds")
+            .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
+        var savedTargetHitFormIds = RequiredArray(source, "cg02TargetHitFormIds")
             .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
         var validCg02Sequences = cg02DadSpeech is null
             ? Array.Empty<string[]>()
@@ -2156,7 +2117,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 (stage == post.AnswerStage || stage == post.GoodbyeStage ||
                  stage == post.TargetStage ||
                  post.ReactorGiftRuntime is { } gift &&
-                    (stage == gift.JonasStage || stage == gift.TargetStage)));
+                    (stage == gift.JonasStage || stage == gift.TargetStage ||
+                     stage == gift.RangeStage || stage == gift.HitStage)));
         var cg02DadComplete = cg02DadSpeech is not null &&
             savedCg02InfoFormIds.Length >= 2;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
@@ -2194,8 +2156,16 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var expectedGateOpen = progressStage != TargetStage;
         var objective = RequiredInteger(source, "displayedObjectiveIndex");
         var expectedObjective = reachedNextQuest
-            ? cg02Butch?.PostIntercomRuntime is { } objectivePost &&
-                stage >= objectivePost.TargetStage
+            ? cg02Butch?.PostIntercomRuntime?.ReactorGiftRuntime is { } objectiveGift &&
+                stage >= objectiveGift.RangeStage
+                ? objectiveGift.StageResults
+                    .Where(value => value.Key <= stage)
+                    .SelectMany(value => value.Value)
+                    .Where(value => value.Kind == "setObjectiveDisplayed" &&
+                        value.Value != 0)
+                    .Select(value => value.ObjectiveIndex).Last()
+                : cg02Butch?.PostIntercomRuntime is { } objectivePost &&
+                  stage >= objectivePost.TargetStage
                 ? objectivePost.StageResults[objectivePost.TargetStage]
                     .Where(value => value.Kind == "setObjectiveDisplayed" && value.Value != 0)
                     .Select(value => value.ObjectiveIndex).Single()
@@ -2318,6 +2288,12 @@ internal sealed record Fo3Cg01PostStage14Transition(
                         if (stage >= commandGift.TargetStage)
                             interactionCommandCount += commandGift.StageResults[
                                 commandGift.TargetStage].Count;
+                        if (stage >= commandGift.RangeStage)
+                            interactionCommandCount += commandGift.StageResults[
+                                commandGift.RangeStage].Count;
+                        if (stage >= commandGift.HitStage)
+                            interactionCommandCount += commandGift.StageResults[
+                                commandGift.HitStage].Count;
                     }
                 }
             }
@@ -2366,6 +2342,15 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 stage >= targetGift.TargetStage)
                 expectedPackages = expectedPackages.Append(
                     targetGift.DadGreetPackageFormId);
+            if (cg02Butch.PostIntercomRuntime?.ReactorGiftRuntime is { } rangeGift &&
+                stage >= rangeGift.TargetStage)
+                expectedPackages = expectedPackages
+                    .Append(rangeGift.DadToRangePackageFormId)
+                    .Append(rangeGift.JonasWaitPackageFormId);
+            if (cg02Butch.PostIntercomRuntime?.ReactorGiftRuntime is { } waitGift &&
+                stage >= waitGift.RangeStage)
+                expectedPackages = expectedPackages.Append(
+                    waitGift.DadWaitPackageFormId);
         }
         var expectedPackageArray = expectedPackages.ToArray();
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
@@ -2392,7 +2377,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
                  stage != timerPost.AnswerStage && stage != timerPost.GoodbyeStage &&
                  stage != timerPost.TargetStage &&
                  (timerPost.ReactorGiftRuntime is not { } timerGift ||
-                  stage != timerGift.JonasStage && stage != timerGift.TargetStage))) &&
+                  stage != timerGift.JonasStage && stage != timerGift.TargetStage &&
+                  stage != timerGift.RangeStage && stage != timerGift.HitStage))) &&
                 (completion.Cg02Stage0.IntroRuntime is null
                 ? timerAdvancing || timerRemaining != 0.0
                 : timerRemaining > completion.Cg02Stage0.IntroRuntime.InitialSeconds ||
@@ -2421,6 +2407,16 @@ internal sealed record Fo3Cg01PostStage14Transition(
             (!reachedNextQuest && RequiredFormId(active, "formId") != baseline.ActiveQuestFormId) ||
             (!reachedNextQuest && RequiredString(active, "editorId") != baseline.ActiveQuestEditorId) ||
             !dadInfoStateValid ||
+            cg02Butch?.PostIntercomRuntime?.ReactorGiftRuntime is { } hitGift &&
+                (savedTargetHitFormIds.Length > hitGift.RequiredHitCount ||
+                 savedTargetHitFormIds.Any(value =>
+                     !hitGift.TargetReferenceFormIds.Contains(value,
+                         StringComparer.OrdinalIgnoreCase)) ||
+                 stage < hitGift.RangeStage && savedTargetHitFormIds.Length != 0 ||
+                 stage == hitGift.RangeStage &&
+                    savedTargetHitFormIds.Length >= hitGift.RequiredHitCount ||
+                 stage == hitGift.HitStage &&
+                    savedTargetHitFormIds.Length != hitGift.RequiredHitCount) ||
             !savedPackageFormIds.SequenceEqual(expectedPackageArray,
                 StringComparer.OrdinalIgnoreCase) ||
             RequiredFormId(gate, "referenceFormId") != baseline.PlaypenGateReferenceFormId ||
@@ -2441,7 +2437,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 (cg02Butch?.PostIntercomRuntime is { } boundaryPost &&
                  stage >= boundaryPost.TargetStage
                     ? boundaryPost.ReactorGiftRuntime is { } boundaryGift &&
-                        stage == boundaryGift.TargetStage
+                        stage == boundaryGift.HitStage
                         ? boundaryGift.NextBoundaryBlocker
                         : boundaryPost.NextBoundaryBlocker
                     : baseline.NextBoundary.Blocker))
@@ -2466,6 +2462,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
             SpecialBookAccepted = accepted,
             TimerRemainingSeconds = timerRemaining,
             TimerAdvancing = timerAdvancing,
+            Cg02TargetHitFormIds = savedTargetHitFormIds,
             ImageSpaceElapsedSeconds = imageSpaceElapsed,
             Stage90SoundStarted = soundStarted,
             NextBoundary = new Fo3Cg01Stage12Boundary(

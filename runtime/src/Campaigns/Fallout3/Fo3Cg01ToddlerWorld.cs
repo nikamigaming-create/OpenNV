@@ -3,6 +3,7 @@ using Godot;
 
 
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Interactions;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -568,6 +569,10 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
     private Action? _bookActivated;
     private Func<InputEvent, bool>? _menuInputHandler;
     private IReadOnlyDictionary<string, Action>? _sourceFormActivations;
+    private IReadOnlyDictionary<string, Action>? _sourceHits;
+    private string? _fireAction;
+    private string? _requiredEquippedItemFormId;
+    private float _fireDistanceMeters;
 
     internal bool MovementEnabled { get; private set; } = true;
     internal int AcceptancePhysicsFrames { get; private set; }
@@ -710,6 +715,14 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         }
         if (!MovementEnabled)
             return;
+        if (_sourceHits is not null && inputEvent.IsActionPressed(_fireAction!))
+        {
+            GamebryoEquippedHitscan.Fire(
+                _camera, GetRid(), _contract.CollisionMask, _fireDistanceMeters,
+                GetMeta("opennv_equipped_item_form_id", "").AsString(),
+                _requiredEquippedItemFormId!, _sourceHits);
+            return;
+        }
         if ((_interaction is not null || _sourceFormActivations is not null) &&
             inputEvent.IsActionPressed(_contract.ActivateAction))
         {
@@ -780,6 +793,24 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
             throw new InvalidOperationException(
                 "Fallout 3 source-form activation lifecycle differs.");
         _sourceFormActivations = activations;
+    }
+
+    internal void ConfigureSourceHitscan(
+        string fireAction,
+        float distanceMeters,
+        string requiredEquippedItemFormId,
+        IReadOnlyDictionary<string, Action> sourceHits)
+    {
+        if (string.IsNullOrWhiteSpace(fireAction) ||
+            !float.IsFinite(distanceMeters) || distanceMeters <= 0.0f ||
+            string.IsNullOrWhiteSpace(requiredEquippedItemFormId) ||
+            sourceHits.Count == 0)
+            throw new InvalidOperationException(
+                "Fallout 3 source hitscan contract is invalid.");
+        _fireAction = fireAction;
+        _fireDistanceMeters = distanceMeters;
+        _requiredEquippedItemFormId = requiredEquippedItemFormId;
+        _sourceHits = sourceHits;
     }
 
     public override void _PhysicsProcess(double delta)

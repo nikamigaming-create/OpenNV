@@ -1040,114 +1040,6 @@ internal partial class Fo3OpeningFlow
         return actor;
     }
 
-    private void StartCg02CakeRuntime(
-        Fo3Cg02CakeRuntime cake,
-        Fo3Cg01ToddlerPlayer player,
-        Action<int, string?> stageChanged,
-        Action<Fo3Cg02CakeCue> cueCompleted,
-        IReadOnlyCollection<string> appliedInfoFormIds,
-        bool packageCompleted)
-    {
-        if (_cg02CakePackageTick is not null)
-            return;
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 CG02 cake world is absent.");
-        var andy = EnsureCg02CakeAndy(cake);
-        if (packageCompleted)
-        {
-            PlayCue(0);
-            return;
-        }
-        var target = GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
-            cake.PackageTargetMarkerFormId,
-            new Vector3((float)cake.PackageTargetTransform.PositionGameUnits.X,
-                (float)cake.PackageTargetTransform.PositionGameUnits.Y,
-                (float)cake.PackageTargetTransform.PositionGameUnits.Z),
-            new Vector3((float)cake.PackageTargetTransform.RotationRadians.X,
-                (float)cake.PackageTargetTransform.RotationRadians.Y,
-                (float)cake.PackageTargetTransform.RotationRadians.Z),
-            (float)cake.PackageTargetTransform.Scale,
-            coverage.Contract.EntryPositionGameUnits);
-        var travel = GamebryoPackageTravel.Start(
-            cake.PackageFormId,
-            target,
-            andy.Placement.Transform,
-            [target.SourceTransform.Origin],
-            cake.PackageLocomotionSpeedGameUnitsPerSecond,
-            cake.PackageRadiusGameUnits);
-        var locomotion = andy.Actor.LoadedAnimations.Single(value =>
-            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                ActorModelSlice.NormalizeAnimationPath(
-                    cake.PackageLocomotionLogicalPath),
-                StringComparison.OrdinalIgnoreCase) &&
-            value.SourceSha256.Equals(cake.PackageLocomotionSha256,
-                StringComparison.OrdinalIgnoreCase));
-        locomotion.Player.Play(locomotion.RuntimeName);
-        travel.Publish(andy.Placement);
-        stageChanged(cake.TriggerStage, null);
-        PlayCue(0);
-        _cg02CakePackageTick = delta =>
-        {
-            var arrived = travel.Advance(delta);
-            travel.Publish(andy.Placement);
-            if (!arrived)
-                return;
-            _cg02CakePackageTick = null;
-            var idle = andy.Actor.LoadedAnimations.Single(value =>
-                ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                    ActorModelSlice.NormalizeAnimationPath(cake.PackageIdleLogicalPath),
-                    StringComparison.OrdinalIgnoreCase));
-            idle.Player.Play(idle.RuntimeName);
-            Cg01WorldReference(cake.CakeReferenceFormId)
-                .SetMeta("opennv_animation_group", "forward");
-            player.SetMeta("opennv_cg02_timer", cake.FailsafeSeconds);
-            player.SetMeta("opennv_cg02_run_timer", 1);
-            stageChanged(cake.TargetStage, cake.PackageFormId);
-        };
-
-        void PlayCue(int index)
-        {
-            if (index == cake.Cues.Count)
-                return;
-            var cue = cake.Cues[index];
-            if (appliedInfoFormIds.Contains(
-                    cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
-            {
-                PlayCue(index + 1);
-                return;
-            }
-            var speaker = cue.SpeakerBaseFormId.Equals(
-                    cake.AndyBaseFormId, StringComparison.OrdinalIgnoreCase)
-                ? andy
-                : _cg02IntroActors.Values.Single(value =>
-                    value.BaseFormId.Equals(cue.SpeakerBaseFormId,
-                        StringComparison.OrdinalIgnoreCase));
-            var voice = new AudioStreamPlayer
-            {
-                Name = $"Fallout3Cg02CakeVoice{cue.Sequence}",
-            };
-            AddChild(voice);
-            var dialogue = new GamebryoDialoguePlayback(
-                voice, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-            _cg02IntroDialogue.Add(dialogue);
-            dialogue.Start(
-                new SourceDialogueLine(
-                    cue.InfoFormId, cue.Response.Index, cue.SpeakerBaseFormId,
-                    cue.Response.Text,
-                    new SourceDialogueAsset(cue.Response.Voice.LogicalPath,
-                        cue.Response.Voice.SourcePath, cue.Response.Voice.Sha256),
-                    new SourceDialogueAsset(cue.Response.Lip.LogicalPath,
-                        cue.Response.Lip.SourcePath, cue.Response.Lip.Sha256)),
-                new FaceGenMorphController(speaker.Actor,
-                    _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
-                () =>
-                {
-                    cueCompleted(cue);
-                    PlayCue(index + 1);
-                });
-        }
-    }
-
     private void BeginCg01DadDialogue(
         Fo3Cg01Stage0State stage5,
         Fo3Cg01RuntimeContext context,
@@ -2498,11 +2390,6 @@ internal partial class Fo3OpeningFlow
                             player.SetMeta("opennv_cg02_objective_completed",
                                 command.ObjectiveIndex);
                             break;
-                        case "setStage":
-                            player.SetMeta("opennv_tutorial_quest_form_id",
-                                command.QuestFormId);
-                            player.SetMeta("opennv_tutorial_stage", command.Stage);
-                            break;
                         default:
                             throw new InvalidOperationException(
                                 $"Fallout 3 CG02 post-intercom command is unsupported: {command.Kind}");
@@ -2695,6 +2582,29 @@ internal partial class Fo3OpeningFlow
                             player.SetMeta("opennv_cg02_objective_completed",
                                 command.ObjectiveIndex);
                             break;
+                        case "setObjectiveDisplayed":
+                            player.SetMeta("opennv_cg02_objective_displayed",
+                                command.ObjectiveIndex);
+                            break;
+                        case "setStage":
+                            player.SetMeta("opennv_tutorial_quest_form_id",
+                                command.QuestFormId);
+                            player.SetMeta("opennv_tutorial_stage", command.Stage);
+                            break;
+                        case "enable":
+                            {
+                                var enabled = Cg01WorldReference(command.ReferenceFormId);
+                                enabled.Visible = true;
+                                enabled.ProcessMode = ProcessModeEnum.Inherit;
+                                enabled.SetMeta("opennv_enabled", 1);
+                                break;
+                            }
+                        case "evaluatePackage":
+                            (_cg02IntroActors.TryGetValue(command.ReferenceFormId,
+                                out var packageActor) ? packageActor.Placement :
+                                Cg01WorldReference(command.ReferenceFormId)).SetMeta(
+                                    "opennv_evaluate_package", 1);
+                            break;
                         default:
                             throw new InvalidOperationException(
                                 $"Fallout 3 CG02 reactor-gift command is unsupported: {command.Kind}");
@@ -2706,19 +2616,36 @@ internal partial class Fo3OpeningFlow
             {
                 var commands = reactorGift.StageResults[stage];
                 ExecuteReactorGiftStageCommands(stage);
+                IReadOnlyList<string> packages = stage switch
+                {
+                    var value when value == reactorGift.JonasStage =>
+                        [reactorGift.JonasGreetPackageFormId],
+                    var value when value == reactorGift.TargetStage =>
+                        [reactorGift.DadGreetPackageFormId,
+                         reactorGift.DadToRangePackageFormId,
+                         reactorGift.JonasWaitPackageFormId],
+                    var value when value == reactorGift.RangeStage =>
+                        [reactorGift.DadWaitPackageFormId],
+                    var value when value == reactorGift.HitStage => [],
+                    _ => throw new InvalidOperationException(
+                        "Fallout 3 CG02 reactor-gift stage differs."),
+                };
                 current = current with
                 {
                     ActiveStage = stage,
-                    AppliedPackageFormIds = current.AppliedPackageFormIds.Append(
-                        stage == reactorGift.JonasStage
-                            ? reactorGift.JonasGreetPackageFormId
-                            : reactorGift.DadGreetPackageFormId).ToArray(),
+                    AppliedPackageFormIds = current.AppliedPackageFormIds
+                        .Concat(packages).ToArray(),
+                    DisplayedObjectiveIndex = commands
+                        .Where(value => value.Kind == "setObjectiveDisplayed" &&
+                            value.Value != 0)
+                        .Select(value => value.ObjectiveIndex)
+                        .DefaultIfEmpty(current.DisplayedObjectiveIndex).Last(),
                     AccountedCommandCount = current.AccountedCommandCount +
                         commands.Count + 1,
                     AppliedCommandCount = current.AppliedCommandCount +
                         commands.Count + 1,
                     NextBoundary = new Fo3Cg01Stage12Boundary(false,
-                        stage == reactorGift.TargetStage
+                        stage == reactorGift.HitStage
                             ? reactorGift.NextBoundaryBlocker
                             : postIntercom.NextBoundaryBlocker),
                 };
@@ -2745,6 +2672,29 @@ internal partial class Fo3OpeningFlow
                         else
                             Persist();
                     });
+            }
+
+            void ApplyTargetHit(string targetReferenceFormId)
+            {
+                if (current.ActiveStage != reactorGift.RangeStage ||
+                    current.Cg02TargetHitFormIds.Count >= reactorGift.RequiredHitCount)
+                    return;
+                var target = Cg01WorldReference(targetReferenceFormId);
+                target.SetMeta("opennv_animation_group",
+                    reactorGift.TargetAnimationGroup);
+                current = current with
+                {
+                    Cg02TargetHitFormIds = current.Cg02TargetHitFormIds
+                        .Append(targetReferenceFormId).ToArray(),
+                };
+                player.SetMeta("opennv_cg02_target_count",
+                    current.Cg02TargetHitFormIds.Count);
+                player.SetMeta("opennv_tutorial_stage",
+                    reactorGift.TutorialHitStage);
+                if (current.Cg02TargetHitFormIds.Count == reactorGift.RequiredHitCount)
+                    ApplyReactorGiftStage(reactorGift.HitStage);
+                else
+                    Persist();
             }
 
             void ApplyStage35()
@@ -3080,10 +3030,19 @@ internal partial class Fo3OpeningFlow
             {
                 if (current.ActiveStage == postIntercom.GoodbyeStage)
                     ActivateDadPostIntercom();
-                else if (current.ActiveStage == reactorGift.JonasStage)
+                else if (current.ActiveStage == reactorGift.JonasStage ||
+                         current.ActiveStage == reactorGift.TargetStage)
                     StartReactorGiftParticipant(dadGift);
             };
             player.ConfigureSourceFormActivations(activations);
+            player.ConfigureSourceHitscan(
+                _runtimeConfiguration.Player.DesktopInput.Fire.Action,
+                _runtimeConfiguration.Player.FireRayDistanceMeters,
+                reactorGift.RequiredWeaponFormId,
+                reactorGift.TargetReferenceFormIds.ToDictionary(
+                    formId => formId,
+                    formId => (Action)(() => ApplyTargetHit(formId)),
+                    StringComparer.OrdinalIgnoreCase));
             if (current.ActiveStage >= postIntercom.SourceStage)
             {
                 EnsureJonas();
@@ -3102,6 +3061,16 @@ internal partial class Fo3OpeningFlow
                 ExecuteReactorGiftStageCommands(reactorGift.JonasStage);
             if (current.ActiveStage >= reactorGift.TargetStage)
                 ExecuteReactorGiftStageCommands(reactorGift.TargetStage);
+            if (current.ActiveStage >= reactorGift.RangeStage)
+                ExecuteReactorGiftStageCommands(reactorGift.RangeStage);
+            if (current.ActiveStage >= reactorGift.HitStage)
+                ExecuteReactorGiftStageCommands(reactorGift.HitStage);
+            foreach (var targetReferenceFormId in current.Cg02TargetHitFormIds.Distinct(
+                StringComparer.OrdinalIgnoreCase))
+                Cg01WorldReference(targetReferenceFormId).SetMeta(
+                    "opennv_animation_group", reactorGift.TargetAnimationGroup);
+            player.SetMeta("opennv_cg02_target_count",
+                current.Cg02TargetHitFormIds.Count);
             StartButchPackageIfEligible();
             if ((current.ActiveStage == butch.AggregateStage ||
                  current.ActiveStage == butch.SceneDoneStage) &&

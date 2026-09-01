@@ -524,8 +524,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("000300e8", post["jonasReferenceFormId"])
         self.assertEqual("00031d48", post["intercomReferenceFormId"])
         gift = post["reactorGift"]
-        self.assertEqual([40, 42, 44], [
-            gift["sourceStage"], gift["jonasStage"], gift["targetStage"]])
+        self.assertEqual([40, 42, 44, 50, 55], [
+            gift["sourceStage"], gift["jonasStage"], gift["targetStage"],
+            gift["rangeStage"], gift["hitStage"]])
+        self.assertEqual(
+            ["000304eb", "0007674b", "00076746"],
+            gift["targetReferenceFormIds"],
+        )
         self.assertEqual("000c0327", gift["bbGunFormId"])
         self.assertEqual("0002935b", gift["bbAmmoFormId"])
         source = read_csharp_source_module(FO3_CG01_RUNTIME)
@@ -533,6 +538,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertIn("reactorGift.StageResults[stage]", source)
         self.assertIn("StartReactorGiftParticipant", source)
         self.assertIn("ConfigureSourceFormActivations(activations)", source)
+        self.assertIn("ConfigureSourceHitscan", source)
+        self.assertIn("Cg02TargetHitFormIds", source)
         self.assertNotIn('InfoFormId.Equals("00031d3c"', source)
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:

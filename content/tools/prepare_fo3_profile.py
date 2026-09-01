@@ -334,7 +334,7 @@ GET_ITEM_COUNT_FUNCTION = 47
 GET_QUEST_VARIABLE_FUNCTION = 79
 GET_IS_CURRENT_PACKAGE_FUNCTION = 161
 DIALOGUE_CHILD_GROUP_TYPE = 7
-DIALOGUE_RESPONSE_METADATA_BYTES = frozenset((20, 24))
+DIALOGUE_RESPONSE_METADATA_BYTES = frozenset((16, 20, 24))
 DIALOGUE_RESPONSE_NUMBER_OFFSET = 12
 DIALOGUE_INFO_DATA_BYTES = 4
 DIALOGUE_INFO_SAY_ONCE_FLAG = 0x0004
@@ -4453,13 +4453,16 @@ def _compile_cg02_reactor_gift_runtime(
         return record
     source_stage, jonas_stage, target_stage = (
         int(config[name]) for name in ("sourceStage", "jonasStage", "targetStage"))
+    range_stage = int(config["rangeStage"])
+    hit_stage = int(config["hitStage"])
     participant_specs = (
         (exact("jonasReferenceFormId", ACTOR_REFERENCE_RECORD),
          exact("jonasBaseFormId", NPC_RECORD),
          [int(str(value), FORM_ID_RADIX) for value in config["jonasGreetingInfoFormIds"]]),
         (exact("dadReferenceFormId", ACTOR_REFERENCE_RECORD),
          exact("dadBaseFormId", NPC_RECORD),
-         [int(str(config["dadGreetingInfoFormId"]), FORM_ID_RADIX)]),
+         [int(str(value), FORM_ID_RADIX)
+          for value in config["dadGreetingInfoFormIds"]]),
     )
     marker = exact("jonasMarkerFormId", PLACED_REFERENCE_RECORD)
     exact("dadMoveMarkerFormId", PLACED_REFERENCE_RECORD)
@@ -4504,7 +4507,7 @@ def _compile_cg02_reactor_gift_runtime(
                             for command in _source_commands(source)]:
                 match = SET_STAGE_PATTERN.fullmatch(command)
                 if match is None or int(match.group("stage")) not in {
-                    jonas_stage, target_stage
+                    jonas_stage, target_stage, range_stage
                 }:
                     raise ValueError(
                         f"Fallout 3 CG02 reactor gift INFO result differs: "
@@ -4561,7 +4564,9 @@ def _compile_cg02_reactor_gift_runtime(
     package_ids.update(struct.unpack("<I", row.data)[0] for row in iter_subrecords(jonas_base)
                        if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES)
     packages = {}
-    for name in ("jonasGreetPackageFormId", "dadGreetPackageFormId"):
+    for name in ("jonasGreetPackageFormId", "dadGreetPackageFormId",
+                 "dadToRangePackageFormId", "dadWaitPackageFormId",
+                 "jonasWaitPackageFormId"):
         package = exact(name, PACKAGE_RECORD)
         if package.form_id not in package_ids:
             raise ValueError("Fallout 3 CG02 reactor gift package ownership differs")
@@ -4569,8 +4574,10 @@ def _compile_cg02_reactor_gift_runtime(
                    if row.signature in {"PLDT", "PTDT"}]
         point_targets = [struct.unpack("<IiII", data) for signature, data in targets
                          if signature == "PTDT" and len(data) == struct.calcsize("<IiII")]
-        if not any(kind == 0 and form_id == player_form_id and count == 0
-                   for kind, form_id, _, count in point_targets):
+        if name in {"jonasGreetPackageFormId", "dadGreetPackageFormId",
+                    "dadToRangePackageFormId"} and not any(
+                kind == 0 and form_id == player_form_id and count == 0
+                for kind, form_id, _, count in point_targets):
             raise ValueError("Fallout 3 CG02 reactor gift player target differs")
         if name == "jonasGreetPackageFormId":
             location_targets = [struct.unpack("<IiI", data)
@@ -4579,10 +4586,38 @@ def _compile_cg02_reactor_gift_runtime(
             if not any(kind == 0 and form_id == marker.form_id
                        for kind, form_id, _ in location_targets):
                 raise ValueError("Fallout 3 CG02 Jonas greet marker differs")
-        packages["jonasGreet" if name.startswith("jonas") else "dadGreet"] = {
+        package_key = {
+            "jonasGreetPackageFormId": "jonasGreet",
+            "dadGreetPackageFormId": "dadGreet",
+            "dadToRangePackageFormId": "dadToRange",
+            "dadWaitPackageFormId": "dadWait",
+            "jonasWaitPackageFormId": "jonasWait",
+        }[name]
+        packages[package_key] = {
             "formId": _form_id(package.form_id), "editorId": _editor_id(package)}
+    target_base = exact("targetBaseFormId", ACTIVATOR_RECORD)
+    target_script = exact("targetScriptFormId", SCRIPT_RECORD)
+    if struct.unpack("<I", _single_subrecord(target_base, "SCRI"))[0] != target_script.form_id:
+        raise ValueError("Fallout 3 CG02 target script join differs")
+    target_source = _script_source(target_script)
+    hit_match = re.search(
+        r"begin\s+OnHitWith.*?playgroup\s+(?P<group>\w+)\s+1.*?"
+        r"targetCount\s+to\s+CG02\.targetCount\s*\+\s*1.*?"
+        r"setstage\s+CGTutorial\s+(?P<tutorial>\d+).*?"
+        r"targetCount\s*>=\s*(?P<count>\d+).*?setstage\s+CG02\s+(?P<stage>\d+)",
+        target_source, re.IGNORECASE | re.DOTALL)
+    if hit_match is None or int(hit_match.group("stage")) != hit_stage:
+        raise ValueError("Fallout 3 CG02 target hit script differs")
+    target_references = []
+    for value in config["targetReferenceFormIds"]:
+        reference = by_form.get(int(str(value), FORM_ID_RADIX))
+        if reference is None or reference.signature != PLACED_REFERENCE_RECORD or \
+                struct.unpack("<I", _single_subrecord(reference, "NAME"))[0] != target_base.form_id:
+            raise ValueError("Fallout 3 CG02 target reference differs")
+        target_references.append({"referenceFormId": _form_id(reference.form_id),
+                                  "sourceTransform": _reference_transform_contract(reference)})
     resolved_stages = {}
-    for stage in (jonas_stage, target_stage):
+    for stage in (jonas_stage, target_stage, range_stage, hit_stage):
         rows = []
         for index, command in enumerate(command for source in stage_sources.get(stage, [])
                                         for command in _source_commands(source)):
@@ -4606,16 +4641,37 @@ def _compile_cg02_reactor_gift_runtime(
                 row.update(kind="enablePlayerControls", arguments=[int(value) for value in match.group("args").split()])
             elif match := re.fullmatch(r"setObjectiveCompleted\s+CG02\s+(?P<objective>\d+)\s+(?P<value>\d+)", command, re.IGNORECASE):
                 row.update(kind="setObjectiveCompleted", objectiveIndex=int(match.group("objective")), value=int(match.group("value")))
+            elif match := SET_OBJECTIVE_DISPLAYED_PATTERN.fullmatch(command):
+                row.update(kind="setObjectiveDisplayed", objectiveIndex=int(match.group("index")), value=int(match.group("value")))
+            elif match := SET_STAGE_PATTERN.fullmatch(command):
+                target_quest = by_editor.get(match.group("quest").casefold())
+                if target_quest is None or target_quest.signature != QUEST_RECORD:
+                    raise ValueError("Fallout 3 CG02 target tutorial quest differs")
+                row.update(kind="setStage", questFormId=_form_id(target_quest.form_id),
+                           stage=int(match.group("stage")))
+            elif match := re.fullmatch(r"(?P<subject>\w+)\.enable", command, re.IGNORECASE):
+                row.update(kind="enable", referenceFormId=_form_id(by_editor[match.group("subject").casefold()].form_id))
+            elif match := re.fullmatch(r"(?P<subject>\w+)\.evp", command, re.IGNORECASE):
+                row.update(kind="evaluatePackage", referenceFormId=_form_id(by_editor[match.group("subject").casefold()].form_id))
             else:
                 raise ValueError(f"Fallout 3 CG02 reactor gift stage result differs: {command}")
             rows.append(row)
         resolved_stages[str(stage)] = {"commands": rows}
     return {"schema": "opennv-fo3-cg02-stage-40-reactor-gift-runtime/v1",
             "sourceStage": source_stage, "jonasStage": jonas_stage,
-            "targetStage": target_stage, "participants": participants,
+            "targetStage": target_stage, "rangeStage": range_stage,
+            "hitStage": hit_stage, "participants": participants,
             "packages": packages, "stageResults": resolved_stages,
+            "targets": {"baseFormId": _form_id(target_base.form_id),
+                        "scriptFormId": _form_id(target_script.form_id),
+                        "requiredWeaponFormId": _form_id(
+                            int(str(config["bbGunFormId"]), FORM_ID_RADIX)),
+                        "references": target_references,
+                        "animationGroup": hit_match.group("group"),
+                        "requiredHitCount": int(hit_match.group("count")),
+                        "tutorialStage": int(hit_match.group("tutorial"))},
             "nextBoundary": {"applied": False,
-                             "blocker": "fo3-cg02-stage-44-target-range-runtime-not-implemented"}}
+                             "blocker": "fo3-cg02-stage-55-radroach-combat-runtime-not-implemented"}}
 
 
 def _compile_cg02_cake_runtime(

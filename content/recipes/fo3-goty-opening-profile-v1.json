@@ -364,13 +364,21 @@
                 "dadReferenceFormId": "000300ef",
                 "dadBaseFormId": "0002fdcf",
                 "dadGreetPackageFormId": "000304e1",
-                "dadGreetingInfoFormId": "0001f9cb",
+                "dadGreetingInfoFormIds": ["0001f9cb", "0001f9c9"],
                 "dadMoveMarkerFormId": "00063aa7",
                 "reactorStairDoorFormId": "000744b8",
                 "targetRangeDoorFormId": "000297bb",
                 "partyHatFormId": "00050e44",
                 "bbGunFormId": "000c0327",
-                "bbAmmoFormId": "0002935b"
+                "bbAmmoFormId": "0002935b",
+                "rangeStage": 50,
+                "hitStage": 55,
+                "targetBaseFormId": "000304db",
+                "targetScriptFormId": "000304d8",
+                "targetReferenceFormIds": ["000304eb", "0007674b", "00076746"],
+                "dadToRangePackageFormId": "000304e2",
+                "dadWaitPackageFormId": "000304e4",
+                "jonasWaitPackageFormId": "000306d6"
               }
             }
           }
