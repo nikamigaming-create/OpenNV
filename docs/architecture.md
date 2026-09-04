@@ -165,7 +165,8 @@ publication rules live in the canonical
 architecture and current implementation truth, not a competing roadmap.
 
 OpenNV is a clean first-party runtime. The retail installation is a read-only
-input, the generated cache is disposable, every cross-boundary artifact has a
+input. Native owned-data routes do not generate a content cache; older generated
+artifacts remain non-native evidence only. Every cross-boundary artifact has a
 schema and hashes, and no OpenMW runtime or source code participates.
 The executable-value rules, single configuration path, and source gate are
 defined in [data and configuration accountability](data-and-configuration-accountability.md).
@@ -175,7 +176,247 @@ whole-game visual pass are defined in
 The official-stack CELL/child/portal denominator and exact meaning of a working
 CELL are defined in [whole-game CELL parity](whole-game-cell-parity.md).
 
+## Fallout 1 native owned-data V13ENT path
+
+The desktop Fallout 1 registration now selects the owned install root and emits
+only sealed profile metadata under launcher user state. Runtime precedence is
+registered loose `DATA`, then `critter.dat`, then `master.dat`; resources remain
+read-only and are decoded in memory. The bounded Godot path proves
+`maps\v13ent.map` to placed PID `03000014`,
+`proto\walls\00000111.pro`, FID `03000324`, and
+`art\walls\vcn6000.frm`, while also exercising a loose FRM winner and a direct
+critter archive member. The production Hex route parses the complete nested
+V13ENT object graph and renders 7,549 entry-elevation floor patches grouped over
+57 directly decoded FRMs plus 1,100 exact static objects sharing 106 decoded
+FRM/rotation resources. Every nonvisual top-level record is transported without
+a sprite: 351 source-labeled Scroll Blockers, 20 Exit Grids with their exact
+four destination words, one Security Door with its raw instance word, and 22
+objects bound by script ID and object ID to matching live MAP script records.
+The MAP has 24 live script records; the two without object bindings remain
+explicit table metadata. Two nested inventory records are not world placements,
+leaving zero unclassified top-level objects. A GL framebuffer audit observes
+653,527 visible pixels at 1152×648. It writes no extraction, temporary content,
+or prepared scene bytes. The 351 Scroll Blockers and initially closed Security
+Door publish 352 exact hex-footprint collision shapes. Adjacent activation opens
+the unscripted door and disables only its collision. Five source Exit Grids
+consume the fully resolved Map 6 / tile 17695 / elevation 0 / rotation 0 tuple.
+That bounded transition now reads the owned `maps\\vault13.map` winner directly,
+verifies its stored `VAULT13.MAP` identity, and publishes the one authoritative
+player arrival with the profile-scoped `fallout1:<sourceProfileId>` save
+compatibility identity. Fifteen world-map sentinel grids remain metadata-only.
+No save or content byte is written by this presentation. The destination's 115
+live MAP scripts are inventoried but script execution, general input/gameplay,
+first-person, and OpenXR remain fail-closed.
+
+The direct-owned population audit now parses every effective loose/DAT1 MAP
+winner without rendering it. The registered corpus contains 72 MAP files, 117
+present elevations, 130,925 top-level objects, 2,036 nested inventory objects,
+2,146 live scripts in 3,136 allocated slots, and 2,260 unique PIDs. Exactly
+2,257 resolve through their type list to a present PRO with matching stored PID;
+the remaining three are the built-in player plus the exact retail item and
+critter sentinel identities. All 132,961 records use the evidenced full 21-word
+layout and all maps close at end-of-record with zero unsupported layouts. This
+is a denominator contract, not script execution or an all-map rendering claim.
+
+## Fallout 2 native owned-data Map 3 path
+
+The desktop Fallout 2 Hex launch no longer requires the Temple, transition,
+Arroyo, player, or character-start presentation caches. The launcher passes the
+registered owned-profile path and the existing save boundary only. Godot
+validates the three DAT2 indexes in place, resolves `patch000.dat` over
+`critter.dat` over `master.dat`, reads `maps\arcaves.map`, `tiles.lst`, the
+required floor FRMs, and `COLOR.PAL`, and constructs the Map 3 elevation-zero
+floor and arrival camera entirely in memory. The bounded registered audit
+constructs 4,595 source floor patches across 20 direct FRM resources with no
+extraction, prepared input, temporary content, or owned-data write.
+
+The same production path now walks the complete Map 3 MAP object section and
+retains each exact placement, PRO identity/subtype, FID-to-FRM link, script
+binding, and nested inventory relationship. The registered source contains
+4,528 top-level objects plus 8 nested inventory records, 47 live scripts in 80
+allocated slots, and object types item 7, critter 22, scenery 416, wall 2,622,
+and misc 1,461. Elevation zero presents 1,302 source-static objects from 115
+shared rotation/FRM resources. The other 3,226 are completely classified as
+2,686 objects on other elevations, 528 miscellaneous gameplay markers, 11
+script-bound objects, and one interactive scenery object; zero top-level object
+records are unclassified. Those classifications are transport/presentation
+coverage, not execution of their gameplay behavior.
+
+This is a native source-presentation launch, not migrated Fallout 2 gameplay.
+The existing `Fo2CharacterStartSaveState` remains the sole character/save
+authority and the native presentation does not create a second player or save
+model. Script execution, interactive scenery, miscellaneous marker behavior,
+critter animation/AI, blocking, player creation, Temple transition execution,
+and cold restore are explicitly unsupported on this branch and fail closed.
+The older cache-driven evidence/proof scenes remain
+available for their bounded validation work but are not desktop launch inputs.
+
+The same direct-owned lane now publishes an in-memory population denominator
+over every effective `maps\*.map` winner in the registered DAT2 overlay. The
+owned audit covers 155 MAP files, 221 present elevations, 300,464 top-level
+objects, 5,234 nested inventory objects, 4,319 live scripts in 6,384 allocated
+script slots, and 3,715 unique PIDs: 3,714 non-builtin PRO records validate
+against their one-based type lists and stored PID, while one is the built-in
+player identity. All 305,698 object records
+use the evidenced full 21-word layout; no compact or unsupported MAP remains in
+this corpus. This is a population ledger, not an all-map renderer: it does not
+execute scripts or infer presentation for those objects.
+
 ## New Vegas owned-data world path
+
+The desktop New Vegas route now has a separate native owned-data lane. It does
+not invoke the Python preparer or restore a prepared cache: the launcher binds
+the exact read-only roots, active plugin order, BSA order, and save namespace;
+Godot indexes ESM/ESP records in place, resolves loose/BSA winners lazily, and
+constructs CELL placements and supported NIF/DDS surfaces in memory. Unknown
+record, NIF, shader, collision, animation, or resource semantics fail the
+native launch at their first use. The older compiler diagrams below remain the
+truth for bounded acceptance routes that have not migrated; they are not the
+New Vegas launcher boot path.
+
+Native plugin startup keeps the complete last-wins FormKey graph, but no longer
+sorts and materializes every effective record signature before one is requested.
+It builds a compact signature-to-winning-key membership table once, materializes
+only demanded signatures, and filters CELL children for the demanded CELL rather
+than constructing an all-CELL placement map. The interactive menu remains visible
+while this work runs in the background. The no-write startup audit separately
+times manifest validation, plugin header scanning, winner construction, initial
+CELL decode, and first winning-resource resolution. Three alternating warm
+fresh-process runs on the current registered 18-plugin TTW/FNV stack produced
+eager/demand median totals of 3,329.191/2,962.051 ms and winner phases of
+1,260.018/870.702 ms. Standalone FO3 produced eager/demand median totals of
+2,225.267/2,038.794 ms and winner phases of 796.285/565.863 ms. One genuinely
+disk-cold eager TTW/FNV observation took 10,929 ms; a paired demand-cold run was
+not taken because clearing Windows' standby cache was outside this audit, so no
+cold improvement percentage is claimed. These are local wall times, not portable
+hardware guarantees. Regression ceilings are 500 ms manifest, 5,000 ms
+header scan, 3,000 ms winner construction, 2,000 ms initial CELL, 2,000 ms first
+resource, and 15,000 ms total. No persistent cache, extraction, content write, or
+override shortcut is introduced.
+
+BSA directory construction now uses the format's contiguous folder-block and
+file-name-table layout as one bounded sequential read per archive, decoding names
+directly from that buffer. A valid non-contiguous folder-offset layout falls back
+to the prior exact offset reader; member offsets, compression overrides, embedded
+names, and returned bytes are unchanged. Three alternating warm pairs reduced the
+TTW/FNV first-resource median from 480.964 to 448.706 ms and standalone FO3 from
+235.035 to 232.727 ms. The stronger invariant is structural: the registered TTW
+lookup opens 38 archives covering 315,116 members and reduces folder-block/name-
+table reads from 6,146 to 38 while reading the same 16,511,100 metadata bytes;
+FO3 opens 15 archives covering 146,875 members and reduces those reads from 2,527
+to 15 over the same 12,761,023 bytes. Header and folder-record-table reads are
+unchanged. No cold result is claimed and no mapped or persistent index is created.
+
+The native NIF lane also decodes the Fallout 20.2.0.7 Havok attachment chain
+in place. Its current bounded Godot mapping is standard `bhkCollisionObject`
+to `bhkRigidBody`/`bhkRigidBodyT`, with source-backed MOPP/packed triangles,
+convex vertices, box, capsule, sphere, list, and convex-transform shapes.
+Static packed triangles become two-sided concave bodies; source convex and
+primitive records become their corresponding Godot shapes. `bhkRigidBodyT`
+pose is applied while ordinary `bhkRigidBody` pose remains evidence-only, as
+specified by the source format. Blended collision objects, constraints, and
+non-static packed-triangle bodies fail closed. This is a Doc Mitchell CELL
+format/runtime slice, not a claim of general Havok simulation or physics parity.
+
+Standalone Fallout 3 now enters the same sealed native source boundary without
+using its former generated opening profile. The launcher registers a legally
+owned GOTY `Data` folder directly, derives the six-plugin official order and
+active `Fallout_default.ini`/plugin BSA order, seals loose-file metadata, and
+passes only `--source-stack`, `--source-stack-sha256`, `--stack-id`, `--campaign`,
+and a Fallout-3-only save namespace to Godot. The native audit indexes the owned Vault 101 birth CELL
+`00028138`, resolves player start `00039562`, and reads supported NIF, DDS, and
+CG00 KF resources in memory. Unsupported `bhkBlendCollisionObject` models and
+unimplemented XPRM primitive behavior remain explicit blockers, so this is a
+cacheless transport/runtime-loading slice rather than freely playable Vault 101.
+
+The native BSA list is an activation list, not an inventory of every archive in
+the folders. It starts with the case-insensitive `[Archive]` `SArchiveList` (and
+numbered `SArchiveListN`) entries from the owned `Fallout_default.ini`, then adds
+archives associated with enabled plugins in low-to-high plugin order. Association
+currently means an exact plugin stem, the conventional `Plugin - Suffix.bsa`
+form, or retail's `FalloutNV.esm`/`Update.bsa` special case. A same-named archive
+in a higher-priority source root replaces the lower copy; unrelated and
+disabled-plugin archives do not enter the runtime. The INI bytes and manager
+load-order files are hash-bound provenance. Every recursively discovered loose
+file is sealed into the stack identity by root, canonical relative path, byte
+length, and modification time; Godot validates that inventory and builds its
+case-insensitive last-wins table in memory instead of walking source directories
+for each lookup. Loose files continue to win over every BSA. Profile-local INI archive overrides, `.nam`
+activation, and undocumented engine filename heuristics outside those declared
+forms remain unsupported and fail closed rather than silently loading every BSA.
+
+The same native stack resolves effective `SOUN` overrides and decodes their
+master-aware file path, random chance, flags, volume, min/max attenuation,
+five-point attenuation curve, reverb, priority, and exact loop sample bounds.
+The Godot playback owners are deliberately bounded to exact-file sounds whose
+requested flags are implemented. The 2D/menu owner applies static volume and WAV
+loop points. The 3D owner uses `AudioStreamPlayer3D` for spatial panning, disables
+Godot's substitute attenuation model, and applies the source five-point gain
+curve plus static attenuation against the live listener distance. It also
+supports exact looping and an explicit source-submerged mute input. Reverb
+attenuation endpoints are source-bound: `100` uses no environment send, while
+`0` requires a nonzero caller-provided `Area3D` mask whose bus owns the current
+acoustic preset. Intermediate wet-send percentages remain unsupported because
+Godot's area reverb does not expose a per-player send amount. Both owners read
+the winning loose/BSA bytes in memory. Folder variant sets,
+random/frequency/envelope behavior, unbound environment presets, and foreign
+`SNDR` layouts fail closed. The current official-plus-TTW stack contains 1,925
+exact-file 3D winners; 482 pass this strict descriptor contract and 479 resolve
+a winning resource, including 468 full-environment-send descriptors with 465
+resolved resources. Fixed, non-random frequency adjustment maps to Godot's pitch
+scale as `1 + percent / 100`; random frequency variance remains unsupported.
+This is transported record behavior and bounded playback,
+not general audio, environment, or dialogue parity.
+
+The actor/creature render-readiness denominator is resolved directly from each
+edition's effective winner graph without reading NIF payloads. The current
+standalone FNV active profile is exactly its one enabled `FalloutNV.esm`: 3,386
+`ACHR` plus 2,999 `ACRE` placements occupy 926 CELLs; 4,507 references have a
+direct base `MODL` whose winning loose/BSA member exists, zero direct paths are
+missing, and 1,878 NPC references have no direct base model and therefore still
+require race/body actor assembly. Its source/save identity is
+`standalone-fnv:02f78c1819ce55db48e597b4f4bf964d8c93267eaab99a20b22161ecbe3f3b4a`.
+The registered 18-plugin TTW profile contains 7,224 `ACHR` plus 8,238 `ACRE`
+placements in 801 CELLs, including 277 mixed actor/creature CELLs; 10,438 direct
+base models resolve, zero direct paths are missing, and 5,024 references require
+actor assembly. Its distinct source/save identity is
+`ttw:f44ed1d6eef6af319ee56183c25e2dd1df40aeafe8df13dc4d915b43eed0604f`.
+Both ledgers close parent CELL, winning `NAME` base type, template, and direct
+resource availability with zero structural blockers. They are complete source
+denominators for a future all-populated-CELL video, not a decode, render, capture,
+or parity claim; the actor-assembly rows remain explicitly unresolved.
+
+`RNAM` chance is evaluated only at an explicit gameplay playback request. The
+caller supplies OpenNV's serializable deterministic sound RNG state; a rejected
+chance consumes the roll but does not resolve or decode the resource, while a
+sound without `RNAM` consumes no RNG state. Direct player creation rejects a
+nonzero chance so callers cannot accidentally bypass selection. Autonomous
+`Play At Random` scheduling, random source position, and random stream start
+remain unsupported because their interval/distribution contracts are not
+defined by the admitted record fields. In the registered official-plus-TTW
+stack, 74 exact-file 3D descriptors carry `RNAM` and 73 resources resolve; nine
+now pass the complete strict descriptor contract after correcting the SNDD
+field offsets described below.
+
+The FNV `SNDD` boundary is the published 36-byte layout: 32-bit flags at offset
+4, signed static attenuation at offset 8, and one-byte stop/start hours at
+offsets 10 and 11. Treating the upper flag word as attenuation had previously
+discarded authored volume and misclassified static attenuation as timed behavior.
+Synthetic layout assertions and the owned corpus audit pin these offsets.
+
+```mermaid
+flowchart LR
+    Manager[plugins.txt / MO2 / Wabbajack / ordered folders] --> Stack[opennv-mod-stack/v2]
+    Data[Owned Data + mod roots] --> Stack
+    Stack --> Plugin[Lazy ESM/ESP record index]
+    Stack --> Resource[Loose + BSA last-wins resolver]
+    Plugin --> Cell[Winning CELL / REFR / base MODL graph]
+    Resource --> Nif[Winning NIF bytes]
+    Resource --> Dds[Winning DDS bytes]
+    Nif --> Godot[Godot Node3D / ArrayMesh]
+    Dds --> Godot
+    Cell --> Godot
+```
 
 ```mermaid
 flowchart LR

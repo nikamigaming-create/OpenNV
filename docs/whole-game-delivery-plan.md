@@ -178,19 +178,100 @@ Goodsprings exterior active set and LOD, enter the saloon, observe authored
 enabled Sunny, save the active location, restart, and Continue from that exact
 state. The narrower completed-save subroute now passes through the owned
 Continue button, configured flat input, both forward XTEL links, saloon
-active-CELL persistence, and a fresh-process v4 Continue restore. That does not
+active-CELL persistence, and a fresh-process v5 Continue restore. That does not
 complete this objective: uninterrupted New Game-to-saloon play, reverse
 traversal, required load/unload streaming, authored Sunny behavior, integrated
 OpenXR, and the remaining UI/presentation gates remain blocking.
 
+### Native live-source startup checkpoint (`partial`, unpromoted)
+
+The local working tree now contains a bounded six-step native New Vegas
+startup/state implementation that reads the active owned ESM/ESP stack in
+memory. It does not prepare or mount a content cache:
+
+1. The authored New Game marker owns one persistent `CharacterBody3D`, camera,
+   movement, looking, activation, and XTEL teleport root.
+2. Winning `VCG00`/`VCG01` QUST `SCTX` commands own the seven player-control
+   flags.
+3. Winning QUST/SCPT/DIAL/INFO sources produce 63 bounded opening transitions.
+   Synthetic and direct-owned probes execute the intro blocker, timers, ordered
+   dialogue results, name/race blockers, and source control changes through
+   `VCG01:55` without treating side-quest `SetStage` calls as main-flow edges.
+   The live `GetPlayerName` blocker now owns a focused functional name-entry
+   surface, advances only after configured player confirmation, and retains the
+   chosen name for campaign persistence. Its presentation is first-party and
+   has not yet been replaced by the owned TextEditMenu surface.
+   At stage 36, `showracemenu` now opens a separate first-party functional
+   selector backed by the winning Player NPC_, RACE hair list, and EYES list.
+   Male/female selection chooses a sex-compatible playable HAIR record and
+   advances only on confirmation. This binds source identity; it does not yet
+   render the selected face or reproduce the owned RaceSex menu.
+   The live Vigor trigger reference now uses its XPRM bounds to enter stage 60,
+   and activation of the source-linked tester opens a functional seven-value
+   SPECIAL allocator. The Player NPC_ supplies the initial `5,5,5,5,5,5,5`
+   values; `ShowLoveTesterMenuParams 40` supplies the required total; each value
+   is constrained to 1–10. Confirmation alone enters stage 65 and its authored
+   reaction timer. This is interactive source-state transport, not a claim of
+   owned Vigor-menu presentation parity.
+   The stage-70 and stage-79 dialogue topics now advance through their winning
+   INFO results to stage 80. Because the multi-question psychological-test
+   presentation and scoring UI remain unsupported, stage 80 exposes an explicit
+   functional handoff whose live terminal INFO set converges on stage 85; it
+   does not claim to execute or reproduce the questionnaire. The authored timer
+   then reaches stage 90, where `SetTagSkills 3 1` opens a functional selector
+   over the 13 winning AVIF skill identities and advances only after three
+   distinct skills are confirmed.
+   The stage-95 dialogue result and authored timers then reach stage 102, where
+   `ShowTraitMenu` opens a functional selector over the ten winning playable
+   PERK identities. Zero, one, or two distinct traits may be confirmed. The
+   stage-105 dialogue result reaches stage 110; the live
+   `GSDocMitchellExitTrigger` REFR/ACTI/SCPT/XPRM contract alone advances the
+   player to the stage-115 farewell handoff. Its INFO result applies the exact
+   tag-skill branches and resolves simple or single-target leveled-list grants
+   to concrete winning inventory records. `VGenericTimer` event 3 then advances
+   to stage 200 after its authored 0.1-second delay.
+4. VCG01-linked INFO result scripts resolve the three unambiguous items that
+   they both add and equip: Pip-Boy, Pip-Boy glove, and Vault Suit 21. Their
+   runtime FormIDs, EDIDs, signatures, value, and weight are revalidated against
+   the current winning records. The farewell INFO result additionally resolves
+   the selected tag-skill loadout, including leveled-list quantity multipliers,
+   and combines it with those opening items.
+5. A stack-scoped native campaign-save v5 schema atomically stores stage 200,
+   the confirmed player name, selected sex/race/hair/eyes identity, confirmed
+   SPECIAL values, three AVIF-backed tag skills, up to two PERK-backed traits, those
+   inventory/equipment identities, the seven control flags, and player
+   transform. Continue rejects a changed stack, stale character identity, or
+   stale SPECIAL/tag-skill/trait contract, stale conditional loadout, or stale
+   item identity and restores the state without rewriting the save.
+   Synthetic and direct-owned cold deserialization pass; the direct check
+   removes its isolated gameplay save after verification.
+
+This checkpoint is implementation progress, not a promoted uninterrupted
+opening. The ordinary native Godot route still lacks the owned TextEditMenu and
+RaceSex/Vigor/Trait presentation, the full psych questionnaire, rendered character
+application, authored Doc package/dialogue presentation, and an accepted
+fresh-process New Game/Continue run through configured input. Its native save owner must also be joined
+to the canonical ordinary gameplay state rather than becoming a second
+long-term authority. No retained evidence report, clean slice commit, or normal
+Godot input acceptance has promoted this checkpoint into **Current baseline**.
+
+The immediate corrective owner is normal configured-input acceptance and the
+canonical state join: drive menu → New Game → stage 200 → exit → Continue in a
+fresh process, join the resulting character/inventory/quest state to the shared
+gameplay save, and retain every unsupported owned presentation as an explicit
+blocker.
+
 Implementation order:
 
-1. Promote the normal front-end route. New Game must enter the authored opening;
+1. **Partial:** promote the normal front-end route. New Game must enter the
+   authored opening;
    Continue/Load must reflect and restore the canonical save. The end-to-end
    proof may not use `--new-game` to bypass the menu. Campaign admission now
    joins the nested opening inventory, equipment/weapon metadata, and player
    transform to the ordinary gameplay fields before enabling Continue; later
    completed-campaign saves update both representations from the live session.
+   The local native Continue implementation validates its own stack-scoped save,
+   but the normal configured-input route and canonical-state join remain open.
 2. **Partial:** compile the owned HUD/Pip-Boy menu, XML, font, image, inventory, equipment,
    quest, map, and control sources into neutral versioned UI contracts. Preserve
    the owned XML input format for stock/JAM/TTW compatibility; do not bake a
@@ -208,9 +289,13 @@ Implementation order:
    reference-canvas rectangles in flat mode. The wrist currently shows only a
    status view from that shared snapshot; complete stock interaction and pixel
    parity remain pending.
-4. Join the stage-200 inventory/equipment FormIDs to the ordinary gameplay
-   inventory and visible first-person presentation. Equip, holster, use, drop,
-   and save/reload operate through one item state path.
+4. **Partial:** join the stage-200 inventory/equipment FormIDs to the ordinary
+   gameplay inventory and visible first-person presentation. The local native
+   path resolves and cold-restores the three mandatory equipped items plus the
+   selected tag-skill farewell loadout directly from winning INFO/result,
+   leveled-list, and item records. The ordinary gameplay-state join, visible
+   presentation, equip/holster/use/drop, and the
+   single authoritative save/reload path remain open.
 5. Resolve Doc Mitchell's exit `DOOR -> REFR -> XTEL -> destination REFR ->
    CELL/worldspace` chain from the effective plugin stack. Stream the destination
    and required persistent/exterior neighbors in one coordinate contract.

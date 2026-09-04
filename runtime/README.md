@@ -21,10 +21,11 @@ Run the complete repository gate from the repository root:
 pwsh -File scripts/Test-GodotRuntime.ps1
 ```
 
-Pass `-FalloutNewVegasData` to make the gate validate the owned master and BSA,
-extract the model directly, build a temporary cache, load it in Godot, and
-delete the cache afterward. No retail-derived file or generated conversion
-belongs in Git.
+Pass `-FalloutNewVegasData` to exercise the disposable content-proof path that
+validates the owned master and BSA, loads a temporary evidence cache in Godot,
+and deletes it afterward. That cache-producing path is evidence tooling only;
+the native launcher uses a sealed v2 source stack instead. No retail-derived
+file or generated conversion belongs in Git.
 
 The whole-game CELL path is partitioned separately from the bounded Goodsprings
 sandbox. Given the immutable CELL corpus and compile plan, compile, validate,
@@ -78,14 +79,11 @@ pwsh -File scripts/Build-GodotRuntime.ps1 -OutputRoot D:\Builds\OpenNV
 
 The archive contains the Godot executable and a packaged legal-content helper,
 but no commercial content. On first launch, select a legal Fallout: New Vegas
-`Data` folder; OpenNV prepares its private cache and enters the owned New Vegas
-menu, whose New Game/Continue route begins in Doc Mitchell's house with the
-Goodsprings exterior and saloon eagerly instantiated as a bounded composite.
-The source-portal active set keeps only the authoritative current CELL active;
-linked CELLs stay loaded but hidden, nonprocessing, and noncollidable until a
-source portal transition. Python and
-OpenMW are not required on the player's machine. Later
-launches reopen that verified cache automatically.
+`Data` folder; the desktop launcher registers its immutable v2 source stack and
+passes the manifest path, manifest hash, stack ID, and campaign to the native
+runtime. The runtime resolves the primary Data root from that manifest and
+rechecks the sealed stack before loading. Python and OpenMW are not required on
+the player's machine; the native route does not reopen a prepared cache.
 
 The owned character menus now bind the prepared `TextEditMenu` and
 `RaceSexMenu` backgrounds. The current ordinary stage-10 capture is
