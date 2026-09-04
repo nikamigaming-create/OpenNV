@@ -29,7 +29,6 @@ internal sealed record RuntimeConfiguration(
     ActorReviewConfiguration ActorReview,
     ExteriorEnvironmentConfiguration ExteriorEnvironment,
     FalloutEnvironmentConfiguration FalloutEnvironment,
-    RetailActorStateConfiguration RetailActorState,
     ActorParityConfiguration ActorParity,
     DesktopLauncherConfiguration DesktopLauncher,
     ToolingConfiguration Tooling,
@@ -222,7 +221,6 @@ internal sealed record RuntimeConfiguration(
             ExteriorEnvironment.Provenance,
             FalloutEnvironment.Provenance,
             FalloutEnvironment.ImageSpace.Provenance,
-            RetailActorState.Provenance,
             ActorParity.Provenance,
             DesktopLauncher.Provenance,
             Tooling.Provenance,
@@ -561,19 +559,6 @@ internal sealed record RuntimeConfiguration(
             RequireVector(shot.CameraPositionMeters, 3, $"{shot.Name} camera position");
             RequireVector(shot.LookAtMeters, 3, $"{shot.Name} look target");
         }
-        if (RetailActorState.RequiredShotKinds.Count < 1 ||
-            !RetailActorState.RequiredShotKinds.SequenceEqual(Capture.ActorShotKinds, StringComparer.Ordinal))
-            throw new InvalidOperationException("Retail actor-state and capture shot kinds must be identical.");
-        RequirePositive(RetailActorState.MinimumContextActors, nameof(RetailActorState.MinimumContextActors));
-        RequirePositive(RetailActorState.MinimumPoseBones, nameof(RetailActorState.MinimumPoseBones));
-        RequirePositive(RetailActorState.MinimumArmBones, nameof(RetailActorState.MinimumArmBones));
-        RequireUnitInterval(RetailActorState.FullSequenceWeight, nameof(RetailActorState.FullSequenceWeight));
-        RequireUnitInterval(
-            RetailActorState.MinimumContextSequenceWeight,
-            nameof(RetailActorState.MinimumContextSequenceWeight));
-        RequirePositive(
-            RetailActorState.SequenceWeightTolerance,
-            nameof(RetailActorState.SequenceWeightTolerance));
         RequirePositive(
             ActorParity.PoseTranslationToleranceMeters,
             nameof(ActorParity.PoseTranslationToleranceMeters));

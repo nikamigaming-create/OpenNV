@@ -48,5 +48,5 @@ npm test --prefix .\desktop
 Launch through the desktop app or pass a selected installation to Godot through
 the launcher-owned `--data-root`, `--campaign`, and `--save-path` arguments.
 
-See [architecture](docs/architecture.md), [installation](docs/installation.md),
-and [current status](docs/status.md).
+See [current work](docs/current-work.md), [architecture](docs/architecture.md),
+[installation](docs/installation.md), and [current status](docs/status.md).

@@ -2,11 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
-using OpenNV.Runtime.SceneGraph;
-
-
 using OpenNV.Runtime.Content;
-using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Diagnostics.Capture;
@@ -27,7 +23,6 @@ internal static class EnvironmentCapture
         string captureRoot,
         string scenePath,
         string? reportPath,
-        string? retailStateContractPath,
         string? galleryShotPath)
     {
         if (galleryShotPath is not null)
@@ -73,32 +68,6 @@ internal static class EnvironmentCapture
 
             var files = new List<object>();
             var visualGates = new List<bool>();
-            var actorShots = new List<object>();
-            RetailActorStateContract.Contract? retailState = null;
-            CellActorLoader.PlacedActor? targetActor = null;
-            if (loaded.Actors.Count > 0)
-            {
-                var proofActors = loaded.Actors.Where(actor => actor.ProofEnabled).ToArray();
-                if (proofActors.Length != 1 || retailStateContractPath is null)
-                    throw new InvalidOperationException(
-                        "Actor capture requires one proof-enabled target and one --retail-state-contract.");
-                targetActor = proofActors[0];
-                retailState = RetailActorStateContract.Load(
-                    retailStateContractPath,
-                    targetActor.Value.ReferenceFormId,
-                    targetActor.Value.BaseFormId,
-                    configuration);
-                var contextReferences = retailState.Shots.Values.First().ContextActors
-                    .Select(actor => FalloutFormId.Normalize(actor.ReferenceFormId))
-                    .ToHashSet(StringComparer.Ordinal);
-                var loadedContexts = loaded.Actors
-                    .Where(actor => !actor.ProofEnabled)
-                    .Select(actor => FalloutFormId.Normalize(actor.ReferenceFormId))
-                    .ToHashSet(StringComparer.Ordinal);
-                if (!loadedContexts.SetEquals(contextReferences))
-                    throw new InvalidOperationException(
-                        "Loaded actor scenes do not exactly match the retail context actors.");
-            }
             foreach (var shot in configuration.Capture.EnvironmentShots)
             {
                 if (shot.OpenProofDoorBeforeShot)
@@ -117,103 +86,6 @@ internal static class EnvironmentCapture
                 visualGates.Add(frame.Passed);
             }
 
-            if (loaded.Actors.Count > 0)
-            {
-                var actor = targetActor!.Value;
-                foreach (var kind in configuration.Capture.ActorShotKinds)
-                {
-                    var state = retailState!.Shots[kind];
-                    ApplyActorState(
-                        loaded,
-                        actor,
-                        state.ReferencePositionGameUnits,
-                        state.ReferenceYawRadians,
-                        state.AnimationFile,
-                        state.AnimationPhaseSeconds,
-                        state.PoseBones);
-                    var contextActors = state.ContextActors.Select(context =>
-                    {
-                        var placed = loaded.Actors.Single(candidate =>
-                            FalloutFormId.Normalize(candidate.ReferenceFormId) ==
-                            FalloutFormId.Normalize(context.ReferenceFormId));
-                        ApplyActorState(
-                            loaded,
-                            placed,
-                            context.PositionGameUnits,
-                            context.YawRadians,
-                            context.AnimationFile,
-                            context.AnimationPhaseSeconds,
-                            context.PoseBones);
-                        return new
-                        {
-                            referenceFormId = placed.ReferenceFormId,
-                            baseFormId = placed.BaseFormId,
-                            positionGameUnits = Vector(context.PositionGameUnits),
-                            positionGodotWorld = Vector(placed.Placement.GlobalPosition),
-                            yawRadians = context.YawRadians,
-                            godotYawRadians = -context.YawRadians,
-                            context.ActorSitSleepState,
-                            context.FurnitureReferenceFormId,
-                            context.FurnitureBaseFormId,
-                            animationFile = context.AnimationFile,
-                            requestedAnimationPhaseSeconds = context.AnimationPhaseSeconds,
-                            appliedAnimationPhaseSeconds =
-                                placed.Actor.AnimationPlayer.CurrentAnimationPosition,
-                            poseBones = CaptureBonePoses(
-                                placed,
-                                context.PoseBones.Select(bone => bone.Name).ToArray()),
-                            faceVertexHash = context.FaceVertexHash,
-                        };
-                    }).ToArray();
-                    camera.Fov = state.VerticalFovDegrees;
-                    camera.GlobalPosition = loaded.GameToWorld(state.CameraPositionGameUnits);
-                    var cameraTarget = loaded.GameToWorld(state.CameraAimGameUnits);
-                    camera.LookAt(cameraTarget, Vector3.Up);
-                    await WaitForRenderedFrames(host, configuration.Capture.ActorRenderedFramesBeforeCapture);
-                    var fileName = $"godot-current-{kind}.png";
-                    var actorFrame = SaveViewportPng(
-                        host,
-                        output,
-                        fileName,
-                        configuration.Capture.ActorMinimumMeanLuminance,
-                        configuration.Capture);
-                    files.Add(actorFrame.Evidence);
-                    visualGates.Add(actorFrame.Passed);
-                    actorShots.Add(new
-                    {
-                        shotKind = kind,
-                        retailStateApplied = true,
-                        cellOriginGameUnits = Vector(loaded.OriginGameUnits),
-                        unitsToMeters = loaded.UnitsToMeters,
-                        referencePositionGameUnits = Vector(state.ReferencePositionGameUnits),
-                        referencePositionGodotWorld = Vector(actor.Placement.GlobalPosition),
-                        referenceYawRadians = state.ReferenceYawRadians,
-                        referenceGodotYawRadians = -state.ReferenceYawRadians,
-                        cameraPositionGameUnits = Vector(state.CameraPositionGameUnits),
-                        cameraAimGameUnits = Vector(state.CameraAimGameUnits),
-                        cameraPosition = Vector(camera.GlobalPosition),
-                        target = Vector(cameraTarget),
-                        distanceMeters = state.CameraDistanceGameUnits * loaded.UnitsToMeters,
-                        sourceDistanceGameUnits = state.CameraDistanceGameUnits,
-                        verticalFovDegrees = camera.Fov,
-                        projectionExact = state.ExactProjection,
-                        projectionStatus = state.ProjectionStatus,
-                        projectionSource = state.ProjectionSource,
-                        projectionConfidence = state.ProjectionConfidence,
-                        animationFile = state.AnimationFile,
-                        requestedAnimationPhaseSeconds = state.AnimationPhaseSeconds,
-                        appliedAnimationPhaseSeconds = actor.Actor.AnimationPlayer.CurrentAnimationPosition,
-                        poseBones = CaptureBonePoses(
-                            actor,
-                            state.PoseBones.Select(bone => bone.Name).ToArray()),
-                        contextActors,
-                        faceVertexHash = state.FaceVertexHash,
-                        hairVertexHash = state.HairVertexHash,
-                        file = Path.Combine(output, fileName),
-                    });
-                }
-            }
-
             var visualQualityPassed = visualGates.All(passed => passed);
             var captureReport = new
             {
@@ -225,15 +97,6 @@ internal static class EnvironmentCapture
                 cellFormId = loaded.FormId,
                 cellEditorId = loaded.EditorId,
                 actorCount = loaded.Actors.Count,
-                retailActorStateContract = retailState is null
-                    ? null
-                    : new
-                    {
-                        path = retailState.Path,
-                        sha256 = retailState.Sha256,
-                        exactProjectionResolved = retailState.ExactProjectionResolved,
-                        shots = retailState.Shots.Count,
-                    },
                 actorReferences = loaded.Actors.Select(actor => new
                 {
                     formId = actor.ReferenceFormId,
@@ -252,7 +115,6 @@ internal static class EnvironmentCapture
                     boundsMinimum = Vector(actor.Actor.Bounds.Position),
                     boundsSize = Vector(actor.Actor.Bounds.Size),
                 }),
-                actorShots,
                 textures = loaded.Textures,
                 materialBindings = loaded.MaterialBindings,
                 authoredLights = loaded.AuthoredLights,
@@ -431,85 +293,6 @@ internal static class EnvironmentCapture
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-    }
-
-    private static void ApplyActorState(
-        CellSceneLoader.LoadedCell loaded,
-        CellActorLoader.PlacedActor actor,
-        Vector3 positionGameUnits,
-        float yawRadians,
-        string animationFile,
-        double animationPhaseSeconds,
-        IReadOnlyList<RetailActorStateContract.PoseBone> poseBones)
-    {
-        if (!NormalizeMeshPath(actor.IdleAnimationPath).Equals(
-                NormalizeMeshPath(animationFile),
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                $"Actor animation does not match retail: actor={actor.ReferenceFormId} " +
-                $"cache={actor.IdleAnimationPath} retail={animationFile}");
-        actor.Placement.Position = loaded.GameToCellUnits(positionGameUnits);
-        actor.Placement.Rotation = new Vector3(0.0f, -yawRadians, 0.0f);
-        actor.Actor.AnimationPlayer.Play(actor.Actor.PlayingAnimation);
-        actor.Actor.AnimationPlayer.Seek(animationPhaseSeconds, true);
-        actor.Actor.AnimationPlayer.Pause();
-        var skeleton = NodeTraversal.Descendants<Skeleton3D>(actor.Actor.Root).Single();
-        foreach (var bone in poseBones)
-        {
-            var index = skeleton.FindBone(bone.Name);
-            if (index < 0)
-                throw new InvalidOperationException(
-                    $"Godot actor {actor.ReferenceFormId} is missing retail pose bone: {bone.Name}");
-            var worldPosition = loaded.GameToWorld(bone.WorldPositionGameUnits);
-            var skeletonPose = new Transform3D(
-                skeleton.GlobalBasis.Orthonormalized().Inverse() *
-                    bone.WorldBasis.Orthonormalized(),
-                skeleton.ToLocal(worldPosition));
-            skeleton.SetBoneGlobalPose(index, skeletonPose);
-        }
-    }
-
-    private static object[] CaptureBonePoses(
-        CellActorLoader.PlacedActor actor,
-        IReadOnlyList<string> names)
-    {
-        var skeleton = NodeTraversal.Descendants<Skeleton3D>(actor.Actor.Root).Single();
-        return names.Select(name =>
-        {
-            var index = skeleton.FindBone(name);
-            if (index < 0)
-                throw new InvalidOperationException(
-                    $"Godot actor {actor.ReferenceFormId} is missing retail pose bone: {name}");
-            var pose = skeleton.GetBoneGlobalPose(index);
-            var parentIndex = skeleton.GetBoneParent(index);
-            var localPose = parentIndex < 0
-                ? pose
-                : skeleton.GetBoneGlobalPose(parentIndex).AffineInverse() * pose;
-            var localRotation = localPose.Basis.GetRotationQuaternion();
-            var rotation = (skeleton.GlobalBasis * pose.Basis).GetRotationQuaternion();
-            return (object)new
-            {
-                name,
-                localTranslation = Vector(localPose.Origin),
-                localRotationQuaternion = new[]
-                {
-                    localRotation.X,
-                    localRotation.Y,
-                    localRotation.Z,
-                    localRotation.W,
-                },
-                worldPosition = Vector(skeleton.ToGlobal(pose.Origin)),
-                worldRotationQuaternion = new[] { rotation.X, rotation.Y, rotation.Z, rotation.W },
-            };
-        }).ToArray();
-    }
-
-    private static string NormalizeMeshPath(string value)
-    {
-        var path = value.Replace('/', '\\').TrimStart('\\');
-        return path.StartsWith("meshes\\", StringComparison.OrdinalIgnoreCase)
-            ? path["meshes\\".Length..]
-            : path;
     }
 
     private static float[] Vector(Vector3 value) => new[] { value.X, value.Y, value.Z };

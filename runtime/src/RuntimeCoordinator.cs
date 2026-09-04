@@ -541,7 +541,6 @@ public partial class RuntimeCoordinator : Node3D
                 captureRoot,
                 scenePath,
                 options.TryGetValue("report", out var captureReport) ? captureReport : null,
-                options.TryGetValue("retail-state-contract", out var retailState) ? retailState : null,
                 options.TryGetValue("gallery-shot", out var galleryShot) ? galleryShot : null);
             if (galleryContract is not null)
                 GD.Print(

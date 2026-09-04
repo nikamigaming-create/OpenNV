@@ -58,4 +58,10 @@ first mismatch into typed field deltas, and retains a bounded in-memory frame
 window around divergence. Godot can show retail, OpenNV, and absolute-difference
 views; the C# evidence writer can encode selected retail-left/OpenNV-right MP4
 clips with hash-bound reports. Retail observation is one-way and never supplies
-gameplay state to OpenNV.
+gameplay state to OpenNV. A diagnostic bridge may duplicate timestamped user
+input into both games, but neither producer may use the other game's state to
+advance simulation.
+
+The comparison denominator is discovered from live source and runtime owners,
+not a maintained checklist. A source identity without a runtime entity, an
+unpublished event, a lost packet, or an unmatched final frame is divergence.

@@ -677,17 +677,6 @@ internal sealed record ImageSpaceTraitIndexConfiguration(
     }
 }
 
-internal sealed record RetailActorStateConfiguration(
-    ConfigurationProvenance Provenance,
-    IReadOnlyList<string> RequiredShotKinds,
-    float FullSequenceWeight,
-    float SequenceWeightTolerance,
-    float MinimumContextSequenceWeight,
-    int MinimumContextActors,
-    int MinimumPoseBones,
-    int MinimumArmBones,
-    IReadOnlyList<string> ExcludedPoseNodes);
-
 internal sealed record ActorParityConfiguration(
     ConfigurationProvenance Provenance,
     float PoseTranslationToleranceMeters,

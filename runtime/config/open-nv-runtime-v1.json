@@ -644,38 +644,6 @@
       "canvasLayer": 127
     }
   },
-  "retailActorState": {
-    "provenance": {
-      "classification": "diagnostic-only",
-      "status": "blocking-test-policy",
-      "source": "Matched retail actor-state acceptance contract",
-      "evidence": "docs/evidence/fnv-retail-actor-state-contract.md"
-    },
-    "requiredShotKinds": [
-      "front-portrait",
-      "front-detail",
-      "left-profile",
-      "right-profile",
-      "front-full-body",
-      "rear-detail",
-      "rear-full-body",
-      "idle-motion"
-    ],
-    "fullSequenceWeight": 1.0,
-    "sequenceWeightTolerance": 0.001,
-    "minimumContextSequenceWeight": 0.99,
-    "minimumContextActors": 1,
-    "minimumPoseBones": 50,
-    "minimumArmBones": 4,
-    "excludedPoseNodes": [
-      "Bip01",
-      "Bip01 NonAccum",
-      "Bip01 Neck",
-      "Bip01 R ForeTwistDriver",
-      "Bip01 LPauldron",
-      "Bip01 RPauldron"
-    ]
-  },
   "actorParity": {
     "provenance": {
       "classification": "diagnostic-only",

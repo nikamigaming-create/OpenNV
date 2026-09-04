@@ -61,11 +61,18 @@ payload before publishing the new sequence. Readers request every sequence in
 order. If a requested sequence has already been overwritten, the read fails;
 telemetry loss is never reported as parity.
 
-The initial OpenNV producer publishes configuration identity, renderer method,
-active CELL identity and reference count, plus active-camera position,
-quaternion, FOV, near plane, and far plane. Actor, bone, animation, quest,
-dialogue, effect, audio, UI, material, and input fields must be added as their
-runtime owners expose authoritative state.
+The OpenNV producer publishes configuration identity, renderer method, active
+CELL identity and reference count, active-camera position, quaternion, FOV,
+near plane, and far plane. The live active-CELL observation registry also
+publishes every source-discovered reference, every observed runtime presence,
+coverage counts, and a deterministic digest of missing identities. Source
+discovery is not presentation or parity: an actor reference without a real
+runtime actor remains missing.
+
+Actor, bone, animation, package, quest, dialogue, inventory, effect, audio, UI,
+material, input, renderer-submission, and final-frame fields must be published
+by their authoritative runtime owners. A maintained side list is not an
+acceptable denominator.
 
 ## Traces and video
 

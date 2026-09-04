@@ -10,11 +10,17 @@ Fallout 3, Fallout: New Vegas, or Tale of Two Wastelands.
 - Direct classic Fallout DAT, MAP, PRO, and FRM reading for bounded areas.
 - New Vegas live opening state through stage 200 with source-resolved player
   inventory and validated cold Continue state.
+- Complete active-CELL source-reference discovery with fail-closed runtime
+  presence reporting. The owned Doc house, Wasteland persistent CELL, and
+  Prospector Saloon are measured without named actor success paths.
+- Canonical exact-byte telemetry packets, a loss-detecting shared-memory ring,
+  typed comparisons, trace evidence, divergence frame retention, and diagnostic
+  video planning.
 - Bounded Fallout 1, Fallout 2, and Fallout 3 routes and synthetic contracts.
 - C# Debug and Release builds, formatting checks, C# contract probes, desktop
   launcher tests, and Godot project loading.
 
-## Blocking complete play
+## Incomplete systems
 
 - Whole-campaign quest, dialogue, package, AI, combat, inventory, crafting,
   world streaming, audio, UI, and save semantics.
@@ -26,6 +32,8 @@ Fallout 3, Fallout: New Vegas, or Tale of Two Wastelands.
 - Integrated flat-route acceptance and physical OpenXR acceptance.
 - Retail visual and behavioral parity across the complete denominator.
 
-The active priority is one ordinary New Vegas route from the real front end
-through Doc Mitchell, Goodsprings, save, restart, and Continue using only live
-owned files and authoritative gameplay state.
+The active priority is synchronized retail/OpenNV observation followed by one
+ordinary New Vegas route from the real front end through Doc Mitchell,
+Goodsprings, Sunny Smiles, the Prospector Saloon, save, restart, and Continue.
+See `docs/current-work.md` for verified measurements, exact gaps, execution
+order, and the repeatable task handoff.
