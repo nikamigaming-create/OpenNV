@@ -86,14 +86,38 @@ catch (InvalidDataException)
 {
 }
 
+var ingress = ParityRetailIngress.Parse(
+    """
+    {"schema":"opennv-retail-parity-snapshot/v1","simulationTick":"1200","monotonicNanoseconds":"8000000000","eventOrdinal":"20","stateKey":"cell:00104c1c/event:dialogue:00012345","fields":[{"category":"World","name":"world.active-cell","kind":"Utf8","value":"GoodspringsGeneralStore"},{"category":"Camera","name":"camera.fov","kind":"Float64","value":"75"}]}
+    """,
+    1);
+var ingressBytes = ParityTelemetryCodec.Encode(ingress);
+var ingressDecoded = ParityTelemetryCodec.Decode(ingressBytes);
+if (ingressDecoded.Engine != ParityEngine.Retail || ingressDecoded.Sequence != 1 ||
+    ingressDecoded.Fields.Count != 2 || ingressDecoded.EventOrdinal != 20)
+    throw new InvalidOperationException("Retail telemetry ingress did not produce packet v1.");
+try
+{
+    _ = ParityRetailIngress.Parse(
+        """
+        {"schema":"opennv-retail-parity-snapshot/v1","simulationTick":"1","monotonicNanoseconds":"2","eventOrdinal":"3","stateKey":"bad","fields":[],"address":"0x1234"}
+        """,
+        2);
+    throw new InvalidOperationException("Retail telemetry ingress accepted a private address field.");
+}
+catch (InvalidDataException)
+{
+}
+
 if (OperatingSystem.IsWindows())
 {
     var channel = "probe_" + Guid.NewGuid().ToString("N");
     using var writer = ParitySharedMemoryRing.CreateOrOpen(channel, 4, 64 * 1024);
     using var reader = ParitySharedMemoryRing.CreateOrOpen(channel, 4, 64 * 1024);
-    var ringSequence = writer.Publish(encoded);
+    var ringSequence = writer.Publish(ingressBytes);
     if (!reader.TryReadLatest(out var observedSequence, out var observed) ||
-        observedSequence != ringSequence || !observed.AsSpan().SequenceEqual(encoded))
+        observedSequence != ringSequence || !observed.AsSpan().SequenceEqual(ingressBytes) ||
+        ParityTelemetryCodec.Decode(observed).Engine != ParityEngine.Retail)
         throw new InvalidOperationException("Parity shared-memory ring lost exact packet bytes.");
     for (var index = 0; index < 5; index++)
         writer.Publish(encoded);
@@ -107,6 +131,7 @@ if (OperatingSystem.IsWindows())
     catch (InvalidDataException)
     {
     }
+
 }
 
 var clips = new ParityClipBuffer(2, 2, 4096);
@@ -193,7 +218,7 @@ if (!string.IsNullOrWhiteSpace(configuredFfmpeg) && File.Exists(configuredFfmpeg
 
 Console.WriteLine(
     "OPENNV_PARITY_TELEMETRY_PASS canonical=1 exact-bytes=1 semantic-deltas=2 shared-memory=1 " +
-    $"overrun=fail-closed trace=2 live-coverage=fail-closed clip-window=4 " +
+    $"overrun=fail-closed retail-ingress=1 trace=2 live-coverage=fail-closed clip-window=4 " +
     $"video-plan=1 video-encoded={(encodedVideo ? 1 : 0)} " +
     $"video-proof={videoProof}");
 

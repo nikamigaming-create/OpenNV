@@ -5,11 +5,15 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenNV", "OpenNV.csproj", "{166F1983-2EAB-4A62-A765-7F5CD4E19728}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenNV.ActorComplexionContractProbe", "..\contract-tests\ActorComplexionContractProbe\ActorComplexionContractProbe.csproj", "{D44FB855-F68D-4D07-A6CE-30BA54BFA2AB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ActorComplexionContractProbe", "..\contract-tests\ActorComplexionContractProbe\ActorComplexionContractProbe.csproj", "{D44FB855-F68D-4D07-A6CE-30BA54BFA2AB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenNV.GamebryoUiTileContractProbe", "..\contract-tests\GamebryoUiTileContractProbe\GamebryoUiTileContractProbe.csproj", "{69082E1A-F57A-4DD4-9C6F-C4882211344C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamebryoUiTileContractProbe", "..\contract-tests\GamebryoUiTileContractProbe\GamebryoUiTileContractProbe.csproj", "{69082E1A-F57A-4DD4-9C6F-C4882211344C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenNV.GamebryoFaceGenMorphProbe", "..\contract-tests\GamebryoFaceGenMorphProbe\GamebryoFaceGenMorphProbe.csproj", "{C158EEB7-73E1-4C7D-AD32-75F3F43A0199}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamebryoFaceGenMorphProbe", "..\contract-tests\GamebryoFaceGenMorphProbe\GamebryoFaceGenMorphProbe.csproj", "{C158EEB7-73E1-4C7D-AD32-75F3F43A0199}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParityRetailPublisher", "tools\ParityRetailPublisher\ParityRetailPublisher.csproj", "{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -69,8 +73,23 @@ Global
 		{C158EEB7-73E1-4C7D-AD32-75F3F43A0199}.Release|x64.Build.0 = Release|Any CPU
 		{C158EEB7-73E1-4C7D-AD32-75F3F43A0199}.Release|x86.ActiveCfg = Release|Any CPU
 		{C158EEB7-73E1-4C7D-AD32-75F3F43A0199}.Release|x86.Build.0 = Release|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Debug|x64.Build.0 = Debug|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Debug|x86.Build.0 = Debug|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Release|x64.ActiveCfg = Release|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Release|x64.Build.0 = Release|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Release|x86.ActiveCfg = Release|Any CPU
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{82B81AF8-2A5F-4C1E-87EE-0AC06BCE005D} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal

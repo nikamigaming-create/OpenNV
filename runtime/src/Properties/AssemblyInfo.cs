@@ -17,3 +17,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.GamebryoRangedCombatProbe")]
 [assembly: InternalsVisibleTo("OpenNV.RuntimeSaveSlotContractProbe")]
 [assembly: InternalsVisibleTo("OpenNV.ParityTelemetryContractProbe")]
+[assembly: InternalsVisibleTo("OpenNV.ParityRetailPublisher")]

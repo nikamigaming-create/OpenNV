@@ -13,5 +13,6 @@
   <ItemGroup>
     <Compile Remove="tools\OpenNV.ResourceProbe\**\*.cs" />
     <Compile Remove="tools\NativeStackStartupAudit\**\*.cs" />
+    <Compile Remove="tools\ParityRetailPublisher\**\*.cs" />
   </ItemGroup>
 </Project>

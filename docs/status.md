@@ -16,6 +16,9 @@ Fallout 3, Fallout: New Vegas, or Tale of Two Wastelands.
 - Canonical exact-byte telemetry packets, a loss-detecting shared-memory ring,
   typed comparisons, trace evidence, divergence frame retention, and diagnostic
   video planning.
+- A strict public retail ingress connected to the reviewed private Win32
+  observer, with live proof of three ordered observe-only module-identity
+  packets. Authoritative retail gameplay timing and state remain unconnected.
 - Bounded Fallout 1, Fallout 2, and Fallout 3 routes and synthetic contracts.
 - C# Debug and Release builds, formatting checks, C# contract probes, desktop
   launcher tests, and Godot project loading.

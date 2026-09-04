@@ -25,6 +25,10 @@ C#/Godot gate with Godot 4.7.2 Mono. Resolve its exact identity with
 - Canonical little-endian telemetry packets, exact-byte comparison, typed field
   deltas, a loss-detecting Windows shared-memory ring, traces, divergence frame
   retention, three-panel Godot review, and hash-bound video plans exist.
+- The reviewed private Win32 observer now feeds strict neutral snapshots through
+  the public retail ingress into packet v1. A live owned FalloutNV.exe proof
+  published three ordered module-identity packets in observe-only mode. This is
+  transport connectivity, not matched gameplay telemetry or parity.
 - The live active-cell registry discovers every reference from the decoded ESM
   graph. Missing runtime entities remain explicit divergence. Initially disabled
   references are observed as disabled rather than instantiated.
@@ -58,8 +62,10 @@ passes.
 ## Current truth
 
 - OpenNV is not a complete playable replacement for any supported campaign.
-- The private WOW64 retail telemetry producer is not connected to the public
-  shared-memory protocol. There is no complete synchronized retail/OpenNV run.
+- The private WOW64 retail observer is connected to the public shared-memory
+  protocol, but authoritative retail simulation tick, event ordinal, state key,
+  gameplay fields, and final-frame identity are not connected. There is no
+  complete synchronized retail/OpenNV run.
 - Active-cell identity coverage is live, but authoritative telemetry is still
   missing for many actor, bone, animation, package, quest, dialogue, inventory,
   effect, audio, material, draw, UI, and input owners.
@@ -74,8 +80,9 @@ passes.
 
 ## Today’s execution order
 
-1. Connect the private WOW64 retail observer to packet v1 and prove ordered,
-   loss-detecting retail packets without controlling retail state.
+1. Recover and connect the authoritative retail simulation boundary, semantic
+   state key, event ordinal, and first gameplay fields through the proven
+   observe-only packet-v1 ingress.
 2. Add the diagnostic input duplicator and matched state-key join so ordinary
    player input drives comparable retail and OpenNV runs.
 3. Wire complete live telemetry at authoritative owners, starting with actors,

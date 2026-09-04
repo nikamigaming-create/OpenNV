@@ -74,6 +74,13 @@ material, input, renderer-submission, and final-frame fields must be published
 by their authoritative runtime owners. A maintained side list is not an
 acceptable denominator.
 
+The private observer sends one strict JSON snapshot per line to
+`OpenNV.ParityRetailPublisher`. The public ingress accepts only neutral field
+names and values, assigns the retail producer sequence itself, encodes packet
+v1, and publishes it to the same loss-detecting ring. Unknown JSON properties
+fail closed so private addresses, process handles, and observer-specific layout
+data cannot accidentally cross into the public protocol.
+
 ## Traces and video
 
 Binary `.onvtrace` evidence stores each original packet with an additional
