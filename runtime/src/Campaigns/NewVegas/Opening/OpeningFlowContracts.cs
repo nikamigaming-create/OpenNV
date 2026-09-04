@@ -951,6 +951,7 @@ internal sealed record OpeningGameplayVitalsContract(
     private const string ExperienceFormula =
         "(targetLevel - 1) * (((targetLevel - 2) * iXPBumpBase) / 2 + iXPBase)";
     private const string JumpHeightFormula = "fJumpHeightMin";
+    private const double DefaultJumpHeightGameUnits = 64d;
     private static readonly string[] RequiredActorValues =
         ["AVHealth", "AVActionPoints", "AVXP", "AVEndurance", "AVAgility"];
     private static readonly string[] RequiredGameSettings =
@@ -1082,7 +1083,7 @@ internal sealed record OpeningGameplayVitalsContract(
                 RecordSha256: null,
                 EngineBuild: ExactEngineBuild,
                 EvidenceId: JumpHeightEvidenceId,
-                Value: 64d,
+                Value: DefaultJumpHeightGameUnits,
             } ||
             Derivations.Count != 4 ||
             Derivations.GetValueOrDefault("maximumHitPoints") != HitPointFormula ||

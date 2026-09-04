@@ -44,6 +44,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private const int EnabledControlValue = 1;
     private const float TransparentAlpha = 0.0f;
     private const double MillisecondsPerSecond = 1000.0;
+    private const int AcceptanceProgressIntervalSeconds = 5;
     private const string RetainedAccumulationRootTranslation =
         "preserve-hash-bound-owned-clip-root-curve";
     private const string ZeroedAccumulationRootTranslation =
@@ -294,7 +295,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     (Time.GetTicksMsec() - startMilliseconds) / MillisecondsPerSecond;
                 var routeProgressSecond = (int)elapsedSeconds;
                 if (routeProgressSecond != lastRouteProgressSecond &&
-                    routeProgressSecond % 5 == 0)
+                    routeProgressSecond % AcceptanceProgressIntervalSeconds == 0)
                 {
                     lastRouteProgressSecond = routeProgressSecond;
                     GD.Print(
