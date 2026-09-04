@@ -47,3 +47,15 @@ installation in place and publish authoritative state to Godot.
 
 A parser count is not gameplay. A rendered cell is not a campaign. Support is
 claimed only for behavior exercised by ordinary input and persistent state.
+
+## Live parity evidence
+
+The parity subsystem uses one canonical little-endian telemetry contract for a
+private, read-only retail observer and the public OpenNV runtime. Each producer
+publishes hash-bound frames through a Windows shared-memory ring. The comparator
+joins equivalent state keys, checks canonical state bytes exactly, expands the
+first mismatch into typed field deltas, and retains a bounded in-memory frame
+window around divergence. Godot can show retail, OpenNV, and absolute-difference
+views; the C# evidence writer can encode selected retail-left/OpenNV-right MP4
+clips with hash-bound reports. Retail observation is one-way and never supplies
+gameplay state to OpenNV.

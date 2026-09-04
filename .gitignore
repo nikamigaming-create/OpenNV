@@ -24,8 +24,7 @@
 /contract-tests/**/obj/
 /tmp/
 /runtime/tests/fixtures/*.gltf.import
-/content/.pytest_cache/
-**/__pycache__/
+*.uid
 /local/
 
 # wrangler files

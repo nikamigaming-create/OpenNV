@@ -16,3 +16,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.ClassicMapInitializationProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoRangedCombatProbe")]
 [assembly: InternalsVisibleTo("OpenNV.RuntimeSaveSlotContractProbe")]
+[assembly: InternalsVisibleTo("OpenNV.ParityTelemetryContractProbe")]

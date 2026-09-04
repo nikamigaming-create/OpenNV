@@ -64,6 +64,7 @@ $probes = @(
     "GamebryoStageCommandProbe",
     "GamebryoUiTileContractProbe",
     "OwnedAuxResourceProbe",
+    "ParityTelemetryContractProbe",
     "RuntimeSaveSlotContractProbe",
     "RuntimeSettingsContractProbe"
 )
