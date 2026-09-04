@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\Content\FalloutDat1Archive.cs" Link="FalloutDat1Archive.cs" />
+    <Compile Include="..\..\runtime\src\Content\Fallout1OwnedContentSource.cs" Link="Fallout1OwnedContentSource.cs" />
+    <Compile Include="..\..\runtime\src\Content\Fallout1NativeFormats.cs" Link="Fallout1NativeFormats.cs" />
+    <Compile Include="..\..\runtime\src\Content\Fallout1NativeObjectGraph.cs" Link="Fallout1NativeObjectGraph.cs" />
+  </ItemGroup>
+</Project>

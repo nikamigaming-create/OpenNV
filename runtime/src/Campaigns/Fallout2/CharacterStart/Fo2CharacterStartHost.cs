@@ -4,6 +4,7 @@ using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Fallout2.Native;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -62,6 +63,17 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     {
         try
         {
+            var options = Fo2ArroyoCavesProofOptions.Parse(OS.GetCmdlineUserArgs());
+            if (options.TryGetValue("fo2-install-root", out var installRoot))
+            {
+                StartNativeOwnedMap3PresentationFromInstall(installRoot, options);
+                return;
+            }
+            if (options.TryGetValue("fo2-owned-profile", out var ownedProfilePath))
+            {
+                StartNativeOwnedMap3Presentation(ownedProfilePath, options);
+                return;
+            }
             var runtimeConfiguration = RuntimeConfiguration.Load();
             _retailRandomContract = LoadRetailRandomContract();
             _classicIntTimerContract = LoadClassicIntTimerContract();
@@ -71,7 +83,6 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             GetWindow().Size = new Vector2I(
                 runtimeConfiguration.Capture.ExpectedWidthPixels,
                 runtimeConfiguration.Capture.ExpectedHeightPixels);
-            var options = Fo2ArroyoCavesProofOptions.Parse(OS.GetCmdlineUserArgs());
             _openingProofRoot = options.TryGetValue(
                 "fo2-opening-handoff-proof",
                 out var openingProofRoot)
@@ -260,6 +271,53 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             GD.PushError($"OPENNV_FO2_CHARACTER_START_FAIL {exception}");
             GetTree().Quit(1);
         }
+    }
+
+    private void StartNativeOwnedMap3Presentation(
+        string ownedProfilePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        if (options.Keys.Any(key => key.EndsWith("cache", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "The native Fallout 2 launch rejects prepared cache arguments.");
+        _savePath = options.TryGetValue("fo2-save", out var savePath)
+            ? savePath
+            : Fo2CharacterStartSaveState.DefaultPath;
+        using var source = Fo2NativeOwnedSource.Load(ownedProfilePath);
+        var coverage = Fo2NativeMap3Presentation.Build(this, source);
+        SetMeta("authoritative_character_state_owner", nameof(Fo2CharacterStartSaveState));
+        SetMeta("native_map3_presentation_only", true);
+        SetMeta("save_path", _savePath);
+        GD.Print(
+            $"OPENNV_FO2_NATIVE_MAP3_READY profile={coverage.SourceProfileId} " +
+            $"map={coverage.MapIndex} elevation={coverage.Elevation} " +
+            $"arrival={coverage.ArrivalTile} floors={coverage.FloorPatches} " +
+            $"meshes={coverage.FloorMeshes} frms={coverage.FrmResources} " +
+            "gameplay=fail-closed objects=unsupported pro=unsupported scripts=unsupported " +
+            "preparedInputs=0 writes=0");
+        if (options.ContainsKey("fo2-native-map3-audit"))
+            GetTree().Quit();
+    }
+
+    private void StartNativeOwnedMap3PresentationFromInstall(
+        string installRoot,
+        IReadOnlyDictionary<string, string> options)
+    {
+        if (options.Keys.Any(key => key.EndsWith("cache", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("The native Fallout 2 launch rejects prepared cache arguments.");
+        _savePath = options.TryGetValue("fo2-save", out var savePath)
+            ? savePath
+            : Fo2CharacterStartSaveState.DefaultPath;
+        using var source = Fo2NativeOwnedSource.LoadInstall(installRoot);
+        var coverage = Fo2NativeMap3Presentation.Build(this, source);
+        SetMeta("authoritative_character_state_owner", nameof(Fo2CharacterStartSaveState));
+        SetMeta("native_map3_presentation_only", true);
+        SetMeta("save_path", _savePath);
+        GD.Print(
+            $"OPENNV_FO2_NATIVE_INSTALL_READY profile={coverage.SourceProfileId} " +
+            $"map={coverage.MapIndex} floors={coverage.FloorPatches} preparedInputs=0 writes=0");
+        if (options.ContainsKey("fo2-native-map3-audit"))
+            GetTree().Quit();
     }
 
     public override void _UnhandledKeyInput(InputEvent inputEvent)

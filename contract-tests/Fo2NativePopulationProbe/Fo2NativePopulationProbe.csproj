@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\Campaigns\Classic\Native\FalloutClassicOwnedSource.cs" Link="FalloutClassicOwnedSource.cs" />
+    <Compile Include="..\..\runtime\src\Campaigns\Fallout2\Native\Fo2NativeOwnedData.cs" Link="Fo2NativeOwnedData.cs" />
+    <Compile Include="..\..\runtime\src\Campaigns\Fallout2\Native\Fo2NativePopulationLedger.cs" Link="Fo2NativePopulationLedger.cs" />
+    <Compile Include="..\..\runtime\src\Campaigns\Fallout2\Native\Fo2NativeMap3Objects.cs" Link="Fo2NativeMap3Objects.cs" />
+  </ItemGroup>
+</Project>

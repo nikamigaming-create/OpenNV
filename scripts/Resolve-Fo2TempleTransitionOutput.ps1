@@ -25,9 +25,12 @@ function Resolve-ExactPath([string]$Value, [string]$Root, [string]$Label) {
     if ([System.IO.Path]::IsPathRooted($Value)) {
         throw "Fallout 2 Temple transition output $Label must be cache-relative."
     }
-    $candidate = [System.IO.Path]::GetFullPath((Join-Path $Root $Value))
-    $relative = [System.IO.Path]::GetRelativePath($Root, $candidate)
-    if ($relative -eq '..' -or $relative.StartsWith("..$([System.IO.Path]::DirectorySeparatorChar)")) {
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar)
+    $candidate = [System.IO.Path]::GetFullPath((Join-Path $rootPath $Value))
+    $rootPrefix = $rootPath + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Fallout 2 Temple transition output $Label escapes its cache root."
     }
     return $candidate
