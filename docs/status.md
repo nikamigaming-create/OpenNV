@@ -16,6 +16,12 @@ Fallout 3, Fallout: New Vegas, or Tale of Two Wastelands.
 - Canonical exact-byte telemetry packets, a loss-detecting shared-memory ring,
   a strict two-channel live state-key join, typed comparisons, trace evidence,
   divergence frame retention, and diagnostic video planning.
+- Original Float32 telemetry bits, complete byte values in field deltas, and
+  tolerance-free RGB8/RGBA8 pixel comparisons. Unknown event identity remains
+  unaligned even when the sampled state bytes happen to agree.
+- Optional native OpenNV viewport capture with pre/post-draw telemetry,
+  unchanged native pixel buffers, PNG previews, and a hash-bound frame index.
+  The front-end capture path has run; matched retail gameplay has not.
 - A strict public retail ingress connected to the reviewed private Win32
   observer. Live owned proof now covers ordered observe-only engine-timer,
   active-CELL, attach-state, player-identity, and normalized player-position

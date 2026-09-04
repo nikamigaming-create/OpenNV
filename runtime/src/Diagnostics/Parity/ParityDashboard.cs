@@ -39,45 +39,54 @@ internal sealed partial class ParityDashboard : Control
         if (retail.IsEmpty() || openNv.IsEmpty() ||
             retail.GetWidth() != openNv.GetWidth() ||
             retail.GetHeight() != openNv.GetHeight() ||
-            retail.GetFormat() != Image.Format.Rgba8 ||
-            openNv.GetFormat() != Image.Format.Rgba8)
+            retail.GetFormat() is not (Image.Format.Rgb8 or Image.Format.Rgba8) ||
+            openNv.GetFormat() != retail.GetFormat())
             throw new InvalidDataException(
-                "Parity visualization requires matched nonempty RGBA8 frames.");
+                "Parity visualization requires native-size frames with the same RGB8 or RGBA8 format.");
         _retail.Texture = ImageTexture.CreateFromImage(retail);
         _openNv.Texture = ImageTexture.CreateFromImage(openNv);
         _difference.Texture = ImageTexture.CreateFromImage(Difference(retail, openNv));
-        _summary.Text = comparison.ExactStateMatch
-            ? $"PARITY EXACT • tick Δ {comparison.SimulationTickDelta} • time Δ {comparison.MonotonicNanosecondsDelta} ns"
-            : $"PARITY DIVERGED • state byte {comparison.FirstStateByteOffset?.ToString() ?? "identity"} • " +
-              $"fields {comparison.Deltas.Count} • tick Δ {comparison.SimulationTickDelta} • " +
-              $"time Δ {comparison.MonotonicNanosecondsDelta} ns";
-        _summary.Modulate = comparison.ExactStateMatch
-            ? new Color(0.35f, 1.0f, 0.45f)
-            : new Color(1.0f, 0.3f, 0.25f);
+        var pixels = retail.GetFormat() == Image.Format.Rgb8
+            ? ParityPixelComparator.CompareRgb8(
+                retail.GetWidth(), retail.GetHeight(), retail.GetData(), openNv.GetData())
+            : ParityPixelComparator.CompareRgba8(
+                retail.GetWidth(), retail.GetHeight(), retail.GetData(), openNv.GetData());
+        var state = comparison.ComparableState
+            ? comparison.ExactStateMatch ? "STATE BYTES EXACT" : "STATE BYTES DIFFER"
+            : $"STATE UNALIGNED: {comparison.AlignmentFailure}";
+        _summary.Text = $"{state} • fields {comparison.Deltas.Count} • " +
+            (pixels.ExactBytes ? "PIXEL BYTES EXACT" :
+                $"PIXELS DIFFER {pixels.DifferentPixels} • first byte {pixels.FirstByteOffset}") +
+            " • final-frame correspondence unverified";
+        _summary.Modulate = new Color(1.0f, 0.3f, 0.25f);
     }
 
     private static Image Difference(Image left, Image right)
     {
         var leftBytes = left.GetData();
         var rightBytes = right.GetData();
-        if (leftBytes.Length != rightBytes.Length || leftBytes.Length % 4 != 0)
+        var stride = left.GetFormat() == Image.Format.Rgb8 ? 3 : 4;
+        if (leftBytes.Length != rightBytes.Length || leftBytes.Length % stride != 0)
             throw new InvalidDataException("Parity frame byte layouts differ.");
         var difference = new byte[leftBytes.Length];
-        for (var offset = 0; offset < difference.Length; offset += 4)
+        for (var offset = 0; offset < difference.Length; offset += stride)
         {
             var red = Math.Abs(leftBytes[offset] - rightBytes[offset]);
             var green = Math.Abs(leftBytes[offset + 1] - rightBytes[offset + 1]);
             var blue = Math.Abs(leftBytes[offset + 2] - rightBytes[offset + 2]);
-            difference[offset] = (byte)Math.Max(red, Math.Max(green, blue));
-            difference[offset + 1] = (byte)(green / 4);
-            difference[offset + 2] = (byte)(blue / 4);
-            difference[offset + 3] = byte.MaxValue;
+            var alpha = stride == 4 ? Math.Abs(leftBytes[offset + 3] - rightBytes[offset + 3]) : 0;
+            // Alpha is displayed as gray so alpha-only differences remain visible.
+            difference[offset] = (byte)Math.Max(red, alpha);
+            difference[offset + 1] = (byte)Math.Max(green, alpha);
+            difference[offset + 2] = (byte)Math.Max(blue, alpha);
+            if (stride == 4)
+                difference[offset + 3] = byte.MaxValue;
         }
         return Image.CreateFromData(
             left.GetWidth(),
             left.GetHeight(),
             false,
-            Image.Format.Rgba8,
+            left.GetFormat(),
             difference);
     }
 

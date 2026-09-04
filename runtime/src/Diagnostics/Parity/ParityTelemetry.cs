@@ -35,6 +35,7 @@ internal enum ParityValueKind : byte
     UInt64 = 3,
     Float64 = 4,
     Utf8 = 5,
+    Float32 = 6,
 }
 
 internal sealed record ParityTelemetryField(
@@ -43,6 +44,21 @@ internal sealed record ParityTelemetryField(
     ParityValueKind Kind,
     byte[] Value)
 {
+    internal static ParityTelemetryField Float32(
+        ParityCategory category,
+        ulong stableId,
+        float value) => Float32Bits(category, stableId, BitConverter.SingleToUInt32Bits(value));
+
+    internal static ParityTelemetryField Float32Bits(
+        ParityCategory category,
+        ulong stableId,
+        uint bits)
+    {
+        var bytes = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, bits);
+        return new(category, stableId, ParityValueKind.Float32, bytes);
+    }
+
     internal static ParityTelemetryField Bytes(
         ParityCategory category,
         ulong stableId,
@@ -193,7 +209,8 @@ internal static class ParityTelemetryCodec
             if (!Enum.IsDefined(field.Category) || !Enum.IsDefined(field.Kind) ||
                 field.Value.Length > MaximumFieldBytes ||
                 field.Kind is ParityValueKind.Int64 or ParityValueKind.UInt64 or ParityValueKind.Float64 &&
-                field.Value.Length != sizeof(long))
+                field.Value.Length != sizeof(long) ||
+                field.Kind == ParityValueKind.Float32 && field.Value.Length != sizeof(float))
                 throw new InvalidDataException("Parity telemetry field is invalid.");
             writer.Write((ushort)field.Category);
             writer.Write((byte)field.Kind);
@@ -231,7 +248,8 @@ internal static class ParityTelemetryCodec
             var length = reader.ReadInt32();
             if (length < 0 || length > MaximumFieldBytes ||
                 kind is ParityValueKind.Int64 or ParityValueKind.UInt64 or ParityValueKind.Float64 &&
-                length != sizeof(long))
+                length != sizeof(long) ||
+                kind == ParityValueKind.Float32 && length != sizeof(float))
                 throw new InvalidDataException("Parity telemetry field length is invalid.");
             var value = reader.ReadBytes(length);
             if (value.Length != length)

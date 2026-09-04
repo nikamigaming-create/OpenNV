@@ -63,9 +63,19 @@ internal static class ParityRetailIngress
             nameof(ParityValueKind.UInt64) => ParityTelemetryField.UInt64(
                 category, stableId, ParseUInt64(value, "Retail parity UInt64 field")),
             nameof(ParityValueKind.Float64) => ParityTelemetryField.Float64(category, stableId, ParseFloat64(value)),
+            nameof(ParityValueKind.Float32) => new ParityTelemetryField(
+                category, stableId, ParityValueKind.Float32, ParseFloat32Bytes(value)),
             nameof(ParityValueKind.Utf8) => ParityTelemetryField.Utf8(category, stableId, value),
             _ => throw new InvalidDataException($"Retail parity value kind is invalid: {kind}"),
         };
+    }
+
+    private static byte[] ParseFloat32Bytes(string value)
+    {
+        if (value.Length != sizeof(float) * 2 || !value.All(char.IsAsciiHexDigit))
+            throw new InvalidDataException(
+                "Retail parity Float32 requires eight hexadecimal digits containing the original little-endian bytes.");
+        return Convert.FromHexString(value);
     }
 
     private static byte[] ParseBase64(string value)

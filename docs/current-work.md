@@ -25,6 +25,14 @@ C#/Godot gate with Godot 4.7.2 Mono. Resolve its exact identity with
 - Canonical little-endian telemetry packets, exact-byte comparison, typed field
   deltas, a loss-detecting Windows shared-memory ring, traces, divergence frame
   retention, three-panel Godot review, and hash-bound video plans exist.
+- Float32 telemetry preserves original IEEE-754 bytes, including signed zero
+  and NaN payloads. Field mismatch reports retain both types and complete hex
+  values. Unknown or different event identities cannot produce an exact-state
+  result. RGB8/RGBA8 pixel comparison checks every channel without tolerance.
+- `--parity-capture` connects native viewport readback to pre/post-draw
+  telemetry. An ordinary OpenNV front-end launch retained 24 native RGB8 frames
+  and 96 hash-checked packet/pixel/PNG files. This verifies capture plumbing
+  only; the captured state was startup, with no matched retail gameplay.
 - The reviewed private Win32 observer now feeds strict neutral snapshots through
   the public retail ingress into packet v1. A live owned FalloutNV.exe proof
   published three ordered gameplay packets carrying the engine millisecond
@@ -76,6 +84,15 @@ passes.
   and first player/world fields. The authoritative retail event ordinal remains
   unrecovered and zero, matched input is absent, and there is no complete
   synchronized retail/OpenNV run or final-frame identity.
+- The observer now retains source Float32 bytes and the measured read interval.
+  A fresh observe-only attachment reached retail but found no parent gameplay
+  CELL. Live gameplay emission of the updated raw-bit fields remains to be run
+  after the user loads a game. Polling does not observe events between samples;
+  lossless packet transport therefore does not mean complete telemetry.
+- The unverified actor experiment was removed from the active build and kept
+  locally under `tmp/actor-development/unverified-ed84fbac352547aeb2092c1e1bf85b41`.
+  Its skin/hair approximations, static pose, and missing face behavior are not
+  implemented retail parity. Resume from observed source/runtime behavior.
 - Active-cell identity coverage is live, but authoritative telemetry is still
   missing for many actor, bone, animation, package, quest, dialogue, inventory,
   effect, audio, material, draw, UI, and input owners.
@@ -90,8 +107,10 @@ passes.
 
 ## Today’s execution order
 
-1. Recover the authoritative retail semantic event boundary and publish its
-   ordinal through the proven gameplay packet-v1 ingress.
+1. Observe retail gameplay update, semantic-event, and render/present boundaries.
+   Establish their actual ordering before publishing event identity. Never
+   substitute a polling-sample counter for an observed event stream. Retain
+   native retail frame bytes and associate them with those boundaries.
 2. Add the diagnostic input duplicator so ordinary timestamped player input
    drives the existing exact state-key/event-ordinal join in both games.
 3. Wire complete live telemetry at authoritative owners, starting with actors,

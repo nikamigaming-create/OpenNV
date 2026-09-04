@@ -44,12 +44,23 @@ A stable ID is the first little-endian `u64` of SHA-256 over the UTF-8 field
 name. Field names therefore remain implementation-neutral while packets remain
 compact.
 
+Value kind `6` is Float32: exactly four original IEEE-754 little-endian bytes.
+The retail JSON ingress represents this kind as eight hexadecimal digits in
+memory byte order (`0000803F` for 1.0). It never converts these fields through
+decimal text, Float64, or unit scaling. Signed zero and NaN payloads survive
+the packet round trip. Existing normalized-coordinate fields remain separate;
+the observer also publishes raw source positions and rotations.
+
 ## Comparison
 
 Envelope sequence and local time do not participate in exact state equality.
-The comparator first requires the same state key, compares complete canonical
+The comparator requires the same state key and the same nonzero observed event
+identity, compares complete canonical
 state bytes, records the first differing byte, and then expands differences by
-field identity. Numeric fields also report an OpenNV-minus-retail delta.
+field identity. Each difference retains both value kinds and full value bytes
+as hex, including missing fields. Numeric deltas are additional diagnostics;
+numeric equality never overrides different bits. Unknown or different event
+identity stays unaligned even if the sampled bytes agree.
 
 State keys and event ordinals must identify equivalent authored state. A camera
 frame from one dialogue node is not comparable with a nearby frame from another
@@ -63,6 +74,18 @@ by default, keeps a monotonically increasing ring sequence, and commits the
 payload before publishing the new sequence. Readers request every sequence in
 order. If a requested sequence has already been overwritten, the read fails;
 telemetry loss is never reported as parity.
+
+Adding `--parity-capture <new-private-directory>` samples at the render
+boundaries instead. Each native viewport readback is saved as unchanged
+`.pixels` bytes plus a PNG preview, with separate before/after `.onvpacket`
+files. `frames.jsonl` records the native format, dimensions, source draw count,
+timestamps, hashes, and whether the observed state changed across the draw.
+This mode requires a rendering display and records every observed draw until
+the runtime exits. Readback and disk writes affect performance; their run is
+not an uninstrumented frame-timing measurement. No game input is generated.
+The native Godot viewport was observed to return RGB8. Capture preserves that
+format instead of manufacturing an alpha channel. Retail-frame correspondence
+remains explicitly unobserved.
 
 The OpenNV producer publishes configuration identity, renderer method,
 authoritative current CELL identity and reference count, player-root position
@@ -91,8 +114,10 @@ data cannot accidentally cross into the public protocol.
 reads every ring sequence in order, verifies each packet's engine and producer
 sequence, and joins frames FIFO by exact `(state key, event ordinal)`. A ring
 overrun, producer gap, wrong engine, or bounded unmatched-state overflow fails
-closed. Each joined pair receives the canonical exact comparison and may be
-written with both original packet traces and a JSON report:
+closed. Each candidate pair receives the canonical exact comparison and may be
+written with both original packet traces and a v2 JSON report containing all
+field deltas. Partial reports and traces are retained on timeout or failure.
+FIFO candidate pairing is not proof of simulation or final-frame alignment.
 
 ```powershell
 dotnet run --project .\runtime\tools\ParityLiveComparator\ParityLiveComparator.csproj -c Release -- `
@@ -104,6 +129,10 @@ Start the comparator before either producer and use new channel names for each
 run. The current retail event ordinal is deliberately zero because the
 authoritative event boundary has not been recovered. A joined zero-ordinal CELL
 sample proves live transport and state-key connectivity only, not event parity.
+The observer can retain its neutral input stream with `-OutputDirectory
+<new-private-directory>`. It records the beginning and end of each memory-read
+interval and a second engine-timer observation; it does not claim an atomic
+snapshot or events that occurred between samples.
 
 ## Traces and video
 
@@ -114,3 +143,9 @@ hash-verified PNG sequences, encodes retail-left/OpenNV-right H.264 with ffmpeg,
 validates the result with ffprobe, and emits `parity-clip-report.json` containing
 source-frame and video hashes. Video is diagnostic evidence; it does not replace
 matched state or exact telemetry.
+
+The dashboard independently compares every byte of equal-size RGB8 or RGBA8
+readbacks, including RGBA alpha. It does not resize, align, recolor, or threshold
+the inputs. State and pixel results are shown separately; sampled telemetry
+equality cannot turn a different image into an exact result. The dashboard
+still has no live retail-frame feed or proven final-frame correspondence.

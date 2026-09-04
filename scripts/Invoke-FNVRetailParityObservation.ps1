@@ -8,10 +8,11 @@ param(
     [string]$ParityChannel,
     [string]$PrivateLayoutPath =
         'D:\Dev\Tools\Ghidrust\workspace\evidence\falloutnv_1_4_0_525\parity_telemetry\gameplay-live-layout.json',
-    [ValidateRange(2, 64)]
+    [ValidateRange(2, [int]::MaxValue)]
     [int]$SampleCount = 3,
     [ValidateRange(10, 1000)]
-    [int]$SampleIntervalMilliseconds = 100
+    [int]$SampleIntervalMilliseconds = 100,
+    [string]$OutputDirectory
 )
 
 Set-StrictMode -Version Latest
@@ -57,6 +58,16 @@ function Format-Float64([double]$Value) {
         throw 'Retail parity Float64 value is not finite.'
     }
     return $Value.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-Float32Hex([byte[]]$Bytes, [int]$Offset) {
+    Assert-ByteRange 'Float32 telemetry bytes' $Offset 4 $Bytes.Length
+    return [Convert]::ToHexString($Bytes, $Offset, 4)
+}
+
+function Get-MonotonicNanoseconds {
+    return [long]([decimal][Diagnostics.Stopwatch]::GetTimestamp() * 1000000000 /
+        [Diagnostics.Stopwatch]::Frequency)
 }
 
 function Resolve-FormKey([uint32]$RuntimeFormId, [string[]]$PluginLoadOrder) {
@@ -210,7 +221,19 @@ $mcp = $null
 $publisher = $null
 $sessionId = $null
 $nextId = 1
+$snapshotWriter = $null
 try {
+    if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+        $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
+        if (Test-Path -LiteralPath $OutputDirectory) {
+            throw "Refusing to overwrite retail observation: $OutputDirectory"
+        }
+        $null = [IO.Directory]::CreateDirectory($OutputDirectory)
+        $snapshotWriter = [IO.StreamWriter]::new(
+            (Join-Path $OutputDirectory 'retail-snapshots.jsonl'), $false,
+            [Text.UTF8Encoding]::new($false))
+        $snapshotWriter.AutoFlush = $true
+    }
     $mcpInfo = [Diagnostics.ProcessStartInfo]::new()
     $mcpInfo.FileName = [string]$layout.observer.path
     $mcpInfo.ArgumentList.Add('mcp')
@@ -276,6 +299,7 @@ try {
 
     for ($index = 0; $index -lt $SampleCount; $index++) {
         if ($target.HasExited) { throw 'Retail target exited during observation.' }
+        $observationBegin = Get-MonotonicNanoseconds
         $timer = Read-ObservedBytes $mcp ([ref]$nextId) $sessionId `
             ($moduleBase + $timerRva) $timerReadBytes
         $playerPointerBytes = Read-ObservedBytes $mcp ([ref]$nextId) $sessionId `
@@ -307,16 +331,19 @@ try {
             [ordered]@{ category = 'Execution'; name = 'runtime.target.version'; kind = 'Utf8'; value = [string]$layout.target.version }
             [ordered]@{ category = 'Execution'; name = 'runtime.module.name'; kind = 'Utf8'; value = [string]$layout.target.moduleName }
             [ordered]@{ category = 'Execution'; name = 'execution.timer.milliseconds'; kind = 'UInt64'; value = [string](Get-UInt32 $timer $timerMillisecondsOffset) }
-            [ordered]@{ category = 'Execution'; name = 'execution.timer.delta-seconds'; kind = 'Float64'; value = Format-Float64 ([double](Get-Float32 $timer $timerSecondsOffset)) }
+            [ordered]@{ category = 'Execution'; name = 'execution.timer.delta-seconds'; kind = 'Float32'; value = Get-Float32Hex $timer $timerSecondsOffset }
             [ordered]@{ category = 'World'; name = 'world.cell.form-key'; kind = 'Utf8'; value = $cellFormKey }
             [ordered]@{ category = 'World'; name = 'world.cell.attach-state'; kind = 'UInt64'; value = [string]$cell[$cellAttachStateOffset] }
             [ordered]@{ category = 'Actor'; name = 'actor.player.form-key'; kind = 'Utf8'; value = $playerFormKey }
             [ordered]@{ category = 'Actor'; name = 'actor.player.root.position.x'; kind = 'Float64'; value = Format-Float64 ($sourceX * $gameUnitsToMeters) }
             [ordered]@{ category = 'Actor'; name = 'actor.player.root.position.y'; kind = 'Float64'; value = Format-Float64 ($sourceZ * $gameUnitsToMeters) }
             [ordered]@{ category = 'Actor'; name = 'actor.player.root.position.z'; kind = 'Float64'; value = Format-Float64 (-$sourceY * $gameUnitsToMeters) }
-            [ordered]@{ category = 'Actor'; name = 'actor.player.source-rotation.x-radians'; kind = 'Float64'; value = Format-Float64 $rotationX }
-            [ordered]@{ category = 'Actor'; name = 'actor.player.source-rotation.y-radians'; kind = 'Float64'; value = Format-Float64 $rotationY }
-            [ordered]@{ category = 'Actor'; name = 'actor.player.source-rotation.z-radians'; kind = 'Float64'; value = Format-Float64 $rotationZ }
+            [ordered]@{ category = 'Actor'; name = 'actor.player.source-position.x-game-units'; kind = 'Float32'; value = Get-Float32Hex $player $referencePositionOffset }
+            [ordered]@{ category = 'Actor'; name = 'actor.player.source-position.y-game-units'; kind = 'Float32'; value = Get-Float32Hex $player ($referencePositionOffset + 4) }
+            [ordered]@{ category = 'Actor'; name = 'actor.player.source-position.z-game-units'; kind = 'Float32'; value = Get-Float32Hex $player ($referencePositionOffset + 8) }
+            [ordered]@{ category = 'Actor'; name = 'actor.player.source-rotation.x-radians'; kind = 'Float32'; value = Get-Float32Hex $player $referenceRotationOffset }
+            [ordered]@{ category = 'Actor'; name = 'actor.player.source-rotation.y-radians'; kind = 'Float32'; value = Get-Float32Hex $player ($referenceRotationOffset + 4) }
+            [ordered]@{ category = 'Actor'; name = 'actor.player.source-rotation.z-radians'; kind = 'Float32'; value = Get-Float32Hex $player ($referenceRotationOffset + 8) }
         )
         $worldspaceAddress = [uint64](Get-UInt32 $cell $cellWorldspaceOffset)
         if ($worldspaceAddress -ne 0) {
@@ -330,8 +357,14 @@ try {
                     $pluginLoadOrder
             }
         }
-        $nanoseconds = [Diagnostics.Stopwatch]::GetTimestamp() * 1000000000L /
-            [Diagnostics.Stopwatch]::Frequency
+        $timerAfter = Read-ObservedBytes $mcp ([ref]$nextId) $sessionId `
+            ($moduleBase + $timerRva) $timerReadBytes
+        $nanoseconds = Get-MonotonicNanoseconds
+        $fields += @(
+            [ordered]@{ category = 'Execution'; name = 'observation.begin.monotonic-nanoseconds'; kind = 'Int64'; value = [string]$observationBegin }
+            [ordered]@{ category = 'Execution'; name = 'observation.end.monotonic-nanoseconds'; kind = 'Int64'; value = [string]$nanoseconds }
+            [ordered]@{ category = 'Execution'; name = 'observation.end.engine-milliseconds'; kind = 'UInt64'; value = [string](Get-UInt32 $timerAfter $timerMillisecondsOffset) }
+        )
         $snapshot = [ordered]@{
             schema = 'opennv-retail-parity-snapshot/v1'
             simulationTick = [string](Get-UInt32 $timer $timerMillisecondsOffset)
@@ -340,6 +373,7 @@ try {
             stateKey = "cell:$cellFormKey"
             fields = $fields
         } | ConvertTo-Json -Compress -Depth 6
+        if ($null -ne $snapshotWriter) { $snapshotWriter.WriteLine($snapshot) }
         $publisher.StandardInput.WriteLine($snapshot)
         $publisher.StandardInput.Flush()
         $receipt = $publisher.StandardOutput.ReadLine()
@@ -355,11 +389,13 @@ try {
         throw "Retail parity publisher failed: $($publisher.StandardError.ReadToEnd())"
     }
     Write-Output (
-        "OPENNV_FNV_RETAIL_PARITY_OBSERVATION_PASS packets=$SampleCount ordered=1 " +
+        "OPENNV_FNV_RETAIL_OBSERVATION_COMPLETE samples=$SampleCount ordered=1 " +
         "observe-only=1 packet-v1=1 state=gameplay-cell-player-timer " +
-        "event-ordinal=unrecovered-zero channel=$ParityChannel")
+        "source-float32=exact-bits event-ordinal=unrecovered-zero " +
+        "final-frames=unobserved complete-telemetry=0 channel=$ParityChannel")
 }
 finally {
+    if ($null -ne $snapshotWriter) { $snapshotWriter.Dispose() }
     if ($null -ne $sessionId -and $null -ne $mcp -and -not $mcp.HasExited) {
         try { $null = Invoke-McpTool $mcp ([ref]$nextId) 'process_detach' @{ session_id = $sessionId } }
         catch { Write-Warning "Could not detach Ghidrust observer: $_" }

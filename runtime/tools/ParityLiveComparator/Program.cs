@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using OpenNV.Runtime.Diagnostics.Parity;
 
 if (!OperatingSystem.IsWindows())
@@ -28,11 +29,12 @@ if (outputRoot is not null)
 }
 
 var rows = new List<JoinReport>(pairCount);
+var joiner = new ParityLiveJoiner(maximumPending);
+string? failure = null;
 try
 {
     using var retailRing = ParitySharedMemoryRing.CreateOrOpen(retailChannel);
     using var openNvRing = ParitySharedMemoryRing.CreateOrOpen(openNvChannel);
-    var joiner = new ParityLiveJoiner(maximumPending);
     var nextRetailRingSequence = 1L;
     var nextOpenNvRingSequence = 1L;
     var stopwatch = Stopwatch.StartNew();
@@ -60,33 +62,44 @@ try
     }
     if (rows.Count != pairCount)
         throw new TimeoutException(
-            $"Timed out after {timeoutSeconds}s waiting for {pairCount} matched parity frames: " +
-            $"matched={rows.Count}, pendingRetail={joiner.PendingRetailFrames}, " +
+            $"Timed out after {timeoutSeconds}s waiting for {pairCount} candidate state pairs: " +
+            $"candidates={rows.Count}, pendingRetail={joiner.PendingRetailFrames}, " +
             $"pendingOpenNV={joiner.PendingOpenNvFrames}.");
+}
+catch (Exception exception)
+{
+    failure = exception.Message;
+    throw;
 }
 finally
 {
     retailTrace?.Dispose();
     openNvTrace?.Dispose();
-}
-
-if (outputRoot is not null)
-{
-    File.WriteAllText(
+    if (outputRoot is not null)
+        File.WriteAllText(
         Path.Combine(outputRoot, "join-report.json"),
         JsonSerializer.Serialize(
             new
             {
-                schema = "opennv-parity-live-join-report/v1",
+                schema = "opennv-parity-live-join-report/v2",
                 retailChannel,
                 openNvChannel,
+                failure,
+                pendingRetail = joiner.PendingRetailFrames,
+                pendingOpenNv = joiner.PendingOpenNvFrames,
+                finalFrames = "unobserved",
                 pairs = rows,
             },
-            new JsonSerializerOptions { WriteIndented = true }));
+            new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new JsonStringEnumConverter() },
+            }));
 }
 Console.WriteLine(
     $"OPENNV_PARITY_LIVE_JOIN_COMPLETE pairs={rows.Count} " +
-    $"exact={rows.Count(row => row.Exact)} diverged={rows.Count(row => !row.Exact)} " +
+    $"state-bytes-exact={rows.Count(row => row.Exact)} diverged={rows.Count(row => !row.Exact)} " +
+    $"unaligned={rows.Count(row => !row.ComparableState)} final-frames=unobserved " +
     $"output={outputRoot ?? "none"}");
 
 static bool Drain(
@@ -116,18 +129,20 @@ static bool Drain(
                 joined.OpenNv.Sequence,
                 joined.Retail.StateKey,
                 joined.Retail.EventOrdinal,
+                comparison.ComparableState,
+                comparison.AlignmentFailure,
                 comparison.ExactStateMatch,
                 comparison.FirstStateByteOffset,
                 comparison.SimulationTickDelta,
                 comparison.MonotonicNanosecondsDelta,
                 comparison.EventOrdinalDelta,
-                comparison.Deltas.Count);
+                comparison.Deltas);
             rows.Add(report);
             Console.WriteLine(
-                $"OPENNV_PARITY_JOINED pair={rows.Count} state={report.StateKey} " +
+                $"OPENNV_PARITY_CANDIDATE pair={rows.Count} state={report.StateKey} " +
                 $"event={report.EventOrdinal} retail={report.RetailSequence} " +
                 $"opennv={report.OpenNvSequence} exact={(report.Exact ? 1 : 0)} " +
-                $"deltas={report.FieldDeltaCount}");
+                $"aligned={(report.ComparableState ? 1 : 0)} deltas={report.FieldDeltas.Count}");
         }
         nextRingSequence = checked(nextRingSequence + 1);
     }
@@ -178,9 +193,11 @@ internal sealed record JoinReport(
     ulong OpenNvSequence,
     string StateKey,
     ulong EventOrdinal,
+    bool ComparableState,
+    string? AlignmentFailure,
     bool Exact,
     int? FirstStateByteOffset,
     long SimulationTickDelta,
     long MonotonicNanosecondsDelta,
     long EventOrdinalDelta,
-    int FieldDeltaCount);
+    IReadOnlyList<ParityFieldDelta> FieldDeltas);

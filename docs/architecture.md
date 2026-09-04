@@ -65,3 +65,10 @@ advance simulation.
 The comparison denominator is discovered from live source and runtime owners,
 not a maintained checklist. A source identity without a runtime entity, an
 unpublished event, a lost packet, or an unmatched final frame is divergence.
+
+Exact source Float32 fields retain their original bits. Optional OpenNV frame
+capture records native viewport bytes and state at both draw boundaries, with
+PNG previews and file hashes. These outputs do not establish retail frame
+correspondence. The live join currently produces candidate sample pairs;
+unknown event identity stays unaligned, and full event/present observation is
+still required. No sampled-packet or startup-capture result certifies gameplay.

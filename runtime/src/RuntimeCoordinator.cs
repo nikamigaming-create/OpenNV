@@ -94,7 +94,9 @@ public partial class RuntimeCoordinator : Node3D
             _configuration = RuntimeConfiguration.Load();
             _options = ParseOptions(OS.GetCmdlineUserArgs());
             if (_options.TryGetValue("parity-channel", out var parityChannel))
-                EnableParityPublisher(parityChannel);
+                EnableParityPublisher(parityChannel, _options.GetValueOrDefault("parity-capture"));
+            else if (_options.ContainsKey("parity-capture"))
+                throw new ArgumentException("--parity-capture requires --parity-channel.");
             var launch = RuntimeLaunchRequest.Create(_options);
             if (_options.TryGetValue("data-root", out var dataRoot))
             {

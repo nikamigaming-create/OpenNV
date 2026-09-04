@@ -34,6 +34,56 @@ if (!exact.ComparableState || !exact.ExactStateMatch || exact.Deltas.Count != 0 
     exact.MonotonicNanosecondsDelta != 100_000)
     throw new InvalidOperationException("Parity telemetry did not isolate envelope timing from exact state bytes.");
 
+foreach (var ordinal in new ulong[] { 0, retail.EventOrdinal + 1 })
+{
+    var unaligned = ParityFrameComparator.Compare(
+        retail, openNv with { EventOrdinal = ordinal });
+    if (unaligned.ComparableState || unaligned.ExactStateMatch ||
+        string.IsNullOrWhiteSpace(unaligned.AlignmentFailure))
+        throw new InvalidOperationException("Identical sampled bytes concealed unavailable or different event identity.");
+}
+
+// These patterns catch conversion through decimal text, double, signed-zero
+// normalization, and NaN canonicalization in the observer/packet path.
+foreach (var bits in new uint[] { 0, 0x80000000, 0x3f800001, 1, 0x7fc00001, 0x7fc00002 })
+{
+    var field = ParityTelemetryField.Float32Bits(ParityCategory.Actor, 42, bits);
+    var snapshot = $$"""
+        {"schema":"opennv-retail-parity-snapshot/v1","simulationTick":"1","monotonicNanoseconds":"2","eventOrdinal":"3","stateKey":"float-bits","fields":[{"category":"Actor","name":"source.float32","kind":"Float32","value":"{{Convert.ToHexString(field.Value)}}"}]}
+        """;
+    var frame = ParityRetailIngress.Parse(snapshot, 1);
+    var roundTrip = ParityTelemetryCodec.Decode(ParityTelemetryCodec.Encode(frame));
+    if (roundTrip.Fields.Single().Kind != ParityValueKind.Float32 ||
+        !roundTrip.Fields.Single().Value.AsSpan().SequenceEqual(field.Value))
+        throw new InvalidOperationException($"Retail Float32 bits changed: {bits:X8}");
+}
+var positiveZero = retail with
+{
+    Fields = [ParityTelemetryField.Float32Bits(ParityCategory.Actor, 42, 0)],
+};
+var negativeZero = positiveZero with
+{
+    Engine = ParityEngine.OpenNv,
+    Fields = [ParityTelemetryField.Float32Bits(ParityCategory.Actor, 42, 0x80000000)],
+};
+var zeroDifference = ParityFrameComparator.Compare(positiveZero, negativeZero);
+if (zeroDifference.ExactStateMatch || zeroDifference.Deltas.Single() is not
+    { FirstByteOffset: 3, RetailHex: "00000000", OpenNvHex: "00000080", NumericDelta: 0 })
+    throw new InvalidOperationException("Numerically equal float values concealed a source-byte mismatch.");
+
+byte[] pixelLeft = [12, 34, 56, 255, 78, 90, 12, 255];
+var pixelRight = pixelLeft.ToArray();
+pixelRight[7]--;
+var alphaMismatch = ParityPixelComparator.CompareRgba8(2, 1, pixelLeft, pixelRight);
+if (alphaMismatch is not
+    { ExactBytes: false, FirstByteOffset: 7, DifferentPixels: 1, DifferentChannels: 1, MaximumChannelDelta: 1 })
+    throw new InvalidOperationException("Exact pixel comparison ignored a one-bit alpha difference.");
+if (!ParityPixelComparator.CompareRgba8(2, 1, pixelLeft, pixelLeft).ExactBytes)
+    throw new InvalidOperationException("Equal native pixel bytes diverged.");
+if (ParityPixelComparator.CompareRgb8(1, 1, [12, 34, 56], [12, 34, 57]) is not
+    { ExactBytes: false, FirstByteOffset: 2, DifferentPixels: 1 })
+    throw new InvalidOperationException("Native RGB8 comparison concealed a differing blue byte.");
+
 var changed = openNv with
 {
     Fields =
@@ -213,6 +263,27 @@ try
     var packets = ParityTraceReader.ReadAll(tracePath);
     if (packets.Count != 2 || !packets[0].AsSpan().SequenceEqual(encoded))
         throw new InvalidOperationException("Parity trace did not preserve exact packet bytes.");
+    var frameRoot = Path.Combine(traceRoot, "frames");
+    using (var archive = new ParityFrameArchive(frameRoot))
+    {
+        var beforeDraw = openNv with { Sequence = 1 };
+        var afterDraw = beforeDraw with { MonotonicNanoseconds = beforeDraw.MonotonicNanoseconds + 100 };
+        archive.Append(beforeDraw, afterDraw, 100, 2, 1, "Rgba8", pixelLeft, [1, 2, 3]);
+        try
+        {
+            archive.Append(beforeDraw with { Sequence = 3 }, afterDraw with { Sequence = 3 },
+                102, 2, 1, "Rgba8", pixelRight, [1, 2, 3]);
+            throw new InvalidOperationException("Viewport archive concealed a missing captured frame.");
+        }
+        catch (InvalidDataException)
+        {
+        }
+    }
+    if (!File.ReadAllBytes(Path.Combine(frameRoot, "0000000001.pixels")).AsSpan().SequenceEqual(pixelLeft) ||
+        File.ReadLines(Path.Combine(frameRoot, "frames.jsonl")).Count() != 1 ||
+        ParityTelemetryCodec.Decode(File.ReadAllBytes(Path.Combine(frameRoot, "0000000001.before.onvpacket")))
+            .Sequence != 1)
+        throw new InvalidOperationException("Viewport capture changed pixel bytes or lost its state association.");
 }
 finally
 {

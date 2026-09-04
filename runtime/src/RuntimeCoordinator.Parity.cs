@@ -45,10 +45,10 @@ public partial class RuntimeCoordinator
     private static readonly ulong CameraFarField = ParityStableId.FromName("camera.far-meters");
     private static readonly ulong RendererField = ParityStableId.FromName("renderer.method");
 
-    private void EnableParityPublisher(string channel)
+    private void EnableParityPublisher(string channel, string? captureDirectory)
     {
         var publisher = new ParityOpenNvPublisher();
-        publisher.Configure(channel, CaptureParityFrame);
+        publisher.Configure(channel, CaptureParityFrame, captureDirectory);
         AddChild(publisher);
         GD.Print($"OPENNV_PARITY_PUBLISHER_READY channel={channel}");
     }
