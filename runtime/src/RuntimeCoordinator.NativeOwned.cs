@@ -37,6 +37,7 @@ public partial class RuntimeCoordinator
     private const int DocTraitResultDialogueStage = 105;
     private FalloutPluginStack? _nativePluginStack;
     private FalloutCellScene? _nativeInitialCell;
+    private FalloutCellScene? _nativeActiveCell;
     private Node3D? _nativeCurrentCellRoot;
     private readonly Dictionary<string, Node3D> _nativeNifPrototypes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -341,7 +342,7 @@ public partial class RuntimeCoordinator
             AddNativeFallout3PlayerCamera(root, cell);
         else
             AddNativePlayer(root, cell, sourceSide);
-        _nativeCurrentCellRoot = root;
+        SetNativeActiveCell(root, activeScene);
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
@@ -518,12 +519,14 @@ public partial class RuntimeCoordinator
         }
         var current = _nativeCurrentCellRoot ??
             throw new InvalidOperationException("Native door activation has no current CELL root.");
+        var active = _nativeActiveCell ??
+            throw new InvalidOperationException("Native door activation has no authoritative CELL state.");
         var expectedCell = toDestination
             ? transition.SourceScene.Cell.FormKey
             : transition.DestinationScene.Cell.FormKey;
-        if (current.Name != $"NativeCell_{expectedCell}")
+        if (active.Cell.FormKey != expectedCell)
             throw new InvalidOperationException(
-                $"Native door activation expected CELL {expectedCell}, found {current.Name}.");
+                $"Native door activation expected CELL {expectedCell}, found {active.Cell.FormKey}.");
         var targetScene = toDestination ? transition.DestinationScene : transition.SourceScene;
         var targetRoot = BuildNativeCellRoot(
             targetScene,
@@ -550,7 +553,7 @@ public partial class RuntimeCoordinator
         var player = _nativePlayer ??
             throw new InvalidOperationException("Native door activation has no authoritative player.");
         player.Teleport(TeleportTransform(entry));
-        _nativeCurrentCellRoot = targetRoot;
+        SetNativeActiveCell(targetRoot, targetScene);
         current.QueueFree();
         _nativeOpeningStageDriver.PersistWorldState(targetScene.Cell.FormKey);
         GD.Print(
@@ -558,6 +561,14 @@ public partial class RuntimeCoordinator
             $"door={(toDestination ? transition.SourceDoor.FormKey : transition.DestinationDoor.FormKey)} " +
             $"entry={entry.Door} world={transition.DestinationWorldspace} " +
             "source=live-retail-files");
+    }
+
+    private void SetNativeActiveCell(Node3D root, FalloutCellScene cell)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(cell);
+        _nativeCurrentCellRoot = root;
+        _nativeActiveCell = cell;
     }
 
     private void AddNativePlacedLight(

@@ -52,6 +52,34 @@ if (mismatch.ExactStateMatch || mismatch.FirstStateByteOffset is null ||
         ParityDeltaKind.MissingRetail)
     throw new InvalidOperationException("Parity semantic delta expansion is incomplete.");
 
+var liveJoiner = new ParityLiveJoiner(4);
+var joined = liveJoiner.Push(retail with { Sequence = 1 });
+if (joined is not null || liveJoiner.PendingRetailFrames != 1)
+    throw new InvalidOperationException("Live parity join did not retain the unmatched retail frame.");
+joined = liveJoiner.Push(openNv with { Sequence = 1 });
+if (joined is null || !joined.Comparison.ExactStateMatch ||
+    liveJoiner.PendingRetailFrames != 0 || liveJoiner.PendingOpenNvFrames != 0)
+    throw new InvalidOperationException("Live parity join did not match exact semantic state FIFO.");
+try
+{
+    _ = new ParityLiveJoiner().Push(retail with { Sequence = 2 });
+    throw new InvalidOperationException("Live parity join concealed an initial producer gap.");
+}
+catch (InvalidDataException)
+{
+}
+var boundedJoiner = new ParityLiveJoiner(2);
+_ = boundedJoiner.Push(retail with { Sequence = 1, StateKey = "retail:one" });
+_ = boundedJoiner.Push(retail with { Sequence = 2, StateKey = "retail:two" });
+try
+{
+    _ = boundedJoiner.Push(retail with { Sequence = 3, StateKey = "retail:three" });
+    throw new InvalidOperationException("Live parity join concealed unmatched-state overflow.");
+}
+catch (InvalidDataException)
+{
+}
+
 var registry = new ParityObservationRegistry();
 registry.ReplaceScope(
     "cell:FalloutNV.esm:103df9",
@@ -131,6 +159,25 @@ if (OperatingSystem.IsWindows())
     catch (InvalidDataException)
     {
     }
+
+    var retailChannel = "retail_" + Guid.NewGuid().ToString("N");
+    var openNvChannel = "opennv_" + Guid.NewGuid().ToString("N");
+    using var retailWriter = ParitySharedMemoryRing.CreateOrOpen(retailChannel, 4, 64 * 1024);
+    using var retailReader = ParitySharedMemoryRing.CreateOrOpen(retailChannel, 4, 64 * 1024);
+    using var openNvWriter = ParitySharedMemoryRing.CreateOrOpen(openNvChannel, 4, 64 * 1024);
+    using var openNvReader = ParitySharedMemoryRing.CreateOrOpen(openNvChannel, 4, 64 * 1024);
+    var joinedRetail = ParityTelemetryCodec.Encode(retail with { Sequence = 1 });
+    var joinedOpenNv = ParityTelemetryCodec.Encode(openNv with { Sequence = 1 });
+    _ = retailWriter.Publish(joinedRetail);
+    _ = openNvWriter.Publish(joinedOpenNv);
+    if (!retailReader.TryRead(1, out var retailPacket) ||
+        !openNvReader.TryRead(1, out var openNvPacket))
+        throw new InvalidOperationException("Distinct live parity channels did not retain both engines.");
+    var ringJoiner = new ParityLiveJoiner();
+    _ = ringJoiner.Push(ParityTelemetryCodec.Decode(retailPacket));
+    var ringJoined = ringJoiner.Push(ParityTelemetryCodec.Decode(openNvPacket));
+    if (ringJoined is null || !ringJoined.Comparison.ExactStateMatch)
+        throw new InvalidOperationException("Distinct live parity channels did not join exact state.");
 
 }
 
@@ -218,7 +265,7 @@ if (!string.IsNullOrWhiteSpace(configuredFfmpeg) && File.Exists(configuredFfmpeg
 
 Console.WriteLine(
     "OPENNV_PARITY_TELEMETRY_PASS canonical=1 exact-bytes=1 semantic-deltas=2 shared-memory=1 " +
-    $"overrun=fail-closed retail-ingress=1 trace=2 live-coverage=fail-closed clip-window=4 " +
+    $"overrun=fail-closed retail-ingress=1 live-join=1 trace=2 live-coverage=fail-closed clip-window=4 " +
     $"video-plan=1 video-encoded={(encodedVideo ? 1 : 0)} " +
     $"video-proof={videoProof}");
 

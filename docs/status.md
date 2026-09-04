@@ -14,11 +14,13 @@ Fallout 3, Fallout: New Vegas, or Tale of Two Wastelands.
   presence reporting. The owned Doc house, Wasteland persistent CELL, and
   Prospector Saloon are measured without named actor success paths.
 - Canonical exact-byte telemetry packets, a loss-detecting shared-memory ring,
-  typed comparisons, trace evidence, divergence frame retention, and diagnostic
-  video planning.
+  a strict two-channel live state-key join, typed comparisons, trace evidence,
+  divergence frame retention, and diagnostic video planning.
 - A strict public retail ingress connected to the reviewed private Win32
-  observer, with live proof of three ordered observe-only module-identity
-  packets. Authoritative retail gameplay timing and state remain unconnected.
+  observer. Live owned proof now covers ordered observe-only engine-timer,
+  active-CELL, attach-state, player-identity, and normalized player-position
+  packets. Authoritative event ordinals and most gameplay state remain
+  unconnected.
 - Bounded Fallout 1, Fallout 2, and Fallout 3 routes and synthetic contracts.
 - C# Debug and Release builds, formatting checks, C# contract probes, desktop
   launcher tests, and Godot project loading.

@@ -12,6 +12,20 @@ public partial class RuntimeCoordinator
     private static readonly ulong CellField = ParityStableId.FromName("world.cell.form-key");
     private static readonly ulong ReferenceCountField =
         ParityStableId.FromName("world.cell.reference-count");
+    private static readonly ulong PlayerPositionXField =
+        ParityStableId.FromName("actor.player.root.position.x");
+    private static readonly ulong PlayerPositionYField =
+        ParityStableId.FromName("actor.player.root.position.y");
+    private static readonly ulong PlayerPositionZField =
+        ParityStableId.FromName("actor.player.root.position.z");
+    private static readonly ulong PlayerRotationXField =
+        ParityStableId.FromName("actor.player.root.rotation.x");
+    private static readonly ulong PlayerRotationYField =
+        ParityStableId.FromName("actor.player.root.rotation.y");
+    private static readonly ulong PlayerRotationZField =
+        ParityStableId.FromName("actor.player.root.rotation.z");
+    private static readonly ulong PlayerRotationWField =
+        ParityStableId.FromName("actor.player.root.rotation.w");
     private static readonly ulong CameraPositionXField =
         ParityStableId.FromName("camera.position.x");
     private static readonly ulong CameraPositionYField =
@@ -53,7 +67,7 @@ public partial class RuntimeCoordinator
                 RenderingServer.GetCurrentRenderingMethod().ToString()),
         };
         var stateKey = "startup";
-        if (_nativeInitialCell is { } cell)
+        if (_nativeActiveCell is { } cell)
         {
             stateKey = $"cell:{cell.Cell.FormKey}";
             fields.Add(ParityTelemetryField.Utf8(
@@ -64,6 +78,25 @@ public partial class RuntimeCoordinator
                 ParityCategory.World,
                 ReferenceCountField,
                 (ulong)cell.References.Count));
+        }
+        if (_nativePlayer is { } player)
+        {
+            var position = player.GlobalPosition;
+            var rotation = player.GlobalBasis.GetRotationQuaternion().Normalized();
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerPositionXField, position.X));
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerPositionYField, position.Y));
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerPositionZField, position.Z));
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerRotationXField, rotation.X));
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerRotationYField, rotation.Y));
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerRotationZField, rotation.Z));
+            fields.Add(ParityTelemetryField.Float64(
+                ParityCategory.Actor, PlayerRotationWField, rotation.W));
         }
         var camera = GetViewport().GetCamera3D();
         if (camera is not null)

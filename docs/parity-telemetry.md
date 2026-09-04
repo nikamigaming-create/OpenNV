@@ -3,8 +3,11 @@
 OpenNV exposes an experimental C# telemetry producer with canonical binary
 state, a Windows shared-memory transport, exact-byte comparison, typed deltas,
 loss-detecting traces, a Godot three-panel view, and divergence-centered video
-evidence. The corresponding private retail observer is not yet connected, so
-this is infrastructure rather than a claim of live retail parity.
+evidence. The reviewed private retail observer now publishes a live engine
+timer, active CELL identity and attach state, player identity, and normalized
+player position through the public packet ingress. Event-boundary identity,
+complete gameplay fields, matched input, and final-frame identity remain
+unconnected, so this is diagnostic infrastructure rather than a parity claim.
 
 ## Safety boundary
 
@@ -61,9 +64,12 @@ payload before publishing the new sequence. Readers request every sequence in
 order. If a requested sequence has already been overwritten, the read fails;
 telemetry loss is never reported as parity.
 
-The OpenNV producer publishes configuration identity, renderer method, active
-CELL identity and reference count, active-camera position, quaternion, FOV,
-near plane, and far plane. The live active-CELL observation registry also
+The OpenNV producer publishes configuration identity, renderer method,
+authoritative current CELL identity and reference count, player-root position
+and quaternion, and active-camera position, quaternion, FOV, near plane, and
+far plane. Door streaming commits the new C# CELL owner before subsequent
+telemetry capture; the startup CELL is not reused as active state. The live
+active-CELL observation registry also
 publishes every source-discovered reference, every observed runtime presence,
 coverage counts, and a deterministic digest of missing identities. Source
 discovery is not presentation or parity: an actor reference without a real
@@ -80,6 +86,24 @@ names and values, assigns the retail producer sequence itself, encodes packet
 v1, and publishes it to the same loss-detecting ring. Unknown JSON properties
 fail closed so private addresses, process handles, and observer-specific layout
 data cannot accidentally cross into the public protocol.
+
+`OpenNV.ParityLiveComparator` opens distinct fresh retail and OpenNV channels,
+reads every ring sequence in order, verifies each packet's engine and producer
+sequence, and joins frames FIFO by exact `(state key, event ordinal)`. A ring
+overrun, producer gap, wrong engine, or bounded unmatched-state overflow fails
+closed. Each joined pair receives the canonical exact comparison and may be
+written with both original packet traces and a JSON report:
+
+```powershell
+dotnet run --project .\runtime\tools\ParityLiveComparator\ParityLiveComparator.csproj -c Release -- `
+  --retail-channel fnv_retail_01 --opennv-channel opennv_01 --pairs 120 `
+  --output D:\private-proof\matched-run-01
+```
+
+Start the comparator before either producer and use new channel names for each
+run. The current retail event ordinal is deliberately zero because the
+authoritative event boundary has not been recovered. A joined zero-ordinal CELL
+sample proves live transport and state-key connectivity only, not event parity.
 
 ## Traces and video
 
