@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Content;
@@ -35,6 +36,9 @@ public partial class RuntimeCoordinator
     private FalloutPluginStack? _nativePluginStack;
     private FalloutCellScene? _nativeInitialCell;
     private Node3D? _nativeCurrentCellRoot;
+    private readonly Dictionary<string, Node3D> _nativeNifPrototypes =
+        new(StringComparer.OrdinalIgnoreCase);
+    private Node3D? _nativePrewarmedInitialCellRoot;
     private RuntimeNativePlayer? _nativePlayer;
     private FalloutOpeningControlGraph? _nativeOpeningControls;
     private FalloutOpeningStageTransitionGraph? _nativeOpeningTransitions;
@@ -48,36 +52,36 @@ public partial class RuntimeCoordinator
     private bool _nativeSkipOpeningMovie;
     private bool _nativeContinueOpening;
 
-    private void LoadNativeOwnedStack()
+    private void LoadNativeLiveStack()
     {
-        var source = RuntimeOwnedContentSource.Current ??
-            throw new InvalidOperationException("Native owned-data source was not configured.");
+        var source = RuntimeLiveContentSource.Current ??
+            throw new InvalidOperationException("Live retail source was not configured.");
         SetLoadingStatus("INDEXING LIVE PLUGINS");
         if (DisplayServer.GetName() == "headless" || _options.ContainsKey("new-game"))
         {
-            IndexNativeOwnedStack(source.PluginSources);
+            IndexNativeLiveStack(source.PluginSources);
             if (_options.ContainsKey("new-game"))
                 LoadNativeInitialCell();
             if (DisplayServer.GetName() == "headless")
                 GetTree().Quit(0);
             return;
         }
-        ShowNativeOwnedMenu(source.PluginSources);
+        ShowNativeLiveMenu(source.PluginSources);
         DismissLoadingScreen();
     }
 
-    private void IndexNativeOwnedStack(IReadOnlyList<FalloutPluginSource> sources)
+    private void IndexNativeLiveStack(IReadOnlyList<FalloutPluginSource> sources)
     {
-        var content = RuntimeOwnedContentSource.Current ??
-            throw new InvalidOperationException("Native owned-data source was not configured.");
-        _nativePluginStack = FalloutPluginStack.Load(sources);
-        var initialCell = content.Campaign == RuntimeOwnedContentSource.Fallout3Game
+        var content = RuntimeLiveContentSource.Current ??
+            throw new InvalidOperationException("Live retail source was not configured.");
+        _nativePluginStack = FalloutPluginStack.Load(sources, out var loadMetrics);
+        var initialCell = content.Campaign == RuntimeLiveContentSource.Fallout3Game
             ? new FalloutFormKey(NativeFallout3InitialCellPlugin, NativeFallout3InitialCellObjectId)
             : new FalloutFormKey(NativeNewVegasInitialCellPlugin, 0x103df9);
         _nativeInitialCell = FalloutCellSceneReader.Read(
             _nativePluginStack,
             initialCell);
-        if (content.Campaign == RuntimeOwnedContentSource.FalloutNewVegasGame)
+        if (content.Campaign == RuntimeLiveContentSource.FalloutNewVegasGame)
         {
             _nativeOpeningControls = FalloutOpeningPlayerControlResolver.Resolve(
                 _nativePluginStack,
@@ -164,15 +168,21 @@ public partial class RuntimeCoordinator
                 }
             }
         }
+        var archiveWarmupWait = Stopwatch.StartNew();
+        content.ArchiveWarmup.GetAwaiter().GetResult();
+        archiveWarmupWait.Stop();
         GD.Print(
             $"OPENNV_NATIVE_STACK_READY edition={content.Edition} campaign={content.Campaign} " +
             $"game={content.Game} plugins={_nativePluginStack.Plugins.Count} " +
             $"records={_nativePluginStack.EffectiveRecordCount} cell={_nativeInitialCell.Cell.FormKey} " +
             $"references={_nativeInitialCell.References.Count} " +
-            $"models={_nativeInitialCell.BaseObjects.Values.Count(value => value.ModelPath is not null)}");
+            $"models={_nativeInitialCell.BaseObjects.Values.Count(value => value.ModelPath is not null)} " +
+            $"pluginOpenMs={loadMetrics.PluginHeaderScan.TotalMilliseconds:F1} " +
+            $"winnerIndexMs={loadMetrics.WinnerConstruction.TotalMilliseconds:F1} " +
+            $"archiveWinnerWaitMs={archiveWarmupWait.Elapsed.TotalMilliseconds:F1}");
     }
 
-    private async void IndexNativeOwnedStackForMenu(
+    private async void IndexNativeLiveStackForMenu(
         IReadOnlyList<FalloutPluginSource> sources,
         Label status,
         Button start,
@@ -181,10 +191,23 @@ public partial class RuntimeCoordinator
     {
         try
         {
-            await Task.Run(() => IndexNativeOwnedStack(sources));
+            await Task.Run(() => IndexNativeLiveStack(sources));
+            status.Text = "Live ESM/BSA index ready\nWarming the opening CELL in RAM…";
+            var initialCell = _nativeInitialCell ??
+                throw new InvalidOperationException("Native initial CELL was not decoded.");
+            var stack = _nativePluginStack ??
+                throw new InvalidOperationException("Native plugin stack was not indexed.");
+            var transition = RuntimeLiveContentSource.Current?.Campaign ==
+                RuntimeLiveContentSource.FalloutNewVegasGame
+                ? FalloutDoorTransitionResolver.ResolveSingleInteriorExit(stack, initialCell)
+                : null;
+            _nativePrewarmedInitialCellRoot = BuildNativeCellRoot(
+                initialCell,
+                transition,
+                sourceSide: true);
             status.Text = $"{_nativePluginStack!.Plugins.Count} plugins • " +
                           $"{_nativeInitialCell!.References.Count} initial CELL references\n" +
-                          "Live source index ready • no prepared cache mounted.";
+                          "Opening CELL resident in RAM • live files remain authoritative.";
             start.Disabled = false;
             skip.Disabled = false;
             continueGame.Disabled = _nativeOpeningRestore is null;
@@ -196,9 +219,9 @@ public partial class RuntimeCoordinator
         }
     }
 
-    private void ShowNativeOwnedMenu(IReadOnlyList<FalloutPluginSource> sources)
+    private void ShowNativeLiveMenu(IReadOnlyList<FalloutPluginSource> sources)
     {
-        var layer = new CanvasLayer { Name = "NativeOwnedMenu", Layer = NativeMenuCanvasLayer };
+        var layer = new CanvasLayer { Name = "NativeLiveMenu", Layer = NativeMenuCanvasLayer };
         var background = new ColorRect
         {
             Color = new Color(
@@ -220,14 +243,14 @@ public partial class RuntimeCoordinator
         center.AddChild(stack);
         var title = new Label
         {
-            Text = "OPENNV — LIVE OWNED DATA",
+            Text = "OPENNV — LIVE RETAIL FILES",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         title.AddThemeFontSizeOverride("font_size", NativeMenuTitleFontPixels);
         stack.AddChild(title);
         var status = new Label
         {
-            Text = "Indexing the active ESM/ESP stack in memory…\nNo prepared cache is mounted.",
+            Text = "Indexing the active ESM/ESP stack in memory…",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         stack.AddChild(status);
@@ -265,30 +288,61 @@ public partial class RuntimeCoordinator
         quit.Pressed += () => GetTree().Quit();
         stack.AddChild(quit);
         AddChild(layer);
-        IndexNativeOwnedStackForMenu(sources, status, start, skip, continueGame);
+        IndexNativeLiveStackForMenu(sources, status, start, skip, continueGame);
     }
 
     private void LoadNativeInitialCell()
     {
-        _ = RuntimeOwnedContentSource.Current ??
-            throw new InvalidOperationException("Native owned-data source was cleared during startup.");
+        _ = RuntimeLiveContentSource.Current ??
+            throw new InvalidOperationException("Live retail source was cleared during startup.");
         var cell = _nativeInitialCell ??
             throw new InvalidOperationException("Native initial CELL was not decoded.");
         var stack = _nativePluginStack ??
             throw new InvalidOperationException("Native plugin stack was not indexed.");
-        var fallout3 = RuntimeOwnedContentSource.Current.Campaign ==
-            RuntimeOwnedContentSource.Fallout3Game;
+        var fallout3 = RuntimeLiveContentSource.Current.Campaign ==
+            RuntimeLiveContentSource.Fallout3Game;
         var transition = fallout3
             ? null
             : FalloutDoorTransitionResolver.ResolveSingleInteriorExit(stack, cell);
-        var root = BuildNativeCellRoot(cell, transition, sourceSide: true);
+        var restore = _nativeContinueOpening
+            ? _nativeOpeningRestore ?? throw new InvalidOperationException(
+                "Native Continue was selected without a valid cold save.")
+            : null;
+        var activeCell = restore?.State.ActiveCell ?? cell.Cell.FormKey;
+        var sourceSide = true;
+        var activeScene = cell;
+        if (!fallout3 && activeCell != cell.Cell.FormKey)
+        {
+            if (transition is null || activeCell != transition.DestinationScene.Cell.FormKey)
+                throw new InvalidDataException(
+                    $"Native Continue active CELL is outside the admitted route: {activeCell}.");
+            activeScene = transition.DestinationScene;
+            sourceSide = false;
+        }
+        var root = sourceSide && activeScene.Cell.FormKey == cell.Cell.FormKey &&
+            _nativePrewarmedInitialCellRoot is not null
+            ? _nativePrewarmedInitialCellRoot
+            : BuildNativeCellRoot(activeScene, transition, sourceSide);
+        _nativePrewarmedInitialCellRoot = null;
+        if (!sourceSide && transition is not null)
+            root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(
+                FalloutLandscapeTransportResolver.Resolve(stack, transition),
+                _configuration.World.GameUnitsToMeters));
         AddChild(root);
-        AddNativeCellEnvironment(root, cell);
+        if (activeScene.Cell.Lighting is not null)
+            AddNativeCellEnvironment(root, activeScene);
+        else if (transition is not null)
+            root.SetMeta(
+                "opennv_exterior_environment_pending",
+                transition.DestinationWorldspace.ToString());
         if (fallout3)
             AddNativeFallout3PlayerCamera(root, cell);
         else
-            AddNativePlayer(root, cell);
+            AddNativePlayer(root, cell, sourceSide);
         _nativeCurrentCellRoot = root;
+        GD.Print(
+            $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
+            $"restored={(restore is not null)} sourceSide={sourceSide}");
         DismissLoadingScreen();
     }
 
@@ -297,12 +351,11 @@ public partial class RuntimeCoordinator
         FalloutDoorTransition? transition,
         bool sourceSide)
     {
-        var source = RuntimeOwnedContentSource.Current ??
-            throw new InvalidOperationException("Native owned-data source was cleared during CELL streaming.");
+        var source = RuntimeLiveContentSource.Current ??
+            throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
         var stack = _nativePluginStack ??
             throw new InvalidOperationException("Native plugin stack was cleared during CELL streaming.");
         var root = new Node3D { Name = $"NativeCell_{cell.Cell.FormKey}" };
-        var prototypes = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
         var placed = 0;
         var placedLights = 0;
         foreach (var reference in cell.References)
@@ -321,7 +374,7 @@ public partial class RuntimeCoordinator
                     $"base={appearance.Base} traits={appearance.TraitsSource} model={appearance.ModelSource} " +
                     $"race={appearance.Race} female={appearance.Female} resources={appearance.Resources.Count} " +
                     $"faceGenBytes={appearance.FaceGenCoordinateBytes} visual=fail-closed " +
-                    $"blockers={string.Join(',', appearance.VisualBlockers)} cache=none writes=0");
+                    $"blockers={string.Join(',', appearance.VisualBlockers)} writes=0");
                 placed++;
                 continue;
             }
@@ -333,7 +386,7 @@ public partial class RuntimeCoordinator
             }
             if (baseObject.ModelPath is null)
                 continue;
-            if (!prototypes.TryGetValue(baseObject.ModelPath, out var prototype))
+            if (!_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out var prototype))
             {
                 if (!source.TryRead(baseObject.ModelPath, null, out var nif, out var nifSource))
                     throw new FileNotFoundException(
@@ -344,7 +397,7 @@ public partial class RuntimeCoordinator
                 var built = NativeNifMeshBuilder.Build(nif, _configuration.World.GameUnitsToMeters);
                 prototype = built.Root;
                 prototype.Name = $"Prototype_{baseObject.FormKey}";
-                prototypes.Add(baseObject.ModelPath, prototype);
+                _nativeNifPrototypes.Add(baseObject.ModelPath, prototype);
                 GD.Print(
                     $"OPENNV_NATIVE_NIF_READY model={baseObject.ModelPath} source={nifSource} " +
                     $"nodes={built.Nodes} surfaces={built.Surfaces} vertices={built.Vertices} triangles={built.Triangles} " +
@@ -354,6 +407,7 @@ public partial class RuntimeCoordinator
             var instance = prototype.Duplicate((int)Node.DuplicateFlags.UseInstantiation) as Node3D ??
                 throw new InvalidOperationException($"Could not instantiate native NIF {baseObject.ModelPath}.");
             instance.Name = $"Reference_{reference.FormKey}";
+            instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
             instance.Transform = ReferenceTransform(reference);
             root.AddChild(instance);
             var portalReference = transition is null
@@ -365,8 +419,8 @@ public partial class RuntimeCoordinator
         }
         GD.Print(
             $"OPENNV_NATIVE_CELL_READY cell={cell.Cell.FormKey} placed={placed} lights={placedLights} " +
-            $"prototypes={prototypes.Count} " +
-            "source=live-owned-stack cache=none");
+            $"residentPrototypes={_nativeNifPrototypes.Count} " +
+            "source=live-retail-files");
         return root;
     }
 
@@ -395,6 +449,15 @@ public partial class RuntimeCoordinator
         FalloutDoorTransition transition,
         bool toDestination)
     {
+        if (_nativeOpeningStageDriver is not { Stage: FalloutNativeCampaignSave.CompletedOpeningStage })
+        {
+            GD.Print(
+                $"OPENNV_NATIVE_DOOR_STREAM_BLOCKED stage=" +
+                $"{_nativeOpeningStageDriver?.QuestEditorId}:" +
+                $"{_nativeOpeningStageDriver?.Stage} required=VCG01:" +
+                $"{FalloutNativeCampaignSave.CompletedOpeningStage}");
+            return;
+        }
         var current = _nativeCurrentCellRoot ??
             throw new InvalidOperationException("Native door activation has no current CELL root.");
         var expectedCell = toDestination
@@ -431,11 +494,12 @@ public partial class RuntimeCoordinator
         player.Teleport(TeleportTransform(entry));
         _nativeCurrentCellRoot = targetRoot;
         current.QueueFree();
+        _nativeOpeningStageDriver.PersistWorldState(targetScene.Cell.FormKey);
         GD.Print(
             $"OPENNV_NATIVE_DOOR_STREAM source={expectedCell} destination={targetScene.Cell.FormKey} " +
             $"door={(toDestination ? transition.SourceDoor.FormKey : transition.DestinationDoor.FormKey)} " +
             $"entry={entry.Door} world={transition.DestinationWorldspace} " +
-            "source=live-owned-stack cache=none");
+            "source=live-retail-files");
     }
 
     private void AddNativePlacedLight(
@@ -453,13 +517,16 @@ public partial class RuntimeCoordinator
             _configuration.Renderer.AuthoredPointLightShadows));
     }
 
-    private void AddNativePlayer(Node3D cellRoot, FalloutCellScene cell)
+    private void AddNativePlayer(
+        Node3D cellRoot,
+        FalloutCellScene initialCell,
+        bool addOpeningInteractions)
     {
         if (_nativePlayer is not null)
             throw new InvalidOperationException("Native player was already created.");
         var start = FalloutNewGamePlayerStartResolver.Resolve(
             _nativePluginStack ?? throw new InvalidOperationException("Native plugin stack was not indexed."),
-            cell);
+            initialCell);
         var marker = start.Reference;
         _nativePlayer = new RuntimeNativePlayer();
         _nativePlayer.Configure(_configuration, ReferenceTransform(marker));
@@ -489,24 +556,30 @@ public partial class RuntimeCoordinator
                 throw new InvalidOperationException("Native tag-skill contract was not resolved."),
             _nativeTraitFarewellContract ??
                 throw new InvalidOperationException("Native trait/farewell contract was not resolved."),
+            _nativePluginStack ??
+                throw new InvalidOperationException("Native plugin stack was not indexed."),
             RequireOption(_options, "save-path"),
-            RuntimeOwnedContentSource.Current?.SaveCompatibilityId ??
+            RuntimeLiveContentSource.Current?.SaveCompatibilityId ??
                 throw new InvalidOperationException("Native save compatibility identity is absent."),
+            initialCell.Cell.FormKey,
             restore,
             _configuration.Player.DesktopInput.Activate.Action,
             "VCG00",
             0);
         AddChild(_nativeOpeningStageDriver);
-        AddNativeVigorInteraction(
-            cellRoot,
-            _nativeVigorContract ??
-                throw new InvalidOperationException("Native Vigor contract was not resolved."),
-            _nativeOpeningStageDriver);
-        AddNativeFarewellInteraction(
-            cellRoot,
-            _nativeTraitFarewellContract ??
-                throw new InvalidOperationException("Native trait/farewell contract was not resolved."),
-            _nativeOpeningStageDriver);
+        if (addOpeningInteractions)
+        {
+            AddNativeVigorInteraction(
+                cellRoot,
+                _nativeVigorContract ??
+                    throw new InvalidOperationException("Native Vigor contract was not resolved."),
+                _nativeOpeningStageDriver);
+            AddNativeFarewellInteraction(
+                cellRoot,
+                _nativeTraitFarewellContract ??
+                    throw new InvalidOperationException("Native trait/farewell contract was not resolved."),
+                _nativeOpeningStageDriver);
+        }
         if (_nativeSkipOpeningMovie && restore is null)
             _nativeOpeningStageDriver.CompleteBlocker("playbink");
         GD.Print(
@@ -514,7 +587,7 @@ public partial class RuntimeCoordinator
             $"quest={start.Quest} stage={start.Stage} candidates={start.Candidates.Count} " +
             $"packageLinked={start.Candidates.Count(value => value.DirectPackageLocationCount > 0)} " +
             $"restored={(restore is not null)} inventory={restore?.Inventory.Items.Count ?? 0} " +
-            "owner=character-body controls=live-qust-sctx source=live-owned-stack cache=none");
+            "owner=character-body controls=live-qust-sctx source=live-retail-files");
     }
 
     private void AddNativeVigorInteraction(
@@ -530,20 +603,30 @@ public partial class RuntimeCoordinator
         trigger.Configure(
             new Vector3(dimensions[0], dimensions[2], dimensions[1]) *
                 _configuration.World.GameUnitsToMeters,
+            _configuration.Player.CollisionLayer,
             driver.EnterVigorTrigger);
         cellRoot.AddChild(trigger);
-        var testerName = $"Reference_{contract.TesterReference.FormKey}";
         var tester = cellRoot.GetChildren().OfType<Node3D>()
-            .SingleOrDefault(value => value.Name == testerName) ??
+            .SingleOrDefault(value =>
+                value.HasMeta("opennv_reference_form_key") &&
+                value.GetMeta("opennv_reference_form_key").AsString() ==
+                    contract.TesterReference.FormKey.ToString());
+        if (tester is null)
+        {
+            var baseObject = _nativeInitialCell?.BaseObjects.GetValueOrDefault(contract.TesterReference.Base);
             throw new InvalidDataException(
-                $"Native Vigor tester presentation is absent: {contract.TesterReference.FormKey}.");
+                $"Native Vigor tester presentation is absent: {contract.TesterReference.FormKey} " +
+                $"base={contract.TesterReference.Base} flags=0x{contract.TesterReference.Flags:x8} " +
+                $"initiallyDisabled={FalloutCellSceneReader.IsInitiallyDisabled(contract.TesterReference)} " +
+                $"signature={baseObject?.Signature ?? "missing"} model={baseObject?.ModelPath ?? "none"}.");
+        }
         var activator = new RuntimeNativeVigorActivator();
         activator.Configure(driver.ActivateVigorTester);
         tester.AddChild(activator);
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_READY trigger={contract.TriggerReference.FormKey} " +
             $"tester={contract.TesterReference.FormKey} total={contract.RequiredTotal} " +
-            "source=live-refr-acti-scpt-xprm cache=none writes=0");
+            "source=live-refr-acti-scpt-xprm writes=0");
     }
 
     private void AddNativeFarewellInteraction(
@@ -559,13 +642,14 @@ public partial class RuntimeCoordinator
         trigger.Configure(
             new Vector3(dimensions[0], dimensions[2], dimensions[1]) *
                 _configuration.World.GameUnitsToMeters,
+            _configuration.Player.CollisionLayer,
             driver.EnterFarewellTrigger);
         cellRoot.AddChild(trigger);
         GD.Print(
             $"OPENNV_NATIVE_FAREWELL_READY trigger={contract.ExitTriggerReference.FormKey} " +
             $"traits={contract.Traits.Count} maximum={contract.MaximumTraits} " +
             $"stage={contract.ExitTriggerFromStage}->{contract.FarewellStage}->" +
-            $"{contract.CompletedStage} source=live-refr-acti-scpt-info-qust cache=none writes=0");
+            $"{contract.CompletedStage} source=live-refr-acti-scpt-info-qust writes=0");
     }
 
     private void AddNativeFallout3PlayerCamera(Node3D root, FalloutCellScene cell)

@@ -31,9 +31,7 @@ internal sealed record RuntimeConfiguration(
     FalloutEnvironmentConfiguration FalloutEnvironment,
     RetailActorStateConfiguration RetailActorState,
     ActorParityConfiguration ActorParity,
-    SetupViewConfiguration SetupView,
     DesktopLauncherConfiguration DesktopLauncher,
-    LegalAssetsConfiguration LegalAssets,
     ToolingConfiguration Tooling,
     ContentCompilerConfiguration ContentCompiler,
     ActorCompilerConfiguration ActorCompiler)
@@ -93,7 +91,7 @@ internal sealed record RuntimeConfiguration(
     {
         if (compiled.GetProperty("schema").GetString() != ExpectedSchema ||
             !compiled.GetProperty("sha256").GetString()!.Equals(Sha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Prepared content was compiled with another runtime configuration.");
+            throw new InvalidOperationException("Input contract was produced for another runtime configuration.");
     }
 
     internal void VerifyCompiledActorConfiguration(JsonElement source)
@@ -226,9 +224,7 @@ internal sealed record RuntimeConfiguration(
             FalloutEnvironment.ImageSpace.Provenance,
             RetailActorState.Provenance,
             ActorParity.Provenance,
-            SetupView.Provenance,
             DesktopLauncher.Provenance,
-            LegalAssets.Provenance,
             Tooling.Provenance,
             ContentCompiler.Provenance,
             ContentCompiler.SpeedTree.Provenance,
@@ -596,13 +592,6 @@ internal sealed record RuntimeConfiguration(
         RequireUnitInterval(
             ActorParity.MaximumChangedPixelFraction,
             nameof(ActorParity.MaximumChangedPixelFraction));
-        RequireColor(SetupView.BackgroundColorRgba, nameof(SetupView.BackgroundColorRgba));
-        RequireColor(SetupView.StatusColorRgba, nameof(SetupView.StatusColorRgba));
-        RequireVector(SetupView.ContentPositionPixels, 2, nameof(SetupView.ContentPositionPixels));
-        RequireVector(SetupView.ContentSizePixels, 2, nameof(SetupView.ContentSizePixels));
-        RequireUnitInterval(SetupView.DialogCenteredRatio, nameof(SetupView.DialogCenteredRatio));
-        foreach (var text in SetupView.Copy.Values)
-            RequireText(text, nameof(SetupView.Copy));
         RequirePositive(
             DesktopLauncher.MainWindowWidthPixels,
             nameof(DesktopLauncher.MainWindowWidthPixels));
@@ -621,43 +610,6 @@ internal sealed record RuntimeConfiguration(
         if (DesktopLauncher.MainWindowMinimumWidthPixels > DesktopLauncher.MainWindowWidthPixels ||
             DesktopLauncher.MainWindowMinimumHeightPixels > DesktopLauncher.MainWindowHeightPixels)
             throw new InvalidOperationException("Desktop launcher minimum dimensions exceed startup dimensions.");
-        RequireText(LegalAssets.DefaultOpeningRecipe, nameof(LegalAssets.DefaultOpeningRecipe));
-        RequireText(LegalAssets.DefaultCellRecipe, nameof(LegalAssets.DefaultCellRecipe));
-        RequireText(
-            LegalAssets.LinkedWorldProofCellRecipe,
-            nameof(LegalAssets.LinkedWorldProofCellRecipe));
-        RequireText(LegalAssets.DefaultCacheRoot, nameof(LegalAssets.DefaultCacheRoot));
-        RequireText(LegalAssets.PackagedCompilerName, nameof(LegalAssets.PackagedCompilerName));
-        RequireText(
-            LegalAssets.SourceContentTool.Executable,
-            nameof(LegalAssets.SourceContentTool.Executable));
-        RequireText(
-            LegalAssets.SourceContentTool.Script,
-            nameof(LegalAssets.SourceContentTool.Script));
-        RequireText(
-            LegalAssets.SourceContentTool.CompilerName,
-            nameof(LegalAssets.SourceContentTool.CompilerName));
-        RequireText(LegalAssets.SmokeModelLogicalPath, nameof(LegalAssets.SmokeModelLogicalPath));
-        LegalAssets.VideoImport.Validate();
-        RequireText(LegalAssets.OwnedData.MasterFile, nameof(LegalAssets.OwnedData.MasterFile));
-        RequireText(
-            LegalAssets.OwnedData.DefaultIniFile,
-            nameof(LegalAssets.OwnedData.DefaultIniFile));
-        RequireText(
-            LegalAssets.OwnedData.MeshesArchiveFile,
-            nameof(LegalAssets.OwnedData.MeshesArchiveFile));
-        RequireText(
-            LegalAssets.OwnedData.UiArchiveFile,
-            nameof(LegalAssets.OwnedData.UiArchiveFile));
-        RequireText(
-            LegalAssets.OwnedData.DataDirectoryName,
-            nameof(LegalAssets.OwnedData.DataDirectoryName));
-        RequireText(
-            LegalAssets.OwnedData.VideoDirectoryName,
-            nameof(LegalAssets.OwnedData.VideoDirectoryName));
-        if (LegalAssets.OwnedData.TextureArchiveFiles.Count < 1 ||
-            LegalAssets.OwnedData.TextureArchiveFiles.Any(string.IsNullOrWhiteSpace))
-            throw new InvalidOperationException("Legal owned-data texture archives must be nonempty.");
         Tooling.Validate();
         RequirePositive(ContentCompiler.AssetIdHexCharacters, nameof(ContentCompiler.AssetIdHexCharacters));
         RequirePositive(ContentCompiler.StableIdHexCharacters, nameof(ContentCompiler.StableIdHexCharacters));

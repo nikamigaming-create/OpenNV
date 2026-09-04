@@ -12,6 +12,7 @@
     <Compile Include="..\..\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
     <Compile Include="..\..\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="..\..\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
-    <Compile Include="..\..\src\Content\RuntimeOwnedContentSource.cs" Link="RuntimeOwnedContentSource.cs" />
+    <Compile Include="..\..\src\Content\RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="..\..\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
   </ItemGroup>
 </Project>

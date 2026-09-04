@@ -34,7 +34,7 @@ internal static class CellContentLoader
         bool proofEnableActor,
         bool buildCollision,
         uint renderLayer,
-        RuntimeMaterialLoader.TextureCache? textureCache = null)
+        RuntimeMaterialLoader.TextureMemoryStore? textureMemory = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -57,7 +57,7 @@ internal static class CellContentLoader
             var textures = RuntimeMaterialLoader.LoadTextures(
                 source,
                 configuration.Renderer,
-                textureCache);
+                textureMemory);
             var materialBindings = 0;
             var defaultCompiler = source.GetProperty("compiler");
             foreach (var asset in source.GetProperty("assets").EnumerateArray())
@@ -248,6 +248,7 @@ internal static class CellContentLoader
             var doors = new Dictionary<string, DoorInstance>(StringComparer.OrdinalIgnoreCase);
             var pickups = new Dictionary<string, PickupInstance>(StringComparer.OrdinalIgnoreCase);
             var containers = new Dictionary<string, ContainerInstance>(StringComparer.OrdinalIgnoreCase);
+            var furniture = new Dictionary<string, FurnitureInstance>(StringComparer.OrdinalIgnoreCase);
             var pools = new Dictionary<string, PoolTableInstance>(StringComparer.OrdinalIgnoreCase);
             var poolManifest = ReadPoolManifest(source);
             PoolTableInstance? poolTable = null;
@@ -420,6 +421,7 @@ internal static class CellContentLoader
                             referenceFormId);
                     activator.ConfigurePhysics(dynamicBodies[0], configuration.Pickup);
                     activator.Basis = new Basis(rotation);
+                    pickups.Add(referenceFormId, activator);
                     placement = activator;
                 }
                 else if (interactionType == "crafting-station" &&
@@ -458,6 +460,27 @@ internal static class CellContentLoader
                     container.Basis = new Basis(rotation);
                     containers.Add(referenceFormId, container);
                     placement = container;
+                }
+                else if (interactionType == "furniture")
+                {
+                    var markers = interaction.GetProperty("markers")
+                        .EnumerateArray()
+                        .Select(marker => new FurnitureInstance.Marker(
+                            marker.GetProperty("positionRef1").GetInt32(),
+                            marker.GetProperty("index").GetInt32(),
+                            ReadVector(marker.GetProperty("offsetGodotGameUnits")),
+                            ReadQuaternion(marker.GetProperty("rotationGodotQuaternion")),
+                            marker.GetProperty("animationType").GetInt32()))
+                        .ToArray();
+                    var seat = new FurnitureInstance();
+                    seat.Configure(
+                        referenceFormId,
+                        interaction.GetProperty("displayName").GetString() ?? baseEditorId,
+                        markers,
+                        unitScale);
+                    seat.Basis = new Basis(rotation);
+                    furniture.Add(referenceFormId, seat);
+                    placement = seat;
                 }
                 else if (baseRecordType == "MSTT")
                 {
@@ -672,6 +695,7 @@ internal static class CellContentLoader
                         scriptedActivator.CollisionMask = 0u;
                     }
                     scriptedActivator.CaptureAuthoredTransform();
+                    session.RegisterPickup(scriptedActivator);
                 }
                 else if (placement is PickupInstance loadedPickup)
                 {
@@ -769,6 +793,9 @@ internal static class CellContentLoader
             }
 
             var lighting = ReadLighting(source.GetProperty("lighting"));
+            var interiorImageSpace = interior
+                ? ReadInteriorImageSpace(source.GetProperty("imageSpace"))
+                : null;
             var exteriorEnvironment = interior
                 ? null
                 : RetailExteriorEnvironment.Load(
@@ -801,6 +828,7 @@ internal static class CellContentLoader
                 doors,
                 pickups,
                 containers,
+                furniture,
                 pools,
                 actors,
                 navigation,
@@ -814,6 +842,7 @@ internal static class CellContentLoader
                 startingLoadout,
                 firstPersonRig,
                 lighting,
+                interiorImageSpace,
                 exteriorEnvironment);
         }
         finally
@@ -1531,6 +1560,22 @@ internal static class CellContentLoader
             lights);
     }
 
+    private static InteriorImageSpaceContract ReadInteriorImageSpace(JsonElement source)
+    {
+        var traits = source.GetProperty("effectiveTraitArray")
+            .EnumerateArray()
+            .Select(value => value.GetSingle())
+            .ToArray();
+        if (traits.Length != 33 || traits.Any(value => !float.IsFinite(value)))
+            throw new InvalidOperationException(
+                "CELL image-space trait array must contain 33 finite values.");
+        return new InteriorImageSpaceContract(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            source.GetProperty("dnamSha256").GetString()!,
+            traits);
+    }
+
     private static FirstPersonRig.Contract ReadFirstPersonRig(JsonElement source)
     {
         var hands = source.GetProperty("hands");
@@ -1774,6 +1819,7 @@ internal static class CellContentLoader
         IReadOnlyDictionary<string, DoorInstance> Doors,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
         IReadOnlyDictionary<string, ContainerInstance> Containers,
+        IReadOnlyDictionary<string, FurnitureInstance> Furniture,
         IReadOnlyDictionary<string, PoolTableInstance> Pools,
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
         CellNavigationGraph Navigation,
@@ -1787,6 +1833,7 @@ internal static class CellContentLoader
         StartingLoadout? StartingLoadout,
         FirstPersonRig.Contract? FirstPersonRig,
         LightingContract Lighting,
+        InteriorImageSpaceContract? InteriorImageSpace,
         RetailExteriorEnvironment? ExteriorEnvironment)
     {
         internal Vector3 GameToWorld(Vector3 position) => Root.ToGlobal(new Vector3(
@@ -1899,6 +1946,12 @@ internal static class CellContentLoader
         Vector2 DirectionalRotationDegrees,
         float DirectionalFade,
         IReadOnlyList<LightContract> Lights);
+
+    internal sealed record InteriorImageSpaceContract(
+        string FormId,
+        string EditorId,
+        string DnamSha256,
+        IReadOnlyList<float> Traits);
 
     internal readonly record struct LightContract(
         string FormId,

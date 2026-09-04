@@ -148,6 +148,32 @@ internal sealed class FalloutPluginStack : IDisposable
         var loadOrderIndices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var pluginHeaderScan = new Stopwatch();
         var winnerConstruction = new Stopwatch();
+        var opened = new FalloutPlugin?[sources.Count];
+
+        pluginHeaderScan.Start();
+        try
+        {
+            Parallel.For(
+                0,
+                sources.Count,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 2, 6),
+                },
+                index => opened[index] = FalloutPlugin.Open(
+                    Path.GetFullPath(sources[index].AbsolutePath),
+                    sources[index].Name));
+        }
+        catch
+        {
+            foreach (var plugin in opened)
+                plugin?.Dispose();
+            throw;
+        }
+        finally
+        {
+            pluginHeaderScan.Stop();
+        }
 
         try
         {
@@ -156,9 +182,9 @@ internal sealed class FalloutPluginStack : IDisposable
                 var source = sources[loadIndex];
                 var configuredName = source.Name;
                 var path = Path.GetFullPath(source.AbsolutePath);
-                pluginHeaderScan.Start();
-                var plugin = FalloutPlugin.Open(path, configuredName);
-                pluginHeaderScan.Stop();
+                var plugin = opened[loadIndex] ?? throw new InvalidOperationException(
+                    $"Plugin did not finish opening: {configuredName}");
+                opened[loadIndex] = null;
                 var info = new FileInfo(path);
                 contexts.Add(new FalloutPluginContext(
                     plugin,
@@ -224,6 +250,8 @@ internal sealed class FalloutPluginStack : IDisposable
         {
             foreach (var context in contexts)
                 context.Plugin.Dispose();
+            foreach (var plugin in opened)
+                plugin?.Dispose();
             throw;
         }
     }

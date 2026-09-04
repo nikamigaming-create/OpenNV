@@ -15,7 +15,6 @@ using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
-using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout3;
 using OpenNV.Runtime.Compatibility.Jam;
 using OpenNV.Runtime.Gameplay.State;
@@ -63,7 +62,6 @@ public partial class RuntimeCoordinator : Node3D
     private RuntimeConfiguration _configuration = null!;
     private RuntimeSettingsState _settings = null!;
     private NativeGameInstallation? _nativeInstallation;
-    private LegalAssetSetupView? _setupView;
     private XRInterface? _openXr;
     private LoadingScreen? _loadingScreen;
     private string? _acceptedOpeningMenuAction;
@@ -96,29 +94,20 @@ public partial class RuntimeCoordinator : Node3D
             _configuration = RuntimeConfiguration.Load();
             _options = ParseOptions(OS.GetCmdlineUserArgs());
             var launch = RuntimeLaunchRequest.Create(_options);
-            if (_options.TryGetValue("source-stack", out var sourceStackPath))
+            if (_options.TryGetValue("data-root", out var dataRoot))
             {
-                RuntimeOwnedContentSource.ConfigureSourceStack(
-                    sourceStackPath,
-                    RequireOption(_options, "source-stack-sha256"),
-                    RequireOption(_options, "stack-id"),
-                    RequireOption(_options, "campaign"));
-                _nativeInstallation = NativeGameInstallation.Detect(
-                    RuntimeOwnedContentSource.Current!.ContentRoot);
-            }
-            else if (_options.TryGetValue("source-root", out var legacySourceRoot) ||
-                     _options.TryGetValue("data-root", out legacySourceRoot))
-            {
-                // Legacy evidence routes may still report their selected root,
-                // but they cannot dispatch the native runtime without a v2
-                // source-stack identity.
-                _nativeInstallation = NativeGameInstallation.Detect(legacySourceRoot);
-                RuntimeOwnedContentSource.Clear();
+                _nativeInstallation = NativeGameInstallation.Detect(dataRoot);
+                if (_nativeInstallation.Game is NativeGame.Fallout3 or NativeGame.FalloutNewVegas)
+                    RuntimeLiveContentSource.Configure(
+                        dataRoot,
+                        RequireOption(_options, "campaign"));
+                else
+                    RuntimeLiveContentSource.Clear();
             }
             else
             {
                 _nativeInstallation = null;
-                RuntimeOwnedContentSource.Clear();
+                RuntimeLiveContentSource.Clear();
             }
             _settings = RuntimeSettingsState.Load(
                 _options.TryGetValue("settings-path", out var settingsPath)
@@ -162,16 +151,9 @@ public partial class RuntimeCoordinator : Node3D
             if (TryDispatchLaunch(launch))
                 return;
 
-            if (_options.TryGetValue("report", out var startupReportPath))
-                WriteStartupReport(startupReportPath);
-            GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0 playableSandbox=1 openxr=experimental");
-            if (DisplayServer.GetName() == "headless")
-                GetTree().Quit(0);
-            else
-            {
-                DismissLoadingScreen();
-                ShowExperimentalStatus("Select a live owned-data source before starting the runtime.");
-            }
+            throw new ArgumentException(
+                "OpenNV requires a live --data-root and --campaign. " +
+                "OpenNV requires a live --data-root and --campaign.");
         }
         catch (Exception exception)
         {
@@ -207,226 +189,18 @@ public partial class RuntimeCoordinator : Node3D
 
     internal async Task WaitForLoadingScreenDismissal()
     {
-        while (GetNodeOrNull<LoadingScreen>("OwnedDataLoadingScreen") is { } loading &&
+        while (GetNodeOrNull<LoadingScreen>("LiveRetailLoadingScreen") is { } loading &&
                GodotObject.IsInstanceValid(loading) &&
                !loading.IsQueuedForDeletion())
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
-    private void LoadPrepared(
-        LegalAssetPreparer.PreparedContent prepared,
-        IReadOnlyDictionary<string, string> options)
-    {
-        if (ShouldShowOpening(options))
-        {
-            ShowOpening(prepared, options);
-            return;
-        }
-        _ = LoadPreparedGameplay(
-            prepared,
-            options,
-            options.ContainsKey("new-game") || options.ContainsKey("opening-proof"));
-    }
-
-    private void ShowOpening(
-        LegalAssetPreparer.PreparedContent prepared,
-        IReadOnlyDictionary<string, string> options)
-    {
-        var manifest = OpeningManifest.Load(
-            prepared.OpeningManifestPath,
-            _configuration,
-            options.ContainsKey("bounded-default-profile"));
-        var savePath = options.TryGetValue("save-path", out var configuredSavePath)
-            ? ResolveRuntimePath(configuredSavePath)
-            : ResolveRuntimePath(DefaultNewVegasOpeningSavePath);
-        var expectedCellFormId = ReadPreparedCellFormId(prepared.CellScenePath);
-        var allowedActiveCellFormIds = ReadPreparedCellFormIds(prepared.CellScenePath);
-        var canContinue = GameplaySession.CanContinueOpening(
-            savePath,
-            expectedCellFormId,
-            allowedActiveCellFormIds,
-            manifest.NewGameFlow.Character.Vitals,
-            state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
-        PreparedGameplayPrewarm? gameplayPrewarm = null;
-        if (!canContinue)
-            gameplayPrewarm = StartGameplayPrewarm(prepared);
-        var opening = new RetailOpening();
-        AddChild(opening);
-        opening.Configure(
-            manifest,
-            canContinue,
-            _configuration.Player.DesktopInput.Cancel.Action,
-            () => gameplayPrewarm ??= StartGameplayPrewarm(prepared),
-            async () =>
-            {
-                if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
-                {
-                    if (acceptedAction != "new-game")
-                        throw new InvalidOperationException(
-                            $"Owned main-menu new-game dispatched while expecting {acceptedAction}.");
-                    _acceptedOpeningMenuAction = acceptedAction;
-                }
-                var newGameOptions = options.ToDictionary(
-                    pair => pair.Key,
-                    pair => pair.Value,
-                    StringComparer.OrdinalIgnoreCase);
-                newGameOptions["new-game"] = "";
-                await CompleteGameplayPrewarm(gameplayPrewarm
-                    ?? throw new InvalidOperationException(
-                        "New Game intro did not start its prepared CELL prewarm."));
-                await LoadPreparedGameplay(
-                    prepared,
-                    newGameOptions,
-                    useOpeningCampaign: true);
-            },
-            async action =>
-            {
-                if (action is "continue" or "load")
-                {
-                    if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
-                    {
-                        if (!action.Equals(acceptedAction, StringComparison.Ordinal))
-                            throw new InvalidOperationException(
-                                $"Owned main-menu acceptance dispatched {action}, expected {acceptedAction}.");
-                        _acceptedOpeningMenuAction = action;
-                    }
-                    await LoadPreparedGameplay(
-                        prepared,
-                        options,
-                        useOpeningCampaign: true);
-                    return;
-                }
-                GD.Print($"OPENNV_OWNED_MENU_ACTION action={action} status=ui-route-pending");
-                await Task.CompletedTask;
-            });
-        GD.Print(
-            $"OPENNV_OWNED_OPENING_READY campaign={manifest.Campaign} " +
-            $"quest={manifest.EntryQuestEditorId} stage={manifest.EntryStage} " +
-            $"buttons={manifest.Buttons.Count} continue={canContinue}");
-        if (options.TryGetValue("opening-menu-proof", out var action))
-        {
-            if (action == "continue" && !canContinue)
-                throw new InvalidOperationException(
-                    "Owned main-menu Continue acceptance requires a valid completed campaign save.");
-            _ = RunOwnedOpeningMenuAcceptance(opening, action);
-        }
-        if (options.ContainsKey("quit-after-load"))
-            GetTree().Quit(0);
-    }
-
-    private static PreparedGameplayPrewarm StartGameplayPrewarm(
-        LegalAssetPreparer.PreparedContent prepared)
-    {
-        GD.Print("OPENNV_OWNED_GAMEPLAY_PREWARM_STARTED source=initial-cell-closure");
-        return PreparedGameplayPrewarm.Start(prepared);
-    }
-
-    private static async Task CompleteGameplayPrewarm(
-        PreparedGameplayPrewarm gameplayPrewarm)
-    {
-        var result = await gameplayPrewarm.WaitAsync();
-        GD.Print(
-            $"OPENNV_OWNED_GAMEPLAY_PREWARM_READY files={result.FileCount} " +
-            $"bytes={result.ByteCount} elapsedMs={result.ElapsedMilliseconds}");
-    }
-
-    private async Task RunOwnedOpeningMenuAcceptance(RetailOpening opening, string action)
-    {
-        try
-        {
-            await ToSignal(GetTree().CreateTimer(2.0), SceneTreeTimer.SignalName.Timeout);
-            GD.Print(
-                $"OPENNV_OWNED_MENU_ACCEPTANCE action={action} transport=godot-button-signal");
-            opening.PressActionForAcceptance(action);
-            if (action != "new-game")
-                return;
-            await ToSignal(GetTree().CreateTimer(2.0), SceneTreeTimer.SignalName.Timeout);
-            Input.ParseInputEvent(new InputEventKey
-            {
-                Keycode = Key.Escape,
-                PhysicalKeycode = Key.Escape,
-                Pressed = true,
-            });
-            GD.Print("OPENNV_OWNED_INTRO_ACCEPTANCE action=escape transport=godot-input-event");
-        }
-        catch (Exception exception)
-        {
-            GD.PushError($"OPENNV_OWNED_MENU_ACCEPTANCE_FAIL {exception}");
-            GetTree().Quit(1);
-        }
-    }
-
-    private Task LoadPreparedGameplay(
-        LegalAssetPreparer.PreparedContent prepared,
-        IReadOnlyDictionary<string, string> options,
-        bool useOpeningCampaign)
-    {
-        if (prepared.CellScenePath is not null)
-        {
-            var preparedOptions = options.ToDictionary(
-                pair => pair.Key,
-                pair => pair.Value,
-                StringComparer.OrdinalIgnoreCase);
-            if (prepared.ActorScenesPath is not null &&
-                !preparedOptions.ContainsKey("actor-scene") &&
-                !preparedOptions.ContainsKey("actor-scenes"))
-                preparedOptions["actor-scenes"] = prepared.ActorScenesPath;
-            if (useOpeningCampaign && !preparedOptions.ContainsKey("opening-manifest"))
-                preparedOptions["opening-manifest"] = prepared.OpeningManifestPath;
-            if (useOpeningCampaign && !preparedOptions.ContainsKey("save-path"))
-                preparedOptions["save-path"] = DefaultNewVegasOpeningSavePath;
-            return LoadCellScene(prepared.CellScenePath, preparedOptions);
-        }
-        LoadModel(prepared.ModelPath, prepared.SidecarPath, options);
-        return Task.CompletedTask;
-    }
-
-    private static bool ShouldShowOpening(IReadOnlyDictionary<string, string> options) =>
-        options.ContainsKey("opening-menu") ||
-        options.ContainsKey("opening-menu-proof") ||
-        !options.Keys.Any(DirectPreparedContentOptions.Contains);
-
     private static string ResolveRuntimePath(string path) =>
         path.StartsWith("res://", StringComparison.Ordinal) ||
         path.StartsWith("user://", StringComparison.Ordinal)
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
-
-    private static string ReadPreparedCellFormId(string? scenePath)
-    {
-        if (scenePath is null)
-            throw new InvalidOperationException(
-                "Owned opening menu requires a prepared campaign CELL scene.");
-        using var document = JsonDocument.Parse(File.ReadAllText(scenePath));
-        var formId = document.RootElement
-            .GetProperty("cell")
-            .GetProperty("formId")
-            .GetString();
-        return string.IsNullOrWhiteSpace(formId)
-            ? throw new InvalidOperationException("Prepared campaign CELL has no FormID.")
-            : formId;
-    }
-
-    private static IReadOnlySet<string> ReadPreparedCellFormIds(string? scenePath)
-    {
-        if (scenePath is null)
-            throw new InvalidOperationException(
-                "Owned opening menu requires a prepared campaign CELL scene.");
-        using var document = JsonDocument.Parse(File.ReadAllText(scenePath));
-        var root = document.RootElement;
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            root.GetProperty("cell").GetProperty("formId").GetString()
-                ?? throw new InvalidOperationException("Prepared campaign CELL has no FormID."),
-        };
-        if (root.TryGetProperty("linkedCells", out var linkedCells))
-            foreach (var linked in linkedCells.EnumerateArray())
-                result.Add(
-                    linked.GetProperty("cellFormId").GetString()
-                    ?? throw new InvalidOperationException("Prepared linked CELL has no FormID."));
-        return result;
-    }
 
     private static string ValidatePerformanceReportPath(string path)
     {
@@ -590,32 +364,6 @@ public partial class RuntimeCoordinator : Node3D
             GetTree().Quit(0);
     }
 
-    private void LoadTtwFo3Opening(
-        string profilePath,
-        IReadOnlyDictionary<string, string> options)
-    {
-        var contract = TtwFo3OpeningContract.Load(ResolveRuntimePath(profilePath));
-        TtwFo3OpeningProof.Run(
-            contract,
-            RequireOption(options, "ttw-fo3-opening-proof"),
-            ResolveRuntimePath(RequireOption(options, "save-path")),
-            ResolveRuntimePath(RequireOption(options, "report")));
-        GetTree().Quit(0);
-    }
-
-    private void LoadFo2TemplePresentation(
-        string cacheManifestPath,
-        string reportPath,
-        string? transitionManifestPath)
-    {
-        var catalog = Fo2TemplePresentationCatalog.Load(cacheManifestPath);
-        var transitions = transitionManifestPath is null
-            ? null
-            : Fo2TempleTransitionCatalog.Load(transitionManifestPath, catalog);
-        var coverage = Fo2TempleScene.Build(catalog, this);
-        _ = Fo2TempleBuildProof.Run(this, coverage, reportPath, transitions);
-    }
-
     private Task LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
         var runTraversalProof = options.ContainsKey("portal-proof");
@@ -630,7 +378,8 @@ public partial class RuntimeCoordinator : Node3D
                 _configuration,
                 options.ContainsKey("bounded-default-profile") ||
                 options.TryGetValue("opening-proof", out var openingProofMode) &&
-                    openingProofMode is "route-stage50" or "route-stage50-resume")
+                    openingProofMode is "route-stage50" or "route-stage50-resume" or
+                        "doc-seated")
             : null;
         var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
         if (galleryContract is not null)
@@ -1236,35 +985,6 @@ public partial class RuntimeCoordinator : Node3D
             RequireOption(options, "capture-root"),
             options.TryGetValue("report", out var report) ? report : null,
             background);
-    }
-
-    private void ShowExperimentalStatus(string? restoreError)
-    {
-        _setupView = new LegalAssetSetupView();
-        _setupView.Configure(restoreError, OnDataRootSelected, _configuration.SetupView);
-        AddChild(_setupView);
-    }
-
-    private async void OnDataRootSelected(string dataRoot)
-    {
-        _setupView!.SetPreparing();
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        PrepareSelectedData(dataRoot);
-    }
-
-    private void PrepareSelectedData(string dataRoot)
-    {
-        try
-        {
-            _ = NativeGameInstallation.Detect(dataRoot);
-            throw new NotSupportedException(
-                "Runtime content preparation is disabled. Restart with --source-stack, --source-stack-sha256, --stack-id, and --campaign to load installed game files directly.");
-        }
-        catch (Exception exception)
-        {
-            _setupView!.ShowError(exception.Message);
-            GD.PushError($"OPENNV_LEGAL_ASSET_SETUP_FAIL {exception.Message}");
-        }
     }
 
     private void WriteStartupReport(string reportPath)

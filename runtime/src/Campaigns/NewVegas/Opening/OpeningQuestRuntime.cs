@@ -2,10 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
-
 using OpenNV.Runtime.SceneGraph;
-
-
 using OpenNV.Runtime.InputSystem;
 using OpenNV.Runtime.Diagnostics.Acceptance;
 using OpenNV.Runtime.Presentation.Ui;
@@ -14,7 +11,6 @@ using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.World.Portals;
 using OpenNV.Runtime.Gameplay.State;
-
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class OpeningQuestRuntime : CanvasLayer
@@ -190,11 +186,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         var stopAtCheckpoint = mode.Equals("checkpoint", StringComparison.OrdinalIgnoreCase);
         var stopAfterCreator = mode.Equals("creator", StringComparison.OrdinalIgnoreCase);
+        var stopAfterDocCapture = mode.Equals("doc-seated", StringComparison.OrdinalIgnoreCase);
         var completeAfterResume = mode.Equals("resume", StringComparison.OrdinalIgnoreCase);
         var completeAtFirstEncounter = mode is "route-stage50" or "route-stage50-resume";
         var resumeToFirstEncounter = mode == "route-stage50-resume";
-        if ((!stopAtCheckpoint && !stopAfterCreator && !completeAfterResume &&
-                !completeAtFirstEncounter) ||
+        if ((!stopAtCheckpoint && !stopAfterCreator && !stopAfterDocCapture &&
+                !completeAfterResume && !completeAtFirstEncounter) ||
             string.IsNullOrWhiteSpace(playerName) || timeoutSeconds <= 0.0)
             throw new ArgumentException("Opening acceptance arguments are invalid.");
         var initialState = _loaded.Session.OpeningState;
@@ -221,7 +218,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         DesktopKeyBindingConfiguration? firstPlayerAction = null;
         Vector3? firstPlayerActionOrigin = null;
         var firstPlayerActionProven = !proveFirstPlayerAction;
-        var requireDocSpatialAcceptance = (stopAtCheckpoint || stopAfterCreator) &&
+        var requireDocSpatialAcceptance = (stopAtCheckpoint || stopAfterCreator ||
+                stopAfterDocCapture) &&
             _stage < OpeningVisualCaptureSession.DocSpatialAcceptanceDeadlineStage;
         var latestDocSpatialTelemetry = "not-yet-observed";
         var appearancePresentationSignature = string.Empty;
@@ -370,9 +368,20 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                             await visualCapture.CaptureFirstAction(this, progress, minimum);
                     }
                 }
-                if (visualCapture is not null &&
-                    await visualCapture.ObserveCheckpointState(this))
-                    continue;
+                if (visualCapture is not null)
+                {
+                    var capturedFrame =
+                        await visualCapture.ObserveCheckpointState(this);
+                    if (stopAfterDocCapture && visualCapture.DocSeatedCaptured)
+                    {
+                        var docState = CaptureState(false);
+                        _loaded.Session.StoreOpeningState(docState);
+                        VisualProofReportPath = visualCapture.Complete(this, docState);
+                        return docState;
+                    }
+                    if (capturedFrame)
+                        continue;
+                }
                 if (movementHeld is not null &&
                     _loaded.Player.LastBlockingCollider is not null &&
                     Ancestor<DoorInstance>(_loaded.Player.LastBlockingCollider) is null &&

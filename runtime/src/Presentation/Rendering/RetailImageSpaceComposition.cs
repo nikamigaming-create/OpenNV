@@ -244,6 +244,31 @@ internal sealed class RetailImageSpaceComposition
             Array.Empty<AppliedModifier>());
     }
 
+    internal static ComposedImageSpace FromOwnedTraits(
+        IReadOnlyList<float> traits,
+        string sourceSha256,
+        RetailImageSpaceConfiguration configuration)
+    {
+        if (traits.Count == 0 || traits.Any(value => !float.IsFinite(value)) ||
+            string.IsNullOrWhiteSpace(sourceSha256))
+            throw new InvalidOperationException("Owned CELL image-space traits are incomplete.");
+        var indices = configuration.TraitIndices;
+        if (indices.Values().Any(index => index >= traits.Count))
+            throw new InvalidOperationException(
+                "Configured image-space trait index is outside the owned CELL IMGS array.");
+        return new ComposedImageSpace(
+            traits.ToArray(),
+            new Vector4(
+                traits[indices.CinematicTintRed],
+                traits[indices.CinematicTintGreen],
+                traits[indices.CinematicTintBlue],
+                MathF.Max(0.0f, traits[indices.CinematicTintStrength])),
+            NeutralFade,
+            1.0f,
+            sourceSha256,
+            Array.Empty<AppliedModifier>());
+    }
+
     private void ValidateCapturedShader(
         ComposedImageSpace result,
         ActorReviewContract.ImageSpaceShaderState captured)

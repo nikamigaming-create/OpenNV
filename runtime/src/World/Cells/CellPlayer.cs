@@ -58,6 +58,8 @@ internal partial class CellPlayer : CharacterBody3D
     private string? _heldWeaponFormId;
     private PoolTableInstance? _activePool;
     private PickupInstance? _heldPickup;
+    private FurnitureInstance? _activeFurniture;
+    private Transform3D _preFurnitureTransform;
     private Node3D? _poolCueMount;
     private Marker3D? _poolCueTip;
     private MeshInstance3D? _muzzleFlash;
@@ -119,6 +121,7 @@ internal partial class CellPlayer : CharacterBody3D
     internal bool HasMuzzleFeedback => _muzzleFlash is not null && _muzzleLight is not null;
     internal bool HasHeldPoolCue => _poolCueMount is not null && _poolCueTip is not null;
     internal PickupInstance? HeldPickup => _heldPickup;
+    internal FurnitureInstance? ActiveFurniture => _activeFurniture;
     internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
     internal PlayerControlTelemetry.Snapshot ControlTelemetry => _controlTelemetry.Report();
     internal IReadOnlyList<CellPortalTravel.Transition> PortalTransitions =>
@@ -368,6 +371,18 @@ internal partial class CellPlayer : CharacterBody3D
         if (_jamJbtBulletTime is not null &&
             Input.IsActionJustPressed(JamJbtBulletTimeContract.InputAction))
             SetJamBulletTime(!_jamBulletTimeActive);
+        if (_activeFurniture is not null)
+        {
+            Velocity = Vector3.Zero;
+            if (_useXr)
+            {
+                PollXrActions();
+                UpdateXrControlTelemetry();
+            }
+            else
+                PollDesktopActions();
+            return;
+        }
         PollJump();
         var input = ReadMovement();
         var forward = -_camera.GlobalBasis.Z;
@@ -727,6 +742,11 @@ internal partial class CellPlayer : CharacterBody3D
 
     private bool Activate(Node3D aimSource)
     {
+        if (_activeFurniture is not null)
+        {
+            ExitFurniture();
+            return true;
+        }
         if (_heldPickup is not null)
         {
             var held = _heldPickup;
@@ -742,6 +762,12 @@ internal partial class CellPlayer : CharacterBody3D
         LastActivationDoorFormId = Ancestor<DoorInstance>(collider)?.ReferenceFormId ?? "none";
         if (_externalActivationHandler?.Invoke(collider) == true)
             return true;
+        var furniture = Ancestor<FurnitureInstance>(collider);
+        if (furniture is not null)
+        {
+            EnterFurniture(furniture);
+            return true;
+        }
         var poolBall = Ancestor<PoolBallInstance>(collider);
         if (poolBall is not null)
         {
@@ -1343,6 +1369,44 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void DropHeldPickupForProof() => DropHeldPickup();
 
+    internal void EnterFurnitureForProof(FurnitureInstance furniture) =>
+        EnterFurniture(furniture);
+
+    internal void ExitFurnitureForProof() => ExitFurniture();
+
+    private void EnterFurniture(FurnitureInstance furniture)
+    {
+        if (_activeFurniture == furniture)
+            return;
+        if (_activeFurniture is not null)
+            ExitFurniture();
+        DropHeldPickup();
+        _preFurnitureTransform = GlobalTransform;
+        var seat = furniture.SeatTransform();
+        GlobalTransform = new Transform3D(
+            seat.Basis.Scaled(GlobalBasis.Scale),
+            seat.Origin + Vector3.Up * _configuration.Player.SpawnCenterHeightMeters);
+        Velocity = Vector3.Zero;
+        _activeFurniture = furniture;
+        _session!.Notify($"Sitting • {furniture.DisplayName} • activate to stand");
+        GD.Print(
+            $"OPENNV_FURNITURE_ENTER reference={furniture.ReferenceFormId} " +
+            $"marker={furniture.MarkerId} position={GlobalPosition}");
+    }
+
+    private void ExitFurniture()
+    {
+        if (_activeFurniture is not { } furniture)
+            return;
+        GlobalTransform = _preFurnitureTransform;
+        Velocity = Vector3.Zero;
+        _activeFurniture = null;
+        _session!.Notify($"Stood up • {furniture.DisplayName}");
+        GD.Print(
+            $"OPENNV_FURNITURE_EXIT reference={furniture.ReferenceFormId} " +
+            $"position={GlobalPosition}");
+    }
+
     private void ExitPool()
     {
         if (_activePool is null)
@@ -1396,8 +1460,7 @@ internal partial class CellPlayer : CharacterBody3D
         var dropped = _heldPickup;
         _heldPickup = null;
         dropped.Drop();
-        if (dropped is not ScriptedActivatorInstance)
-            _session!.PickupMoved(dropped);
+        _session!.PickupMoved(dropped);
     }
 
     private void TriggerHaptic(HapticConfiguration haptic)

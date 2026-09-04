@@ -24,7 +24,7 @@ internal sealed class LazyLinkedCellRoute
     private readonly bool _proofEnableActor;
     private readonly bool _buildCollision;
     private readonly bool _applyCellEnvironment;
-    private readonly RuntimeMaterialLoader.TextureCache _textureCache;
+    private readonly RuntimeMaterialLoader.TextureMemoryStore _textureMemory;
     private readonly IReadOnlyList<CellDescriptor> _descriptors;
     private readonly IReadOnlyList<RouteEdge> _edges;
     private readonly IReadOnlySet<string> _requiredReferenceFormIds;
@@ -33,6 +33,7 @@ internal sealed class LazyLinkedCellRoute
     private readonly List<CellSceneLoader.PortalLink> _portalLinks;
     private readonly Dictionary<string, PickupInstance> _pickups;
     private readonly Dictionary<string, ContainerInstance> _containers;
+    private readonly Dictionary<string, FurnitureInstance> _furniture;
     private readonly Dictionary<string, PoolTableInstance> _pools;
     private readonly List<CellActorLoader.PlacedActor> _actors;
     private readonly CellActiveSet _activeSet;
@@ -49,7 +50,7 @@ internal sealed class LazyLinkedCellRoute
         bool proofEnableActor,
         bool buildCollision,
         bool applyCellEnvironment,
-        RuntimeMaterialLoader.TextureCache textureCache,
+        RuntimeMaterialLoader.TextureMemoryStore textureMemory,
         IReadOnlyList<CellDescriptor> descriptors,
         IReadOnlyList<RouteEdge> edges,
         IReadOnlySet<string> requiredReferenceFormIds,
@@ -58,6 +59,7 @@ internal sealed class LazyLinkedCellRoute
         List<CellSceneLoader.PortalLink> portalLinks,
         Dictionary<string, PickupInstance> pickups,
         Dictionary<string, ContainerInstance> containers,
+        Dictionary<string, FurnitureInstance> furniture,
         Dictionary<string, PoolTableInstance> pools,
         List<CellActorLoader.PlacedActor> actors,
         CellActiveSet activeSet,
@@ -71,7 +73,7 @@ internal sealed class LazyLinkedCellRoute
         _proofEnableActor = proofEnableActor;
         _buildCollision = buildCollision;
         _applyCellEnvironment = applyCellEnvironment;
-        _textureCache = textureCache;
+        _textureMemory = textureMemory;
         _descriptors = descriptors;
         _edges = edges;
         _requiredReferenceFormIds = requiredReferenceFormIds;
@@ -83,6 +85,7 @@ internal sealed class LazyLinkedCellRoute
         _portalLinks = portalLinks;
         _pickups = pickups;
         _containers = containers;
+        _furniture = furniture;
         _pools = pools;
         _actors = actors;
         _activeSet = activeSet;
@@ -116,7 +119,7 @@ internal sealed class LazyLinkedCellRoute
         if (activeDescriptor is null)
             throw new InvalidOperationException(
                 $"Saved active CELL is outside the prepared route: {session.ActiveCellFormId}");
-        var textureCache = new RuntimeMaterialLoader.TextureCache();
+        var textureMemory = new RuntimeMaterialLoader.TextureMemoryStore();
         var activeContent = CellContentLoader.Load(
             activeDescriptor.ScenePath,
             parent,
@@ -128,7 +131,7 @@ internal sealed class LazyLinkedCellRoute
             proofEnableActor,
             buildCollision,
             activeDescriptor.RenderLayer,
-            textureCache);
+            textureMemory);
         ValidateContent(activeContent, activeDescriptor);
         using var activeDocument = JsonDocument.Parse(
             File.ReadAllText(activeDescriptor.ScenePath));
@@ -223,6 +226,9 @@ internal sealed class LazyLinkedCellRoute
         var containers = new Dictionary<string, ContainerInstance>(
             activeContent.Containers,
             StringComparer.OrdinalIgnoreCase);
+        var furniture = new Dictionary<string, FurnitureInstance>(
+            activeContent.Furniture,
+            StringComparer.OrdinalIgnoreCase);
         var pools = new Dictionary<string, PoolTableInstance>(
             activeContent.Pools,
             StringComparer.OrdinalIgnoreCase);
@@ -235,7 +241,7 @@ internal sealed class LazyLinkedCellRoute
             proofEnableActor,
             buildCollision,
             applyCellEnvironment,
-            textureCache,
+            textureMemory,
             descriptors,
             edges,
             requiredReferenceFormIds,
@@ -244,6 +250,7 @@ internal sealed class LazyLinkedCellRoute
             portalLinks,
             pickups,
             containers,
+            furniture,
             pools,
             actors,
             activeSet,
@@ -286,6 +293,7 @@ internal sealed class LazyLinkedCellRoute
             session,
             pickups,
             containers,
+            furniture,
             pools,
             actors,
             linkedCells,
@@ -448,7 +456,7 @@ internal sealed class LazyLinkedCellRoute
             _proofEnableActor,
             _buildCollision,
             descriptor.RenderLayer,
-            _textureCache);
+            _textureMemory);
         ValidateContent(content, descriptor);
         var fixedDoorId = edge.From.FormId.Equals(
                 fixedCellFormId,
@@ -519,6 +527,7 @@ internal sealed class LazyLinkedCellRoute
         _session.AddWorldContent(content, fixedCellFormId);
         AddUnique(_pickups, content.Pickups, "pickup");
         AddUnique(_containers, content.Containers, "container");
+        AddUnique(_furniture, content.Furniture, "furniture");
         AddUnique(_pools, content.Pools, "pool table");
         _actors.AddRange(content.Actors);
         _linkedCells.Add(new CellSceneLoader.LinkedCell(content, descriptor.RenderLayer));

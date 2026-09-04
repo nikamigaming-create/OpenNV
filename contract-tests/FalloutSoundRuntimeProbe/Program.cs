@@ -116,13 +116,14 @@ if (args.Length > 0)
         var manifestBytes = File.ReadAllBytes(root);
         using var document = JsonDocument.Parse(manifestBytes);
         var manifest = document.RootElement;
-        RuntimeOwnedContentSource.Configure(
-            manifest.GetProperty("roots")[0].GetProperty("root").GetString()!,
-            Path.GetFullPath(root),
-            Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant(),
-            manifest.GetProperty("stackId").GetString());
+        var selectedRoot = manifest.GetProperty("roots")[0].GetProperty("root").GetString()!;
+        var detected = NativeGameInstallation.Detect(selectedRoot);
+        var campaign = detected.Game == NativeGame.Fallout3
+            ? RuntimeLiveContentSource.Fallout3Game
+            : RuntimeLiveContentSource.FalloutNewVegasGame;
+        RuntimeLiveContentSource.Configure(selectedRoot, campaign);
         configured = true;
-        owned = FalloutPluginStack.Load(RuntimeOwnedContentSource.Current!.PluginSources);
+        owned = FalloutPluginStack.Load(RuntimeLiveContentSource.Current!.PluginSources);
     }
     else
     {
@@ -176,7 +177,7 @@ if (args.Length > 0)
                         if (sound.RandomChancePercent != 0)
                         {
                             randomChanceFieldDescriptors++;
-                            if (configured && RuntimeOwnedContentSource.Current!.TryRead(
+                            if (configured && RuntimeLiveContentSource.Current!.TryRead(
                                     sound.LogicalPath, null, out _, out _))
                                 resolvedRandomChanceFieldDescriptors++;
                         }
@@ -214,7 +215,7 @@ if (args.Length > 0)
                             fullEnvironmentThreeDimensional += needsEnvironment ? 1 : 0;
                             var usesRandomChance = sound.RandomChancePercent != 0;
                             randomChanceThreeDimensional += usesRandomChance ? 1 : 0;
-                            var resolved = configured && RuntimeOwnedContentSource.Current!.TryRead(
+                            var resolved = configured && RuntimeLiveContentSource.Current!.TryRead(
                                 sound.LogicalPath, null, out _, out _);
                             if (resolved)
                             {
@@ -288,7 +289,7 @@ if (args.Length > 0)
         finally
         {
             if (configured)
-                RuntimeOwnedContentSource.Clear();
+                RuntimeLiveContentSource.Clear();
         }
 }
 

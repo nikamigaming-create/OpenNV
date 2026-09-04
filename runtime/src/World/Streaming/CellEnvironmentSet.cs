@@ -64,6 +64,7 @@ internal sealed class CellEnvironmentSet
             throw new InvalidOperationException(
                 $"Cannot activate an unloaded CELL environment: {cellFormId}");
         _world.Environment = state.Environment;
+        _world.Compositor = state.Compositor;
         _activeCellFormId = state.CellFormId;
         _updates.Add(new Update(
             state.CellFormId,
@@ -91,6 +92,19 @@ internal sealed class CellEnvironmentSet
         RuntimeConfiguration configuration)
     {
         var lighting = content.Lighting;
+        var imageSpace = content.InteriorImageSpace ??
+            throw new InvalidOperationException(
+                $"Interior CELL has no owned XCIM/IMGS contract: {content.FormId}");
+        var composed = RetailImageSpaceComposition.FromOwnedTraits(
+            imageSpace.Traits,
+            imageSpace.DnamSha256,
+            configuration.FalloutEnvironment.ImageSpace);
+        var application = RetailImageSpaceRenderer.Create(
+            composed,
+            configuration.FalloutEnvironment.ImageSpace,
+            configuration.Capture,
+            configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer,
+            runtimeAdaptation: true);
         return new State(
             content.FormId,
             "interior-xcll",
@@ -102,6 +116,7 @@ internal sealed class CellEnvironmentSet
                 lighting.FogPower,
                 content.UnitsToMeters,
                 configuration),
+            application.Compositor,
             null,
             null,
             null,
@@ -139,6 +154,7 @@ internal sealed class CellEnvironmentSet
                 resolved.FogPower,
                 content.UnitsToMeters,
                 configuration),
+            null,
             resolved.GameHour,
             $"{resolved.WeatherFormId:x8}",
             resolved.WeatherEditorId,
@@ -193,6 +209,7 @@ internal sealed class CellEnvironmentSet
         string CellFormId,
         string Mode,
         Godot.Environment Environment,
+        Compositor? Compositor,
         float? GameHour,
         string? WeatherFormId,
         string? WeatherEditorId,

@@ -12,9 +12,10 @@ internal static class RuntimeNativeNifMeshBuilder
     private const uint ShaderFlagSpecular = 1U << 0;
     private const uint ShaderFlagSkinned = 1U << 1;
     private const uint ShaderFlagVertexAlpha = 1U << 3;
-    private const uint ShaderFlagEmpty = 1U << 6;
+    private const uint ShaderFlagUseFalloff = 1U << 6;
     private const uint ShaderFlagEnvironmentMapping = 1U << 7;
     private const uint ShaderFlagAlphaTexture = 1U << 8;
+    private const uint ShaderFlagEyeEnvironmentMapping = 1U << 17;
     private const uint ShaderFlagWindowEnvironmentMapping = 1U << 21;
     private const uint ShaderFlagRemappableTextures = 1U << 25;
     private const uint ShaderFlagDecal = 1U << 26;
@@ -25,13 +26,19 @@ internal static class RuntimeNativeNifMeshBuilder
     private const uint ShaderFlagNoFade = 1U << 3;
     private const uint ShaderFlagEnvironmentMapLightFade = 1U << 15;
     private const uint SupportedShaderFlags = ShaderFlagSpecular |
+        ShaderFlagVertexAlpha |
+        ShaderFlagUseFalloff |
         ShaderFlagEnvironmentMapping | ShaderFlagAlphaTexture |
+        ShaderFlagEyeEnvironmentMapping |
         ShaderFlagWindowEnvironmentMapping | ShaderFlagRemappableTextures |
+        ShaderFlagExternalEmittance |
         ShaderFlagZBufferTest;
-    private const uint SupportedShaderFlags2 = ShaderFlagZBufferWrite;
+    private const uint SupportedShaderFlags2 = ShaderFlagZBufferWrite |
+        ShaderFlagEnvironmentMapLightFade;
     private const uint SupportedNoLightingShaderType = 33;
     private const uint SupportedNoLightingShaderFlags = ShaderFlagVertexAlpha |
         ShaderFlagSpecular |
+        ShaderFlagUseFalloff |
         ShaderFlagRemappableTextures | ShaderFlagDecal | ShaderFlagDynamicDecal |
         ShaderFlagExternalEmittance | ShaderFlagZBufferTest;
     private const uint SupportedNoLightingShaderFlags2 = SupportedShaderFlags2 | ShaderFlagNoFade;
@@ -113,6 +120,31 @@ internal static class RuntimeNativeNifMeshBuilder
             ALPHA = 1.0;
         }
         """;
+    private const string EnvironmentLightFadeShader = """
+        shader_type spatial;
+        render_mode blend_add, depth_draw_never, cull_back;
+
+        uniform sampler2D normal_map : hint_normal;
+        uniform samplerCube environment_cube;
+        uniform sampler2D environment_mask;
+        uniform bool use_environment_mask;
+        uniform float environment_scale;
+
+        void fragment() {
+            vec3 tangent_normal = normalize(texture(normal_map, UV).xyz * 2.0 - 1.0);
+            vec3 view_normal = normalize(
+                TANGENT * tangent_normal.x + BINORMAL * tangent_normal.y + NORMAL * tangent_normal.z);
+            vec3 reflected_view = reflect(-normalize(VIEW), view_normal);
+            vec3 reflected_world = normalize((INV_VIEW_MATRIX * vec4(reflected_view, 0.0)).xyz);
+            float mask = use_environment_mask
+                ? texture(environment_mask, UV).r
+                : texture(normal_map, UV).a;
+            ALBEDO = texture(environment_cube, reflected_world).rgb * mask * environment_scale;
+            ROUGHNESS = 0.0;
+            METALLIC = 0.0;
+            ALPHA = 1.0;
+        }
+        """;
 
     internal static RuntimeNativeNifScene Build(
         ReadOnlyMemory<byte> payload,
@@ -152,6 +184,8 @@ internal static class RuntimeNativeNifMeshBuilder
         private readonly Dictionary<int, Node3D> _nodes = [];
         private readonly Dictionary<int, List<StandardMaterial3D>> _materials = [];
         private readonly List<FalloutNifControllerManager> _controllerManagers = [];
+        private readonly List<RuntimeNifControllerSequence> _directControllerSequences = [];
+        private readonly HashSet<int> _referencedDynamicEffects = [];
 
         internal BuildState(
             FalloutNifFile source,
@@ -161,6 +195,12 @@ internal static class RuntimeNativeNifMeshBuilder
             _source = source;
             _unitsToMetres = unitsToMetres;
             _preferredTextureArchive = preferredTextureArchive;
+            foreach (var nodeBlock in source.Blocks.Where(block =>
+                block.TypeName is "NiNode" or "NiBone" or "BSFadeNode"))
+            {
+                foreach (var effect in source.ReadNode(nodeBlock.Index).Effects.Where(reference => reference != -1))
+                    _referencedDynamicEffects.Add(effect);
+            }
             foreach (var block in source.Blocks.Where(block =>
                 block.TypeName is "NiTriShape" or "NiTriStrips"))
             {
@@ -197,6 +237,8 @@ internal static class RuntimeNativeNifMeshBuilder
                 {
                     "NiNode" or "NiBone" or "BSFadeNode" => BuildNode(_source.ReadNode(blockIndex)),
                     "NiTriShape" or "NiTriStrips" => BuildGeometry(_source.ReadGeometry(blockIndex)),
+                    "NiAmbientLight" => BuildAmbientLight(
+                        (FalloutNifAmbientLight)_source.ReadObject(blockIndex)),
                     _ => throw new NotSupportedException(
                         $"Reachable NIF visual block {blockIndex} type {block.TypeName} is unsupported."),
                 };
@@ -236,6 +278,26 @@ internal static class RuntimeNativeNifMeshBuilder
                     else
                         result.AddChild(Build(child));
                 }
+            return result;
+        }
+
+        private Node3D BuildAmbientLight(FalloutNifAmbientLight source)
+        {
+            RequirePlainVisualState(source.Block, source.Controller, source.ExtraData,
+                source.Properties, source.CollisionObject);
+            if (_referencedDynamicEffects.Contains(source.Block.Index))
+                throw new NotSupportedException(
+                    $"NIF ambient light {source.Block.Index} requires an exact subtree-lighting contract " +
+                    $"(switch={source.SwitchState}, dimmer={source.Dimmer:R}, " +
+                    $"ambient={source.Ambient.R:R},{source.Ambient.G:R},{source.Ambient.B:R}, " +
+                    $"diffuse={source.Diffuse.R:R},{source.Diffuse.G:R},{source.Diffuse.B:R}, " +
+                    $"specular={source.Specular.R:R},{source.Specular.G:R},{source.Specular.B:R}, " +
+                    $"affected=[{string.Join(',', source.AffectedNodes)}]).");
+            var result = CreateNode(source.Name, source.Block.Index, source.Transform, source.Flags);
+            result.SetMeta("opennv_nif_unreferenced_ambient_light", true);
+            result.SetMeta("opennv_nif_ambient_switch", source.SwitchState);
+            result.SetMeta("opennv_nif_ambient_dimmer", source.Dimmer);
+            NodeCount++;
             return result;
         }
 
@@ -289,6 +351,12 @@ internal static class RuntimeNativeNifMeshBuilder
         {
             if (owner.Controller == -1)
                 return;
+            if (_source.Blocks[owner.Controller].TypeName == "bhkBlendController")
+            {
+                node.SetMeta("opennv_nif_blend_controller", owner.Controller);
+                node.SetMeta("opennv_nif_blend_controller_pinned", true);
+                return;
+            }
             var controller = _source.ReadObject(owner.Controller);
             if (controller is FalloutNifBoneLodController boneLod)
             {
@@ -299,14 +367,23 @@ internal static class RuntimeNativeNifMeshBuilder
             {
                 if (TryPreserveConstantBindTransform(owner, node, direct))
                     return;
-                if (direct.Time.NextController != -1 ||
-                    direct.Time.Flags is not (DormantDirectTransformFlags or DormantMultiTargetFlags) ||
+                if (TryApplyStaticTransformController(owner, node, direct))
+                    return;
+                if (TryBuildDirectTransformController(owner, node, direct))
+                    return;
+                if (direct.Time.Flags is not (DormantDirectTransformFlags or DormantMultiTargetFlags or DormantManagerFlags) ||
                     direct.Time.Frequency != 1.0f || direct.Time.Phase != 0.0f ||
                     direct.Time.StartTime != float.MaxValue || direct.Time.StopTime != float.MinValue ||
                     direct.Time.Target != owner.Block.Index || direct.Interpolator != -1)
                     throw new NotSupportedException(
-                        $"NIF node {owner.Block.Index} has an unsupported direct transform controller.");
+                        $"NIF node {owner.Block.Index} has an unsupported direct transform controller " +
+                        $"block={direct.Block.Index} next={direct.Time.NextController} " +
+                        $"flags=0x{direct.Time.Flags:x4} frequency={direct.Time.Frequency:R} " +
+                        $"phase={direct.Time.Phase:R} start={direct.Time.StartTime:R} " +
+                        $"stop={direct.Time.StopTime:R} target={direct.Time.Target} " +
+                        $"interpolator={direct.Interpolator}.");
                 node.SetMeta("opennv_nif_dormant_transform_controller", direct.Block.Index);
+                node.SetMeta("opennv_nif_dormant_transform_next", direct.Time.NextController);
                 return;
             }
             if (controller is not FalloutNifControllerManager manager ||
@@ -385,6 +462,154 @@ internal static class RuntimeNativeNifMeshBuilder
             node.SetMeta("opennv_nif_constant_bind_transform_stop", controller.Time.StopTime);
             node.SetMeta("opennv_nif_constant_bind_transform_runtime_enabled", false);
             return true;
+        }
+
+        private bool TryBuildDirectTransformController(
+            FalloutNifNode owner,
+            Node3D node,
+            FalloutNifTransformController controller)
+        {
+            if (controller.Time.NextController != -1 || controller.Time.Frequency <= 0.0f ||
+                controller.Time.StopTime <= controller.Time.StartTime ||
+                controller.Time.Target != owner.Block.Index || controller.Time.UnknownInteger != 0 ||
+                controller.Interpolator == -1 ||
+                _source.ReadObject(controller.Interpolator) is not FalloutNifTransformInterpolator interpolator ||
+                interpolator.Data == -1 ||
+                _source.ReadObject(interpolator.Data) is not FalloutNifTransformData data ||
+                !ValidateDirectRotation(data, controller.Time.StartTime, controller.Time.StopTime) ||
+                (data.Translations.Length != 0 && !ValidateQuadraticKeys(
+                    data.Translations, controller.Time.StartTime, controller.Time.StopTime)) ||
+                (data.Scales.Length != 0 && !ValidateQuadraticKeys(
+                    data.Scales, controller.Time.StartTime, controller.Time.StopTime)))
+                return false;
+
+            var cycleType = (uint)(controller.Time.Flags >> 1) & 3U;
+            if (cycleType is not (0U or 2U))
+                return false;
+            var sourceTransform = owner.Transform;
+            var baseTranslation = interpolator.Translation.X == float.MinValue &&
+                interpolator.Translation.Y == float.MinValue &&
+                interpolator.Translation.Z == float.MinValue
+                ? sourceTransform.Translation
+                : interpolator.Translation;
+            var baseScale = interpolator.Scale == float.MinValue
+                ? sourceTransform.Scale
+                : interpolator.Scale;
+            var channel = new RuntimeNifControllerChannel(time =>
+            {
+                var rotation = data.QuaternionRotations.Length != 0
+                    ? QuaternionRowMajor(SampleQuaternion(data.QuaternionRotations, time))
+                    : EulerXyzRowMajor(
+                        SampleScalar(data.XyzRotations[0], time),
+                        SampleScalar(data.XyzRotations[1], time),
+                        SampleScalar(data.XyzRotations[2], time));
+                var translation = data.Translations.Length == 0
+                    ? baseTranslation
+                    : SampleVector(data.Translations, time);
+                var scale = data.Scales.Length == 0
+                    ? baseScale
+                    : SampleScalar(data.Scales, time);
+                node.Transform = ConvertTransform(new FalloutNifTransform(
+                    translation, rotation, scale));
+            });
+            _directControllerSequences.Add(new RuntimeNifControllerSequence(
+                $"DirectTransform{controller.Block.Index}",
+                cycleType,
+                controller.Time.Frequency,
+                controller.Time.StartTime,
+                controller.Time.StopTime,
+                [channel]));
+            node.SetMeta("opennv_nif_direct_transform_controller", controller.Block.Index);
+            return true;
+        }
+
+        private bool TryApplyStaticTransformController(
+            FalloutNifNode owner,
+            Node3D node,
+            FalloutNifTransformController controller)
+        {
+            if (controller.Time.NextController != -1 ||
+                controller.Time.StopTime != controller.Time.StartTime ||
+                controller.Time.Target != owner.Block.Index || controller.Interpolator == -1 ||
+                _source.ReadObject(controller.Interpolator) is not FalloutNifTransformInterpolator interpolator)
+                return false;
+            var translation = interpolator.Translation.X == float.MinValue &&
+                interpolator.Translation.Y == float.MinValue &&
+                interpolator.Translation.Z == float.MinValue
+                ? owner.Transform.Translation
+                : interpolator.Translation;
+            var scale = interpolator.Scale == float.MinValue
+                ? owner.Transform.Scale
+                : interpolator.Scale;
+            var lengthSquared = interpolator.Rotation.W * interpolator.Rotation.W +
+                interpolator.Rotation.X * interpolator.Rotation.X +
+                interpolator.Rotation.Y * interpolator.Rotation.Y +
+                interpolator.Rotation.Z * interpolator.Rotation.Z;
+            var rotation = NearlyEqual(lengthSquared, 1.0f)
+                ? QuaternionRowMajor(interpolator.Rotation)
+                : owner.Transform.RotationRowMajor;
+            if (interpolator.Data != -1)
+            {
+                if (_source.ReadObject(interpolator.Data) is not FalloutNifTransformData data)
+                    return false;
+                if (data.QuaternionRotations.Length != 0)
+                    rotation = QuaternionRowMajor(data.QuaternionRotations[0].Value);
+                else if (data.XyzRotations.Length == 3 &&
+                    data.XyzRotations.All(keys => keys.Length != 0))
+                    rotation = EulerXyzRowMajor(
+                        data.XyzRotations[0][0].Value,
+                        data.XyzRotations[1][0].Value,
+                        data.XyzRotations[2][0].Value);
+                if (data.Translations.Length != 0)
+                    translation = data.Translations[0].Value;
+                if (data.Scales.Length != 0)
+                    scale = data.Scales[0].Value;
+            }
+            node.Transform = ConvertTransform(new FalloutNifTransform(translation, rotation, scale));
+            node.SetMeta("opennv_nif_static_transform_controller", controller.Block.Index);
+            return true;
+        }
+
+        private static bool ValidateDirectRotation(
+            FalloutNifTransformData data,
+            float start,
+            float stop)
+        {
+            if (data.RotationType == 4)
+                return data.XyzRotations.Length == 3 &&
+                    data.QuaternionRotations.Length == 0 &&
+                    data.XyzRotations.All(keys => ValidateQuadraticKeys(keys, start, stop));
+            return data.RotationType is 1U or 2U && data.XyzRotations.Length == 0 &&
+                data.QuaternionRotations.Length >= 2 &&
+                data.QuaternionRotations[0].Time == start &&
+                data.QuaternionRotations[^1].Time == stop &&
+                data.QuaternionRotations.Zip(data.QuaternionRotations.Skip(1),
+                    (left, right) => right.Time > left.Time).All(value => value);
+        }
+
+        private static FalloutNifQuaternion SampleQuaternion(
+            IReadOnlyList<FalloutNifQuaternionKey> keys,
+            float time)
+        {
+            if (time <= keys[0].Time)
+                return keys[0].Value;
+            if (time >= keys[^1].Time)
+                return keys[^1].Value;
+            for (var index = 0; index + 1 < keys.Count; ++index)
+            {
+                var first = keys[index];
+                var second = keys[index + 1];
+                if (time > second.Time)
+                    continue;
+                var amount = (time - first.Time) / (second.Time - first.Time);
+                var left = new Quaternion(
+                    first.Value.X, first.Value.Y, first.Value.Z, first.Value.W).Normalized();
+                var right = new Quaternion(
+                    second.Value.X, second.Value.Y, second.Value.Z, second.Value.W).Normalized();
+                var value = left.Slerp(right, amount).Normalized();
+                return new FalloutNifQuaternion(value.W, value.X, value.Y, value.Z);
+            }
+            throw new InvalidDataException("NIF quaternion controller interval was not found.");
         }
 
         private static float[] QuaternionRowMajor(FalloutNifQuaternion value)
@@ -484,6 +709,16 @@ internal static class RuntimeNativeNifMeshBuilder
                 player.Configure(sequences);
                 player.SetMeta("opennv_nif_controller_manager", manager.Block.Index);
                 player.SetMeta("opennv_nif_source_sequences", sequences.Select(value => value.Name).ToArray());
+                root.AddChild(player);
+            }
+            foreach (var sequence in _directControllerSequences)
+            {
+                var player = new RuntimeNifControllerPlayer
+                {
+                    Name = sequence.Name,
+                };
+                player.Configure([sequence]);
+                player.SetMeta("opennv_nif_direct_controller", true);
                 root.AddChild(player);
             }
         }
@@ -936,12 +1171,16 @@ internal static class RuntimeNativeNifMeshBuilder
                         break;
                     case FalloutNifStringExtraData:
                     case FalloutNifIntegerExtraData:
+                    case FalloutNifFloatExtraData:
+                    case FalloutNifDecalPlacementExtraData:
+                    case FalloutNifTextKeyExtraData:
                     case FalloutNifBound:
                     case FalloutNifFurnitureMarker:
                         break;
                     default:
                         throw new NotSupportedException(
-                            $"NIF visual block {owner.Index} has unsupported extra-data block {reference}.");
+                            $"NIF visual block {owner.Index} has unsupported extra-data block {reference} " +
+                            $"({_source.ReadObject(reference).Block.TypeName}).");
                 }
             }
             return omitEditorMarkers;
@@ -1075,10 +1314,6 @@ internal static class RuntimeNativeNifMeshBuilder
                 _source.Blocks[collision.Body].TypeName is not ("bhkRigidBody" or "bhkRigidBodyT"))
                 throw new NotSupportedException(
                     $"NIF visual block {owner.Index} has an unsupported collision attachment.");
-            if (collision.IsBlend)
-                throw new NotSupportedException(
-                    $"NIF visual block {owner.Index} uses blend collision {collision.Block.Index}; " +
-                    "ragdoll constraints and animation-to-physics blending remain unsupported.");
             return collision;
         }
 
@@ -1090,6 +1325,7 @@ internal static class RuntimeNativeNifMeshBuilder
                 return;
             node.SetMeta("opennv_nif_collision_object", collision.Block.Index);
             node.SetMeta("opennv_nif_collision_body", collision.Body);
+            node.SetMeta("opennv_nif_blend_collision", collision.IsBlend);
             node.SetMeta("opennv_nif_collision_flags", collision.Flags);
         }
 
@@ -1192,10 +1428,6 @@ internal static class RuntimeNativeNifMeshBuilder
                     $"NIF geometry {geometry.Block.Index} lost its validated lighting shader.");
             var supportedLightingFlags = SupportedShaderFlags |
                 (geometry.SkinInstance == -1 ? 0U : ShaderFlagSkinned);
-            if ((shader.ShaderFlags2 & ShaderFlagEnvironmentMapLightFade) != 0)
-                throw new NotSupportedException(
-                    $"NIF shader {shader.Block.Index} requires the unresolved environment-map light-fade term: " +
-                    $"flags1=0x{shader.ShaderFlags:x8} flags2=0x{shader.ShaderFlags2:x8}.");
             if (shader.Controller != -1 || shader.ExtraData.Any(reference => reference != -1) ||
                 shader.ShaderType != SupportedShaderType ||
                 (shader.ShaderFlags & ~supportedLightingFlags) != 0 ||
@@ -1206,22 +1438,22 @@ internal static class RuntimeNativeNifMeshBuilder
                     $"type={shader.ShaderType} flags1=0x{shader.ShaderFlags:x8} " +
                     $"flags2=0x{shader.ShaderFlags2:x8} clamp={shader.TextureClampMode} " +
                     $"refraction={shader.RefractionStrength}/{shader.RefractionFirePeriod}.");
-            var environment = (shader.ShaderFlags & ShaderFlagEnvironmentMapping) != 0;
             var windowEnvironment = (shader.ShaderFlags & ShaderFlagWindowEnvironmentMapping) != 0;
-            if (windowEnvironment && !environment)
-                throw new NotSupportedException(
-                    $"NIF shader {shader.Block.Index} has an incomplete window environment-map contract: " +
-                    $"flags1=0x{shader.ShaderFlags:x8} textureSet={shader.TextureSet}.");
+            var eyeEnvironment = (shader.ShaderFlags & ShaderFlagEyeEnvironmentMapping) != 0;
+            var environment = (shader.ShaderFlags & ShaderFlagEnvironmentMapping) != 0 ||
+                windowEnvironment || eyeEnvironment;
             if (shader.TextureSet == -1 ||
                 _source.ReadObject(shader.TextureSet) is not FalloutNifShaderTextureSet textures)
                 throw new NotSupportedException(
                     $"NIF shader {shader.Block.Index} has no decoded texture set: " +
                     $"flags1=0x{shader.ShaderFlags:x8} textureSet={shader.TextureSet}.");
+            if (textures.Textures.Length == FalloutTextureSlots &&
+                textures.Textures[EnvironmentTextureSlot].Length != 0)
+                environment = true;
             if (textures.Textures.Length != FalloutTextureSlots ||
                 (!environment && textures.Textures.Skip(EmissiveTextureSlot + 1)
                     .Any(path => !string.IsNullOrEmpty(path))) ||
-                (environment && (textures.Textures[EnvironmentTextureSlot].Length == 0 ||
-                    textures.Textures[3].Length != 0)))
+                (environment && textures.Textures[3].Length != 0))
                 throw new NotSupportedException(
                     $"NIF shader {shader.Block.Index} uses an unsupported texture set: " +
                     $"flags1=0x{shader.ShaderFlags:x8} slots=" +
@@ -1232,6 +1464,8 @@ internal static class RuntimeNativeNifMeshBuilder
                 TextureRepeat = shader.TextureClampMode == 0,
                 Metallic = 0.0f,
                 Roughness = material is null ? 1.0f : GlossToRoughness(material.Glossiness),
+                VertexColorUseAsAlbedo =
+                    (shader.ShaderFlags & ShaderFlagVertexAlpha) != 0,
             };
             if (material is not null)
             {
@@ -1270,11 +1504,23 @@ internal static class RuntimeNativeNifMeshBuilder
                 if (normal is null)
                     throw new NotSupportedException(
                         $"NIF environment shader {shader.Block.Index} has no tangent-space normal map.");
-                result.NextPass = BuildEnvironmentPass(
-                    LoadCubemap(textures.Textures[EnvironmentTextureSlot]),
-                    normal,
-                    LoadTexture(textures.Textures[EnvironmentMaskTextureSlot], normal: false),
-                    shader.EnvironmentMapScale);
+                var environmentMask = LoadTexture(
+                    textures.Textures[EnvironmentMaskTextureSlot], normal: false);
+                var environmentScale = eyeEnvironment ? 1.0f : shader.EnvironmentMapScale;
+                if (textures.Textures[EnvironmentTextureSlot].Length == 0)
+                {
+                    result.Metallic = Math.Clamp(environmentScale, 0.0f, 1.0f);
+                    result.MetallicTexture = environmentMask;
+                }
+                else
+                {
+                    result.NextPass = BuildEnvironmentPass(
+                        LoadCubemap(textures.Textures[EnvironmentTextureSlot]),
+                        normal,
+                        environmentMask,
+                        environmentScale,
+                        (shader.ShaderFlags2 & ShaderFlagEnvironmentMapLightFade) != 0);
+                }
             }
             ApplyAlpha(result, alpha);
             ApplyStencil(result, stencil, environment);
@@ -1317,7 +1563,7 @@ internal static class RuntimeNativeNifMeshBuilder
             FalloutNifStencilProperty? stencil)
         {
             var supportedShaderFlags = SupportedNoLightingShaderFlags |
-                (texturing is null ? 0U : ShaderFlagEmpty | ShaderFlagAlphaTexture);
+                (texturing is null ? 0U : ShaderFlagAlphaTexture);
             if (shader.Controller != -1 || shader.ExtraData.Any(reference => reference != -1) ||
                 shader.ShaderType != SupportedNoLightingShaderType ||
                 (shader.ShaderFlags & ~supportedShaderFlags) != 0 ||
@@ -1377,15 +1623,24 @@ internal static class RuntimeNativeNifMeshBuilder
                 texturing.BaseTexture is not { } descriptor ||
                 descriptor.Flags != LegacyBaseTextureFlags ||
                 descriptor.UvSet != LegacyTextureUvSet ||
-                descriptor.Transform is not null ||
+                (descriptor.Transform is not null && !IsIdentityTextureTransform(descriptor.Transform)) ||
                 texturing.DarkTexture is not null || texturing.DetailTexture is not null ||
                 texturing.GlossTexture is not null || texturing.GlowTexture is not null ||
                 texturing.BumpTexture is not null || texturing.BumpParameters is not null ||
-                texturing.NormalTexture is not null || texturing.UnknownTexture is not null ||
-                texturing.UnknownTextureFloat is not null || texturing.Decal0Texture is not null ||
-                texturing.Decal1Texture is not null)
+                texturing.NormalTexture is not null || texturing.ParallaxTexture is not null ||
+                texturing.ParallaxOffset is not null || texturing.Decal0Texture is not null ||
+                texturing.Decal1Texture is not null || texturing.ShaderTextures.Length != 0)
                 throw new NotSupportedException(
-                    $"NIF legacy texturing property {texturing.Block.Index} is outside the supported base-only contract.");
+                    $"NIF legacy texturing property {texturing.Block.Index} is outside the supported base-only contract " +
+                    $"(flags=0x{texturing.Flags:x4}, slots={texturing.TextureCount}, base={texturing.BaseTexture is not null}, " +
+                    $"dark={texturing.DarkTexture is not null}, detail={texturing.DetailTexture is not null}, " +
+                    $"gloss={texturing.GlossTexture is not null}, glow={texturing.GlowTexture is not null}, " +
+                    $"bump={texturing.BumpTexture is not null}, normal={texturing.NormalTexture is not null}, " +
+                    $"parallax={texturing.ParallaxTexture is not null}, decal0={texturing.Decal0Texture is not null}, " +
+                    $"decal1={texturing.Decal1Texture is not null}, shaderTextures={texturing.ShaderTextures.Length}, " +
+                    $"controller={texturing.Controller}, extra=[{string.Join(',', texturing.ExtraData)}], " +
+                    $"baseFlags=0x{texturing.BaseTexture?.Flags:x4}, baseUv={texturing.BaseTexture?.UvSet}, " +
+                    $"baseTransform={FormatTextureTransform(texturing.BaseTexture?.Transform)}).");
             if (_source.ReadObject(descriptor.Source) is not FalloutNifSourceTexture source ||
                 source.Controller != -1 || source.ExtraData.Any(reference => reference != -1) ||
                 source.UnknownLink != -1 || source.PixelLayout != LegacySourcePixelLayout ||
@@ -1397,6 +1652,18 @@ internal static class RuntimeNativeNifMeshBuilder
                     $"NIF legacy texturing property {texturing.Block.Index} has an unsupported source texture contract.");
             return source.FileName;
         }
+
+        private static string FormatTextureTransform(FalloutNifTextureTransform? transform) =>
+            transform is null ? "none" :
+            $"offset={transform.Translation.U:R},{transform.Translation.V:R};" +
+            $"scale={transform.Tiling.U:R},{transform.Tiling.V:R};" +
+            $"rotation={transform.Rotation:R};method={transform.TransformType};" +
+            $"center={transform.Center.U:R},{transform.Center.V:R}";
+
+        private static bool IsIdentityTextureTransform(FalloutNifTextureTransform transform) =>
+            transform.Translation.U == 0.0f && transform.Translation.V == 0.0f &&
+            transform.Tiling.U == 1.0f && transform.Tiling.V == 1.0f &&
+            transform.Rotation == 0.0f;
 
         private bool IsManagedMaterialController(int reference, int target) =>
             _source.ReadObject(reference) is FalloutNifMaterialColorController controller &&
@@ -1499,9 +1766,16 @@ internal static class RuntimeNativeNifMeshBuilder
             Cubemap environment,
             Texture2D normal,
             Texture2D? mask,
-            float scale)
+            float scale,
+            bool lightFade)
         {
-            var result = new ShaderMaterial { Shader = new Shader { Code = EnvironmentShader } };
+            var result = new ShaderMaterial
+            {
+                Shader = new Shader
+                {
+                    Code = lightFade ? EnvironmentLightFadeShader : EnvironmentShader,
+                },
+            };
             result.SetShaderParameter("normal_map", normal);
             result.SetShaderParameter("environment_cube", environment);
             result.SetShaderParameter("environment_mask", mask ?? normal);
@@ -1512,7 +1786,7 @@ internal static class RuntimeNativeNifMeshBuilder
 
         private (byte[] Payload, string Source) ReadTexture(string logicalPath)
         {
-            var owned = RuntimeOwnedContentSource.Current ??
+            var owned = RuntimeLiveContentSource.Current ??
                 throw new InvalidOperationException(
                     $"Native NIF texture resolution is not configured: {logicalPath}");
             if (!owned.TryRead(logicalPath, _preferredTextureArchive, out var payload, out var source))
@@ -1566,7 +1840,7 @@ internal static class RuntimeNativeNifMeshBuilder
         private static string SourceName(string value, int blockIndex) =>
             string.IsNullOrWhiteSpace(value) ? $"NifBlock{blockIndex}" : value;
 
-        private static void RequirePlainVisualState(
+        private void RequirePlainVisualState(
             FalloutNifBlock block,
             int controller,
             IReadOnlyList<int> extraData,
@@ -1574,8 +1848,18 @@ internal static class RuntimeNativeNifMeshBuilder
             int collision)
         {
             if (controller != -1)
-                throw new NotSupportedException(
-                    $"NIF visual block {block.Index} has an unsupported controller.");
+            {
+                var dormant = _source.Blocks[controller].TypeName == "NiTransformController" &&
+                    _source.ReadObject(controller) is FalloutNifTransformController direct &&
+                    direct.Time.Flags is (DormantDirectTransformFlags or DormantMultiTargetFlags or DormantManagerFlags) &&
+                    direct.Time.Frequency == 1.0f && direct.Time.Phase == 0.0f &&
+                    direct.Time.StartTime == float.MaxValue && direct.Time.StopTime == float.MinValue &&
+                    direct.Time.Target == block.Index && direct.Interpolator == -1;
+                if (!dormant)
+                    throw new NotSupportedException(
+                        $"NIF visual block {block.Index} has unsupported controller {controller} " +
+                        $"type {_source.Blocks[controller].TypeName}.");
+            }
             if (extraData.Any(reference => reference != -1))
                 throw new NotSupportedException(
                     $"NIF visual block {block.Index} has unsupported extra data.");

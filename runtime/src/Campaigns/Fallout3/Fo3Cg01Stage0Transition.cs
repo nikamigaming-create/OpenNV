@@ -802,7 +802,7 @@ internal sealed record Fo3Cg01Stage0Transition(
                 break;
             case JsonValueKind.String:
                 writer.WriteRawValue(
-                    PythonJsonString(source.GetString()!),
+                    JsonQuotedString(source.GetString()!),
                     skipInputValidation: false);
                 break;
             case JsonValueKind.Number:
@@ -823,7 +823,7 @@ internal sealed record Fo3Cg01Stage0Transition(
         }
     }
 
-    private static string PythonJsonString(string value)
+    private static string JsonQuotedString(string value)
     {
         var result = new StringBuilder(value.Length + 2);
         result.Append('"');

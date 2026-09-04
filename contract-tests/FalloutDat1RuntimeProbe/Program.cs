@@ -32,7 +32,7 @@ try
 
     Console.WriteLine(
         $"OPENNV_FALLOUT_DAT1_RUNTIME_PROBE_PASS entries={archive.Entries.Count} " +
-        $"stored={stored.Length} compressed={compressedSource.Length} cache=none");
+        $"stored={stored.Length} compressed={compressedSource.Length}");
 
     if (args.Length != 0)
     {
@@ -48,7 +48,7 @@ try
             $"OPENNV_FALLOUT_DAT1_OWNED_INPUT_PASS masterEntries={master.Entries.Count} " +
             $"critterEntries={critter.Entries.Count} map=maps/v13ent.map mapBytes={map.Length} " +
             $"player=art/critters/hmjmpsaa.frm playerBytes={player.Length} " +
-            "source=live-owned-dat1 cache=none");
+            "source=live-owned-dat1");
     }
 }
 finally

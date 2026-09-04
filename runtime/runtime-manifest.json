@@ -1,192 +1,23 @@
 {
-  "schema": "opennv-runtime-manifest/v1",
+  "schema": "opennv-runtime-manifest/v2",
   "runtime": {
-    "engine": "Godot",
-    "engineVersion": "4.7.2",
+    "engine": "Godot 4.7.2 Mono",
+    "language": "C#",
     "status": "experimental",
-    "label": "Launcher-ready bounded Fallout 1 V13ENT, Fallout 2 Arroyo Hex, and New Vegas Goodsprings slices; Fallout 3 CG00 remains a development frontend.",
-    "canLaunch": true,
-    "executables": {},
-    "contentExecutables": {},
-    "presentationModes": {
-      "flat": {
-        "launchable": true,
-        "status": "playable-sandbox"
-      },
-      "classicDiorama": {
-        "launchable": true,
-        "status": "presentation-proof-turn-simulation-not-connected",
-        "projection": "orthogonal",
-        "cameraControls": ["pan", "zoom", "rotate-60-degrees"]
-      },
-      "fo1HexTactical": {
-        "launchable": true,
-        "status": "playable-character-opening-v13ent-3d-slice-full-campaign-not-connected",
-        "newGameSequence": "owned-original-style-creator -> owned-original-overseer-opening -> V13ENT tile 17690 rotation 2",
-        "grid": "V13ENT 200x200 one-metre hexes",
-        "floor": "one opaque owned cave mesh over 30196 exact source-backed movement hexes",
-        "gridOverlay": "optional opaque depth-tested mesh with 27519 walkable hexes and 86841 unique shared edges after 1608 presentation-footprint blockers",
-        "cameraControls": [
-          "middle-mouse-orbit-tilt",
-          "right-mouse-drag-pan",
-          "wheel-cursor-zoom",
-          "wasd-arrow-and-edge-pan",
-          "player-focus-and-route-reset"
-        ]
-      },
-      "openxr": {
-        "launchable": true,
-        "status": "experimental-hardware-gate-pending",
-        "hardwareValidated": false,
-        "testedInteractionProfiles": [
-          "/interaction_profiles/khr/generic_controller",
-          "/interaction_profiles/oculus/touch_controller"
-        ]
-      }
-    }
+    "sourcePolicy": "read-only-direct-owned-install",
+    "canLaunch": true
   },
   "campaigns": [
-    {
-      "id": "Fallout1EtTu",
-      "variants": {
-        "vault13Concept": {
-          "ready": true,
-          "presentations": {
-            "first-person": { "ready": false, "status": "native-object-camera-gameplay-contract-pending" },
-            "hex-tactical": { "ready": true, "status": "native-v13ent-floor-evidenced-static-object-presentation" },
-            "openxr": { "ready": false, "status": "launcher-and-headset-gates-pending" }
-          },
-          "requiresLauncherProfile": "opennv-fo1-owned-profile/v1",
-          "message": "Launcher-capable for a bounded, non-gameplay Hex presentation after the player registers a legally owned Fallout 1 install. Godot reads V13ENT.MAP, the complete nested object graph and live script table, PRO/FRM lists, COLOR.PAL, master.dat, critter.dat, and sealed loose DATA directly in memory. The admitted view contains all 7,549 non-default entry-elevation floor patches plus 1,100 evidenced static objects sharing 106 decoded FRM/rotation resources. Every nonvisual top-level record is transported as exact metadata: 351 Scroll Blockers, 20 Exit Grids, one Security Door, and 22 objects bound to matching live MAP script records, for zero unclassified objects. The Scroll Blockers and closed Security Door own exact hex-footprint runtime collision; adjacent activation opens only that unscripted door. Five fully resolved Exit Grids expose Map 6 / tile 17695 / elevation 0 / rotation 0 transitions, while 15 world-map sentinels remain metadata-only. Two nested inventory records are not world placements; two additional live MAP script records are retained without object bindings. Script execution, destination-map loading, general input/gameplay, character start, first-person, and OpenXR remain fail-closed. No prepared scene or character cache is used."
-        }
-      }
-    },
-    {
-      "id": "Fallout2",
-      "variants": {
-        "arroyo": {
-          "ready": true,
-          "presentations": {
-            "first-person": { "ready": false, "status": "not-implemented" },
-            "hex-tactical": { "ready": true, "status": "bounded-premade-arroyo-map3-slice" },
-            "openxr": { "ready": false, "status": "not-implemented" }
-          },
-          "requiresProfile": "opennv-fo2-owned-profile/v1",
-          "message": "The bounded Hex first slice selects owned Narg, Mingan, or Chitsa or uses the source-backed Modify/Create surface for name, sex, age 16-35, and seven 1-10 SPECIAL values totaling 40. Modify preserves source tags/traits; Create leaves them explicitly unselected. Take hands the state to Map 3 tile 28707 with sex-correct owned idle FRM, grounded source-walk-gated movement, and atomic cold restore. Tag/trait editing, scripts, actors, combat, inventory, reciprocal exits, campaign-wide persistence, the full campaign, FPS, OpenXR, and retail parity remain unavailable."
-        }
-      }
-    },
-    {
-      "id": "NewVegas",
-      "variants": {
-        "vanilla": {
-          "ready": true,
-          "presentations": {
-            "first-person": { "ready": true, "status": "native-owned-stack-menu-live-cell-capability-gated" },
-            "hex-tactical": { "ready": false, "status": "not-implemented" },
-            "openxr": { "ready": false, "status": "native-owned-cell-player-rig-not-connected" }
-          },
-          "message": "The launcher route mounts a hash-bound read-only ESM/ESP, sealed loose-file, and active-BSA stack and opens the Godot menu without preparing or restoring a cache. The live Doc Mitchell path resolves the exact quest-selected player start, authored collision, lighting, bounded NIF/DDS/KF/controller contracts, and a reciprocal XTEL transition into the winning Wasteland CELL directly in memory. Unsupported formats or semantics stop at first use. It is not yet a playable campaign: remaining NIF/material behavior, exterior LAND material presentation, actors, packages, scripts, complete UI/save state, active-set streaming, and the native OpenXR player rig remain capability gates. Historical cache compilers remain development evidence only; their old outputs were deleted and are not launcher inputs.",
-          "unavailableDlc": []
-        },
-        "jam": {
-          "ready": false,
-          "message": "The owned JAM 4.6 profile transports bounded desktop JVS sprint and JBT time dilation. Missing dependencies and remaining AP, UI, animation, audio, event, and save semantics keep complete JAM play disabled."
-        }
-      }
-    },
-    {
-      "id": "Fallout3",
-      "variants": {
-        "vanilla": {
-          "ready": false,
-          "presentations": {
-            "first-person": { "ready": false, "status": "no-vault-world-or-first-person-runtime" },
-            "hex-tactical": { "ready": false, "status": "not-implemented" },
-            "openxr": { "ready": false, "status": "not-implemented" }
-          },
-          "requiresProfile": "opennv-owned-game-profile/v1",
-          "message": "The registered Fallout 3 GOTY profile runs the bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name/appearance selection, and owned Vault 101 birth-room flow through persistent stage 100. Exact stage-65 Dad cue, stage-80/85 INFO results, stage-90 INFO 0001f379 white-fade/sound, and seven of eight exact stage-100 commands through SetPCYoung 1 execute and cold-restore without replaying one-shot effects. A fresh pinned-Theora profile compiles both movies and the exact CG01 stage-0/stage-5/Dad-speech-to-stage-10 contracts, but native stage-10 apply/restore is blocked by non-portable actor paths in the prior presentation cache. General package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain absent, so FPS, Hex, and VR stay launcher-disabled."
-        }
-      }
-    },
-    {
-      "id": "TTW",
-      "variants": {
-        "vanilla": {
-          "ready": false,
-          "presentations": {
-            "first-person": {
-              "ready": false,
-              "status": "cg00-cg01-command-state-native-proof"
-            },
-            "hex-tactical": {
-              "ready": false,
-              "status": "not-implemented"
-            },
-            "openxr": {
-              "ready": false,
-              "status": "not-implemented"
-            }
-          },
-          "requiresProfile": "opennv-ttw-profile/v1",
-          "requiresOpeningProfile": "opennv-ttw-fo3-opening-profile/v1",
-          "message": "The strict TTW source namespace and bounded CG00-to-CG01-stage-5 command contract can be launcher-validated with dedicated cache and save identities. The isolated native interpreter applies and cold-restores all 38 admitted commands. Vault 101 world and movie presentation, stage-10-and-later gameplay, xNVSE execution, and JAM runtime are not connected, so every TTW presentation remains disabled."
-        },
-        "jam": {
-          "ready": false,
-          "message": "JAM native plugin execution and complete portable semantics are not connected for TTW."
-        }
-      }
-    }
+    { "id": "Fallout1", "launchable": true, "status": "bounded native V13ENT slice; full campaign incomplete" },
+    { "id": "Fallout2", "launchable": true, "status": "bounded native Arroyo Map 3 slice; full campaign incomplete" },
+    { "id": "NewVegas", "launchable": true, "status": "direct ESM/ESP/BSA and loose-file runtime; full campaign incomplete" },
+    { "id": "Fallout3", "launchable": true, "status": "direct owned-data runtime is incomplete" },
+    { "id": "TTW", "launchable": false, "status": "direct runtime support is not implemented" },
+    { "id": "JAM", "launchable": false, "status": "complete plugin semantics are not implemented" }
   ],
-  "capabilities": [
-    "direct-static-nif-gltf",
-    "legal-data-folder-picker",
-    "packaged-legal-content-helper",
-    "persistent-legal-install-cache",
-    "direct-esm-cell-reference-graph",
-    "direct-dds-png-texture-cache",
-    "surface-material-bindings",
-    "normal-map-green-channel-conversion",
-    "authored-furniture-fixtures-and-clutter",
-    "cell-xcll-ambient-lighting",
-    "placed-ligh-color-radius-intensity",
-    "xtel-data-derived-spawn",
-    "authored-bhk-packed-static-collision",
-    "authored-bhk-convex-dynamic-bodies",
-    "land-height-and-layer-import",
-    "reciprocal-xtel-interior-exterior-link",
-    "walk-and-fire-through-open-door",
-    "interactive-doors-and-physical-fire-rays",
-    "bounded-linked-cells-no-portal-culling",
-    "ordered-doc-exterior-saloon-portal-chain",
-    "flat-doc-exterior-saloon-forward-xtel-travel",
-    "campaign-save-v4-load-compatibility",
-    "campaign-save-v5-saloon-container-state",
-    "campaign-save-v7-movable-pickup-state",
-    "owned-container-take-one-take-all-exit",
-    "forward-plus-static-model-load",
-    "artifact-provenance-validation",
-    "authored-pickup-inventory-loop",
-    "owned-nif-convex-and-box-pickup-rigid-bodies",
-    "separate-collect-and-hold-move-drop-controls",
-    "retail-weap-damage-and-clip-profile",
-    "persistent-sandbox-save-cold-reload",
-    "playable-objective-route",
-    "openxr-stereo-rig",
-    "openxr-generic-and-oculus-touch-action-map",
-    "owned-data-first-person-skinned-hands",
-    "openxr-separate-grip-and-aim-poses",
-    "shared-configured-flat-openxr-controls",
-    "repo-local-openxr-simulator-acceptance",
-    "meter-correct-xr-world-scale",
-    "calibrated-standing-xr-eye-height",
-    "vr-authored-10mm-starting-loadout-and-reload",
-    "world-space-xr-hud",
-    "shared-flat-xr-gameplay-save-state",
-    "retail-actor-set-sunny-settler-easy-pete",
-    "fo2-owned-premade-arroyo-cold-restore",
-    "fo2-custom-character-arroyo-cold-restore"
-  ]
+  "dataFlow": {
+    "inputs": ["owned plugins", "owned archives", "owned loose files"],
+    "writes": ["OpenNV settings", "OpenNV saves"],
+    "generatedRetailAssets": false
+  }
 }

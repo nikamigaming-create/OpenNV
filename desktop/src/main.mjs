@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
@@ -10,18 +10,12 @@ import { synchronizeManagedLayers, updateManagedLayer, validateManagedLayers } f
 import { createLaunchInvocation } from "./native-launch-contract.mjs";
 import {
   appendSourceRoot,
-  createOwnedFallout3Stack,
-  createOwnedNewVegasStack,
   importMo2Profile,
   importTtwInstallerProfile,
   inspectOwnedNewVegasDataRoot,
   rebuildManagedSourceLayers,
   validateInstalledModStack
 } from "./mod-stack-contract.mjs";
-import {
-  readTtwFo3OpeningContract,
-  validateTtwProfileSourceLayout
-} from "./ttw-opening-contract.mjs";
 import { createFo1OwnedProfile, validateFo1OwnedProfile } from "./fo1-owned-profile.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -178,13 +172,13 @@ function configuredNewVegasDataRoot() {
   try {
     const registration = JSON.parse(
       readFileSync(newVegasDataRegistrationPath(), "utf8"));
-    if (registration?.schema === "opennv-launcher-owned-data-registration/v1" &&
+    if (registration?.schema === "opennv-live-install-registration/v1" &&
         registration?.campaign === "NewVegas" &&
         typeof registration?.dataRoot === "string") {
       return path.resolve(registration.dataRoot);
     }
   } catch {
-    // No owned Data folder has been registered yet.
+    // No live Data folder has been selected yet.
   }
   return null;
 }
@@ -200,13 +194,13 @@ function configuredFallout3DataRoot() {
   try {
     const registration = JSON.parse(
       readFileSync(fallout3DataRegistrationPath(), "utf8"));
-    if (registration?.schema === "opennv-launcher-owned-data-registration/v1" &&
+    if (registration?.schema === "opennv-live-install-registration/v1" &&
         registration?.campaign === "Fallout3" &&
         typeof registration?.dataRoot === "string") {
       return path.resolve(registration.dataRoot);
     }
   } catch {
-    // No standalone Fallout 3 Data folder has been registered yet.
+    // No standalone Fallout 3 Data folder has been selected yet.
   }
   return null;
 }
@@ -341,123 +335,19 @@ function hasCurrentNativeTtwSnapshot(profile, manifestPath) {
 
 function readTtwProfile(manifestOverride = null) {
   const manifestPath = path.resolve(manifestOverride || configuredModProfilePath("ttw"));
-  const unavailableOpenings = (profileMessage) => ({
-    "ttw-fo3": {
-      proofValidated: false,
-      proofProfilePath: null,
-      interactiveReady: false,
-      blocker: profileMessage
-    },
-    "ttw-fnv": {
-      proofValidated: false,
-      proofProfilePath: null,
-      interactiveReady: false,
-      blocker: profileMessage
-    }
-  });
-  const unavailable = (message, manifestDetected = existsSync(manifestPath)) => ({
+  const message = "TTW direct runtime support is not implemented.";
+  return {
     ready: false,
     runtimeReady: false,
     validated: false,
-    manifestDetected,
+    manifestDetected: existsSync(manifestPath),
     message,
-    openings: unavailableOpenings(message),
+    openings: {
+      "ttw-fo3": { proofValidated: false, proofProfilePath: null, interactiveReady: false, blocker: message },
+      "ttw-fnv": { proofValidated: false, proofProfilePath: null, interactiveReady: false, blocker: message }
+    },
     path: manifestPath
-  });
-  try {
-    const profile = JSON.parse(readFileSync(manifestPath, "utf8"));
-    if (profile?.schema !== "opennv-ttw-profile/v1" ||
-        profile?.status !== "validated-generated-plugin-profile" ||
-        profile?.kind !== "ttw" || !isSha256(profile?.pluginStackId) ||
-        profile?.saveCompatibilityId !== `ttw:${profile.pluginStackId}` ||
-        !Array.isArray(profile?.sourceRoots) || profile.sourceRoots.length < 1 ||
-        !Array.isArray(profile?.plugins) || profile.plugins.length === 0) {
-      return unavailable("The selected TTW manifest is not a validated generated profile.", true);
-    }
-    const roots = profile.sourceRoots.map((root) => path.resolve(root));
-    if (!existsSync(path.join(roots[0], FALLOUT_NV_MASTER))) {
-      return unavailable("The TTW profile has no vanilla New Vegas lower source layer.", true);
-    }
-    const nativeSnapshotCurrent = hasCurrentNativeTtwSnapshot(profile, manifestPath);
-    const pluginNames = new Set();
-    for (const [loadOrderIndex, row] of profile.plugins.entries()) {
-      if (!Number.isInteger(row?.sourceRootIndex) || !roots[row.sourceRootIndex] ||
-          row?.loadOrderIndex !== loadOrderIndex ||
-          typeof row?.file !== "string" || path.basename(row.file) !== row.file ||
-          !Array.isArray(row?.masters) || !row.masters.every((master) => typeof master === "string")) {
-        return unavailable("The selected TTW manifest has an invalid plugin source.", true);
-      }
-      const foldedName = row.file.toLowerCase();
-      if (pluginNames.has(foldedName)) {
-        return unavailable("The selected TTW manifest repeats an active plugin.", true);
-      }
-      pluginNames.add(foldedName);
-      const source = path.join(roots[row.sourceRootIndex], row.file);
-      if (!nativeSnapshotCurrent) {
-        validateHashBoundFile(source, row, `TTW plugin ${row.file}`);
-      }
-    }
-    if (profile.plugins[0].file.toLowerCase() !== "falloutnv.esm" ||
-        REQUIRED_TTW_PLUGINS.some((plugin) => !pluginNames.has(plugin)) ||
-        ttwPluginStackId(profile) !== profile.pluginStackId) {
-      return unavailable("The selected TTW plugin stack identity changed; register it again.", true);
-    }
-    validateTtwProfileSourceLayout(profile);
-    const loadOrder = profile?.loadOrderSource;
-    if (!loadOrder?.file || !isSha256(loadOrder?.sha256) ||
-        !existsSync(loadOrder.file) || sha256(loadOrder.file) !== loadOrder.sha256) {
-      return unavailable("The TTW active load order changed; register it again.", true);
-    }
-    const opening = readTtwFo3OpeningContract({
-      baseManifestPath: manifestPath,
-      baseProfile: profile,
-      openingManifestPath: configuredTtwFo3OpeningProfilePath(manifestPath)
-    });
-    const runtimeReady = profile?.runtimeCompatibility?.ready === true && opening.runtimeReady;
-    const reason = String(profile?.runtimeCompatibility?.reason || "TTW runtime compatibility is not ready.");
-    const cacheDigest = opening.validated ? opening.cacheCompatibilityId.split(":", 2)[1] : null;
-    const openings = {
-      "ttw-fo3": {
-        proofValidated: opening.validated,
-        proofProfilePath: opening.path,
-        interactiveReady: false,
-        blocker: opening.validated
-          ? "Fallout 3 via TTW has a validated CG00-to-CG01 proof contract, but Vault 101 world, movie playback, and interactive continuation are not connected."
-          : "Fallout 3 via TTW is missing its bounded CG00-to-CG01 proof contract."
-      },
-      "ttw-fnv": {
-        proofValidated: false,
-        proofProfilePath: null,
-        interactiveReady: false,
-        blocker: "New Vegas via TTW has no effective-stack Doc Mitchell opening profile or interactive world runtime yet."
-      }
-    };
-    return {
-      ready: runtimeReady,
-      runtimeReady,
-      validated: true,
-      manifestDetected: true,
-      openingValidated: opening.validated,
-      openingManifestDetected: opening.manifestDetected,
-      openings,
-      message: opening.validated
-        ? opening.message
-        : "TTW profile registered; the bounded Fallout 3 opening contract is missing or changed.",
-      reason: opening.validated ? opening.reason : `${opening.message} ${reason}`,
-      path: manifestPath,
-      openingProfilePath: opening.path,
-      sourceNamespacePath: opening.sourceNamespacePath,
-      pluginStackId: profile.pluginStackId,
-      saveCompatibilityId: profile.saveCompatibilityId,
-      cacheCompatibilityId: opening.cacheCompatibilityId,
-      cacheRoot: cacheDigest
-        ? path.join(app.getPath("userData"), "cache", "ttw", profile.pluginStackId, cacheDigest)
-        : null,
-      savePath: path.join(app.getPath("userData"), "profiles", "ttw", profile.pluginStackId, "fo3-opening-v1.json")
-    };
-  } catch (error) {
-    return unavailable(error instanceof Error ? error.message : "The TTW profile could not be read.");
-  }
+  };
 }
 
 function readJamProfile(manifestOverride = null) {
@@ -557,6 +447,7 @@ function readFo1Profile() {
       runtimeReady: false,
       message: "Fallout 1 owned DAT1/loose profile registered; native gameplay remains fail-closed.",
       path: profilePath,
+      dataRoot: configured.install.root,
       profileId: configured.sourceProfileId,
       saveCompatibilityId: configured.saveCompatibilityId,
       savePath: path.join(app.getPath("userData"), "profiles", "fallout1", "vault-dweller-v1.json")
@@ -586,7 +477,6 @@ function readFo2Profile(manifestOverride = null) {
         profile?.saveCompatibilityId !== `fallout2:${profile.sourceProfileId}` ||
         profile?.runtimeCompatibility?.ready !== false ||
         profile?.retailOrDerivedAssetsPackaged !== false ||
-        !Array.isArray(profile?.generatedCaches) || profile.generatedCaches.length !== 0 ||
         !Array.isArray(profile?.install?.archives) || profile.install.archives.length !== 3) {
       return unavailable("The selected Fallout 2 manifest is not a safe owned-install profile.", true);
     }
@@ -623,6 +513,7 @@ function readFo2Profile(manifestOverride = null) {
       manifestDetected: true,
       message: "Ready: native owned-data Map 3 presentation; gameplay semantics remain fail-closed.",
       path: manifestPath,
+      dataRoot: root,
       sourceProfileId: profile.sourceProfileId,
       saveCompatibilityId: profile.saveCompatibilityId,
       savePath: path.join(app.getPath("userData"), "profiles", "fallout2", "chosen-v1.json")
@@ -646,31 +537,25 @@ function readFo3Profile() {
       return unavailable("Choose the legally owned standalone Fallout 3 GOTY Data folder.", false);
     }
     const dataRoot = path.resolve(configuredRoot);
-    const nativeStackPath = path.resolve(fo3NativeStackPath());
-    const nativeStackBytes = readFileSync(nativeStackPath);
-    const nativeStack = validateInstalledModStack(JSON.parse(nativeStackBytes.toString("utf8")));
-    if (nativeStack.edition !== "fallout-3" || nativeStack.game !== "fallout-3" ||
-        path.resolve(nativeStack.roots[0]?.root || "") !== dataRoot) {
-      return unavailable("The native Fallout 3 source stack does not match the registered Data folder.");
+    if (!existsSync(path.join(dataRoot, "Fallout3.esm"))) {
+      return unavailable("The selected folder has no live Fallout3.esm.");
     }
-    const nativeStackSha256 = createHash("sha256").update(nativeStackBytes).digest("hex");
+    const names = readdirSync(dataRoot);
+    const plugins = names.filter((name) => /\.(?:esm|esp)$/iu.test(name));
+    const archives = names.filter((name) => /\.bsa$/iu.test(name));
+    if (archives.length === 0) return unavailable("The selected folder has no live BSA files.");
     return {
       ready: true,
       runtimeReady: true,
       validated: true,
       manifestDetected: true,
-      message: `${nativeStack.plugins.length} standalone Fallout 3 plugins and ` +
-        `${nativeStack.archives.length} active archives registered for native read-only loading.`,
+      message: `${plugins.length} live Fallout 3 plugins and ${archives.length} live archives ready.`,
       dataRoot,
-      stackPath: nativeStackPath,
-      stackId: nativeStack.stackId,
-      stackSha256: nativeStackSha256,
       savePath: path.join(
         app.getPath("userData"),
         "profiles",
         "fallout3",
-        "native",
-        nativeStack.stackId,
+        "live",
         "campaign-v1.json")
     };
   } catch (error) {
@@ -690,31 +575,20 @@ function readNewVegasProfile(dataRootOverride = null) {
     message
   });
   try {
-    if (process.env.OPENNV_NEWVEGAS_PREFLIGHT_ERROR) {
-      return unavailable(process.env.OPENNV_NEWVEGAS_PREFLIGHT_ERROR);
-    }
     if (!configuredRoot) {
       return unavailable("Choose the legally owned Fallout: New Vegas Data folder.", false);
     }
     const inspected = inspectOwnedNewVegasDataRoot(configuredRoot);
-    const stack = readModStack();
-    if (!stack.validated || stack.dataRoot !== inspected.root) {
-      return unavailable(
-        "The native New Vegas source stack is missing or does not match the registered Data folder.",
-        true);
-    }
     return {
       ready: true,
       runtimeReady: true,
       validated: true,
       manifestDetected: true,
       message: `${inspected.plugins.length} plugins and ${inspected.archives.length} archives ` +
-        "registered for native read-only loading.",
+        "ready for direct live loading.",
       dataRoot: inspected.root,
-      stackId: stack.stackId,
       savePath: path.join(
-        app.getPath("userData"), "profiles", "newvegas", "stacks",
-        stack.stackId, "courier-v1.json")
+        app.getPath("userData"), "profiles", "newvegas", "live", "courier-v1.json")
     };
   } catch (error) {
     return unavailable(error instanceof Error
@@ -1133,12 +1007,10 @@ async function chooseNewVegasData() {
     return { ok: false, message: "New Vegas Data registration canceled." };
   }
   try {
-    const stack = createOwnedNewVegasStack(selection.filePaths[0], {
-      configRoot: configuredFnvLoadOrderRoot()
-    });
-    const dataRoot = stack.roots[0].root;
+    const inspected = inspectOwnedNewVegasDataRoot(selection.filePaths[0]);
+    const dataRoot = inspected.root;
     const registration = {
-      schema: "opennv-launcher-owned-data-registration/v1",
+      schema: "opennv-live-install-registration/v1",
       campaign: "NewVegas",
       dataRoot
     };
@@ -1146,12 +1018,6 @@ async function chooseNewVegasData() {
     writeFileSync(
       newVegasDataRegistrationPath(),
       `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
-      "utf8"
-    );
-    mkdirSync(path.dirname(modStackPath()), { recursive: true });
-    writeFileSync(
-      modStackPath(),
-      `${JSON.stringify(stack, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
       "utf8"
     );
     const profile = readNewVegasProfile(dataRoot);
@@ -1177,10 +1043,12 @@ async function chooseFallout3Data() {
     return { ok: false, message: "Fallout 3 Data registration canceled." };
   }
   try {
-    const stack = createOwnedFallout3Stack(selection.filePaths[0]);
-    const dataRoot = stack.roots[0].root;
+    const dataRoot = path.resolve(selection.filePaths[0]);
+    if (!existsSync(path.join(dataRoot, "Fallout3.esm"))) {
+      throw new Error("The selected folder has no live Fallout3.esm.");
+    }
     const registration = {
-      schema: "opennv-launcher-owned-data-registration/v1",
+      schema: "opennv-live-install-registration/v1",
       campaign: "Fallout3",
       dataRoot
     };
@@ -1188,11 +1056,6 @@ async function chooseFallout3Data() {
     writeFileSync(
       fallout3DataRegistrationPath(),
       `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
-      "utf8");
-    mkdirSync(path.dirname(fo3NativeStackPath()), { recursive: true });
-    writeFileSync(
-      fo3NativeStackPath(),
-      `${JSON.stringify(stack, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
       "utf8");
     const profile = readFo3Profile();
     return profile.ready

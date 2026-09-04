@@ -167,7 +167,6 @@ export function createFo1OwnedProfile(installDirectory) {
     sourceProfileId,
     saveCompatibilityId: `fallout1:${sourceProfileId}`,
     retailOrDerivedAssetsPackaged: false,
-    generatedCaches: [],
     install: {
       root,
       archives,
@@ -188,7 +187,7 @@ export function validateFo1OwnedProfile(profile) {
   if (profile?.schema !== FO1_OWNED_PROFILE_SCHEMA || profile?.status !== "registered-owned-install" ||
       profile?.campaign !== "Fallout1" || !SHA256_PATTERN.test(profile?.sourceProfileId || "") ||
       profile?.saveCompatibilityId !== `fallout1:${profile.sourceProfileId}` ||
-      profile?.retailOrDerivedAssetsPackaged !== false || profile?.generatedCaches?.length !== 0 ||
+      profile?.retailOrDerivedAssetsPackaged !== false ||
       JSON.stringify(profile?.install?.overlayOrderHighToLow) !== JSON.stringify(OVERLAY) ||
       !Array.isArray(profile?.install?.archives) || profile.install.archives.length !== ARCHIVE_NAMES.length) {
     throw new Error("The Fallout 1 owned profile identity is invalid.");

@@ -14,8 +14,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutNativeVigorContract _vigorContract = null!;
     private FalloutNativeTagSkillContract _tagSkillContract = null!;
     private FalloutNativeTraitFarewellContract _traitFarewellContract = null!;
+    private FalloutPluginStack _pluginStack = null!;
     private string _savePath = string.Empty;
     private string _saveCompatibilityId = string.Empty;
+    private FalloutFormKey _activeCell;
     private string _activateAction = string.Empty;
     private string _playerName = string.Empty;
     private FalloutNativeRaceSexSelection _character = null!;
@@ -37,6 +39,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal short Stage => _machine.Stage;
     internal float? TimerSeconds => _machine.TimerSeconds;
     internal IReadOnlyCollection<string> PendingBlockers => _machine.PendingBlockers;
+    internal FalloutFormKey ActiveCell => _activeCell;
 
     internal void Configure(
         FalloutOpeningStageTransitionGraph transitions,
@@ -47,8 +50,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutNativeVigorContract vigorContract,
         FalloutNativeTagSkillContract tagSkillContract,
         FalloutNativeTraitFarewellContract traitFarewellContract,
+        FalloutPluginStack pluginStack,
         string savePath,
         string saveCompatibilityId,
+        FalloutFormKey initialCell,
         FalloutNativeCampaignRestore? restore,
         string activateAction,
         string initialQuestEditorId,
@@ -63,11 +68,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _tagSkillContract = tagSkillContract ?? throw new ArgumentNullException(nameof(tagSkillContract));
         _traitFarewellContract = traitFarewellContract ??
             throw new ArgumentNullException(nameof(traitFarewellContract));
+        _pluginStack = pluginStack ?? throw new ArgumentNullException(nameof(pluginStack));
         _savePath = Path.GetFullPath(savePath ?? throw new ArgumentNullException(nameof(savePath)));
         _saveCompatibilityId = string.IsNullOrWhiteSpace(saveCompatibilityId)
             ? throw new ArgumentException(
                 "Native save compatibility identity is required.", nameof(saveCompatibilityId))
             : saveCompatibilityId;
+        _activeCell = restore?.State.ActiveCell ?? initialCell;
         _stage200Saved = restore is not null;
         _playerName = restore?.State.PlayerName ?? string.Empty;
         _character = restore?.State.Character ?? raceSexContract.Initial;
@@ -124,7 +131,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_TRIGGER stage={_vigorContract.TriggerFromStage}->" +
             $"{_vigorContract.TesterStage} reference={_vigorContract.TriggerReference.FormKey} " +
-            "source=live-trigger-script-xprm cache=none");
+            "source=live-trigger-script-xprm");
         Synchronize();
     }
 
@@ -145,7 +152,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_OPEN stage={_machine.Stage} total={_vigorContract.RequiredTotal} " +
             $"reference={_vigorContract.TesterReference.FormKey} " +
-            "source=live-player-vigor-scripts presentation=first-party-functional cache=none");
+            "source=live-player-vigor-scripts presentation=first-party-functional");
     }
 
     internal void EnterFarewellTrigger()
@@ -161,7 +168,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             $"OPENNV_NATIVE_FAREWELL_TRIGGER stage={_traitFarewellContract.ExitTriggerFromStage}->" +
             $"{_traitFarewellContract.FarewellStage} reference=" +
             $"{_traitFarewellContract.ExitTriggerReference.FormKey} " +
-            "source=live-trigger-script-xprm cache=none");
+            "source=live-trigger-script-xprm");
         Synchronize();
     }
 
@@ -222,6 +229,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                     _tagSkills);
             var state = FalloutNativeCampaignSave.Capture(
                 _saveCompatibilityId,
+                _activeCell,
                 completedGrant,
                 _playerName,
                 _character,
@@ -239,8 +247,36 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             GD.Print(
                 $"OPENNV_NATIVE_OPENING_SAVED stage={state.QuestEditorId}:{state.Stage} " +
                 $"items={state.Inventory.Count} equipped={state.EquippedRuntimeFormIds.Count} " +
-                $"save={_savePath} source=live-qust-info-records cache=none writes=save-only");
+                $"save={_savePath} source=live-qust-info-records writes=save-only");
         }
+    }
+
+    internal FalloutNativeCampaignState PersistWorldState(FalloutFormKey activeCell)
+    {
+        if (!_stage200Saved)
+            throw new InvalidOperationException(
+                "Native world state cannot persist before the opening completes.");
+        var restore = FalloutNativeCampaignSave.Read(
+            _savePath,
+            _saveCompatibilityId,
+            _pluginStack,
+            _vigorContract,
+            _tagSkillContract,
+            _openingGrant,
+            _traitFarewellContract);
+        var transform = _player.GlobalTransform;
+        var rotation = transform.Basis.GetRotationQuaternion().Normalized();
+        var state = FalloutNativeCampaignSave.WithWorldState(
+            restore.State,
+            activeCell,
+            [transform.Origin.X, transform.Origin.Y, transform.Origin.Z],
+            [rotation.X, rotation.Y, rotation.Z, rotation.W]);
+        FalloutNativeCampaignSave.Write(_savePath, state);
+        _activeCell = activeCell;
+        GD.Print(
+            $"OPENNV_NATIVE_WORLD_SAVED cell={activeCell} stage={state.QuestEditorId}:{state.Stage} " +
+            $"save={_savePath} owner=native-campaign-state");
+        return state;
     }
 
     private void SynchronizeNameEntry()
@@ -264,7 +300,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _nameEntry.Configure(_playerName);
         GD.Print(
             $"OPENNV_NATIVE_NAME_ENTRY_OPEN quest={_machine.QuestEditorId} stage={_machine.Stage} " +
-            "source=getplayername presentation=first-party-functional cache=none");
+            "source=getplayername presentation=first-party-functional");
     }
 
     private void AcceptPlayerName(string value)
@@ -306,7 +342,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_RACESEX_OPEN quest={_machine.QuestEditorId} stage={_machine.Stage} " +
             $"race={_character.RaceEditorId}/{_character.RaceRuntimeFormId:x8} " +
-            "source=player-race-hair-eyes presentation=first-party-functional cache=none");
+            "source=player-race-hair-eyes presentation=first-party-functional");
     }
 
     private void AcceptCharacter(FalloutNativeRaceSexSelection selection)
@@ -376,7 +412,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_PSYCH_HANDOFF_OPEN stage={_machine.Stage} " +
             $"terminal={_tagSkillContract.PsychCompletedStage} " +
-            "source=live-info-terminal-results presentation=first-party-functional cache=none");
+            "source=live-info-terminal-results presentation=first-party-functional");
     }
 
     private void AcceptPsychHandoff()
@@ -422,7 +458,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_OPEN stage={_machine.Stage} " +
             $"choices={_tagSkillContract.Skills.Count} required={_tagSkillContract.RequiredCount} " +
-            "source=live-settagskills-avif presentation=first-party-functional cache=none");
+            "source=live-settagskills-avif presentation=first-party-functional");
     }
 
     private void AcceptTagSkills(IReadOnlyList<FalloutNativeSkillIdentity> selection)
@@ -469,7 +505,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             $"OPENNV_NATIVE_TRAITS_OPEN stage={_machine.Stage} " +
             $"choices={_traitFarewellContract.Traits.Count} maximum=" +
             $"{_traitFarewellContract.MaximumTraits} " +
-            "source=live-showtraitmenu-perk presentation=first-party-functional cache=none");
+            "source=live-showtraitmenu-perk presentation=first-party-functional");
     }
 
     private void AcceptTraits(IReadOnlyList<FalloutNativeTraitIdentity> selection)
@@ -520,7 +556,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_FAREWELL_OPEN stage={_machine.Stage} " +
             $"items={_completedGrant.Inventory.Items.Count} " +
-            "source=live-info-tag-branches presentation=first-party-functional cache=none");
+            "source=live-info-tag-branches presentation=first-party-functional");
     }
 
     private void AcceptFarewell()

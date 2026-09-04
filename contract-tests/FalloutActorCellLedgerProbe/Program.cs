@@ -73,13 +73,13 @@ Console.WriteLine(
     $"OPENNV_ACTOR_CELL_LEDGER_PASS plugins={stack.Plugins.Count} cells={cells.Count} " +
     $"populationCells={ordered.Length} actors={actorPlacements} creatures={creaturePlacements} " +
     $"mixedCells={ordered.Count(pair => pair.Value.Actors > 0 && pair.Value.Creatures > 0)} " +
-    $"stackId={stackId} source=live-owned-stack cache=none");
+    $"stackId={stackId} source=live-owned-stack");
 
 var renderLedger = FalloutActorCreatureLedgerBuilder.Build(
     stack,
     game,
     ownedSource.TryResolve);
-var edition = game == RuntimeOwnedContentSource.Fallout3Game
+var edition = game == RuntimeLiveContentSource.Fallout3Game
     ? "standalone-fo3"
     : root.TryGetProperty("orderSource", out var orderSource) &&
         orderSource.ValueKind == JsonValueKind.Object &&

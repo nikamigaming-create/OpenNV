@@ -12,6 +12,7 @@ internal sealed record FalloutNativeSavedItem(
 internal sealed record FalloutNativeCampaignState(
     string Schema,
     string SaveCompatibilityId,
+    FalloutFormKey ActiveCell,
     string QuestEditorId,
     short Stage,
     string PlayerName,
@@ -31,7 +32,7 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v5";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v6";
     internal const string OpeningQuestEditorId = "VCG01";
     internal const short CompletedOpeningStage = 200;
     private const int PositionComponents = 3;
@@ -44,6 +45,7 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState Capture(
         string saveCompatibilityId,
+        FalloutFormKey activeCell,
         FalloutOpeningInventoryGrant grant,
         string playerName,
         FalloutNativeRaceSexSelection character,
@@ -64,6 +66,7 @@ internal static class FalloutNativeCampaignSave
         var state = new FalloutNativeCampaignState(
             ExpectedSchema,
             saveCompatibilityId,
+            activeCell,
             OpeningQuestEditorId,
             CompletedOpeningStage,
             playerName,
@@ -133,6 +136,10 @@ internal static class FalloutNativeCampaignSave
                 File.ReadAllText(fullPath)) ??
             throw new InvalidDataException($"Native campaign save is empty: {fullPath}");
         Validate(state, expectedSaveCompatibilityId);
+        var activeCell = stack.GetEffective(state.ActiveCell);
+        if (activeCell.Signature != "CELL")
+            throw new InvalidDataException(
+                "Native campaign save active CELL differs from the live winning records.");
         var characterContract = FalloutNativeRaceSexResolver.Resolve(stack);
         FalloutNativeRaceSexResolver.Validate(characterContract, state.Character);
         FalloutNativeVigorResolver.Validate(vigorContract, state.Special);
@@ -169,6 +176,23 @@ internal static class FalloutNativeCampaignSave
         return new FalloutNativeCampaignRestore(state, inventory);
     }
 
+    internal static FalloutNativeCampaignState WithWorldState(
+        FalloutNativeCampaignState state,
+        FalloutFormKey activeCell,
+        IReadOnlyList<float> playerPosition,
+        IReadOnlyList<float> playerRotation)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var updated = state with
+        {
+            ActiveCell = activeCell,
+            PlayerPosition = playerPosition.ToArray(),
+            PlayerRotation = playerRotation.ToArray(),
+        };
+        Validate(updated, state.SaveCompatibilityId);
+        return updated;
+    }
+
     internal static FalloutPlayerControlState RestorePlayerControls(
         FalloutNativeCampaignState state)
     {
@@ -190,6 +214,8 @@ internal static class FalloutNativeCampaignSave
         if (state.Schema != ExpectedSchema ||
             string.IsNullOrWhiteSpace(expectedSaveCompatibilityId) ||
             state.SaveCompatibilityId != expectedSaveCompatibilityId ||
+            string.IsNullOrWhiteSpace(state.ActiveCell.OwnerPlugin) ||
+            state.ActiveCell.ObjectId == 0 ||
             state.QuestEditorId != OpeningQuestEditorId ||
             state.Stage != CompletedOpeningStage ||
             string.IsNullOrWhiteSpace(state.PlayerName) ||

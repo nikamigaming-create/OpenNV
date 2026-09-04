@@ -11,7 +11,25 @@ internal static class RetailImageSpaceRenderer
         RetailImageSpaceComposition.ComposedImageSpace imageSpace,
         RetailImageSpaceConfiguration configuration,
         CaptureConfiguration capture,
-        ColorTransferConfiguration outputTransfer)
+        ColorTransferConfiguration outputTransfer,
+        bool runtimeAdaptation = false)
+    {
+        var application = Create(
+            imageSpace,
+            configuration,
+            capture,
+            outputTransfer,
+            runtimeAdaptation);
+        environment.Compositor = application.Compositor;
+        return application;
+    }
+
+    internal static Application Create(
+        RetailImageSpaceComposition.ComposedImageSpace imageSpace,
+        RetailImageSpaceConfiguration configuration,
+        CaptureConfiguration capture,
+        ColorTransferConfiguration outputTransfer,
+        bool runtimeAdaptation)
     {
         var indices = configuration.TraitIndices;
         var cinematic = new Vector4(
@@ -27,8 +45,9 @@ internal static class RetailImageSpaceRenderer
             imageSpace.Fade,
             configuration,
             capture,
-            outputTransfer);
-        environment.Compositor = new Compositor
+            outputTransfer,
+            runtimeAdaptation);
+        var compositor = new Compositor
         {
             CompositorEffects = new Godot.Collections.Array<CompositorEffect> { effect },
         };
@@ -40,7 +59,8 @@ internal static class RetailImageSpaceRenderer
             imageSpace.MatchedAdaptationSum,
             imageSpace.MatchedAdaptationSourceSha256,
             imageSpace.AppliedModifiers,
-            effect);
+            effect,
+            compositor);
     }
 
     internal sealed record Application(
@@ -51,7 +71,8 @@ internal static class RetailImageSpaceRenderer
         float MatchedAdaptationSum,
         string MatchedAdaptationSourceSha256,
         IReadOnlyList<RetailImageSpaceComposition.AppliedModifier> AppliedModifiers,
-        RetailHdrCompositorEffect Effect)
+        RetailHdrCompositorEffect Effect,
+        Compositor Compositor)
     {
         internal bool FinalCinematicStageResolved => Effect.Operational;
 
@@ -155,7 +176,9 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
                 }
                 // The matched retail frame already carries its temporal adaptation
                 // state in the alpha channel of the captured blurred-HDR input.
-                float adaptation_sum = params.hdr_state.x;
+                float adaptation_sum = params.hdr_state.y > 0.5
+                    ? max(dot(sampled(source_one, vec2(0.5)).rgb, vec3(1.0)), 0.0001)
+                    : params.hdr_state.x;
                 result = vec4(bright, adaptation_sum);
             } else if (pass == __HORIZONTAL_BLUR_PASS__) {
                 vec3 blurred = vec3(0.0);
@@ -243,6 +266,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private readonly RetailHdrBlendConfiguration _hdr;
     private readonly CaptureConfiguration _capture;
     private readonly string _computeShaderSource;
+    private readonly bool _runtimeAdaptation;
     private readonly Dictionary<uint, bool> _writeAdaptationA = new();
     private readonly Dictionary<uint, Rid> _sceneCopies = new();
     private readonly Dictionary<uint, Rid> _postHdrScenes = new();
@@ -263,7 +287,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         Vector4 fade,
         RetailImageSpaceConfiguration configuration,
         CaptureConfiguration capture,
-        ColorTransferConfiguration outputTransfer)
+        ColorTransferConfiguration outputTransfer,
+        bool runtimeAdaptation)
     {
         if (!float.IsFinite(matchedAdaptationSum) || matchedAdaptationSum <= 0.0f)
             throw new InvalidOperationException(
@@ -275,6 +300,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         _fade = fade;
         _hdr = configuration.HdrBlend;
         _capture = capture;
+        _runtimeAdaptation = runtimeAdaptation;
         _computeShaderSource = BuildComputeShaderSource(
             configuration,
             outputTransfer);
@@ -646,7 +672,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             _fade.Z,
             _fade.W,
             _matchedAdaptationSum,
-            0.0f,
+            _runtimeAdaptation ? 1.0f : 0.0f,
             0.0f,
             0.0f,
         };

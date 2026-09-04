@@ -49,8 +49,7 @@ internal sealed class Fallout1OwnedContentSource
             RequiredString(root, "campaign") != Campaign ||
             !IsSha256(profileId) ||
             RequiredString(root, "saveCompatibilityId") != $"fallout1:{profileId}" ||
-            root.GetProperty("retailOrDerivedAssetsPackaged").GetBoolean() ||
-            root.GetProperty("generatedCaches").GetArrayLength() != 0)
+            root.GetProperty("retailOrDerivedAssetsPackaged").GetBoolean())
             throw new InvalidDataException("The Fallout 1 owned profile identity is invalid.");
 
         var install = root.GetProperty("install");
@@ -240,7 +239,6 @@ internal sealed class Fallout1OwnedContentSource
             sourceProfileId = profileId,
             saveCompatibilityId = $"fallout1:{profileId}",
             retailOrDerivedAssetsPackaged = false,
-            generatedCaches = Array.Empty<object>(),
             install = new
             {
                 root,

@@ -15,7 +15,8 @@
     <Compile Include="..\..\runtime\src\Content\FalloutDoorTransition.cs" Link="FalloutDoorTransition.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutLandscapeTransport.cs" Link="FalloutLandscapeTransport.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
-    <Compile Include="..\..\runtime\src\Content\RuntimeOwnedContentSource.cs" Link="RuntimeOwnedContentSource.cs" />
+    <Compile Include="..\..\runtime\src\Content\RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="..\..\runtime\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutActorCreatureLedger.cs" Link="FalloutActorCreatureLedger.cs" />
   </ItemGroup>
 </Project>

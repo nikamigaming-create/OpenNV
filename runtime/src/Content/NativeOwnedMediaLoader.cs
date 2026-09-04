@@ -73,9 +73,9 @@ internal static class NativeOwnedMediaLoader
         string? preferredArchive,
         out string source)
     {
-        var owned = RuntimeOwnedContentSource.Current ??
+        var owned = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException(
-                "Native owned-data media loading requires a configured source stack.");
+                "Live media loading requires a selected retail Data folder.");
         if (!owned.TryRead(logicalPath, preferredArchive, out var payload, out source))
             throw new FileNotFoundException(
                 $"Owned media resource is missing: {logicalPath}", logicalPath);

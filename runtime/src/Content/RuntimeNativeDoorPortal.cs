@@ -31,7 +31,7 @@ internal partial class RuntimeNativeDoorPortal : Node
         SetMeta("opennv_xtel_destination_cell", destinationCell.ToString());
         if (destinationWorldspace is { } worldspace)
             SetMeta("opennv_xtel_destination_world", worldspace.ToString());
-        SetMeta("opennv_source", "live-owned-stack");
+        SetMeta("opennv_source", "live-retail-files");
     }
 
     internal void Activate()

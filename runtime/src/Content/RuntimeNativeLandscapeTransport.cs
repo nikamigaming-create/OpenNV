@@ -70,7 +70,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         root.SetMeta("opennv_land_cell", source.ActiveCell.ToString());
         root.SetMeta("opennv_land_world", source.Worldspace.ToString());
         root.SetMeta("opennv_land_texture_count", textures.Count);
-        root.SetMeta("opennv_source", "live-owned-stack");
+        root.SetMeta("opennv_source", "live-retail-files");
         root.AddChild(geometry);
         return root;
     }

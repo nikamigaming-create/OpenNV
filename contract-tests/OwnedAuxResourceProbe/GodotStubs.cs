@@ -37,9 +37,9 @@ namespace Godot.Collections
 
 namespace OpenNV.Runtime.Content
 {
-    internal sealed class RuntimeOwnedContentSource
+    internal sealed class RuntimeLiveContentSource
     {
-        internal static RuntimeOwnedContentSource? Current => null;
+        internal static RuntimeLiveContentSource? Current => null;
         internal bool TryRead(string logicalPath, string? preferredArchive, out byte[] data, out string source)
         {
             data = [];

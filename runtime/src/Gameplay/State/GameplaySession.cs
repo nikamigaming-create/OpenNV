@@ -461,7 +461,7 @@ internal partial class GameplaySession : Node
         if (string.IsNullOrWhiteSpace(container.DisplayName) ||
             container.Items.Any(item => !item.Resolved || string.IsNullOrWhiteSpace(item.DisplayName)))
         {
-            RefreshHud("Container names or contents are unresolved; rebuild the owned cache");
+            RefreshHud("Container names or contents are unresolved in the owned source data");
             return;
         }
         if (_containerView is null)
@@ -519,7 +519,7 @@ internal partial class GameplaySession : Node
                 $"Player inventory item is unavailable: {normalizedItemFormId}");
         if (string.IsNullOrWhiteSpace(item.DisplayName))
         {
-            RefreshHud($"{item.EditorId} has no owned display identity; rebuild the item cache");
+            RefreshHud($"{item.EditorId} has no owned display identity in the source data");
             return;
         }
         var displayName = item.DisplayName;
@@ -551,6 +551,8 @@ internal partial class GameplaySession : Node
         _containerView.Close();
         RefreshHud("Container closed");
     }
+
+    internal void CloseContainerForProof() => CloseContainer();
 
     private void SynchronizeContainerEmptyMarker(string referenceFormId)
     {

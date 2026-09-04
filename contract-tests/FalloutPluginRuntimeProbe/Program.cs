@@ -846,6 +846,7 @@ try
     const string syntheticSaveCompatibilityId = "standalone:synthetic-stack";
     var syntheticCampaignState = FalloutNativeCampaignSave.Capture(
         syntheticSaveCompatibilityId,
+        syntheticCellForVigor.Cell.FormKey,
         syntheticCompletedGrant,
         "Synthetic Courier",
         syntheticRaceSex.Female,
@@ -870,6 +871,7 @@ try
         syntheticTraitFarewell);
     Require(
         syntheticRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
+        syntheticRestore.State.ActiveCell == syntheticCellForVigor.Cell.FormKey &&
         syntheticRestore.State.PlayerName == "Synthetic Courier" &&
         syntheticRestore.State.Character == syntheticRaceSex.Female &&
         syntheticRestore.State.Special == syntheticSpecial &&
@@ -883,6 +885,25 @@ try
                 .Select(value => value.RuntimeFormId)) &&
         Directory.GetFiles(fixtureRoot, "*.tmp").Length == 0,
         "Native opening campaign save did not cold-restore atomically.");
+    var syntheticExteriorCell = new FalloutFormKey("Cell.esm", 0x100);
+    var movedCampaignState = FalloutNativeCampaignSave.WithWorldState(
+        syntheticRestore.State,
+        syntheticExteriorCell,
+        [4.0f, 5.0f, 6.0f],
+        [0.0f, 0.0f, 0.0f, 1.0f]);
+    FalloutNativeCampaignSave.Write(syntheticSavePath, movedCampaignState);
+    var movedRestore = FalloutNativeCampaignSave.Read(
+        syntheticSavePath,
+        syntheticSaveCompatibilityId,
+        cellStack,
+        syntheticVigor,
+        syntheticTagSkills,
+        syntheticOpeningGrant,
+        syntheticTraitFarewell);
+    Require(
+        movedRestore.State.ActiveCell == syntheticExteriorCell &&
+        movedRestore.State.PlayerPosition.SequenceEqual([4.0f, 5.0f, 6.0f]),
+        "Native campaign world state did not cold-restore its active CELL and player transform.");
     var staleCharacterState = syntheticCampaignState with
     {
         Character = syntheticCampaignState.Character with
@@ -1130,20 +1151,20 @@ if (args.Length > 0)
             $"maleHair={liveRaceSex.Male.HairEditorId}/{liveRaceSex.Male.HairRuntimeFormId:x8} " +
             $"femaleHair={liveRaceSex.Female.HairEditorId}/{liveRaceSex.Female.HairRuntimeFormId:x8} " +
             $"eyes={liveRaceSex.Male.EyesEditorId}/{liveRaceSex.Male.EyesRuntimeFormId:x8} " +
-            "source=winning-npc-race-hair-eyes cache=none writes=0");
+            "source=winning-npc-race-hair-eyes writes=0");
         Console.WriteLine(
             "OPENNV_FALLOUT_LIVE_VIGOR_PASS " +
             $"trigger={liveVigor.TriggerReference.FormKey} stage={liveVigor.TriggerFromStage}->" +
             $"{liveVigor.TesterStage} tester={liveVigor.TesterReference.FormKey} " +
             $"complete={liveVigor.CompletedStage} total={liveVigor.RequiredTotal} " +
             $"initial={string.Join(',', liveVigor.Initial.Values)} " +
-            "source=winning-player-refr-acti-scpt-xprm cache=none writes=0");
+            "source=winning-player-refr-acti-scpt-xprm writes=0");
         Console.WriteLine(
             "OPENNV_FALLOUT_LIVE_TAG_SKILLS_PASS " +
             $"choices={liveTagSkills.Skills.Count} required={liveTagSkills.RequiredCount} " +
             $"skills={string.Join(',', liveTagSkills.Skills.Select(value =>
                 $"{value.RuntimeFormId:x8}/{value.EditorId}/{value.DisplayName}"))} " +
-            "source=winning-qust-info-avif cache=none writes=0");
+            "source=winning-qust-info-avif writes=0");
         Console.WriteLine(
             "OPENNV_FALLOUT_LIVE_TRAIT_FAREWELL_PASS " +
             $"traits={liveTraitFarewell.Traits.Count} maximum={liveTraitFarewell.MaximumTraits} " +
@@ -1153,7 +1174,7 @@ if (args.Length > 0)
             $"{liveTraitFarewell.ExitTriggerFromStage}->" +
             $"{liveTraitFarewell.FarewellStage}->{liveTraitFarewell.CompletedStage} " +
             $"delay={liveTraitFarewell.CompletionDelaySeconds:R} " +
-            "source=winning-perk-refr-acti-scpt-info-qust cache=none writes=0");
+            "source=winning-perk-refr-acti-scpt-info-qust writes=0");
         var stage200Grant = FalloutOpeningInventoryGrantResolver.Resolve(
             owned,
             openingControls,
@@ -1164,7 +1185,7 @@ if (args.Length > 0)
             $"equipped={stage200Grant.EquippedRuntimeFormIds.Count} " +
             $"resolved={string.Join(',', stage200Grant.Inventory.Items.Select(item =>
                 $"{item.RuntimeFormId:x8}/{item.EditorId}/{item.RecordType}/{item.Value}/{item.Weight:R}"))} " +
-            "source=winning-qust-info-sctx-records cache=none writes=0");
+            "source=winning-qust-info-sctx-records writes=0");
         var liveCompletedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(
             liveTraitFarewell,
             stage200Grant,
@@ -1174,7 +1195,7 @@ if (args.Length > 0)
             $"items={liveCompletedGrant.Inventory.Items.Count} " +
             $"resolved={string.Join(',', liveCompletedGrant.Inventory.Items.Select(item =>
                 $"{item.RuntimeFormId:x8}/{item.EditorId}/{item.RecordType}/{item.Count}"))} " +
-            "source=winning-info-tag-branches cache=none writes=0");
+            "source=winning-info-tag-branches writes=0");
         var liveControlState = FalloutPlayerControlState.AllEnabled;
         foreach (var stage in new[]
                  {
@@ -1203,7 +1224,7 @@ if (args.Length > 0)
             $"quests={openingControls.Quests.Count} stage=VCG01:55 " +
             $"movement={liveControlState.Movement} pipBoy={liveControlState.PipBoy} " +
             $"fighting={liveControlState.Fighting} looking={liveControlState.Looking} " +
-            "source=winning-qust-sctx cache=none writes=0");
+            "source=winning-qust-sctx writes=0");
         var openingTransitions = FalloutOpeningStageTransitionResolver.Resolve(
             owned,
             openingControls);
@@ -1266,7 +1287,7 @@ if (args.Length > 0)
             $"entry={liveIntroEdge.FromQuestEditorId}:{liveIntroEdge.FromStage}->" +
             $"{liveIntroEdge.ToQuestEditorId}:{liveIntroEdge.ToStage} " +
             $"blockers={string.Join(',', liveIntroEdge.Blockers)} " +
-            "source=winning-qust-scpt-dial-info cache=none writes=0");
+            "source=winning-qust-scpt-dial-info writes=0");
         var liveStageMachine = new FalloutOpeningStageMachine(
             openingTransitions,
             openingControls,
@@ -1370,7 +1391,7 @@ if (args.Length > 0)
             $"stage={liveStageMachine.QuestEditorId}:{liveStageMachine.Stage} " +
             $"movement={liveStageMachine.ControlState.Movement} " +
             $"looking={liveStageMachine.ControlState.Looking} " +
-            "source=winning-qust-scpt-dial-info cache=none writes=0");
+            "source=winning-qust-scpt-dial-info writes=0");
         var completedControls = openingControls.Stage("VCG01", 110).Commands.Aggregate(
             liveStageMachine.ControlState,
             (state, command) => command.Apply(state));
@@ -1382,6 +1403,7 @@ if (args.Length > 0)
         {
             var liveSave = FalloutNativeCampaignSave.Capture(
                 liveSaveCompatibilityId,
+                new FalloutFormKey("FalloutNV.esm", 0x103df9),
                 liveCompletedGrant,
                 "Live Courier",
                 liveRaceSex.Female,

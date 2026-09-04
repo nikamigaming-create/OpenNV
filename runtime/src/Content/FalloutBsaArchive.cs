@@ -1,10 +1,11 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
+using Microsoft.Win32.SafeHandles;
 using System.Text;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed class FalloutBsaArchive
+internal sealed class FalloutBsaArchive : IDisposable
 {
     private const uint ExpectedMagic = 0x00415342;
     private const uint ExpectedVersion = 104;
@@ -22,6 +23,7 @@ internal sealed class FalloutBsaArchive
     private readonly string _path;
     private readonly bool _embeddedNames;
     private readonly Dictionary<string, Member> _members;
+    private readonly SafeFileHandle _readHandle;
 
     internal int FolderCount { get; }
     internal int FileCount { get; }
@@ -108,19 +110,31 @@ internal sealed class FalloutBsaArchive
                     archiveCompressed != ((row.RawSize & CompressedOverrideFlag) != 0))))
                 throw new InvalidDataException($"Duplicate BSA member path: {logicalPath}");
         }
+        _readHandle = File.OpenHandle(
+            _path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            FileOptions.RandomAccess);
     }
 
     internal bool Contains(string logicalPath) => _members.ContainsKey(CanonicalPath(logicalPath));
+    internal IEnumerable<string> MemberPaths => _members.Keys;
 
     internal byte[] Read(string logicalPath)
     {
         var canonical = CanonicalPath(logicalPath);
         if (!_members.TryGetValue(canonical, out var member))
             throw new FileNotFoundException($"BSA member not found: {canonical}", _path);
-        using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        stream.Position = member.Offset;
         var payload = new byte[checked((int)member.StoredBytes)];
-        stream.ReadExactly(payload);
+        var read = 0;
+        while (read < payload.Length)
+        {
+            var count = RandomAccess.Read(_readHandle, payload.AsSpan(read), member.Offset + read);
+            if (count == 0)
+                throw new EndOfStreamException($"BSA member data is truncated: {canonical}");
+            read += count;
+        }
         var content = _embeddedNames ? StripEmbeddedName(payload, canonical) : payload;
         if (!member.Compressed)
             return content;
@@ -135,6 +149,8 @@ internal sealed class FalloutBsaArchive
             throw new InvalidDataException($"Inflated BSA member size differs: {canonical}");
         return output.ToArray();
     }
+
+    public void Dispose() => _readHandle.Dispose();
 
     internal static string CanonicalPath(string value)
     {

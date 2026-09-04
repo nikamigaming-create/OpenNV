@@ -95,60 +95,6 @@ foreach ($requiredFile in @(
     }
 }
 
-$env:OPENNV_NEWVEGAS_PREFLIGHT_ERROR = $null
-if ($env:OS -eq "Windows_NT" -and -not [string]::IsNullOrWhiteSpace($env:APPDATA)) {
-    $registrationPath = Join-Path `
-        $env:APPDATA `
-        "@open-nevada\launcher\newvegas-cache-registration.json"
-    if (Test-Path -LiteralPath $registrationPath -PathType Leaf) {
-        try {
-            $registration = Get-Content -LiteralPath $registrationPath -Raw |
-                ConvertFrom-Json
-            $cacheRoot = [IO.Path]::GetFullPath([string]$registration.cacheRoot)
-            $installManifestPath = Join-Path $cacheRoot "install-manifest.json"
-            $runtimeConfigurationPath = Join-Path `
-                $runtimeRoot `
-                "config\open-nv-runtime-v1.json"
-            $runtimeConfiguration = Get-Content -LiteralPath $runtimeConfigurationPath -Raw |
-                ConvertFrom-Json
-            $cellRecipe = [string]$runtimeConfiguration.legalAssets.defaultCellRecipe
-            $python = Get-Command python -CommandType Application -ErrorAction Stop |
-                Select-Object -First 1
-            $identityOutput = & $python.Source `
-                (Join-Path $repoRoot "content\tools\prepare_legal_assets.py") `
-                --compiler-identity `
-                --cell-recipe $cellRecipe
-            if ($LASTEXITCODE -ne 0) {
-                throw "The active New Vegas compiler identity could not be read."
-            }
-            $identityPrefix = "OPENNV_CONTENT_COMPILER_IDENTITY "
-            $identityLine = $identityOutput |
-                Where-Object { $_.StartsWith($identityPrefix, [StringComparison]::Ordinal) } |
-                Select-Object -Last 1
-            if ([string]::IsNullOrWhiteSpace($identityLine)) {
-                throw "The active New Vegas compiler identity was not emitted."
-            }
-            $activeIdentity = $identityLine.Substring($identityPrefix.Length) |
-                ConvertFrom-Json
-            $installManifest = Get-Content -LiteralPath $installManifestPath -Raw |
-                ConvertFrom-Json
-            foreach ($family in $activeIdentity.families.PSObject.Properties.Name) {
-                $expected = [string]$activeIdentity.families.$family.sha256
-                $actual = [string]$installManifest.compilerFamilies.$family.sha256
-                if (-not $actual.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
-                    $env:OPENNV_NEWVEGAS_PREFLIGHT_ERROR =
-                        "The registered New Vegas cache is stale. Refresh it before Play."
-                    break
-                }
-            }
-        }
-        catch {
-            $env:OPENNV_NEWVEGAS_PREFLIGHT_ERROR =
-                "The registered New Vegas cache could not be validated. Refresh it before Play."
-        }
-    }
-}
-
 $npm = Get-Command npm.cmd -CommandType Application -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if ($null -eq $npm) {

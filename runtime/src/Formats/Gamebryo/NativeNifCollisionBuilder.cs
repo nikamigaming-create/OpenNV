@@ -35,14 +35,12 @@ internal static class NativeNifCollisionBuilder
                 $"NIF collision object {attachment.Block.Index} does not reference a decoded rigid body.");
         if (body.Shape == -1)
             throw new InvalidDataException($"NIF rigid body {body.Block.Index} has no shape.");
-        if (body.Constraints.Length != 0)
-            throw new NotSupportedException(
-                $"NIF rigid body {body.Block.Index} has constraints; constrained runtime physics is unsupported.");
         if (body.Mass < 0.0f)
             throw new InvalidDataException($"NIF rigid body {body.Block.Index} has negative mass.");
 
+        var pinToWorld = attachment.IsBlend || body.Constraints.Length != 0;
         PhysicsBody3D result;
-        if (body.Mass == 0.0f)
+        if (body.Mass == 0.0f || pinToWorld)
             result = new StaticBody3D();
         else
             result = new RigidBody3D { Mass = body.Mass };
@@ -54,10 +52,12 @@ internal static class NativeNifCollisionBuilder
         result.SetMeta("opennv_nif_collision_body", body.Block.Index);
         result.SetMeta("opennv_nif_collision_mass", body.Mass);
         result.SetMeta("opennv_nif_collision_motion_system", body.MotionSystem);
+        result.SetMeta("opennv_nif_collision_constraints", body.Constraints.Length);
+        result.SetMeta("opennv_nif_collision_pinned", pinToWorld);
 
         var shapes = new List<CollisionShape3D>();
         var triangles = 0;
-        BuildShape(source, body.Shape, unitsToMetres, body.Mass, Transform3D.Identity,
+        BuildShape(source, body.Shape, unitsToMetres, pinToWorld ? 0.0f : body.Mass, Transform3D.Identity,
             shapes, ref triangles, []);
         if (shapes.Count == 0)
             throw new InvalidDataException($"NIF rigid body {body.Block.Index} produced no collision shapes.");

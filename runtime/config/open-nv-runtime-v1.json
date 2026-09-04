@@ -711,32 +711,6 @@
       "detailRgb": [190, 198, 208]
     }
   },
-  "setupView": {
-    "provenance": {
-      "classification": "open-nv-policy",
-      "status": "experimental",
-      "source": "OpenNV legal-owned-data setup presentation",
-      "evidence": "docs/architecture.md#asset-free-distribution-and-local-import"
-    },
-    "backgroundColorRgba": [0.025, 0.045, 0.07, 1.0],
-    "contentPositionPixels": [64.0, 64.0],
-    "contentSizePixels": [760.0, 460.0],
-    "titleFontSizePixels": 28,
-    "bodyFontSizePixels": 18,
-    "buttonMinimumHeightPixels": 48.0,
-    "statusMinimumHeightPixels": 96.0,
-    "statusColorRgba": [0.70, 0.80, 0.90, 1.0],
-    "statusFontSizePixels": 16,
-    "dialogCenteredRatio": 0.8,
-    "copy": {
-      "title": "OPEN NEVADA  /  EXPERIMENTAL GODOT RUNTIME",
-      "body": "Select your legally owned game folder or its Data folder to prepare the configured playable slice.\nPython and external engine runtimes are not required.\n\nNo game assets are included, and your installation is never modified.",
-      "selectButton": "Select legally owned game folder",
-      "waitingStatus": "Waiting for the game installation folder or its Data folder.",
-      "rebuildStatusPrefix": "The previous cache could not be reopened. Select the game folder to rebuild it.\n",
-      "dialogTitle": "Select game installation folder or Data folder"
-    }
-  },
   "desktopLauncher": {
     "provenance": {
       "classification": "open-nv-policy",
@@ -749,46 +723,6 @@
     "mainWindowMinimumWidthPixels": 620,
     "mainWindowMinimumHeightPixels": 450,
     "toastVisibilityMilliseconds": 5200
-  },
-  "legalAssets": {
-    "provenance": {
-      "classification": "open-nv-policy",
-      "status": "verified",
-      "source": "Asset-free local import and disposable cache contract",
-      "evidence": "docs/clean-room.md#asset-boundary"
-    },
-    "defaultOpeningRecipe": "fnv-new-game-opening-v1",
-    "defaultCellRecipe": "goodsprings-doc-mitchell-house-v1",
-    "linkedWorldProofCellRecipe": "goodsprings-saloon-structure-v1",
-    "defaultCacheRoot": "user://cache/legal-assets-v1",
-    "packagedCompilerName": "OpenNV.Content packaged direct exporter v1",
-    "sourceContentTool": {
-      "executable": "python",
-      "script": "../content/tools/prepare_legal_assets.py",
-      "compilerName": "OpenNV direct static NIF exporter v1"
-    },
-    "smokeModelLogicalPath": "meshes\\landscape\\nv_rocks\\nvn_rockcanyon12.nif",
-    "videoImport": {
-      "transcoderExecutable": "ffmpeg",
-      "outputExtension": ".ogv",
-      "containerFormat": "ogg",
-      "videoCodec": "libtheora",
-      "audioCodec": "libvorbis",
-      "videoQuality": 7,
-      "audioQuality": 5,
-      "threads": 1,
-      "pixelFormat": "yuv420p",
-      "logLevel": "error"
-    },
-    "ownedData": {
-      "masterFile": "FalloutNV.esm",
-      "defaultIniFile": "Fallout_default.ini",
-      "meshesArchiveFile": "Fallout - Meshes.bsa",
-      "uiArchiveFile": "Fallout - Misc.bsa",
-      "textureArchiveFiles": ["Fallout - Textures.bsa", "Fallout - Textures2.bsa"],
-      "dataDirectoryName": "Data",
-      "videoDirectoryName": "Video"
-    }
   },
   "tooling": {
     "provenance": {

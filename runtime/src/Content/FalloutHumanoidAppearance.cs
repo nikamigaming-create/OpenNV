@@ -44,9 +44,9 @@ internal static class FalloutHumanoidAppearanceResolver
 
     internal static FalloutHumanoidAppearance ResolveGoodspringsSunny(
         FalloutPluginStack stack,
-        RuntimeOwnedContentSource source)
+        RuntimeLiveContentSource source)
     {
-        if (source.Game != RuntimeOwnedContentSource.FalloutNewVegasGame)
+        if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
             throw new InvalidDataException(
                 $"{GoodspringsLocationName} actor appearance requires a New Vegas or TTW stack.");
         if (!stack.TryGetEffective(GoodspringsSunnyReference, out var reference) ||
@@ -132,7 +132,7 @@ internal static class FalloutHumanoidAppearanceResolver
         root.SetMeta("facegen_coordinate_bytes", appearance.FaceGenCoordinateBytes);
         root.SetMeta("visual_build", "fail-closed");
         root.SetMeta("visual_blockers", string.Join(',', appearance.VisualBlockers));
-        root.SetMeta("cache_inputs", 0);
+        root.SetMeta("generated_asset_inputs", 0);
         root.SetMeta("content_writes", 0);
         foreach (var resource in appearance.Resources)
         {
@@ -190,7 +190,7 @@ internal static class FalloutHumanoidAppearanceResolver
     }
 
     private static void AddRaceResources(
-        RuntimeOwnedContentSource source,
+        RuntimeLiveContentSource source,
         List<FalloutOwnedActorResource> resources,
         FalloutPluginRecord race,
         bool female)
@@ -229,7 +229,7 @@ internal static class FalloutHumanoidAppearanceResolver
         string expected) => RequireRecord(stack, key, expected);
 
     private static void AddPartResources(
-        RuntimeOwnedContentSource source,
+        RuntimeLiveContentSource source,
         List<FalloutOwnedActorResource> resources,
         FalloutPluginRecord part,
         string role)
@@ -267,7 +267,7 @@ internal static class FalloutHumanoidAppearanceResolver
     }
 
     private static void AddResource(
-        RuntimeOwnedContentSource source,
+        RuntimeLiveContentSource source,
         List<FalloutOwnedActorResource> resources,
         string role,
         string logicalPath)
@@ -283,7 +283,7 @@ internal static class FalloutHumanoidAppearanceResolver
     }
 
     private static void AddOptionalResource(
-        RuntimeOwnedContentSource source,
+        RuntimeLiveContentSource source,
         List<FalloutOwnedActorResource> resources,
         string role,
         string logicalPath)

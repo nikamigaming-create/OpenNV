@@ -64,8 +64,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         };
         AddChild(_camera);
         Teleport(authoredFloorTransform);
-        SetMeta("opennv_source", "live-owned-stack");
-        SetMeta("opennv_content_cache", "none");
+        SetMeta("opennv_source", "live-retail-files");
+        SetMeta("opennv_content_source", "live-owned-files");
     }
 
     internal void Teleport(Transform3D authoredFloorTransform)

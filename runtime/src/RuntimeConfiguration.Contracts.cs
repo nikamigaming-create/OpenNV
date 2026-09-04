@@ -719,32 +719,6 @@ internal sealed record ActorParityContactSheetConfiguration(
     int[] GodotTitleRgb,
     int[] DetailRgb);
 
-internal sealed record SetupViewConfiguration(
-    ConfigurationProvenance Provenance,
-    float[] BackgroundColorRgba,
-    float[] ContentPositionPixels,
-    float[] ContentSizePixels,
-    int TitleFontSizePixels,
-    int BodyFontSizePixels,
-    float ButtonMinimumHeightPixels,
-    float StatusMinimumHeightPixels,
-    float[] StatusColorRgba,
-    int StatusFontSizePixels,
-    float DialogCenteredRatio,
-    SetupViewCopyConfiguration Copy);
-
-internal sealed record SetupViewCopyConfiguration(
-    string Title,
-    string Body,
-    string SelectButton,
-    string WaitingStatus,
-    string RebuildStatusPrefix,
-    string DialogTitle)
-{
-    internal IEnumerable<string> Values =>
-    [Title, Body, SelectButton, WaitingStatus, RebuildStatusPrefix, DialogTitle];
-}
-
 internal sealed record DesktopLauncherConfiguration(
     ConfigurationProvenance Provenance,
     int MainWindowWidthPixels,
@@ -752,63 +726,6 @@ internal sealed record DesktopLauncherConfiguration(
     int MainWindowMinimumWidthPixels,
     int MainWindowMinimumHeightPixels,
     int ToastVisibilityMilliseconds);
-
-internal sealed record LegalAssetsConfiguration(
-    ConfigurationProvenance Provenance,
-    string DefaultOpeningRecipe,
-    string DefaultCellRecipe,
-    string LinkedWorldProofCellRecipe,
-    string DefaultCacheRoot,
-    string PackagedCompilerName,
-    SourceContentToolConfiguration SourceContentTool,
-    string SmokeModelLogicalPath,
-    OpeningVideoImportConfiguration VideoImport,
-    LegalOwnedDataConfiguration OwnedData);
-
-internal sealed record SourceContentToolConfiguration(
-    string Executable,
-    string Script,
-    string CompilerName);
-
-internal sealed record OpeningVideoImportConfiguration(
-    string TranscoderExecutable,
-    string OutputExtension,
-    string ContainerFormat,
-    string VideoCodec,
-    string AudioCodec,
-    int VideoQuality,
-    int AudioQuality,
-    int Threads,
-    string PixelFormat,
-    string LogLevel)
-{
-    internal void Validate()
-    {
-        foreach (var value in new[]
-        {
-            TranscoderExecutable,
-            OutputExtension,
-            ContainerFormat,
-            VideoCodec,
-            AudioCodec,
-            PixelFormat,
-            LogLevel,
-        })
-            if (string.IsNullOrWhiteSpace(value))
-                throw new InvalidOperationException("Opening video-import strings must be nonempty.");
-        if (VideoQuality <= 0 || AudioQuality <= 0 || Threads <= 0)
-            throw new InvalidOperationException("Opening video-import quality values must be positive.");
-    }
-}
-
-internal sealed record LegalOwnedDataConfiguration(
-    string MasterFile,
-    string DefaultIniFile,
-    string MeshesArchiveFile,
-    string UiArchiveFile,
-    IReadOnlyList<string> TextureArchiveFiles,
-    string DataDirectoryName,
-    string VideoDirectoryName);
 
 internal sealed record ToolingConfiguration(
     ConfigurationProvenance Provenance,

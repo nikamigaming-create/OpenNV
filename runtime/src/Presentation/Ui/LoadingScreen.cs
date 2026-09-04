@@ -49,7 +49,7 @@ internal partial class LoadingScreen : CanvasLayer
 
     internal void Configure(string status)
     {
-        Name = "OwnedDataLoadingScreen";
+        Name = "LiveRetailLoadingScreen";
         Layer = LoadingScreenNumericContracts.PresentationInt1000;
 
         var background = new ColorRect
@@ -120,7 +120,7 @@ internal partial class LoadingScreen : CanvasLayer
 
         var policy = new Label
         {
-            Text = "VERIFYING PLAYER-OWNED DATA  •  NO RETAIL ASSETS ARE PACKAGED",
+            Text = "INDEXING LIVE RETAIL FILES IN MEMORY  •  NO DERIVED CONTENT IS WRITTEN",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         policy.AddThemeColorOverride("font_color", new Color(LoadingScreenNumericContracts.PresentationFloat0Point46f, LoadingScreenNumericContracts.PresentationFloat0Point58f, LoadingScreenNumericContracts.PresentationFloat0Point51f));

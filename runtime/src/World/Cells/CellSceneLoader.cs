@@ -112,7 +112,7 @@ internal static class CellSceneLoader
                 requiredReferenceFormIds ?? new HashSet<string>(
                     StringComparer.OrdinalIgnoreCase));
         }
-        var textureCache = new RuntimeMaterialLoader.TextureCache();
+        var textureMemory = new RuntimeMaterialLoader.TextureMemoryStore();
         var main = CellContentLoader.Load(
             resolvedScenePath,
             parent,
@@ -124,7 +124,7 @@ internal static class CellSceneLoader
             proofEnableActor,
             buildCollision,
             1u,
-            textureCache);
+            textureMemory);
         if (enableFirstPersonPresentation && main.StartingLoadout is { } loadout)
         {
             session.PrepareStartingLoadout(new GameplaySession.StartingWeapon(
@@ -160,7 +160,7 @@ internal static class CellSceneLoader
                     proofEnableActor,
                     buildCollision,
                     renderLayer,
-                    textureCache);
+                    textureMemory);
                 if (!Mathf.IsEqualApprox(linked.UnitsToMeters, main.UnitsToMeters))
                     throw new InvalidOperationException("Linked CELL unit scales do not match.");
                 var fromDoorId = link.GetProperty("fromDoorReferenceFormId").GetString()!;
@@ -249,8 +249,8 @@ internal static class CellSceneLoader
             }
         }
         GD.Print(
-            $"OPENNV_CELL_TEXTURE_CACHE unique={textureCache.UniqueTextures} " +
-            $"reused={textureCache.ReusedTextures} scope=prepared-cell-route");
+            $"OPENNV_CELL_TEXTURE_MEMORY unique={textureMemory.UniqueTextures} " +
+            $"reused={textureMemory.ReusedTextures} scope=session");
 
         var allDoors = main.Doors
             .Concat(linkedCells.SelectMany(value => value.Content.Doors))
@@ -360,6 +360,9 @@ internal static class CellSceneLoader
         var allContainers = main.Containers
             .Concat(linkedCells.SelectMany(value => value.Content.Containers))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        var allFurniture = main.Furniture
+            .Concat(linkedCells.SelectMany(value => value.Content.Furniture))
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var allPools = main.Pools
             .Concat(linkedCells.SelectMany(value => value.Content.Pools))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
@@ -388,6 +391,7 @@ internal static class CellSceneLoader
             session,
             allPickups,
             allContainers,
+            allFurniture,
             allPools,
             allActors,
             linkedCells,
@@ -441,6 +445,20 @@ internal static class CellSceneLoader
             };
             worldEnvironment = new WorldEnvironment { Environment = environment };
             parent.AddChild(worldEnvironment);
+            if (main.InteriorImageSpace is { } imageSpace)
+            {
+                var composed = RetailImageSpaceComposition.FromOwnedTraits(
+                    imageSpace.Traits,
+                    imageSpace.DnamSha256,
+                    configuration.FalloutEnvironment.ImageSpace);
+                RetailImageSpaceRenderer.Apply(
+                    worldEnvironment,
+                    composed,
+                    configuration.FalloutEnvironment.ImageSpace,
+                    configuration.Capture,
+                    configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer,
+                    runtimeAdaptation: true);
+            }
         }
         lights = AddCellLights(
             parent,
@@ -727,6 +745,7 @@ internal static class CellSceneLoader
         GameplaySession Session,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
         IReadOnlyDictionary<string, ContainerInstance> Containers,
+        IReadOnlyDictionary<string, FurnitureInstance> Furniture,
         IReadOnlyDictionary<string, PoolTableInstance> Pools,
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
         IReadOnlyList<LinkedCell> LinkedCells,

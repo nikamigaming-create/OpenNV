@@ -20,17 +20,13 @@ export const TTW_OPENING_ROUTE_IDS = Object.freeze(["ttw-fo3", "ttw-fnv"]);
 const TTW_OPENING_ROUTE_ID_SET = new Set(TTW_OPENING_ROUTE_IDS);
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 
-function nativeSourceStackArguments(stackPath, stackSha256, stackId, campaign) {
-  if (typeof stackPath !== "string" || !stackPath ||
-      !SHA256_PATTERN.test(String(stackSha256 || "")) ||
-      !SHA256_PATTERN.test(String(stackId || "")) ||
+function liveRetailArguments(dataRoot, campaign) {
+  if (typeof dataRoot !== "string" || !dataRoot ||
       !["fallout-new-vegas", "fallout-3"].includes(campaign)) {
-    throw new Error("The native source stack identity is unavailable.");
+    throw new Error("The live retail Data folder is unavailable.");
   }
   return [
-    "--source-stack", stackPath,
-    "--source-stack-sha256", stackSha256,
-    "--stack-id", stackId,
+    "--data-root", dataRoot,
     "--campaign", campaign
   ];
 }
@@ -189,7 +185,8 @@ export function createRuntimeArguments(
   } = {}
 ) {
   if (campaign.id === "fallout1") {
-    if (!fallout1Profile?.ready) throw new Error(CONTRACT.copy.fallout1ProfileUnavailable);
+    if (!fallout1Profile?.ready || !fallout1Profile?.dataRoot || !fallout1Profile?.savePath)
+      throw new Error(CONTRACT.copy.fallout1ProfileUnavailable);
     if (!["forward_plus", "mobile", "gl_compatibility"].includes(campaign.desktopRenderingMethod)) {
       throw new Error("Fallout 1 has no valid desktop rendering method.");
     }
@@ -197,55 +194,45 @@ export function createRuntimeArguments(
       "--xr-mode", "off",
       "--rendering-method", campaign.desktopRenderingMethod,
       "--",
-      "--fo1-owned-profile", fallout1Profile.path,
+      "--data-root", fallout1Profile.dataRoot,
+      "--campaign", "fallout-1",
       "--fo1-start-presentation", presentation,
       "--save-path", fallout1Profile.savePath
     ];
   }
   if (campaign.id === "fallout2") {
-    if (!fallout2Profile?.ready) throw new Error(CONTRACT.copy.fallout2ProfileUnavailable);
+    if (!fallout2Profile?.ready || !fallout2Profile?.dataRoot || !fallout2Profile?.savePath)
+      throw new Error(CONTRACT.copy.fallout2ProfileUnavailable);
     if (presentation !== "hex-tactical") throw new Error(CONTRACT.copy.invalidPresentation);
     return [
       "--xr-mode", "off",
       "--windowed",
       "--resolution", "1280x720",
-      "res://src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStart.tscn",
       "--",
-      "--fo2-owned-profile", fallout2Profile.path,
+      "--data-root", fallout2Profile.dataRoot,
+      "--campaign", "fallout-2",
+      "--save-path", fallout2Profile.savePath,
       "--fo2-save", fallout2Profile.savePath
     ];
   }
   if (campaign.id === "fallout3") {
-    if (!fallout3Profile?.ready ||
-        !fallout3Profile?.stackPath || !SHA256_PATTERN.test(fallout3Profile?.stackId || "") ||
-        !SHA256_PATTERN.test(fallout3Profile?.stackSha256 || "") || !fallout3Profile?.savePath) {
+    if (!fallout3Profile?.ready || !fallout3Profile?.dataRoot || !fallout3Profile?.savePath) {
       throw new Error(CONTRACT.copy.fallout3ProfileUnavailable);
     }
     return [
       "--xr-mode", "off", "--",
-      ...nativeSourceStackArguments(
-        fallout3Profile.stackPath,
-        fallout3Profile.stackSha256,
-        fallout3Profile.stackId,
-        "fallout-3"),
+      ...liveRetailArguments(fallout3Profile.dataRoot, "fallout-3"),
       "--opening-menu",
       "--save-path", fallout3Profile.savePath
     ];
   }
   if (campaign.id === "newvegas") {
-    if (!newVegasProfile?.ready ||
-        !SHA256_PATTERN.test(newVegasProfile?.stackId || "") || !newVegasProfile?.savePath ||
-        !modStack?.validated || modStack.stackId !== newVegasProfile.stackId ||
-        !modStack?.path || !SHA256_PATTERN.test(modStack?.sha256 || "")) {
-      throw new Error("The New Vegas owned-data profile is unavailable.");
+    if (!newVegasProfile?.ready || !newVegasProfile?.dataRoot || !newVegasProfile?.savePath) {
+      throw new Error("The New Vegas live Data folder is unavailable.");
     }
     const args = [
       "--xr-mode", enableVr ? "on" : "off", "--",
-      ...nativeSourceStackArguments(
-        modStack.path,
-        modStack.sha256,
-        modStack.stackId,
-        "fallout-new-vegas"),
+      ...liveRetailArguments(newVegasProfile.dataRoot, "fallout-new-vegas"),
       "--opening-menu",
       "--save-path", newVegasProfile.savePath
     ];
@@ -257,7 +244,6 @@ export function createRuntimeArguments(
     return args;
   }
   if (!ttwProfile?.validated || !ttwProfile?.sourceNamespacePath ||
-      !ttwProfile?.cacheCompatibilityId || !ttwProfile?.cacheRoot ||
       !ttwProfile?.saveCompatibilityId) {
     throw new Error(CONTRACT.copy.ttwProfileUnavailable);
   }

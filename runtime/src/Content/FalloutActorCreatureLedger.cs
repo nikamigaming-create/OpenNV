@@ -52,7 +52,7 @@ internal static class FalloutActorCreatureLedgerBuilder
 
     internal static FalloutActorCreatureLedger Build(
         FalloutPluginStack stack,
-        RuntimeOwnedContentSource source)
+        RuntimeLiveContentSource source)
         => Build(stack, source.Game, source.TryResolve);
 
     internal static FalloutActorCreatureLedger Build(
@@ -62,8 +62,8 @@ internal static class FalloutActorCreatureLedgerBuilder
     {
         ArgumentNullException.ThrowIfNull(stack);
         ArgumentNullException.ThrowIfNull(resolve);
-        if (game is not (RuntimeOwnedContentSource.Fallout3Game or
-            RuntimeOwnedContentSource.FalloutNewVegasGame))
+        if (game is not (RuntimeLiveContentSource.Fallout3Game or
+            RuntimeLiveContentSource.FalloutNewVegasGame))
             throw new InvalidDataException(
                 "The actor ledger requires a registered Fallout 3 or New Vegas source stack.");
 

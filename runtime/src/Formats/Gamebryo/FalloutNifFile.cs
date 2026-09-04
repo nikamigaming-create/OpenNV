@@ -142,6 +142,7 @@ internal sealed class FalloutNifFile
         FalloutNifObject result = block.TypeName switch
         {
             "NiNode" or "NiBone" or "BSFadeNode" => ReadNode(block, ref cursor),
+            "NiAmbientLight" => ReadAmbientLight(block, ref cursor),
             "NiTriShape" or "NiTriStrips" => ReadGeometry(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
@@ -170,6 +171,8 @@ internal sealed class FalloutNifFile
             "NiMaterialProperty" => ReadMaterialProperty(block, ref cursor),
             "BSXFlags" => ReadBsxFlags(block, ref cursor),
             "NiIntegerExtraData" => ReadIntegerExtraData(block, ref cursor),
+            "NiFloatExtraData" => ReadFloatExtraData(block, ref cursor),
+            "BSDecalPlacementVectorExtraData" => ReadDecalPlacementExtraData(block, ref cursor),
             "NiStringExtraData" => ReadStringExtraData(block, ref cursor),
             "BSBound" => ReadBound(block, ref cursor),
             "BSFurnitureMarker" => ReadFurnitureMarker(block, ref cursor),
@@ -383,6 +386,20 @@ internal sealed class FalloutNifFile
         var effects = ReadReferences(ref cursor, "effects");
         return new FalloutNifNode(block, av.Name, av.Transform, av.Flags, av.Controller,
             av.ExtraData, av.Properties, av.CollisionObject, children, effects);
+    }
+
+    private FalloutNifAmbientLight ReadAmbientLight(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var av = ReadAvObject(ref cursor, block.TypeName);
+        var switchState = cursor.ReadBoolean("ambient light switch state");
+        var affectedNodes = ReadReferences(ref cursor, "ambient light affected nodes");
+        return new FalloutNifAmbientLight(
+            block, av.Name, av.Transform, av.Flags, av.Controller, av.ExtraData,
+            av.Properties, av.CollisionObject, switchState, affectedNodes,
+            cursor.ReadFiniteSingle("ambient light dimmer"),
+            ReadColor3(ref cursor, "ambient light ambient color"),
+            ReadColor3(ref cursor, "ambient light diffuse color"),
+            ReadColor3(ref cursor, "ambient light specular color"));
     }
 
     private FalloutNifGeometry ReadGeometry(FalloutNifBlock block, ref NifCursor cursor)
@@ -870,6 +887,34 @@ internal sealed class FalloutNifFile
         new(block, ReadStringReference(ref cursor, "integer extra-data name"),
             cursor.ReadUInt32("integer extra-data value"));
 
+    private FalloutNifFloatExtraData ReadFloatExtraData(
+        FalloutNifBlock block,
+        ref NifCursor cursor) =>
+        new(block, ReadStringReference(ref cursor, "float extra-data name"),
+            cursor.ReadFiniteSingle("float extra-data value"));
+
+    private FalloutNifDecalPlacementExtraData ReadDecalPlacementExtraData(
+        FalloutNifBlock block,
+        ref NifCursor cursor)
+    {
+        var name = ReadStringReference(ref cursor, "decal-placement name");
+        var value = cursor.ReadFiniteSingle("decal-placement float value");
+        var blockCount = cursor.ReadUInt16("decal-placement vector block count");
+        var vectorBlocks = new FalloutNifDecalVectorBlock[blockCount];
+        for (var blockIndex = 0; blockIndex < vectorBlocks.Length; blockIndex++)
+        {
+            var vectorCount = cursor.ReadUInt16($"decal-placement block {blockIndex} vector count");
+            var points = new FalloutNifVector3[vectorCount];
+            var normals = new FalloutNifVector3[vectorCount];
+            for (var index = 0; index < vectorCount; index++)
+                points[index] = ReadVector(ref cursor, $"decal-placement block {blockIndex} point {index}");
+            for (var index = 0; index < vectorCount; index++)
+                normals[index] = ReadVector(ref cursor, $"decal-placement block {blockIndex} normal {index}");
+            vectorBlocks[blockIndex] = new FalloutNifDecalVectorBlock(points, normals);
+        }
+        return new FalloutNifDecalPlacementExtraData(block, name, value, vectorBlocks);
+    }
+
     private FalloutNifStringExtraData ReadStringExtraData(
         FalloutNifBlock block,
         ref NifCursor cursor) =>
@@ -1161,17 +1206,28 @@ internal sealed class FalloutNifFile
                 cursor.ReadFiniteSingle("bump matrix 10"),
                 cursor.ReadFiniteSingle("bump matrix 11"));
         var normalTexture = ReadOptionalTextureDescriptor(ref cursor, "normal texture");
-        var unknownTexture = ReadOptionalTextureDescriptor(ref cursor, "unknown texture 2");
-        float? unknownTextureFloat = unknownTexture is null
-            ? null : cursor.ReadFiniteSingle("unknown texture 2 float");
+        var parallaxTexture = ReadOptionalTextureDescriptor(ref cursor, "parallax texture");
+        float? parallaxOffset = parallaxTexture is null
+            ? null : cursor.ReadFiniteSingle("parallax offset");
         var decal0Texture = ReadOptionalTextureDescriptor(ref cursor, "decal 0 texture");
         var decal1Texture = textureCount == FalloutLegacyTextureSlotCountWithSecondDecal
             ? ReadOptionalTextureDescriptor(ref cursor, "decal 1 texture") : null;
+        var shaderTextureCount = cursor.ReadCount32(
+            "shader texture count", MaximumShaderTextureCount);
+        var shaderTextures = new FalloutNifShaderTextureDescriptor[shaderTextureCount];
+        for (var index = 0; index < shaderTextures.Length; index++)
+        {
+            var texture = ReadOptionalTextureDescriptor(
+                ref cursor, $"shader texture {index}");
+            shaderTextures[index] = new FalloutNifShaderTextureDescriptor(
+                texture,
+                texture is null ? null : cursor.ReadUInt32($"shader texture {index} map ID"));
+        }
         return new FalloutNifTexturingProperty(
             block, objectNet.Name, objectNet.ExtraData, objectNet.Controller, flags,
             textureCount, baseTexture, darkTexture, detailTexture, glossTexture,
-            glowTexture, bumpTexture, bump, normalTexture, unknownTexture,
-            unknownTextureFloat, decal0Texture, decal1Texture);
+            glowTexture, bumpTexture, bump, normalTexture, parallaxTexture,
+            parallaxOffset, decal0Texture, decal1Texture, shaderTextures);
     }
 
     private FalloutNifTextureDescriptor? ReadOptionalTextureDescriptor(
@@ -1182,7 +1238,7 @@ internal sealed class FalloutNifFile
             return null;
         var source = ReadReference(ref cursor, $"{label} source");
         var flags = cursor.ReadUInt16($"{label} flags");
-        var uvSet = cursor.ReadUInt32($"{label} UV set");
+        var uvSet = (uint)(flags & 0x00ff);
         FalloutNifTextureTransform? transform = null;
         if (cursor.ReadBoolean($"{label} has transform"))
             transform = new FalloutNifTextureTransform(
@@ -1422,6 +1478,22 @@ internal sealed record FalloutNifNode(
     int[] Children,
     int[] Effects) : FalloutNifObject(Block);
 
+internal sealed record FalloutNifAmbientLight(
+    FalloutNifBlock Block,
+    string Name,
+    FalloutNifTransform Transform,
+    ushort Flags,
+    int Controller,
+    int[] ExtraData,
+    int[] Properties,
+    int CollisionObject,
+    bool SwitchState,
+    int[] AffectedNodes,
+    float Dimmer,
+    FalloutNifColor3 Ambient,
+    FalloutNifColor3 Diffuse,
+    FalloutNifColor3 Specular) : FalloutNifObject(Block);
+
 internal sealed record FalloutNifGeometry(
     FalloutNifBlock Block,
     string Name,
@@ -1655,6 +1727,21 @@ internal sealed record FalloutNifIntegerExtraData(
     string Name,
     uint Value) : FalloutNifObject(Block);
 
+internal sealed record FalloutNifFloatExtraData(
+    FalloutNifBlock Block,
+    string Name,
+    float Value) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifDecalVectorBlock(
+    FalloutNifVector3[] Points,
+    FalloutNifVector3[] Normals);
+
+internal sealed record FalloutNifDecalPlacementExtraData(
+    FalloutNifBlock Block,
+    string Name,
+    float Value,
+    FalloutNifDecalVectorBlock[] VectorBlocks) : FalloutNifObject(Block);
+
 internal sealed record FalloutNifStringExtraData(
     FalloutNifBlock Block,
     string Name,
@@ -1785,6 +1872,10 @@ internal sealed record FalloutNifBumpMapParameters(
     float Matrix10,
     float Matrix11);
 
+internal sealed record FalloutNifShaderTextureDescriptor(
+    FalloutNifTextureDescriptor? Texture,
+    uint? MapId);
+
 internal sealed record FalloutNifTexturingProperty(
     FalloutNifBlock Block,
     string Name,
@@ -1800,10 +1891,11 @@ internal sealed record FalloutNifTexturingProperty(
     FalloutNifTextureDescriptor? BumpTexture,
     FalloutNifBumpMapParameters? BumpParameters,
     FalloutNifTextureDescriptor? NormalTexture,
-    FalloutNifTextureDescriptor? UnknownTexture,
-    float? UnknownTextureFloat,
+    FalloutNifTextureDescriptor? ParallaxTexture,
+    float? ParallaxOffset,
     FalloutNifTextureDescriptor? Decal0Texture,
-    FalloutNifTextureDescriptor? Decal1Texture) : FalloutNifObject(Block);
+    FalloutNifTextureDescriptor? Decal1Texture,
+    FalloutNifShaderTextureDescriptor[] ShaderTextures) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifSourceTexture(
     FalloutNifBlock Block,
@@ -1844,7 +1936,13 @@ internal ref struct NifCursor
     {
         var value = ReadByte(label);
         if (value > 1)
-            throw new InvalidDataException($"{_owner} {label} is not a canonical boolean.");
+        {
+            var start = Math.Max(0, Offset - 9);
+            var count = Math.Min(24, _data.Length - start);
+            throw new InvalidDataException(
+                $"{_owner} {label} at byte {Offset - 1} has value {value} and is not a canonical boolean; " +
+                $"near={Convert.ToHexString(_data.Slice(start, count))}.");
+        }
         return value != 0;
     }
 

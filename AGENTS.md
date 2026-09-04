@@ -7,7 +7,7 @@ changing subsystem boundaries or promotion claims.
 ## Non-negotiable boundaries
 
 - Retail ESM/BSA/NIF/DDS files are read-only inputs. Never commit, package,
-  upload, or distribute Bethesda assets, saves, executables, or derived caches.
+  upload, or distribute Bethesda assets, saves, executables, or converted derivatives.
 - OpenNV does not depend on OpenMW source or runtime. Reverse-engineering output
   must be reduced to implementation-neutral contracts; never paste decompiler
   output into OpenNV.
@@ -18,8 +18,8 @@ changing subsystem boundaries or promotion claims.
 
 ## Current actor truth
 
-- Direct actor records, FaceGen primitives, deterministic actor-cache export,
-  Godot import, and a fail-closed retail differential are merged.
+- Direct actor records, FaceGen primitives, native Godot presentation, and a
+  fail-closed retail differential are the supported direction.
 - Trudy identity and application of the provisional retail shot-state contract
   currently pass; rendering still fails. Do not describe the actor or saloon as
   retail-parity.

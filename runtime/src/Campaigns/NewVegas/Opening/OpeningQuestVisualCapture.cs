@@ -30,6 +30,7 @@ internal partial class OpeningQuestRuntime
         private const string ExpectedCheckpointMode = "checkpoint";
         private const string ExpectedCreatorMode = "creator";
         private const string ExpectedResumeMode = "resume";
+        private const string ExpectedDocSeatedMode = "doc-seated";
         private static readonly string[] CheckpointFrames =
         [
             "owned-imad-dialogue-transition",
@@ -68,6 +69,8 @@ internal partial class OpeningQuestRuntime
         private readonly List<OpeningVisualFrame> _frames = [];
         private Image? _defaultPreviewImage;
 
+        internal bool DocSeatedCaptured => _captured.Contains("doc-seated-smoking");
+
         private OpeningVisualCaptureSession(
             string root,
             string mode,
@@ -91,7 +94,8 @@ internal partial class OpeningQuestRuntime
                     "Opening visual proof requires the native rendering display driver.");
             if (mode is not ExpectedCheckpointMode and
                 not ExpectedCreatorMode and
-                not ExpectedResumeMode)
+                not ExpectedResumeMode and
+                not ExpectedDocSeatedMode)
                 throw new InvalidOperationException(
                     "Opening visual proof mode is unsupported.");
             var root = Path.GetFullPath(requestedRoot);
@@ -110,7 +114,9 @@ internal partial class OpeningQuestRuntime
 
         internal async Task<bool> ObserveCheckpointState(OpeningQuestRuntime host)
         {
-            if (_mode is not ExpectedCheckpointMode and not ExpectedCreatorMode)
+            if (_mode is not ExpectedCheckpointMode and
+                not ExpectedCreatorMode and
+                not ExpectedDocSeatedMode)
                 return false;
             if (!_captured.Contains("owned-imad-dialogue-transition") &&
                 OwnedImageSpaceDialogueTransitionActive(host))
@@ -272,6 +278,7 @@ internal partial class OpeningQuestRuntime
             {
                 ExpectedCheckpointMode => CheckpointFrames,
                 ExpectedCreatorMode => CreatorFrames,
+                ExpectedDocSeatedMode => CheckpointFrames[..3],
                 _ => ResumeFrames,
             };
             var missing = required.Where(value => !_captured.Contains(value)).ToArray();

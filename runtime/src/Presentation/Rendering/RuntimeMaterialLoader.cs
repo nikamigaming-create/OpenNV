@@ -95,20 +95,20 @@ internal static class RuntimeMaterialLoader
     internal static LoadedTextures LoadTextures(
         JsonElement scene,
         RendererConfiguration configuration,
-        TextureCache? cache = null) =>
+        TextureMemoryStore? memory = null) =>
         LoadTextures(
             scene.GetProperty("textures").EnumerateArray(),
             configuration,
             "id",
             null,
-            cache);
+            memory);
 
     internal static LoadedTextures LoadTextures(
         IEnumerable<JsonElement> textureRows,
         RendererConfiguration configuration,
         string idProperty,
         string? baseDirectory,
-        TextureCache? cache = null)
+        TextureMemoryStore? memory = null)
     {
         var textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
         var cubemaps = new Dictionary<string, Cubemap>(StringComparer.Ordinal);
@@ -120,16 +120,16 @@ internal static class RuntimeMaterialLoader
         {
             var id = texture.GetProperty(idProperty).GetString()!;
             var contract = texture.GetRawText();
-            if (cache?.TryGet(id, contract, out var cached) == true)
+            if (memory?.TryGet(id, contract, out var stored) == true)
             {
-                textures.Add(id, cached.Texture);
-                if (cached.Cubemap is not null)
-                    cubemaps.Add(id, cached.Cubemap);
-                authoredDdsTextures += cached.AuthoredDdsTextures;
-                authoredDdsMipChainTextures += cached.AuthoredDdsMipChainTextures;
+                textures.Add(id, stored.Texture);
+                if (stored.Cubemap is not null)
+                    cubemaps.Add(id, stored.Cubemap);
+                authoredDdsTextures += stored.AuthoredDdsTextures;
+                authoredDdsMipChainTextures += stored.AuthoredDdsMipChainTextures;
                 decodedAuthoredBc1AlphaMipChainTextures +=
-                    cached.DecodedAuthoredBc1AlphaMipChainTextures;
-                runtimeGeneratedMipTextures += cached.RuntimeGeneratedMipTextures;
+                    stored.DecodedAuthoredBc1AlphaMipChainTextures;
+                runtimeGeneratedMipTextures += stored.RuntimeGeneratedMipTextures;
                 continue;
             }
             var authoredDdsBefore = authoredDdsTextures;
@@ -151,7 +151,7 @@ internal static class RuntimeMaterialLoader
             Image? image = null;
             var loadedDirectly = false;
             if (!isLandscapeWeightMap && !hasCubeFaces &&
-                RuntimeOwnedContentSource.Current is { } ownedSource &&
+                RuntimeLiveContentSource.Current is { } ownedSource &&
                 texture.TryGetProperty("archivePath", out var archivePathProperty) &&
                 archivePathProperty.ValueKind == JsonValueKind.String)
             {
@@ -330,10 +330,10 @@ internal static class RuntimeMaterialLoader
                     cubemaps.Add(id, loadedCubemap);
                 }
             }
-            cache?.Add(
+            memory?.Add(
                 id,
                 contract,
-                new CachedTexture(
+                new StoredTexture(
                     loadedTexture,
                     loadedCubemap,
                     authoredDdsTextures - authoredDdsBefore,
@@ -1442,15 +1442,15 @@ internal static class RuntimeMaterialLoader
         int DecodedAuthoredBc1AlphaMipChainTextures,
         int RuntimeGeneratedMipTextures);
 
-    internal sealed class TextureCache
+    internal sealed class TextureMemoryStore
     {
-        private readonly Dictionary<string, (string Contract, CachedTexture Texture)> _entries =
+        private readonly Dictionary<string, (string Contract, StoredTexture Texture)> _entries =
             new(StringComparer.Ordinal);
 
         internal int UniqueTextures => _entries.Count;
         internal int ReusedTextures { get; private set; }
 
-        internal bool TryGet(string id, string contract, out CachedTexture texture)
+        internal bool TryGet(string id, string contract, out StoredTexture texture)
         {
             if (!_entries.TryGetValue(id, out var entry))
             {
@@ -1459,25 +1459,26 @@ internal static class RuntimeMaterialLoader
             }
             if (!entry.Contract.Equals(contract, StringComparison.Ordinal))
                 throw new InvalidOperationException(
-                    $"Prepared texture identity {id} has conflicting contracts.");
+                    $"Texture identity {id} has conflicting in-memory contracts.");
             ReusedTextures++;
             texture = entry.Texture;
             return true;
         }
 
-        internal void Add(string id, string contract, CachedTexture texture)
+        internal void Add(string id, string contract, StoredTexture texture)
         {
             if (!_entries.TryAdd(id, (contract, texture)))
                 throw new InvalidOperationException(
-                    $"Prepared texture identity {id} was cached twice.");
+                    $"Texture identity {id} was stored in memory twice.");
         }
     }
 
-    internal readonly record struct CachedTexture(
+    internal readonly record struct StoredTexture(
         Texture2D Texture,
         Cubemap? Cubemap,
         int AuthoredDdsTextures,
         int AuthoredDdsMipChainTextures,
         int DecodedAuthoredBc1AlphaMipChainTextures,
         int RuntimeGeneratedMipTextures);
+
 }

@@ -31,7 +31,7 @@ internal sealed class BethesdaStringTable
         _values.TryGetValue(id, out value!);
 
     internal static BethesdaStringTable Load(
-        RuntimeOwnedContentSource source,
+        RuntimeLiveContentSource source,
         string logicalPath,
         string? preferredArchive = null)
     {

@@ -20,20 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11.9"
-          cache: pip
-          cache-dependency-path: |
-            content/requirements.txt
-            content/requirements-build.txt
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
-
-      - name: Install direct-content dependencies
-        run: python -m pip install -r content/requirements-build.txt
 
       - name: Download pinned Godot Mono
         id: godot
@@ -55,43 +44,6 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-GodotRuntime.ps1 -Godot '${{ steps.godot.outputs.path }}'
 
-      - name: Cache pinned Godot export templates
-        uses: actions/cache@v4
-        with:
-          path: ~/AppData/Roaming/Godot/export_templates/4.7.2.stable.mono
-          key: godot-mono-4.7.2-windows-export-92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d
-
-      - name: Install pinned Windows export template
-        shell: pwsh
-        run: |
-          $target = Join-Path $env:APPDATA 'Godot/export_templates/4.7.2.stable.mono'
-          $windowsTemplate = Join-Path $target 'windows_release_x86_64.exe'
-          if (Test-Path -LiteralPath $windowsTemplate -PathType Leaf) { exit 0 }
-          $archive = Join-Path $env:RUNNER_TEMP 'godot-mono-templates.tpz'
-          $expanded = Join-Path $env:RUNNER_TEMP 'godot-mono-templates'
-          $expectedSha256 = '92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d'
-          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz' -OutFile $archive
-          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) { throw "Godot template archive hash mismatch: $actualSha256" }
-          Expand-Archive -LiteralPath $archive -DestinationPath $expanded
-          $source = Join-Path $expanded 'templates'
-          if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw 'Godot template archive has no templates directory.' }
-          New-Item -ItemType Directory -Path $target -Force | Out-Null
-          Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force
-
-      - name: Build experimental Windows runtime
-        shell: pwsh
-        run: |
-          $version = 'experimental-' + '${{ github.sha }}'.Substring(0, 12)
-          ./scripts/Build-GodotRuntime.ps1 -Godot '${{ steps.godot.outputs.path }}' -OutputRoot "$env:RUNNER_TEMP/opennv" -Version $version -SkipTests
-
-      - name: Upload experimental Godot runtime
-        uses: actions/upload-artifact@v4
-        with:
-          name: opennv-godot-experimental-windows-x64
-          path: ${{ runner.temp }}/opennv/*.zip
-          if-no-files-found: error
-
   desktop-launcher:
     name: Validate desktop launcher (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
@@ -110,8 +62,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
       - run: npm ci --prefix desktop
       - run: npm run check --prefix desktop
       - run: npm test --prefix desktop
