@@ -8,6 +8,10 @@ ROOT = Path(__file__).resolve().parents[2]
 FO3 = ROOT / "runtime" / "src" / "Campaigns" / "Fallout3"
 
 
+def fo3_sources(*names: str) -> str:
+    return "\n".join((FO3 / name).read_text(encoding="utf-8") for name in names)
+
+
 class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
     def test_toddler_motion_uses_only_configured_input_actions(self) -> None:
         source = (FO3 / "Fo3Cg01ToddlerWorld.cs").read_text(encoding="utf-8")
@@ -42,10 +46,14 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
         )
 
     def test_post_stage14_executes_owned_packages_and_persists_stage20(self) -> None:
-        contract = (FO3 / "Fo3Cg01PostStage14Transition.cs").read_text(
-            encoding="utf-8"
+        contract = fo3_sources(
+            "Fo3Cg01PostStage14Transition.cs",
+            "Fo3Cg01Stage20Contracts.cs",
         )
-        flow = (FO3 / "Fo3OpeningFlow.Cg01.cs").read_text(encoding="utf-8")
+        flow = fo3_sources(
+            "Fo3OpeningFlow.Cg01.cs",
+            "Fo3OpeningFlow.Cg01Stage20Interactions.cs",
+        )
         persistence = (FO3 / "Fo3OpeningFlow.Persistence.cs").read_text(
             encoding="utf-8"
         )
@@ -62,10 +70,14 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
         self.assertIn("InstallStage20Interactions", (FO3 / "Fo3Cg01ToddlerWorld.cs").read_text(encoding="utf-8"))
 
     def test_stage90_uses_frame_delta_and_shared_owned_effect_owners(self) -> None:
-        contract = (FO3 / "Fo3Cg01PostStage14Transition.cs").read_text(
-            encoding="utf-8"
+        contract = fo3_sources(
+            "Fo3Cg01PostStage14Transition.cs",
+            "Fo3Cg01Stage20Contracts.cs",
         )
-        flow = (FO3 / "Fo3OpeningFlow.Cg01.cs").read_text(encoding="utf-8")
+        flow = fo3_sources(
+            "Fo3OpeningFlow.Cg01.cs",
+            "Fo3OpeningFlow.Cg01Stage20Interactions.cs",
+        )
 
         self.assertIn('"GetSecondsPassed"', contract)
         self.assertIn("Fo3Stage90Transition.LoadModifier(", contract)
@@ -80,7 +92,10 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
         )
 
     def test_cg02_nested_stage5_executes_before_source_moveto(self) -> None:
-        flow = (FO3 / "Fo3OpeningFlow.Cg01.cs").read_text(encoding="utf-8")
+        flow = fo3_sources(
+            "Fo3OpeningFlow.Cg01.cs",
+            "Fo3OpeningFlow.Cg01Stage20Interactions.cs",
+        )
         compiler = (ROOT / "content" / "tools" / "prepare_fo3_profile.py").read_text(
             encoding="utf-8"
         )
