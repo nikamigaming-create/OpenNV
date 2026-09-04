@@ -26,7 +26,8 @@ const editionRow = document.querySelector("#edition-row");
 const edition = document.querySelector("#edition");
 const fo1ProfileButton = document.querySelector("#choose-fo1-profile");
 const fo2ProfileButton = document.querySelector("#choose-fo2-profile");
-const newVegasCacheButton = document.querySelector("#choose-newvegas-cache");
+const newVegasDataButton = document.querySelector("#choose-newvegas-data");
+const fallout3DataButton = document.querySelector("#choose-fallout3-data");
 const ttwProfileButton = document.querySelector("#choose-ttw-profile");
 const jamProfileButton = document.querySelector("#choose-jam-profile");
 const launchButton = document.querySelector("#launch");
@@ -67,6 +68,11 @@ function statusLabel(runtime) {
   if (runtime.status === "development-slice") return "Godot development slice";
   if (runtime.status === "portable-shell") return "Cross-platform shell";
   return "Godot runtime not selected";
+}
+
+function escapeHtml(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 function campaignStatus(campaign) {
@@ -114,6 +120,33 @@ function renderLayers() {
   document.querySelector("#mods").innerHTML = state.mods.map((mod) => `
     <div class="module-row"><div><strong>${mod.title}</strong><p>${mod.detail}</p></div><span class="module-status">${mod.status.replaceAll("-", " ")}</span></div>
   `).join("");
+  const managedState = state.managedLayers?.[selectedGameId];
+  const managed = managedState?.layers || [];
+  const container = document.querySelector("#managed-mod-layers");
+  container.innerHTML = managed.length === 0
+    ? `<div class="layer-row"><div><strong>No managed mod layers</strong><p>${escapeHtml(managedState?.message || "Install a local ZIP or add a deployed mod folder.")}</p></div></div>`
+    : managed.map((layer, index) => `
+      <div class="layer-row">
+        <span class="status-pill ${layer.enabled ? "ready" : "not-installed"}">${layer.enabled ? "enabled" : "disabled"}</span>
+        <div><strong>${index + 1}. ${escapeHtml(layer.displayName)}</strong><p>${escapeHtml(layer.provider)} · ${layer.plugins} plugins · low-to-high priority</p>
+          <button class="quiet-button" type="button" data-layer-action="${layer.enabled ? "disable" : "enable"}" data-layer-id="${escapeHtml(layer.id)}">${layer.enabled ? "Disable" : "Enable"}</button>
+          <button class="quiet-button" type="button" data-layer-action="move-up" data-layer-id="${escapeHtml(layer.id)}" ${index === 0 ? "disabled" : ""}>Lower priority</button>
+          <button class="quiet-button" type="button" data-layer-action="move-down" data-layer-id="${escapeHtml(layer.id)}" ${index === managed.length - 1 ? "disabled" : ""}>Higher priority</button>
+          ${layer.removable ? `<button class="quiet-button" type="button" data-layer-action="uninstall" data-layer-id="${escapeHtml(layer.id)}">Uninstall</button>` : ""}
+        </div>
+      </div>`).join("");
+  container.querySelectorAll("[data-layer-action]").forEach((element) => {
+    element.addEventListener("click", async () => {
+      const result = await api.manageModLayer({
+        game: selectedGameId,
+        layerId: element.dataset.layerId,
+        action: element.dataset.layerAction
+      });
+      showToast(result.message, result.ok ? "success" : "warning");
+      state = await api.getState();
+      render();
+    });
+  });
 }
 
 function render() {
@@ -191,10 +224,14 @@ function render() {
   fo2ProfileButton.textContent = state.profiles?.fallout2?.validated
     ? "Fallout 2 installed"
     : "Set up Fallout 2";
-  newVegasCacheButton.classList.toggle("hidden", selectedGameId !== "newvegas");
-  newVegasCacheButton.textContent = state.profiles?.newVegas?.ready
+  newVegasDataButton.classList.toggle("hidden", selectedGameId !== "newvegas");
+  newVegasDataButton.textContent = state.profiles?.newVegas?.ready
     ? "New Vegas set up"
     : "Set up New Vegas";
+  fallout3DataButton.classList.toggle("hidden", selectedGameId !== "fallout3");
+  fallout3DataButton.textContent = state.profiles?.fallout3?.ready
+    ? "Fallout 3 set up"
+    : "Set up Fallout 3";
   ttwProfileButton.classList.toggle("hidden", campaign.id !== "ttw");
   ttwProfileButton.textContent = modProfileLabel("ttw");
   ttwProfileButton.title = state.profiles?.ttw?.message || "Choose a local TTW profile manifest.";
@@ -251,8 +288,15 @@ fo2ProfileButton.addEventListener("click", async () => {
   render();
 });
 
-newVegasCacheButton.addEventListener("click", async () => {
-  const result = await api.chooseNewVegasCache();
+newVegasDataButton.addEventListener("click", async () => {
+  const result = await api.chooseNewVegasData();
+  showToast(result.message, result.ok ? "success" : "warning");
+  state = await api.getState();
+  render();
+});
+
+fallout3DataButton.addEventListener("click", async () => {
+  const result = await api.chooseFallout3Data();
   showToast(result.message, result.ok ? "success" : "warning");
   state = await api.getState();
   render();
@@ -277,6 +321,24 @@ document.querySelector("#open-mod-docs").addEventListener("click", async () => {
     await api.openExternal("https://github.com/nikamigaming-create/OpenNV/blob/main/docs/mods.md");
   } catch {
     showToast("The support policy is available in docs/mods.md in the OpenNV release.", "info");
+  }
+});
+
+document.querySelector("#add-mod-source-root").addEventListener("click", async () => {
+  const result = await api.addModSourceRoot(selectedGameId);
+  showToast(result.message, result.ok ? "success" : "warning");
+  if (result.ok) {
+    state = await api.getState();
+    render();
+  }
+});
+
+document.querySelector("#install-local-mod-archive").addEventListener("click", async () => {
+  const result = await api.installLocalModArchive(selectedGameId);
+  showToast(result.message, result.ok ? "success" : "warning");
+  if (result.ok) {
+    state = await api.getState();
+    render();
   }
 });
 

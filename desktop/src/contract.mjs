@@ -18,6 +18,22 @@ export const EXTENDER_LAYERS = CONTRACT.extenderLayers;
 export const TTW_OPENING_ROUTE_IDS = Object.freeze(["ttw-fo3", "ttw-fnv"]);
 
 const TTW_OPENING_ROUTE_ID_SET = new Set(TTW_OPENING_ROUTE_IDS);
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+
+function nativeSourceStackArguments(stackPath, stackSha256, stackId, campaign) {
+  if (typeof stackPath !== "string" || !stackPath ||
+      !SHA256_PATTERN.test(String(stackSha256 || "")) ||
+      !SHA256_PATTERN.test(String(stackId || "")) ||
+      !["fallout-new-vegas", "fallout-3"].includes(campaign)) {
+    throw new Error("The native source stack identity is unavailable.");
+  }
+  return [
+    "--source-stack", stackPath,
+    "--source-stack-sha256", stackSha256,
+    "--stack-id", stackId,
+    "--campaign", campaign
+  ];
+}
 
 function defaultRuntime(platform) {
   const windows = platform === "win32";
@@ -168,7 +184,8 @@ export function createRuntimeArguments(
     fallout3Profile = null,
     newVegasProfile = null,
     ttwProfile = null,
-    jamProfile = null
+    jamProfile = null,
+    modStack = null
   } = {}
 ) {
   if (campaign.id === "fallout1") {
@@ -180,10 +197,7 @@ export function createRuntimeArguments(
       "--xr-mode", "off",
       "--rendering-method", campaign.desktopRenderingMethod,
       "--",
-      "--fo1-hex-scene", fallout1Profile.hexScene,
-      "--fo1-new-game",
-      "--fo1-character-start", fallout1Profile.characterStart,
-      "--fo1-character-start-sha256", fallout1Profile.characterStartSha256,
+      "--fo1-owned-profile", fallout1Profile.path,
       "--fo1-start-presentation", presentation,
       "--save-path", fallout1Profile.savePath
     ];
@@ -197,34 +211,44 @@ export function createRuntimeArguments(
       "--resolution", "1280x720",
       "res://src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStart.tscn",
       "--",
-      "--fo2-temple-cache", fallout2Profile.templeCache,
-      "--fo2-temple-transitions", fallout2Profile.templeTransitions,
-      "--fo2-arroyo-cache", fallout2Profile.arroyoCache,
-      "--fo2-player-cache", fallout2Profile.playerCache,
-      "--fo2-character-start-cache", fallout2Profile.characterStartCache,
+      "--fo2-owned-profile", fallout2Profile.path,
       "--fo2-save", fallout2Profile.savePath
     ];
   }
   if (campaign.id === "fallout3") {
-    if (!fallout3Profile?.ready) throw new Error(CONTRACT.copy.fallout3ProfileUnavailable);
+    if (!fallout3Profile?.ready ||
+        !fallout3Profile?.stackPath || !SHA256_PATTERN.test(fallout3Profile?.stackId || "") ||
+        !SHA256_PATTERN.test(fallout3Profile?.stackSha256 || "") || !fallout3Profile?.savePath) {
+      throw new Error(CONTRACT.copy.fallout3ProfileUnavailable);
+    }
     return [
       "--xr-mode", "off", "--",
-      "--fo3-profile", fallout3Profile.path,
+      ...nativeSourceStackArguments(
+        fallout3Profile.stackPath,
+        fallout3Profile.stackSha256,
+        fallout3Profile.stackId,
+        "fallout-3"),
+      "--opening-menu",
       "--save-path", fallout3Profile.savePath
     ];
   }
   if (campaign.id === "newvegas") {
-    if (!newVegasProfile?.ready || !newVegasProfile?.cacheRoot || !newVegasProfile?.savePath) {
+    if (!newVegasProfile?.ready ||
+        !SHA256_PATTERN.test(newVegasProfile?.stackId || "") || !newVegasProfile?.savePath ||
+        !modStack?.validated || modStack.stackId !== newVegasProfile.stackId ||
+        !modStack?.path || !SHA256_PATTERN.test(modStack?.sha256 || "")) {
       throw new Error("The New Vegas owned-data profile is unavailable.");
     }
     const args = [
       "--xr-mode", enableVr ? "on" : "off", "--",
-      "--reuse-cache",
-      "--cache-root", newVegasProfile.cacheRoot,
+      ...nativeSourceStackArguments(
+        modStack.path,
+        modStack.sha256,
+        modStack.stackId,
+        "fallout-new-vegas"),
       "--opening-menu",
       "--save-path", newVegasProfile.savePath
     ];
-    if (newVegasProfile.boundedDefaultProfile) args.push("--bounded-default-profile");
     if (enableJam) {
       if (!jamProfile?.ready) throw new Error(CONTRACT.copy.jamProfileUnavailable);
       args.push("--enable-jam", "--jam-profile", jamProfile.path);

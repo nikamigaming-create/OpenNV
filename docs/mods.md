@@ -21,6 +21,115 @@ a time:
 OpenNV never writes into a game installation, bundles third-party archives, or
 loads an arbitrary native plugin merely because it was detected.
 
+## Unified read-only source stacks
+
+The launcher owns a versioned `opennv-mod-stack/v2` profile. **Choose New Vegas
+Data** validates the legal install's `FalloutNV.esm` header and makes that
+read-only Data directory layer zero. It imports the canonical local
+`plugins.txt` plus `loadorder.txt` when present; an unlisted plugin is disabled,
+and a non-official plugin without an explicit order fails registration. The
+load-order files are size, time, and SHA-256 bound so a later manager edit
+requires re-import. **Install local mod ZIP** safely installs an already-owned
+ZIP into the launcher's private per-mod directory and registers that directory
+as the next source layer. It supports stored and deflated ZIP members, including
+a single outer `Data` directory; it fails closed on path escape, links, special
+files, encryption, unsupported compression, corruption, or overwrite. This is
+not a downloader, 7z extractor, or scripted FOMOD executor. **Add mod folder**
+appends ordinary Vortex/deployed folders
+in explicit low-to-high order. Selecting an MO2 profile directory instead
+(a directory containing `modlist.txt` and `plugins.txt`) imports enabled mod
+folders in MO2 priority order and active plugins in profile order. Portable
+Wabbajack installations use that same MO2 profile contract. The profile indexes effective
+top-level ESM, ESP, and BSA names plus byte length and last-write time without
+extracting or hashing multi-gigabyte archives. It recursively inventories every
+ordinary loose file by root, canonical relative path, byte length, and
+last-write time; links, junctions, special files, and case-colliding paths fail
+registration. Loose resources use a sealed in-memory case-insensitive
+`low-to-high-last-wins` table while retaining winning and overridden identities.
+
+Every v2 stack also binds an edition (`fallout-new-vegas`, `fallout-3`, or
+`ttw`), engine/content build, supported campaigns, and a stack-scoped save
+compatibility ID. TTW records the required xNVSE/JIP/ShowOff semantics as
+clean-room capabilities; OpenNV never loads those extender DLLs.
+
+The same panel lists every non-owned source layer in exact low-to-high priority
+order. Enable/disable and priority changes rebuild the sealed stack from the
+unchanged owned layer zero; each resulting `stackId` continues to own a separate
+save path. **Uninstall** is available only for ZIP content created inside Gate
+Vortex's private install root. MO2, Wabbajack, deployed Vortex, Nexus Mods App,
+Thunderstore, TTW, JAM, and manual folders remain externally owned and are never
+deleted by the launcher.
+
+Standalone Fallout 3 uses a separate `profiles/fallout3/layers.json`, private
+install root, `opennv-mod-stack/v2` identity, and stack-keyed save namespace.
+Its ordinary deployed folders and static ZIP layers use the same controls without
+sharing New Vegas roots or catalog state. Fallout 3 MO2/Wabbajack profile parsing
+is not implemented; users may add its already-deployed mod folders individually.
+Fallout 1 and Fallout 2 remain deliberately blocked in this manager: Fallout 1's
+current direct profile admits exactly install `Data` over `critter.dat` and
+`master.dat`, while Fallout 2 admits only `patch000.dat`, `critter.dat`, and
+`master.dat`. Neither runtime has an ordered external loose-root contract, so
+Gate Vortex refuses loose layers, DAT replacement, executables, and script
+extenders instead of implying that those mods work.
+
+The source contract accepts `manual`, `gate-vortex`, `mo2`, `wabbajack`, `vortex`,
+`nexus-mods-app`, `thunderstore`, and `ttw-installer` provenance. These labels
+all feed the same winner rules; a provider label alone does not grant behavioral
+compatibility. On every launch the launcher rechecks declared roots, load-order
+sources, top-level plugin/archive metadata, and sealed loose-file metadata,
+hashes the stack manifest, and passes `--source-stack`,
+`--source-stack-sha256`, `--stack-id`, and `--campaign` to Godot. Saves are
+isolated by that stack ID. A changed declared plugin or archive fails closed and
+must be registered again. The launcher does not guess a plugin order from
+alphabetical filenames. Nexus/Thunderstore downloads and APIs, 7z, scripted
+FOMOD choice graphs, and native extender DLL loading are not implemented. A ZIP
+containing `fomod/ModuleConfig.xml` fails with instructions to deploy it through
+a manager that implements those choices, then add that deployed folder/profile.
+
+## Direct runtime media and localization
+
+The native source stack can pass a winning loose file or BSA member directly
+from memory to Godot. DDS textures use Godot 4.7.2's DDS decoder; WAV, MP3, and
+Ogg Vorbis audio use the corresponding buffer decoders. No temporary converted
+file or prepared media cache is written. Each loader first checks the container
+signature and bounded header, then fails if Godot rejects the payload. A mod's
+higher-priority loose or archive member therefore replaces the lower resource
+through the same `low-to-high-last-wins` namespace used by meshes.
+
+`STRINGS`, `DLSTRINGS`, and `ILSTRINGS` tables also have strict in-memory
+readers. They validate the complete directory/data size, offsets, duplicate
+IDs, terminators, and UTF-8 text before exposing an ID. Missing IDs and malformed
+tables fail instead of producing blank UI text.
+
+Effective `SOUN` records now resolve through the master-aware plugin winner map.
+The runtime decodes exact `FNAM`, `RNAM`, `SNDX`/`SNDD`, attenuation-curve,
+reverb, priority, flags, and loop-sample fields. Exact-file 2D/menu sounds with
+bounded volume and loop behavior can become Godot audio players backed by the
+winning in-memory resource. A strict 3D subset uses `AudioStreamPlayer3D` for
+spatial panning while applying the source five-point gain curve, static
+attenuation, loop points, and an explicit submerged-state mute input. Random
+scheduling, folder variant sets, frequency randomization, envelopes, LFE/radius
+behavior, and unbound environmental reverb fail closed at playback. Reverb
+attenuation `0` is admitted only with a caller-provided `Area3D` mask for the
+current acoustic preset; `100` is a dry send. Intermediate per-source wet-send
+amounts remain unsupported. The registered official-plus-TTW audit has 1,925
+exact-file 3D winners, admits 482 under that exact descriptor contract, and
+resolves 479 resources. Fixed frequency adjustment is applied as an authored
+pitch percentage; random frequency variance remains fail-closed. `SNDR` does not occur
+in the owned official New Vegas corpus and is not admitted as an FNV record
+layout. Dialogue response/language selection and joining localized IDs from
+every record type remain separate capabilities. WAV codecs or DDS encodings
+that Godot 4.7.2 cannot decode remain unsupported and fail closed; OpenNV does
+not silently transcode them or fall back to a cache.
+
+For explicit 3D playback requests, `RNAM` is a percentage gate driven by
+serializable gameplay-owned sound RNG state. A failed roll occurs before any
+resource bytes are loaded, and records without `RNAM` do not advance the RNG.
+The registered stack has 74 exact-file 3D `RNAM` records, resolves 73 of their
+resources, and admits nine complete descriptors under the current strict contract.
+`Play At Random` interval scheduling, random location, and random stream start
+remain fail-closed rather than borrowing wall-clock randomness.
+
 ## TTW profile
 
 TTW is not downloaded or generated by OpenNV. The player uses the current TTW
@@ -32,12 +141,14 @@ version, plugin-stack ID, and a distinct save-compatibility ID. There is no TTW
 save-loading route yet; the separate identity prevents future TTW support from
 silently adopting a standalone Fallout 3 or New Vegas save.
 
-TTW runtime support is absent. The bounded opening compiler resolves only the
-effective CG00→CG01-stage-5 record, command, and owned-movie closure described
-below. It does not implement general archive/loose-file precedence, execute the
-commands, present or transition the Vault 101 world, load/save TTW gameplay, or
-execute xNVSE/JAM plugins. No TTW output or derived cache enters Git or an
-OpenNV release.
+Playable TTW runtime support is absent. The native source lane can register the
+effective TTW roots, plugin order, active BSA order, and save-isolated stack ID;
+it can index those plugins and resolve loose/BSA members in place. That is
+source transport, not a TTW world. The bounded opening compiler separately
+resolves only the effective CG00→CG01-stage-5 record, command, and owned-movie
+closure described below. OpenNV does not execute those commands, present or
+transition the Vault 101 world, load/save TTW gameplay, or execute xNVSE/JAM
+plugins. No TTW output or derived cache enters Git or an OpenNV release.
 
 The first concrete registration step is available now. Give the inspector the
 effective MO2 data layers in low-to-high precedence order and the profile's
@@ -62,7 +173,12 @@ Archive members, loose files, records, scripts, and world transitions remain
 uncompiled, so the manifest deliberately reports
 `runtimeCompatibility.ready=false` and cannot be selected as a playable route.
 The desktop launcher auto-detects this default output path or accepts it through
-**Set up TTW**. Registration is shown separately from runtime readiness.
+**Set up TTW**. Selecting it performs the expensive plugin hash proof once,
+then emits the ordinary native mod-stack snapshot from the same read-only roots.
+Subsequent launcher refreshes and launches verify the small provenance files plus
+plugin/BSA size and modification time rather than re-hashing every ESM. A changed
+source fails closed and requires registration again. Registration is shown
+separately from playable TTW readiness.
 
 For a flattened installer output whose top-level plugin modification times are
 strictly increasing, the inspector can derive the all-active order without an

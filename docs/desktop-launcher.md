@@ -43,12 +43,42 @@ The portable contract is implemented in
 separate from the current Windows PowerShell bridge, so platform-specific
 runtime launches cannot redefine product or save semantics.
 
-New Vegas cache selection is explicit. The contextual **Set up New Vegas**
-action validates a generated `install-manifest.json` and stores only its
-immutable cache-root path in the launcher user-data directory. The launcher
-falls back to the legacy Godot `legal-assets-v1` cache only when no registration
-exists. It never rebuilds or silently replaces that cache during launch; a new
-compiler result becomes active only after it is registered.
+New Vegas source selection is explicit. The contextual **Choose New Vegas
+Data** action accepts either the legal game root or its `Data` directory,
+requires a real `FalloutNV.esm` beginning with a `TES4` record, and registers
+that read-only directory as layer zero of `opennv-mod-stack/v2`. It inventories
+top-level ESM/ESP/BSA files by name, byte length, and last-write time without
+extracting or hashing multi-gigabyte archives. Launches pass the sealed manifest
+path, manifest SHA-256, stack ID, and campaign to Godot; the runtime resolves
+the primary Data root from that manifest and rejects any mismatch. There is no
+prepared-cache argument or legacy-cache
+fallback on the New Vegas route. The final process-invocation boundary checks
+the composed command as well: any native source-stack launch using a Python
+executable, a `.py` helper, or `--cache-root`/`--reuse-cache` is rejected before
+the child process starts. Legacy non-native evidence routes retain their
+existing arguments and are outside that guard.
+
+The same invariant covers every active standalone game card. Fallout 1 and
+Fallout 2 pass only a sealed owned-install profile plus presentation/save
+state; standalone Fallout 3 and New Vegas pass only their read-only Data root,
+sealed loose/BSA stack identity, and save path. The launcher has no active
+FO1/FO2/FNV/FO3 cache-path constructor and does not create, read, or pass a
+prepared-content cache while composing or spawning those launches.
+
+Some historical evidence contracts remain deliberately checked in but are not
+launchable game routes. The disabled TTW opening proof retains its
+`cacheCompatibilityId`/`cacheRoot` identity boundary; the legal-asset preparer,
+classic-Fallout presentation compilers, and their proof/audit tools remain
+offline evidence utilities. They are not reachable from Play on any of the
+four standalone cards, and the native invocation guard rejects their arguments
+if they are accidentally mixed into a standalone launch.
+
+The retained runtime-only entry points are `--data-root`/`--reuse-cache` with
+`LegalAssetPreparer`, `--fo1-hex-scene` and the FO1 campaign proof inputs,
+`--fo2-temple-cache` with its proof/transition inputs, the old `--fo3-profile`
+opening contract, and `--ttw-fo3-opening-profile`. They remain executable for
+historical differential and audit work, but the desktop launcher constructs
+none of them for FO1, FO2, FNV, or standalone FO3 Play.
 
 ## Runtime manifest and portability
 
@@ -81,28 +111,37 @@ alternative exact tagged-Speech Cameron route keeps Klint alive and reaches live
 ARVILLAG input/save. The routes do not merge or infer a dead-guardian shortcut;
 their retained hashes and boundaries are in the
 [canonical FO2 branch ledger](evidence/fo2-first-slice-branch-ledger.md). The
-launcher enables Hex
-only after all five local slice artifacts match the registered profile; FPS and
-VR remain disabled. The non-source opaque Temple wall proxy is removed while
+launcher enables Hex after the owned DAT2 profile validates; FPS and VR remain
+disabled. The non-source opaque Temple wall proxy is removed while
 the owned wall FRMs and source-derived collision remain; Tag/trait editing,
 target AI/turns, general scripting/combat/inventory, classic fixed-Y
 composition, campaign-wide state, custom face/hair/skin editing, deterministic
 custom portrait generation, and parity
-remain open. The Fallout 3
-intro is converted locally to a hash-verified Theora cache during profile
-registration; Escape and the visible Skip action enter the same CG00 state.
-Fallout 1 Hex/FPS remain disabled
-until the player uses **Set up Fallout 1** to select a generated
-`hex-scene.json` and `character-start.json`; the launcher validates their
-schemas and character-contract hash, stores only local paths under its user-data
-folder, and supplies the exact runtime arguments plus an isolated Vault Dweller
-save path. The current desktop launch also selects Godot's GL compatibility
-renderer for this bounded route: the current Vulkan startup on the development
-machine stalls before its first frame, while the same contracts reach the
-Fallout menu, owned picker/movie, live first-person, shoulder, and Hex gameplay
-under GL. GL reports unsupported volumetric-fog features, so this is a
-functional bounded-route recovery path, not a claim that the supplied video's
-visually consistent high-fidelity cave is renderer-matched.
+remain open. The Fallout 3 bounded native opening reads its registered source
+stack directly; Escape and the visible Skip action enter the same CG00 state.
+**Set up Fallout 1** now selects the legally owned install folder itself. The
+launcher validates and hash-binds `master.dat`, `critter.dat`, and the sealed
+loose `DATA` inventory into user-profile metadata; it does not select or create
+`hex-scene.json`, `character-start.json`, extracted FRMs, or another content
+cache. Launch passes only `--fo1-owned-profile`, the selected presentation, and
+an isolated Vault Dweller save path. Godot validates the DAT1 indexes in place
+and reads the complete real V13ENT object graph and MAP-to-PRO-to-FRM closure in
+memory. The Hex button now opens a bounded direct presentation containing 7,549
+source floor patches from 57 FRMs and 1,100 exact static objects sharing 106
+decoded FRM/rotation resources. Every nonvisual top-level record is transported
+as source metadata: 351 Scroll Blockers, 20 Exit Grids with exact destinations,
+one Security Door with its raw instance word, and 22 objects matched to live MAP
+script records. Two further live scripts are retained without object bindings;
+two nested inventory records are not world placements. There are zero
+unclassified top-level objects. The 351 Scroll Blockers and closed Security Door
+now provide 352 source-hex collision shapes; adjacent activation opens the
+unscripted door. Five fully resolved Exit Grids expose the exact Map 6 / tile
+17695 / elevation 0 / rotation 0 destination tuple, while 15 world-map sentinels
+remain metadata-only. The interaction runtime is bound only to the launcher's
+isolated save path and does not emit content or cache files. Script execution,
+destination loading, general input/gameplay, first-person, and OpenXR remain
+explicitly deferred and cannot silently fall back to the older prepared evidence
+route.
 The Fallout 1 OpenXR adapter has simulator coverage but remains
 launcher-disabled and has no physical-headset acceptance. Fallout 3's current
 early-birth implementation selects hash-bound KFs from exact source `PACK`
@@ -121,14 +160,13 @@ the verified ITEMS frame until its remaining Gamebryo rectangle expressions are
 implemented. Complete tile interaction and retail-pixel parity remain unpromoted
 and do not change the route readiness flags.
 
-Fallout 2 profiles are generated with `content/tools/fo2_profile.py` or
-`scripts/Register-OpenNVFallout2.ps1`. The profile hashes `master.dat`,
+Fallout 2 profiles can be registered with the existing offline profile tool or
+launcher setup flow. The profile hashes `master.dat`,
 `critter.dat`, and `patch000.dat`, verifies each DAT2 footer and directory, and
 records a neutral source/index identity. The launcher rechecks those three
-hash-bound files on every read, then requires the matching local Temple,
-transition, Arroyo, player, and character-start contracts before enabling Hex.
-It neither extracts nor copies archive members; those disposable caches remain
-outside the repository and package.
+hash-bound files on every read, then starts the bounded native Map 3 route from
+that profile. It neither extracts nor copies archive members and does not pass
+a presentation-cache path to Godot.
 
 TTW and JAM manifests are auto-detected from
 `%LOCALAPPDATA%\OpenNV\profiles\ttw-profile.json` and
@@ -139,6 +177,45 @@ pending, or ready. It passes only verified contract paths and identities and
 never executes an extender DLL. A mod route remains disabled until both its
 generated profile and the runtime manifest explicitly report compatible
 semantics.
+
+The **Mods and compatibility** panel also exposes **Install local mod ZIP** and
+**Add mod folder** after the owned Data root is registered. The ZIP installer
+extracts only ordinary stored/deflated files into an app-owned per-mod folder,
+records the source archive hash and install metadata, rejects traversal, links,
+special files, encryption, unsupported compression, corrupt CRCs, and an
+existing identical destination, then appends that folder as the highest-priority
+source layer. A single outer `Data` directory is stripped. 7z, automatic
+downloads, scripted FOMOD choices, and native plugin execution are not claimed.
+The panel visibly lists managed layers low-to-high and supports enable/disable
+and priority changes. Those actions regenerate the same sealed source contract,
+so the new stack identity receives its own save directory. Uninstall deletes
+only a verified launcher-owned Gate Vortex install; external deployed and
+manager-owned folders remain read-only and return an explicit refusal.
+New Vegas and standalone Fallout 3 store independent catalogs, private install
+roots, sealed stack identities, and stack-keyed saves. Fallout 1/2 controls show
+their exact direct-source blocker because their current DAT contracts cannot
+admit ordered external loose roots or archive replacement safely.
+Each manual folder selection appends one read-only mod folder
+to the New Vegas source stack at the next highest priority. The launcher
+records a sealed `opennv-mod-stack/v2` identity, effective top-level
+plugin/archive metadata, and the exact ordered roots, and rechecks those paths
+and fast metadata before every launch. Saves live below
+`profiles/newvegas/stacks/<stackId>` so different source stacks cannot silently
+share a character. This is the common profile boundary for future
+MO2/Wabbajack, Vortex, Nexus Mods App, Thunderstore, TTW-installer, and manual
+adapters. The launcher does not claim automatic downloads or FOMOD execution,
+and it never executes xNVSE/JAM native DLLs; those behaviors require native
+first-party runtime implementations.
+
+**Set up TTW** also projects an already validated `opennv-ttw-profile/v1`
+directly into this native source-stack boundary. The owned New Vegas Data folder
+remains layer zero and each generated TTW root remains a read-only higher layer;
+the registered plugin order and active plugin-associated BSAs are preserved.
+Plugin bytes are hash-verified during TTW registration. Ordinary launcher state
+refresh and launch then use the sealed stack's fast file metadata and hashed
+small provenance inputs, so they do not repeatedly hash the complete TTW ESM
+set. This makes TTW record/resource transport available to the native loader;
+it does not enable either TTW edition or execute extender DLLs.
 
 The bounded TTW Fallout 3 opening contract is separately auto-detected as
 `ttw-fo3-opening-profile.json` beside the registered TTW profile, with

@@ -14,7 +14,7 @@
   "main": "src/main.mjs",
   "scripts": {
     "dev": "electron .",
-    "check": "node --check src/contract.mjs && node --check src/ttw-opening-contract.mjs && node --check src/main.mjs && node --check src/preload.cjs && node --check src/renderer/app.mjs",
+    "check": "node --check src/contract.mjs && node --check src/local-mod-installer.mjs && node --check src/gate-vortex-layers.mjs && node --check src/mod-stack-contract.mjs && node --check src/native-launch-contract.mjs && node --check src/ttw-opening-contract.mjs && node --check src/main.mjs && node --check src/preload.cjs && node --check src/renderer/app.mjs",
     "test": "node --test",
     "package": "electron-builder"
   },

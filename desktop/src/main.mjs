@@ -1,14 +1,28 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
+import { installLocalZip, removeLocalInstall } from "./local-mod-installer.mjs";
+import { synchronizeManagedLayers, updateManagedLayer, validateManagedLayers } from "./gate-vortex-layers.mjs";
+import { createLaunchInvocation } from "./native-launch-contract.mjs";
+import {
+  appendSourceRoot,
+  createOwnedFallout3Stack,
+  createOwnedNewVegasStack,
+  importMo2Profile,
+  importTtwInstallerProfile,
+  inspectOwnedNewVegasDataRoot,
+  rebuildManagedSourceLayers,
+  validateInstalledModStack
+} from "./mod-stack-contract.mjs";
 import {
   readTtwFo3OpeningContract,
   validateTtwProfileSourceLayout
 } from "./ttw-opening-contract.mjs";
+import { createFo1OwnedProfile, validateFo1OwnedProfile } from "./fo1-owned-profile.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(here, "renderer", "index.html");
@@ -16,6 +30,8 @@ const DAT2_FOOTER_BYTES = 8;
 const HASH_READ_CHUNK_BYTES = 1024 * 1024;
 const RUNTIME_CONFIG_JSON_INDENT = 2;
 const SHA256_HEX_CHARACTERS = 64;
+const FALLOUT_PLUGIN_MASTER_EXTENSION = ".esm";
+const FALLOUT_NV_MASTER = `FalloutNV${FALLOUT_PLUGIN_MASTER_EXTENSION}`;
 const TTW_PLUGIN_STACK_ID_PREFIX = "opennv-ttw-plugin-stack-v1\0";
 const REQUIRED_TTW_PLUGINS = [
   "falloutnv.esm",
@@ -73,15 +89,61 @@ function runtimeConfigPath() {
 }
 
 function fo1ProfileConfigPath() {
-  return path.join(app.getPath("userData"), "fallout1-profile.json");
+  return path.join(app.getPath("userData"), "profiles", "fallout1", "fallout1-profile.json");
 }
 
 function fo2ProfileRegistrationPath() {
   return path.join(app.getPath("userData"), "fallout2-profile-registration.json");
 }
 
-function newVegasCacheRegistrationPath() {
-  return path.join(app.getPath("userData"), "newvegas-cache-registration.json");
+function newVegasDataRegistrationPath() {
+  return path.join(app.getPath("userData"), "newvegas-data-registration.json");
+}
+
+function fallout3DataRegistrationPath() {
+  return path.join(app.getPath("userData"), "fallout3-data-registration.json");
+}
+
+function modStackPath() {
+  return path.join(app.getPath("userData"), "profiles", "newvegas", "mod-stack.json");
+}
+
+function installedModsRoot(game = "newvegas") {
+  return path.join(app.getPath("userData"), "mods", game);
+}
+
+function managedLayersPath(game = "newvegas") {
+  return path.join(app.getPath("userData"), "profiles", game, "layers.json");
+}
+
+function writeJsonAtomic(destination, document) {
+  mkdirSync(path.dirname(destination), { recursive: true });
+  const pending = `${destination}.next`;
+  writeFileSync(pending, `${JSON.stringify(document, null, RUNTIME_CONFIG_JSON_INDENT)}\n`, "utf8");
+  renameSync(pending, destination);
+}
+
+function managedLayers(stack, game = "newvegas") {
+  const previous = existsSync(managedLayersPath(game))
+    ? validateManagedLayers(JSON.parse(readFileSync(managedLayersPath(game), "utf8")))
+    : null;
+  return synchronizeManagedLayers(stack, previous);
+}
+
+function persistManagedStack(stack, game = "newvegas") {
+  const layers = managedLayers(stack, game);
+  writeJsonAtomic(managedLayersPath(game), layers);
+  writeJsonAtomic(game === "fallout3" ? fo3NativeStackPath() : modStackPath(), stack);
+  return layers;
+}
+
+function configuredFnvLoadOrderRoot() {
+  if (process.env.OPENNV_FNV_PROFILE_ROOT) {
+    return path.resolve(process.env.OPENNV_FNV_PROFILE_ROOT);
+  }
+  if (!process.env.LOCALAPPDATA) return null;
+  const candidate = path.join(process.env.LOCALAPPDATA, "FalloutNV");
+  return existsSync(path.join(candidate, "plugins.txt")) ? candidate : null;
 }
 
 function defaultFo2ProfilePath() {
@@ -92,18 +154,6 @@ function fo2LocalDataRoot() {
   return process.env.LOCALAPPDATA
     ? path.join(process.env.LOCALAPPDATA, "OpenNV")
     : app.getPath("userData");
-}
-
-function fo2SlicePaths() {
-  const root = fo2LocalDataRoot();
-  return {
-    templeCache: path.join(root, "cache", "fallout2", "temple-of-trials-v1", "fo2-temple-presentation-cache.json"),
-    templeTransitions: path.join(root, "profiles", "fallout2", "temple-transitions-v1.json"),
-    arroyoCache: path.join(root, "cache", "fallout2", "arroyo-caves-v1", "fo2-arroyo-caves-presentation-cache.json"),
-    playerCache: path.join(root, "cache", "fallout2", "arroyo-player-v1", "fo2-arroyo-player-presentation-cache.json"),
-    characterStartCache: path.join(root, "cache", "fallout2", "character-start-v1", "fo2-character-start-cache.json"),
-    savePath: path.join(root, "saves", "fallout2", "character-arroyo-v1.json")
-  };
 }
 
 function configuredFo2ProfilePath() {
@@ -121,39 +171,44 @@ function configuredFo2ProfilePath() {
   return defaultFo2ProfilePath();
 }
 
-function defaultNewVegasCacheRoot() {
-  return path.join(
-    app.getPath("appData"),
-    "Godot", "app_userdata", "OpenNV", "cache", "legal-assets-v1");
-}
-
-function configuredNewVegasCacheRoot() {
-  if (process.env.OPENNV_NEWVEGAS_CACHE_ROOT) {
-    return path.resolve(process.env.OPENNV_NEWVEGAS_CACHE_ROOT);
+function configuredNewVegasDataRoot() {
+  if (process.env.OPENNV_NEWVEGAS_DATA_ROOT) {
+    return path.resolve(process.env.OPENNV_NEWVEGAS_DATA_ROOT);
   }
   try {
     const registration = JSON.parse(
-      readFileSync(newVegasCacheRegistrationPath(), "utf8"));
-    if (registration?.schema === "opennv-launcher-owned-cache-registration/v1" &&
+      readFileSync(newVegasDataRegistrationPath(), "utf8"));
+    if (registration?.schema === "opennv-launcher-owned-data-registration/v1" &&
         registration?.campaign === "NewVegas" &&
-        typeof registration?.cacheRoot === "string") {
-      const registeredRoot = path.resolve(registration.cacheRoot);
-      if (existsSync(path.join(registeredRoot, "install-manifest.json"))) {
-        return registeredRoot;
-      }
+        typeof registration?.dataRoot === "string") {
+      return path.resolve(registration.dataRoot);
     }
   } catch {
-    // Fall through to the legacy Godot user-data cache for existing installs.
+    // No owned Data folder has been registered yet.
   }
-  return defaultNewVegasCacheRoot();
+  return null;
 }
 
-function fo3ProfileConfigPath() {
-  if (process.env.OPENNV_FO3_PROFILE) return process.env.OPENNV_FO3_PROFILE;
-  const localAppData = process.env.LOCALAPPDATA;
-  return localAppData
-    ? path.join(localAppData, "OpenNV", "profiles", "fallout3", "vanilla", "fallout3-profile.json")
-    : path.join(app.getPath("userData"), "profiles", "fallout3", "vanilla", "fallout3-profile.json");
+function fo3NativeStackPath() {
+  return path.join(app.getPath("userData"), "profiles", "fallout3", "mod-stack.json");
+}
+
+function configuredFallout3DataRoot() {
+  if (process.env.OPENNV_FALLOUT3_DATA_ROOT) {
+    return path.resolve(process.env.OPENNV_FALLOUT3_DATA_ROOT);
+  }
+  try {
+    const registration = JSON.parse(
+      readFileSync(fallout3DataRegistrationPath(), "utf8"));
+    if (registration?.schema === "opennv-launcher-owned-data-registration/v1" &&
+        registration?.campaign === "Fallout3" &&
+        typeof registration?.dataRoot === "string") {
+      return path.resolve(registration.dataRoot);
+    }
+  } catch {
+    // No standalone Fallout 3 Data folder has been registered yet.
+  }
+  return null;
 }
 
 function modProfileRegistrationPath(kind) {
@@ -262,6 +317,28 @@ function validateHashBoundFile(filePath, row, label) {
   }
 }
 
+function hasCurrentNativeTtwSnapshot(profile, manifestPath) {
+  try {
+    const stack = validateInstalledModStack(JSON.parse(readFileSync(modStackPath(), "utf8")));
+    if (stack?.edition !== "ttw" ||
+        stack?.orderSource?.kind !== "ttw-profile" ||
+        !stack.orderSource.files.some((row) =>
+          path.resolve(row.path) === path.resolve(manifestPath) && row.sha256 === sha256(manifestPath)) ||
+        stack.plugins.length !== profile.plugins.length) {
+      return false;
+    }
+    return stack.plugins.every((row, index) => {
+      const expected = profile.plugins[index];
+      const sourceRoot = stack.roots.find((root) => root.id === row.rootId)?.root;
+      return row.file.toLowerCase() === String(expected?.file || "").toLowerCase() &&
+        row.bytes === expected?.bytes &&
+        path.resolve(sourceRoot || "") === path.resolve(profile.sourceRoots[expected?.sourceRootIndex] || "");
+    });
+  } catch {
+    return false;
+  }
+}
+
 function readTtwProfile(manifestOverride = null) {
   const manifestPath = path.resolve(manifestOverride || configuredModProfilePath("ttw"));
   const unavailableOpenings = (profileMessage) => ({
@@ -298,9 +375,10 @@ function readTtwProfile(manifestOverride = null) {
       return unavailable("The selected TTW manifest is not a validated generated profile.", true);
     }
     const roots = profile.sourceRoots.map((root) => path.resolve(root));
-    if (!existsSync(path.join(roots[0], "FalloutNV.esm"))) {
+    if (!existsSync(path.join(roots[0], FALLOUT_NV_MASTER))) {
       return unavailable("The TTW profile has no vanilla New Vegas lower source layer.", true);
     }
+    const nativeSnapshotCurrent = hasCurrentNativeTtwSnapshot(profile, manifestPath);
     const pluginNames = new Set();
     for (const [loadOrderIndex, row] of profile.plugins.entries()) {
       if (!Number.isInteger(row?.sourceRootIndex) || !roots[row.sourceRootIndex] ||
@@ -314,7 +392,10 @@ function readTtwProfile(manifestOverride = null) {
         return unavailable("The selected TTW manifest repeats an active plugin.", true);
       }
       pluginNames.add(foldedName);
-      validateHashBoundFile(path.join(roots[row.sourceRootIndex], row.file), row, `TTW plugin ${row.file}`);
+      const source = path.join(roots[row.sourceRootIndex], row.file);
+      if (!nativeSnapshotCurrent) {
+        validateHashBoundFile(source, row, `TTW plugin ${row.file}`);
+      }
     }
     if (profile.plugins[0].file.toLowerCase() !== "falloutnv.esm" ||
         REQUIRED_TTW_PLUGINS.some((plugin) => !pluginNames.has(plugin)) ||
@@ -466,41 +547,24 @@ function readJamProfile(manifestOverride = null) {
 }
 
 function readFo1Profile() {
-  const unavailable = (message) => ({ ready: false, message });
+  const profilePath = path.resolve(fo1ProfileConfigPath());
+  const unavailable = (message) => ({ ready: false, validated: false, message, path: profilePath });
   try {
-    const configured = JSON.parse(readFileSync(fo1ProfileConfigPath(), "utf8"));
-    if (configured?.schema !== "opennv-launcher-fo1-profile/v1") {
-      return unavailable("The registered Fallout 1 launcher profile has an unsupported schema.");
-    }
-    for (const filePath of [configured.hexScene, configured.characterStart]) {
-      if (!filePath || !existsSync(filePath)) {
-        return unavailable("The registered Fallout 1 generated cache is missing. Register it again.");
-      }
-    }
-    const hexScene = JSON.parse(readFileSync(configured.hexScene, "utf8"));
-    if (hexScene?.schema !== "opennv-fo1-hex-scene/v1" || hexScene?.status !== "interactive-hex-topology-proof") {
-      return unavailable("The selected Fallout 1 hex scene is not the playable V13ENT contract.");
-    }
-    const characterStart = JSON.parse(readFileSync(configured.characterStart, "utf8"));
-    if (characterStart?.schema !== "opennv-fo1-character-start/v1" ||
-        characterStart?.status !== "prepared-owned-data" ||
-        characterStart?.retailOrDerivedAssetsPackaged !== false) {
-      return unavailable("The selected Fallout 1 character-start cache is not a valid local owned-data contract.");
-    }
-    const characterStartSha256 = sha256(configured.characterStart);
-    if (characterStartSha256 !== configured.characterStartSha256) {
-      return unavailable("The registered Fallout 1 character-start contract changed. Register it again.");
-    }
+    const configured = validateFo1OwnedProfile(JSON.parse(readFileSync(profilePath, "utf8")));
     return {
       ready: true,
-      message: "Generated Fallout 1 V13ENT and character-opening caches registered.",
-      hexScene: path.resolve(configured.hexScene),
-      characterStart: path.resolve(configured.characterStart),
-      characterStartSha256,
+      validated: true,
+      runtimeReady: false,
+      message: "Fallout 1 owned DAT1/loose profile registered; native gameplay remains fail-closed.",
+      path: profilePath,
+      profileId: configured.sourceProfileId,
+      saveCompatibilityId: configured.saveCompatibilityId,
       savePath: path.join(app.getPath("userData"), "profiles", "fallout1", "vault-dweller-v1.json")
     };
-  } catch {
-    return unavailable("Register the generated Fallout 1 hex-scene.json and character-start.json to enable this route.");
+  } catch (error) {
+    return unavailable(error instanceof Error
+      ? error.message
+      : "Register a legally owned Fallout 1 install to enable the native route.");
   }
 }
 
@@ -539,7 +603,10 @@ function readFo2Profile(manifestOverride = null) {
           !isSha256(archive.formatIdentity.indexSha256)) {
         return unavailable("The selected Fallout 2 manifest has an invalid DAT2 source identity.", true);
       }
-      validateHashBoundFile(path.resolve(archive.source), archive, `Fallout 2 archive ${archive.file}`);
+      const archivePath = path.resolve(archive.source);
+      if (!existsSync(archivePath) || statSync(archivePath).size !== archive.bytes) {
+        return unavailable(`Fallout 2 archive ${archive.file} is missing or changed.`, true);
+      }
     }
     if (expected.size !== 0) {
       return unavailable("The selected Fallout 2 manifest is missing a required DAT2 archive.", true);
@@ -549,48 +616,16 @@ function readFo2Profile(manifestOverride = null) {
         !["hex-tactical", "first-person", "openxr"].every((id) => presentations[id]?.ready === false)) {
       return unavailable("The Fallout 2 profile overstates runtime presentation readiness.", true);
     }
-    const profileSha256 = sha256(manifestPath);
-    const slicePaths = fo2SlicePaths();
-    const contracts = [
-      ["templeCache", "opennv-fo2-temple-presentation-cache/v1", "decoded-disposable-local-cache", "TempleOfTrials"],
-      ["templeTransitions", "opennv-fo2-temple-transitions/v1", "compiled-owned-transition-records", "TempleOfTrials"],
-      ["arroyoCache", "opennv-fo2-arroyo-caves-presentation-cache/v1", "decoded-disposable-local-cache", "ArroyoCaves"],
-      ["playerCache", "opennv-fo2-player-presentation-cache/v1", "decoded-disposable-local-cache", "ArroyoCavesPlayer"],
-      ["characterStartCache", "opennv-fo2-character-start-cache/v1", "decoded-disposable-local-cache", "CharacterStartToArroyo"]
-    ];
-    const missing = contracts.find(([key]) => !existsSync(slicePaths[key]));
-    if (missing) {
-      return {
-        ready: false,
-        runtimeReady: false,
-        validated: true,
-        manifestDetected: true,
-        message: "Fallout 2 owned install registered; prepare its bounded Hex first-slice cache to play.",
-        reason: `The required Fallout 2 ${missing[0]} contract is missing.`,
-        path: manifestPath,
-        sourceProfileId: profile.sourceProfileId,
-        saveCompatibilityId: profile.saveCompatibilityId
-      };
-    }
-    for (const [key, schema, status, slice] of contracts) {
-      const contract = JSON.parse(readFileSync(slicePaths[key], "utf8"));
-      if (contract?.schema !== schema || contract?.status !== status ||
-          contract?.campaign !== "Fallout2" || contract?.slice !== slice ||
-          contract?.sourceProfile?.sourceProfileId !== profile.sourceProfileId ||
-          contract?.sourceProfile?.sha256 !== profileSha256) {
-        return unavailable(`The Fallout 2 ${key} contract does not match the registered owned profile. Prepare it again.`, true);
-      }
-    }
     return {
       ready: true,
       runtimeReady: true,
       validated: true,
       manifestDetected: true,
-      message: "Ready: bounded Fallout 2 Hex first slice with owned premade selection and cold restore.",
+      message: "Ready: native owned-data Map 3 presentation; gameplay semantics remain fail-closed.",
       path: manifestPath,
       sourceProfileId: profile.sourceProfileId,
       saveCompatibilityId: profile.saveCompatibilityId,
-      ...slicePaths
+      savePath: path.join(app.getPath("userData"), "profiles", "fallout2", "chosen-v1.json")
     };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : "Set up the local Fallout 2 profile first.");
@@ -598,104 +633,156 @@ function readFo2Profile(manifestOverride = null) {
 }
 
 function readFo3Profile() {
-  const unavailable = (message) => ({ ready: false, message });
-  try {
-    const profilePath = path.resolve(fo3ProfileConfigPath());
-    const profile = JSON.parse(readFileSync(profilePath, "utf8"));
-    if (profile?.schema !== "opennv-owned-game-profile/v1" ||
-        profile?.status !== "registered-owned-profile" ||
-        profile?.campaign !== "Fallout3" ||
-        profile?.capabilities?.runtimeBootReady !== true) {
-      return unavailable("Set up the local Fallout 3 GOTY profile first.");
-    }
-    const master = profile?.install?.master?.source;
-    if (!master || !existsSync(master)) {
-      return unavailable("The registered Fallout 3 installation is missing or moved.");
-    }
-    return {
-      ready: true,
-      message: "Fallout 3 CG00 birth profile registered.",
-      path: profilePath,
-      savePath: path.join(app.getPath("userData"), "profiles", "fallout3", "cg00-character-v1.json")
-    };
-  } catch {
-    return unavailable("Set up the local Fallout 3 GOTY profile first.");
-  }
-}
-
-function readNewVegasProfile(cacheRootOverride = null) {
-  const cacheRoot = path.resolve(cacheRootOverride || configuredNewVegasCacheRoot());
-  const unavailable = (message, manifestDetected =
-    existsSync(path.join(cacheRoot, "install-manifest.json"))) => ({
+  const configuredRoot = configuredFallout3DataRoot();
+  const unavailable = (message, manifestDetected = Boolean(configuredRoot)) => ({
     ready: false,
     runtimeReady: false,
     validated: false,
     manifestDetected,
-    message,
-    cacheRoot
+    message
+  });
+  try {
+    if (!configuredRoot) {
+      return unavailable("Choose the legally owned standalone Fallout 3 GOTY Data folder.", false);
+    }
+    const dataRoot = path.resolve(configuredRoot);
+    const nativeStackPath = path.resolve(fo3NativeStackPath());
+    const nativeStackBytes = readFileSync(nativeStackPath);
+    const nativeStack = validateInstalledModStack(JSON.parse(nativeStackBytes.toString("utf8")));
+    if (nativeStack.edition !== "fallout-3" || nativeStack.game !== "fallout-3" ||
+        path.resolve(nativeStack.roots[0]?.root || "") !== dataRoot) {
+      return unavailable("The native Fallout 3 source stack does not match the registered Data folder.");
+    }
+    const nativeStackSha256 = createHash("sha256").update(nativeStackBytes).digest("hex");
+    return {
+      ready: true,
+      runtimeReady: true,
+      validated: true,
+      manifestDetected: true,
+      message: `${nativeStack.plugins.length} standalone Fallout 3 plugins and ` +
+        `${nativeStack.archives.length} active archives registered for native read-only loading.`,
+      dataRoot,
+      stackPath: nativeStackPath,
+      stackId: nativeStack.stackId,
+      stackSha256: nativeStackSha256,
+      savePath: path.join(
+        app.getPath("userData"),
+        "profiles",
+        "fallout3",
+        "native",
+        nativeStack.stackId,
+        "campaign-v1.json")
+    };
+  } catch (error) {
+    return unavailable(error instanceof Error
+      ? error.message
+      : "Register the local Fallout 3 GOTY Data folder again.");
+  }
+}
+
+function readNewVegasProfile(dataRootOverride = null) {
+  const configuredRoot = dataRootOverride || configuredNewVegasDataRoot();
+  const unavailable = (message, manifestDetected = Boolean(configuredRoot)) => ({
+    ready: false,
+    runtimeReady: false,
+    validated: false,
+    manifestDetected,
+    message
   });
   try {
     if (process.env.OPENNV_NEWVEGAS_PREFLIGHT_ERROR) {
       return unavailable(process.env.OPENNV_NEWVEGAS_PREFLIGHT_ERROR);
     }
-    const defaultCellRecipe = productConfiguration()?.legalAssets?.defaultCellRecipe;
-    if (typeof defaultCellRecipe !== "string" || path.basename(defaultCellRecipe) !== defaultCellRecipe) {
-      return unavailable("The OpenNV default New Vegas cell recipe is invalid.");
+    if (!configuredRoot) {
+      return unavailable("Choose the legally owned Fallout: New Vegas Data folder.", false);
     }
-    const manifest = JSON.parse(readFileSync(path.join(cacheRoot, "install-manifest.json"), "utf8"));
-    if (manifest?.schema !== "opennv-legal-asset-cache/v1" ||
-        manifest?.status !== "prepared-legal-assets" ||
-        manifest?.install?.master?.file !== "FalloutNV.esm" ||
-        typeof manifest?.install?.dataRoot !== "string") {
-      return unavailable("Rebuild the standalone New Vegas owned-data cache.");
-    }
-    const dataRoot = path.resolve(manifest.install.dataRoot);
-    if (existsSync(path.join(dataRoot, "TaleOfTwoWastelands.esm")) ||
-        existsSync(path.join(dataRoot, "YUPTTW.esm"))) {
-      return unavailable("The New Vegas route cannot use a TTW source root.", true);
-    }
-    validateHashBoundFile(
-      path.join(dataRoot, manifest.install.master.file),
-      manifest.install.master,
-      "New Vegas master");
-    const openingManifestPath = path.join(
-      cacheRoot, "generated", "opening", "opening-manifest.json");
-    const openingManifest = JSON.parse(readFileSync(openingManifestPath, "utf8"));
-    const boundedDefaultProfile =
-      openingManifest?.playerFaceGenProfile === "source-default-route-validation" &&
-      openingManifest?.sourceClosure?.playableClaimReady === false &&
-      openingManifest?.sourceClosure?.unaccountedCount === 1 &&
-      openingManifest?.sourceClosure?.unaccounted?.[0]?.reason ===
-        "creator-valid-selection-preview-closure";
-    if (!boundedDefaultProfile &&
-        openingManifest?.sourceClosure?.playableClaimReady !== true) {
+    const inspected = inspectOwnedNewVegasDataRoot(configuredRoot);
+    const stack = readModStack();
+    if (!stack.validated || stack.dataRoot !== inspected.root) {
       return unavailable(
-        "This New Vegas cache has an incomplete interactive source closure.",
+        "The native New Vegas source stack is missing or does not match the registered Data folder.",
         true);
-    }
-    const required = [
-      [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v14"],
-      [path.join("generated", "actors", "actor-scenes.json"), "opennv-world-actor-scenes/v2"],
-      [path.relative(cacheRoot, openingManifestPath), "opennv-owned-opening-manifest/v1"]
-    ];
-    for (const [relativePath, schema] of required) {
-      const document = JSON.parse(readFileSync(path.join(cacheRoot, relativePath), "utf8"));
-      if (document?.schema !== schema) return unavailable("Rebuild the local New Vegas owned-data cache.");
     }
     return {
       ready: true,
       runtimeReady: true,
       validated: true,
       manifestDetected: true,
-      message: boundedDefaultProfile
-        ? "New Vegas bounded default-Courier hot-play cache registered."
-        : "New Vegas owned menu, opening, actor, and Doc Mitchell cell cache registered.",
-      boundedDefaultProfile,
-      cacheRoot,
-      savePath: path.join(app.getPath("userData"), "profiles", "newvegas", "courier-v1.json")
+      message: `${inspected.plugins.length} plugins and ${inspected.archives.length} archives ` +
+        "registered for native read-only loading.",
+      dataRoot: inspected.root,
+      stackId: stack.stackId,
+      savePath: path.join(
+        app.getPath("userData"), "profiles", "newvegas", "stacks",
+        stack.stackId, "courier-v1.json")
     };
-  } catch {
-    return unavailable("Import the legally owned New Vegas data once to enable this route.");
+  } catch (error) {
+    return unavailable(error instanceof Error
+      ? error.message
+      : "The legally owned New Vegas Data folder could not be validated.");
+  }
+}
+
+function readModStack() {
+  const profilePath = modStackPath();
+  const unavailable = (message, manifestDetected = existsSync(profilePath)) => ({
+    ready: false,
+    runtimeReady: false,
+    validated: false,
+    manifestDetected,
+    message,
+    path: profilePath
+  });
+  try {
+    const profile = validateInstalledModStack(JSON.parse(readFileSync(profilePath, "utf8")));
+    if (profile.edition !== "fallout-new-vegas" ||
+        profile.roots[0]?.id !== "owned-data" ||
+        !existsSync(path.join(profile.roots[0].root, FALLOUT_NV_MASTER))) {
+      return unavailable(`The native source stack has no owned ${FALLOUT_NV_MASTER} base layer.`, true);
+    }
+    return {
+      ready: true,
+      runtimeReady: true,
+      validated: true,
+      manifestDetected: true,
+      message: `${profile.roots.length} read-only native source layers registered.`,
+      path: profilePath,
+      sha256: sha256(profilePath),
+      stackId: profile.stackId,
+      dataRoot: path.resolve(profile.roots[0].root),
+      roots: profile.roots.length,
+      plugins: profile.plugins.length,
+      archives: profile.archives.length
+    };
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : "The mod stack could not be read.");
+  }
+}
+
+function readManagedLayerState(game = "newvegas") {
+  try {
+    const stackPath = game === "fallout3" ? fo3NativeStackPath() : modStackPath();
+    const stack = validateInstalledModStack(JSON.parse(readFileSync(stackPath, "utf8")));
+    const catalog = managedLayers(stack, game);
+    return {
+      validated: true,
+      catalogId: catalog.catalogId,
+      layers: catalog.layers.map((layer) => ({
+        id: layer.id,
+        provider: layer.provider,
+        displayName: layer.displayName,
+        enabled: layer.enabled,
+        order: layer.order,
+        plugins: layer.plugins.length,
+        removable: layer.removable
+      }))
+    };
+  } catch (error) {
+    return {
+      validated: false,
+      message: error instanceof Error ? error.message : "Gate Vortex layers could not be read.",
+      layers: []
+    };
   }
 }
 
@@ -740,8 +827,11 @@ async function launcherState() {
   const fallout2Profile = readFo2Profile();
   const fallout3Profile = readFo3Profile();
   const newVegasProfile = readNewVegasProfile();
+  const modStack = readModStack();
   const ttwProfile = readTtwProfile();
   const jamProfile = readJamProfile();
+  const newVegasManagedLayers = readManagedLayerState();
+  const fallout3ManagedLayers = readManagedLayerState("fallout3");
   const merged = mergeRuntimeState(
     base,
     await readRuntimeState(),
@@ -755,22 +845,211 @@ async function launcherState() {
         : "registered-runtime-pending";
   return {
     ...merged,
-    mods: merged.mods.map((mod) => {
+    mods: [{
+      id: "source-stack",
+      title: "Unified mod source stack",
+      status: !modStack.manifestDetected
+        ? "not-installed"
+        : modStack.validated
+          ? "ready"
+          : "profile-changed",
+      detail: modStack.message
+    }, ...merged.mods.map((mod) => {
       const profile = mod.id === "ttw" ? ttwProfile : mod.id === "jam" ? jamProfile : null;
       return profile
         ? { ...mod, status: profileStatus(profile), detail: profile.message }
         : mod;
-    }),
+    })],
     profiles: {
       fallout1: fallout1Profile,
       fallout2: fallout2Profile,
       fallout3: fallout3Profile,
       newVegas: newVegasProfile,
       ttw: ttwProfile,
-      jam: jamProfile
+      jam: jamProfile,
+      modStack
+    },
+    managedLayers: {
+      newvegas: newVegasManagedLayers,
+      fallout3: fallout3ManagedLayers,
+      fallout1: {
+        validated: false,
+        layers: [],
+        message: "Fallout 1 currently admits only install/Data over critter.dat and master.dat; ordered external loose roots are not implemented."
+      },
+      fallout2: {
+        validated: false,
+        layers: [],
+        message: "Fallout 2 currently admits patch000.dat, critter.dat, and master.dat only; no direct loose-root overlay contract exists."
+      }
     },
     desktopLauncher: desktopLauncherPolicy()
   };
+}
+
+function requireManagedGame(game) {
+  if (game === "fallout1") {
+    throw new Error(
+      "Fallout 1 mod layers are blocked: the direct runtime currently admits only install/Data over critter.dat and master.dat. External loose roots, DAT replacement, and executable or script-extender mods are not implemented.");
+  }
+  if (game === "fallout2") {
+    throw new Error(
+      "Fallout 2 mod layers are blocked: the direct runtime currently admits patch000.dat, critter.dat, and master.dat only. Loose roots, DAT replacement, and executable or script-extender mods are not implemented.");
+  }
+  if (game !== "newvegas" && game !== "fallout3") {
+    throw new Error(`Gate Vortex does not recognize the game profile: ${game}`);
+  }
+  return game;
+}
+
+async function addModSourceRoot(_event, requestedGame = "newvegas") {
+  let game;
+  try {
+    game = requireManagedGame(requestedGame);
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+  const selection = await dialog.showOpenDialog({
+    title: `Add a read-only ${game === "fallout3" ? "Fallout 3" : "New Vegas"} mod folder as the highest-priority layer`,
+    properties: ["openDirectory"]
+  });
+  if (selection.canceled || selection.filePaths.length !== 1) {
+    return { ok: false, message: "Mod source registration canceled." };
+  }
+  try {
+    let current = null;
+    const stackPath = game === "fallout3" ? fo3NativeStackPath() : modStackPath();
+    if (existsSync(stackPath)) {
+      current = validateInstalledModStack(JSON.parse(readFileSync(stackPath, "utf8")));
+    }
+    const expectedBase = game === "fallout3" ? "owned-fallout3-data" : "owned-data";
+    if (!current || current.roots[0]?.id !== expectedBase) {
+      throw new Error(`Choose the owned ${game === "fallout3" ? "Fallout 3" : "New Vegas"} Data folder before adding mod layers.`);
+    }
+    const selected = path.resolve(selection.filePaths[0]);
+    if (game === "fallout3" && existsSync(path.join(selected, "modlist.txt")) &&
+        existsSync(path.join(selected, "plugins.txt"))) {
+      throw new Error(
+        "Fallout 3 MO2/Wabbajack profile import is not implemented yet; add its already-deployed mod folders individually."
+      );
+    }
+    if (game === "newvegas" && existsSync(path.join(selected, "modlist.txt")) &&
+        existsSync(path.join(selected, "plugins.txt"))) {
+      const profile = importMo2Profile(current, selected, { provider: "mo2" });
+      persistManagedStack(profile, game);
+      return {
+        ok: true,
+        message: `Imported ${path.basename(selected)} with ${profile.roots.length - 1} enabled mod layers ` +
+          `and ${profile.plugins.length} enabled plugins in profile order.`
+      };
+    }
+    const nextIndex = current?.roots.length || 0;
+    const idBase = path.basename(selected).toLowerCase()
+      .replaceAll(/[^a-z\d]+/gu, "-")
+      .replaceAll(/^-|-$/gu, "") || "layer";
+    const profile = appendSourceRoot(current, {
+      id: `${nextIndex.toString().padStart(3, "0")}-${idBase}`,
+      provider: "manual",
+      root: selected,
+      name: "OpenNV New Vegas Mod Stack"
+    });
+    persistManagedStack(profile, game);
+    return {
+      ok: true,
+      message: `Added ${path.basename(selected)} as layer ${profile.roots.length - 1}; ` +
+        `${profile.plugins.length} effective plugins and ${profile.archives.length} archives indexed.`
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "The mod source folder could not be registered."
+    };
+  }
+}
+
+async function installLocalModArchive(_event, requestedGame = "newvegas") {
+  let game;
+  try {
+    game = requireManagedGame(requestedGame);
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+  const selection = await dialog.showOpenDialog({
+    title: `Install a local ${game === "fallout3" ? "Fallout 3" : "New Vegas"} mod ZIP into Gate Vortex`,
+    properties: ["openFile"],
+    filters: [{ name: "ZIP mod archive", extensions: ["zip"] }]
+  });
+  if (selection.canceled || selection.filePaths.length !== 1) {
+    return { ok: false, message: "Local mod installation canceled." };
+  }
+  let installed = null;
+  try {
+    const stackPath = game === "fallout3" ? fo3NativeStackPath() : modStackPath();
+    if (!existsSync(stackPath)) {
+      throw new Error(`Choose the owned ${game === "fallout3" ? "Fallout 3" : "New Vegas"} Data folder before installing mods.`);
+    }
+    const current = validateInstalledModStack(JSON.parse(readFileSync(stackPath, "utf8")));
+    const expectedBase = game === "fallout3" ? "owned-fallout3-data" : "owned-data";
+    if (current.roots[0]?.id !== expectedBase) {
+      throw new Error(`The native mod stack has no owned ${game === "fallout3" ? "Fallout 3" : "New Vegas"} base layer.`);
+    }
+    installed = installLocalZip(selection.filePaths[0], installedModsRoot(game));
+    const profile = appendSourceRoot(current, {
+      id: `gate-${installed.installId}`,
+      provider: "gate-vortex",
+      root: installed.contentRoot,
+      name: "OpenNV Gate Vortex Mod Stack"
+    });
+    persistManagedStack(profile, game);
+    return {
+      ok: true,
+      message: `Installed ${installed.displayName} as a private Gate Vortex layer; ` +
+        `${profile.plugins.length} effective plugins and ${profile.archives.length} archives are now indexed.`
+    };
+  } catch (error) {
+    if (installed !== null) {
+      try {
+        removeLocalInstall(installed);
+      } catch {
+        // Preserve the original fail-closed installation error.
+      }
+    }
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "The local mod ZIP could not be installed."
+    };
+  }
+}
+
+async function manageModLayer(_event, request) {
+  try {
+    const game = requireManagedGame(request?.game);
+    if (typeof request?.layerId !== "string" || typeof request?.action !== "string") {
+      throw new Error("Choose one visible Gate Vortex layer action.");
+    }
+    const stackPath = game === "fallout3" ? fo3NativeStackPath() : modStackPath();
+    const current = validateInstalledModStack(JSON.parse(readFileSync(stackPath, "utf8")));
+    const catalog = managedLayers(current, game);
+    const target = catalog.layers.find((layer) => layer.id === request.layerId);
+    if (!target) throw new Error(`Managed mod layer is unknown: ${request.layerId}`);
+    const updated = updateManagedLayer(catalog, request.layerId, request.action);
+    const profile = rebuildManagedSourceLayers(current, updated.layers);
+    writeJsonAtomic(managedLayersPath(game), updated);
+    writeJsonAtomic(stackPath, profile);
+    if (request.action === "uninstall") {
+      removeLocalInstall({ installId: target.installId, metadataPath: target.metadataPath });
+    }
+    return {
+      ok: true,
+      message: `${target.displayName}: ${request.action}. Active layers are sealed low-to-high as ` +
+        `${profile.stackId}; its saves remain isolated from every other stack identity.`
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "The Gate Vortex layer action failed closed."
+    };
+  }
 }
 
 function isRuntimeRoot(candidate) {
@@ -803,25 +1082,14 @@ async function chooseRuntime() {
 }
 
 async function chooseFo1Profile() {
-  const selectContract = async (title) => dialog.showOpenDialog({
-    title,
-    properties: ["openFile"],
-    filters: [{ name: "OpenNV JSON contract", extensions: ["json"] }]
+  const selection = await dialog.showOpenDialog({
+    title: "Choose the legally owned Fallout 1 install folder",
+    properties: ["openDirectory"]
   });
-  const hexSelection = await selectContract("Choose the generated Fallout 1 hex-scene.json");
-  if (hexSelection.canceled || hexSelection.filePaths.length !== 1) {
+  if (selection.canceled || selection.filePaths.length !== 1) {
     return { ok: false, message: "Fallout 1 profile registration canceled." };
   }
-  const characterSelection = await selectContract("Choose the generated Fallout 1 character-start.json");
-  if (characterSelection.canceled || characterSelection.filePaths.length !== 1) {
-    return { ok: false, message: "Fallout 1 profile registration canceled." };
-  }
-  const profile = {
-    schema: "opennv-launcher-fo1-profile/v1",
-    hexScene: path.resolve(hexSelection.filePaths[0]),
-    characterStart: path.resolve(characterSelection.filePaths[0]),
-    characterStartSha256: sha256(characterSelection.filePaths[0])
-  };
+  const profile = createFo1OwnedProfile(selection.filePaths[0]);
   mkdirSync(path.dirname(fo1ProfileConfigPath()), { recursive: true });
   writeFileSync(fo1ProfileConfigPath(), `${JSON.stringify(profile, null, RUNTIME_CONFIG_JSON_INDENT)}\n`, "utf8");
   const validated = readFo1Profile();
@@ -856,34 +1124,88 @@ async function chooseFo2Profile() {
   return { ok: true, message: profile.message };
 }
 
-async function chooseNewVegasCache() {
+async function chooseNewVegasData() {
   const selection = await dialog.showOpenDialog({
-    title: "Choose the generated New Vegas install-manifest.json",
-    properties: ["openFile"],
-    filters: [{ name: "OpenNV New Vegas cache manifest", extensions: ["json"] }]
+    title: "Choose your legally owned Fallout: New Vegas Data folder",
+    properties: ["openDirectory"]
   });
   if (selection.canceled || selection.filePaths.length !== 1) {
-    return { ok: false, message: "New Vegas cache registration canceled." };
+    return { ok: false, message: "New Vegas Data registration canceled." };
   }
-  const manifest = path.resolve(selection.filePaths[0]);
-  if (path.basename(manifest).toLowerCase() !== "install-manifest.json") {
-    return { ok: false, message: "Choose the generated New Vegas install-manifest.json." };
+  try {
+    const stack = createOwnedNewVegasStack(selection.filePaths[0], {
+      configRoot: configuredFnvLoadOrderRoot()
+    });
+    const dataRoot = stack.roots[0].root;
+    const registration = {
+      schema: "opennv-launcher-owned-data-registration/v1",
+      campaign: "NewVegas",
+      dataRoot
+    };
+    mkdirSync(path.dirname(newVegasDataRegistrationPath()), { recursive: true });
+    writeFileSync(
+      newVegasDataRegistrationPath(),
+      `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+      "utf8"
+    );
+    mkdirSync(path.dirname(modStackPath()), { recursive: true });
+    writeFileSync(
+      modStackPath(),
+      `${JSON.stringify(stack, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+      "utf8"
+    );
+    const profile = readNewVegasProfile(dataRoot);
+    return profile.ready
+      ? { ok: true, message: profile.message }
+      : { ok: false, message: profile.message };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error
+        ? error.message
+        : "The selected New Vegas Data folder could not be registered."
+    };
   }
-  const cacheRoot = path.dirname(manifest);
-  const profile = readNewVegasProfile(cacheRoot);
-  if (!profile.ready) return { ok: false, message: profile.message };
-  const registration = {
-    schema: "opennv-launcher-owned-cache-registration/v1",
-    campaign: "NewVegas",
-    cacheRoot
-  };
-  mkdirSync(path.dirname(newVegasCacheRegistrationPath()), { recursive: true });
-  writeFileSync(
-    newVegasCacheRegistrationPath(),
-    `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
-    "utf8"
-  );
-  return { ok: true, message: profile.message };
+}
+
+async function chooseFallout3Data() {
+  const selection = await dialog.showOpenDialog({
+    title: "Choose your legally owned standalone Fallout 3 GOTY Data folder",
+    properties: ["openDirectory"]
+  });
+  if (selection.canceled || selection.filePaths.length !== 1) {
+    return { ok: false, message: "Fallout 3 Data registration canceled." };
+  }
+  try {
+    const stack = createOwnedFallout3Stack(selection.filePaths[0]);
+    const dataRoot = stack.roots[0].root;
+    const registration = {
+      schema: "opennv-launcher-owned-data-registration/v1",
+      campaign: "Fallout3",
+      dataRoot
+    };
+    mkdirSync(path.dirname(fallout3DataRegistrationPath()), { recursive: true });
+    writeFileSync(
+      fallout3DataRegistrationPath(),
+      `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+      "utf8");
+    mkdirSync(path.dirname(fo3NativeStackPath()), { recursive: true });
+    writeFileSync(
+      fo3NativeStackPath(),
+      `${JSON.stringify(stack, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+      "utf8");
+    const profile = readFo3Profile();
+    return profile.ready
+      ? { ok: true, message: profile.message }
+      : { ok: false, message: profile.message };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error
+        ? error.message
+        : "The selected Fallout 3 Data folder could not be registered."
+    };
+  }
 }
 
 async function chooseModProfile(kind) {
@@ -901,6 +1223,17 @@ async function chooseModProfile(kind) {
   const manifest = path.resolve(selection.filePaths[0]);
   const profile = kind === "ttw" ? readTtwProfile(manifest) : readJamProfile(manifest);
   if (!profile.validated) return { ok: false, message: profile.message };
+  let nativeTtwStack = null;
+  try {
+    nativeTtwStack = kind === "ttw"
+      ? importTtwInstallerProfile(manifest, { verifyPluginHashes: false })
+      : null;
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "The TTW native source stack could not be registered."
+    };
+  }
   const registration = {
     schema: "opennv-launcher-mod-profile-registration/v1",
     kind,
@@ -912,6 +1245,25 @@ async function chooseModProfile(kind) {
     `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
     "utf8"
   );
+  if (nativeTtwStack !== null) {
+    mkdirSync(path.dirname(modStackPath()), { recursive: true });
+    writeFileSync(
+      modStackPath(),
+      `${JSON.stringify(nativeTtwStack, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+      "utf8"
+    );
+    const dataRoot = nativeTtwStack.roots[0].root;
+    mkdirSync(path.dirname(newVegasDataRegistrationPath()), { recursive: true });
+    writeFileSync(
+      newVegasDataRegistrationPath(),
+      `${JSON.stringify({
+        schema: "opennv-launcher-owned-data-registration/v1",
+        campaign: "NewVegas",
+        dataRoot
+      }, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+      "utf8"
+    );
+  }
   return { ok: true, message: profile.message };
 }
 
@@ -979,6 +1331,7 @@ function launch(request) {
   const fallout2Profile = readFo2Profile();
   const fallout3Profile = readFo3Profile();
   const newVegasProfile = readNewVegasProfile();
+  const modStack = readModStack();
   const ttwProfile = selectedTtwProfile || readTtwProfile();
   const jamProfile = readJamProfile();
   if (campaign.id === "fallout1" && !fallout1Profile.ready) {
@@ -1016,9 +1369,21 @@ function launch(request) {
   }
   const runtimeArguments = createRuntimeArguments(
     validatedRequest,
-    { fallout1Profile, fallout2Profile, fallout3Profile, newVegasProfile, ttwProfile, jamProfile });
-  const args = [...command.prefixArguments, ...runtimeArguments];
-  const child = spawn(command.executable, args, { detached: true, stdio: "ignore", windowsHide: true });
+    {
+      fallout1Profile,
+      fallout2Profile,
+      fallout3Profile,
+      newVegasProfile,
+      ttwProfile,
+      jamProfile,
+      modStack
+    });
+  const invocation = createLaunchInvocation(command, runtimeArguments);
+  const child = spawn(invocation.executable, invocation.arguments, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
   child.unref();
   const presentationLabel = {
     "first-person": "FPS",
@@ -1056,9 +1421,13 @@ app.whenReady().then(() => {
   ipcMain.handle("opennv:choose-runtime", chooseRuntime);
   ipcMain.handle("opennv:choose-fo1-profile", chooseFo1Profile);
   ipcMain.handle("opennv:choose-fo2-profile", chooseFo2Profile);
-  ipcMain.handle("opennv:choose-newvegas-cache", chooseNewVegasCache);
+  ipcMain.handle("opennv:choose-newvegas-data", chooseNewVegasData);
+  ipcMain.handle("opennv:choose-fallout3-data", chooseFallout3Data);
   ipcMain.handle("opennv:choose-ttw-profile", () => chooseModProfile("ttw"));
   ipcMain.handle("opennv:choose-jam-profile", () => chooseModProfile("jam"));
+  ipcMain.handle("opennv:add-mod-source-root", addModSourceRoot);
+  ipcMain.handle("opennv:install-local-mod-archive", installLocalModArchive);
+  ipcMain.handle("opennv:manage-mod-layer", manageModLayer);
   ipcMain.handle("opennv:launch", (_, request) => launch(request));
   ipcMain.handle("opennv:open-external", async (_, value) => {
     const url = new URL(value);
