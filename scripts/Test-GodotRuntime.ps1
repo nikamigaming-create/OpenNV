@@ -74,6 +74,8 @@ foreach ($probe in $probes) {
     if ($LASTEXITCODE -ne 0) { throw "$probe failed." }
 }
 
+& npm run check --prefix (Join-Path $repository "desktop")
+if ($LASTEXITCODE -ne 0) { throw "Desktop launcher syntax checks failed." }
 & npm test --prefix (Join-Path $repository "desktop")
 if ($LASTEXITCODE -ne 0) { throw "Desktop launcher tests failed." }
 

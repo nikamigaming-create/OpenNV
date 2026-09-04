@@ -6,6 +6,7 @@ using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
+
 internal sealed record Fo3Cg01PostStage14Transition(
     int SourceStage,
     int Stage16,

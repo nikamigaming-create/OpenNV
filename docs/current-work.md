@@ -18,9 +18,9 @@ No selected failure list can certify the game.
 
 ## Verified baseline
 
-The last validated runtime baseline is `b81cc2cc3e385176a43890078920a3affef5cb5f`.
-It is on `main`, was pushed to `origin/main`, and passed the complete C#/Godot
-gate with Godot 4.7.2 Mono.
+The current `origin/main` is the validated baseline. It passed the complete
+C#/Godot gate with Godot 4.7.2 Mono. Resolve its exact identity with
+`git rev-parse origin/main` rather than copying a stale commit into a new task.
 
 - Canonical little-endian telemetry packets, exact-byte comparison, typed field
   deltas, a loss-detecting Windows shared-memory ring, traces, divergence frame
@@ -36,6 +36,8 @@ gate with Godot 4.7.2 Mono.
   owned Prospector Saloon door pairs resolve, including authored door scale.
 - Actor model-front facing has a tested source-space basis and is applied during
   opening guide travel.
+- The obsolete shot-state injection capture path and its runtime configuration
+  were deleted. Matched comparison proceeds through live telemetry.
 
 The verified official New Vegas stack contains 10 plugins, 628,395 winning
 records, 44,517 CELL records, and 3,056,284 subrecords. The FalloutNV.esm
