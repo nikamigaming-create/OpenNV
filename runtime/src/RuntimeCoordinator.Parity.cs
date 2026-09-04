@@ -6,6 +6,7 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
+    private readonly ParityObservationRegistry _parityObservations = new();
     private static readonly ulong ConfigurationField =
         ParityStableId.FromName("execution.configuration.sha256");
     private static readonly ulong CellField = ParityStableId.FromName("world.cell.form-key");
@@ -80,6 +81,8 @@ public partial class RuntimeCoordinator
             fields.Add(ParityTelemetryField.Float64(ParityCategory.Camera, CameraNearField, camera.Near));
             fields.Add(ParityTelemetryField.Float64(ParityCategory.Camera, CameraFarField, camera.Far));
         }
+        var observations = _parityObservations.Snapshot();
+        fields.AddRange(observations.Fields);
         var nanoseconds = checked((long)Math.Round(
             Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency),
             MidpointRounding.ToEven));
@@ -88,7 +91,7 @@ public partial class RuntimeCoordinator
             sequence,
             checked((long)Engine.GetPhysicsFrames()),
             nanoseconds,
-            sequence,
+            observations.EventOrdinal,
             stateKey,
             fields);
     }

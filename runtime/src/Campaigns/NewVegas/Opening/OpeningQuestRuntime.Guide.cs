@@ -909,11 +909,7 @@ internal partial class OpeningQuestRuntime
 
     private void FaceGuideToward(Vector3 globalTarget)
     {
-        var origin = _guideActor.Placement.GlobalPosition;
-        var levelTarget = new Vector3(globalTarget.X, origin.Y, globalTarget.Z);
-        if ((levelTarget - origin).LengthSquared() <= Mathf.Epsilon)
-            return;
-        _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
+        GamebryoActorFacing.FaceModelFrontToward(_guideActor.Placement, globalTarget);
     }
 
     private Vector3 GuidePlayerLookTarget()

@@ -129,21 +129,7 @@ internal static class FalloutCellSceneReader
             if ((flags & ~KnownLightingInheritanceFlags) != 0)
                 throw Error(cellRecord, $"has unsupported lighting inheritance flags 0x{flags:x8}");
             var rawTemplateId = BinaryPrimitives.ReadUInt32LittleEndian(templateId);
-            if (rawTemplateId == 0)
-            {
-                var fallout3AuthoredNullTemplate = authoredLighting is not null &&
-                    (cellRecord.Plugin.Name.Equals("Fallout3.esm", StringComparison.OrdinalIgnoreCase) ||
-                     cellRecord.Plugin.Masters.Count == 1 &&
-                     cellRecord.Plugin.Masters[0].Equals("Fallout3.esm", StringComparison.OrdinalIgnoreCase));
-                if (!fallout3AuthoredNullTemplate &&
-                    (authoredLighting is not null || coordinates is null ||
-                    data is null || (data[0] & 0x01) != 0)
-                   )
-                    throw Error(
-                        cellRecord,
-                        "null LTMP inheritance is only admitted for an exterior CELL without XCLL");
-            }
-            else if (flags != 0)
+            if (rawTemplateId != 0 && flags != 0)
             {
                 var templateKey = cellRecord.Plugin.AdjustFormId(rawTemplateId);
                 var template = stack.GetEffective(templateKey);

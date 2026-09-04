@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Text;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Content;
@@ -7,6 +8,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.Diagnostics.Parity;
 
 namespace OpenNV.Runtime;
 
@@ -199,7 +201,7 @@ public partial class RuntimeCoordinator
                 throw new InvalidOperationException("Native plugin stack was not indexed.");
             var transition = RuntimeLiveContentSource.Current?.Campaign ==
                 RuntimeLiveContentSource.FalloutNewVegasGame
-                ? FalloutDoorTransitionResolver.ResolveSingleInteriorExit(stack, initialCell)
+                ? FalloutDoorTransitionResolver.ResolveInteriorExits(stack, initialCell).Single()
                 : null;
             _nativePrewarmedInitialCellRoot = BuildNativeCellRoot(
                 initialCell,
@@ -303,7 +305,7 @@ public partial class RuntimeCoordinator
             RuntimeLiveContentSource.Fallout3Game;
         var transition = fallout3
             ? null
-            : FalloutDoorTransitionResolver.ResolveSingleInteriorExit(stack, cell);
+            : FalloutDoorTransitionResolver.ResolveInteriorExits(stack, cell).Single();
         var restore = _nativeContinueOpening
             ? _nativeOpeningRestore ?? throw new InvalidOperationException(
                 "Native Continue was selected without a valid cold save.")
@@ -353,34 +355,42 @@ public partial class RuntimeCoordinator
     {
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
-        var stack = _nativePluginStack ??
-            throw new InvalidOperationException("Native plugin stack was cleared during CELL streaming.");
         var root = new Node3D { Name = $"NativeCell_{cell.Cell.FormKey}" };
+        const string parityScope = "world/active-cell";
+        string ParityIdentity(FalloutPlacedReference reference) =>
+            $"{cell.Cell.FormKey}/{reference.FormKey}";
+        _parityObservations.ReplaceScope(
+            parityScope,
+            cell.References.Select(reference =>
+            {
+                var baseObject = cell.BaseObjects[reference.Base];
+                return (
+                    ParityIdentity(reference),
+                    ParityCategoryFor(baseObject.Signature),
+                    NativeReferenceState(reference, baseObject, "source"));
+            }));
         var placed = 0;
         var placedLights = 0;
         foreach (var reference in cell.References)
         {
-            if (FalloutCellSceneReader.IsInitiallyDisabled(reference) ||
-                !cell.BaseObjects.TryGetValue(reference.Base, out var baseObject))
-                continue;
-            if (reference.FormKey == FalloutHumanoidAppearanceResolver.GoodspringsSunnyReference)
+            if (!cell.BaseObjects.TryGetValue(reference.Base, out var baseObject))
+                throw new InvalidDataException(
+                    $"Live CELL reference {reference.FormKey} has no decoded base object.");
+            if (FalloutCellSceneReader.IsInitiallyDisabled(reference))
             {
-                var appearance = FalloutHumanoidAppearanceResolver.ResolveGoodspringsSunny(stack, source);
-                var actor = FalloutHumanoidAppearanceResolver.BuildSourceIdentityNode(appearance);
-                actor.Transform = ReferenceTransform(reference);
-                root.AddChild(actor);
-                GD.Print(
-                    $"OPENNV_NATIVE_HUMANOID_APPEARANCE reference={appearance.Reference} " +
-                    $"base={appearance.Base} traits={appearance.TraitsSource} model={appearance.ModelSource} " +
-                    $"race={appearance.Race} female={appearance.Female} resources={appearance.Resources.Count} " +
-                    $"faceGenBytes={appearance.FaceGenCoordinateBytes} visual=fail-closed " +
-                    $"blockers={string.Join(',', appearance.VisualBlockers)} writes=0");
-                placed++;
+                _parityObservations.Observe(
+                    parityScope,
+                    ParityIdentity(reference),
+                    NativeReferenceState(reference, baseObject, "disabled"));
                 continue;
             }
             if (baseObject.Light is not null)
             {
                 AddNativePlacedLight(root, reference, baseObject);
+                _parityObservations.Observe(
+                    parityScope,
+                    ParityIdentity(reference),
+                    NativeReferenceState(reference, baseObject, "light"));
                 placedLights++;
                 continue;
             }
@@ -410,6 +420,10 @@ public partial class RuntimeCoordinator
             instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
             instance.Transform = ReferenceTransform(reference);
             root.AddChild(instance);
+            _parityObservations.Observe(
+                parityScope,
+                ParityIdentity(reference),
+                NativeReferenceState(reference, baseObject, "model"));
             var portalReference = transition is null
                 ? null
                 : sourceSide ? transition.SourceDoor : transition.DestinationDoor;
@@ -417,11 +431,55 @@ public partial class RuntimeCoordinator
                 AddNativeDoorPortal(instance, transition, sourceSide);
             placed++;
         }
+        var coverage = _parityObservations.Snapshot();
+        var missing = coverage.Missing.Count(identity =>
+            identity.StartsWith(parityScope + "/", StringComparison.Ordinal));
         GD.Print(
             $"OPENNV_NATIVE_CELL_READY cell={cell.Cell.FormKey} placed={placed} lights={placedLights} " +
-            $"residentPrototypes={_nativeNifPrototypes.Count} " +
+            $"residentPrototypes={_nativeNifPrototypes.Count} discovered={cell.References.Count} " +
+            $"observed={cell.References.Count - missing} missing={missing} " +
+            $"coverage={(missing == 0 ? "exact" : "diverged")} " +
             "source=live-retail-files");
         return root;
+    }
+
+    private static ParityCategory ParityCategoryFor(string signature) => signature switch
+    {
+        "NPC_" or "CREA" => ParityCategory.Actor,
+        "LIGH" => ParityCategory.Renderer,
+        "SOUN" => ParityCategory.Audio,
+        _ => ParityCategory.World,
+    };
+
+    private static byte[] NativeReferenceState(
+        FalloutPlacedReference reference,
+        FalloutBaseObjectDefinition baseObject,
+        string disposition)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+        WriteText(writer, reference.FormKey.ToString());
+        WriteText(writer, reference.EditorId);
+        WriteText(writer, reference.Base.ToString());
+        WriteText(writer, baseObject.Signature);
+        WriteText(writer, baseObject.EditorId);
+        WriteText(writer, disposition);
+        writer.Write(reference.Flags);
+        foreach (var value in reference.Position)
+            writer.Write(value);
+        foreach (var value in reference.RotationRadians)
+            writer.Write(value);
+        writer.Write(reference.Scale);
+        WriteText(writer, baseObject.ModelPath ?? string.Empty);
+        writer.Flush();
+        return stream.ToArray();
+    }
+
+    private static void WriteText(BinaryWriter writer, string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        writer.Write(bytes.Length);
+        writer.Write(bytes);
     }
 
     private void AddNativeDoorPortal(

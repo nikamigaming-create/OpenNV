@@ -52,6 +52,29 @@ if (mismatch.ExactStateMatch || mismatch.FirstStateByteOffset is null ||
         ParityDeltaKind.MissingRetail)
     throw new InvalidOperationException("Parity semantic delta expansion is incomplete.");
 
+var registry = new ParityObservationRegistry();
+registry.ReplaceScope(
+    "cell:FalloutNV.esm:103df9",
+    [
+        ("FalloutNV.esm:103e61", ParityCategory.World, new byte[] { 1, 2, 3 }),
+        ("FalloutNV.esm:104c0f", ParityCategory.Actor, new byte[] { 4, 5, 6 }),
+    ]);
+registry.Observe(
+    "cell:FalloutNV.esm:103df9",
+    "FalloutNV.esm:103e61",
+    [7, 8, 9]);
+var eventOrdinal = registry.RecordEvent(
+    ParityCategory.Input,
+    "activate/FalloutNV.esm:103e61",
+    [10, 11]);
+var registrySnapshot = registry.Snapshot();
+if (eventOrdinal != 1 || registrySnapshot.EventOrdinal != 1 ||
+    registrySnapshot.Discovered != 3 || registrySnapshot.Observed != 2 ||
+    registrySnapshot.Missing.Count != 1 ||
+    !registrySnapshot.Missing[0].EndsWith("FalloutNV.esm:104c0f", StringComparison.Ordinal))
+    throw new InvalidOperationException(
+        "Live parity discovery, observation, event, or missing-state accounting differs.");
+
 var corrupt = encoded.ToArray();
 corrupt[^1] ^= byte.MaxValue;
 try
@@ -126,10 +149,17 @@ finally
 }
 
 var configuredFfmpeg = Environment.GetEnvironmentVariable("OPENNV_FFMPEG");
+var configuredProofRoot = Environment.GetEnvironmentVariable("OPENNV_PARITY_PROOF_ROOT");
 var encodedVideo = false;
+var videoProof = "none";
 if (!string.IsNullOrWhiteSpace(configuredFfmpeg) && File.Exists(configuredFfmpeg))
 {
-    var mediaRoot = Path.Combine(Path.GetTempPath(), "opennv-parity-media-" + Guid.NewGuid().ToString("N"));
+    var preserveMedia = !string.IsNullOrWhiteSpace(configuredProofRoot);
+    var mediaRoot = preserveMedia
+        ? Path.GetFullPath(configuredProofRoot!)
+        : Path.Combine(Path.GetTempPath(), "opennv-parity-media-" + Guid.NewGuid().ToString("N"));
+    if (preserveMedia && (Directory.Exists(mediaRoot) || File.Exists(mediaRoot)))
+        throw new InvalidOperationException($"Parity proof output already exists: {mediaRoot}");
     Directory.CreateDirectory(mediaRoot);
     try
     {
@@ -152,16 +182,20 @@ if (!string.IsNullOrWhiteSpace(configuredFfmpeg) && File.Exists(configuredFfmpeg
             report.VideoSha256.Length != 64)
             throw new InvalidOperationException("Parity video evidence did not pass its media contract.");
         encodedVideo = true;
+        videoProof = Path.Combine(mediaRoot, "clip", "parity-clip-report.json");
     }
     finally
     {
-        Directory.Delete(mediaRoot, recursive: true);
+        if (!preserveMedia)
+            Directory.Delete(mediaRoot, recursive: true);
     }
 }
 
 Console.WriteLine(
     "OPENNV_PARITY_TELEMETRY_PASS canonical=1 exact-bytes=1 semantic-deltas=2 shared-memory=1 " +
-    $"overrun=fail-closed trace=2 clip-window=4 video-plan=1 video-encoded={(encodedVideo ? 1 : 0)}");
+    $"overrun=fail-closed trace=2 live-coverage=fail-closed clip-window=4 " +
+    $"video-plan=1 video-encoded={(encodedVideo ? 1 : 0)} " +
+    $"video-proof={videoProof}");
 
 static ParityEvidenceClip Clip(string reason, byte[] png)
 {

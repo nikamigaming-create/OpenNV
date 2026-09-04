@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
@@ -264,7 +265,10 @@ try
         Record("TES4", 0, 0, []),
         Record("CELL", 0x100, 0, Combine(
             Subrecord("EDID", ZString("SyntheticCell")),
-            Subrecord("DATA", [1]))),
+            Subrecord("DATA", [1]),
+            Subrecord("XCLL", new byte[40]),
+            Subrecord("LTMP", UInt32(0)),
+            Subrecord("LNAM", UInt32(0x9f)))),
         Record("STAT", 0x110, 0, Combine(
             Subrecord("EDID", ZString("SyntheticBase")),
             Subrecord("MODL", ZString("clutter/test.nif")))),
@@ -953,7 +957,7 @@ try
             Flags: 0,
         },
         "Native CELL/reference/MODL decoding failed.");
-    var syntheticDoor = FalloutDoorTransitionResolver.ResolveSingleInteriorExit(cellStack, cell);
+    var syntheticDoor = FalloutDoorTransitionResolver.ResolveInteriorExits(cellStack, cell).Single();
     Require(
         syntheticDoor.SourceDoor.FormKey == new FalloutFormKey("Cell.esm", 0x126) &&
         syntheticDoor.DestinationDoor.FormKey == new FalloutFormKey("Cell.esm", 0x127) &&
@@ -1001,7 +1005,7 @@ try
                         : reference).ToArray(),
             },
             syntheticDoor.SourceDoor.FormKey),
-        "outside the active persistent portal contract");
+        "is not an active persistent portal");
     var syntheticStart = FalloutNewGamePlayerStartResolver.Resolve(cellStack, cell);
     Require(
         syntheticStart.Reference.FormKey == new FalloutFormKey("Cell.esm", 0x122) &&
@@ -1462,8 +1466,8 @@ if (args.Length > 0)
         $"editorId={docMitchell.Cell.EditorId} references={docMitchell.References.Count} " +
         $"models={docMitchell.BaseObjects.Values.Count(value => value.ModelPath is not null)} " +
         $"playerMarkers={playerMarkers.Length}");
-    var ownedDoorTransition = FalloutDoorTransitionResolver.ResolveSingleInteriorExit(
-        owned, docMitchell);
+    var ownedDoorTransition = FalloutDoorTransitionResolver.ResolveInteriorExits(
+        owned, docMitchell).Single();
     Require(
         ownedDoorTransition.SourceDoor.FormKey == new FalloutFormKey("FalloutNV.esm", 0x103e61) &&
         ownedDoorTransition.DestinationDoor.FormKey == new FalloutFormKey("FalloutNV.esm", 0x103e69) &&
@@ -1592,6 +1596,57 @@ if (args.Length > 0)
                 Adjustment: value.Reference.RadiusAdjustmentGameUnits))
             .OrderBy(group => group.Key.Base).ThenBy(group => group.Key.Adjustment)
             .Select(group => $"{group.Key.Base}/{group.Key.Adjustment:R}:{group.Count()}")));
+
+    var saloonCellRecord = cells.Single(record =>
+        ReadOptionalEditorId(record) == "GSProspectorSaloonInterior");
+    var saloon = FalloutCellSceneReader.Read(owned, saloonCellRecord.FormKey);
+    var saloonDoorTransitions = FalloutDoorTransitionResolver.ResolveInteriorExits(owned, saloon);
+    Require(
+        saloon.Cell.EditorId == "GSProspectorSaloonInterior" &&
+        saloonDoorTransitions.Count == 4 &&
+        saloonDoorTransitions.All(transition =>
+            transition.DestinationWorldspace == ownedDoorTransition.DestinationWorldspace),
+        "Owned Prospector Saloon CELL/XTEL identity differs.");
+    ReportLiveCellCoverage("doc-interior", docMitchell);
+    ReportLiveCellCoverage("doc-exterior", ownedDoorTransition.DestinationScene);
+    ReportLiveCellCoverage("saloon-interior", saloon);
+    foreach (var exterior in saloonDoorTransitions
+                 .Select(transition => transition.DestinationScene)
+                 .DistinctBy(scene => scene.Cell.FormKey))
+        ReportLiveCellCoverage("saloon-exterior", exterior);
+}
+
+static void ReportLiveCellCoverage(string role, FalloutCellScene scene)
+{
+    var enabled = scene.References
+        .Where(reference => !FalloutCellSceneReader.IsInitiallyDisabled(reference))
+        .ToArray();
+    var actors = enabled.Where(reference =>
+        scene.BaseObjects[reference.Base].Signature is "NPC_" or "CREA").ToArray();
+    var modelReferences = enabled.Count(reference =>
+        scene.BaseObjects[reference.Base].ModelPath is not null);
+    var lights = enabled.Count(reference =>
+        scene.BaseObjects[reference.Base].Light is not null);
+    var unresolvedPresentation = enabled.Where(reference =>
+        scene.BaseObjects[reference.Base].ModelPath is null &&
+        scene.BaseObjects[reference.Base].Light is null).ToArray();
+    var signatures = scene.References
+        .GroupBy(reference => scene.BaseObjects[reference.Base].Signature)
+        .OrderBy(group => group.Key, StringComparer.Ordinal)
+        .Select(group => $"{group.Key}:{group.Count()}");
+    var actorRows = actors.Select(reference =>
+    {
+        var actor = scene.BaseObjects[reference.Base];
+        return $"{reference.FormKey}/{reference.EditorId}/{actor.FormKey}/{actor.EditorId}";
+    }).Order(StringComparer.Ordinal).ToArray();
+    var actorIdentitySha256 = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', actorRows)))).ToLowerInvariant();
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_LIVE_CELL_COVERAGE role={role} cell={scene.Cell.FormKey} " +
+        $"editorId={scene.Cell.EditorId} references={scene.References.Count} enabled={enabled.Length} " +
+        $"models={modelReferences} lights={lights} actors={actors.Length} " +
+        $"unresolvedPresentation={unresolvedPresentation.Length} " +
+        $"signatures={string.Join(',', signatures)} actorIdentitySha256={actorIdentitySha256}");
 }
 
 static string ReadEditorId(FalloutPluginRecord record)

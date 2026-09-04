@@ -16,7 +16,7 @@ internal static class FalloutDoorTransitionResolver
     private const uint PersistentReferenceFlag = 0x0000_0400;
     private const uint SupportedTeleportFlags = 0;
 
-    internal static FalloutDoorTransition ResolveSingleInteriorExit(
+    internal static IReadOnlyList<FalloutDoorTransition> ResolveInteriorExits(
         FalloutPluginStack stack,
         FalloutCellScene sourceScene)
     {
@@ -25,11 +25,10 @@ internal static class FalloutDoorTransitionResolver
             sourceScene.BaseObjects.TryGetValue(reference.Base, out var baseObject) &&
             baseObject.Signature == "DOOR" &&
             !FalloutCellSceneReader.IsInitiallyDisabled(reference)).ToArray();
-        if (candidates.Length != 1)
-            throw new InvalidDataException(
-                $"Native CELL {sourceScene.Cell.FormKey} has {candidates.Length} active XTEL doors; " +
-                "the bounded live exit requires exactly one.");
-        return Resolve(stack, sourceScene, candidates[0].FormKey);
+        return candidates
+            .OrderBy(reference => stack.RuntimeFormId(reference.FormKey))
+            .Select(reference => Resolve(stack, sourceScene, reference.FormKey))
+            .ToArray();
     }
 
     internal static FalloutDoorTransition Resolve(
@@ -99,12 +98,12 @@ internal static class FalloutDoorTransitionResolver
         if (reference.Teleport is null)
             throw new InvalidDataException(
                 $"Native XTEL {label} {reference.FormKey} has no teleport destination.");
-        if (reference.Flags != PersistentReferenceFlag ||
+        if ((reference.Flags & PersistentReferenceFlag) == 0 ||
             FalloutCellSceneReader.IsInitiallyDisabled(reference) ||
-            reference.EnableParent is not null || reference.Scale != 1.0f ||
+            reference.EnableParent is not null ||
             reference.Teleport.Flags != SupportedTeleportFlags)
             throw new NotSupportedException(
-                $"Native XTEL {label} {reference.FormKey} is outside the active persistent portal contract: " +
+                $"Native XTEL {label} {reference.FormKey} is not an active persistent portal: " +
                 $"flags=0x{reference.Flags:x8} enableParent={reference.EnableParent} " +
                 $"scale={reference.Scale:R} xtelFlags=0x{reference.Teleport.Flags:x8}.");
     }

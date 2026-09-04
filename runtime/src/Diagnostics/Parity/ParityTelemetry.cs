@@ -25,6 +25,7 @@ internal enum ParityCategory : ushort
     Material = 11,
     Renderer = 12,
     Input = 13,
+    Coverage = 14,
 }
 
 internal enum ParityValueKind : byte

@@ -52,6 +52,10 @@ if (!settled.Arrived || !settled.Transform.IsEqualApprox(savedFacing))
 var resumedSettled = GamebryoPackageTravel.Restore(settled.CaptureState(), target);
 if (!resumedSettled.Arrived || !resumedSettled.Transform.IsEqualApprox(savedFacing))
     throw new InvalidOperationException("Restored source package rest transform differs.");
+var facingBasis = GamebryoActorFacing.ModelFrontBasis(Vector3.Right, Vector3.Up);
+if (facingBasis.Z.Normalized().Dot(Vector3.Right) < 0.999f)
+    throw new InvalidOperationException(
+        "Source actor model front faces backward along package travel.");
 using var savedPackageDocument = JsonDocument.Parse(
     """
     {
