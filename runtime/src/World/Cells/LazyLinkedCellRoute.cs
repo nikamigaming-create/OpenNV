@@ -15,6 +15,8 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed class LazyLinkedCellRoute
 {
+    private const int BitsPerByte = 8;
+    private const int GodotPhysicsLayerCount = sizeof(uint) * BitsPerByte;
     private readonly Node3D _parent;
     private readonly GameplaySession _session;
     private readonly RuntimeConfiguration _configuration;
@@ -645,7 +647,7 @@ internal sealed class LazyLinkedCellRoute
         {
             get
             {
-                if (Index >= sizeof(uint) * 8)
+                if (Index >= GodotPhysicsLayerCount)
                     throw new InvalidOperationException(
                         $"Prepared route exceeds Godot collision layers: {Index + 1}");
                 return 1u << Index;

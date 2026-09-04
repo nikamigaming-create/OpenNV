@@ -62,6 +62,7 @@ public partial class RuntimeCoordinator : Node3D
     private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
     private RuntimeConfiguration _configuration = null!;
     private RuntimeSettingsState _settings = null!;
+    private NativeGameInstallation? _nativeInstallation;
     private LegalAssetSetupView? _setupView;
     private XRInterface? _openXr;
     private LoadingScreen? _loadingScreen;
@@ -94,6 +95,31 @@ public partial class RuntimeCoordinator : Node3D
         {
             _configuration = RuntimeConfiguration.Load();
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            var launch = RuntimeLaunchRequest.Create(_options);
+            if (_options.TryGetValue("source-stack", out var sourceStackPath))
+            {
+                RuntimeOwnedContentSource.ConfigureSourceStack(
+                    sourceStackPath,
+                    RequireOption(_options, "source-stack-sha256"),
+                    RequireOption(_options, "stack-id"),
+                    RequireOption(_options, "campaign"));
+                _nativeInstallation = NativeGameInstallation.Detect(
+                    RuntimeOwnedContentSource.Current!.ContentRoot);
+            }
+            else if (_options.TryGetValue("source-root", out var legacySourceRoot) ||
+                     _options.TryGetValue("data-root", out legacySourceRoot))
+            {
+                // Legacy evidence routes may still report their selected root,
+                // but they cannot dispatch the native runtime without a v2
+                // source-stack identity.
+                _nativeInstallation = NativeGameInstallation.Detect(legacySourceRoot);
+                RuntimeOwnedContentSource.Clear();
+            }
+            else
+            {
+                _nativeInstallation = null;
+                RuntimeOwnedContentSource.Clear();
+            }
             _settings = RuntimeSettingsState.Load(
                 _options.TryGetValue("settings-path", out var settingsPath)
                     ? settingsPath
@@ -104,7 +130,6 @@ public partial class RuntimeCoordinator : Node3D
                 _configuration.Capture.ExpectedHeightPixels);
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
-            var launch = RuntimeLaunchRequest.Create(_options);
             var performanceReportPath = _options.TryGetValue(
                 "perf-report",
                 out var configuredPerformanceReportPath)
@@ -142,19 +167,10 @@ public partial class RuntimeCoordinator : Node3D
             GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0 playableSandbox=1 openxr=experimental");
             if (DisplayServer.GetName() == "headless")
                 GetTree().Quit(0);
-            else if (LegalAssetPreparer.TryRestore(
-                         _options,
-                         _configuration,
-                         out var restored,
-                         out var restoreError))
-            {
-                LoadPrepared(restored, _options);
-                DismissLoadingScreen();
-            }
             else
             {
                 DismissLoadingScreen();
-                ShowExperimentalStatus(restoreError);
+                ShowExperimentalStatus("Select a live owned-data source before starting the runtime.");
             }
         }
         catch (Exception exception)
@@ -1240,10 +1256,9 @@ public partial class RuntimeCoordinator : Node3D
     {
         try
         {
-            var prepared = LegalAssetPreparer.Prepare(dataRoot, _options, _configuration);
-            LoadPrepared(prepared, _options);
-            _setupView?.QueueFree();
-            _setupView = null;
+            _ = NativeGameInstallation.Detect(dataRoot);
+            throw new NotSupportedException(
+                "Runtime content preparation is disabled. Restart with --source-stack, --source-stack-sha256, --stack-id, and --campaign to load installed game files directly.");
         }
         catch (Exception exception)
         {

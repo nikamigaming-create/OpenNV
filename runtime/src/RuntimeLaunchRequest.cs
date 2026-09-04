@@ -7,17 +7,21 @@ namespace OpenNV.Runtime;
 /// </summary>
 internal sealed record RuntimeLaunchRequest(
     RuntimeLaunchRoute Route,
-    string? DataRoot,
     string? LoadingTitle)
 {
     private static readonly (string Option, RuntimeLaunchRoute Route)[] PrimarySources =
     [
-        ("data-root", RuntimeLaunchRoute.OwnedData),
+        ("source-stack", RuntimeLaunchRoute.NativeOwnedData),
+        // Kept only so old evidence invocations fail through the same native
+        // validator while the launcher uses the v2 source-stack route.
+        ("source-root", RuntimeLaunchRoute.NativeOwnedData),
+        ("data-root", RuntimeLaunchRoute.NativeOwnedData),
         ("model", RuntimeLaunchRoute.Model),
         ("cell-scene", RuntimeLaunchRoute.CellScene),
         ("static-cell-compile", RuntimeLaunchRoute.StaticCellCompile),
         ("actor-model", RuntimeLaunchRoute.ActorModel),
         ("actor-review-scene", RuntimeLaunchRoute.ActorReviewScene),
+        ("fo1-owned-profile", RuntimeLaunchRoute.Fallout1NativeOwned),
         ("fo1-hex-scene", RuntimeLaunchRoute.Fallout1HexScene),
         ("fo1-campaign-transport", RuntimeLaunchRoute.Fallout1CampaignTransport),
         ("fo1-campaign-presentation", RuntimeLaunchRoute.Fallout1CampaignPresentation),
@@ -35,26 +39,31 @@ internal sealed record RuntimeLaunchRequest(
             .ToArray();
         if (selectedSources.Length > 1)
             throw new ArgumentException(
-                "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
+                "Use only one --source-stack or legacy source root, or one of --model/--sidecar, --cell-scene, " +
                 "--static-cell-compile, --actor-model/--actor-sidecar, " +
-                "--actor-review-scene, --fo1-hex-scene, --fo1-campaign-transport, or " +
+                "--actor-review-scene, --fo1-owned-profile, --fo1-hex-scene, --fo1-campaign-transport, or " +
                 "--fo1-campaign-presentation, --fo2-temple-cache, --fo3-profile, or " +
                 "--ttw-fo3-opening-profile.");
 
         var route = selectedSources.Length == 1
             ? selectedSources[0].Route
-            : options.ContainsKey("reuse-cache")
-                ? RuntimeLaunchRoute.PreparedCache
-                : RuntimeLaunchRoute.None;
-        options.TryGetValue("data-root", out var dataRoot);
-
-        return new RuntimeLaunchRequest(route, dataRoot, SelectLoadingTitle(options));
+            : RuntimeLaunchRoute.None;
+        return new RuntimeLaunchRequest(route, SelectLoadingTitle(options));
     }
 
     internal bool Is(RuntimeLaunchRoute route) => Route == route;
 
     private static string? SelectLoadingTitle(IReadOnlyDictionary<string, string> options)
     {
+        if (options.ContainsKey("fo1-owned-profile"))
+            return "FALLOUT 1  //  VERIFYING OWNED DAT1 SOURCES";
+        if (options.ContainsKey("source-stack"))
+        {
+            var campaign = options.TryGetValue("campaign", out var selected)
+                ? selected.Replace('-', ' ').ToUpperInvariant()
+                : "OWNED SOURCE";
+            return $"{campaign}  //  VERIFYING SOURCE STACK";
+        }
         if (options.ContainsKey("fo1-hex-scene"))
         {
             var presentation = options.TryGetValue("fo1-start-presentation", out var selected)
@@ -80,17 +89,17 @@ internal sealed record RuntimeLaunchRequest(
 internal enum RuntimeLaunchRoute
 {
     None,
-    OwnedData,
+    NativeOwnedData,
     Model,
     CellScene,
     StaticCellCompile,
     ActorModel,
     ActorReviewScene,
+    Fallout1NativeOwned,
     Fallout1HexScene,
     Fallout1CampaignTransport,
     Fallout1CampaignPresentation,
     Fallout2TemplePresentation,
     Fallout3Opening,
     TtwFallout3Opening,
-    PreparedCache,
 }

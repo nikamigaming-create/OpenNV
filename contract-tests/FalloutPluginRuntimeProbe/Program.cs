@@ -1,0 +1,1737 @@
+using System.Buffers.Binary;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
+using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
+
+const uint compressedFlag = FalloutPluginRecord.CompressedFlag;
+var fixtureRoot = Path.Combine(Path.GetTempPath(), $"opennv-plugin-runtime-{Guid.NewGuid():N}");
+Directory.CreateDirectory(fixtureRoot);
+try
+{
+    var extendedValue = Encoding.ASCII.GetBytes("extended-editor-id");
+    var armorData = new byte[12];
+    BinaryPrimitives.WriteInt32LittleEndian(armorData, 25);
+    BinaryPrimitives.WriteSingleLittleEndian(armorData.AsSpan(8), 3.5f);
+    var winningArmorData = (byte[])armorData.Clone();
+    BinaryPrimitives.WriteInt32LittleEndian(winningArmorData, 40);
+    var weaponData = new byte[15];
+    BinaryPrimitives.WriteInt32LittleEndian(weaponData, 75);
+    BinaryPrimitives.WriteSingleLittleEndian(weaponData.AsSpan(8), 2.0f);
+    BinaryPrimitives.WriteUInt16LittleEndian(weaponData.AsSpan(12), 18);
+    weaponData[14] = 6;
+    var weaponDnam = new byte[204];
+    BinaryPrimitives.WriteUInt32LittleEndian(weaponDnam, 7);
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Master.esm"), Combine(
+        Record("TES4", 0, 0, Subrecord("HEDR", [0, 0, 0, 0])),
+        Group("STAT", 0, Combine(
+            Record("STAT", 0x00000010, 0, ExtendedSubrecord("EDID", extendedValue)),
+            Record("MISC", 0x00000020, 0, Subrecord("EDID", ZString("Removed"))),
+            CompressedRecord("STAT", 0x00000040, Subrecord("EDID", ZString("Compressed")), true),
+            CompressedRecord("CONT", 0x00000041, Subrecord("EDID", ZString("Checksummed")), false))),
+        Record("ARMO", 0x00000060, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticArmor")),
+            Subrecord("DATA", armorData))),
+        Record("WEAP", 0x00000061, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticWeapon")),
+            Subrecord("DATA", weaponData),
+            Subrecord("NAM0", UInt32(0x00000062)),
+            Subrecord("DNAM", weaponDnam))),
+        Record("AMMO", 0x00000062, 0, Subrecord("EDID", ZString("SyntheticAmmo"))),
+        Record("WTHR", 0x00000050, 0, BinarySubrecord(
+            [5, (byte)'I', (byte)'A', (byte)'D'], [1]))));
+
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Patch.esp"), Combine(
+        Record("TES4", 0, 0, Combine(
+            Subrecord("HEDR", [0, 0, 0, 0]),
+            Subrecord("MAST", ZString("master.ESM")))),
+        Group("STAT", 0, Group("CELL", 6, Combine(
+            Record("STAT", 0x00000010, 0, Subrecord("EDID", ZString("Winner"))),
+            Record("MISC", 0x00000020, FalloutPluginRecord.DeletedFlag, []),
+            Record("STAT", 0x01000030, 0, Subrecord("EDID", ZString("PatchNew")))))),
+        Record("ARMO", 0x00000060, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticArmor")),
+            Subrecord("DATA", winningArmorData)))));
+
+    using var stack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Patch.esp"]);
+    Require(stack.Plugins.Count == 2, "Plugin count differs.");
+    Require(stack.Plugins[1].Plugin.Masters.SequenceEqual(["Master.esm"]), "Master casing was not canonicalized.");
+    Require(stack.Plugins.All(item => item.Sha256.Length == 64 && item.Bytes > 0), "Plugin provenance is incomplete.");
+
+    var campaignInventory = FalloutCampaignInventoryResolver.Resolve(
+        stack,
+        [
+            new FalloutCampaignInventoryRequest(0x00000060, "SyntheticArmor", "ARMO", 1),
+            new FalloutCampaignInventoryRequest(0x00000061, "SyntheticWeapon", "WEAP", 1),
+            new FalloutCampaignInventoryRequest(0x00000062, "SyntheticAmmo", "AMMO", 24),
+        ],
+        new FalloutCampaignWeaponRequest(0x00000061, 0x00000062, 18, 6, 4, 7));
+    Require(
+        campaignInventory.Items.Count == 3 &&
+        campaignInventory.Items[0].FormKey == new FalloutFormKey("Master.esm", 0x60) &&
+        campaignInventory.Items[0].Value == 40 &&
+        campaignInventory.Items[0].Weight == 3.5f &&
+        campaignInventory.EquippedWeapon is { Damage: 18, ClipSize: 6, AmmoInMagazine: 4, AnimationType: 7 } &&
+        campaignInventory.EquippedWeapon.Ammo == new FalloutFormKey("Master.esm", 0x62),
+        "Live campaign inventory/equipment resolution failed.");
+    ExpectFailure(
+        () => FalloutCampaignInventoryResolver.Resolve(
+            stack,
+            [new FalloutCampaignInventoryRequest(0x00000061, "SyntheticWeapon", "WEAP", 1)],
+            new FalloutCampaignWeaponRequest(0x00000061, 0x00000062, 19, 6, 4, 7)),
+        "differs from the live winning record");
+    ExpectFailure(
+        () => FalloutCampaignInventoryResolver.Resolve(
+            stack,
+            [new FalloutCampaignInventoryRequest(0x02000060, "SyntheticArmor", "ARMO", 1)],
+            null),
+        "inactive load-order index");
+
+    var baseLayer = Path.Combine(fixtureRoot, "base-layer");
+    var modLayer = Path.Combine(fixtureRoot, "mod-layer");
+    Directory.CreateDirectory(baseLayer);
+    Directory.CreateDirectory(modLayer);
+    var layeredMasterPath = Path.Combine(baseLayer, "Master.esm");
+    var layeredPatchPath = Path.Combine(modLayer, "Patch.esp");
+    File.Copy(Path.Combine(fixtureRoot, "Master.esm"), layeredMasterPath);
+    File.Copy(Path.Combine(fixtureRoot, "Patch.esp"), layeredPatchPath);
+    var masterInfo = new FileInfo(layeredMasterPath);
+    var patchInfo = new FileInfo(layeredPatchPath);
+    var registeredMasterSha = new string('a', 64);
+    using var layeredStack = FalloutPluginStack.Load([
+        new FalloutPluginSource(
+            "Master.esm",
+            layeredMasterPath,
+            masterInfo.Length,
+            new DateTimeOffset(masterInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds(),
+            registeredMasterSha),
+        new FalloutPluginSource(
+            "Patch.esp",
+            layeredPatchPath,
+            patchInfo.Length,
+            new DateTimeOffset(patchInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds())]);
+    Require(
+        layeredStack.Plugins[0].Sha256 == registeredMasterSha &&
+        layeredStack.Plugins[1].Plugin.Path == layeredPatchPath &&
+        ReadEditorId(layeredStack.GetEffective(new FalloutFormKey("Master.esm", 0x10))) == "Winner",
+        "Layered absolute-path stack or registered provenance failed.");
+    ExpectFailure(
+        () => FalloutPluginStack.Load([
+            new FalloutPluginSource(
+                "Master.esm",
+                layeredMasterPath,
+                masterInfo.Length + 1,
+                new DateTimeOffset(masterInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds())]),
+        "changed after registration");
+
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Middle.esm"), Record(
+        "TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))));
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Target.esm"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
+        Record("STAT", 0x01000801, 0, Subrecord("EDID", ZString("Target")))));
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Inject.esp"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
+        Record("STAT", 0x02000801, 0, Subrecord("EDID", ZString("Injected")))));
+    using var injectedStack = FalloutPluginStack.Load(
+        fixtureRoot,
+        ["Master.esm", "Middle.esm", "Target.esm", "Inject.esp"]);
+    Require(
+        ReadEditorId(injectedStack.GetEffective(new FalloutFormKey("Target.esm", 0x801))) == "Injected",
+        "Earlier-load-slot injected record resolution failed.");
+    ExpectFailure(
+        () => FalloutPluginStack.Load(
+            fixtureRoot,
+            ["Master.esm", "Inject.esp", "Target.esm"]),
+        "no safe configured injection target");
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "LowInject.esp"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
+        Record("STAT", 0x02000001, 0, Subrecord("EDID", ZString("Unsafe")))));
+    ExpectFailure(
+        () => FalloutPluginStack.Load(
+            fixtureRoot,
+            ["Master.esm", "Middle.esm", "Target.esm", "LowInject.esp"]),
+        "no safe configured injection target");
+
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Fallout3.esm"), Combine(
+        Record("TES4", 0, 0, []),
+        Record("REFR", 0x01000802, 0, Subrecord("EDID", ZString("Fallout3SelfNamespace")))));
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Anchorage.esm"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Fallout3.esm"))),
+        Record("REFR", 0x02000803, 0, Subrecord("EDID", ZString("AnchorageSelfNamespace")))));
+    using var fallout3SelfNamespaces = FalloutPluginStack.Load(
+        fixtureRoot,
+        ["Fallout3.esm", "Anchorage.esm"]);
+    Require(
+        ReadEditorId(fallout3SelfNamespaces.GetEffective(new FalloutFormKey("Fallout3.esm", 0x802))) ==
+        "Fallout3SelfNamespace" &&
+        ReadEditorId(fallout3SelfNamespaces.GetEffective(new FalloutFormKey("Anchorage.esm", 0x803))) ==
+        "AnchorageSelfNamespace",
+        "Fallout 3 ESM self-namespace resolution failed.");
+
+    var masterKey = new FalloutFormKey("Master.esm", 0x10);
+    var removedKey = new FalloutFormKey("Master.esm", 0x20);
+    var patchKey = new FalloutFormKey("Patch.esp", 0x30);
+    Require(ReadEditorId(stack.GetEffective(masterKey)) == "Winner", "Last-wins override failed.");
+    Require(!stack.TryGetEffective(removedKey, out _), "Deleted winner remained effective.");
+    Require(stack.TryGetWinner(removedKey, out var deleted) && deleted.IsDeleted, "Deletion provenance was lost.");
+    Require(stack.RuntimeFormId(patchKey) == 0x01000030, "Runtime FormID adjustment failed.");
+    Require(stack.Plugins[1].Plugin.AdjustOptionalFormId(0) is null, "Optional null FormID failed.");
+
+    var extended = stack.Plugins[0].Plugin.Records.Single(record => record.RawFormId == 0x10);
+    Require(extended.ReadSubrecords().Single().Data.Span.SequenceEqual(extendedValue), "XXXX size failed.");
+    Require(ReadEditorId(stack.Plugins[0].Plugin.Records.Single(record => record.RawFormId == 0x40)) == "Compressed", "Invalid-checksum zlib compatibility failed.");
+    Require(ReadEditorId(stack.Plugins[0].Plugin.Records.Single(record => record.RawFormId == 0x41)) == "Checksummed", "Checksummed zlib failed.");
+    Require(stack.Plugins[0].Plugin.Records.Single(record => record.RawFormId == 0x10).Groups.Count == 1, "GRUP context failed.");
+    Require(stack.Plugins[1].Plugin.Records.Single(record => record.RawFormId == 0x01000030).Groups.Count == 2, "Recursive GRUP context failed.");
+    Require(stack.Plugins[0].Plugin.Records.Single(record => record.RawFormId == 0x50).ReadSubrecords().Single().Signature == "5IAD", "Binary IAD failed.");
+    Require(stack.EffectiveRecords("STAT").Select(record => stack.RuntimeFormId(record.FormKey)).SequenceEqual([0x00000010u, 0x00000040u, 0x01000030u]), "Effective order differs.");
+
+    ExpectFailure(() => stack.Plugins[1].Plugin.AdjustFormId(0x02000001), "undeclared local namespace");
+    ExpectFailure(() => FalloutPluginStack.Load(fixtureRoot, ["Patch.esp", "Master.esm"]), "earlier in load order");
+    ExpectFailure(() => FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "master.ESM"]), "duplicate name");
+
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "BadType.esp"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
+        Record("MISC", 0x00000010, 0, Subrecord("EDID", ZString("WrongType")))));
+    ExpectFailure(() => FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "BadType.esp"]), "changes record type");
+
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Malformed.esm"), Combine(
+        Record("TES4", 0, 0, []),
+        Record("STAT", 1, compressedFlag, Combine(UInt32(16), [1, 2, 3, 4, 5, 6]))));
+    using var malformed = FalloutPlugin.Open(Path.Combine(fixtureRoot, "Malformed.esm"));
+    ExpectFailure(() => malformed.Records.Single(record => record.RawFormId == 1).ReadData(), "invalid zlib data");
+
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Dangling.esm"), Combine(
+        Record("TES4", 0, 0, []),
+        Record("STAT", 1, 0, Subrecord("XXXX", UInt32(70_000)))));
+    using var dangling = FalloutPlugin.Open(Path.Combine(fixtureRoot, "Dangling.esm"));
+    ExpectFailure(
+        () => dangling.Records.Single(record => record.RawFormId == 1).ReadSubrecords().ToArray(),
+        "dangling XXXX");
+
+    var oversizedGroup = Group("STAT", 0, []);
+    BinaryPrimitives.WriteUInt32LittleEndian(oversizedGroup.AsSpan(4), 25);
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "BadBounds.esm"), Combine(
+        Record("TES4", 0, 0, []), oversizedGroup));
+    ExpectFailure(
+        () => FalloutPlugin.Open(Path.Combine(fixtureRoot, "BadBounds.esm")),
+        "exceeds its parent");
+
+    var transform = new byte[sizeof(float) * 6];
+    BinaryPrimitives.WriteSingleLittleEndian(transform.AsSpan(0), 10.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(transform.AsSpan(sizeof(float)), 20.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(transform.AsSpan(sizeof(float) * 2), 30.0f);
+    var scale = new byte[sizeof(float)];
+    BinaryPrimitives.WriteSingleLittleEndian(scale, 1.25f);
+    var lightData = new byte[32];
+    BinaryPrimitives.WriteInt32LittleEndian(lightData, -1);
+    BinaryPrimitives.WriteUInt32LittleEndian(lightData.AsSpan(4), 256);
+    lightData[8] = 100;
+    lightData[9] = 80;
+    lightData[10] = 40;
+    BinaryPrimitives.WriteSingleLittleEndian(lightData.AsSpan(16), 1.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(lightData.AsSpan(20), 90.0f);
+    var lightIntensity = new byte[sizeof(float)];
+    BinaryPrimitives.WriteSingleLittleEndian(lightIntensity, 1.5f);
+    var lightRadius = new byte[sizeof(float)];
+    BinaryPrimitives.WriteSingleLittleEndian(lightRadius, -96.0f);
+    var sourceTeleport = Teleport(
+        0x127,
+        [100.0f, 200.0f, 300.0f],
+        [0.0f, 0.0f, 1.25f]);
+    var returnTeleport = Teleport(
+        0x126,
+        [10.0f, 20.0f, 30.0f],
+        [0.0f, 0.0f, -1.25f]);
+    var landNormals = new byte[33 * 33 * 3];
+    for (var index = 0; index < 33 * 33; ++index)
+        landNormals[index * 3 + 2] = 127;
+    var landHeights = new byte[sizeof(float) + 33 * 33 + 3];
+    var landOpacity = new byte[8];
+    BinaryPrimitives.WriteSingleLittleEndian(landOpacity.AsSpan(sizeof(uint)), 0.5f);
+    var vigorPrimitive = new byte[32];
+    BinaryPrimitives.WriteSingleLittleEndian(vigorPrimitive, 100.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(vigorPrimitive.AsSpan(4), 80.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(vigorPrimitive.AsSpan(8), 60.0f);
+    BinaryPrimitives.WriteUInt32LittleEndian(vigorPrimitive.AsSpan(28), 1);
+    var farewellPrimitive = new byte[32];
+    BinaryPrimitives.WriteSingleLittleEndian(farewellPrimitive, 120.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(farewellPrimitive.AsSpan(4), 90.0f);
+    BinaryPrimitives.WriteSingleLittleEndian(farewellPrimitive.AsSpan(8), 70.0f);
+    BinaryPrimitives.WriteUInt32LittleEndian(farewellPrimitive.AsSpan(28), 1);
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Cell.esm"), Combine(
+        Record("TES4", 0, 0, []),
+        Record("CELL", 0x100, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticCell")),
+            Subrecord("DATA", [1]))),
+        Record("STAT", 0x110, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticBase")),
+            Subrecord("MODL", ZString("clutter/test.nif")))),
+        Record("LIGH", 0x111, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticLight")),
+            Subrecord("DATA", lightData),
+            Subrecord("FNAM", lightIntensity))),
+        Record("STAT", 0x112, 0, Subrecord("EDID", ZString("XMarkerHeading"))),
+        Record("DOOR", 0x113, 0, Subrecord("EDID", ZString("SyntheticInteriorDoor"))),
+        Record("DOOR", 0x114, 0, Subrecord("EDID", ZString("SyntheticExteriorDoor"))),
+        Record("ARMO", 0x115, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticPipBoy")),
+            Subrecord("DATA", armorData))),
+        Record("ARMO", 0x116, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticPipBoyGlove")),
+            Subrecord("DATA", armorData))),
+        Record("ARMO", 0x117, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticVaultSuit")),
+            Subrecord("DATA", armorData))),
+        Record("ARMO", 0x118, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticFarewellAid")),
+            Subrecord("DATA", armorData))),
+        Record("ARMO", 0x119, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticFarewellTool")),
+            Subrecord("DATA", armorData))),
+        Record("ARMO", 0x11a, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticFarewellWeapon")),
+            Subrecord("DATA", armorData))),
+        Record("NPC_", 0x180, 0, Combine(
+            Subrecord("EDID", ZString("Player")),
+            Subrecord("ACBS", new byte[24]),
+            Subrecord("DATA", Combine(UInt32(100), [5, 5, 5, 5, 5, 5, 5])),
+            Subrecord("RNAM", UInt32(0x181)),
+            Subrecord("HNAM", UInt32(0x182)),
+            Subrecord("ENAM", UInt32(0x184)))),
+        Record("RACE", 0x181, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticRace")),
+            Subrecord("HNAM", Combine(UInt32(0x182), UInt32(0x183))),
+            Subrecord("ENAM", UInt32(0x184)))),
+        Record("HAIR", 0x182, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticMaleHair")),
+            Subrecord("DATA", [0x05]))),
+        Record("HAIR", 0x183, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticFemaleHair")),
+            Subrecord("DATA", [0x03]))),
+        Record("EYES", 0x184, 0, Subrecord("EDID", ZString("SyntheticEyes"))),
+        Record("SCPT", 0x185, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticVigorTriggerScript")),
+            Subrecord("SCTX", ZString(
+                "begin onTriggerEnter player\r\n" +
+                "if IsActionRef player == 1\r\nSetStage VCG01 60\r\nendif\r\nEnd\r\n")))),
+        Record("SCPT", 0x186, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticVigorTesterScript")),
+            Subrecord("SCTX", ZString(
+                "BEGIN OnActivate\r\n" +
+                "if(GetStage VCG01 == 60)\r\n" +
+                "ShowLoveTesterMenuParams 40;\r\nSetStage VCG01 65\r\nendif\r\nEND\r\n")))),
+        Record("ACTI", 0x187, 0, Combine(
+            Subrecord("EDID", ZString("VCG01VigorTesterTrigger")),
+            Subrecord("SCRI", UInt32(0x185)))),
+        Record("ACTI", 0x188, 0, Combine(
+            Subrecord("EDID", ZString("VCG01VigorTester")),
+            Subrecord("SCRI", UInt32(0x186)))),
+        Record("AVIF", 0x190, 0, Combine(Subrecord("EDID", ZString("AVBarter")), Subrecord("FULL", ZString("Barter")), Subrecord("ANAM", ZString("Barter")))),
+        Record("AVIF", 0x191, 0, Combine(Subrecord("EDID", ZString("AVEnergyWeapons")), Subrecord("FULL", ZString("Energy Weapons")), Subrecord("ANAM", ZString("Energy Weapons")))),
+        Record("AVIF", 0x192, 0, Combine(Subrecord("EDID", ZString("AVExplosives")), Subrecord("FULL", ZString("Explosives")), Subrecord("ANAM", ZString("Explosives")))),
+        Record("AVIF", 0x193, 0, Combine(Subrecord("EDID", ZString("AVLockpick")), Subrecord("FULL", ZString("Lockpick")), Subrecord("ANAM", ZString("Lockpick")))),
+        Record("AVIF", 0x194, 0, Combine(Subrecord("EDID", ZString("AVMedicine")), Subrecord("FULL", ZString("Medicine")), Subrecord("ANAM", ZString("Medicine")))),
+        Record("AVIF", 0x195, 0, Combine(Subrecord("EDID", ZString("AVMeleeWeapons")), Subrecord("FULL", ZString("Melee Weapons")), Subrecord("ANAM", ZString("Melee Weapons")))),
+        Record("AVIF", 0x196, 0, Combine(Subrecord("EDID", ZString("AVRepair")), Subrecord("FULL", ZString("Repair")), Subrecord("ANAM", ZString("Repair")))),
+        Record("AVIF", 0x197, 0, Combine(Subrecord("EDID", ZString("AVScience")), Subrecord("FULL", ZString("Science")), Subrecord("ANAM", ZString("Science")))),
+        Record("AVIF", 0x198, 0, Combine(Subrecord("EDID", ZString("AVSmallGuns")), Subrecord("FULL", ZString("Guns")), Subrecord("ANAM", ZString("Guns")))),
+        Record("AVIF", 0x199, 0, Combine(Subrecord("EDID", ZString("AVSneak")), Subrecord("FULL", ZString("Sneak")), Subrecord("ANAM", ZString("Sneak")))),
+        Record("AVIF", 0x19a, 0, Combine(Subrecord("EDID", ZString("AVSpeech")), Subrecord("FULL", ZString("Speech")), Subrecord("ANAM", ZString("Speech")))),
+        Record("AVIF", 0x19b, 0, Combine(Subrecord("EDID", ZString("AVThrowing")), Subrecord("FULL", ZString("Survival")), Subrecord("ANAM", ZString("Survival")))),
+        Record("AVIF", 0x19c, 0, Combine(Subrecord("EDID", ZString("AVUnarmed")), Subrecord("FULL", ZString("Unarmed")), Subrecord("ANAM", ZString("Unarmed")))),
+        Record("PERK", 0x19d, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticTraitOne")),
+            Subrecord("FULL", ZString("Synthetic Trait One")),
+            Subrecord("DATA", new byte[] { 1, 1, 1, 1, 0 }))),
+        Record("PERK", 0x19e, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticTraitTwo")),
+            Subrecord("FULL", ZString("Synthetic Trait Two")),
+            Subrecord("DATA", new byte[] { 1, 1, 1, 1, 0 }))),
+        Record("SCPT", 0x19f, 0, Combine(
+            Subrecord("EDID", ZString("GSDocMitchellExitTriggerScript")),
+            Subrecord("SCTX", ZString(
+                "begin onTriggerEnter player\r\n" +
+                "if GetStage VCG01 == 110\r\nSetStage VCG01 115\r\nendif\r\nend\r\n")))),
+        Record("ACTI", 0x1a0, 0, Combine(
+            Subrecord("EDID", ZString("GSDocMitchellExitTrigger")),
+            Subrecord("SCRI", UInt32(0x19f)))),
+        Record("SCPT", 0x1a1, 0, Combine(
+            Subrecord("EDID", ZString("VGenericTimerScript")),
+            Subrecord("SCTX", ZString(
+                "if nEvent == 3\r\nSetStage VCG01 200\r\nendif\r\n")))),
+        Record("QUST", 0x1a2, 0, Combine(
+            Subrecord("EDID", ZString("VGenericTimer")),
+            Subrecord("DATA", new byte[8]),
+            Subrecord("SCRI", UInt32(0x1a1)))),
+        Record("QUST", 0x140, 0, Combine(
+            Subrecord("EDID", ZString("VCG00")),
+            Subrecord("DATA", new byte[8]),
+            Subrecord("SCRI", UInt32(0x144)),
+            Subrecord("INDX", [0, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString(
+                "DisablePlayerControls 1 1\r\n" +
+                "DisablePlayerControls 0 0 0 0 1 0 0\r\n" +
+                "PlayBink \"SyntheticIntro.bik\" 1 1 0 1\r\n" +
+                "; player.moveto CommentedOutMarkerREF\r\n" +
+                "if GetQuestCompleted CG04 == 0\r\n" +
+                "player.moveto SyntheticPlayerStartREF\r\n" +
+                "else\r\n" +
+                "player.moveto SyntheticAlternateStartREF\r\n" +
+                "endif\r\n" +
+                "SetStage VCG00 90\r\n")),
+            Subrecord("SCRO", UInt32(0x122)),
+            Subrecord("SCRO", UInt32(0x142)),
+            Subrecord("INDX", [90, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG00.fTimer to 3\r\n")),
+            Subrecord("INDX", [95, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; immediate timer continuation\r\n")),
+            Subrecord("INDX", [100, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString(
+                "EnablePlayerControls 1 1 1 1 0 1 1\r\n" +
+                "SetStage VCG01 0\r\n")))),
+        Record("PACK", 0x141, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticDistractorTravel")),
+            Subrecord("PLDT", Combine(UInt32(0), UInt32(0x123), UInt32(0))))),
+        Record("QUST", 0x142, 0, Combine(
+            Subrecord("EDID", ZString("CG04")),
+            Subrecord("DATA", new byte[8]))),
+        Record("QUST", 0x143, 0, Combine(
+            Subrecord("EDID", ZString("VCG01")),
+            Subrecord("DATA", new byte[8]),
+            Subrecord("SCRI", UInt32(0x145)),
+            Subrecord("INDX", [0, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString(
+                "EnablePlayerControls 0 0 0 0 1\r\n" +
+                "DisablePlayerControls 1 1 1 1 0 1 1\r\n" +
+                "set VCG01.fTimer to 0.2\r\n")),
+            Subrecord("INDX", [1, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 2.8\r\n")),
+            Subrecord("INDX", [3, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("DocMitchellREF.SayTo player VCG01Intro\r\n")),
+            Subrecord("INDX", [5, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 3.25\r\n")),
+            Subrecord("INDX", [7, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 0\r\n")),
+            Subrecord("INDX", [8, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("DocMitchellREF.SayTo player VCG01Intro\r\n")),
+            Subrecord("INDX", [10, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString(
+                "GetPlayerName\r\n" +
+                "set VCG01.fTimer to 1\r\n")),
+            Subrecord("INDX", [15, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; post-name stop\r\n")),
+            Subrecord("INDX", [55, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString(
+                "DisablePlayerControls 0 1 1 0 0 0 1\r\n" +
+                "EnablePlayerControls 1 0 0 1 1 1 0\r\n")),
+            Subrecord("INDX", [60, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; Vigor tester activation\r\n")),
+            Subrecord("INDX", [65, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 1\r\n")),
+            Subrecord("INDX", [70, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; Vigor reaction complete\r\n")),
+            Subrecord("INDX", [80, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; psychological evaluation\r\n")),
+            Subrecord("INDX", [85, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 1\r\n")),
+            Subrecord("INDX", [90, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("SetTagSkills 3 1;\r\nset VCG01.fTimer to 1\r\n")),
+            Subrecord("INDX", [95, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; tag skills accepted\r\n")),
+            Subrecord("INDX", [98, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 1\r\n")),
+            Subrecord("INDX", [100, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("set VCG01.fTimer to 0\r\n")),
+            Subrecord("INDX", [102, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("ShowTraitMenu\r\nset VCG01.fTimer to 1\r\n")),
+            Subrecord("INDX", [105, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; farewell transition\r\n")),
+            Subrecord("INDX", [110, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString(
+                "DisablePlayerControls 1 1 1 1 1 1 1\r\n" +
+                "EnablePlayerControls 1 0 0 1 1 1 0\r\n")),
+            Subrecord("INDX", [115, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("; farewell conversation\r\n")),
+            Subrecord("INDX", [200, 0]),
+            Subrecord("QSDT", [0]),
+            Subrecord("SCTX", ZString("StopQuest VCG01\r\n")))),
+        Record("SCPT", 0x144, 0, Combine(
+            Subrecord("EDID", ZString("VCG00ScriptNV")),
+            Subrecord("SCTX", ZString(
+                "if getstage VCG00 == 90\r\n" +
+                "  SetStage VCG00 95\r\n" +
+                "elseif getstage VCG00 == 95\r\n" +
+                "  SetStage VCG00 100\r\n" +
+                "endif\r\n")))),
+        Record("SCPT", 0x145, 0, Combine(
+            Subrecord("EDID", ZString("VCG01SCRIPT")),
+            Subrecord("SCTX", ZString(
+                "if getstage VCG01 == 0\r\n" +
+                "  SetStage VCG01 1\r\n" +
+                "elseif getstage VCG01 == 1\r\n" +
+                "  SetStage VCG01 3\r\n" +
+                "elseif getstage VCG01 == 5\r\n" +
+                "  SetStage VCG01 7\r\n" +
+                "elseif getstage VCG01 == 7\r\n" +
+                "  SetStage VCG01 8\r\n" +
+                "elseif getstage VCG01 == 10\r\n" +
+                "  SetStage VCG01 15\r\n" +
+                "elseif getstage VCG01 == 55\r\n" +
+                "  SetStage VCG01 60\r\n" +
+                "elseif getstage VCG01 == 65\r\n" +
+                "  SetStage VCG01 70\r\n" +
+                "elseif getstage VCG01 == 85\r\n" +
+                "  SetStage VCG01 90\r\n" +
+                "elseif getstage VCG01 == 90\r\n" +
+                "  SetStage VCG01 95\r\n" +
+                "elseif getstage VCG01 == 98\r\n" +
+                "  SetStage VCG01 100\r\n" +
+                "elseif getstage VCG01 == 100\r\n" +
+                "  SetStage VCG01 102\r\n" +
+                "elseif getstage VCG01 == 102\r\n" +
+                "  SetStage VCG01 105\r\n" +
+                "endif\r\n")))),
+        Record("DIAL", 0x146, 0, Combine(
+            Subrecord("EDID", ZString("VCG01Intro")),
+            Subrecord("DATA", [0, 0, 0, 0]))),
+        GroupFormId(0x146, 7, Combine(
+            Record("INFO", 0x147, 0, Combine(
+                Subrecord("QSTI", UInt32(0x143)),
+                Subrecord("SCTX", ZString("SetStage VCG01 5\r\n")))),
+            Record("INFO", 0x148, 0, Combine(
+                Subrecord("QSTI", UInt32(0x143)),
+                Subrecord("SCTX", ZString(
+                    "SetStage VCG01 10\r\n" +
+                    "player.additem SyntheticPipBoy 1\r\n" +
+                    "player.additem SyntheticPipBoyGlove 1\r\n" +
+                    "player.additem SyntheticVaultSuit 1\r\n" +
+                    "player.equipitem SyntheticPipBoy\r\n" +
+                    "player.equipitem SyntheticPipBoyGlove\r\n" +
+                    "player.equipitem SyntheticVaultSuit\r\n")))))),
+        Record("INFO", 0x18b, 0, Combine(
+            Subrecord("QSTI", UInt32(0x143)),
+            Subrecord("SCTX", ZString("SetStage VCG01 85\r\n")))),
+        Record("INFO", 0x1a4, 0, Combine(
+            Subrecord("QSTI", UInt32(0x143)),
+            Subrecord("SCTX", ZString(
+                "; Basic starting equipment for all players\r\n" +
+                "player.additem SyntheticFarewellAid 1\r\n" +
+                "if IsPlayerTagSkill Barter\r\n" +
+                "player.additem SyntheticFarewellTool 2\r\n" +
+                "else\r\nplayer.additem SyntheticFarewellTool 1\r\nendif\r\n" +
+                "if IsPlayerTagSkill Guns\r\n" +
+                "player.additem SyntheticFarewellWeapon 2\r\n" +
+                "else\r\nplayer.additem SyntheticFarewellWeapon 1\r\nendif\r\n")))),
+        Record("INFO", 0x1a5, 0, Combine(
+            Subrecord("QSTI", UInt32(0x143)),
+            Subrecord("SCTX", ZString(
+                "set VGenericTimer.fTimer to 0.1\r\n" +
+                "set VGenericTimer.nEvent to 3\r\n" +
+                "StartQuest VGenericTimer\r\n")))),
+        Record("WRLD", 0x150, 0, Subrecord("EDID", ZString("SyntheticWorld"))),
+        Record("LTEX", 0x160, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticLand")),
+            Subrecord("TNAM", UInt32(0x161)))),
+        Record("TXST", 0x161, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticLandTextureSet")),
+            Subrecord("TX00", ZString("landscape\\synthetic.dds")))),
+        GroupFormId(0x100, 6, Combine(
+            Record("REFR", 0x120, 0, Combine(
+                Subrecord("NAME", UInt32(0x110)),
+                Subrecord("DATA", transform),
+                Subrecord("XSCL", scale))),
+            Record("REFR", 0x121, 0, Combine(
+                Subrecord("NAME", UInt32(0x111)),
+                Subrecord("DATA", transform),
+                Subrecord("XRDS", lightRadius))),
+            Record("REFR", 0x122, 0x0000_0400, Combine(
+                Subrecord("EDID", ZString("SyntheticPlayerStartREF")),
+                Subrecord("NAME", UInt32(0x112)),
+                Subrecord("DATA", transform))),
+            Record("REFR", 0x123, 0x0000_0400, Combine(
+                Subrecord("EDID", ZString("SyntheticPackageMarkerREF")),
+                Subrecord("NAME", UInt32(0x112)),
+                Subrecord("DATA", transform))),
+            Record("REFR", 0x126, 0x0000_0400, Combine(
+                Subrecord("EDID", ZString("SyntheticInteriorDoorREF")),
+                Subrecord("NAME", UInt32(0x113)),
+                Subrecord("XTEL", sourceTeleport),
+                Subrecord("DATA", transform))),
+            Record("REFR", 0x189, 0, Combine(
+                Subrecord("NAME", UInt32(0x187)),
+                Subrecord("XPRM", vigorPrimitive),
+                Subrecord("DATA", transform))),
+            Record("REFR", 0x18a, 0, Combine(
+                Subrecord("EDID", ZString("SyntheticVigorTesterREF")),
+                Subrecord("NAME", UInt32(0x188)),
+                Subrecord("DATA", transform))),
+            Record("REFR", 0x1a3, 0, Combine(
+                Subrecord("EDID", ZString("SyntheticFarewellTriggerREF")),
+                Subrecord("NAME", UInt32(0x1a0)),
+                Subrecord("XPRM", farewellPrimitive),
+                Subrecord("DATA", transform))))),
+        GroupFormId(0x150, 1, Combine(
+            Record("CELL", 0x101, 0, Combine(
+                Subrecord("DATA", [2]),
+                Subrecord("XCLC", new byte[12]),
+                Subrecord("LTMP", UInt32(0)),
+                Subrecord("LNAM", UInt32(0x9f)))),
+            GroupFormId(0x101, 6, Combine(
+                Record("REFR", 0x127, 0x0000_0400, Combine(
+                    Subrecord("EDID", ZString("SyntheticExteriorDoorREF")),
+                    Subrecord("NAME", UInt32(0x114)),
+                    Subrecord("XTEL", returnTeleport),
+                    Subrecord("DATA", transform))),
+                Record("LAND", 0x170, 0, Combine(
+                    Subrecord("DATA", UInt32(1)),
+                    Subrecord("VNML", landNormals),
+                    Subrecord("VHGT", landHeights),
+                    Subrecord("BTXT", LayerHeader(0x160, 0, 0xffff)),
+                    Subrecord("BTXT", LayerHeader(0x160, 1, 0xffff)),
+                    Subrecord("BTXT", LayerHeader(0x160, 2, 0xffff)),
+                    Subrecord("BTXT", LayerHeader(0x160, 3, 0xffff)),
+                    Subrecord("ATXT", LayerHeader(0, 0, 0)),
+                    Subrecord("VTXT", landOpacity))))),
+            Record("CELL", 0x102, 0, Combine(
+                Subrecord("DATA", [0]),
+                Subrecord("XCLC", Combine(UInt32(1), UInt32(0))),
+                Subrecord("LTMP", UInt32(0)),
+                Subrecord("LNAM", UInt32(0x9f)))),
+            GroupFormId(0x102, 6, Record("LAND", 0x172, 0, Combine(
+                Subrecord("DATA", UInt32(1)),
+                Subrecord("VNML", landNormals),
+                Subrecord("VHGT", landHeights),
+                Subrecord("BTXT", LayerHeader(0x160, 0, 0xffff)),
+                Subrecord("BTXT", LayerHeader(0x160, 1, 0xffff)),
+                Subrecord("BTXT", LayerHeader(0x160, 2, 0xffff)))))))));
+    using var cellStack = FalloutPluginStack.Load(fixtureRoot, ["Cell.esm"]);
+    var syntheticCellForVigor = FalloutCellSceneReader.Read(
+        cellStack,
+        new FalloutFormKey("Cell.esm", 0x100));
+    var syntheticRaceSex = FalloutNativeRaceSexResolver.Resolve(cellStack);
+    Require(
+        syntheticRaceSex.Initial == syntheticRaceSex.Male &&
+        syntheticRaceSex.Male.HairEditorId == "SyntheticMaleHair" &&
+        syntheticRaceSex.Female.HairEditorId == "SyntheticFemaleHair" &&
+        syntheticRaceSex.Male.EyesEditorId == "SyntheticEyes",
+        "Live Player/RACE sex-specific identity resolution failed.");
+    var syntheticVigor = FalloutNativeVigorResolver.Resolve(cellStack, syntheticCellForVigor);
+    var syntheticSpecial = syntheticVigor.Initial.WithValue(0, 10);
+    FalloutNativeVigorResolver.Validate(syntheticVigor, syntheticSpecial);
+    ExpectFailure(
+        () => FalloutNativeVigorResolver.Validate(syntheticVigor, syntheticVigor.Initial),
+        "differs from the live Vigor allocation contract");
+    Require(
+        syntheticVigor.TriggerFromStage == 55 &&
+        syntheticVigor.TesterStage == 60 &&
+        syntheticVigor.CompletedStage == 65 &&
+        syntheticVigor.RequiredTotal == 40 &&
+        syntheticVigor.TriggerDimensionsGameUnits.SequenceEqual([100.0f, 80.0f, 60.0f]),
+        "Live Vigor trigger/tester contract resolution failed.");
+    var controlGraph = FalloutOpeningPlayerControlResolver.Resolve(cellStack, ["VCG00", "VCG01"]);
+    var syntheticTagSkills = FalloutNativeTagSkillResolver.Resolve(cellStack, controlGraph);
+    var syntheticTags = syntheticTagSkills.Skills.Take(syntheticTagSkills.RequiredCount).ToArray();
+    FalloutNativeTagSkillResolver.Validate(syntheticTagSkills, syntheticTags);
+    ExpectFailure(
+        () => FalloutNativeTagSkillResolver.Validate(
+            syntheticTagSkills,
+            syntheticTags.Take(2).ToArray()),
+        "differ from the live SetTagSkills/AVIF contract");
+    Require(
+        syntheticTagSkills.Skills.Count == 13 &&
+        syntheticTagSkills.RequiredCount == 3 &&
+        syntheticTagSkills.Skills.Any(value =>
+            value.EditorId == "AVThrowing" && value.DisplayName == "Survival"),
+        "Live SetTagSkills/AVIF contract resolution failed.");
+    var syntheticTraitFarewell = FalloutNativeTraitFarewellResolver.Resolve(
+        cellStack,
+        controlGraph,
+        syntheticCellForVigor);
+    var syntheticTraits = syntheticTraitFarewell.Traits.Take(2).ToArray();
+    FalloutNativeTraitFarewellResolver.ValidateTraits(syntheticTraitFarewell, syntheticTraits);
+    Require(
+        syntheticTraitFarewell.Traits.Count == 2 &&
+        syntheticTraitFarewell.MaximumTraits == 2 &&
+        syntheticTraitFarewell.TraitMenuStage == 102 &&
+        syntheticTraitFarewell.ExitTriggerFromStage == 110 &&
+        syntheticTraitFarewell.FarewellStage == 115 &&
+        syntheticTraitFarewell.CompletedStage == 200 &&
+        syntheticTraitFarewell.CompletionDelaySeconds == 0.1f &&
+        syntheticTraitFarewell.ExitTriggerDimensionsGameUnits.SequenceEqual(
+            [120.0f, 90.0f, 70.0f]),
+        "Live trait/farewell contract resolution failed.");
+    var transitionGraph = FalloutOpeningStageTransitionResolver.Resolve(cellStack, controlGraph);
+    transitionGraph = FalloutOpeningStageTransitionResolver.AddDialogueResults(
+        cellStack,
+        controlGraph,
+        transitionGraph,
+        "VCG01",
+        [3, 8]);
+    var vcg00StageZeroControls = controlGraph.Stage("VCG00", 0).Commands.Aggregate(
+        FalloutPlayerControlState.AllEnabled,
+        (state, command) => command.Apply(state));
+    var vcg01StageZeroControls = controlGraph.Stage("VCG01", 0).Commands.Aggregate(
+        FalloutPlayerControlState.AllEnabled,
+        (state, command) => command.Apply(state));
+    var vcg01Stage55Controls = controlGraph.Stage("VCG01", 55).Commands.Aggregate(
+        vcg01StageZeroControls,
+        (state, command) => command.Apply(state));
+    Require(
+        controlGraph.Quests.Count == 2 &&
+        !vcg00StageZeroControls.Movement && !vcg00StageZeroControls.PipBoy &&
+        vcg00StageZeroControls.Fighting && !vcg00StageZeroControls.Looking &&
+        !vcg01StageZeroControls.Movement && !vcg01StageZeroControls.Fighting &&
+        vcg01StageZeroControls.Looking &&
+        vcg01Stage55Controls.Movement && vcg01Stage55Controls.Looking &&
+        !vcg01Stage55Controls.PipBoy && !vcg01Stage55Controls.Fighting,
+        "Native opening player-control graph resolution failed.");
+    Require(
+        transitionGraph.From("VCG00", 0).Single(value => value.Kind == "stage-script") is
+        {
+            ToQuestEditorId: "VCG00",
+            ToStage: 90,
+        } introEdge && introEdge.Blockers.SequenceEqual(["playbink"]) &&
+        transitionGraph.From("VCG00", 90).Single(value => value.Kind == "timer") is
+        {
+            ToStage: 95,
+            DelaySeconds: 3.0f,
+        } &&
+        transitionGraph.From("VCG00", 95).Single(value => value.Kind == "timer").ToStage == 100 &&
+        transitionGraph.From("VCG00", 100).Single(value => value.Kind == "stage-script") is
+        {
+            ToQuestEditorId: "VCG01",
+            ToStage: 0,
+        } &&
+        transitionGraph.From("VCG01", 3).Single(value => value.Kind == "dialogue-result") is
+        {
+            ToQuestEditorId: "VCG01",
+            ToStage: 5,
+        } dialogueEdge && dialogueEdge.Blockers.SequenceEqual(["sayto"]),
+        "Native opening stage/timer transition graph resolution failed.");
+    var stageMachine = new FalloutOpeningStageMachine(
+        transitionGraph,
+        controlGraph,
+        "VCG00",
+        0);
+    Require(
+        stageMachine.QuestEditorId == "VCG00" && stageMachine.Stage == 0 &&
+        stageMachine.PendingBlockers.SequenceEqual(["playbink"]) &&
+        !stageMachine.ControlState.Movement && !stageMachine.ControlState.Looking,
+        "Native opening stage machine did not stop at the intro movie blocker.");
+    Require(
+        stageMachine.CompleteBlocker("playbink") &&
+        stageMachine.QuestEditorId == "VCG00" && stageMachine.Stage == 90 &&
+        stageMachine.TimerSeconds == 3.0f,
+        "Native opening stage machine did not enter the post-intro timer.");
+    Require(
+        stageMachine.AdvanceTime(3.0f) &&
+        stageMachine.QuestEditorId == "VCG01" && stageMachine.Stage == 0 &&
+        stageMachine.TimerSeconds == 0.2f &&
+        !stageMachine.ControlState.Movement && stageMachine.ControlState.Looking,
+        "Native opening stage machine did not enter the live Doc opening timer.");
+    Require(
+        stageMachine.AdvanceTime(0.2f) &&
+        stageMachine.QuestEditorId == "VCG01" && stageMachine.Stage == 1 &&
+        stageMachine.TimerSeconds == 2.8f &&
+        stageMachine.AdvanceTime(2.8f) &&
+        stageMachine.QuestEditorId == "VCG01" && stageMachine.Stage == 3 &&
+        stageMachine.TimerSeconds is null &&
+        stageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+        !stageMachine.ControlState.Movement && stageMachine.ControlState.Looking,
+        "Native opening stage machine did not stop at the first dialogue-dependent stage.");
+    Require(
+        stageMachine.CompleteBlocker("sayto") &&
+        stageMachine.Stage == 5 && stageMachine.TimerSeconds == 3.25f &&
+        stageMachine.AdvanceTime(3.25f) &&
+        stageMachine.Stage == 8 && stageMachine.TimerSeconds is null &&
+        stageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+        stageMachine.CompleteBlocker("sayto") &&
+        stageMachine.Stage == 10 && stageMachine.TimerSeconds is null &&
+        stageMachine.PendingBlockers.SequenceEqual(["getplayername"]) &&
+        stageMachine.CompleteBlocker("getplayername") &&
+        stageMachine.TimerSeconds == 1.0f &&
+        stageMachine.AdvanceTime(1.0f) && stageMachine.Stage == 15,
+        "Native opening stage machine did not execute the first dialogue result.");
+    var syntheticVigorMachine = new FalloutOpeningStageMachine(
+        transitionGraph,
+        controlGraph,
+        "VCG01",
+        55);
+    syntheticVigorMachine.EnterSourceStage("VCG01", syntheticVigor.TesterStage);
+    syntheticVigorMachine.EnterSourceStage("VCG01", syntheticVigor.CompletedStage);
+    Require(
+        syntheticVigorMachine.Stage == 65 &&
+        syntheticVigorMachine.PendingBlockers.Count == 0,
+        "Native Vigor source-trigger stage entry failed.");
+    var syntheticTagMachine = new FalloutOpeningStageMachine(
+        transitionGraph,
+        controlGraph,
+        "VCG01",
+        syntheticTagSkills.PsychStage);
+    syntheticTagMachine.EnterSourceStage("VCG01", syntheticTagSkills.PsychCompletedStage);
+    Require(
+        syntheticTagMachine.TimerSeconds == 1.0f &&
+        syntheticTagMachine.AdvanceTime(1.0f) &&
+        syntheticTagMachine.Stage == syntheticTagSkills.TagMenuStage &&
+        syntheticTagMachine.PendingBlockers.SequenceEqual(["settagskills"]) &&
+        syntheticTagMachine.CompleteBlocker("settagskills") &&
+        syntheticTagMachine.TimerSeconds == 1.0f &&
+        syntheticTagMachine.AdvanceTime(1.0f) &&
+        syntheticTagMachine.Stage == 95,
+        "Native psych-to-tag-skill source stages did not complete.");
+    var syntheticTraitMachine = new FalloutOpeningStageMachine(
+        transitionGraph,
+        controlGraph,
+        "VCG01",
+        98);
+    Require(
+        syntheticTraitMachine.TimerSeconds == 1.0f &&
+        syntheticTraitMachine.AdvanceTime(1.0f) &&
+        syntheticTraitMachine.Stage == 102 &&
+        syntheticTraitMachine.PendingBlockers.SequenceEqual(["showtraitmenu"]) &&
+        syntheticTraitMachine.CompleteBlocker("showtraitmenu") &&
+        syntheticTraitMachine.AdvanceTime(1.0f) &&
+        syntheticTraitMachine.Stage == 105,
+        "Native trait-menu stage graph did not complete.");
+    var syntheticOpeningGrant = FalloutOpeningInventoryGrantResolver.Resolve(
+        cellStack,
+        controlGraph,
+        "VCG01");
+    Require(
+        syntheticOpeningGrant.Inventory.Items.Count == 3 &&
+        syntheticOpeningGrant.Inventory.Items.All(value =>
+            value.RecordType == "ARMO" && value.Count == 1) &&
+        syntheticOpeningGrant.EquippedRuntimeFormIds.Count == 3,
+        "Native opening INFO inventory grants were not resolved.");
+    var syntheticCompletedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(
+        syntheticTraitFarewell,
+        syntheticOpeningGrant,
+        syntheticTags);
+    Require(
+        syntheticCompletedGrant.Inventory.Items.Single(value =>
+            value.EditorId == "SyntheticFarewellAid").Count == 1 &&
+        syntheticCompletedGrant.Inventory.Items.Single(value =>
+            value.EditorId == "SyntheticFarewellTool").Count == 2 &&
+        syntheticCompletedGrant.Inventory.Items.Single(value =>
+            value.EditorId == "SyntheticFarewellWeapon").Count == 1,
+        "Native farewell conditional loadout differs.");
+    const string syntheticSaveCompatibilityId = "standalone:synthetic-stack";
+    var syntheticCampaignState = FalloutNativeCampaignSave.Capture(
+        syntheticSaveCompatibilityId,
+        syntheticCompletedGrant,
+        "Synthetic Courier",
+        syntheticRaceSex.Female,
+        syntheticVigor,
+        syntheticSpecial,
+        syntheticTagSkills,
+        syntheticTags,
+        syntheticTraitFarewell,
+        syntheticTraits,
+        stageMachine.ControlState,
+        [1.0f, 2.0f, 3.0f],
+        [0.0f, 0.0f, 0.0f, 1.0f]);
+    var syntheticSavePath = Path.Combine(fixtureRoot, "native-campaign-save.json");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
+    var syntheticRestore = FalloutNativeCampaignSave.Read(
+        syntheticSavePath,
+        syntheticSaveCompatibilityId,
+        cellStack,
+        syntheticVigor,
+        syntheticTagSkills,
+        syntheticOpeningGrant,
+        syntheticTraitFarewell);
+    Require(
+        syntheticRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
+        syntheticRestore.State.PlayerName == "Synthetic Courier" &&
+        syntheticRestore.State.Character == syntheticRaceSex.Female &&
+        syntheticRestore.State.Special == syntheticSpecial &&
+        syntheticRestore.State.TagSkills.SequenceEqual(syntheticTags) &&
+        syntheticRestore.State.Traits.SequenceEqual(syntheticTraits) &&
+        FalloutNativeCampaignSave.RestorePlayerControls(syntheticRestore.State) ==
+            stageMachine.ControlState &&
+        syntheticRestore.Inventory.Items.Select(value => value.RuntimeFormId)
+            .SequenceEqual(syntheticCompletedGrant.Inventory.Items
+                .OrderBy(value => value.RuntimeFormId)
+                .Select(value => value.RuntimeFormId)) &&
+        Directory.GetFiles(fixtureRoot, "*.tmp").Length == 0,
+        "Native opening campaign save did not cold-restore atomically.");
+    var staleCharacterState = syntheticCampaignState with
+    {
+        Character = syntheticCampaignState.Character with
+        {
+            HairRuntimeFormId = 0x00000185,
+            HairEditorId = "StaleHair",
+        },
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, staleCharacterState);
+    ExpectFailure(
+        () => FalloutNativeCampaignSave.Read(
+            syntheticSavePath,
+            syntheticSaveCompatibilityId,
+            cellStack,
+            syntheticVigor,
+            syntheticTagSkills,
+            syntheticOpeningGrant,
+            syntheticTraitFarewell),
+        "differs from the live Player/RACE graph");
+    var cell = syntheticCellForVigor;
+    using var eagerCellStack = FalloutPluginStack.Load(
+        [new FalloutPluginSource("Cell.esm", Path.Combine(fixtureRoot, "Cell.esm"))],
+        loadAllSignatureIndexesForAudit: true,
+        out _);
+    var eagerCell = FalloutCellSceneReader.Read(
+        eagerCellStack,
+        new FalloutFormKey("Cell.esm", 0x100));
+    Require(
+        eagerCellStack.WinnerRecordCount == cellStack.WinnerRecordCount &&
+        eagerCellStack.EffectiveRecordCount == cellStack.EffectiveRecordCount &&
+        eagerCell.References.Select(reference => reference.FormKey)
+            .SequenceEqual(cell.References.Select(reference => reference.FormKey)) &&
+        eagerCell.BaseObjects.Keys.OrderBy(key => eagerCellStack.RuntimeFormId(key))
+            .SequenceEqual(cell.BaseObjects.Keys.OrderBy(key => cellStack.RuntimeFormId(key))),
+        "Demand signature/CELL indexing differs from the eager winner graph.");
+    Require(
+        cell.Cell.EditorId == "SyntheticCell" &&
+        cell.References.Count == 8 &&
+        cell.References[0].Position.SequenceEqual([10.0f, 20.0f, 30.0f]) &&
+        cell.References[0].Scale == 1.25f &&
+        cell.BaseObjects[cell.References[0].Base].ModelPath == "meshes\\clutter\\test.nif" &&
+        cell.References[1].RadiusAdjustmentGameUnits == -96.0f &&
+        cell.BaseObjects[cell.References[1].Base].Light is
+        {
+            RadiusGameUnits: 256,
+            Intensity: 1.5f,
+            Flags: 0,
+        },
+        "Native CELL/reference/MODL decoding failed.");
+    var syntheticDoor = FalloutDoorTransitionResolver.ResolveSingleInteriorExit(cellStack, cell);
+    Require(
+        syntheticDoor.SourceDoor.FormKey == new FalloutFormKey("Cell.esm", 0x126) &&
+        syntheticDoor.DestinationDoor.FormKey == new FalloutFormKey("Cell.esm", 0x127) &&
+        syntheticDoor.DestinationScene.Cell.FormKey == new FalloutFormKey("Cell.esm", 0x101) &&
+        syntheticDoor.DestinationScene.Cell.Coordinates == (0, 0) &&
+        syntheticDoor.DestinationWorldspace == new FalloutFormKey("Cell.esm", 0x150) &&
+        syntheticDoor.DestinationWorldspaceEditorId == "SyntheticWorld" &&
+        syntheticDoor.SourceDoor.Teleport!.Position.SequenceEqual([100.0f, 200.0f, 300.0f]) &&
+        syntheticDoor.DestinationDoor.Teleport!.Door == syntheticDoor.SourceDoor.FormKey,
+        "Native XTEL/CELL/WRLD reciprocal door transition differs.");
+    var syntheticLandscape = FalloutLandscapeTransportResolver.Resolve(cellStack, syntheticDoor);
+    Require(
+        syntheticLandscape.ActiveCell == new FalloutFormKey("Cell.esm", 0x101) &&
+        syntheticLandscape.Landscape == new FalloutFormKey("Cell.esm", 0x170) &&
+        syntheticLandscape.ActiveCoordinates == (0, 0) &&
+        syntheticLandscape.BaseLayers.Count == 4 &&
+        syntheticLandscape.AlphaLayers.Single().UsesQuadrantDefault &&
+        syntheticLandscape.Textures.Count == 1,
+        "Native active-set LAND/LTEX/TXST transport differs.");
+    ExpectFailure(
+        () => FalloutLandscapeTransportResolver.Resolve(
+            cellStack,
+            syntheticDoor with
+            {
+                SourceDoor = syntheticDoor.SourceDoor with
+                {
+                    Teleport = syntheticDoor.SourceDoor.Teleport! with
+                    {
+                        Position = [5000.0f, 200.0f, 300.0f],
+                    },
+                },
+            }),
+        "must author one BTXT for each quadrant");
+    ExpectFailure(
+        () => FalloutDoorTransitionResolver.Resolve(
+            cellStack,
+            cell with
+            {
+                References = cell.References.Select(reference =>
+                    reference.FormKey == syntheticDoor.SourceDoor.FormKey
+                        ? reference with
+                        {
+                            Teleport = reference.Teleport! with { Flags = 1 },
+                        }
+                        : reference).ToArray(),
+            },
+            syntheticDoor.SourceDoor.FormKey),
+        "outside the active persistent portal contract");
+    var syntheticStart = FalloutNewGamePlayerStartResolver.Resolve(cellStack, cell);
+    Require(
+        syntheticStart.Reference.FormKey == new FalloutFormKey("Cell.esm", 0x122) &&
+        syntheticStart.Reference.EditorId == "SyntheticPlayerStartREF" &&
+        syntheticStart.Quest == new FalloutFormKey("Cell.esm", 0x140) &&
+        syntheticStart.Stage == 0 &&
+        syntheticStart.Candidates.Count == 2 &&
+        syntheticStart.Candidates.Single(value =>
+            value.Reference.FormKey == new FalloutFormKey("Cell.esm", 0x123))
+            .DirectPackageLocationCount == 1,
+        "Native New Game QUST/SCRO/REFR/PACK player-start selection differs.");
+    var duplicateStart = syntheticStart.Reference with
+    {
+        FormKey = new FalloutFormKey("Cell.esm", 0x124),
+    };
+    ExpectFailure(
+        () => FalloutNewGamePlayerStartResolver.Resolve(
+            cellStack,
+            cell with { References = cell.References.Append(duplicateStart).ToArray() }),
+        "resolves to 2 CELL references");
+    ExpectFailure(
+        () => FalloutNewGamePlayerStartResolver.Resolve(
+            cellStack,
+            cell with
+            {
+                References = cell.References.Select(reference =>
+                    reference.FormKey == syntheticStart.Reference.FormKey
+                        ? reference with { EnableParent = new FalloutFormKey("Cell.esm", 0x125) }
+                        : reference).ToArray(),
+            }),
+        "outside the evidenced active persistent reference contract");
+    var syntheticLightBase = cell.BaseObjects[cell.References[1].Base];
+    var syntheticLight = FalloutPlacedLightResolver.Resolve(cell.References[1], syntheticLightBase);
+    Require(syntheticLight.RadiusGameUnits == 160.0f,
+        "Native LIGH base plus REFR XRDS radius adjustment differs.");
+    ExpectFailure(
+        () => FalloutPlacedLightResolver.Resolve(
+            cell.References[1], syntheticLightBase with
+            {
+                Light = syntheticLightBase.Light! with { Flags = 0x0000_0008 },
+            }),
+        "outside the evidenced static point-light contract");
+    ExpectFailure(
+        () => FalloutPlacedLightResolver.Resolve(
+            cell.References[1] with
+            {
+                EnableParent = new FalloutFormKey("Cell.esm", 0x130),
+            },
+            syntheticLightBase),
+        "unresolved enable parent");
+
+    Require(stack.WinnerRecordCount == 9 && stack.EffectiveRecordCount == 8, "Winner/deletion counts differ.");
+    Console.WriteLine($"OPENNV_FALLOUT_PLUGIN_RUNTIME_PROBE_PASS plugins={stack.Plugins.Count} effective={stack.EffectiveRecordCount} winner={stack.GetEffective(masterKey).Plugin.Name}");
+}
+finally
+{
+    Directory.Delete(fixtureRoot, recursive: true);
+}
+
+if (args.Length > 0)
+{
+    string[] officialNames = [
+        "FalloutNV.esm",
+        "DeadMoney.esm",
+        "HonestHearts.esm",
+        "OldWorldBlues.esm",
+        "LonesomeRoad.esm",
+        "TribalPack.esm",
+        "MercenaryPack.esm",
+        "ClassicPack.esm",
+        "CaravanPack.esm",
+        "GunRunnersArsenal.esm",
+    ];
+    var manifestMode = args[0] == "--source-stack";
+    if (manifestMode && args.Length != 2)
+        throw new ArgumentException("--source-stack requires exactly one manifest path.");
+    var names = manifestMode
+        ? []
+        : args.Length > 1
+            ? args[1..]
+            : officialNames.All(name => File.Exists(Path.Combine(args[0], name)))
+                ? officialNames
+                : ["FalloutNV.esm"];
+    using var owned = manifestMode
+        ? FalloutPluginStack.Load(ReadManifestPluginSources(args[1]))
+        : FalloutPluginStack.Load(args[0], names);
+    var cells = owned.EffectiveRecords("CELL");
+    if (names.Contains("GunRunnersArsenal.esm", StringComparer.OrdinalIgnoreCase))
+    {
+        var injectedReference = owned.GetEffective(
+            new FalloutFormKey("HonestHearts.esm", 0x801));
+        var injectedBaseRaw = BinaryPrimitives.ReadUInt32LittleEndian(
+            injectedReference.ReadSubrecords().Single(row => row.Signature == "NAME").Data.Span);
+        Require(
+            injectedReference.Plugin.Name == "GunRunnersArsenal.esm" &&
+            injectedReference.RawFormId == 0x02000801 &&
+            injectedReference.Plugin.AdjustFormId(injectedBaseRaw) ==
+                new FalloutFormKey("HonestHearts.esm", 0x800),
+            "Official GRA injected reference namespace differs.");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_PLUGIN_INJECTION_PASS " +
+            $"winner={injectedReference.Plugin.Name} key={injectedReference.FormKey} " +
+            $"base={injectedReference.Plugin.AdjustFormId(injectedBaseRaw)}");
+    }
+    var compressedRecords = 0;
+    long subrecords = 0;
+    foreach (var context in owned.Plugins)
+    {
+        foreach (var record in context.Plugin.Records)
+        {
+            if (record.IsCompressed)
+                compressedRecords++;
+            subrecords += record.ReadSubrecords().LongCount();
+        }
+    }
+    Console.WriteLine($"OPENNV_FALLOUT_PLUGIN_OWNED_INPUT_PASS plugins={owned.Plugins.Count} cells={cells.Count} records={owned.EffectiveRecordCount} baseSha256={owned.Plugins[0].Sha256}");
+    Console.WriteLine($"OPENNV_FALLOUT_PLUGIN_PAYLOAD_PASS compressed={compressedRecords} subrecords={subrecords}");
+    if (owned.Plugins[0].Plugin.Name.Equals("FalloutNV.esm", StringComparison.OrdinalIgnoreCase))
+    {
+        var openingControls = FalloutOpeningPlayerControlResolver.Resolve(
+            owned,
+            ["VCG00", "VCG01"]);
+        var liveRaceSex = FalloutNativeRaceSexResolver.Resolve(owned);
+        var liveOpeningCell = FalloutCellSceneReader.Read(
+            owned,
+            new FalloutFormKey("FalloutNV.esm", 0x103df9));
+        var liveVigor = FalloutNativeVigorResolver.Resolve(owned, liveOpeningCell);
+        var liveSpecial = liveVigor.Initial.WithValue(0, 10);
+        FalloutNativeVigorResolver.Validate(liveVigor, liveSpecial);
+        var liveTagSkills = FalloutNativeTagSkillResolver.Resolve(owned, openingControls);
+        var liveTags = liveTagSkills.Skills.Take(liveTagSkills.RequiredCount).ToArray();
+        FalloutNativeTagSkillResolver.Validate(liveTagSkills, liveTags);
+        var liveTraitFarewell = FalloutNativeTraitFarewellResolver.Resolve(
+            owned,
+            openingControls,
+            liveOpeningCell);
+        var liveTraits = liveTraitFarewell.Traits.Take(2).ToArray();
+        FalloutNativeTraitFarewellResolver.ValidateTraits(liveTraitFarewell, liveTraits);
+        Require(
+            liveRaceSex.Male.RaceRuntimeFormId == liveRaceSex.Female.RaceRuntimeFormId &&
+            liveRaceSex.Male.EyesRuntimeFormId == liveRaceSex.Female.EyesRuntimeFormId,
+            "Owned Player/RACE identity contract is inconsistent.");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_RACESEX_PASS " +
+            $"player={liveRaceSex.Player} race={liveRaceSex.Male.RaceEditorId}/" +
+            $"{liveRaceSex.Male.RaceRuntimeFormId:x8} " +
+            $"maleHair={liveRaceSex.Male.HairEditorId}/{liveRaceSex.Male.HairRuntimeFormId:x8} " +
+            $"femaleHair={liveRaceSex.Female.HairEditorId}/{liveRaceSex.Female.HairRuntimeFormId:x8} " +
+            $"eyes={liveRaceSex.Male.EyesEditorId}/{liveRaceSex.Male.EyesRuntimeFormId:x8} " +
+            "source=winning-npc-race-hair-eyes cache=none writes=0");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_VIGOR_PASS " +
+            $"trigger={liveVigor.TriggerReference.FormKey} stage={liveVigor.TriggerFromStage}->" +
+            $"{liveVigor.TesterStage} tester={liveVigor.TesterReference.FormKey} " +
+            $"complete={liveVigor.CompletedStage} total={liveVigor.RequiredTotal} " +
+            $"initial={string.Join(',', liveVigor.Initial.Values)} " +
+            "source=winning-player-refr-acti-scpt-xprm cache=none writes=0");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_TAG_SKILLS_PASS " +
+            $"choices={liveTagSkills.Skills.Count} required={liveTagSkills.RequiredCount} " +
+            $"skills={string.Join(',', liveTagSkills.Skills.Select(value =>
+                $"{value.RuntimeFormId:x8}/{value.EditorId}/{value.DisplayName}"))} " +
+            "source=winning-qust-info-avif cache=none writes=0");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_TRAIT_FAREWELL_PASS " +
+            $"traits={liveTraitFarewell.Traits.Count} maximum={liveTraitFarewell.MaximumTraits} " +
+            $"selected={string.Join(',', liveTraits.Select(value => value.EditorId))} " +
+            $"trigger={liveTraitFarewell.ExitTriggerReference.FormKey} " +
+            $"stage={liveTraitFarewell.TraitMenuStage}->" +
+            $"{liveTraitFarewell.ExitTriggerFromStage}->" +
+            $"{liveTraitFarewell.FarewellStage}->{liveTraitFarewell.CompletedStage} " +
+            $"delay={liveTraitFarewell.CompletionDelaySeconds:R} " +
+            "source=winning-perk-refr-acti-scpt-info-qust cache=none writes=0");
+        var stage200Grant = FalloutOpeningInventoryGrantResolver.Resolve(
+            owned,
+            openingControls,
+            "VCG01");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_CAMPAIGN_INVENTORY_PASS " +
+            $"items={stage200Grant.Inventory.Items.Count} " +
+            $"equipped={stage200Grant.EquippedRuntimeFormIds.Count} " +
+            $"resolved={string.Join(',', stage200Grant.Inventory.Items.Select(item =>
+                $"{item.RuntimeFormId:x8}/{item.EditorId}/{item.RecordType}/{item.Value}/{item.Weight:R}"))} " +
+            "source=winning-qust-info-sctx-records cache=none writes=0");
+        var liveCompletedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(
+            liveTraitFarewell,
+            stage200Grant,
+            liveTags);
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_FAREWELL_GRANT_PASS " +
+            $"items={liveCompletedGrant.Inventory.Items.Count} " +
+            $"resolved={string.Join(',', liveCompletedGrant.Inventory.Items.Select(item =>
+                $"{item.RuntimeFormId:x8}/{item.EditorId}/{item.RecordType}/{item.Count}"))} " +
+            "source=winning-info-tag-branches cache=none writes=0");
+        var liveControlState = FalloutPlayerControlState.AllEnabled;
+        foreach (var stage in new[]
+                 {
+                     openingControls.Stage("VCG00", 0),
+                     openingControls.Stage("VCG00", 100),
+                     openingControls.Stage("VCG01", 0),
+                 })
+            liveControlState = stage.Commands.Aggregate(
+                liveControlState,
+                (state, command) => command.Apply(state));
+        Require(
+            !liveControlState.Movement && !liveControlState.PipBoy &&
+            !liveControlState.Fighting && liveControlState.Looking,
+            "Owned VCG00-to-VCG01 initial player controls differ.");
+        liveControlState = openingControls.Stage("VCG01", 55).Commands.Aggregate(
+            liveControlState,
+            (state, command) => command.Apply(state));
+        Require(
+            liveControlState.Movement && !liveControlState.PipBoy &&
+            !liveControlState.Fighting && liveControlState.PointOfView &&
+            liveControlState.Looking && liveControlState.RolloverText &&
+            !liveControlState.Sneaking,
+            "Owned VCG01 stage-55 player controls differ.");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_OPENING_CONTROLS_PASS " +
+            $"quests={openingControls.Quests.Count} stage=VCG01:55 " +
+            $"movement={liveControlState.Movement} pipBoy={liveControlState.PipBoy} " +
+            $"fighting={liveControlState.Fighting} looking={liveControlState.Looking} " +
+            "source=winning-qust-sctx cache=none writes=0");
+        var openingTransitions = FalloutOpeningStageTransitionResolver.Resolve(
+            owned,
+            openingControls);
+        openingTransitions = FalloutOpeningStageTransitionResolver.AddDialogueResults(
+            owned,
+            openingControls,
+            openingTransitions,
+            "VCG01",
+            [3, 8, 15, 25, 35, 40, 50]);
+        openingTransitions = FalloutOpeningStageTransitionResolver.AddDialogueResults(
+            owned,
+            openingControls,
+            openingTransitions,
+            "VCG01",
+            [70]);
+        openingTransitions = FalloutOpeningStageTransitionResolver.AddDialogueResults(
+            owned,
+            openingControls,
+            openingTransitions,
+            "VCG01",
+            [79]);
+        openingTransitions = FalloutOpeningStageTransitionResolver.AddDialogueResults(
+            owned,
+            openingControls,
+            openingTransitions,
+            "VCG01",
+            [95]);
+        openingTransitions = FalloutOpeningStageTransitionResolver.AddDialogueResults(
+            owned,
+            openingControls,
+            openingTransitions,
+            "VCG01",
+            [105]);
+        var liveIntroEdge = openingTransitions.From("VCG00", 0)
+            .Single(value => value.Kind == "stage-script");
+        Require(
+            liveIntroEdge.ToQuestEditorId == "VCG00" && liveIntroEdge.ToStage == 90 &&
+            liveIntroEdge.Blockers.SequenceEqual(["playbink"]) &&
+            openingTransitions.From("VCG00", 90).Single(value => value.Kind == "timer") is
+            {
+                ToStage: 95,
+                DelaySeconds: 3.0f,
+            } &&
+            openingTransitions.From("VCG00", 95).Single(value => value.Kind == "timer")
+                .ToStage == 100 &&
+            openingTransitions.From("VCG00", 100).Single(value => value.Kind == "stage-script") is
+            {
+                ToQuestEditorId: "VCG01",
+                ToStage: 0,
+            } &&
+            openingTransitions.From("VCG01", 0).Single(value => value.Kind == "timer") is
+            {
+                ToStage: 1,
+                DelaySeconds: 0.2f,
+            },
+            "Owned opening stage/timer transition graph differs.");
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_OPENING_TRANSITIONS_PASS " +
+            $"edges={openingTransitions.Transitions.Count} " +
+            $"entry={liveIntroEdge.FromQuestEditorId}:{liveIntroEdge.FromStage}->" +
+            $"{liveIntroEdge.ToQuestEditorId}:{liveIntroEdge.ToStage} " +
+            $"blockers={string.Join(',', liveIntroEdge.Blockers)} " +
+            "source=winning-qust-scpt-dial-info cache=none writes=0");
+        var liveStageMachine = new FalloutOpeningStageMachine(
+            openingTransitions,
+            openingControls,
+            "VCG00",
+            0);
+        Require(
+            liveStageMachine.PendingBlockers.SequenceEqual(["playbink"]) &&
+            liveStageMachine.CompleteBlocker("playbink") &&
+            liveStageMachine.Stage == 90 && liveStageMachine.TimerSeconds == 3.0f &&
+            liveStageMachine.AdvanceTime(3.0f) &&
+            liveStageMachine.QuestEditorId == "VCG01" && liveStageMachine.Stage == 0 &&
+            liveStageMachine.TimerSeconds == 0.2f &&
+            liveStageMachine.AdvanceTime(0.2f) &&
+            liveStageMachine.Stage == 1 && liveStageMachine.TimerSeconds == 2.8f &&
+            liveStageMachine.AdvanceTime(2.8f) &&
+            liveStageMachine.Stage == 3 && liveStageMachine.TimerSeconds is null &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            !liveStageMachine.ControlState.Movement &&
+            liveStageMachine.ControlState.Looking,
+            "Owned opening stage machine did not reach the first dialogue-dependent stage.");
+        Require(
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 5 && liveStageMachine.TimerSeconds == 3.25f &&
+            liveStageMachine.AdvanceTime(3.25f) &&
+            liveStageMachine.Stage == 8 && liveStageMachine.TimerSeconds is null &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 10 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["getplayername"]) &&
+            liveStageMachine.CompleteBlocker("getplayername") &&
+            liveStageMachine.TimerSeconds == 1.0f &&
+            liveStageMachine.AdvanceTime(1.0f) &&
+            liveStageMachine.Stage == 15 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 25 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 30 && liveStageMachine.TimerSeconds == 3.0f &&
+            liveStageMachine.AdvanceTime(3.0f) &&
+            liveStageMachine.Stage == 35 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 36 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["showracemenu"]) &&
+            liveStageMachine.CompleteBlocker("showracemenu") &&
+            liveStageMachine.Stage == 40 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 45 && liveStageMachine.TimerSeconds == 3.0f &&
+            liveStageMachine.AdvanceTime(3.0f) &&
+            liveStageMachine.Stage == 50 &&
+            liveStageMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveStageMachine.CompleteBlocker("sayto") &&
+            liveStageMachine.Stage == 55 && liveStageMachine.TimerSeconds is null &&
+            liveStageMachine.PendingBlockers.Count == 0 &&
+            liveStageMachine.ControlState.Movement &&
+            liveStageMachine.ControlState.Looking,
+            "Owned opening stage machine did not reach source-controlled free movement.");
+        var liveVigorMachine = new FalloutOpeningStageMachine(
+            openingTransitions,
+            openingControls,
+            "VCG01",
+            liveVigor.TriggerFromStage);
+        liveVigorMachine.EnterSourceStage("VCG01", liveVigor.TesterStage);
+        liveVigorMachine.EnterSourceStage("VCG01", liveVigor.CompletedStage);
+        Require(
+            liveVigorMachine.Stage == 65 && liveVigorMachine.TimerSeconds == 1.0f &&
+            liveVigorMachine.AdvanceTime(1.0f) && liveVigorMachine.Stage == 70 &&
+            liveVigorMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveVigorMachine.CompleteBlocker("sayto") && liveVigorMachine.Stage == 79 &&
+            liveVigorMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveVigorMachine.CompleteBlocker("sayto") && liveVigorMachine.Stage == 80,
+            "Owned native Vigor/psych dialogue stages did not reach stage 80.");
+        liveVigorMachine.EnterSourceStage("VCG01", liveTagSkills.PsychCompletedStage);
+        Require(
+            liveVigorMachine.AdvanceTime(1.0f) &&
+            liveVigorMachine.Stage == liveTagSkills.TagMenuStage &&
+            liveVigorMachine.PendingBlockers.SequenceEqual(["settagskills"]) &&
+            liveVigorMachine.CompleteBlocker("settagskills") &&
+            liveVigorMachine.AdvanceTime(1.0f) && liveVigorMachine.Stage == 95,
+            "Owned native psych/tag-skill stages did not reach stage 95.");
+        Require(
+            liveVigorMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveVigorMachine.CompleteBlocker("sayto") &&
+            liveVigorMachine.Stage == 98 &&
+            liveVigorMachine.AdvanceTime(1.0f) &&
+            liveVigorMachine.Stage == liveTraitFarewell.TraitMenuStage &&
+            liveVigorMachine.PendingBlockers.SequenceEqual(["showtraitmenu"]) &&
+            liveVigorMachine.CompleteBlocker("showtraitmenu") &&
+            liveVigorMachine.AdvanceTime(1.0f) &&
+            liveVigorMachine.Stage == 105 &&
+            liveVigorMachine.PendingBlockers.SequenceEqual(["sayto"]) &&
+            liveVigorMachine.CompleteBlocker("sayto") &&
+            liveVigorMachine.Stage == liveTraitFarewell.ExitTriggerFromStage,
+            "Owned native trait/farewell stages did not reach the Doc exit trigger.");
+        liveVigorMachine.EnterSourceStage("VCG01", liveTraitFarewell.FarewellStage);
+        liveVigorMachine.EnterSourceStage("VCG01", liveTraitFarewell.CompletedStage);
+        Console.WriteLine(
+            "OPENNV_FALLOUT_LIVE_OPENING_STAGE_MACHINE_PASS " +
+            $"stage={liveStageMachine.QuestEditorId}:{liveStageMachine.Stage} " +
+            $"movement={liveStageMachine.ControlState.Movement} " +
+            $"looking={liveStageMachine.ControlState.Looking} " +
+            "source=winning-qust-scpt-dial-info cache=none writes=0");
+        var completedControls = openingControls.Stage("VCG01", 110).Commands.Aggregate(
+            liveStageMachine.ControlState,
+            (state, command) => command.Apply(state));
+        var liveSaveCompatibilityId = $"standalone-live:{owned.Plugins[0].Sha256}";
+        var liveSavePath = Path.Combine(
+            Path.GetTempPath(),
+            $"opennv-native-campaign-{Guid.NewGuid():N}.json");
+        try
+        {
+            var liveSave = FalloutNativeCampaignSave.Capture(
+                liveSaveCompatibilityId,
+                liveCompletedGrant,
+                "Live Courier",
+                liveRaceSex.Female,
+                liveVigor,
+                liveSpecial,
+                liveTagSkills,
+                liveTags,
+                liveTraitFarewell,
+                liveTraits,
+                completedControls,
+                [12.5f, 2.0f, -8.25f],
+                [0.0f, 0.0f, 0.0f, 1.0f]);
+            FalloutNativeCampaignSave.Write(liveSavePath, liveSave);
+            var liveRestore = FalloutNativeCampaignSave.Read(
+                liveSavePath,
+                liveSaveCompatibilityId,
+                owned,
+                liveVigor,
+                liveTagSkills,
+                stage200Grant,
+                liveTraitFarewell);
+            Require(
+                liveRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
+                liveRestore.State.PlayerName == "Live Courier" &&
+                liveRestore.State.Character == liveRaceSex.Female &&
+                liveRestore.State.Special == liveSpecial &&
+                liveRestore.State.TagSkills.SequenceEqual(liveTags) &&
+                liveRestore.State.Traits.SequenceEqual(liveTraits) &&
+                liveRestore.Inventory.Items.Count == liveCompletedGrant.Inventory.Items.Count &&
+                FalloutNativeCampaignSave.RestorePlayerControls(liveRestore.State) ==
+                    completedControls,
+                "Owned native campaign save did not cold-restore against live records.");
+        }
+        finally
+        {
+            if (File.Exists(liveSavePath))
+                File.Delete(liveSavePath);
+        }
+        Require(!File.Exists(liveSavePath), "Owned native campaign save cleanup failed.");
+        Console.WriteLine(
+            $"OPENNV_FALLOUT_LIVE_COLD_RELOAD_PASS stage=VCG01:200 " +
+            $"items={liveCompletedGrant.Inventory.Items.Count} " +
+            "character=restored special=restored tags=restored traits=restored " +
+            "transform=restored controls=restored " +
+            "source=winning-records " +
+            "cache=none writes=save-only cleanup=complete");
+    }
+    var docMitchell = FalloutCellSceneReader.Read(
+        owned,
+        new FalloutFormKey("FalloutNV.esm", 0x103df9));
+    var playerMarkers = docMitchell.References.Where(reference =>
+        docMitchell.BaseObjects[reference.Base].EditorId.Equals(
+            "XMarkerHeading", StringComparison.OrdinalIgnoreCase)).ToArray();
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_CELL_RUNTIME_PASS cell={docMitchell.Cell.FormKey} " +
+        $"editorId={docMitchell.Cell.EditorId} references={docMitchell.References.Count} " +
+        $"models={docMitchell.BaseObjects.Values.Count(value => value.ModelPath is not null)} " +
+        $"playerMarkers={playerMarkers.Length}");
+    var ownedDoorTransition = FalloutDoorTransitionResolver.ResolveSingleInteriorExit(
+        owned, docMitchell);
+    Require(
+        ownedDoorTransition.SourceDoor.FormKey == new FalloutFormKey("FalloutNV.esm", 0x103e61) &&
+        ownedDoorTransition.DestinationDoor.FormKey == new FalloutFormKey("FalloutNV.esm", 0x103e69) &&
+        ownedDoorTransition.DestinationScene.Cell.FormKey ==
+            new FalloutFormKey("FalloutNV.esm", 0x0846ea) &&
+        ownedDoorTransition.DestinationWorldspace == new FalloutFormKey("FalloutNV.esm", 0x0da726),
+        "Owned Doc-house XTEL/CELL/WRLD transition differs.");
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_DOOR_TRANSITION_PASS source={ownedDoorTransition.SourceDoor.FormKey} " +
+        $"destination={ownedDoorTransition.DestinationDoor.FormKey} " +
+        $"cell={ownedDoorTransition.DestinationScene.Cell.FormKey} " +
+        $"coordinates={ownedDoorTransition.DestinationScene.Cell.Coordinates} " +
+        $"world={ownedDoorTransition.DestinationWorldspace} " +
+        $"worldEditorId={ownedDoorTransition.DestinationWorldspaceEditorId}");
+    const float exteriorCellSide = 4096.0f;
+    var entryPosition = ownedDoorTransition.SourceDoor.Teleport!.Position;
+    var activeCoordinates = (
+        X: (int)MathF.Floor(entryPosition[0] / exteriorCellSide),
+        Y: (int)MathF.Floor(entryPosition[1] / exteriorCellSide));
+    var activeCells = owned.EffectiveRecords("CELL").Where(record =>
+    {
+        var worldGroup = record.Groups.LastOrDefault(value => value.Type == 1);
+        if (worldGroup.Type != 1 ||
+            record.Plugin.AdjustFormId(worldGroup.LabelAsUInt32) !=
+            ownedDoorTransition.DestinationWorldspace)
+            return false;
+        var xclc = record.ReadSubrecords().SingleOrDefault(value => value.Signature == "XCLC");
+        return xclc.Data.Length >= sizeof(int) * 2 &&
+            BinaryPrimitives.ReadInt32LittleEndian(xclc.Data.Span) == activeCoordinates.X &&
+            BinaryPrimitives.ReadInt32LittleEndian(xclc.Data.Span[sizeof(int)..]) == activeCoordinates.Y;
+    }).ToArray();
+    Require(activeCells.Length == 1, "Owned XTEL active exterior grid CELL is ambiguous.");
+    var activeCell = activeCells[0];
+    var activeLand = owned.EffectiveRecords("LAND").Where(record =>
+        FalloutCellSceneReader.ParentCell(record) == activeCell.FormKey).ToArray();
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_LAND_ACTIVE_CELL coordinates={activeCoordinates} cell={activeCell.FormKey} " +
+        $"land={string.Join(',', activeLand.Select(value => value.FormKey))} " +
+        $"subrecords={string.Join(',', activeLand.SelectMany(value => value.ReadSubrecords())
+            .GroupBy(value => value.Signature).Select(value => $"{value.Key}:{value.Count()}"))}");
+    var ownedLandscape = FalloutLandscapeTransportResolver.Resolve(owned, ownedDoorTransition);
+    Require(
+        ownedLandscape.ActiveCoordinates == (-18, 0) &&
+        ownedLandscape.ActiveCell == new FalloutFormKey("FalloutNV.esm", 0x0daebb) &&
+        ownedLandscape.Landscape == new FalloutFormKey("FalloutNV.esm", 0x0db00e) &&
+        ownedLandscape.BaseLayers.Count == 4 &&
+        ownedLandscape.AlphaLayers.Count == 23 &&
+        ownedLandscape.Heights.Length == 33 * 33,
+        "Owned XTEL active-set LAND transport differs.");
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_LAND_TRANSPORT_PASS activeCell={ownedLandscape.ActiveCell} " +
+        $"coordinates={ownedLandscape.ActiveCoordinates} land={ownedLandscape.Landscape} " +
+        $"flags=0x{ownedLandscape.Flags:x8} vertices={ownedLandscape.Heights.Length} " +
+        $"baseLayers={ownedLandscape.BaseLayers.Count} alphaLayers={ownedLandscape.AlphaLayers.Count} " +
+        $"textures={ownedLandscape.Textures.Count} defaults=" +
+        $"{ownedLandscape.AlphaLayers.Count(value => value.UsesQuadrantDefault)} " +
+        $"dds={string.Join(',', ownedLandscape.Textures.Values.Select(value => value.DiffusePath))}");
+    foreach (var marker in playerMarkers)
+    {
+        var record = owned.GetEffective(marker.FormKey);
+        Console.WriteLine(
+            $"OPENNV_FALLOUT_PLAYER_MARKER form={marker.FormKey} editorId={ReadOptionalEditorId(record)} " +
+            $"flags=0x{marker.Flags:x8} " +
+            $"position={string.Join('/', marker.Position.Select(value => value.ToString("R")))} " +
+            $"rotation={string.Join('/', marker.RotationRadians.Select(value => value.ToString("R")))} " +
+            $"subrecords={string.Join(',', record.ReadSubrecords().Select(value => value.Signature))}");
+        var runtimeFormId = owned.RuntimeFormId(marker.FormKey);
+        foreach (var owner in owned.EffectiveRecords().Where(candidate =>
+                     candidate.Signature is "QUST" or "PACK"))
+        {
+            foreach (var subrecord in owner.ReadSubrecords())
+            {
+                var offsets = FindUInt32(subrecord.Data.Span, runtimeFormId).ToArray();
+                if (offsets.Length > 0)
+                    Console.WriteLine(
+                        $"OPENNV_FALLOUT_PLAYER_MARKER_LINK marker={marker.FormKey} " +
+                        $"owner={owner.Signature}/{owner.FormKey} editorId={ReadOptionalEditorId(owner)} " +
+                        $"subrecord={subrecord.Signature} " +
+                        $"offsets={string.Join(',', offsets)} bytes={Convert.ToHexString(subrecord.Data.Span)}");
+            }
+        }
+    }
+    var ownedStart = FalloutNewGamePlayerStartResolver.Resolve(owned, docMitchell);
+    Require(
+        ownedStart.Reference.FormKey == new FalloutFormKey("FalloutNV.esm", 0x103e6b) &&
+        ownedStart.Reference.EditorId == "VCG01PlayerStartMarkerREF" &&
+        ownedStart.Quest == new FalloutFormKey("FalloutNV.esm", 0x102037) &&
+        ownedStart.Stage == 0 &&
+        ownedStart.Candidates.Count == 7 &&
+        ownedStart.Candidates.Count(value => value.DirectPackageLocationCount > 0) == 5 &&
+        ownedStart.Candidates.Sum(value => value.DirectPackageLocationCount) == 6,
+        "Owned New Game QUST/SCRO/REFR/PACK player-start selection differs.");
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_NEW_GAME_PLAYER_START_PASS reference={ownedStart.Reference.FormKey} " +
+        $"editorId={ownedStart.Reference.EditorId} quest={ownedStart.Quest} stage={ownedStart.Stage} " +
+        $"candidates={ownedStart.Candidates.Count} " +
+        $"packageLinked={ownedStart.Candidates.Count(value => value.DirectPackageLocationCount > 0)} " +
+        $"packageTargets={ownedStart.Candidates.Sum(value => value.DirectPackageLocationCount)}");
+    var ownedLights = docMitchell.References
+        .Select(reference => (Reference: reference, Base: docMitchell.BaseObjects[reference.Base]))
+        .Where(value => value.Base.Light is not null)
+        .ToArray();
+    var resolvedLights = ownedLights
+        .Select(value => FalloutPlacedLightResolver.Resolve(value.Reference, value.Base))
+        .ToArray();
+    Console.WriteLine(
+        $"OPENNV_FALLOUT_CELL_LIGHT_AUDIT lights={ownedLights.Length} enabled=" +
+        $"{ownedLights.Count(value => !FalloutCellSceneReader.IsInitiallyDisabled(value.Reference))} " +
+        $"enableParents={ownedLights.Count(value => value.Reference.EnableParent is not null)} " +
+        "flags=" + string.Join(',', ownedLights.GroupBy(value => value.Base.Light!.Flags)
+            .OrderBy(group => group.Key).Select(group => $"0x{group.Key:x8}:{group.Count()}")) + " " +
+        "durations=" + string.Join(',', ownedLights.GroupBy(value => value.Base.Light!.Duration)
+            .OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}")) + " " +
+        "periods=" + string.Join(',', ownedLights.GroupBy(value => value.Base.Light!.Period)
+            .OrderBy(group => group.Key).Select(group => $"{group.Key:R}:{group.Count()}")) + " " +
+        "contracts=" + string.Join(',', ownedLights.GroupBy(value => (
+                value.Base.Light!.Falloff, value.Base.Light.FieldOfViewDegrees,
+                value.Base.Light.NearClip, value.Base.Light.Intensity,
+                value.Base.Light.ColorAlpha))
+            .Select(group => $"{group.Key.Falloff:R}/{group.Key.FieldOfViewDegrees:R}/" +
+                $"{group.Key.NearClip}/{group.Key.Intensity:R}/{group.Key.ColorAlpha}:{group.Count()}")) + " " +
+        $"resolvedRadius={resolvedLights.Min(value => value.RadiusGameUnits):R}.." +
+        $"{resolvedLights.Max(value => value.RadiusGameUnits):R} " +
+        "radii=" + string.Join(',', ownedLights.GroupBy(value => (
+                Base: value.Base.Light!.RadiusGameUnits,
+                Adjustment: value.Reference.RadiusAdjustmentGameUnits))
+            .OrderBy(group => group.Key.Base).ThenBy(group => group.Key.Adjustment)
+            .Select(group => $"{group.Key.Base}/{group.Key.Adjustment:R}:{group.Count()}")));
+}
+
+static string ReadEditorId(FalloutPluginRecord record)
+{
+    var data = record.ReadSubrecords().Single(subrecord => subrecord.Signature == "EDID").Data.Span;
+    var end = data.IndexOf((byte)0);
+    return Encoding.ASCII.GetString(end >= 0 ? data[..end] : data);
+}
+
+static IReadOnlyList<FalloutPluginSource> ReadManifestPluginSources(string manifestPath)
+{
+    using var document = JsonDocument.Parse(File.ReadAllBytes(Path.GetFullPath(manifestPath)));
+    var root = document.RootElement;
+    var roots = root.GetProperty("roots").EnumerateArray().ToDictionary(
+        value => value.GetProperty("id").GetString()!,
+        value => Path.GetFullPath(value.GetProperty("root").GetString()!),
+        StringComparer.Ordinal);
+    return root.GetProperty("plugins").EnumerateArray().Select(value =>
+    {
+        var name = value.GetProperty("file").GetString()!;
+        return new FalloutPluginSource(
+            name,
+            Path.Combine(roots[value.GetProperty("rootId").GetString()!], name),
+            value.GetProperty("bytes").GetInt64(),
+            value.GetProperty("mtimeMs").GetInt64());
+    }).ToArray();
+}
+
+static string ReadOptionalEditorId(FalloutPluginRecord record)
+{
+    var editor = record.ReadSubrecords().FirstOrDefault(value => value.Signature == "EDID");
+    if (editor.Data.IsEmpty)
+        return "<none>";
+    var data = editor.Data.Span;
+    var end = data.IndexOf((byte)0);
+    return Encoding.ASCII.GetString(end >= 0 ? data[..end] : data);
+}
+
+static IReadOnlyList<int> FindUInt32(ReadOnlySpan<byte> data, uint value)
+{
+    var result = new List<int>();
+    for (var offset = 0; offset <= data.Length - sizeof(uint); offset++)
+    {
+        if (BinaryPrimitives.ReadUInt32LittleEndian(data[offset..]) == value)
+            result.Add(offset);
+    }
+    return result;
+}
+
+static void Require(bool condition, string message)
+{
+    if (!condition)
+        throw new InvalidOperationException(message);
+}
+
+static void ExpectFailure(Action action, string messageFragment)
+{
+    try
+    {
+        action();
+        throw new InvalidOperationException($"Expected failure containing '{messageFragment}' was not raised.");
+    }
+    catch (Exception error) when (error.Message.Contains(messageFragment, StringComparison.OrdinalIgnoreCase))
+    {
+    }
+}
+
+static byte[] Record(string signature, uint formId, uint flags, byte[] data)
+{
+    var header = new byte[24];
+    Encoding.ASCII.GetBytes(signature).CopyTo(header, 0);
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), checked((uint)data.Length));
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(8), flags);
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), formId);
+    return Combine(header, data);
+}
+
+static byte[] Teleport(uint destination, float[] position, float[] rotation)
+{
+    var data = new byte[32];
+    BinaryPrimitives.WriteUInt32LittleEndian(data, destination);
+    for (var index = 0; index < 3; ++index)
+    {
+        BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(sizeof(uint) + index * sizeof(float)), position[index]);
+        BinaryPrimitives.WriteSingleLittleEndian(
+            data.AsSpan(sizeof(uint) + (index + 3) * sizeof(float)), rotation[index]);
+    }
+    return data;
+}
+
+static byte[] LayerHeader(uint texture, byte quadrant, ushort layer)
+{
+    var data = new byte[8];
+    BinaryPrimitives.WriteUInt32LittleEndian(data, texture);
+    data[sizeof(uint)] = quadrant;
+    BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(sizeof(uint) + 2), layer);
+    return data;
+}
+
+static byte[] Group(string label, int type, byte[] data)
+{
+    var header = new byte[24];
+    Encoding.ASCII.GetBytes("GRUP").CopyTo(header, 0);
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), checked((uint)(header.Length + data.Length)));
+    Encoding.ASCII.GetBytes(label).CopyTo(header, 8);
+    BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12), type);
+    return Combine(header, data);
+}
+
+static byte[] GroupFormId(uint label, int type, byte[] data)
+{
+    var header = new byte[24];
+    Encoding.ASCII.GetBytes("GRUP").CopyTo(header, 0);
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), checked((uint)(header.Length + data.Length)));
+    BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(8), label);
+    BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12), type);
+    return Combine(header, data);
+}
+
+static byte[] CompressedRecord(string signature, uint formId, byte[] data, bool corruptChecksum)
+{
+    using var destination = new MemoryStream();
+    using (var compressor = new ZLibStream(destination, CompressionLevel.SmallestSize, leaveOpen: true))
+        compressor.Write(data);
+    var payload = destination.ToArray();
+    if (corruptChecksum)
+        payload[^1] ^= 0xff;
+    return Record(signature, formId, compressedFlag, Combine(UInt32(checked((uint)data.Length)), payload));
+}
+
+static byte[] ExtendedSubrecord(string signature, byte[] data) => Combine(
+    Subrecord("XXXX", UInt32(checked((uint)data.Length))),
+    Subrecord(signature, data, 0));
+
+static byte[] Subrecord(string signature, byte[] data, ushort? declaredSize = null) =>
+    BinarySubrecord(Encoding.ASCII.GetBytes(signature), data, declaredSize);
+
+static byte[] BinarySubrecord(byte[] signature, byte[] data, ushort? declaredSize = null)
+{
+    var header = new byte[6];
+    signature.CopyTo(header, 0);
+    BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(4), declaredSize ?? checked((ushort)data.Length));
+    return Combine(header, data);
+}
+
+static byte[] ZString(string value) => [.. Encoding.ASCII.GetBytes(value), 0];
+
+static byte[] UInt32(uint value)
+{
+    var data = new byte[sizeof(uint)];
+    BinaryPrimitives.WriteUInt32LittleEndian(data, value);
+    return data;
+}
+
+static byte[] Combine(params byte[][] values)
+{
+    var result = new byte[values.Sum(value => value.Length)];
+    var offset = 0;
+    foreach (var value in values)
+    {
+        value.CopyTo(result, offset);
+        offset += value.Length;
+    }
+    return result;
+}

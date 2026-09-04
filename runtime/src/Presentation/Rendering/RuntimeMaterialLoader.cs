@@ -136,10 +136,6 @@ internal static class RuntimeMaterialLoader
             var authoredDdsMipBefore = authoredDdsMipChainTextures;
             var decodedMipBefore = decodedAuthoredBc1AlphaMipChainTextures;
             var generatedMipBefore = runtimeGeneratedMipTextures;
-            var path = ResolveContentPath(
-                texture.GetProperty("png").GetString()!,
-                baseDirectory);
-            VerifiedGltfLoader.VerifyHash(path, texture.GetProperty("pngSha256").GetString()!);
             var isLandscapeWeightMap = texture.TryGetProperty(
                     "landscapeRole",
                     out var landscapeRole) &&
@@ -148,6 +144,38 @@ internal static class RuntimeMaterialLoader
                 cubeFaceRows.GetArrayLength() > 0;
             var normalGreenInverted =
                 texture.GetProperty("normalGreenInverted").GetBoolean();
+            var path = ResolveContentPath(
+                texture.GetProperty("png").GetString()!,
+                baseDirectory);
+            var loadedTexturePath = path;
+            Image? image = null;
+            var loadedDirectly = false;
+            if (!isLandscapeWeightMap && !hasCubeFaces &&
+                RuntimeOwnedContentSource.Current is { } ownedSource &&
+                texture.TryGetProperty("archivePath", out var archivePathProperty) &&
+                archivePathProperty.ValueKind == JsonValueKind.String)
+            {
+                var logicalPath = archivePathProperty.GetString()!;
+                var preferredArchive = texture.TryGetProperty("sourceArchive", out var sourceArchiveProperty)
+                    ? sourceArchiveProperty.GetString()
+                    : null;
+                if (!ownedSource.TryRead(logicalPath, preferredArchive, out var sourceBytes, out var source))
+                    throw new FileNotFoundException($"The effective owned resource is missing: {logicalPath}");
+                image = new Image();
+                var directLoadResult = image.LoadDdsFromBuffer(sourceBytes);
+                if (directLoadResult != Error.Ok || image.IsEmpty())
+                    throw new InvalidOperationException(
+                        $"Godot could not decode effective DDS resource: {source} ({directLoadResult})");
+                if (normalGreenInverted)
+                    image = InvertNormalGreen(image, source);
+                loadedTexturePath = source;
+                loadedDirectly = true;
+                authoredDdsTextures++;
+                if (image.HasMipmaps())
+                    authoredDdsMipChainTextures++;
+            }
+            if (!loadedDirectly)
+                VerifiedGltfLoader.VerifyHash(path, texture.GetProperty("pngSha256").GetString()!);
             JsonElement rgba8MipProperty = default;
             var useDecodedAuthoredMipChain = !isLandscapeWeightMap &&
                 !hasCubeFaces &&
@@ -160,9 +188,12 @@ internal static class RuntimeMaterialLoader
                 !hasCubeFaces &&
                 texture.TryGetProperty("dds", out ddsProperty) &&
                 ddsProperty.ValueKind == JsonValueKind.String;
-            var loadedTexturePath = path;
-            Image? image;
-            if (isLandscapeWeightMap)
+            if (loadedDirectly)
+            {
+                // The effective source can be a legitimate higher-priority mod replacement,
+                // so prepared-source dimensions and hashes do not apply to this payload.
+            }
+            else if (isLandscapeWeightMap)
             {
                 var width = texture.GetProperty("width").GetInt32();
                 var height = texture.GetProperty("height").GetInt32();
@@ -255,8 +286,9 @@ internal static class RuntimeMaterialLoader
                 image = Image.LoadFromFile(path);
             if (image is null || image.IsEmpty())
                 throw new InvalidOperationException($"Godot could not load prepared texture: {path}");
-            if (image.GetWidth() != texture.GetProperty("width").GetInt32() ||
-                image.GetHeight() != texture.GetProperty("height").GetInt32())
+            if (!loadedDirectly &&
+                (image.GetWidth() != texture.GetProperty("width").GetInt32() ||
+                    image.GetHeight() != texture.GetProperty("height").GetInt32()))
                 throw new InvalidOperationException($"Prepared texture dimensions do not match manifest: {path}");
             if (!isLandscapeWeightMap)
                 runtimeGeneratedMipTextures += GenerateRuntimeMipmaps(
@@ -348,6 +380,23 @@ internal static class RuntimeMaterialLoader
             throw new InvalidOperationException(
                 $"Godot could not generate the required runtime mip chain: {path} ({result})");
         return true;
+    }
+
+    private static Image InvertNormalGreen(Image image, string source)
+    {
+        var width = image.GetWidth();
+        var height = image.GetHeight();
+        var hasMipmaps = image.HasMipmaps();
+        image.Convert(Image.Format.Rgba8);
+        var data = image.GetData();
+        if (data.Length % 4 != 0)
+            throw new InvalidOperationException($"Decoded normal DDS is not RGBA8 aligned: {source}");
+        for (var index = 1; index < data.Length; index += 4)
+            data[index] = (byte)(byte.MaxValue - data[index]);
+        var inverted = Image.CreateFromData(width, height, hasMipmaps, Image.Format.Rgba8, data);
+        if (inverted is null || inverted.IsEmpty())
+            throw new InvalidOperationException($"Godot could not invert the normal-map green channel: {source}");
+        return inverted;
     }
 
     internal static int Apply(

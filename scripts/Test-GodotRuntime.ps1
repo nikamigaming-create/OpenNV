@@ -70,6 +70,10 @@ $gamebryoUiTileProbe = Join-Path $repoRoot `
     "contract-tests\GamebryoUiTileContractProbe\GamebryoUiTileContractProbe.csproj"
 $gamebryoPackagePlacementProbe = Join-Path $repoRoot `
     "contract-tests\GamebryoPackagePlacementProbe\GamebryoPackagePlacementProbe.csproj"
+$ownedAuxResourceProbe = Join-Path $repoRoot `
+    "contract-tests\OwnedAuxResourceProbe\OwnedAuxResourceProbe.csproj"
+$falloutSoundRuntimeProbe = Join-Path $repoRoot `
+    "contract-tests\FalloutSoundRuntimeProbe\FalloutSoundRuntimeProbe.csproj"
 $exporter = Join-Path $contentRoot "tools\export_static_nif_gltf.py"
 $preparer = Join-Path $contentRoot "tools\prepare_legal_assets.py"
 $reportValidator = Join-Path $contentRoot "tools\validate_runtime_report.py"
@@ -104,7 +108,7 @@ function Resolve-OwnedDataRoot(
     throw "Select either the configured game installation folder or its data folder."
 }
 
-foreach ($path in @($Godot, $solution, $containerInventoryProbe, $actorAnimationPlaybackProbe, $actorComplexionProbe, $gamebryoPackageSelectionProbe, $gamebryoUiTileProbe, $gamebryoPackagePlacementProbe, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
+foreach ($path in @($Godot, $solution, $containerInventoryProbe, $actorAnimationPlaybackProbe, $actorComplexionProbe, $gamebryoPackageSelectionProbe, $gamebryoUiTileProbe, $gamebryoPackagePlacementProbe, $ownedAuxResourceProbe, $falloutSoundRuntimeProbe, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Missing OpenNV Godot gate input: $path"
     }
@@ -163,6 +167,10 @@ if ($LASTEXITCODE -ne 0) { throw "Gamebryo package selection contract probe fail
 if ($LASTEXITCODE -ne 0) { throw "Gamebryo UI tile contract probe failed." }
 & dotnet run --project $gamebryoPackagePlacementProbe --configuration Release
 if ($LASTEXITCODE -ne 0) { throw "Gamebryo package placement contract probe failed." }
+& dotnet run --project $ownedAuxResourceProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Owned auxiliary resource contract probe failed." }
+& dotnet run --project $falloutSoundRuntimeProbe --configuration Release
+if ($LASTEXITCODE -ne 0) { throw "Fallout sound runtime contract probe failed." }
 
 $startupOutput = & $Godot --headless --xr-mode off --path $runtimeRoot 2>&1
 if ($LASTEXITCODE -ne 0 -or ($startupOutput | Out-String) -notmatch "OPENNV_GODOT_EXPERIMENTAL_READY playable=0") {

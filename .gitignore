@@ -14,6 +14,10 @@
 /runtime/generated/
 /runtime/bin/
 /runtime/obj/
+/runtime/tools/**/bin/
+/runtime/tools/**/obj/
+/tools/**/bin/
+/tools/**/obj/
 /runtime/dist/
 /runtime/tmp/
 /contract-tests/**/bin/

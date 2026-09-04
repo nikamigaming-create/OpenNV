@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\Content\FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutSoundRecord.cs" Link="FalloutSoundRecord.cs" />
+    <Compile Include="..\..\runtime\src\Content\RuntimeOwnedContentSource.cs" Link="RuntimeOwnedContentSource.cs" />
+  </ItemGroup>
+</Project>

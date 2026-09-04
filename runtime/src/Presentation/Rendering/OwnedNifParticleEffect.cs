@@ -6,6 +6,7 @@ namespace OpenNV.Runtime.Presentation.Rendering;
 internal static partial class OwnedNifParticleEffect
 {
     private const string Schema = "opennv-owned-nif-particle-effect/v1";
+    private const int GodotRenderLayerCount = 20;
 
     internal static Node3D Create(
         JsonElement source,
@@ -56,7 +57,7 @@ internal static partial class OwnedNifParticleEffect
             VisibilityAabb = SourceVisibilityBounds(emitter, speed.Maximum * life.Maximum + radius.Maximum),
         };
         particles.SetLayerMaskValue(1, false);
-        for (var layer = 1; layer <= 20; layer++)
+        for (var layer = 1; layer <= GodotRenderLayerCount; layer++)
             if ((renderLayer & (1u << (layer - 1))) != 0)
                 particles.SetLayerMaskValue(layer, true);
 

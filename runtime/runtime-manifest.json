@@ -52,12 +52,12 @@
         "vault13Concept": {
           "ready": true,
           "presentations": {
-            "first-person": { "ready": true, "status": "bounded-v13ent-slice" },
-            "hex-tactical": { "ready": true, "status": "bounded-v13ent-slice" },
+            "first-person": { "ready": false, "status": "native-object-camera-gameplay-contract-pending" },
+            "hex-tactical": { "ready": true, "status": "native-v13ent-floor-evidenced-static-object-presentation" },
             "openxr": { "ready": false, "status": "launcher-and-headset-gates-pending" }
           },
-          "requiresLauncherProfile": "opennv-launcher-fo1-profile/v1",
-          "message": "Launcher-capable when the player registers generated local hex-scene.json and character-start.json inputs. The route has original-style character creation, the owned Overseer movie with Escape/skip convergence, and one shared V13ENT save across Hex Tactical and First Person. A diagnostic OpenXR adapter reaches that shared session but is not launcher-enabled: reload/save simulator input, XR door use, campaign-native hands/weapon/UI, and physical-headset acceptance remain open. Only 1 of 96 inventoried local maps is tactically playable; dialogue, quests, complete campaign simulation, and retail combat-formula parity are not connected."
+          "requiresLauncherProfile": "opennv-fo1-owned-profile/v1",
+          "message": "Launcher-capable for a bounded, non-gameplay Hex presentation after the player registers a legally owned Fallout 1 install. Godot reads V13ENT.MAP, the complete nested object graph and live script table, PRO/FRM lists, COLOR.PAL, master.dat, critter.dat, and sealed loose DATA directly in memory. The admitted view contains all 7,549 non-default entry-elevation floor patches plus 1,100 evidenced static objects sharing 106 decoded FRM/rotation resources. Every nonvisual top-level record is transported as exact metadata: 351 Scroll Blockers, 20 Exit Grids, one Security Door, and 22 objects bound to matching live MAP script records, for zero unclassified objects. The Scroll Blockers and closed Security Door own exact hex-footprint runtime collision; adjacent activation opens only that unscripted door. Five fully resolved Exit Grids expose Map 6 / tile 17695 / elevation 0 / rotation 0 transitions, while 15 world-map sentinels remain metadata-only. Two nested inventory records are not world placements; two additional live MAP script records are retained without object bindings. Script execution, destination-map loading, general input/gameplay, character start, first-person, and OpenXR remain fail-closed. No prepared scene or character cache is used."
         }
       }
     },
@@ -82,11 +82,11 @@
         "vanilla": {
           "ready": true,
           "presentations": {
-            "first-person": { "ready": true, "status": "bounded-goodsprings-slice" },
+            "first-person": { "ready": true, "status": "native-owned-stack-menu-live-cell-capability-gated" },
             "hex-tactical": { "ready": false, "status": "not-implemented" },
-            "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
+            "openxr": { "ready": false, "status": "native-owned-cell-player-rig-not-connected" }
           },
-          "message": "Owned menu, skippable intro, source-ordered Doc opening beats, character creation, source-bound HUD/Pip-Boy shell, and a bounded eagerly instantiated Doc house to Goodsprings exterior to saloon composite. Campaign save v6 persists source-derived Level/HP/AP/XP, saloon CELL 00106185, opened-container remaining counts, and the player transform. The admitted four-family cache supports exact controller-door articulation, mass-zero target-local convex collision, authoritative current-CELL-only render/collision activation with linked CELLs hidden and frozen as preload state, and one-time source-collision actor grounding. Current configured-input first-run and cold-Continue acceptance cross both ordered XTEL transitions and restore the saloon with zero replayed transitions. The exact startup player-root/camera, complete population/package AI, player deposits, reverse traversal, neighboring exterior-grid streaming, integrated-route OpenXR acceptance, complete tile interaction, and retail UI parity remain pending.",
+          "message": "The launcher route mounts a hash-bound read-only ESM/ESP, sealed loose-file, and active-BSA stack and opens the Godot menu without preparing or restoring a cache. The live Doc Mitchell path resolves the exact quest-selected player start, authored collision, lighting, bounded NIF/DDS/KF/controller contracts, and a reciprocal XTEL transition into the winning Wasteland CELL directly in memory. Unsupported formats or semantics stop at first use. It is not yet a playable campaign: remaining NIF/material behavior, exterior LAND material presentation, actors, packages, scripts, complete UI/save state, active-set streaming, and the native OpenXR player rig remain capability gates. Historical cache compilers remain development evidence only; their old outputs were deleted and are not launcher inputs.",
           "unavailableDlc": []
         },
         "jam": {

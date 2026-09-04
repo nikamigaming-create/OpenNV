@@ -4,6 +4,7 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class GamebryoActorCollision : Area3D
 {
+    private const float HalfExtentScale = 0.5f;
     private readonly Node3D _actor;
     private readonly Vector3 _localCenter;
     private readonly Vector3 _sizeMeters;
@@ -82,7 +83,7 @@ internal sealed partial class GamebryoActorCollision : Area3D
         var inverse = GlobalTransform.AffineInverse();
         var localFrom = inverse * from;
         var localTo = inverse * to;
-        var bounds = new Aabb(-_sizeMeters * 0.5f, _sizeMeters);
+        var bounds = new Aabb(-_sizeMeters * HalfExtentScale, _sizeMeters);
         var direction = localTo - localFrom;
         var minimum = bounds.Position;
         var maximum = bounds.End;

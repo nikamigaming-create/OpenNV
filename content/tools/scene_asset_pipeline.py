@@ -325,7 +325,7 @@ def authored_collision_face_selection(
     logical_path: str,
     collision_source: str,
 ) -> str:
-    """Select the source collision face family without reference-name heuristics."""
+    """Select the source collision face family without relying on reference names."""
 
     canonical_path = logical_path.replace("/", "\\").lower()
     is_owned_road = canonical_path.startswith("meshes\\landscape\\roads\\") or (

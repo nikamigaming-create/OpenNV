@@ -1,3 +1,4 @@
+using Godot;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime;
@@ -10,11 +11,14 @@ public partial class RuntimeCoordinator
     /// </summary>
     private bool TryDispatchLaunch(RuntimeLaunchRequest launch)
     {
-        if (launch.Is(RuntimeLaunchRoute.OwnedData))
+        if (launch.Is(RuntimeLaunchRoute.NativeOwnedData))
         {
-            var prepared = LegalAssetPreparer.Prepare(launch.DataRoot!, _options, _configuration);
-            LoadPrepared(prepared, _options);
-            DismissLoadingScreen();
+            if (_nativeInstallation?.Game == NativeGame.Fallout1)
+                LoadFallout1NativeInstall(_nativeInstallation.InstallRoot, RequireOption(_options, "save-path"));
+            else if (_nativeInstallation?.Game == NativeGame.Fallout2)
+                LoadFallout2NativeInstall(_nativeInstallation.InstallRoot);
+            else
+                LoadNativeOwnedStack();
             return true;
         }
 
@@ -56,6 +60,15 @@ public partial class RuntimeCoordinator
                 RequireOption(_options, "actor-sidecar"),
                 _options);
             DismissLoadingScreen();
+            return true;
+        }
+
+        if (launch.Is(RuntimeLaunchRoute.Fallout1NativeOwned))
+        {
+            LoadFallout1NativeOwned(
+                RequireOption(_options, "fo1-owned-profile"),
+                RequireOption(_options, "fo1-start-presentation"),
+                RequireOption(_options, "save-path"));
             return true;
         }
 
@@ -126,18 +139,14 @@ public partial class RuntimeCoordinator
             return true;
         }
 
-        if (launch.Is(RuntimeLaunchRoute.PreparedCache))
-        {
-            if (!LegalAssetPreparer.TryRestore(
-                    _options,
-                    _configuration,
-                    out var restored,
-                    out var restoreError))
-                throw new InvalidOperationException(restoreError ?? "No prepared legal-asset cache exists.");
-            LoadPrepared(restored, _options);
-            DismissLoadingScreen();
-            return true;
-        }
         return false;
+    }
+
+    private void LoadFallout2NativeInstall(string installRoot)
+    {
+        _options["fo2-install-root"] = installRoot;
+        var scene = GD.Load<PackedScene>("res://src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStart.tscn");
+        AddChild(scene.Instantiate<Node3D>());
+        DismissLoadingScreen();
     }
 }

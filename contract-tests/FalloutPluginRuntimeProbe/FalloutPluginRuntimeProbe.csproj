@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\Content\FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutCampaignInventory.cs" Link="FalloutCampaignInventory.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutNativeRaceSex.cs" Link="FalloutNativeRaceSex.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutNativeVigor.cs" Link="FalloutNativeVigor.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutNativeTagSkills.cs" Link="FalloutNativeTagSkills.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutNativeTraitsFarewell.cs" Link="FalloutNativeTraitsFarewell.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutOpeningPlayerControls.cs" Link="FalloutOpeningPlayerControls.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutOpeningStageTransitions.cs" Link="FalloutOpeningStageTransitions.cs" />
+    <Compile Include="..\..\runtime\src\Gameplay\State\FalloutNativeCampaignSave.cs" Link="FalloutNativeCampaignSave.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutPlacedLight.cs" Link="FalloutPlacedLight.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutNewGamePlayerStart.cs" Link="FalloutNewGamePlayerStart.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutDoorTransition.cs" Link="FalloutDoorTransition.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutLandscapeTransport.cs" Link="FalloutLandscapeTransport.cs" />
+  </ItemGroup>
+</Project>

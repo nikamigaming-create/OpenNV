@@ -16,6 +16,22 @@ internal static class GamebryoCoordinate
     internal static Vector3 ConvertVector(Vector3 source) =>
         new(source.X, source.Z, -source.Y);
 
+    internal static Basis ConvertReferenceEuler(Vector3 sourceRadians, float scale)
+    {
+        if (!sourceRadians.IsFinite() || !float.IsFinite(scale) || scale <= 0.0f)
+            throw new InvalidOperationException("Gamebryo reference transform must be finite and positive.");
+        var x = new Basis(Vector3.Right, sourceRadians.X);
+        var y = new Basis(Vector3.Up, sourceRadians.Y);
+        var z = new Basis(Vector3.Back, -sourceRadians.Z);
+        var source = z * y * x;
+        return ConvertBasis(
+            [source.X.X, source.Y.X, source.Z.X,
+             source.X.Y, source.Y.Y, source.Z.Y,
+             source.X.Z, source.Y.Z, source.Z.Z],
+            scale,
+            "reference Euler transform");
+    }
+
     internal static Basis ConvertCameraBasis(
         IReadOnlyList<float> gameRowMajor,
         string label)

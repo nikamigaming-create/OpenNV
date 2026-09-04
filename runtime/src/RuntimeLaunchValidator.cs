@@ -118,19 +118,53 @@ internal static class RuntimeLaunchValidator
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(launch);
-        var hasDataRoot = launch.Is(RuntimeLaunchRoute.OwnedData);
+        var hasNativeSourceStack = launch.Is(RuntimeLaunchRoute.NativeOwnedData);
         var hasModel = launch.Is(RuntimeLaunchRoute.Model);
         var hasCellScene = launch.Is(RuntimeLaunchRoute.CellScene);
         var hasStaticCellCompile = launch.Is(RuntimeLaunchRoute.StaticCellCompile);
         var hasActorModel = launch.Is(RuntimeLaunchRoute.ActorModel);
         var hasActorReviewScene = launch.Is(RuntimeLaunchRoute.ActorReviewScene);
+        var hasFo1NativeOwned = launch.Is(RuntimeLaunchRoute.Fallout1NativeOwned);
         var hasFo1HexScene = launch.Is(RuntimeLaunchRoute.Fallout1HexScene);
         var hasFo1Campaign = launch.Is(RuntimeLaunchRoute.Fallout1CampaignTransport);
         var hasFo1CampaignPresentation = launch.Is(RuntimeLaunchRoute.Fallout1CampaignPresentation);
         var hasFo2TemplePresentation = launch.Is(RuntimeLaunchRoute.Fallout2TemplePresentation);
         var hasFo3Profile = launch.Is(RuntimeLaunchRoute.Fallout3Opening);
         var hasTtwFo3OpeningProfile = launch.Is(RuntimeLaunchRoute.TtwFallout3Opening);
-        var hasPreparedCache = launch.Is(RuntimeLaunchRoute.PreparedCache);
+        var nativeStackOptions = new[]
+        {
+            "source-stack", "source-stack-sha256", "stack-id", "campaign"
+        };
+        var nativeStackOptionCount = nativeStackOptions.Count(options.ContainsKey);
+        var legacyNativeStackOptions = new[]
+        {
+            "source-root", "data-root", "mod-stack", "mod-stack-sha256", "mod-stack-id"
+        };
+        var legacyNativeStackOption = legacyNativeStackOptions.FirstOrDefault(options.ContainsKey);
+        if (hasNativeSourceStack && !options.ContainsKey("save-path"))
+            throw new ArgumentException(
+                "The native --source-stack route requires an isolated --save-path.");
+        if (hasNativeSourceStack && nativeStackOptionCount != nativeStackOptions.Length)
+            throw new ArgumentException("A native Gamebryo source stack requires all mod-stack identity options.");
+        if (hasNativeSourceStack && legacyNativeStackOption is not null)
+            throw new ArgumentException(
+                $"The native v2 source-stack route cannot use legacy option --{legacyNativeStackOption}.");
+        if (!hasNativeSourceStack && nativeStackOptionCount != 0)
+            throw new ArgumentException(
+                "--source-stack options require the native source-stack route.");
+        if (!hasNativeSourceStack && legacyNativeStackOption is not null &&
+            options.ContainsKey("mod-stack"))
+            throw new ArgumentException(
+                "Legacy mod-stack options are not a native launch contract.");
+        if (hasFo1NativeOwned &&
+            (!options.ContainsKey("save-path") ||
+                !options.TryGetValue("fo1-start-presentation", out var fo1Presentation) ||
+                fo1Presentation is not "hex-tactical" and not "first-person" ||
+                options.ContainsKey("fo1-hex-scene") || options.ContainsKey("fo1-character-start") ||
+                options.ContainsKey("fo1-new-game")))
+            throw new ArgumentException(
+                "--fo1-owned-profile requires an isolated --save-path and " +
+                "--fo1-start-presentation hex-tactical|first-person, and cannot use prepared FO1 inputs.");
         if (options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
             throw new ArgumentException(
                 "--fo3-birth-presentation requires --fo3-profile.");
@@ -165,9 +199,9 @@ internal static class RuntimeLaunchValidator
             throw new ArgumentException(
                 "--ttw-fo3-opening-proof requires --ttw-fo3-opening-profile.");
         var hasJamProfile = options.ContainsKey("jam-profile");
-        if (hasJamProfile && !hasDataRoot && !hasCellScene && !hasPreparedCache)
+        if (hasJamProfile && !hasNativeSourceStack && !hasCellScene)
             throw new ArgumentException(
-                "--jam-profile requires --data-root, --cell-scene, or --reuse-cache.");
+            "--jam-profile requires --source-stack or --cell-scene.");
         if (hasJamProfile &&
             (options.ContainsKey("vr") || options.ContainsKey("vr-layout-proof") ||
                 options.ContainsKey("classic-diorama")))
@@ -213,10 +247,11 @@ internal static class RuntimeLaunchValidator
             throw new ArgumentException(
                 "Fallout new game requires --fo1-character-start and --fo1-character-start-sha256.");
         if (options.TryGetValue("fo1-start-presentation", out var fo1StartPresentation) &&
-            (!startsFo1NewGame ||
+            (!startsFo1NewGame && !hasFo1NativeOwned ||
                 fo1StartPresentation is not "hex-tactical" and not "first-person"))
             throw new ArgumentException(
-                "--fo1-start-presentation requires Fallout new game and must be hex-tactical or first-person.");
+                "--fo1-start-presentation requires native Fallout 1 or prepared Fallout new game " +
+                "and must be hex-tactical or first-person.");
         if (options.ContainsKey("fo1-new-game-demo") && !options.ContainsKey("demo-report"))
             throw new ArgumentException("Fallout new-game demo requires --demo-report.");
         if (options.TryGetValue("fo1-character-video", out var fo1VideoCharacter) &&

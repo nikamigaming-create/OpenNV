@@ -10,4 +10,8 @@
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tools\OpenNV.ResourceProbe\**\*.cs" />
+    <Compile Remove="tools\NativeStackStartupAudit\**\*.cs" />
+  </ItemGroup>
 </Project>
