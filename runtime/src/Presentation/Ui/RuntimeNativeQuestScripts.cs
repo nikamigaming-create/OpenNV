@@ -1,0 +1,67 @@
+using Godot;
+using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
+
+namespace OpenNV.Runtime.Presentation.Ui;
+
+internal sealed partial class RuntimeNativeQuestScripts : Node
+{
+    private readonly FalloutPluginStack _records;
+    internal FalloutQuestScripts Scripts { get; }
+    private CanvasLayer? _layer;
+    private FalloutSourceMessage? _current;
+    private bool _pausedBefore;
+    private string? _error;
+    internal object State => new { scripts = Scripts.State, message = _current, error = _error };
+
+    internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
+
+    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
+        FalloutPlayerInventory inventory)
+    {
+        Name = "NativeQuestScripts";
+        _records = records;
+        Scripts = new(records, quests, claimed, inventory);
+        ProcessMode = ProcessModeEnum.Always;
+        ProcessPriority = int.MinValue + 1;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_error is not null || _layer is not null || GetTree().Paused) return;
+        if (Scripts.TryTakeMessage(out var restored)) { Show(restored!); return; }
+        Scripts.Advance(delta);
+        if (Scripts.TryTakeMessage(out var message)) Show(message!);
+    }
+
+    private void Show(FalloutSourceMessage message)
+    {
+        _current = message;
+        _pausedBefore = GetTree().Paused;
+        GetTree().Paused = true;
+        _layer = new CanvasLayer { Name = "NativeMessageLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
+        AddChild(_layer);
+        try
+        {
+            _layer.AddChild(new NativeOwnedMessageMenu(message, _records, choice =>
+            {
+                GD.Print($"OPENNV_SOURCE_MESSAGE_ACCEPT source={message.Form} choice={choice}");
+                _layer?.QueueFree();
+                _layer = null;
+                _current = null;
+                GetTree().Paused = _pausedBefore;
+                if (Scripts.TryTakeMessage(out var next)) Show(next!);
+            }, error => Fail(message, error)));
+            GD.Print($"OPENNV_SOURCE_MESSAGE_OPEN source={message.Form}");
+        }
+        catch (Exception error)
+        {
+            Fail(message, error);
+        }
+    }
+    private void Fail(FalloutSourceMessage message, Exception error)
+    {
+        _error = error.Message;
+        GD.PushError($"OPENNV_SOURCE_MESSAGE_UNBOUND source={message.Form} error={error.Message}");
+    }
+}

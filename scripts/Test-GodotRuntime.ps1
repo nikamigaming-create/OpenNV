@@ -47,12 +47,27 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV formatting or analyzer checks failed." 
 & dotnet build $solution --configuration Debug --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Debug build failed." }
 
+& dotnet build (Join-Path $repository "tools\OpenNV.LiveHarness\OpenNV.LiveHarness.csproj") --configuration Release --nologo
+if ($LASTEXITCODE -ne 0) { throw "OpenNV live harness build failed." }
+
 $probes = @(
     "ActorAnimationPlaybackProbe",
     "ActorComplexionContractProbe",
     "ClassicMapInitializationProbe",
     "ContainerInventoryContractProbe",
     "FalloutPluginRuntimeProbe",
+    "FalloutNifPhysicsContractProbe",
+    "FalloutNifRenderingContractProbe",
+    "FalloutShaderProbe",
+    "FalloutImageSpaceProbe",
+    "FalloutNifSkinningContractProbe",
+    "FalloutNifAnimationContractProbe",
+    "FalloutNpcAppearanceProbe",
+    "FalloutFaceGenGeometryProbe",
+    "FalloutFaceGenControlProbe",
+    "FalloutDialogueProbe",
+    "FalloutMovieProbe",
+    "FalloutBuiltinFormProbe",
     "FalloutSoundRuntimeProbe",
     "GamebryoDialoguePlaybackProbe",
     "GamebryoFaceGenMorphProbe",
@@ -84,5 +99,13 @@ $text = $output | Out-String
 if ($LASTEXITCODE -ne 0 -or $text -match "(?m)^ERROR:") {
     throw "OpenNV Godot startup failed:`n$text"
 }
+
+$instanceOutput = & $Godot --headless --path $runtime res://tools/NativeNifInstanceAudit/NativeNifInstanceAudit.tscn 2>&1
+$instanceText = $instanceOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $instanceText -match "(?m)^ERROR:" -or
+    $instanceText -notmatch "OPENNV_NIF_INSTANCE_AUDIT_PASS") {
+    throw "OpenNV native instance binding failed:`n$instanceText"
+}
+Write-Output "OPENNV_NIF_INSTANCE_AUDIT_PASS controllers=independent targets=instance-owned prototype=unchanged"
 
 Write-Output "OPENNV_CSHARP_GODOT_GATE_PASS"

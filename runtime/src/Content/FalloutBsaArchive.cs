@@ -121,6 +121,12 @@ internal sealed class FalloutBsaArchive : IDisposable
     internal bool Contains(string logicalPath) => _members.ContainsKey(CanonicalPath(logicalPath));
     internal IEnumerable<string> MemberPaths => _members.Keys;
 
+    internal (long Offset, int Bytes, bool Compressed) StoredExtent(string logicalPath)
+    {
+        var member = _members[CanonicalPath(logicalPath)];
+        return (member.Offset, checked((int)member.StoredBytes), member.Compressed);
+    }
+
     internal byte[] Read(string logicalPath)
     {
         var canonical = CanonicalPath(logicalPath);

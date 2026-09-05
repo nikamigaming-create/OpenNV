@@ -70,7 +70,7 @@ public partial class RuntimeCoordinator : Node3D
 
     public override void _Ready()
     {
-        if (DisplayServer.GetName() != "headless")
+        if (DisplayServer.GetName() != "headless" && OS.GetCmdlineUserArgs().Contains("--loading-diagnostics"))
         {
             _loadingScreen = new LoadingScreen();
             _loadingScreen.Configure("STARTING VERIFIED RUNTIME");
@@ -118,6 +118,12 @@ public partial class RuntimeCoordinator : Node3D
                     ? settingsPath
                     : null);
             DesktopInputMap.Configure(_configuration.Player.DesktopInput);
+            if (_options.TryGetValue("live-harness", out var harnessDirectory))
+            {
+                var harness = new Diagnostics.Parity.RuntimeLiveHarness();
+                harness.Configure(harnessDirectory, CaptureParityFrame, CaptureNativeDriveState, () => _nativePluginStack);
+                AddChild(harness);
+            }
             GetWindow().Size = new Vector2I(
                 _configuration.Capture.ExpectedWidthPixels,
                 _configuration.Capture.ExpectedHeightPixels);
@@ -168,6 +174,7 @@ public partial class RuntimeCoordinator : Node3D
 
     private void SetLoadingStatus(string status)
     {
+        GD.Print($"OPENNV_LOAD_STATUS {status}");
         _loadingScreen?.SetStatus(status);
     }
 

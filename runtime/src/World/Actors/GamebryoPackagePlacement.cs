@@ -61,7 +61,11 @@ internal static class GamebryoPackagePlacement
         Quaternion actorHeadingDeltaGodot,
         Vector3 actorScale)
     {
-        var rootOffset = markerOffsetCellUnits - actorPlacementOffsetCellUnits;
+        // Furniture approach deltas relocate the actor horizontally. The marker
+        // itself owns the occupied root height; the vertical approach delta is
+        // not an extra displacement of the seated skeleton.
+        var rootOffset = markerOffsetCellUnits - new Vector3(
+            actorPlacementOffsetCellUnits.X, 0.0f, actorPlacementOffsetCellUnits.Z);
         var marker = furnitureTransform * new Transform3D(
             new Basis(markerRotationGodot),
             rootOffset);

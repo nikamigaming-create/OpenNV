@@ -38,14 +38,16 @@ internal sealed class FaceGenLipAnimation
 
     internal static FaceGenLipAnimation Load(
         string path,
-        FaceGenLipConfiguration configuration)
+        FaceGenLipConfiguration configuration) => Read(File.ReadAllBytes(path), configuration);
+
+    internal static FaceGenLipAnimation Read(byte[] payload, FaceGenLipConfiguration configuration)
     {
         if (configuration.IntegerBytes != sizeof(uint) ||
             configuration.ValueBytes != sizeof(float) ||
             configuration.RunLengthBytes != sizeof(ushort))
             throw new InvalidOperationException(
                 "Configured FaceGen LIP scalar widths are unsupported.");
-        var source = new ByteCursor(File.ReadAllBytes(path));
+        var source = new ByteCursor(payload);
         var header = configuration.FileHeaderFields.ToDictionary(
             name => name,
             name => source.ReadUInt32(configuration.IntegerBytes, $"LIP {name}"),

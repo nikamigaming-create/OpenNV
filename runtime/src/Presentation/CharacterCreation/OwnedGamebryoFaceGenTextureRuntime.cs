@@ -1,29 +1,16 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Formats.FaceGen;
 
 namespace OpenNV.Runtime.Presentation.CharacterCreation;
 
 internal sealed class OwnedGamebryoFaceGenTextureRuntime
 {
-    private static ReadOnlySpan<byte> EgtSignature => "FREGT003"u8;
-    private const int HeaderBytes = 64;
-    private const int ControlBytes = 4;
     private const int Channels = 3;
-    private const int FaceTextureSlot = 7;
-    private const byte EnabledFlag = 0x04;
-    private const byte MaxedFlag = 0x40;
-    private const byte InvertFlag = 0x80;
-    private const byte IntensityMask = 0x03;
-    private const int SlotShift = 3;
-    private const byte SlotMask = 0x07;
     private static readonly float Neutral = (byte.MaxValue + 1.0f) / 2.0f;
-    private static readonly float[] IntensityScales = Enumerable
-        .Range(0, IntensityMask + 1)
-        .Select(index => 1.0f / (InvertFlag >> (index * (SlotShift - 1))))
-        .ToArray();
 
-    private readonly byte[] _egt;
+    private readonly FalloutEgtFile _egt;
     private readonly IReadOnlyList<float> _baseline;
     private readonly IReadOnlyDictionary<string, OpeningNativeFaceGenTextureControl> _controls;
     private readonly float _morphWeightScale;
@@ -40,9 +27,22 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
         float maximum,
         float morphWeightScale,
         float resetValue)
+        : this(File.ReadAllBytes(egtPath), egtSha256, baseline, controls, minimum, maximum, morphWeightScale, resetValue)
     {
-        _egt = File.ReadAllBytes(egtPath);
-        var actual = Convert.ToHexString(SHA256.HashData(_egt)).ToLowerInvariant();
+    }
+
+    internal OwnedGamebryoFaceGenTextureRuntime(
+        ReadOnlyMemory<byte> egtPayload,
+        string egtSha256,
+        IReadOnlyList<float> baseline,
+        IReadOnlyList<OpeningNativeFaceGenTextureControl> controls,
+        float minimum,
+        float maximum,
+        float morphWeightScale,
+        float resetValue)
+    {
+        _egt = FalloutEgtFile.Read(egtPayload);
+        var actual = Convert.ToHexString(SHA256.HashData(egtPayload.Span)).ToLowerInvariant();
         if (!actual.Equals(egtSha256, StringComparison.OrdinalIgnoreCase) ||
             baseline.Count == 0 || baseline.Any(value => !float.IsFinite(value)) ||
             controls.Count == 0 ||
@@ -69,14 +69,13 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
             value => value.SettingEntity,
             _ => resetValue,
             StringComparer.Ordinal);
-        _ = Decode(_baseline);
+        using var initial = Decode(_baseline);
     }
 
     internal IReadOnlyDictionary<string, float> Values => _values;
 
     internal static bool HasSupportedSignature(ReadOnlySpan<byte> payload) =>
-        payload.Length >= EgtSignature.Length &&
-        payload[..EgtSignature.Length].SequenceEqual(EgtSignature);
+        FalloutEgtFile.HasSupportedSignature(payload);
 
     internal static string CoordinateSha256(
         IReadOnlyList<float> baseline,
@@ -145,7 +144,8 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
             for (var index = 0; index < weights.Length; index++)
                 weights[index] += pair.Value * _morphWeightScale * axis[index];
         }
-        return ImageTexture.CreateFromImage(Decode(weights));
+        using var image = Decode(weights);
+        return ImageTexture.CreateFromImage(image);
     }
 
     internal ImageTexture ApplyAge(
@@ -157,49 +157,19 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
             throw new InvalidOperationException("Owned FaceGen age texture axis is invalid.");
         var weights = Coordinates(_baseline, _controls.Values.ToArray(), _values, _morphWeightScale)
             .Zip(axis, (value, weight) => value + coefficient * weight).ToArray();
-        return ImageTexture.CreateFromImage(Decode(weights));
+        using var image = Decode(weights);
+        return ImageTexture.CreateFromImage(image);
     }
 
     private Image Decode(IReadOnlyList<float> weights)
     {
-        var signatureBytes = EgtSignature.Length;
-        if (_egt.Length < HeaderBytes || !HasSupportedSignature(_egt))
-            throw new InvalidOperationException("Owned FaceGen EGT signature is invalid.");
-        var width = BinaryPrimitives.ReadInt32LittleEndian(
-            _egt.AsSpan(signatureBytes, sizeof(int)));
-        var height = BinaryPrimitives.ReadInt32LittleEndian(
-            _egt.AsSpan(signatureBytes + sizeof(int), sizeof(int)));
-        var modes = BinaryPrimitives.ReadInt32LittleEndian(
-            _egt.AsSpan(signatureBytes + sizeof(int) * 2, sizeof(int)));
+        var delta = _egt.EvaluateDelta(weights, []);
+        var width = delta.Width;
+        var height = delta.Height;
         var pixels = checked(width * height);
-        var expected = checked(HeaderBytes + modes * (ControlBytes + pixels * Channels));
-        if (width <= 0 || height <= 0 || modes != weights.Count ||
-            expected != _egt.Length || weights.Any(value => !float.IsFinite(value)))
-            throw new InvalidOperationException("Owned FaceGen EGT dimensions are invalid.");
-        var channels = new float[Channels][];
-        for (var channel = 0; channel < Channels; channel++)
-            channels[channel] = Enumerable.Repeat(Neutral, pixels).ToArray();
-        var offset = HeaderBytes;
-        foreach (var weight in weights)
-        {
-            var flags = _egt[offset + 3];
-            offset += ControlBytes;
-            var intensity = flags & IntensityMask;
-            var slot = (flags >> SlotShift) & SlotMask;
-            if (slot != FaceTextureSlot || (flags & MaxedFlag) != 0)
-                throw new InvalidOperationException("Owned FaceGen EGT flags are unsupported.");
-            var scale = IntensityScales[intensity];
-            if ((flags & InvertFlag) != 0)
-                scale = -scale;
-            for (var channel = 0; channel < Channels; channel++)
-            {
-                if ((flags & EnabledFlag) != 0 && weight != 0.0f)
-                    for (var pixel = 0; pixel < pixels; pixel++)
-                        channels[channel][pixel] +=
-                            weight * scale * unchecked((sbyte)_egt[offset + pixel]);
-                offset += pixels;
-            }
-        }
+        // Preserve this preview adapter's existing neutral encoding and UV
+        // orientation separately from the source decoder. Native actor shaders
+        // consume FalloutEgtFile deltas with their own observed map contract.
         var rgba = new byte[pixels * (Channels + 1)];
         for (var sourceY = 0; sourceY < height; sourceY++)
         {
@@ -210,7 +180,7 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
                 var targetPixel = targetY * width + x;
                 for (var channel = 0; channel < Channels; channel++)
                     rgba[targetPixel * (Channels + 1) + channel] = (byte)Math.Clamp(
-                        MathF.Round(channels[channel][sourcePixel]), 0.0f, byte.MaxValue);
+                        MathF.Round(Neutral + delta.Rgb[sourcePixel * Channels + channel]), 0.0f, byte.MaxValue);
                 rgba[targetPixel * (Channels + 1) + Channels] = byte.MaxValue;
             }
         }

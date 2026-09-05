@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../runtime/src/Diagnostics/Parity/LiveHarnessFrameBuffer.cs" Link="LiveHarnessFrameBuffer.cs" />
+    <Compile Include="../../runtime/src/Diagnostics/Parity/LiveHarnessFrameMailbox.cs" Link="LiveHarnessFrameMailbox.cs" />
+  </ItemGroup>
+</Project>

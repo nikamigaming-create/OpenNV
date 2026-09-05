@@ -9,7 +9,7 @@ var furniture = GamebryoPackagePlacement.FromFurnitureMarker(
     new Vector3(0.5f, 1.0f, 1.5f),
     new Quaternion(Vector3.Up, Mathf.Pi),
     Vector3.One);
-if (!furniture.SourceTransform.Origin.IsEqualApprox(new Vector3(1.5f, 2.0f, 2.5f)))
+if (!furniture.SourceTransform.Origin.IsEqualApprox(new Vector3(1.5f, 3.0f, 2.5f)))
     throw new InvalidOperationException("Furniture marker root composition differs.");
 
 var grounded = GamebryoPackagePlacement.AdjustSupportHeight(
@@ -18,7 +18,7 @@ var grounded = GamebryoPackagePlacement.AdjustSupportHeight(
 GamebryoPackagePlacement.RequireSupportHeightOnly(
     furniture.SourceTransform,
     grounded);
-if (!Mathf.IsEqualApprox(grounded.Origin.Y, 2.75f) ||
+if (!Mathf.IsEqualApprox(grounded.Origin.Y, 3.75f) ||
     !Mathf.IsEqualApprox(grounded.Origin.X, furniture.SourceTransform.Origin.X) ||
     !Mathf.IsEqualApprox(grounded.Origin.Z, furniture.SourceTransform.Origin.Z) ||
     !grounded.Basis.IsEqualApprox(furniture.SourceTransform.Basis))

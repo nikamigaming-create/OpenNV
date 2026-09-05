@@ -6,8 +6,9 @@ loss-detecting traces, a Godot three-panel view, and divergence-centered video
 evidence. The reviewed private retail observer now publishes a live engine
 timer, active CELL identity and attach state, player identity, and normalized
 player position through the public packet ingress. Event-boundary identity,
-complete gameplay fields, matched input, and final-frame identity remain
-unconnected, so this is diagnostic infrastructure rather than a parity claim.
+complete gameplay fields and final-frame identity remain unconnected. A separate
+live drive harness now sends ordinary input to each engine and presents native
+frames; matched simulation and draw correspondence remain unestablished.
 
 ## Safety boundary
 
@@ -15,6 +16,18 @@ The retail producer is an observe-only private tool. It may publish neutral
 measurements but may not modify retail state, inject input, ship target
 addresses, or enter the public repository. OpenNV never consumes retail state as
 gameplay authority.
+
+The separate private diagnostic input adapter supplies native device input.
+The CLI harness can duplicate key and relative mouse input, while a person can
+take priority and release all controls. It does not write quests, actor poses,
+camera state or other gameplay outcomes. Native input receipts mean delivery;
+subsequent engine state and pixels establish what actually happened.
+
+The live drive view uses bounded latest-frame mailboxes and revision waits.
+It records preview replacements and rejects stale captures. This responsive
+view does not retain every rendered frame and must not be described as a
+lossless event or frame trace. The exact comparison protocol below remains a
+separate lane.
 
 ## Packet v1
 
@@ -149,3 +162,31 @@ readbacks, including RGBA alpha. It does not resize, align, recolor, or threshol
 the inputs. State and pixel results are shown separately; sampled telemetry
 equality cannot turn a different image into an exact result. The dashboard
 still has no live retail-frame feed or proven final-frame correspondence.
+
+## Switchable source-to-render inspection
+
+The CLI live harness supports `trace` with `target: "opennv"` and `enabled: true`
+or `false`, `trace.capture`, `trace.inspect`, and `trace.compare`. Tracing is off
+by default. Enabling attaches source-read observers and schedules one capture;
+disabling detaches them and clears queued source events. Normal reads do not
+hash or copy trace payloads while tracing is off.
+
+Each private trace contains source disk extents and decoded payloads, winning
+and observed record ranges, NIF block ranges, scene transforms and projections,
+mesh buffers, skin binds and bones, materials, shader programs and uniforms,
+texture readbacks, viewport images, and gameplay state before and after draw.
+Immutable SHA-256-addressed blobs preserve their exact bytes. Retained source
+resources are identified as current observations, not a reconstructed history.
+The bounded source-event queue reports overflow explicitly.
+
+The inspector follows node-to-resource-to-source links. Clicking a viewport
+lists projected bounding-box candidates. It does not determine occlusion,
+alpha contribution, skinned coverage or exact pixel provenance. The byte
+comparator validates each blob's length and hash before reporting the first
+different byte, total differences and a surrounding hex window.
+
+Two live captures and observer detachment were exercised in paired run40.
+Collection is expensive and intended for stopped discrepancy investigation.
+Native GPU draw execution, exact per-pixel contributors, matched retail frame
+joins and complete audio events remain missing evidence. Do not treat a
+populated inspector or byte-equal source record as visual parity.

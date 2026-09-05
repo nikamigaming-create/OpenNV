@@ -54,6 +54,7 @@ internal sealed class FalloutPluginRecord
         string signature,
         uint rawFormId,
         uint flags,
+        ushort formVersion,
         long headerOffset,
         long dataOffset,
         int storedSize,
@@ -63,6 +64,7 @@ internal sealed class FalloutPluginRecord
         Signature = signature;
         RawFormId = rawFormId;
         Flags = flags;
+        FormVersion = formVersion;
         HeaderOffset = headerOffset;
         _dataOffset = dataOffset;
         _storedSize = storedSize;
@@ -74,12 +76,24 @@ internal sealed class FalloutPluginRecord
     internal uint RawFormId { get; }
     internal FalloutFormKey FormKey => _plugin.AdjustFormId(RawFormId);
     internal uint Flags { get; }
+    internal ushort FormVersion { get; }
     internal bool IsCompressed => (Flags & CompressedFlag) != 0;
     internal bool IsDeleted => (Flags & DeletedFlag) != 0;
     internal long HeaderOffset { get; }
     internal IReadOnlyList<FalloutPluginGroup> Groups { get; }
+    internal static Action<FalloutPluginRecord, ReadOnlyMemory<byte>>? ReadObserver { get; set; }
+    internal long DataOffset => _dataOffset;
+    internal int StoredSize => _storedSize;
+    internal byte[] ReadDataForObservation() => ReadDataCore();
 
     internal byte[] ReadData()
+    {
+        var data = ReadDataCore();
+        ReadObserver?.Invoke(this, data);
+        return data;
+    }
+
+    private byte[] ReadDataCore()
     {
         var stored = _plugin.ReadAt(_dataOffset, _storedSize, $"{Signature} record data");
         if (!IsCompressed)
@@ -421,6 +435,7 @@ internal sealed class FalloutPlugin : IDisposable
                 signature,
                 BinaryPrimitives.ReadUInt32LittleEndian(header[RecordFormIdOffset..]),
                 BinaryPrimitives.ReadUInt32LittleEndian(header[RecordFlagsOffset..]),
+                BinaryPrimitives.ReadUInt16LittleEndian(header[20..]),
                 offset,
                 dataOffset,
                 (int)size,

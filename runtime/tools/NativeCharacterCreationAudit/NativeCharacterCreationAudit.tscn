@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://tools/NativeCharacterCreationAudit/NativeCharacterCreationAudit.cs" type="Script" id="1"]
+
+[node name="NativeCharacterCreationAudit" type="Node"]
+script = ExtResource("1")

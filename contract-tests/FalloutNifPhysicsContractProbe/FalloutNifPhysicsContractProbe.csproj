@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifFile.cs" Link="FalloutNifFile.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifMorphAnimation.cs" Link="FalloutNifMorphAnimation.cs" />
+    <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifSkinContract.cs" Link="FalloutNifSkinContract.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+  </ItemGroup>
+</Project>

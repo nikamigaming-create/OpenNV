@@ -26,12 +26,6 @@ internal sealed class FalloutNifFile
     private const uint AnimationNotesVersion2Maximum = 28;
     private const uint RagdollConstraintType = 7;
     private const int RotationMatrixValues = 9;
-    private const int RigidBodyResponsePrefixBytes = 44;
-    private const int RigidBodyVelocityBytes = 32;
-    private const int RigidBodyInertiaBytes = 48;
-    private const int RigidBodyLimitBytes = 12;
-    private const int RigidBodyDeactivationBytes = 3;
-    private const int RigidBodyUnknownIntegerBytes = 12;
     private const int HavokUnknownPairBytes = 8;
     private const int HavokUnknownFloatPairBytes = 8;
     private const int HavokUnknownSixFloatBytes = 24;
@@ -143,17 +137,28 @@ internal sealed class FalloutNifFile
         {
             "NiNode" or "NiBone" or "BSFadeNode" => ReadNode(block, ref cursor),
             "NiAmbientLight" => ReadAmbientLight(block, ref cursor),
+            "NiPointLight" => ReadPointLight(block, ref cursor),
             "NiTriShape" or "NiTriStrips" => ReadGeometry(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
-            "BSDismemberSkinInstance" => ReadSkinInstance(block, ref cursor),
+            "NiSkinInstance" or "BSDismemberSkinInstance" => ReadSkinInstance(block, ref cursor),
             "NiSkinData" => ReadSkinData(block, ref cursor),
             "NiSkinPartition" => ReadSkinPartition(block, ref cursor),
             "NiControllerSequence" => ReadControllerSequence(block, ref cursor),
             "NiTransformInterpolator" => ReadTransformInterpolator(block, ref cursor),
+            "NiBSplineTransformInterpolator" or "NiBSplineCompTransformInterpolator" =>
+                ReadSplineTransformInterpolator(block, ref cursor),
+            "NiBSplineBasisData" => new FalloutNifSplineBasisData(block,
+                cursor.ReadCount32("spline control point count", MaximumTableEntries)),
+            "NiBSplineData" => ReadSplineData(block, ref cursor),
             "NiTransformData" => ReadTransformData(block, ref cursor),
             "NiFloatInterpolator" => ReadFloatInterpolator(block, ref cursor),
             "NiFloatData" => ReadFloatData(block, ref cursor),
+            "NiBoolInterpolator" => new FalloutNifBoolInterpolator(block, cursor.ReadByte("bool value"), ReadReference(ref cursor, "bool data")),
+            "NiBoolData" => ReadBoolData(block, ref cursor),
+            "NiVisController" => new FalloutNifVisibilityController(block, ReadTimeController(ref cursor, "visibility"), ReadReference(ref cursor, "visibility interpolator")),
+            "NiGeomMorpherController" => ReadMorphController(block, ref cursor),
+            "NiMorphData" => ReadMorphData(block, ref cursor),
             "NiPoint3Interpolator" => ReadPoint3Interpolator(block, ref cursor),
             "NiPosData" => ReadPositionData(block, ref cursor),
             "NiBlendFloatInterpolator" => ReadBlendFloatInterpolator(block, ref cursor),
@@ -189,6 +194,7 @@ internal sealed class FalloutNifFile
             "bhkListShape" => ReadListShape(block, ref cursor),
             "bhkConvexTransformShape" => ReadConvexTransformShape(block, ref cursor),
             "BSShaderNoLightingProperty" => ReadNoLightingProperty(block, ref cursor),
+            "TileShaderProperty" => ReadTileShaderProperty(block, ref cursor),
             "NiAlphaProperty" => ReadAlphaProperty(block, ref cursor),
             "NiStencilProperty" => ReadStencilProperty(block, ref cursor),
             "NiTexturingProperty" => ReadTexturingProperty(block, ref cursor),
@@ -266,7 +272,8 @@ internal sealed class FalloutNifFile
         var partition = ReadReference(ref cursor, "skin partition");
         var skeletonRoot = ReadReference(ref cursor, "skeleton root");
         var bones = ReadReferences(ref cursor, "skin bones");
-        var bodyPartitionCount = cursor.ReadInt32("body partition count");
+        var bodyPartitionCount = block.TypeName == "BSDismemberSkinInstance"
+            ? cursor.ReadInt32("body partition count") : 0;
         if (bodyPartitionCount < 0 || bodyPartitionCount > MaximumTableEntries)
             throw new InvalidDataException(
                 $"NIF skin {block.Index} has an invalid body-partition count.");
@@ -342,13 +349,32 @@ internal sealed class FalloutNifFile
                 stripLengths[index] = cursor.ReadUInt16(
                     $"skin partition {partitionIndex} strip length {index}");
             var hasFaces = cursor.ReadBoolean($"skin partition {partitionIndex} has faces");
-            if (hasFaces && stripCount != 0)
-                throw new NotSupportedException(
-                    $"NIF skin partition {block.Index} uses triangle strips outside the proven contract.");
-            var triangles = hasFaces ? new FalloutNifTriangle[triangleCount] : [];
-            for (var index = 0; index < triangles.Length; ++index)
-                triangles[index] = ReadTriangle(
-                    ref cursor, vertexCount, $"skin partition {partitionIndex} triangle {index}");
+            var strips = new ushort[hasFaces ? stripCount : 0][];
+            var expanded = new List<FalloutNifTriangle>();
+            for (var strip = 0; strip < strips.Length; ++strip)
+            {
+                strips[strip] = new ushort[stripLengths[strip]];
+                for (var point = 0; point < strips[strip].Length; ++point)
+                {
+                    var vertex = cursor.ReadUInt16($"skin partition {partitionIndex} strip {strip}/{point}");
+                    if (vertex >= vertexCount)
+                        throw new InvalidDataException($"NIF skin partition {partitionIndex} strip index is invalid.");
+                    strips[strip][point] = vertex;
+                    if (point >= 2)
+                        expanded.Add((point & 1) == 0
+                            ? new FalloutNifTriangle(strips[strip][point - 2], strips[strip][point - 1], vertex)
+                            : new FalloutNifTriangle(strips[strip][point - 1], strips[strip][point - 2], vertex));
+                }
+            }
+            var triangles = hasFaces && stripCount == 0 ? new FalloutNifTriangle[triangleCount]
+                : expanded.ToArray();
+            if (hasFaces && stripCount != 0 && triangles.Length != triangleCount)
+                throw new InvalidDataException(
+                    $"NIF skin partition {partitionIndex} strip triangle count differs from its declaration.");
+            if (hasFaces && stripCount == 0)
+                for (var index = 0; index < triangles.Length; ++index)
+                    triangles[index] = ReadTriangle(
+                        ref cursor, vertexCount, $"skin partition {partitionIndex} triangle {index}");
 
             var hasBoneIndices = cursor.ReadBoolean(
                 $"skin partition {partitionIndex} has bone indices");
@@ -362,7 +388,7 @@ internal sealed class FalloutNifFile
             }
             partitions[partitionIndex] = new FalloutNifSkinPartitionBlock(
                 vertexCount, triangleCount, bones, weightsPerVertex, vertexMap,
-                vertexWeights, stripLengths, triangles, boneIndices);
+                vertexWeights, stripLengths, triangles, boneIndices, strips);
         }
         return new FalloutNifSkinPartition(block, partitions);
     }
@@ -401,6 +427,12 @@ internal sealed class FalloutNifFile
             ReadColor3(ref cursor, "ambient light diffuse color"),
             ReadColor3(ref cursor, "ambient light specular color"));
     }
+
+    private FalloutNifPointLight ReadPointLight(FalloutNifBlock block, ref NifCursor cursor) => new(
+        block, ReadAmbientLight(block, ref cursor),
+        cursor.ReadFiniteSingle("point light constant attenuation"),
+        cursor.ReadFiniteSingle("point light linear attenuation"),
+        cursor.ReadFiniteSingle("point light quadratic attenuation"));
 
     private FalloutNifGeometry ReadGeometry(FalloutNifBlock block, ref NifCursor cursor)
     {
@@ -633,6 +665,43 @@ internal sealed class FalloutNifFile
         return new FalloutNifTransformInterpolator(block, translation, rotation, scale, data);
     }
 
+    private FalloutNifSplineTransformInterpolator ReadSplineTransformInterpolator(
+        FalloutNifBlock block,
+        ref NifCursor cursor)
+    {
+        var start = cursor.ReadFiniteSingle("spline start time");
+        var stop = cursor.ReadFiniteSingle("spline stop time");
+        var data = ReadReference(ref cursor, "spline data");
+        var basis = ReadReference(ref cursor, "spline basis");
+        var translation = ReadVector(ref cursor, "spline translation");
+        var rotation = ReadQuaternion(ref cursor, "spline rotation");
+        var scale = cursor.ReadFiniteSingle("spline scale");
+        var translationHandle = cursor.ReadUInt32("spline translation handle");
+        var rotationHandle = cursor.ReadUInt32("spline rotation handle");
+        var scaleHandle = cursor.ReadUInt32("spline scale handle");
+        var compact = block.TypeName == "NiBSplineCompTransformInterpolator";
+        var translationOffset = compact ? cursor.ReadFiniteSingle("spline translation offset") : 0.0f;
+        var translationRange = compact ? cursor.ReadFiniteSingle("spline translation half range") : 1.0f;
+        var rotationOffset = compact ? cursor.ReadFiniteSingle("spline rotation offset") : 0.0f;
+        var rotationRange = compact ? cursor.ReadFiniteSingle("spline rotation half range") : 1.0f;
+        var scaleOffset = compact ? cursor.ReadFiniteSingle("spline scale offset") : 0.0f;
+        var scaleRange = compact ? cursor.ReadFiniteSingle("spline scale half range") : 1.0f;
+        return new FalloutNifSplineTransformInterpolator(block, start, stop, data, basis,
+            translation, rotation, scale, translationHandle, rotationHandle, scaleHandle, compact,
+            translationOffset, translationRange, rotationOffset, rotationRange, scaleOffset, scaleRange);
+    }
+
+    private static FalloutNifSplineData ReadSplineData(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var floats = new float[cursor.ReadCount32("float control point count", MaximumTableEntries)];
+        for (var index = 0; index < floats.Length; index++)
+            floats[index] = cursor.ReadFiniteSingle($"float control point {index}");
+        var compact = new short[cursor.ReadCount32("compact control point count", MaximumTableEntries)];
+        for (var index = 0; index < compact.Length; index++)
+            compact[index] = unchecked((short)cursor.ReadUInt16($"compact control point {index}"));
+        return new FalloutNifSplineData(block, floats, compact);
+    }
+
     private FalloutNifFloatInterpolator ReadFloatInterpolator(
         FalloutNifBlock block,
         ref NifCursor cursor) => new(
@@ -642,6 +711,47 @@ internal sealed class FalloutNifFile
 
     private FalloutNifFloatData ReadFloatData(FalloutNifBlock block, ref NifCursor cursor) =>
         new(block, ReadScalarKeyGroup(ref cursor, "float data"));
+
+    private static FalloutNifBoolData ReadBoolData(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var count = cursor.ReadCount32("boolean key count", MaximumTableEntries);
+        var interpolation = count == 0 ? 0 : cursor.ReadUInt32("boolean interpolation");
+        if (count != 0 && interpolation is not (1 or 5)) throw new NotSupportedException($"Boolean interpolation {interpolation} is unbound.");
+        var keys = new FalloutNifBoolKey[count];
+        for (var index = 0; index < count; index++)
+            keys[index] = new(cursor.ReadFiniteSingle("boolean time"), cursor.ReadBoolean("boolean value"));
+        RequireIncreasingTimes(keys.Select(key => key.Time), "boolean");
+        return new(block, interpolation, keys);
+    }
+
+    private FalloutNifMorphController ReadMorphController(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var time = ReadTimeController(ref cursor, "morph");
+        var flags = cursor.ReadUInt16("morph flags");
+        var data = ReadReference(ref cursor, "morph data");
+        var alwaysUpdate = cursor.ReadByte("morph always update");
+        var count = cursor.ReadCount32("morph interpolator count", MaximumTableEntries);
+        var weights = new FalloutNifMorphWeight[count];
+        for (var index = 0; index < count; index++) weights[index] = new(ReadReference(ref cursor, "morph interpolator"), cursor.ReadFiniteSingle("morph weight"));
+        return new(block, time, flags, data, alwaysUpdate, weights);
+    }
+
+    private FalloutNifMorphData ReadMorphData(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var count = cursor.ReadCount32("morph count", MaximumTableEntries);
+        var vertices = cursor.ReadCount32("morph vertices", MaximumTableEntries);
+        var relative = cursor.ReadByte("relative morph targets");
+        if ((long)count * (4L + vertices * 12L) > cursor.Remaining) throw new InvalidDataException("Morph tables exceed the source block.");
+        var morphs = new FalloutNifMorph[count];
+        for (var index = 0; index < count; index++)
+        {
+            var name = ReadStringReference(ref cursor, "morph name");
+            var values = new FalloutNifVector3[vertices];
+            for (var vertex = 0; vertex < vertices; vertex++) values[vertex] = ReadVector(ref cursor, "morph vector");
+            morphs[index] = new(name, values);
+        }
+        return new(block, relative, morphs);
+    }
 
     private FalloutNifPoint3Interpolator ReadPoint3Interpolator(
         FalloutNifBlock block,
@@ -960,27 +1070,92 @@ internal sealed class FalloutNifFile
     private FalloutNifRigidBody ReadRigidBody(FalloutNifBlock block, ref NifCursor cursor)
     {
         var shape = ReadReference(ref cursor, "rigid-body shape");
-        _ = ReadCollisionFilter(ref cursor, "rigid-body filter");
-        cursor.Skip(RigidBodyResponsePrefixBytes, "rigid-body response prefix");
-        var translation = ReadVector4(ref cursor, "rigid-body translation");
+        var filter = ReadCollisionFilter(ref cursor, "rigid-body world filter");
+        var worldUnused = cursor.ReadUInt32("rigid-body world unused bytes");
+        var broadPhaseType = cursor.ReadByte("rigid-body broad phase type");
+        var broadPhaseUnused = new byte[3];
+        for (var index = 0; index < broadPhaseUnused.Length; ++index)
+            broadPhaseUnused[index] = cursor.ReadByte("rigid-body broad phase unused byte");
+        var property = new FalloutNifHavokProperty(
+            cursor.ReadUInt32("rigid-body property data"),
+            cursor.ReadUInt32("rigid-body property size"),
+            cursor.ReadUInt32("rigid-body property capacity and flags"));
+        var entityResponse = ReadCollisionResponse(ref cursor, "rigid-body entity");
+        var infoUnused1 = cursor.ReadUInt32("rigid-body info unused bytes 1");
+        var infoFilter = ReadCollisionFilter(ref cursor, "rigid-body info filter");
+        var infoUnused2 = cursor.ReadUInt32("rigid-body info unused bytes 2");
+        var infoResponse = ReadCollisionResponse(ref cursor, "rigid-body info");
+        var infoUnused3 = cursor.ReadUInt32("rigid-body info unused bytes 3");
+        var translation = ReadHavokVector(ref cursor, "rigid-body translation");
         var rotation = ReadQuaternionXyzw(ref cursor, "rigid-body rotation");
-        cursor.Skip(RigidBodyVelocityBytes, "rigid-body velocities");
-        cursor.Skip(RigidBodyInertiaBytes, "rigid-body inertia tensor");
-        var center = ReadVector4(ref cursor, "rigid-body center");
+        var linearVelocity = ReadHavokVector(ref cursor, "rigid-body linear velocity");
+        var angularVelocity = ReadHavokVector(ref cursor, "rigid-body angular velocity");
+        var inertia = new FalloutNifHavokMatrix3(
+            ReadVector(ref cursor, "rigid-body inertia row 0"),
+            cursor.ReadUInt32("rigid-body inertia row 0 padding"),
+            ReadVector(ref cursor, "rigid-body inertia row 1"),
+            cursor.ReadUInt32("rigid-body inertia row 1 padding"),
+            ReadVector(ref cursor, "rigid-body inertia row 2"),
+            cursor.ReadUInt32("rigid-body inertia row 2 padding"));
+        var center = ReadHavokVector(ref cursor, "rigid-body center");
         var mass = cursor.ReadFiniteSingle("rigid-body mass");
         var linearDamping = cursor.ReadFiniteSingle("rigid-body linear damping");
         var angularDamping = cursor.ReadFiniteSingle("rigid-body angular damping");
         var friction = cursor.ReadFiniteSingle("rigid-body friction");
         var restitution = cursor.ReadFiniteSingle("rigid-body restitution");
-        cursor.Skip(RigidBodyLimitBytes, "rigid-body velocity and penetration limits");
+        var maxLinearVelocity = cursor.ReadFiniteSingle("rigid-body maximum linear velocity");
+        var maxAngularVelocity = cursor.ReadFiniteSingle("rigid-body maximum angular velocity");
+        var penetrationDepth = cursor.ReadFiniteSingle("rigid-body penetration depth");
         var motionSystem = cursor.ReadByte("rigid-body motion system");
-        cursor.Skip(RigidBodyDeactivationBytes, "rigid-body deactivation and quality");
-        cursor.Skip(RigidBodyUnknownIntegerBytes, "rigid-body unknown integers");
+        var deactivatorType = cursor.ReadByte("rigid-body deactivator type");
+        var solverDeactivation = cursor.ReadByte("rigid-body solver deactivation");
+        var qualityType = cursor.ReadByte("rigid-body quality type");
+        var infoUnused4 = new uint[3];
+        for (var index = 0; index < infoUnused4.Length; ++index)
+            infoUnused4[index] = cursor.ReadUInt32("rigid-body info unused trailing bytes");
         var constraints = ReadReferences(ref cursor, "rigid-body constraints");
-        _ = cursor.ReadUInt32("rigid-body trailing integer");
+        var bodyFlags = cursor.ReadUInt32("rigid-body flags");
         return new FalloutNifRigidBody(block, shape, translation, rotation, center, mass,
-            linearDamping, angularDamping, friction, restitution, motionSystem, constraints);
+            linearDamping, angularDamping, friction, restitution, motionSystem, constraints)
+        {
+            Filter = filter,
+            WorldUnused = worldUnused,
+            BroadPhaseType = broadPhaseType,
+            BroadPhaseUnused = broadPhaseUnused,
+            Property = property,
+            EntityResponse = entityResponse,
+            InfoUnused1 = infoUnused1,
+            InfoFilter = infoFilter,
+            InfoUnused2 = infoUnused2,
+            InfoResponse = infoResponse,
+            InfoUnused3 = infoUnused3,
+            LinearVelocity = linearVelocity,
+            AngularVelocity = angularVelocity,
+            Inertia = inertia,
+            MaxLinearVelocity = maxLinearVelocity,
+            MaxAngularVelocity = maxAngularVelocity,
+            PenetrationDepth = penetrationDepth,
+            DeactivatorType = deactivatorType,
+            SolverDeactivation = solverDeactivation,
+            QualityType = qualityType,
+            InfoUnused4 = infoUnused4,
+            BodyFlags = bodyFlags,
+            SourceBytes = _payload.Slice(block.Offset, block.Size),
+        };
     }
+
+    private static FalloutNifCollisionResponse ReadCollisionResponse(ref NifCursor cursor, string label) =>
+        new(cursor.ReadByte($"{label} collision response"),
+            cursor.ReadByte($"{label} unused byte"),
+            cursor.ReadUInt16($"{label} contact callback delay"));
+
+    private static FalloutNifVector4 ReadHavokVector(ref NifCursor cursor, string label) =>
+        new(cursor.ReadFiniteSingle($"{label} x"),
+            cursor.ReadFiniteSingle($"{label} y"),
+            cursor.ReadFiniteSingle($"{label} z"),
+            // Havok's fourth SIMD lane is not a spatial coordinate. Owned bodies
+            // contain non-finite padding here; retain those bits without arithmetic.
+            BitConverter.UInt32BitsToSingle(cursor.ReadUInt32($"{label} fourth lane")));
 
     private FalloutNifMoppShape ReadMoppShape(FalloutNifBlock block, ref NifCursor cursor)
     {
@@ -1152,6 +1327,16 @@ internal sealed class FalloutNifFile
             objectNet.Controller, smooth, shaderType, shaderFlags, shaderFlags2,
             environmentMapScale, textureClampMode, fileName, falloffStartAngle,
             falloffStopAngle, falloffStartOpacity, falloffStopOpacity);
+    }
+
+    private FalloutNifTileShaderProperty ReadTileShaderProperty(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var net = ReadObjectNet(ref cursor, block.TypeName);
+        return new FalloutNifTileShaderProperty(block, net.Name, net.ExtraData, net.Controller,
+            cursor.ReadUInt16("tile smooth flags"), cursor.ReadUInt32("tile shader type"),
+            cursor.ReadUInt32("tile shader flags"), cursor.ReadUInt32("tile shader flags 2"),
+            cursor.ReadFiniteSingle("tile environment map scale"), cursor.ReadUInt32("tile texture clamp mode"),
+            cursor.ReadSizedUtf8("tile texture", checked((uint)cursor.Remaining)));
     }
 
     private FalloutNifAlphaProperty ReadAlphaProperty(
@@ -1494,6 +1679,13 @@ internal sealed record FalloutNifAmbientLight(
     FalloutNifColor3 Diffuse,
     FalloutNifColor3 Specular) : FalloutNifObject(Block);
 
+internal sealed record FalloutNifPointLight(
+    FalloutNifBlock Block,
+    FalloutNifAmbientLight Light,
+    float ConstantAttenuation,
+    float LinearAttenuation,
+    float QuadraticAttenuation) : FalloutNifObject(Block);
+
 internal sealed record FalloutNifGeometry(
     FalloutNifBlock Block,
     string Name,
@@ -1557,6 +1749,35 @@ internal sealed record FalloutNifTransformInterpolator(
     FalloutNifQuaternion Rotation,
     float Scale,
     int Data) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifSplineBasisData(
+    FalloutNifBlock Block,
+    int ControlPointCount) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifSplineData(
+    FalloutNifBlock Block,
+    float[] FloatControlPoints,
+    short[] CompactControlPoints) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifSplineTransformInterpolator(
+    FalloutNifBlock Block,
+    float StartTime,
+    float StopTime,
+    int Data,
+    int BasisData,
+    FalloutNifVector3 Translation,
+    FalloutNifQuaternion Rotation,
+    float Scale,
+    uint TranslationHandle,
+    uint RotationHandle,
+    uint ScaleHandle,
+    bool Compact,
+    float TranslationOffset,
+    float TranslationHalfRange,
+    float RotationOffset,
+    float RotationHalfRange,
+    float ScaleOffset,
+    float ScaleHalfRange) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifFloatInterpolator(
     FalloutNifBlock Block,
@@ -1776,6 +1997,12 @@ internal sealed record FalloutNifCollisionObject(
 }
 
 internal readonly record struct FalloutNifCollisionFilter(byte Layer, byte Flags, ushort Group);
+internal readonly record struct FalloutNifCollisionResponse(byte Type, byte Unused, ushort CallbackDelay);
+internal readonly record struct FalloutNifHavokProperty(uint Data, uint Size, uint CapacityAndFlags);
+internal readonly record struct FalloutNifHavokMatrix3(
+    FalloutNifVector3 Row0, uint Padding0,
+    FalloutNifVector3 Row1, uint Padding1,
+    FalloutNifVector3 Row2, uint Padding2);
 internal readonly record struct FalloutNifConstraintHeader(
     FalloutNifBlock Block,
     uint WrappedType,
@@ -1792,7 +2019,32 @@ internal sealed record FalloutNifRigidBody(
     FalloutNifBlock Block, int Shape, FalloutNifVector4 Translation,
     FalloutNifQuaternion Rotation, FalloutNifVector4 Center, float Mass,
     float LinearDamping, float AngularDamping, float Friction, float Restitution,
-    byte MotionSystem, int[] Constraints) : FalloutNifObject(Block);
+    byte MotionSystem, int[] Constraints) : FalloutNifObject(Block)
+{
+    internal required FalloutNifCollisionFilter Filter { get; init; }
+    internal required uint WorldUnused { get; init; }
+    internal required byte BroadPhaseType { get; init; }
+    internal required byte[] BroadPhaseUnused { get; init; }
+    internal required FalloutNifHavokProperty Property { get; init; }
+    internal required FalloutNifCollisionResponse EntityResponse { get; init; }
+    internal required uint InfoUnused1 { get; init; }
+    internal required FalloutNifCollisionFilter InfoFilter { get; init; }
+    internal required uint InfoUnused2 { get; init; }
+    internal required FalloutNifCollisionResponse InfoResponse { get; init; }
+    internal required uint InfoUnused3 { get; init; }
+    internal required FalloutNifVector4 LinearVelocity { get; init; }
+    internal required FalloutNifVector4 AngularVelocity { get; init; }
+    internal required FalloutNifHavokMatrix3 Inertia { get; init; }
+    internal required float MaxLinearVelocity { get; init; }
+    internal required float MaxAngularVelocity { get; init; }
+    internal required float PenetrationDepth { get; init; }
+    internal required byte DeactivatorType { get; init; }
+    internal required byte SolverDeactivation { get; init; }
+    internal required byte QualityType { get; init; }
+    internal required uint[] InfoUnused4 { get; init; }
+    internal required uint BodyFlags { get; init; }
+    internal required ReadOnlyMemory<byte> SourceBytes { get; init; }
+}
 internal sealed record FalloutNifMoppShape(
     FalloutNifBlock Block, int Child, FalloutNifVector3 Origin, float Scale) : FalloutNifObject(Block);
 internal sealed record FalloutNifPackedShape(
@@ -1833,6 +2085,11 @@ internal sealed record FalloutNifNoLightingProperty(
     float FalloffStopAngle,
     float FalloffStartOpacity,
     float FalloffStopOpacity) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifTileShaderProperty(
+    FalloutNifBlock Block, string Name, int[] ExtraData, int Controller,
+    ushort Smooth, uint ShaderType, uint ShaderFlags, uint ShaderFlags2,
+    float EnvironmentMapScale, uint TextureClampMode, string FileName) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifAlphaProperty(
     FalloutNifBlock Block,

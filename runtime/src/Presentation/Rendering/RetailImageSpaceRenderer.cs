@@ -1,11 +1,25 @@
 using System.Threading;
 using System.Globalization;
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Presentation.Rendering;
 
 internal static class RetailImageSpaceRenderer
 {
+    internal static Application CreateFromSource(FalloutImageSpace source,
+        RetailImageSpaceConfiguration configuration, CaptureConfiguration capture,
+        ColorTransferConfiguration outputTransfer)
+    {
+        var cinematic = new Vector4(source.Cinematic.X, source.Cinematic.Y, source.Cinematic.Z, source.Cinematic.W);
+        var tint = new Vector4(source.Tint.X, source.Tint.Y, source.Tint.Z, source.Tint.W);
+        var effect = new RetailHdrCompositorEffect(source.TargetLuminance, 1, cinematic, tint, Vector4.Zero,
+            configuration, capture, outputTransfer, runtimeAdaptation: true);
+        var compositor = new Compositor { CompositorEffects = new Godot.Collections.Array<CompositorEffect> { effect } };
+        return new Application(configuration.Schema, cinematic, tint, Vector4.Zero, 1, source.DnamSha256,
+            [], effect, compositor);
+    }
+
     internal static Application Apply(
         WorldEnvironment environment,
         RetailImageSpaceComposition.ComposedImageSpace imageSpace,
@@ -258,11 +272,10 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private static string Invariant(float value) =>
         value.ToString("R", CultureInfo.InvariantCulture);
 
-    private readonly float _targetLuminance;
     private readonly float _matchedAdaptationSum;
-    private readonly Vector4 _cinematic;
-    private readonly Vector4 _tint;
-    private readonly Vector4 _fade;
+    private sealed record FrameParameters(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade, float DeltaSeconds);
+    private FrameParameters _parameters;
+    private FrameParameters _renderParameters;
     private readonly RetailHdrBlendConfiguration _hdr;
     private readonly CaptureConfiguration _capture;
     private readonly string _computeShaderSource;
@@ -293,11 +306,9 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         if (!float.IsFinite(matchedAdaptationSum) || matchedAdaptationSum <= 0.0f)
             throw new InvalidOperationException(
                 "Matched retail HDR adaptation state is invalid.");
-        _targetLuminance = targetLuminance;
         _matchedAdaptationSum = matchedAdaptationSum;
-        _cinematic = cinematic;
-        _tint = tint;
-        _fade = fade;
+        _parameters = new(targetLuminance, cinematic, tint, fade, configuration.HdrBlend.AdaptationDeltaSeconds);
+        _renderParameters = _parameters;
         _hdr = configuration.HdrBlend;
         _capture = capture;
         _runtimeAdaptation = runtimeAdaptation;
@@ -310,6 +321,14 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     }
 
     internal bool Operational => Volatile.Read(ref _operational) != 0;
+
+    internal void SetSourceFrame(FalloutImageSpaceFrame frame, float deltaSeconds)
+    {
+        if (!float.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        static Vector4 Vector(System.Numerics.Vector4 value) => new(value.X, value.Y, value.Z, value.W);
+        Volatile.Write(ref _parameters, new(frame.TargetLuminance, Vector(frame.Cinematic),
+            Vector(frame.Tint), Vector(frame.Fade), deltaSeconds));
+    }
 
     internal byte[] CapturePreHdrSceneColor(uint view = 0) =>
         CaptureRetainedSceneColor(_sceneCopies, "pre-HDR", view);
@@ -385,6 +404,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
                 return;
             }
 
+            // One immutable game-clock publication owns every pass and both eyes.
+            _renderParameters = Volatile.Read(ref _parameters);
             for (uint view = 0; view < buffers.GetViewCount(); ++view)
                 RenderView(buffers, view, size);
             Volatile.Write(ref _operational, 1);
@@ -657,20 +678,20 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             (float)sourceSize.Y,
             (float)pass,
             initializeAdaptation ? 1.0f : 0.0f,
-            _hdr.AdaptationDeltaSeconds,
-            _targetLuminance,
-            _cinematic.X,
-            _cinematic.Y,
-            _cinematic.Z,
-            _cinematic.W,
-            _tint.X,
-            _tint.Y,
-            _tint.Z,
-            _tint.W,
-            _fade.X,
-            _fade.Y,
-            _fade.Z,
-            _fade.W,
+            _renderParameters.DeltaSeconds,
+            _renderParameters.TargetLuminance,
+            _renderParameters.Cinematic.X,
+            _renderParameters.Cinematic.Y,
+            _renderParameters.Cinematic.Z,
+            _renderParameters.Cinematic.W,
+            _renderParameters.Tint.X,
+            _renderParameters.Tint.Y,
+            _renderParameters.Tint.Z,
+            _renderParameters.Tint.W,
+            _renderParameters.Fade.X,
+            _renderParameters.Fade.Y,
+            _renderParameters.Fade.Z,
+            _renderParameters.Fade.W,
             _matchedAdaptationSum,
             _runtimeAdaptation ? 1.0f : 0.0f,
             0.0f,

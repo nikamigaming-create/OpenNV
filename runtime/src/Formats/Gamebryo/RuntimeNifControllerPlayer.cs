@@ -10,7 +10,14 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     private double _elapsedSeconds;
 
     internal IReadOnlyCollection<string> SequenceNames => _sequences.Keys;
+    internal string? ActiveSequence => _active?.Name;
     internal double SourceTimeSeconds { get; private set; }
+
+    public override void _Ready()
+    {
+        if (_sequences.Count == 0)
+            throw new InvalidOperationException("A NIF controller entered the scene without its C# source bindings.");
+    }
 
     internal void Configure(IEnumerable<RuntimeNifControllerSequence> sequences)
     {

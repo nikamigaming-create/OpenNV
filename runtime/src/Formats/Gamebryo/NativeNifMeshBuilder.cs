@@ -33,11 +33,11 @@ internal static class RuntimeNativeNifMeshBuilder
         ShaderFlagWindowEnvironmentMapping | ShaderFlagRemappableTextures |
         ShaderFlagExternalEmittance |
         ShaderFlagZBufferTest;
-    private const uint SupportedShaderFlags2 = ShaderFlagZBufferWrite |
+    private const uint SupportedShaderFlags2 = ShaderFlagZBufferWrite | (1U << 5) |
         ShaderFlagEnvironmentMapLightFade;
     private const uint SupportedNoLightingShaderType = 33;
     private const uint SupportedNoLightingShaderFlags = ShaderFlagVertexAlpha |
-        ShaderFlagSpecular |
+        ShaderFlagSpecular | ShaderFlagEnvironmentMapping |
         ShaderFlagUseFalloff |
         ShaderFlagRemappableTextures | ShaderFlagDecal | ShaderFlagDynamicDecal |
         ShaderFlagExternalEmittance | ShaderFlagZBufferTest;
@@ -51,7 +51,6 @@ internal static class RuntimeNativeNifMeshBuilder
         CollisionFlagSetLocal | CollisionFlagAnimatedStatic | CollisionFlagReset;
     private const ushort AlphaBlendEnabled = 0x0001;
     private const ushort AlphaTestEnabled = 0x0200;
-    private const ushort LegacyAdditiveAlphaFlags = 0x100d;
     private const ushort DisabledDoubleSidedStencilFlags = 0x4d80;
     private const ushort LegacyBaseTextureFlags = 0x3200;
     private const ushort LegacyTexturingFlags = 0x0004;
@@ -65,7 +64,6 @@ internal static class RuntimeNativeNifMeshBuilder
     private const int LegacyTextureSlotCount = 9;
     private const uint LegacySourcePixelLayout = 6;
     private const uint LegacySourceMipmapMode = 1;
-    private const uint LegacySourceAlphaFormat = 3;
     private const float ByteMaximum = 255.0f;
     private const float HalfAngleScale = 0.5f;
     private const float ConstantBindTransformTolerance = 0.00001f;
@@ -149,12 +147,16 @@ internal static class RuntimeNativeNifMeshBuilder
     internal static RuntimeNativeNifScene Build(
         ReadOnlyMemory<byte> payload,
         float unitsToMetres,
+        string? preferredTextureArchive = null) => Build(FalloutNifFile.Read(payload), unitsToMetres, preferredTextureArchive);
+
+    internal static RuntimeNativeNifScene Build(
+        FalloutNifFile source,
+        float unitsToMetres,
         string? preferredTextureArchive = null)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(
                 nameof(unitsToMetres), "NIF-to-Godot scale must be finite and positive.");
-        var source = FalloutNifFile.Read(payload);
         var root = new Node3D { Name = "NativeNif" };
         var state = new BuildState(source, unitsToMetres, preferredTextureArchive);
         try
@@ -173,8 +175,109 @@ internal static class RuntimeNativeNifMeshBuilder
         }
     }
 
+    internal static RuntimeNativeNifSkeleton BuildActorSkeleton(
+        ReadOnlyMemory<byte> payload, float unitsToMetres)
+    {
+        if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
+            throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
+        return new RuntimeNativeNifSkeleton(FalloutNifFile.Read(payload), unitsToMetres);
+    }
+
+    internal static MeshInstance3D BuildSkeletonAttachment(RuntimeNativeNifSkeleton skeleton, FalloutNifGeometry geometry,
+        FalloutNifMorphGeometry? morph)
+    {
+        var state = new BuildState(skeleton.Source, skeleton.UnitsToMetres, null, externalSkeleton: true,
+            geometryOwner: morph is null ? null : (_, _, data) => morph.BaseGeometry(data))
+        {
+            ExternalControllerBlocks = morph?.ControllerBlocks,
+            MorphOwner = morph is null ? null : (_, _, _) => morph.RelativeDeltas(),
+        };
+        return (MeshInstance3D)state.Build(geometry.Block.Index);
+    }
+
+    internal static Material BuildMaterial(
+        FalloutNifFile source, FalloutNifGeometry geometry, string? preferredTextureArchive, Color? hairColor) =>
+        new BuildState(source, 1.0f, preferredTextureArchive, externalSkeleton: true).BuildMaterial(geometry, hairColor);
+
+    internal static RuntimeNativeNifScene AddActorPart(
+        ReadOnlyMemory<byte> payload,
+        RuntimeNativeNifSkeleton skeleton,
+        string? preferredTextureArchive,
+        Func<FalloutNifFile, FalloutNifGeometry, Material?>? materialOverride,
+        Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, FalloutNifMeshData>? geometryOwner,
+        IReadOnlySet<string>? externalTransformTargets,
+        IReadOnlyDictionary<string, FalloutNifTransform>? rigidFaceBinds,
+        string? selectedGeometryName,
+        Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? morphOwner)
+    {
+        var source = FalloutNifFile.Read(payload);
+        var state = new BuildState(source, skeleton.UnitsToMetres, preferredTextureArchive,
+            externalSkeleton: true, materialOverride, geometryOwner)
+        { ExternalTransformTargets = externalTransformTargets, SelectedGeometryName = selectedGeometryName, MorphOwner = morphOwner };
+        if (selectedGeometryName is not null && source.Blocks
+            .Where(block => block.TypeName is "NiTriShape" or "NiTriStrips")
+            .Count(block => source.ReadGeometry(block.Index).Name.Equals(selectedGeometryName, StringComparison.OrdinalIgnoreCase)) != 1)
+            throw new InvalidDataException($"Source model has no unique equipped geometry named {selectedGeometryName}.");
+        var result = new Node3D { Name = $"NativePart{skeleton.Node.GetChildCount()}" };
+        try
+        {
+            foreach (var rootIndex in source.Roots)
+            {
+                var root = source.ReadNode(rootIndex);
+                var parentNames = root.ExtraData.Where(reference => reference >= 0)
+                    .Select(source.ReadObject).OfType<FalloutNifStringExtraData>()
+                    .Where(extra => extra.Name == "Prn").Select(extra => extra.Value).ToArray();
+                if (parentNames.Length > 1)
+                    throw new InvalidDataException("Actor NIF has multiple source parent attachments.");
+                if (parentNames.Length == 1)
+                {
+                    _ = skeleton.BoneIndex(parentNames[0]);
+                    if (rigidFaceBinds is not null)
+                    {
+                        if (!rigidFaceBinds.TryGetValue(parentNames[0], out var faceBind))
+                            throw new InvalidDataException($"Source head skin has no Prn inverse bind for {parentNames[0]}.");
+                        state.RigidFaceBind = skeleton.Convert(faceBind);
+                    }
+                    var attachment = new BoneAttachment3D
+                    {
+                        Name = $"SourceAttachment{rootIndex}",
+                        BoneName = parentNames[0],
+                        UseExternalSkeleton = true,
+                        ExternalSkeleton = new NodePath("../.."),
+                    };
+                    attachment.SetMeta("opennv_nif_parent_bone", parentNames[0]);
+                    result.AddChild(attachment);
+                    attachment.AddChild(state.Build(rootIndex));
+                    if (rigidFaceBinds is not null)
+                        attachment.SetMeta("opennv_rigid_face_basis", "source-head-skin-inverse-bind");
+                }
+                else
+                {
+                    if (rigidFaceBinds is not null)
+                        throw new NotSupportedException("Rigid FaceGen component has no unique source Prn owner.");
+                    state.BuildHardwareSkinTree(rootIndex, Transform3D.Identity, true, result, skeleton, []);
+                }
+            }
+            if (state.SurfaceCount == 0)
+                throw new InvalidDataException("Actor part contains no presented source surfaces.");
+            skeleton.Node.AddChild(result);
+            return new RuntimeNativeNifScene(result, state.NodeCount, state.SurfaceCount,
+                state.VertexCount, state.TriangleCount, state.CollisionBodyCount,
+                state.CollisionShapeCount, state.CollisionTriangleCount);
+        }
+        catch
+        {
+            result.Free();
+            throw;
+        }
+    }
+
     private sealed class BuildState
     {
+        internal IReadOnlySet<string>? ExternalTransformTargets { get; init; }
+        internal IReadOnlySet<int>? ExternalControllerBlocks { get; init; }
+        internal Transform3D? RigidFaceBind { get; set; }
+        internal string? SelectedGeometryName { get; init; }
         private readonly FalloutNifFile _source;
         private readonly float _unitsToMetres;
         private readonly string? _preferredTextureArchive;
@@ -182,27 +285,35 @@ internal static class RuntimeNativeNifMeshBuilder
         private readonly HashSet<int> _owned = [];
         private readonly Dictionary<int, int> _oneBoneSkinInstances = [];
         private readonly Dictionary<int, Node3D> _nodes = [];
-        private readonly Dictionary<int, List<StandardMaterial3D>> _materials = [];
+        private readonly Dictionary<int, List<Material>> _materials = [];
         private readonly List<FalloutNifControllerManager> _controllerManagers = [];
         private readonly List<RuntimeNifControllerSequence> _directControllerSequences = [];
         private readonly HashSet<int> _referencedDynamicEffects = [];
+        private readonly Func<FalloutNifFile, FalloutNifGeometry, Material?>? _materialOverride;
+        private readonly Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, FalloutNifMeshData>? _geometryOwner;
+        internal Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? MorphOwner { get; init; }
 
         internal BuildState(
             FalloutNifFile source,
             float unitsToMetres,
-            string? preferredTextureArchive)
+            string? preferredTextureArchive,
+            bool externalSkeleton = false,
+            Func<FalloutNifFile, FalloutNifGeometry, Material?>? materialOverride = null,
+            Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, FalloutNifMeshData>? geometryOwner = null)
         {
             _source = source;
             _unitsToMetres = unitsToMetres;
             _preferredTextureArchive = preferredTextureArchive;
+            _materialOverride = materialOverride;
+            _geometryOwner = geometryOwner;
             foreach (var nodeBlock in source.Blocks.Where(block =>
                 block.TypeName is "NiNode" or "NiBone" or "BSFadeNode"))
             {
                 foreach (var effect in source.ReadNode(nodeBlock.Index).Effects.Where(reference => reference != -1))
                     _referencedDynamicEffects.Add(effect);
             }
-            foreach (var block in source.Blocks.Where(block =>
-                block.TypeName is "NiTriShape" or "NiTriStrips"))
+            foreach (var block in source.Blocks.Where(block => !externalSkeleton &&
+                (block.TypeName is "NiTriShape" or "NiTriStrips")))
             {
                 var geometry = source.ReadGeometry(block.Index);
                 if (geometry.SkinInstance == -1 ||
@@ -223,6 +334,130 @@ internal static class RuntimeNativeNifMeshBuilder
         internal int CollisionShapeCount { get; private set; }
         internal int CollisionTriangleCount { get; private set; }
 
+        internal void BuildHardwareSkinTree(
+            int blockIndex,
+            Transform3D parent,
+            bool visible,
+            Node3D output,
+            RuntimeNativeNifSkeleton skeleton,
+            HashSet<int> visited)
+        {
+            if (!visited.Add(blockIndex))
+                throw new InvalidDataException("Actor part has a cycle or multiply owned source node.");
+            if (_source.ReadObject(blockIndex) is FalloutNifNode node)
+            {
+                RequirePlainVisualState(node.Block, node.Controller, [], node.Properties, node.CollisionObject);
+                if (node.Effects.Any(reference => reference >= 0))
+                    throw new NotSupportedException($"Actor part source node {blockIndex} has unbound dynamic effects.");
+                _ = ValidateExtraData(node.Block, node.ExtraData, collisionContract: false);
+                var transform = parent * ConvertTransform(node.Transform);
+                foreach (var child in node.Children.Where(child => child >= 0))
+                    BuildHardwareSkinTree(child, transform,
+                        visible && (node.Flags & HiddenFlag) == 0, output, skeleton, visited);
+                return;
+            }
+            if (_source.ReadObject(blockIndex) is not FalloutNifGeometry geometry || geometry.SkinInstance < 0)
+                throw new NotSupportedException(
+                    $"Actor source block {blockIndex} requires a skinned mesh or an explicit Prn attachment.");
+            RequirePlainVisualState(geometry.Block, geometry.Controller, [], [], geometry.CollisionObject);
+            _ = ValidateExtraData(geometry.Block, geometry.ExtraData, collisionContract: false);
+            if (geometry.MaterialNames.Length != 0 || geometry.MaterialExtraData.Length != 0)
+                throw new NotSupportedException($"Actor geometry {blockIndex} uses an unsupported material table.");
+            var data = ReadOwnedMeshData(geometry);
+            var instance = (FalloutNifSkinInstance)_source.ReadObject(geometry.SkinInstance);
+            var skinData = (FalloutNifSkinData)_source.ReadObject(instance.Data);
+            var partitionData = (FalloutNifSkinPartition)_source.ReadObject(instance.SkinPartition);
+            var sourceRoot = _source.ReadNode(instance.SkeletonRoot);
+            var rootBone = skeleton.BoneIndex(sourceRoot.Name);
+            if (skeleton.Node.GetBoneParent(rootBone) != -1)
+                throw new NotSupportedException("Actor skin root is not a root of the external source skeleton.");
+            var partitions = FalloutNifHardwareSkin.Read(instance, skinData, partitionData, data.Vertices.Length);
+            var material = BuildMaterial(geometry);
+            foreach (var partition in partitions)
+            {
+                var skin = new Skin();
+                skin.SetBindCount(partition.BonePalette.Length);
+                for (var bind = 0; bind < partition.BonePalette.Length; bind++)
+                {
+                    var sourceBone = partition.BonePalette[bind];
+                    var boneName = _source.ReadNode(instance.Bones[sourceBone]).Name;
+                    skin.SetBindBone(bind, skeleton.BoneIndex(boneName));
+                    skin.SetBindName(bind, boneName);
+                    skin.SetBindPose(bind, ConvertTransform(skinData.Bones[sourceBone].SkinTransform));
+                }
+                var mesh = new ArrayMesh();
+                var arrays = BuildHardwareSkinArrays(data, partition);
+                var morphs = BuildMorphArrays(mesh, geometry, data, arrays, partition.VertexMap.Select(value => (int)value).ToArray());
+                var format = partition.InfluencesPerVertex == 8 ? Mesh.ArrayFormat.FlagUse8BoneWeights : 0;
+                mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, morphs, flags: format);
+                mesh.SurfaceSetMaterial(0, material);
+                var rendered = new MeshInstance3D
+                {
+                    Name = $"{SourceName(geometry.Name, blockIndex)}_Partition{partition.PartitionIndex}",
+                    // NiSkinData maps the skeleton frame back into geometry space.
+                    // Its product with the authored geometry placement is retained.
+                    Transform = parent * ConvertTransform(geometry.Transform) * ConvertTransform(skinData.SkinTransform),
+                    Visible = visible && (geometry.Flags & HiddenFlag) == 0 &&
+                        FalloutNifHardwareSkin.VisibleOnIntactBody(partition.BodyPart),
+                    Mesh = mesh,
+                    Skin = skin,
+                    Skeleton = new NodePath("../.."),
+                };
+                rendered.SetMeta("opennv_nif_geometry_block", blockIndex);
+                PreserveExtraDataMetadata(rendered, geometry.ExtraData);
+                rendered.SetMeta("opennv_nif_skin_instance", instance.Block.Index);
+                rendered.SetMeta("opennv_nif_skin_partition", partition.PartitionIndex);
+                rendered.SetMeta("opennv_nif_skin_vertex_map", partition.VertexMap.Select(value => (int)value).ToArray());
+                if (partition.BodyPart is { } bodyPart)
+                {
+                    rendered.SetMeta("opennv_nif_body_part", bodyPart.BodyPart);
+                    rendered.SetMeta("opennv_nif_body_part_flags", bodyPart.Flags);
+                }
+                output.AddChild(rendered);
+                NodeCount++;
+                SurfaceCount++;
+                VertexCount += partition.VertexMap.Length;
+                TriangleCount += arrays[(int)Mesh.ArrayType.Index].AsInt32Array().Length / 3;
+            }
+        }
+
+        private Godot.Collections.Array BuildHardwareSkinArrays(
+            FalloutNifMeshData data, FalloutNifHardwareSkinPartition partition)
+        {
+            if (data.AdditionalData != -1 || data.TextureCoordinates.Length > 1)
+                throw new NotSupportedException("Actor source mesh has unsupported additional attributes.");
+            RequireAttributeCount(data.Normals.Length, data.Vertices.Length, "normals", data.Block.Index);
+            RequireAttributeCount(data.Tangents.Length, data.Vertices.Length, "tangents", data.Block.Index);
+            RequireAttributeCount(data.Bitangents.Length, data.Vertices.Length, "bitangents", data.Block.Index);
+            RequireAttributeCount(data.Colors.Length, data.Vertices.Length, "colors", data.Block.Index);
+            var map = partition.VertexMap;
+            var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Mesh.ArrayType.Max);
+            arrays[(int)Mesh.ArrayType.Vertex] = map.Select(index => ConvertVector(data.Vertices[index]) * _unitsToMetres).ToArray();
+            if (data.Normals.Length > 0)
+                arrays[(int)Mesh.ArrayType.Normal] = map.Select(index => ConvertVector(data.Normals[index])).ToArray();
+            if (data.Tangents.Length > 0)
+                arrays[(int)Mesh.ArrayType.Tangent] = BuildTangents(data with
+                {
+                    Normals = map.Select(index => data.Normals[index]).ToArray(),
+                    Tangents = map.Select(index => data.Tangents[index]).ToArray(),
+                    Bitangents = map.Select(index => data.Bitangents[index]).ToArray(),
+                });
+            if (data.Colors.Length > 0)
+                arrays[(int)Mesh.ArrayType.Color] = map.Select(index => data.Colors[index])
+                    .Select(color => new Color(color.R, color.G, color.B, color.A)).ToArray();
+            if (data.TextureCoordinates.Length > 0)
+            {
+                RequireAttributeCount(data.TextureCoordinates[0].Length, data.Vertices.Length, "UVs", data.Block.Index);
+                arrays[(int)Mesh.ArrayType.TexUV] = map.Select(index => data.TextureCoordinates[0][index])
+                    .Select(uv => new Vector2(uv.U, uv.V)).ToArray();
+            }
+            arrays[(int)Mesh.ArrayType.Bones] = partition.BoneIndices;
+            arrays[(int)Mesh.ArrayType.Weights] = partition.Weights;
+            arrays[(int)Mesh.ArrayType.Index] = FalloutNifTriangleWinding.ToGodotIndices(partition.Triangles);
+            return arrays;
+        }
+
         internal Node3D Build(int blockIndex)
         {
             if (!_active.Add(blockIndex))
@@ -239,6 +474,8 @@ internal static class RuntimeNativeNifMeshBuilder
                     "NiTriShape" or "NiTriStrips" => BuildGeometry(_source.ReadGeometry(blockIndex)),
                     "NiAmbientLight" => BuildAmbientLight(
                         (FalloutNifAmbientLight)_source.ReadObject(blockIndex)),
+                    "NiPointLight" => BuildPointLight(
+                        (FalloutNifPointLight)_source.ReadObject(blockIndex)),
                     _ => throw new NotSupportedException(
                         $"Reachable NIF visual block {blockIndex} type {block.TypeName} is unsupported."),
                 };
@@ -259,6 +496,12 @@ internal static class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException(
                     $"NIF node {source.Block.Index} has unsupported dynamic effects.");
             var result = CreateNode(source.Name, source.Block.Index, source.Transform, source.Flags);
+            if (RigidFaceBind is not null)
+            {
+                if (source.Controller != -1 || source.CollisionObject != -1)
+                    throw new NotSupportedException("Rigid FaceGen export hierarchy has an unbound transform or collision owner.");
+                result.Transform = Transform3D.Identity;
+            }
             _nodes.Add(source.Block.Index, result);
             PreserveCollisionMetadata(result, collision);
             AddCollision(result, collision);
@@ -275,6 +518,13 @@ internal static class RuntimeNativeNifMeshBuilder
                 {
                     if (omitEditorMarkers && IsEditorMarkerRoot(child))
                         ValidateEditorMarkerTree(child);
+                    else if (SelectedGeometryName is not null && _source.Blocks[child].TypeName is "NiTriShape" or "NiTriStrips" &&
+                        !_source.ReadGeometry(child).Name.Equals(SelectedGeometryName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var omitted = CreateNode(_source.ReadGeometry(child).Name, child, _source.ReadGeometry(child).Transform, 0);
+                        omitted.SetMeta("opennv_nif_geometry_disposition", "not-selected-by-equipment");
+                        result.AddChild(omitted);
+                    }
                     else
                         result.AddChild(Build(child));
                 }
@@ -298,6 +548,20 @@ internal static class RuntimeNativeNifMeshBuilder
             result.SetMeta("opennv_nif_ambient_switch", source.SwitchState);
             result.SetMeta("opennv_nif_ambient_dimmer", source.Dimmer);
             NodeCount++;
+            return result;
+        }
+
+        private Node3D BuildPointLight(FalloutNifPointLight source)
+        {
+            // A NiDynamicEffect is applied through the node effect lists. Mere
+            // presence in the visual tree does not light every mesh in a cell.
+            // Keep the authored object and its parameters; an actual reference
+            // still requires the subtree-lighting owner and fails closed above.
+            var result = BuildAmbientLight(source.Light);
+            result.RemoveMeta("opennv_nif_unreferenced_ambient_light");
+            result.SetMeta("opennv_nif_unreferenced_point_light", true);
+            result.SetMeta("opennv_nif_point_attenuation", new Vector3(source.ConstantAttenuation,
+                source.LinearAttenuation, source.QuadraticAttenuation));
             return result;
         }
 
@@ -365,6 +629,15 @@ internal static class RuntimeNativeNifMeshBuilder
             }
             if (controller is FalloutNifTransformController direct)
             {
+                if (ExternalTransformTargets?.Contains(owner.Name) == true &&
+                    (direct.Time.Flags & 0x0040) != 0 && direct.Time.NextController == -1 &&
+                    direct.Time.Target == owner.Block.Index)
+                {
+                    // Manager-controlled transform: the selected external KF
+                    // supplies this node's clock and values, not an auto-loop.
+                    node.SetMeta("opennv_nif_external_transform_controller", direct.Block.Index);
+                    return;
+                }
                 if (TryPreserveConstantBindTransform(owner, node, direct))
                     return;
                 if (TryApplyStaticTransformController(owner, node, direct))
@@ -833,10 +1106,15 @@ internal static class RuntimeNativeNifMeshBuilder
                 var color = new Color(value.X, value.Y, value.Z);
                 foreach (var material in materials)
                 {
-                    material.EmissionEnabled = true;
-                    material.Emission = color;
-                    if (material.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded)
-                        material.AlbedoColor = new Color(color.R, color.G, color.B, material.AlbedoColor.A);
+                    if (material is ShaderMaterial shader)
+                        shader.SetShaderParameter("emissive_color", new Vector3(color.R, color.G, color.B));
+                    else if (material is StandardMaterial3D standard)
+                    {
+                        standard.EmissionEnabled = true;
+                        standard.Emission = color;
+                        if (standard.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded)
+                            standard.AlbedoColor = new Color(color.R, color.G, color.B, standard.AlbedoColor.A);
+                    }
                 }
             });
         }
@@ -865,7 +1143,7 @@ internal static class RuntimeNativeNifMeshBuilder
             return new RuntimeNifControllerChannel(time =>
             {
                 var value = SampleScalar(data.Keys, time);
-                foreach (var material in materials)
+                foreach (var material in materials.Cast<StandardMaterial3D>())
                     material.Uv1Offset = new Vector3(material.Uv1Offset.X, value, material.Uv1Offset.Z);
             });
         }
@@ -1027,7 +1305,7 @@ internal static class RuntimeNativeNifMeshBuilder
                     $"NIF geometry {source.Block.Index} uses an unsupported material table.");
             if (source.Data == -1)
                 throw new InvalidDataException($"NIF geometry {source.Block.Index} has no mesh data.");
-            var data = _source.ReadMeshData(source.Data);
+            var data = ReadOwnedMeshData(source);
             if (data.AdditionalData != -1)
                 throw new NotSupportedException(
                     $"NIF geometry data {data.Block.Index} has unsupported additional vertex data.");
@@ -1094,21 +1372,14 @@ internal static class RuntimeNativeNifMeshBuilder
                 arrays[(int)Mesh.ArrayType.Weights] = skinBinding.Weights;
             }
 
-            var indices = new List<int>(checked(data.Triangles.Length * 3));
-            foreach (var triangle in data.Triangles)
-            {
-                if (triangle.A == triangle.B || triangle.B == triangle.C || triangle.C == triangle.A)
-                    continue;
-                indices.Add(triangle.A);
-                indices.Add(triangle.B);
-                indices.Add(triangle.C);
-            }
-            if (indices.Count == 0)
+            var indices = FalloutNifTriangleWinding.ToGodotIndices(data.Triangles);
+            if (indices.Length == 0)
                 throw new InvalidDataException(
                     $"NIF geometry data {data.Block.Index} contains no non-degenerate triangles.");
-            arrays[(int)Mesh.ArrayType.Index] = indices.ToArray();
+            arrays[(int)Mesh.ArrayType.Index] = indices;
             var mesh = new ArrayMesh();
-            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays,
+                BuildMorphArrays(mesh, source, data, arrays, Enumerable.Range(0, data.Vertices.Length).ToArray()));
             mesh.SurfaceSetMaterial(0, BuildMaterial(source));
             var result = new MeshInstance3D
             {
@@ -1117,6 +1388,18 @@ internal static class RuntimeNativeNifMeshBuilder
                 Visible = (source.Flags & HiddenFlag) == 0,
                 Mesh = mesh,
             };
+            result.SetMeta("opennv_nif_geometry_block", source.Block.Index);
+            result.SetMeta("opennv_nif_source_name", source.Name);
+            if (RigidFaceBind is { } faceBind)
+            {
+                if (skinBinding is not null)
+                    throw new NotSupportedException("Rigid FaceGen shape must be unskinned.");
+                // FaceGen uses the head's model basis, including its scale.
+                // Component export rotation/scale are not applied again; owned
+                // mouth/eye exports also contain non-unit rounding residues.
+                result.Transform = faceBind * new Transform3D(Basis.Identity,
+                    ConvertVector(source.Transform.Translation) * _unitsToMetres);
+            }
             _nodes.Add(source.Block.Index, result);
             if (skinBinding is not null && skinBone is not null)
             {
@@ -1135,7 +1418,44 @@ internal static class RuntimeNativeNifMeshBuilder
             NodeCount++;
             SurfaceCount++;
             VertexCount += vertices.Length;
-            TriangleCount += indices.Count / 3;
+            TriangleCount += indices.Length / 3;
+            return result;
+        }
+
+        private Godot.Collections.Array<Godot.Collections.Array> BuildMorphArrays(ArrayMesh mesh, FalloutNifGeometry geometry,
+            FalloutNifMeshData data, Godot.Collections.Array sourceArrays, int[] vertexMap)
+        {
+            var result = new Godot.Collections.Array<Godot.Collections.Array>();
+            if (MorphOwner is null) return result;
+            mesh.BlendShapeMode = Mesh.BlendShapeMode.Relative;
+            foreach (var (name, values) in MorphOwner(_source, geometry, data))
+            {
+                if (values.Length != data.Vertices.Length) throw new InvalidDataException("Source morph vertex order differs from geometry.");
+                mesh.AddBlendShape(name);
+                var arrays = new Godot.Collections.Array();
+                arrays.Resize((int)Mesh.ArrayType.Max);
+                arrays[(int)Mesh.ArrayType.Vertex] = vertexMap.Select(index =>
+                    GamebryoCoordinate.ConvertVector(new(values[index].X, values[index].Y, values[index].Z)) * _unitsToMetres).ToArray();
+                // Preserve the source normal/tangent basis; expression normal updates
+                // remain a separately measured presentation lane.
+                if (sourceArrays[(int)Mesh.ArrayType.Normal].VariantType != Variant.Type.Nil)
+                    arrays[(int)Mesh.ArrayType.Normal] = new Vector3[vertexMap.Length];
+                if (sourceArrays[(int)Mesh.ArrayType.Tangent].VariantType != Variant.Type.Nil)
+                    arrays[(int)Mesh.ArrayType.Tangent] = new float[vertexMap.Length * 4];
+                result.Add(arrays);
+            }
+            return result;
+        }
+
+        private FalloutNifMeshData ReadOwnedMeshData(FalloutNifGeometry geometry)
+        {
+            var source = _source.ReadMeshData(geometry.Data);
+            if (_geometryOwner is null)
+                return source;
+            var result = _geometryOwner(_source, geometry, source);
+            if (result.Block != source.Block || result.Vertices.Length != source.Vertices.Length ||
+                !result.Triangles.SequenceEqual(source.Triangles))
+                throw new InvalidDataException("Actor geometry owner changed source mesh identity, vertex count or topology.");
             return result;
         }
 
@@ -1340,10 +1660,13 @@ internal static class RuntimeNativeNifMeshBuilder
             CollisionTriangleCount += built.Triangles;
         }
 
-        private Material BuildMaterial(FalloutNifGeometry geometry)
+        internal Material BuildMaterial(FalloutNifGeometry geometry, Color? hairColor = null)
         {
-            var result = BuildMaterialCore(geometry);
-            if (result is not StandardMaterial3D standard)
+            var overridden = _materialOverride?.Invoke(_source, geometry);
+            if (overridden is not null)
+                return overridden;
+            var result = BuildMaterialCore(geometry, hairColor);
+            if (result is not StandardMaterial3D && result.ResourceName != NativeNifLightingMaterial.ResourceIdentity)
                 return result;
             foreach (var reference in geometry.Properties.Where(reference => reference != -1))
             {
@@ -1355,12 +1678,12 @@ internal static class RuntimeNativeNifMeshBuilder
                     values = [];
                     _materials.Add(reference, values);
                 }
-                values.Add(standard);
+                values.Add(result);
             }
             return result;
         }
 
-        private Material BuildMaterialCore(FalloutNifGeometry geometry)
+        private Material BuildMaterialCore(FalloutNifGeometry geometry, Color? hairColor)
         {
             FalloutNifShaderProperty? shader = null;
             FalloutNifNoLightingProperty? noLighting = null;
@@ -1427,7 +1750,8 @@ internal static class RuntimeNativeNifMeshBuilder
                 throw new InvalidDataException(
                     $"NIF geometry {geometry.Block.Index} lost its validated lighting shader.");
             var supportedLightingFlags = SupportedShaderFlags |
-                (geometry.SkinInstance == -1 ? 0U : ShaderFlagSkinned);
+                (geometry.SkinInstance == -1 ? 0U : ShaderFlagSkinned) |
+                (hairColor.HasValue ? FalloutNpcAppearanceHairColor.ShaderFlag : 0U);
             if (shader.Controller != -1 || shader.ExtraData.Any(reference => reference != -1) ||
                 shader.ShaderType != SupportedShaderType ||
                 (shader.ShaderFlags & ~supportedLightingFlags) != 0 ||
@@ -1461,8 +1785,11 @@ internal static class RuntimeNativeNifMeshBuilder
 
             var result = new StandardMaterial3D
             {
-                TextureRepeat = shader.TextureClampMode == 0,
+                TextureRepeat = FalloutNifTextureAddressing.RepeatForGodot(shader.TextureClampMode),
                 Metallic = 0.0f,
+                SpecularMode = (shader.ShaderFlags & ShaderFlagSpecular) == 0
+                    ? BaseMaterial3D.SpecularModeEnum.Disabled
+                    : BaseMaterial3D.SpecularModeEnum.SchlickGgx,
                 Roughness = material is null ? 1.0f : GlossToRoughness(material.Glossiness),
                 VertexColorUseAsAlbedo =
                     (shader.ShaderFlags & ShaderFlagVertexAlpha) != 0,
@@ -1522,9 +1849,16 @@ internal static class RuntimeNativeNifMeshBuilder
                         (shader.ShaderFlags2 & ShaderFlagEnvironmentMapLightFade) != 0);
                 }
             }
+            if ((shader.ShaderFlags & FalloutNpcAppearanceHairColor.ShaderFlag) != 0)
+            {
+                var tint = hairColor ?? throw new InvalidDataException("Hair shader has no actor colour owner.");
+                result.AlbedoColor = new Color(tint.R, tint.G, tint.B, result.AlbedoColor.A);
+                result.SetMeta("opennv_hair_rgb", new Vector3(tint.R, tint.G, tint.B));
+                result.SetMeta("opennv_hair_lighting_parity", "unverified");
+            }
             ApplyAlpha(result, alpha);
             ApplyStencil(result, stencil, environment);
-            return result;
+            return NativeNifLightingMaterial.Build(result, shader, material, alpha);
         }
 
         private StandardMaterial3D BuildVertexMaterialOnly(
@@ -1555,13 +1889,17 @@ internal static class RuntimeNativeNifMeshBuilder
             };
         }
 
-        private StandardMaterial3D BuildNoLightingMaterial(
+        private Material BuildNoLightingMaterial(
             FalloutNifNoLightingProperty shader,
             FalloutNifMaterialProperty? material,
             FalloutNifAlphaProperty? alpha,
             FalloutNifTexturingProperty? texturing,
             FalloutNifStencilProperty? stencil)
         {
+            // NOLIGHT programs consume the property-owned 2D diffuse texture.
+            // The common specular/environment bits do not introduce lighting
+            // passes or another texture slot in this shader family. The owned
+            // NOLIGHT vertex/pixel program inventory confirms this contract.
             var supportedShaderFlags = SupportedNoLightingShaderFlags |
                 (texturing is null ? 0U : ShaderFlagAlphaTexture);
             if (shader.Controller != -1 || shader.ExtraData.Any(reference => reference != -1) ||
@@ -1588,28 +1926,27 @@ internal static class RuntimeNativeNifMeshBuilder
                 if (!texturePath.Equals(shader.FileName, StringComparison.OrdinalIgnoreCase))
                     throw new NotSupportedException(
                         $"NIF legacy texturing property {texturing.Block.Index} differs from its no-lighting shader texture.");
-                if (alpha is not null &&
-                    (alpha.Flags != LegacyAdditiveAlphaFlags || alpha.Threshold != 0))
-                    throw new NotSupportedException(
-                        $"NIF legacy texturing property {texturing.Block.Index} has an unsupported alpha contract.");
             }
             var result = new StandardMaterial3D
             {
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 VertexColorUseAsAlbedo = true,
-                TextureRepeat = shader.TextureClampMode == 0,
+                TextureRepeat = FalloutNifTextureAddressing.RepeatForGodot(shader.TextureClampMode),
                 AlbedoTexture = LoadTexture(texturePath, normal: false),
                 AlbedoColor = new Color(1.0f, 1.0f, 1.0f, material?.Alpha ?? 1.0f),
             };
             ApplyAlpha(result, alpha);
             if ((shader.ShaderFlags2 & ShaderFlagZBufferWrite) == 0)
                 result.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
-            if (texturing is not null && alpha is not null)
-            {
-                result.BlendMode = BaseMaterial3D.BlendModeEnum.Add;
-                result.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
-            }
             ApplyStencil(result, stencil, environmentPass: false);
+            if ((shader.ShaderFlags & ShaderFlagUseFalloff) != 0)
+            {
+                if (material?.Controller >= 0 || texturing?.Controller >= 0)
+                    throw new NotSupportedException("Animated angle-falloff materials require a shader-parameter controller owner.");
+                return NativeNifEffectMaterial.Build(shader, material, alpha,
+                    result.AlbedoTexture,
+                    result.CullMode == BaseMaterial3D.CullModeEnum.Disabled);
+            }
             return result;
         }
 
@@ -1645,11 +1982,14 @@ internal static class RuntimeNativeNifMeshBuilder
                 source.Controller != -1 || source.ExtraData.Any(reference => reference != -1) ||
                 source.UnknownLink != -1 || source.PixelLayout != LegacySourcePixelLayout ||
                 source.MipmapMode != LegacySourceMipmapMode ||
-                source.AlphaFormat != LegacySourceAlphaFormat || source.StaticFlag != 1 ||
+                source.AlphaFormat > 3 || source.StaticFlag != 1 ||
                 !source.DirectRender || source.PersistentRenderData ||
                 string.IsNullOrWhiteSpace(source.FileName))
                 throw new NotSupportedException(
                     $"NIF legacy texturing property {texturing.Block.Index} has an unsupported source texture contract.");
+            // NiTexture::FormatPrefs requests a storage format; it is not draw
+            // state. External DDS pixels already carry that format. Preserve
+            // their alpha and let NiAlphaProperty own blending and testing.
             return source.FileName;
         }
 
@@ -1701,6 +2041,14 @@ internal static class RuntimeNativeNifMeshBuilder
             if (alpha.Controller != -1 || alpha.ExtraData.Any(reference => reference != -1))
                 throw new NotSupportedException(
                     $"NIF alpha property {alpha.Block.Index} uses unsupported controllers or extra data.");
+            var state = FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold);
+            material.BlendMode = state.Blend switch
+            {
+                FalloutNifBlendMode.Add => BaseMaterial3D.BlendModeEnum.Add,
+                FalloutNifBlendMode.Premultiplied => BaseMaterial3D.BlendModeEnum.PremultAlpha,
+                FalloutNifBlendMode.Multiply => BaseMaterial3D.BlendModeEnum.Mul,
+                _ => BaseMaterial3D.BlendModeEnum.Mix,
+            };
             if ((alpha.Flags & AlphaTestEnabled) != 0)
             {
                 material.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
@@ -1723,7 +2071,10 @@ internal static class RuntimeNativeNifMeshBuilder
             if (normal && image.GetFormat() == Image.Format.L8)
                 throw new NotSupportedException(
                     $"Native NIF normal texture has an unsupported single-channel format: {source}");
-            return ImageTexture.CreateFromImage(image);
+            var texture = ImageTexture.CreateFromImage(image);
+            texture.SetMeta("opennv_source_texture", source);
+            texture.SetMeta("opennv_logical_texture", logicalPath);
+            return texture;
         }
 
         private Cubemap LoadCubemap(string logicalPath)
@@ -1781,6 +2132,7 @@ internal static class RuntimeNativeNifMeshBuilder
             result.SetShaderParameter("environment_mask", mask ?? normal);
             result.SetShaderParameter("use_environment_mask", mask is not null);
             result.SetShaderParameter("environment_scale", scale);
+            result.SetMeta("opennv_environment_light_fade", lightFade);
             return result;
         }
 
@@ -1805,12 +2157,18 @@ internal static class RuntimeNativeNifMeshBuilder
             string sourceName,
             int blockIndex,
             FalloutNifTransform transform,
-            ushort flags) => new()
+            ushort flags)
+        {
+            var node = new Node3D
             {
                 Name = SourceName(sourceName, blockIndex),
                 Transform = ConvertTransform(transform),
                 Visible = (flags & HiddenFlag) == 0,
             };
+            node.SetMeta("opennv_nif_block", blockIndex);
+            node.SetMeta("opennv_nif_source_name", sourceName);
+            return node;
+        }
 
         private Transform3D ConvertTransform(FalloutNifTransform source) => new(
             GamebryoCoordinate.ConvertBasis(source.RotationRowMajor, source.Scale, "NIF local transform"),
@@ -1847,7 +2205,7 @@ internal static class RuntimeNativeNifMeshBuilder
             IReadOnlyList<int> properties,
             int collision)
         {
-            if (controller != -1)
+            if (controller != -1 && ExternalControllerBlocks?.Contains(controller) != true)
             {
                 var dormant = _source.Blocks[controller].TypeName == "NiTransformController" &&
                     _source.ReadObject(controller) is FalloutNifTransformController direct &&
@@ -1894,8 +2252,54 @@ internal sealed record RuntimeNativeNifScene(
     int CollisionShapes,
     int CollisionTriangles);
 
+internal sealed class RuntimeNativeNifPrototype
+{
+    private readonly FalloutNifFile _source;
+    private readonly float _unitsToMetres;
+    private readonly bool _hasControllers;
+    internal RuntimeNativeNifScene Scene { get; }
+
+    internal RuntimeNativeNifPrototype(ReadOnlyMemory<byte> payload, float unitsToMetres)
+    {
+        _source = FalloutNifFile.Read(payload);
+        _unitsToMetres = unitsToMetres;
+        Scene = RuntimeNativeNifMeshBuilder.Build(_source, unitsToMetres);
+        _hasControllers = Scene.Root.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Any();
+    }
+
+    internal Node3D Instantiate()
+    {
+        // Godot Duplicate copies engine properties, not configured C# delegates
+        // and their target objects. Reuse the decoded source, but create fresh
+        // controllers/material owners for each animated reference.
+        if (_hasControllers) return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres).Root;
+        return Scene.Root.Duplicate((int)Node.DuplicateFlags.UseInstantiation) as Node3D ??
+            throw new InvalidOperationException("Could not instantiate a static native NIF.");
+    }
+}
+
 internal static class NativeNifMeshBuilder
 {
+    internal static Material BuildMaterial(
+        FalloutNifFile source, FalloutNifGeometry geometry, string? preferredTextureArchive = null, Color? hairColor = null) =>
+        RuntimeNativeNifMeshBuilder.BuildMaterial(source, geometry, preferredTextureArchive, hairColor);
+
+    internal static RuntimeNativeNifSkeleton BuildActorSkeleton(
+        ReadOnlyMemory<byte> payload, float unitsToMetres) =>
+        RuntimeNativeNifMeshBuilder.BuildActorSkeleton(payload, unitsToMetres);
+
+    internal static RuntimeNativeNifScene AddActorPart(
+        ReadOnlyMemory<byte> payload,
+        RuntimeNativeNifSkeleton skeleton,
+        string? preferredTextureArchive = null,
+        Func<FalloutNifFile, FalloutNifGeometry, Material?>? materialOverride = null,
+        Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, FalloutNifMeshData>? geometryOwner = null,
+        IReadOnlySet<string>? externalTransformTargets = null,
+        IReadOnlyDictionary<string, FalloutNifTransform>? rigidFaceBinds = null,
+        string? selectedGeometryName = null,
+        Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? morphOwner = null) =>
+        RuntimeNativeNifMeshBuilder.AddActorPart(payload, skeleton, preferredTextureArchive, materialOverride, geometryOwner, externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner);
+
     internal static RuntimeNativeNifScene Build(
         ReadOnlyMemory<byte> payload,
         float unitsToMetres,

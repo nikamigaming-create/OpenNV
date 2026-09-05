@@ -24,7 +24,9 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<uint> EquippedRuntimeFormIds,
     IReadOnlyList<bool> PlayerControls,
     IReadOnlyList<float> PlayerPosition,
-    IReadOnlyList<float> PlayerRotation);
+    IReadOnlyList<float> PlayerRotation,
+    IReadOnlyList<FalloutQuestSnapshot>? Quests = null,
+    FalloutQuestScriptsSnapshot? Scripts = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -32,7 +34,9 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v6";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v8";
+    internal const string FeetAnchoredSchema = "opennv-native-fnv-campaign-save/v7";
+    internal const string CapsuleCenteredSchema = "opennv-native-fnv-campaign-save/v6";
     internal const string OpeningQuestEditorId = "VCG01";
     internal const short CompletedOpeningStage = 200;
     private const int PositionComponents = 3;
@@ -57,7 +61,9 @@ internal static class FalloutNativeCampaignSave
         IReadOnlyList<FalloutNativeTraitIdentity> traits,
         FalloutPlayerControlState playerControls,
         IReadOnlyList<float> playerPosition,
-        IReadOnlyList<float> playerRotation)
+        IReadOnlyList<float> playerRotation,
+        IReadOnlyList<FalloutQuestSnapshot>? quests = null,
+        FalloutQuestScriptsSnapshot? scripts = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         FalloutNativeVigorResolver.Validate(vigorContract, special);
@@ -92,7 +98,7 @@ internal static class FalloutNativeCampaignSave
                 playerControls.Sneaking,
             ],
             playerPosition.ToArray(),
-            playerRotation.ToArray());
+            playerRotation.ToArray(), quests, scripts);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -142,6 +148,15 @@ internal static class FalloutNativeCampaignSave
                 "Native campaign save active CELL differs from the live winning records.");
         var characterContract = FalloutNativeRaceSexResolver.Resolve(stack);
         FalloutNativeRaceSexResolver.Validate(characterContract, state.Character);
+        if (state.Character.Face is { } face)
+        {
+            var player = stack.GetEffective(characterContract.Player);
+            foreach (var (signature, bytes) in new[] { ("FGGS", face.SymmetricGeometry), ("FGGA", face.AsymmetricGeometry), ("FGTS", face.SymmetricTexture) })
+                if (player.ReadSubrecords().Single(row => row.Signature == signature).Data.Length != bytes.Length)
+                    throw new InvalidDataException("Saved face coefficient extent differs from the owned player model.");
+            foreach (var id in face.HeadParts)
+                if (stack.GetEffective(stack.RuntimeFormKey(id)).Signature != "HDPT") throw new InvalidDataException("Saved player head part is not an owned HDPT.");
+        }
         FalloutNativeVigorResolver.Validate(vigorContract, state.Special);
         FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, state.Traits);
@@ -164,15 +179,16 @@ internal static class FalloutNativeCampaignSave
                         (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))))
             throw new InvalidDataException(
                 "Native campaign save inventory differs from the live winning records.");
-        if (!state.Inventory.OrderBy(value => value.RuntimeFormId)
+        if (state.Scripts is null && (!state.Inventory.OrderBy(value => value.RuntimeFormId)
                 .Select(value => (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))
                 .SequenceEqual(expectedGrant.Inventory.Items.OrderBy(value => value.RuntimeFormId)
                     .Select(value =>
                         (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))) ||
             !state.EquippedRuntimeFormIds.Order()
-                .SequenceEqual(expectedGrant.EquippedRuntimeFormIds.Order()))
+                .SequenceEqual(expectedGrant.EquippedRuntimeFormIds.Order())))
             throw new InvalidDataException(
                 "Native campaign save loadout differs from the live farewell/tag-skill contract.");
+        if (state.Quests is not null) new FalloutQuestState(stack).Restore(state.Quests);
         return new FalloutNativeCampaignRestore(state, inventory);
     }
 
@@ -185,12 +201,26 @@ internal static class FalloutNativeCampaignSave
         ArgumentNullException.ThrowIfNull(state);
         var updated = state with
         {
+            Schema = ExpectedSchema,
             ActiveCell = activeCell,
             PlayerPosition = playerPosition.ToArray(),
             PlayerRotation = playerRotation.ToArray(),
         };
         Validate(updated, state.SaveCompatibilityId);
         return updated;
+    }
+
+    internal static float[] RestorePlayerPosition(FalloutNativeCampaignState state, float legacyCapsuleCenterHeight)
+    {
+        Validate(state, state.SaveCompatibilityId);
+        if (!float.IsFinite(legacyCapsuleCenterHeight) || legacyCapsuleCenterHeight <= 0.0f)
+            throw new ArgumentOutOfRangeException(nameof(legacyCapsuleCenterHeight));
+        var position = state.PlayerPosition.ToArray();
+        if (state.Schema == CapsuleCenteredSchema)
+            position[1] -= legacyCapsuleCenterHeight;
+        if (position.Any(value => !float.IsFinite(value)))
+            throw new InvalidDataException("Native saved player anchor conversion is non-finite.");
+        return position;
     }
 
     internal static FalloutPlayerControlState RestorePlayerControls(
@@ -211,7 +241,8 @@ internal static class FalloutNativeCampaignSave
         FalloutNativeCampaignState state,
         string expectedSaveCompatibilityId)
     {
-        if (state.Schema != ExpectedSchema ||
+        if ((state.Schema != ExpectedSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
+            (state.Scripts is null) != (state.Quests is null) ||
             string.IsNullOrWhiteSpace(expectedSaveCompatibilityId) ||
             state.SaveCompatibilityId != expectedSaveCompatibilityId ||
             string.IsNullOrWhiteSpace(state.ActiveCell.OwnerPlugin) ||

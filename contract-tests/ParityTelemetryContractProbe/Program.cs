@@ -2,6 +2,30 @@ using OpenNV.Runtime.Diagnostics.Parity;
 using System.Diagnostics;
 using System.Security.Cryptography;
 
+var traceDirectory = Path.Combine(Path.GetTempPath(), "opennv-trace-contract-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var store = new RenderTraceBlobStore(traceDirectory);
+    byte[] payload = [0, 0, 0, 0x80, 7, 3, 255];
+    var first = store.Put(payload);
+    var repeated = store.Put(payload);
+    if (first != repeated || !File.ReadAllBytes(first.File).SequenceEqual(payload) ||
+        Directory.EnumerateFiles(traceDirectory).Count() != 1)
+        throw new InvalidOperationException("Trace evidence lost bytes or failed content-addressed reuse.");
+    File.WriteAllBytes(first.File, [4, 5, 6]);
+    var rejected = false;
+    try { store.Put(payload); } catch (InvalidDataException) { rejected = true; }
+    if (!rejected) throw new InvalidOperationException("Trace accepted a corrupted existing blob.");
+    Console.WriteLine("OPENNV_RENDER_TRACE_BLOB_CONTRACT_OK exactBytes=true negativeZeroBits=true immutable=true corruptFails=true");
+}
+finally
+{
+    var resolved = Path.GetFullPath(traceDirectory);
+    var parent = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())) + Path.DirectorySeparatorChar;
+    if (!resolved.StartsWith(parent, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Trace fixture escaped temp.");
+    if (Directory.Exists(resolved)) Directory.Delete(resolved, true);
+}
+
 var fields = new ParityTelemetryField[]
 {
     ParityTelemetryField.Float64(ParityCategory.Camera, 2, 75.0),

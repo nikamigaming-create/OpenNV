@@ -6,6 +6,47 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
+if (args is ["--audit-quest-scripts", var sourceRoot])
+{
+    RuntimeLiveContentSource.Configure(sourceRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var quests = new FalloutQuestState(records);
+    var inventory = new FalloutPlayerInventory();
+    var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), inventory);
+    scripts.Advance(0);
+    var expectedInventory = JsonSerializer.Serialize(inventory.Items);
+    var savedQuests = JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(quests.Capture()))!;
+    var savedScripts = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scripts.Capture()))!;
+    var restoredQuests = new FalloutQuestState(records);
+    restoredQuests.Restore(savedQuests);
+    var restoredInventory = new FalloutPlayerInventory();
+    var requests = inventory.Items.Select(item => new FalloutCampaignInventoryRequest(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray();
+    restoredInventory.Restore(FalloutCampaignInventoryResolver.Resolve(records, requests, null), []);
+    var restoredScripts = new FalloutQuestScripts(records, restoredQuests, new HashSet<FalloutFormKey>(), restoredInventory);
+    restoredScripts.Restore(savedScripts);
+    restoredScripts.Advance(0);
+    Require(JsonSerializer.Serialize(restoredInventory.Items) == expectedInventory, "Owned script grants changed across a cold restore.");
+    Require(restoredScripts.Capture().Messages.SequenceEqual(savedScripts.Messages), "Owned pending messages changed across a cold restore.");
+    Console.WriteLine(JsonSerializer.Serialize(scripts.State));
+    return;
+}
+
+var variables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase) { ["given"] = 0, ["count"] = 0 };
+var effects = new List<string>();
+var sourceProgram = FalloutGameModeProgram.Read("scn Synthetic\nshort given\nbegin GameMode\nif (given == 0)\nset count to 2 + 3 * 4\nShowMessage Synthetic\nset given to 1\nelseif given == 1\nset count to count + 1\nelse\nUnknown unreachable\nendif\nend");
+void ExecuteProgram() => sourceProgram.Execute(name => variables[name], (name, value) => variables[name] = value,
+    (name, arguments) => effects.Add(name + ":" + string.Join(',', arguments)));
+ExecuteProgram(); ExecuteProgram();
+Require(variables["given"] == 1 && variables["count"] == 15 && effects.SequenceEqual(["ShowMessage:Synthetic"]),
+    "GameMode source branches, arithmetic, source command arguments or once-only variable behavior differ.");
+Require(FalloutGameModeProgram.Evaluate(FalloutGameModeProgram.Tokens("0 && missing || (5 > 2)"), _ => throw new Exception("Short circuit evaluated an inactive operand.")) == 1,
+    "Script short circuit evaluated an inactive operand.");
+var invalidScriptRejected = false;
+try { FalloutGameModeProgram.Read("begin GameMode\nif 1\nShowMessage Synthetic\nend"); }
+catch (InvalidDataException) { invalidScriptRejected = true; }
+Require(invalidScriptRejected, "An unclosed script condition was admitted.");
+
 const uint compressedFlag = FalloutPluginRecord.CompressedFlag;
 var fixtureRoot = Path.Combine(Path.GetTempPath(), $"opennv-plugin-runtime-{Guid.NewGuid():N}");
 Directory.CreateDirectory(fixtureRoot);
@@ -56,6 +97,52 @@ try
             Subrecord("DATA", winningArmorData)))));
 
     using var stack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Patch.esp"]);
+    var variableData = new byte[24];
+    BinaryPrimitives.WriteUInt32LittleEndian(variableData, 1);
+    byte[] Script(uint form, string body) => Record("SCPT", form, 0, Combine(
+        Subrecord("SCTX", Encoding.ASCII.GetBytes("scn Synthetic\nshort given\nbegin GameMode\n" + body + "\nend")),
+        Subrecord("SLSD", variableData), Subrecord("SCVR", ZString("given")),
+        Subrecord("SCRO", UInt32(0x14)), Subrecord("SCRO", UInt32(0x60)), Subrecord("SCRO", UInt32(0x01000079))));
+    byte[] Quest(uint form, uint script) => Record("QUST", form, 0, Combine(
+        Subrecord("EDID", ZString("SyntheticQuest" + form)),
+        Subrecord("DATA", [0x11, 1, 0, 0, 0, 0, 0, 0]), Subrecord("SCRI", UInt32(script))));
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Scripts.esp"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
+        Quest(0x01000070, 0x01000073), Quest(0x01000071, 0x01000074), Quest(0x01000072, 0x01000075),
+        Script(0x01000073, "if given == 0\nShowMessage SyntheticMessage\nPlayer.AddItem SyntheticArmor 2\nset given to 1\nendif"),
+        Script(0x01000074, "set given to 1\nPlayer.AddItem SyntheticArmor 4\nShowMessage SyntheticMessage\nUnsupportedReachedCommand"),
+        Script(0x01000075, "Player.AddItem SyntheticArmor 1.5"),
+        Record("MESG", 0x01000079, 0, Combine(Subrecord("EDID", ZString("SyntheticMessage")),
+            Subrecord("FULL", ZString("Synthetic title")), Subrecord("DESC", ZString("Synthetic body")),
+            Subrecord("DNAM", UInt32(1)), Subrecord("INAM", UInt32(0)), Subrecord("ITXT", ZString("Synthetic choice"))))));
+    using (var scriptStack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Scripts.esp"]))
+    {
+        var questState = new FalloutQuestState(scriptStack);
+        var playerInventory = new FalloutPlayerInventory();
+        var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory);
+        scriptRuntime.Advance(0);
+        scriptRuntime.Advance(0);
+        Require(playerInventory.Items is [{ Count: 2 }] &&
+            questState.Variable(new("Scripts.esp", 0x70), 1) == 1 && questState.Variable(new("Scripts.esp", 0x71), 1) == 0,
+            "Script effects duplicated, fractional counts were admitted, or an unsupported command partially committed.");
+        Require(scriptRuntime.TryTakeMessage(out var message) && message is { Title: "Synthetic title", Text: "Synthetic body" } &&
+            message.Buttons.SequenceEqual(["Synthetic choice"]) && !scriptRuntime.TryTakeMessage(out _),
+            "Source message identity or transactional queue differs.");
+        var snapshotPath = Path.Combine(fixtureRoot, "quest-state.json");
+        questState.SetVariable(new("Scripts.esp", 0x70), 1, 1.0000000000000002);
+        File.WriteAllText(snapshotPath, JsonSerializer.Serialize(questState.Capture()));
+        var coldQuestState = new FalloutQuestState(scriptStack);
+        _ = coldQuestState.Variable(new("Scripts.esp", 0x70), 1);
+        coldQuestState.Restore(JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(File.ReadAllText(snapshotPath))!);
+        Require(coldQuestState.Variable(new("Scripts.esp", 0x70), 1) == 1.0000000000000002, "Quest Float64 values lost precision across save/restore.");
+        var coldInventory = new FalloutPlayerInventory();
+        coldInventory.Restore(FalloutCampaignInventoryResolver.Resolve(scriptStack,
+            playerInventory.Items.Select(item => new FalloutCampaignInventoryRequest(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(), null), []);
+        var coldScripts = new FalloutQuestScripts(scriptStack, coldQuestState, new HashSet<FalloutFormKey>(), coldInventory);
+        coldScripts.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scriptRuntime.Capture()))!);
+        coldScripts.Advance(0);
+        Require(coldInventory.Items is [{ Count: 2 }] && !coldScripts.TryTakeMessage(out _), "Cold restore awarded or announced a completed grant again.");
+    }
     Require(stack.Plugins.Count == 2, "Plugin count differs.");
     Require(stack.Plugins[1].Plugin.Masters.SequenceEqual(["Master.esm"]), "Master casing was not canonicalized.");
     Require(stack.Plugins.All(item => item.Sha256.Length == 64 && item.Bytes > 0), "Plugin provenance is incomplete.");
@@ -306,15 +393,30 @@ try
             Subrecord("ENAM", UInt32(0x184)))),
         Record("RACE", 0x181, 0, Combine(
             Subrecord("EDID", ZString("SyntheticRace")),
+            Subrecord("FULL", ZString("Synthetic Race")),
+            Subrecord("DATA", Combine(new byte[32], UInt32(1))),
+            Subrecord("DNAM", Combine(UInt32(0x182), UInt32(0x183))),
             Subrecord("HNAM", Combine(UInt32(0x182), UInt32(0x183))),
             Subrecord("ENAM", UInt32(0x184)))),
         Record("HAIR", 0x182, 0, Combine(
             Subrecord("EDID", ZString("SyntheticMaleHair")),
+            Subrecord("FULL", ZString("Synthetic Male Hair")),
             Subrecord("DATA", [0x05]))),
         Record("HAIR", 0x183, 0, Combine(
             Subrecord("EDID", ZString("SyntheticFemaleHair")),
+            Subrecord("FULL", ZString("Synthetic Female Hair")),
             Subrecord("DATA", [0x03]))),
-        Record("EYES", 0x184, 0, Subrecord("EDID", ZString("SyntheticEyes"))),
+        Record("EYES", 0x184, 0, Combine(Subrecord("EDID", ZString("SyntheticEyes")),
+            Subrecord("FULL", ZString("Synthetic Eyes")), Subrecord("DATA", [1]))),
+        Record("RACE", 0x7fff12, 0, Combine(
+            Subrecord("EDID", ZString("AnotherPlayableRace")), Subrecord("FULL", ZString("Another Race")),
+            Subrecord("DATA", Combine(new byte[32], UInt32(1))),
+            Subrecord("DNAM", Combine(UInt32(0x7fff10), UInt32(0x7fff10))),
+            Subrecord("HNAM", UInt32(0x7fff10)), Subrecord("ENAM", UInt32(0x7fff11)))),
+        Record("HAIR", 0x7fff10, 0, Combine(Subrecord("EDID", ZString("AnotherHair")),
+            Subrecord("FULL", ZString("Another Hair")), Subrecord("DATA", [1]))),
+        Record("EYES", 0x7fff11, 0, Combine(Subrecord("EDID", ZString("AnotherEyes")),
+            Subrecord("FULL", ZString("Another Eyes")), Subrecord("DATA", [1]))),
         Record("SCPT", 0x185, 0, Combine(
             Subrecord("EDID", ZString("SyntheticVigorTriggerScript")),
             Subrecord("SCTX", ZString(
@@ -647,6 +749,15 @@ try
         syntheticRaceSex.Female.HairEditorId == "SyntheticFemaleHair" &&
         syntheticRaceSex.Male.EyesEditorId == "SyntheticEyes",
         "Live Player/RACE sex-specific identity resolution failed.");
+    var changedRace = syntheticRaceSex.Select(0x7fff12, true, syntheticRaceSex.Initial);
+    FalloutNativeRaceSexResolver.Validate(syntheticRaceSex, changedRace);
+    Require(changedRace.RaceEditorId == "AnotherPlayableRace" && changedRace.HairEditorId == "AnotherHair" &&
+        changedRace.EyesEditorId == "AnotherEyes", "Playable race selection was restricted to Player defaults.");
+    ExpectFailure(() => FalloutNativeRaceSexResolver.Validate(syntheticRaceSex,
+        changedRace with { HairRuntimeFormId = syntheticRaceSex.Male.HairRuntimeFormId, HairEditorId = syntheticRaceSex.Male.HairEditorId }),
+        "differs from the live Player/RACE graph");
+    ExpectFailure(() => FalloutNativeRaceSexResolver.Validate(syntheticRaceSex, syntheticRaceSex.Male with { Female = true }),
+        "differs from the live Player/RACE graph");
     var syntheticVigor = FalloutNativeVigorResolver.Resolve(cellStack, syntheticCellForVigor);
     var syntheticSpecial = syntheticVigor.Initial.WithValue(0, 10);
     FalloutNativeVigorResolver.Validate(syntheticVigor, syntheticSpecial);
@@ -692,6 +803,24 @@ try
         syntheticTraitFarewell.ExitTriggerDimensionsGameUnits.SequenceEqual(
             [120.0f, 90.0f, 70.0f]),
         "Live trait/farewell contract resolution failed.");
+    var arbitraryQuest = new FalloutFormKey("Synthetic.esm", 0x900);
+    var arbitraryControls = new FalloutOpeningControlGraph(new Dictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>>
+    {
+        ["ArbitraryQuest"] = new Dictionary<short, FalloutOpeningControlStage>
+        {
+            [12] = new(arbitraryQuest, "ArbitraryQuest", 12, "SomeActor.SayTo player SomeTopic", []),
+            [87] = new(arbitraryQuest, "ArbitraryQuest", 87, "", []),
+        },
+    });
+    var waits = FalloutOpeningStageTransitionResolver.AddDialogueWaits(arbitraryControls, new([]));
+    var sourceDialogue = new FalloutOpeningStageMachine(waits, arbitraryControls, "ArbitraryQuest", 12);
+    Require(sourceDialogue.PendingBlockers.Contains("sayto"), "Script-discovered speech did not block.");
+    sourceDialogue.CompleteDialogueResult("ArbitraryQuest", 87);
+    Require(sourceDialogue.Stage == 87 && sourceDialogue.PendingBlockers.Count == 0,
+        "Executed INFO destination was replaced by a predicted stage.");
+    var enteredStages = new List<short>();
+    while (sourceDialogue.TryTakeEnteredStage(out var entered)) enteredStages.Add(entered!.Stage);
+    Require(enteredStages.SequenceEqual(new short[] { 12, 87 }), "Entered source-stage order was lost.");
     var transitionGraph = FalloutOpeningStageTransitionResolver.Resolve(cellStack, controlGraph);
     transitionGraph = FalloutOpeningStageTransitionResolver.AddDialogueResults(
         cellStack,
@@ -864,6 +993,28 @@ try
         [1.0f, 2.0f, 3.0f],
         [0.0f, 0.0f, 0.0f, 1.0f]);
     var syntheticSavePath = Path.Combine(fixtureRoot, "native-campaign-save.json");
+    var centeredState = syntheticCampaignState with
+    {
+        Schema = FalloutNativeCampaignSave.CapsuleCenteredSchema,
+        PlayerPosition = [1.0f, 2.5f, 3.0f],
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
+    var centeredRestore = FalloutNativeCampaignSave.Read(syntheticSavePath,
+        syntheticSaveCompatibilityId, cellStack, syntheticVigor, syntheticTagSkills,
+        syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f)
+            .SequenceEqual(syntheticCampaignState.PlayerPosition) &&
+        FalloutNativeCampaignSave.RestorePlayerPosition(syntheticCampaignState, 0.5f)
+            .SequenceEqual(syntheticCampaignState.PlayerPosition),
+        "Legacy capsule-center saves and current foot-root saves must restore the same physical pose.");
+    var upgradedState = FalloutNativeCampaignSave.WithWorldState(centeredRestore.State,
+        centeredRestore.State.ActiveCell,
+        FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f),
+        centeredRestore.State.PlayerRotation);
+    Require(upgradedState.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+        FalloutNativeCampaignSave.RestorePlayerPosition(upgradedState, 0.5f)
+            .SequenceEqual(syntheticCampaignState.PlayerPosition),
+        "Saving a restored legacy player must upgrade its anchor without applying the offset twice.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
     var syntheticRestore = FalloutNativeCampaignSave.Read(
         syntheticSavePath,

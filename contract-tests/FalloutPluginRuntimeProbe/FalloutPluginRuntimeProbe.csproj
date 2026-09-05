@@ -7,6 +7,15 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutPlayerInventory.cs" Link="FalloutPlayerInventory.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutQuestScripts.cs" Link="FalloutQuestScripts.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />
+    <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutCampaignInventory.cs" Link="FalloutCampaignInventory.cs" />

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\Formats\FaceGen\FalloutEgmFile.cs" Link="FalloutEgmFile.cs" />
+    <Compile Include="..\..\runtime\src\Formats\FaceGen\FalloutTriFile.cs" Link="FalloutTriFile.cs" />
+    <Compile Include="..\..\runtime\src\Formats\FaceGen\FalloutFaceGenCoefficients.cs" Link="FalloutFaceGenCoefficients.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+  </ItemGroup>
+</Project>

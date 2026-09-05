@@ -13,8 +13,23 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     private bool _lookingEnabled = true;
     private bool _activationEnabled = true;
     private bool _modalInput;
+    private Transform3D? _sourceCamera;
 
     internal Camera3D Camera => _camera;
+    internal float UnitsToMeters => _configuration.World.GameUnitsToMeters;
+
+    internal void ApplySourceCamera(Transform3D transformFromFeet)
+    {
+        _sourceCamera = transformFromFeet;
+        _camera.Transform = transformFromFeet * new Transform3D(new Basis(Vector3.Right, _pitchRadians), Vector3.Zero);
+    }
+
+    internal void ReleaseSourceCamera()
+    {
+        _sourceCamera = null;
+        _camera.Transform = new Transform3D(new Basis(Vector3.Right, _pitchRadians),
+            Vector3.Up * _configuration.Player.SpawnCenterHeightMeters + _configuration.Player.DesktopCameraOffsetMeters.Vector3());
+    }
 
     internal void SetModalInput(bool modal)
     {
@@ -48,21 +63,29 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         AddChild(new CollisionShape3D
         {
             Name = "NativePlayerCapsule",
+            Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters,
             Shape = new CapsuleShape3D
             {
                 Radius = configuration.Player.CapsuleRadiusMeters,
                 Height = configuration.Player.CapsuleHeightMeters,
             },
         });
+        var projection = FalloutCameraProjection.Read(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!));
         _camera = new Camera3D
         {
             Name = "NativePlayerCamera",
-            Position = configuration.Player.DesktopCameraOffsetMeters.Vector3(),
-            Near = configuration.Player.CameraNearMeters,
+            Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters +
+                configuration.Player.DesktopCameraOffsetMeters.Vector3(),
+            Fov = projection.VerticalFovDegrees,
+            KeepAspect = Camera3D.KeepAspectEnum.Height,
+            Near = projection.NearGameUnits * configuration.World.GameUnitsToMeters,
             Far = configuration.Player.CameraFarMeters,
             Current = true,
         };
         AddChild(_camera);
+        GD.Print($"OPENNV_NATIVE_CAMERA_PROJECTION verticalFov={projection.VerticalFovDegrees:R} " +
+            $"nearGameUnits={projection.NearGameUnits:R} source=owned-display-settings referenceAspect=4:3 " +
+            "farClip=unverified matchedFrame=unverified");
         Teleport(authoredFloorTransform);
         SetMeta("opennv_source", "live-retail-files");
         SetMeta("opennv_content_source", "live-owned-files");
@@ -75,8 +98,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         var basis = authoredFloorTransform.Basis.Orthonormalized();
         GlobalTransform = new Transform3D(
             basis,
-            authoredFloorTransform.Origin +
-                Vector3.Up * _configuration.Player.SpawnCenterHeightMeters);
+            authoredFloorTransform.Origin);
         _pitchRadians = 0.0f;
         _camera.Rotation = Vector3.Zero;
         Velocity = Vector3.Zero;
@@ -137,7 +159,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
                 _configuration.Player.MouseSensitivityRadiansPerPixel,
             -_configuration.Player.VerticalLookLimitRadians,
             _configuration.Player.VerticalLookLimitRadians);
-        _camera.Rotation = new Vector3(_pitchRadians, 0.0f, 0.0f);
+        if (_sourceCamera is { } authored) ApplySourceCamera(authored);
+        else _camera.Rotation = new Vector3(_pitchRadians, 0.0f, 0.0f);
     }
 
     public override void _PhysicsProcess(double delta)

@@ -35,7 +35,8 @@ internal sealed record FalloutNifSkinPartitionBlock(
     float[][] VertexWeights,
     ushort[] StripLengths,
     FalloutNifTriangle[] Triangles,
-    byte[][] BoneIndices);
+    byte[][] BoneIndices,
+    ushort[][]? Strips = null);
 
 internal readonly record struct FalloutNifBodyPartition(ushort Flags, ushort BodyPart);
 

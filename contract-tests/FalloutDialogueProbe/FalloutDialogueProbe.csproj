@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutAiPackages.cs" Link="FalloutAiPackages.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutFurnitureIdleTree.cs" Link="FalloutFurnitureIdleTree.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutActorIdleCommand.cs" Link="FalloutActorIdleCommand.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptPackage.cs" Link="FalloutScriptPackage.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutImageSpaceCommands.cs" Link="FalloutImageSpaceCommands.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutMenuXml.cs" Link="FalloutMenuXml.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutBitmapFont.cs" Link="FalloutBitmapFont.cs" />
+    <Compile Include="../../runtime/src/Formats/FaceGen/FalloutTriFile.cs" Link="FalloutTriFile.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGameSettingStrings.cs" Link="FalloutGameSettingStrings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGameSettingIntegers.cs" Link="FalloutGameSettingIntegers.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutActorIdleSource.cs" Link="FalloutActorIdleSource.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
+    <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+  </ItemGroup>
+</Project>

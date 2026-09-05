@@ -32,6 +32,9 @@ internal sealed class FalloutOpeningStageMachine
     private FalloutOpeningStageTransition? _timerTransition;
     private FalloutOpeningStageTransition? _blockedTransition;
     private HashSet<string> _pendingBlockers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<FalloutOpeningControlStage> _enteredStages = [];
+
+    internal bool TryTakeEnteredStage(out FalloutOpeningControlStage? stage) => _enteredStages.TryDequeue(out stage);
 
     internal FalloutOpeningStageMachine(
         FalloutOpeningStageTransitionGraph transitions,
@@ -65,6 +68,8 @@ internal sealed class FalloutOpeningStageMachine
 
     internal bool CompleteBlocker(string blocker)
     {
+        if (string.Equals(blocker, "sayto", StringComparison.OrdinalIgnoreCase) && _blockedTransition?.Kind == "dialogue-wait")
+            throw new InvalidOperationException("A source INFO result must complete the dialogue wait.");
         if (string.IsNullOrWhiteSpace(blocker) || !_pendingBlockers.Remove(blocker))
             throw new InvalidOperationException(
                 $"Native opening blocker is not pending: {blocker}.");
@@ -103,11 +108,22 @@ internal sealed class FalloutOpeningStageMachine
         return true;
     }
 
+    internal void CompleteDialogueResult(string questEditorId, short stage)
+    {
+        _ = _controls.Stage(questEditorId, stage);
+        if (_pendingBlockers.Count != 1 || !_pendingBlockers.Contains("sayto") || _blockedTransition is null)
+            throw new InvalidOperationException("Source dialogue result has no matching SayTo owner.");
+        // The executed INFO owns this target. It is not selected by the ordinal
+        // position of an INFO/FormID in the opening transition inventory.
+        Enter(questEditorId, stage);
+    }
+
     private void Enter(string questEditorId, short stage)
     {
         for (var count = 0; count < MaximumImmediateTransitions; ++count)
         {
             var source = _controls.Stage(questEditorId, stage);
+            _enteredStages.Enqueue(source);
             ControlState = source.Commands.Aggregate(
                 ControlState,
                 (state, command) => command.Apply(state));
@@ -119,7 +135,7 @@ internal sealed class FalloutOpeningStageMachine
             _pendingBlockers.Clear();
 
             var immediate = _transitions.From(questEditorId, stage)
-                .Where(value => value.Kind is "stage-script" or "dialogue-result")
+                .Where(value => value.Kind is "stage-script" or "dialogue-result" or "dialogue-wait")
                 .ToArray();
             if (immediate.Length > 1)
                 throw new InvalidOperationException(
@@ -168,6 +184,24 @@ internal sealed class FalloutOpeningStageMachine
 
 internal static partial class FalloutOpeningStageTransitionResolver
 {
+    internal static FalloutOpeningStageTransitionGraph AddDialogueWaits(
+        FalloutOpeningControlGraph stages, FalloutOpeningStageTransitionGraph transitions)
+    {
+        var result = transitions.Transitions.ToList();
+        foreach (var quest in stages.Quests.Values)
+            foreach (var stage in quest.Values)
+            {
+                if (!CodeLines(stage.Source).Any(line => SayToLine().IsMatch(line))) continue;
+                if (transitions.From(stage.QuestEditorId, stage.Stage).Count != 0) continue;
+                // The selected INFO's executed result chooses the destination.
+                // This edge only blocks on speech; it never predicts an INFO by
+                // FormID order or by an opening-specific table of stage numbers.
+                result.Add(new("dialogue-wait", stage.QuestEditorId, stage.Stage,
+                    stage.QuestEditorId, stage.Stage, null, ["sayto"]));
+            }
+        return new(result);
+    }
+
     private const byte TopLevelGroupType = 7;
     private static readonly string[] BlockingCommands =
     [

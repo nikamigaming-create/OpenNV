@@ -10,20 +10,69 @@ internal sealed record FalloutNativeRaceSexSelection(
     uint HairRuntimeFormId,
     string HairEditorId,
     uint EyesRuntimeFormId,
-    string EyesEditorId);
+    string EyesEditorId,
+    FalloutNativeFaceState? Face = null);
+
+// The player's editable appearance retains original source Float32 bytes.
+// A null value is the explicit legacy-save state: use the winning NPC fields.
+internal sealed record FalloutNativeFaceState(byte[] SymmetricGeometry, byte[] AsymmetricGeometry,
+    byte[] SymmetricTexture, byte[] HairColor, byte[] HairLength, uint[] HeadParts)
+{
+    internal void Validate()
+    {
+        foreach (var bytes in new[] { SymmetricGeometry, AsymmetricGeometry, SymmetricTexture })
+        {
+            if (bytes is null || bytes.Length == 0 || bytes.Length % 4 != 0) throw new InvalidDataException("Player face coefficient extent is invalid.");
+            for (var at = 0; at < bytes.Length; at += 4)
+                if (!float.IsFinite(BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(at)))) throw new InvalidDataException("Player face coefficient is non-finite.");
+        }
+        if (HairColor is not { Length: 4 } || HairLength is null || HairLength.Length is not (0 or 4) ||
+            HairLength.Length == 4 && !float.IsFinite(BinaryPrimitives.ReadSingleLittleEndian(HairLength)) ||
+            HeadParts is null || HeadParts.Any(id => id == 0) || HeadParts.Distinct().Count() != HeadParts.Length)
+            throw new InvalidDataException("Player face colour, length or head-part state is invalid.");
+    }
+}
+
+internal sealed record FalloutNativeRaceSexPart(uint RuntimeFormId, string EditorId, string DisplayName,
+    bool Male, bool Female);
+
+internal sealed record FalloutNativeRaceSexRace(uint RuntimeFormId, string EditorId, string DisplayName,
+    IReadOnlyList<FalloutNativeRaceSexPart> Hair, IReadOnlyList<FalloutNativeRaceSexPart> Eyes,
+    uint MaleDefaultHair, uint FemaleDefaultHair)
+{
+    internal IReadOnlyList<FalloutNativeRaceSexPart> HairFor(bool female) => Hair.Where(part => female ? part.Female : part.Male).ToArray();
+    internal IReadOnlyList<FalloutNativeRaceSexPart> EyesFor(bool female) => Eyes.Where(part => female ? part.Female : part.Male).ToArray();
+}
 
 internal sealed record FalloutNativeRaceSexContract(
     FalloutFormKey Player,
     FalloutNativeRaceSexSelection Male,
     FalloutNativeRaceSexSelection Female,
-    bool InitialFemale)
+    bool InitialFemale,
+    IReadOnlyList<FalloutNativeRaceSexRace> Races)
 {
     internal FalloutNativeRaceSexSelection Initial => ForSex(InitialFemale);
 
     internal FalloutNativeRaceSexSelection ForSex(bool female) => female ? Female : Male;
 
-    internal bool Contains(FalloutNativeRaceSexSelection selection) =>
-        selection == Male || selection == Female;
+    internal bool Contains(FalloutNativeRaceSexSelection selection)
+    {
+        var race = Races.SingleOrDefault(race => race.RuntimeFormId == selection.RaceRuntimeFormId && race.EditorId == selection.RaceEditorId);
+        return race is not null && race.HairFor(selection.Female).Any(part => part.RuntimeFormId == selection.HairRuntimeFormId && part.EditorId == selection.HairEditorId) &&
+            race.EyesFor(selection.Female).Any(part => part.RuntimeFormId == selection.EyesRuntimeFormId && part.EditorId == selection.EyesEditorId);
+    }
+
+    internal FalloutNativeRaceSexSelection Select(uint raceId, bool female, FalloutNativeRaceSexSelection current)
+    {
+        var race = Races.Single(race => race.RuntimeFormId == raceId);
+        var hairs = race.HairFor(female); var eyes = race.EyesFor(female);
+        var hair = hairs.SingleOrDefault(part => part.RuntimeFormId == current.HairRuntimeFormId) ??
+            hairs.SingleOrDefault(part => part.RuntimeFormId == (female ? race.FemaleDefaultHair : race.MaleDefaultHair)) ??
+            hairs.FirstOrDefault() ?? throw new NotSupportedException("Playable race has no eligible hair.");
+        var eye = eyes.SingleOrDefault(part => part.RuntimeFormId == current.EyesRuntimeFormId) ??
+            eyes.FirstOrDefault() ?? throw new NotSupportedException("Playable race has no eligible eyes.");
+        return new(female, race.RuntimeFormId, race.EditorId, hair.RuntimeFormId, hair.EditorId, eye.RuntimeFormId, eye.EditorId);
+    }
 }
 
 internal static class FalloutNativeRaceSexResolver
@@ -70,7 +119,44 @@ internal static class FalloutNativeRaceSexResolver
         var eye = playerEyes;
         var male = Selection(stack, race, maleHair, eye, female: false);
         var female = Selection(stack, race, femaleHair, eye, female: true);
-        return new FalloutNativeRaceSexContract(player.FormKey, male, female, initialFemale);
+        var races = stack.EffectiveRecords("RACE").Where(IsPlayableRace).Select(record => Race(stack, record)).ToArray();
+        var result = new FalloutNativeRaceSexContract(player.FormKey, male, female, initialFemale, races);
+        Validate(result, result.Initial);
+        return result;
+    }
+
+    private static bool IsPlayableRace(FalloutPluginRecord record)
+    {
+        var data = Single(record, "DATA");
+        if (data.Length != 36) throw new InvalidDataException($"RACE {record.FormKey} DATA layout is unsupported.");
+        return (BinaryPrimitives.ReadUInt32LittleEndian(data.Span[32..]) & 1) != 0;
+    }
+
+    private static FalloutNativeRaceSexRace Race(FalloutPluginStack stack, FalloutPluginRecord race)
+    {
+        // RACE.DATA playability and its HNAM/ENAM lists define selectable parts.
+        // HAIR/EYES DATA use independent playability and sex exclusion bits.
+        // https://tes5edit.github.io/fopdoc/FalloutNV/Records/RACE.html
+        FalloutNativeRaceSexPart[] Parts(string field, string signature) => FormList(race, field)
+            .Select(key => RequireRecord(stack, key, signature)).Where(record => HairSupports(record, false) || HairSupports(record, true))
+            .Select(record => new FalloutNativeRaceSexPart(stack.RuntimeFormId(record.FormKey), ReadEditorId(record), DisplayName(record),
+                HairSupports(record, false), HairSupports(record, true))).ToArray();
+        var defaults = Single(race, "DNAM");
+        if (defaults.Length != 8) throw new InvalidDataException($"RACE {race.FormKey} default-hair layout is unsupported.");
+        uint Default(int offset)
+        {
+            var id = BinaryPrimitives.ReadUInt32LittleEndian(defaults.Span[offset..]);
+            return id == 0 ? 0 : stack.RuntimeFormId(RequireRecord(stack, race.Plugin.AdjustFormId(id), "HAIR").FormKey);
+        }
+        return new(stack.RuntimeFormId(race.FormKey), ReadEditorId(race), DisplayName(race), Parts("HNAM", "HAIR"), Parts("ENAM", "EYES"), Default(0), Default(4));
+    }
+
+    private static string DisplayName(FalloutPluginRecord record)
+    {
+        var bytes = Single(record, "FULL").Span;
+        if (bytes.Length <= 1 || bytes[^1] != 0 || bytes[..^1].Contains((byte)0))
+            throw new InvalidDataException($"Selectable {record.Signature} {record.FormKey} has no complete name.");
+        return Encoding.Latin1.GetString(bytes[..^1]);
     }
 
     internal static void Validate(
@@ -82,6 +168,7 @@ internal static class FalloutNativeRaceSexResolver
         if (!contract.Contains(selection))
             throw new InvalidDataException(
                 "Native campaign character identity differs from the live Player/RACE graph.");
+        selection.Face?.Validate();
     }
 
     private static FalloutNativeRaceSexSelection Selection(
@@ -114,7 +201,7 @@ internal static class FalloutNativeRaceSexResolver
     {
         var data = Single(hair, "DATA");
         if (data.Length != 1)
-            throw new InvalidDataException($"Native HAIR {hair.FormKey} DATA layout is unsupported.");
+            throw new InvalidDataException($"Native {hair.Signature} {hair.FormKey} DATA layout is unsupported.");
         var flags = data.Span[0];
         return (flags & PlayableHairFlag) != 0 &&
             (female ? (flags & NotFemaleHairFlag) == 0 : (flags & NotMaleHairFlag) == 0);

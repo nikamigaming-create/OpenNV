@@ -77,6 +77,21 @@ internal sealed class RuntimeLiveContentSource : IDisposable
     internal string Campaign { get; }
     internal string ContentRoot { get; }
     internal Task ArchiveWarmup { get; }
+    // Opt-in diagnostics. Ordinary reads do not hash, copy or journal payloads.
+    internal Action<string, string, ReadOnlyMemory<byte>>? ResourceReadObserver { get; set; }
+
+    internal IEnumerable<(string Identity, ReadOnlyMemory<byte> Bytes)> CachedResources() =>
+        _archivePayloads.Select(pair => (pair.Key, (ReadOnlyMemory<byte>)pair.Value))
+            .Concat(_loosePayloads.Select(pair => (pair.Key, (ReadOnlyMemory<byte>)pair.Value.Data)));
+
+    internal (string File, long Offset, int StoredBytes, bool Compressed) ResourceExtent(string identity)
+    {
+        var split = identity.IndexOf("::", StringComparison.Ordinal);
+        if (split < 0) return (identity, 0, checked((int)new FileInfo(identity).Length), false);
+        var file = identity[..split];
+        var extent = GetArchive(file).StoredExtent(identity[(split + 2)..]);
+        return (file, extent.Offset, extent.Bytes, extent.Compressed);
+    }
     internal static void Configure(string selectedRoot, string expectedCampaign)
     {
         Current?.Dispose();
@@ -148,6 +163,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
                     : new LoosePayload(info.Length, mtime, File.ReadAllBytes(loosePath)));
             data = payload.Data;
             source = loosePath;
+            ResourceReadObserver?.Invoke(logicalPath, source, data);
             return true;
         }
         var canonical = FalloutBsaArchive.CanonicalPath(logicalPath);
@@ -156,6 +172,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
             var archive = GetArchive(indexedArchive);
             source = $"{indexedArchive}::{canonical}";
             data = _archivePayloads.GetOrAdd(source, _ => archive.Read(canonical));
+            ResourceReadObserver?.Invoke(logicalPath, source, data);
             return true;
         }
         data = [];
@@ -175,6 +192,22 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         }
         source = string.Empty;
         return false;
+    }
+
+    internal IReadOnlyList<string> ResourcePathsUnder(string logicalDirectory)
+    {
+        var prefix = FalloutBsaArchive.CanonicalPath(logicalDirectory).TrimEnd('\\') + "\\";
+        ArchiveWarmup.GetAwaiter().GetResult();
+        var paths = _archiveWinners.Keys.Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var directory = Path.GetFullPath(Path.Combine(ContentRoot, prefix.Replace('\\', Path.DirectorySeparatorChar)));
+        var rootPrefix = Path.TrimEndingDirectorySeparator(ContentRoot) + Path.DirectorySeparatorChar;
+        if (!directory.StartsWith(rootPrefix, PathComparison))
+            throw new InvalidDataException("Owned resource directory escapes the installation.");
+        if (Directory.Exists(directory))
+            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+                paths.Add(FalloutBsaArchive.CanonicalPath(Path.GetRelativePath(ContentRoot, file)));
+        return paths.Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private bool TryGetIndexedArchive(
