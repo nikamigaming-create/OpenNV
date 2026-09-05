@@ -219,7 +219,7 @@ public partial class RuntimeCoordinator
                             "Native trait/farewell contract was not resolved."));
                 }
                 catch (Exception exception) when (
-                    exception is IOException or InvalidDataException or JsonException)
+                    exception is IOException or InvalidDataException or JsonException or NotSupportedException)
                 {
                     GD.PushWarning($"OPENNV_NATIVE_CONTINUE_REJECTED {exception.Message}");
                 }
@@ -258,6 +258,7 @@ public partial class RuntimeCoordinator
                 initialCell,
                 transition,
                 sourceSide: true);
+            if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
             menu.SetReady(stack, _nativeOpeningRestore is not null);
         }
         catch (Exception exception)
@@ -361,10 +362,16 @@ public partial class RuntimeCoordinator
         }
         if (!fallout3 && (restore is null || restore.State.Scripts is not null))
         {
-            var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
-            _nativeQuestScripts = new RuntimeNativeQuestScripts(stack, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals);
-            if (restore?.State.Scripts is { } scripts) _nativeQuestScripts.Scripts.Restore(scripts);
-            AddChild(_nativeQuestScripts);
+            // New Game retains the timers already running behind StartMenu.
+            // Continue replaces that menu session with the saved clocks.
+            if (restore is not null || _nativeQuestScripts is null) CreateNativeQuestScripts(restore?.State.Scripts);
+            _nativeQuestScripts!.ActivateWorld();
+        }
+        else if (_nativeQuestScripts is not null)
+        {
+            RemoveChild(_nativeQuestScripts);
+            _nativeQuestScripts.QueueFree();
+            _nativeQuestScripts = null;
         }
         if (activeScene.Cell.Lighting is not null)
             AddNativeCellEnvironment(root, activeScene);
@@ -381,6 +388,20 @@ public partial class RuntimeCoordinator
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
         DismissLoadingScreen();
+    }
+
+    private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
+    {
+        var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
+        var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals);
+        if (restore is not null) scripts.Scripts.Restore(restore);
+        if (_nativeQuestScripts is not null)
+        {
+            RemoveChild(_nativeQuestScripts);
+            _nativeQuestScripts.QueueFree();
+        }
+        _nativeQuestScripts = scripts;
+        AddChild(scripts);
     }
 
     private Node3D BuildNativeCellRoot(

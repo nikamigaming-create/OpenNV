@@ -47,7 +47,10 @@ internal static class QuestScriptClockProbe
             "A long frame executed a fabricated catch-up loop.");
         Require(overrun.Advance(0.25f) && overrun.Remaining == -1.25f && overrun.Elapsed == 0,
             "An overdue next-frame call consumed delta twice.");
-        Console.WriteLine("OPENNV_QUEST_SCRIPT_CLOCK_PASS recurrence=true float32=true overshoot=true coldRestore=true initialPhase=unbound");
+        Require(new[] { 0L, 1, 2, 7, 14, 255, 256 }.Select(index => FalloutQuestScriptInitialization.Phase(5, index))
+            .SequenceEqual([5f, 2.5f, 1.25f, 4.375f, 2.1875f, 4.98046875f, 5f]),
+            "Source initialization fractions or counter-byte wrap differ.");
+        Console.WriteLine("OPENNV_QUEST_SCRIPT_CLOCK_PASS recurrence=true float32=true overshoot=true coldRestore=true phaseFractions=true");
     }
 
     private static void Reject(Action action)

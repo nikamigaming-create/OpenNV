@@ -2,6 +2,11 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutQuestScriptClockSnapshot(float Remaining, float Elapsed, long Invocations)
 {
+    internal bool HasSameBits(FalloutQuestScriptClockSnapshot other) =>
+        BitConverter.SingleToInt32Bits(Remaining) == BitConverter.SingleToInt32Bits(other.Remaining) &&
+        BitConverter.SingleToInt32Bits(Elapsed) == BitConverter.SingleToInt32Bits(other.Elapsed) &&
+        Invocations == other.Invocations;
+
     internal void Validate()
     {
         if (!float.IsFinite(Remaining) || !float.IsFinite(Elapsed) || Elapsed < 0 || Invocations < 0)

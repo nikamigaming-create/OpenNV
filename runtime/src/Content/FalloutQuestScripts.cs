@@ -44,6 +44,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
         if (Instances is null || Messages is null)
             throw new InvalidDataException("Saved quest script owners are missing.");
         var quests = new HashSet<FalloutFormKey>();
+        var definitions = new Dictionary<FalloutFormKey, FalloutQuestScriptClockSnapshot>();
         foreach (var instance in Instances)
         {
             if (instance is null || !quests.Add(instance.Quest))
@@ -51,6 +52,9 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
             if (instance.Clock is null)
                 throw new NotSupportedException("Legacy quest scripts have no elapsed/cadence clock owner.");
             instance.Clock.Validate();
+            if (definitions.TryGetValue(instance.Script, out var clock) && !clock.HasSameBits(instance.Clock))
+                throw new InvalidDataException("Saved shared script clocks disagree.");
+            definitions[instance.Script] = instance.Clock;
             if (instance.Remaining != instance.Clock.Remaining || instance.Executions < 0 ||
                 instance.Executions > instance.Clock.Invocations)
                 throw new InvalidDataException("Saved quest script scheduling is invalid.");
@@ -80,6 +84,7 @@ internal sealed class FalloutQuestScripts
     private readonly FalloutPlayerInventory _inventory;
     private readonly FalloutGlobalState? _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
+    private readonly FalloutQuestScriptInitialization _initialization;
 
     internal object State => new
     {
@@ -88,7 +93,8 @@ internal sealed class FalloutQuestScripts
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
         notifications = _inventory.Notifications.Capture(),
-        scheduling = "source-configured Float32 recurrence; initial linking/phase and main-menu lifetime unbound",
+        initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
+        scheduling = "source registration, embedded declarations and shared SCPT clocks; MenuMode execution and dynamic scheduling unbound",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
     internal bool TryTakeMessage(out FalloutSourceMessage? message) => _messages.TryDequeue(out message);
@@ -139,26 +145,27 @@ internal sealed class FalloutQuestScripts
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
             .Number("MAIN", "fQuestScriptDelayTime");
         if (!float.IsFinite(defaultDelay)) throw new InvalidDataException("Default quest script delay is invalid.");
-        foreach (var quest in records.EffectiveRecords("QUST"))
+        _initialization = new(records, defaultDelay);
+        var clocks = new Dictionary<FalloutFormKey, FalloutQuestScriptClock>();
+        foreach (var quest in _initialization.QuestOrder)
         {
             if (claimedQuests.Contains(quest.FormKey)) continue;
             try
             {
                 var fields = quest.ReadSubrecords().ToArray();
                 var data = fields.Single(field => field.Signature == "DATA").Data;
-                if (data.Length != 8) throw new NotSupportedException("Quest DATA version is unbound.");
+                if (data.Length is not (2 or 8)) throw new NotSupportedException("Quest DATA version is unbound.");
                 if ((data.Span[0] & 1) == 0 || !fields.Any(field => field.Signature == "SCRI")) continue;
                 var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(quest, "SCRI"));
                 if (script.Signature != "SCPT") throw new InvalidDataException("Quest script is not SCPT.");
                 var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
                 if (source.Length != 1) throw new NotSupportedException("Quest script source is absent or ambiguous.");
                 var program = FalloutGameModeProgram.Read(source[0].Data.Span);
-                float? delay = (data.Span[0] & 0x10) != 0 ? BinaryPrimitives.ReadSingleLittleEndian(data.Span[4..]) : null;
-                // Positive authored delays replace the configured interval.
-                // Zero uses that interval too. Initial phase remains the
-                // existing startup divergence until the full linker owns it.
-                _instances.Add(new(quest, script, program,
-                    new(defaultDelay, delay, 0)));
+                if (!_initialization.Definitions.TryGetValue(script.FormKey, out var definition))
+                    throw new NotSupportedException("Attached quest script has no quest-clock declaration.");
+                if (!clocks.TryGetValue(script.FormKey, out var clock))
+                    clocks.Add(script.FormKey, clock = new(defaultDelay, definition.ProcessingDelay, definition.InitialPhase));
+                _instances.Add(new(quest, script, program, clock));
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException)
             { _unbound[quest.FormKey] = error.Message; }

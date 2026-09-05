@@ -61,6 +61,8 @@ internal sealed class FalloutPluginStack : IDisposable
     private readonly object _signatureIndexLock = new();
     private readonly Dictionary<string, IReadOnlyList<FalloutPluginRecord>> _effectiveBySignature =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<FalloutPluginRecord>> _registrationBySignature =
+        new(StringComparer.Ordinal);
     private readonly int _effectiveRecordCount;
     private readonly object _cellIndexLock = new();
     private readonly Dictionary<string, Dictionary<FalloutFormKey, IReadOnlyList<FalloutPluginRecord>>>
@@ -271,6 +273,22 @@ internal sealed class FalloutPluginStack : IDisposable
                 : [];
             _effectiveBySignature.Add(signature, records);
             return records;
+        }
+    }
+
+    internal IReadOnlyList<FalloutPluginRecord> EffectiveRecordsInRegistrationOrder(string signature)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(signature);
+        lock (_signatureIndexLock)
+        {
+            if (_registrationBySignature.TryGetValue(signature, out var existing)) return existing;
+            var seen = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance);
+            var records = new List<FalloutPluginRecord>();
+            foreach (var plugin in _plugins)
+                foreach (var record in plugin.Plugin.Records)
+                    if (record.Signature == signature && seen.Add(record.FormKey) && TryGetEffective(record.FormKey, out var winner))
+                        records.Add(winner);
+            return _registrationBySignature[signature] = records.ToArray();
         }
     }
 

@@ -13,6 +13,7 @@
     <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestScriptClock.cs" Link="FalloutQuestScriptClock.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutQuestScriptInitialization.cs" Link="FalloutQuestScriptInitialization.cs" />
     <Compile Include="../../runtime/src/Gameplay/State/FalloutSkyLightingState.cs" Link="FalloutSkyLightingState.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />

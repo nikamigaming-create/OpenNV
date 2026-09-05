@@ -9,6 +9,26 @@ using OpenNV.Runtime.Gameplay.State;
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 
+if (args is ["--audit-script-initialization", var initializationRoot])
+{
+    RuntimeLiveContentSource.Configure(initializationRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var initial = new FalloutQuestScriptInitialization(records,
+        FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime"));
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        initial.DefaultDelay, initial.EmbeddedQuestScripts, initial.Initializations,
+        definitions = initial.Definitions.Values.Select(definition => new
+        {
+            script = records.RuntimeFormId(definition.Script), quest = definition.Quest,
+            definition.InitializationOrdinal, definition.ProcessingDelay, definition.InitialPhase,
+            phaseBytes = Convert.ToHexString(BitConverter.GetBytes(definition.InitialPhase)),
+        }),
+    }));
+    return;
+}
+
 if (args is ["--audit-placed-lights", var lightRoot, var lightCell])
 {
     PlacedLightProbe.Owned(lightRoot, lightCell);
@@ -28,7 +48,7 @@ if (args is ["--audit-quest-scripts", var sourceRoot])
     var quests = new FalloutQuestState(records);
     var inventory = new FalloutPlayerInventory();
     var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), inventory);
-    scripts.Advance(0);
+    for (var frame = 0; frame < 360; frame++) scripts.Advance(1f / 60);
     var expectedInventory = JsonSerializer.Serialize(inventory.Items);
     var savedQuests = JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(quests.Capture()))!;
     var savedScripts = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scripts.Capture()))!;
@@ -39,7 +59,7 @@ if (args is ["--audit-quest-scripts", var sourceRoot])
     restoredInventory.Restore(FalloutCampaignInventoryResolver.Resolve(records, requests, null), []);
     var restoredScripts = new FalloutQuestScripts(records, restoredQuests, new HashSet<FalloutFormKey>(), restoredInventory);
     restoredScripts.Restore(savedScripts);
-    restoredScripts.Advance(0);
+    restoredScripts.Advance(0, gameMode: false);
     Require(JsonSerializer.Serialize(restoredInventory.Items) == expectedInventory, "Owned script grants changed across a cold restore.");
     Require(restoredScripts.Capture().Messages.SequenceEqual(savedScripts.Messages), "Owned pending messages changed across a cold restore.");
     Console.WriteLine(JsonSerializer.Serialize(scripts.State));
@@ -113,7 +133,13 @@ try
     using var stack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Patch.esp"]);
     var variableData = new byte[24];
     BinaryPrimitives.WriteUInt32LittleEndian(variableData, 1);
+    var questScriptHeader = new byte[20];
+    BinaryPrimitives.WriteUInt32LittleEndian(questScriptHeader.AsSpan(4), 4);
+    BinaryPrimitives.WriteUInt32LittleEndian(questScriptHeader.AsSpan(8), 8);
+    BinaryPrimitives.WriteUInt32LittleEndian(questScriptHeader.AsSpan(12), 1);
+    questScriptHeader[16] = 1;
     byte[] Script(uint form, string body) => Record("SCPT", form, 0, Combine(
+        Subrecord("SCHR", questScriptHeader),
         Subrecord("SCTX", Encoding.ASCII.GetBytes("scn Synthetic\nshort given\nbegin GameMode\n" + body + "\nend")),
         Subrecord("SLSD", variableData), Subrecord("SCVR", ZString("given")),
         Subrecord("SCRO", UInt32(0x14)), Subrecord("SCRO", UInt32(0x60)), Subrecord("SCRO", UInt32(0x01000079)),
@@ -124,7 +150,7 @@ try
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Scripts.esp"), Combine(
         Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
         Quest(0x01000070, 0x01000073), Quest(0x01000071, 0x01000074), Quest(0x01000072, 0x01000075),
-        Quest(0x01000076, 0x01000077, flags: 1, delay: float.NaN),
+        Quest(0x01000076, 0x01000077, flags: 1, delay: 0.125f),
         Script(0x01000077, "set given to 1"),
         Script(0x01000073, "if given == 0\nShowMessage SyntheticMessage\nPlayer.AddItem SyntheticArmor 2\nset SyntheticGlobal to SyntheticGlobal + 0.1\nset given to 1\nendif"),
         Script(0x01000074, "set given to 1\nset SyntheticGlobal to 999\nPlayer.AddItem SyntheticArmor 4\nShowMessage SyntheticMessage\nUnsupportedReachedCommand"),
@@ -140,7 +166,7 @@ try
         var playerInventory = new FalloutPlayerInventory();
         var globals = FalloutGlobalState.Read(scriptStack);
         var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory, globals, defaultProcessingDelay: 5);
-        scriptRuntime.Advance(0);
+        scriptRuntime.Advance(5);
         scriptRuntime.Advance(0);
         Require(playerInventory.Items is [{ Count: 2 }] &&
             questState.Variable(new("Scripts.esp", 0x70), 1) == 1 && questState.Variable(new("Scripts.esp", 0x71), 1) == 0,
@@ -152,17 +178,17 @@ try
             "Source message identity or transactional queue differs.");
         var beforeMenu = scriptRuntime.Capture();
         Require(beforeMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x76).Clock is
-            { Remaining: 5, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
-            "An unused authored delay overrode configured cadence or rejected a default-timed quest.");
+            { Remaining: 0.125f, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
+            "An unrelated quest flag suppressed the source processing delay.");
         scriptRuntime.Advance(2.25, gameMode: false);
         var duringMenu = scriptRuntime.Capture();
         Require(duringMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x70).Clock is
-            { Remaining: 2.75f, Elapsed: 2.25f } &&
+            { Remaining: 4, Elapsed: 0, Invocations: 2 } &&
             duringMenu.Instances.Select(instance => instance.Executions).SequenceEqual(beforeMenu.Instances.Select(instance => instance.Executions)),
             "Modal time froze the quest countdown or executed a GameMode block.");
         scriptRuntime.Advance(3.25, gameMode: false);
         Require(scriptRuntime.Capture().Instances.Single(instance => instance.Quest.ObjectId == 0x70).Clock is
-            { Remaining: 4.5f, Elapsed: 0, Invocations: 2 } && globals.Get(new("Scripts.esp", 0x80)) == 1.35f,
+            { Remaining: 0.75f, Elapsed: 3.25f, Invocations: 2 } && globals.Get(new("Scripts.esp", 0x80)) == 1.35f,
             "A due modal invocation lost overshoot or committed GameMode effects.");
         var snapshotPath = Path.Combine(fixtureRoot, "quest-state.json");
         questState.SetVariable(new("Scripts.esp", 0x70), 1, 1.0000000000000002);
@@ -178,11 +204,64 @@ try
         coldGlobals.Restore(JsonSerializer.Deserialize<FalloutGlobalStateSnapshot>(JsonSerializer.Serialize(globals.Capture()))!);
         var coldScripts = new FalloutQuestScripts(scriptStack, coldQuestState, new HashSet<FalloutFormKey>(), coldInventory, coldGlobals, defaultProcessingDelay: 5);
         coldScripts.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scriptRuntime.Capture()))!);
-        coldScripts.Advance(0);
+        coldScripts.Advance(0, gameMode: false);
+        scriptRuntime.Advance(0, gameMode: false);
         Require(JsonSerializer.Serialize(coldScripts.Capture()) == JsonSerializer.Serialize(scriptRuntime.Capture()),
             "Cold restore lost a partially elapsed quest script clock.");
         Require(coldInventory.Items is [{ Count: 2 }] && !coldScripts.TryTakeMessage(out _), "Cold restore awarded or announced a completed grant again.");
         Require(coldGlobals.Capture().Values.SequenceEqual(globals.Capture().Values), "Cold script restore changed shared globals.");
+    }
+    var objectHeader = (byte[])questScriptHeader.Clone();
+    objectHeader[16] = 0;
+    byte[] ClockScript(uint form, string name, byte[] header) => Record("SCPT", form, 0,
+        Combine(Subrecord("EDID", ZString(name)), Subrecord("SCHR", header),
+            Subrecord("SCTX", ZString("begin GameMode\nend"))));
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "Timing.esm"), Combine(
+        Record("TES4", 0, 0, Subrecord("HEDR", [0, 0, 0, 0])),
+        ClockScript(0x350, "First", questScriptHeader), ClockScript(0x550, "ObjectScript", objectHeader),
+        ClockScript(0x450, "Second", questScriptHeader), ClockScript(0x650, "Orphan", questScriptHeader),
+        Quest(0x33, 0x350, flags: 1, delay: 2), Quest(0x32, 0x350, flags: 1, delay: 9),
+        Record("QUST", 0x10, 0, Combine(Subrecord("DATA", [1, 0]), Subrecord("SCRI", UInt32(0x450)))),
+        Record("TERM", 0x400, 0, Combine(Subrecord("SCHR", questScriptHeader), Subrecord("SCHR", questScriptHeader)))));
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "TimingPatch.esp"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Timing.esm"))),
+        ClockScript(0x350, "WinningFirst", questScriptHeader),
+        ClockScript(0x01000750, "UnattachedNew", questScriptHeader),
+        Record("TERM", 0x400, 0, Subrecord("SCHR", questScriptHeader))));
+    using (var timingStack = FalloutPluginStack.Load(fixtureRoot, ["Timing.esm", "TimingPatch.esp"]))
+    {
+        var initialization = new FalloutQuestScriptInitialization(timingStack, 5);
+        var definitions = initialization.Definitions.Values.ToArray();
+        Require(initialization.EmbeddedQuestScripts == 1 && initialization.Initializations == 5 &&
+            definitions.Select(definition => definition.Script.ObjectId).SequenceEqual([0x750u, 0x650u, 0x450u, 0x350u]) &&
+            definitions.Select(definition => definition.InitialPhase).SequenceEqual([2.5f, 1.25f, 3.75f, 0f]),
+            "Initialization ignored winning embedded declarations, inactive scripts, or first registration order.");
+        Require(definitions[^1].Quest == new FalloutFormKey("Timing.esm", 0x33) && definitions[^1].ProcessingDelay == 2,
+            "A shared definition did not retain its last source quest binding.");
+        Require(initialization.QuestOrder.Select(record => record.FormKey.ObjectId).SequenceEqual([0x10u, 0x32u, 0x33u]) &&
+            FalloutQuestScriptInitialization.ProcessingDelay(initialization.QuestOrder[0]) == 0,
+            "Quest order or the legacy DATA delay differs.");
+        var timed = new FalloutQuestScripts(timingStack, new(timingStack), new HashSet<FalloutFormKey>(), new(), defaultProcessingDelay: 5);
+        timed.Advance(0, gameMode: false);
+        timed.Advance(0.75, gameMode: false);
+        var shared = timed.Capture().Instances.Where(instance => instance.Script.ObjectId == 0x350).ToArray();
+        Require(shared.Length == 2 && shared.All(instance => instance.Clock is { Remaining: 0.5f, Elapsed: 1.5f, Invocations: 1 }) &&
+            shared.All(instance => instance.Executions == 0), "Two quests invented separate definition clocks or ran GameMode in a menu.");
+        var fresh = new FalloutQuestScripts(timingStack, new(timingStack), new HashSet<FalloutFormKey>(), new(), defaultProcessingDelay: 5);
+        var untouched = JsonSerializer.Serialize(fresh.Capture());
+        var corrupted = timed.Capture() with
+        {
+            Instances = timed.Capture().Instances.Select(instance => instance.Quest.ObjectId == 0x32
+                ? instance with { Remaining = 0.25, Clock = instance.Clock! with { Remaining = 0.25f } } : instance).ToArray(),
+        };
+        ExpectFailure(() => fresh.Restore(corrupted), "shared script clocks disagree");
+        Require(JsonSerializer.Serialize(fresh.Capture()) == untouched, "Rejected shared clocks partially restored the owner.");
+        fresh.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(timed.Capture()))!);
+        fresh.Advance(0.25, gameMode: false);
+        timed.Advance(0.25, gameMode: false);
+        Require(JsonSerializer.Serialize(fresh.Capture()) == JsonSerializer.Serialize(timed.Capture()),
+            "Shared definition cadence changed after a cold restore.");
+        Console.WriteLine("OPENNV_SCRIPT_INITIALIZATION_PASS sourceOrder=true embedded=true sharedDefinition=true coldRestore=true");
     }
     Require(stack.Plugins.Count == 2, "Plugin count differs.");
     Require(stack.Plugins[1].Plugin.Masters.SequenceEqual(["Master.esm"]), "Master casing was not canonicalized.");

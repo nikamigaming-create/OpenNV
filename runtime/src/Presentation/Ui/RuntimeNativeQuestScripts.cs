@@ -14,9 +14,11 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private string? _error;
     private readonly FalloutPlayerInventory _inventory;
     private NativeOwnedHudMessages? _hud;
-    internal object State => new { scripts = Scripts.State, message = _current, hud = _hud?.State, error = _error };
+    private bool _worldActive;
+    internal object State => new { scripts = Scripts.State, worldActive = _worldActive, message = _current, hud = _hud?.State, error = _error };
 
     internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
+    internal void ActivateWorld() => _worldActive = true;
 
     internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
         FalloutPlayerInventory inventory, FalloutGlobalState? globals = null)
@@ -48,7 +50,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     public override void _Process(double delta)
     {
         if (_error is not null) return;
-        if (_layer is not null || GetTree().Paused)
+        if (!_worldActive || _layer is not null || GetTree().Paused)
         {
             Scripts.Advance(delta, gameMode: false);
             return;
