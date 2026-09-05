@@ -30,8 +30,9 @@ internal static class RuntimeNativePlacedLightBuilder
             Transform = transform,
             LightColor = RetailLighting.GodotLightColor(color),
             LightEnergy = MathF.Max(minimumEnergy, source.Intensity * energyScale),
-            OmniRange = RetailLighting.PointShaderRadius(
-                source.RadiusGameUnits * gameUnitsToMeters),
+            // The source shader radius is the resolved light radius. Geometry
+            // scale changes its local coordinates, not its world-space reach.
+            OmniRange = source.RadiusGameUnits * gameUnitsToMeters,
             OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
             ShadowEnabled = shadows,
         };

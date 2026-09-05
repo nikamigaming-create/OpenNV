@@ -105,6 +105,16 @@ agree with the submitted constants. Unreadable GPU destinations remain visible
 as missing evidence. Complete light selection, fog, materials and shadows are
 still open.
 
+Point-light creation no longer expands the resolved source radius by the
+square root of two. Retained native shader inputs and independently checked
+scale handling establish the source radius contract. Synthetic binding checks,
+the 25-light owned audit and the full gate pass; ordinary room-61 confirms all
+25 Godot radii with exact Float32 unit conversion and unchanged source colours
+and placement. Checked floor/ceiling region error decreases substantially.
+Window beams, fog projection/interpolation, light selection, shadows and full
+pixel agreement remain open. The original name prompt is the current live
+checkpoint; exact camera/animation/frame alignment remains unestablished.
+
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior
 streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics, complete

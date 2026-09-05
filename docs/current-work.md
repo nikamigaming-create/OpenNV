@@ -52,6 +52,17 @@ Component and transport results do not establish scene or campaign parity.
   local Godot binding. World composition differs by one ULP in one near-zero
   component; GPU direction and pixels remain unverified. The floor, ceiling
   and window brightness remain visibly wrong.
+- Point lights now retain their resolved source world radius. The previous
+  extra square-root-of-two multiplier extended every light's reach by about
+  41 percent. Owned shader declarations, retained native radius inputs and
+  independently corroborated native scale handling contradict that expansion.
+  All three point-light creation paths now pass the source radius directly.
+  Synthetic signed-adjustment/unit/binding checks, the 25-light owned audit and
+  the complete gate pass. Ordinary room-61 binds all 25 radii with exact
+  Float32 unit conversion, preserving their source RGB and placement. Checked
+  floor error falls from 32.46 to 10.28 and ceiling error from 37.25 to 13.22
+  colour levels. These region diagnostics do not establish pixel acceptance;
+  window beams, fog, material response and selected light/shadow passes remain.
 - The restored HUD owner renders the original gift icon, bracket, bitmap font
   and item text during Classic Pack in ordinary run hud-45. Startup scripts
   produce 19 inventory grants through transactional shared state. Declaration,
@@ -163,14 +174,20 @@ prompt. Compared with retained retail-54 inputs, matching light RGB triples
 improve from 19/25 to 25/25; all 25 dimmers agree. The rendered room still looks
 too bright. Room-56 additionally restores the geometry-derived vertex-colour
 binding, improving the checked wall regions without changing the source lights.
-The current comparison is room-60/retail-54 at the original name prompt; the
+The current comparison is room-61/retail-54 at the original name prompt; the
 movie was skipped and all four pack messages were dismissed through ordinary
 input. Bounded GPU readbacks retain ten intermediate image-space surfaces and
 the exact constants for eleven submitted passes. Native target luminance,
 cinematic, tint and fade bytes agree with the submitted OpenNV parameters. The
-room is already too bright before HDR; the correction to directional rotation
-does not resolve that discrepancy. Trace material response, selected lights,
-fog and shadows next. Doc's rest/aim pose and text composition also differ.
+room is already too bright before HDR. Removing the unsupported point-radius
+expansion improves the checked floor, ceiling and wall regions. Source colours,
+placement and HDR settings stay the same. The native shared fog constants agree
+with the source far distance, extent, power and colour; the owned vertex
+program computes fog distance after projection, while the material currently
+uses view-space distance. That interpolation/projection discrepancy remains
+open, as do window beam composition and selected light/shadow passes. Doc's
+rest/aim pose and text composition also differ. Menu/quest checkpoints match;
+exact camera, animation and frame timing are not aligned.
 ForceWeather and complete result-script execution remain unbound.
 
 The harness previously gave every tap a 900 ms engine lease. A loading
@@ -210,10 +227,11 @@ owned records and decoded resources stay outside the public repository.
 
 1. Trace the remaining bright floor/ceiling/window discrepancy in the pre-HDR
    scene. Preserve the matching source colours and corrected vertex-colour and
-   directional-axis bindings. Selected native geometry now has observed render
-   pass/light lists; pass admission, fog constants, material response and GPU
-   contribution still need binding. Do not fit HDR settings to this discrepancy.
-   Preserve room-60/retail-54 at the name prompt for this bounded check.
+   directional-axis and point-radius bindings. Selected native geometry now has
+   observed render pass/light lists. Fog constants agree with source inputs;
+   fog projection/interpolation, pass admission, window material response and
+   GPU contribution still need binding. Do not fit HDR settings to this
+   discrepancy. Preserve room-61/retail-54 at the name prompt for this check.
    Continue ordinary startup using keyboard input and fresh observed controls.
    Exact block admission, MenuMode execution, mutable processing delays and
    dynamic quest start/stop remain separate gaps. Do not reopen proved

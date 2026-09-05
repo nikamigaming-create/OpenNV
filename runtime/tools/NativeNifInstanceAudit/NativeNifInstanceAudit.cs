@@ -14,6 +14,7 @@ public partial class NativeNifInstanceAudit : Node
         {
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
+            ExercisePlacedLights();
             if (OS.GetCmdlineUserArgs() is ["--placement", var placementRoot, var cellHex, var observations])
             {
                 ExerciseObservedPlacement(placementRoot, cellHex, observations);

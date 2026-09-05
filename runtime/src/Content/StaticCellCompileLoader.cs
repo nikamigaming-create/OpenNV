@@ -320,8 +320,7 @@ internal static class StaticCellCompileLoader
                 configuration.Renderer.MinimumPointLightEnergy,
                 light.GetProperty("intensity").GetSingle() *
                 configuration.Renderer.PointLightEnergyScale),
-            OmniRange = RetailLighting.PointShaderRadius(
-                light.GetProperty("effectiveRadiusMeters").GetSingle()),
+            OmniRange = light.GetProperty("effectiveRadiusMeters").GetSingle(),
             OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
             ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
             LightCullMask = DefaultRenderLayer,

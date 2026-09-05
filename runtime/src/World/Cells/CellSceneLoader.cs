@@ -617,7 +617,7 @@ internal static class CellSceneLoader
                 LightEnergy = MathF.Max(
                     configuration.Renderer.MinimumPointLightEnergy,
                     light.Intensity * configuration.Renderer.PointLightEnergyScale),
-                OmniRange = RetailLighting.PointShaderRadius(light.RadiusMeters),
+                OmniRange = light.RadiusMeters,
                 OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
                 ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
                 LightCullMask = renderLayer,

@@ -13,9 +13,6 @@ internal static class RetailLighting
 {
     internal const float GodotOmniDecayForRetailRemap = 0.0f;
 
-    internal static float PointShaderRadius(float authoredRadius) =>
-        authoredRadius * Mathf.Sqrt(2.0f);
-
     internal static Color GodotLightColor(Color sourceShaderColor)
     {
         if (!float.IsFinite(sourceShaderColor.R) ||
