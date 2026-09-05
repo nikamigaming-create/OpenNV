@@ -10,10 +10,11 @@ Godot presents those owners. No replacement menus, named scene fixes or
 captured reference values may become gameplay authority.
 
 Work stays on main. All three subagents are stopped at the user's request.
-Continue in this task only. The fetched main and origin/main both point to
-c20d97c; there are no open pull requests. The substantial working changes below
-are preserved on main and are not yet published. The full gate is running;
-do not describe an earlier gate result as verification of this tree.
+Continue in this task only. The presentation/clock changes are published as
+d6d7591 on main/origin, with no open PRs. The complete gate, selected owned
+light/audio audits and fresh native actor checks passed on 2026-09-05. The
+subsequent timed-input fix also passed the complete gate and a live 25 ms
+command/deadline check. These results do not establish scene acceptance.
 
 All 33 requirements in recovery-checklist.md remain open. scene-defects.md
 tracks current component discrepancies and the evidence needed to close them.
@@ -41,7 +42,8 @@ Component and transport results do not establish scene or campaign parity.
 - Four source response gestures, finite release/resumption, chair exit and
   NAVM travel pass the native actor component audit. ResetAI/EVP reach their
   actor owners. Source IDLE internal repeats and PACK collection timing are
-  implemented. The native FaceGen blink lifecycle reaches original TRI targets
+  implemented; the native collection polling delay remains unbound. The native
+  FaceGen blink lifecycle reaches original TRI targets
   in the neutral preview audit. Full live motion, aiming and matched timing
   remain unverified.
 - KF Sound events now dispatch from crossed source intervals to the owned
@@ -74,9 +76,22 @@ Component and transport results do not establish scene or campaign parity.
 
 ## Live comparison and evidence
 
-Both native games were last at the first Reflectron page. The hidden harness
-retains the checkpoint; implementation does not require a visible comparison
-window. Revalidate current processes and states before controlling them.
+Fresh run room-47 reset both games and skipped the movie. It stopped at a
+confirmed pack-order discrepancy: retail shows Mercenary then Classic, while
+OpenNV shows Classic then Mercenary. OpenNV is now on Caravan; retail is on
+Classic. Do not describe this as matched state or advance it blindly. Trace
+native startup quest registration/scheduling; the runtime currently iterates
+the winning QUST index sorted by FormID. Do not hardcode the four pack names.
+
+The harness previously gave every tap a 900 ms engine lease. A loading
+transition delayed retail's explicit release receipt; taps now send their
+requested duration as the local lease to both engines. A live 25 ms check
+confirms both commands carry 25 ms and both held-input states clear. This
+corrects a harness timing flaw, but does not resolve the source quest order.
+Original default-button casing also differs (Ok/OK); the paired-button guard
+correctly rejects that label mismatch. Ordinary keyboard input remains usable.
+Revalidate processes/states before control. Keep comparison hidden during code
+work and open it only for bounded matched checks.
 
 Only the private diagnostic input bridge drives retail. It may duplicate
 ordinary timestamped player input. Native WOW64 observation uses the Win32
@@ -99,10 +114,10 @@ owned records and decoded resources stay outside the public repository.
 
 ## Next work
 
-1. Finish the active full gate, selected owned audits and review; publish the
-   preserved changes to main/origin only when those checks pass. Update this
-   file with the actual result. No work may remain stranded in another task.
-2. Restart the current OpenNV build once, skip the intro, and capture the live
+1. Fix startup quest ordering from source registration and native observation;
+   verify default MessageMenu button ownership. Keep the current mismatch and
+   all independent visual/event lanes explicit. Publish only verified changes.
+2. Replay the corrected boundary, skip the intro, and capture the live
    HUD, Doc motion/animation sound, window/gurney alpha, clock-driven light
    colour, opening haze and Reflectron background/preview blinking. Reset and
    align retail for comparisons; an old night checkpoint and a new daytime

@@ -10,6 +10,9 @@ input, audio and pixel comparisons remain independent requirements.
 | Gurney opaque black fill | Source falloff pass retains opacity; owned audit passes; new live frame shows the open wheel | Matched surfaces, shadows and camera phase |
 | Skin texture over preview shirt | Clothing preserves its NIF texture; new live frame shows the dark shirt | Current preview material and lighting comparison |
 | Missing top-left item notice | Original gift icon, bracket, bitmap font and item text appear during Classic Pack | Queue timing, fading, wrapping, glow and retail event order |
+| Startup pack order | Fresh room-47 confirms retail Mercenary/Classic versus OpenNV Classic/Mercenary | Native quest registration/scheduling; no named reorder table |
+| Tap spans a load boundary | Requested duration now reaches both local engine leases; live 25 ms check and full gate pass | Replay the movie/message boundary and compare consumed edges |
+| Default message button casing | OpenNV exposes Ok while retail exposes OK; paired-button guard rejects it | Original default-button declaration/formatting owner |
 | Radio/remaining HUD notices | Open | Discovery events and remaining source HUD branches |
 | Missing Doc response gestures | Four source clips pass finite-playback and resumption audit | Complete matched motion, speech overlap and handoff timing |
 | Chair exit and walking | Owned audit passes exit, root continuity, NAVM travel and arrival | Ordinary replay, native pose/timing, later furniture entry |

@@ -9,7 +9,7 @@ The published main checkpoint c20d97c fixes placed architecture ownership and
 near-plane trace selection. Ordinary replay removes the wall obstructing Doc's
 room; selected native evidence agrees on 19 transforms across three modules.
 
-The current verified tree restores original startup HUD notifications,
+Published commit d6d7591 restores original startup HUD notifications,
 fixes the gurney's opaque fill and the Reflectron shirt texture, adds source
 response gestures, chair exit/travel, preview blinking, IDLE repetition and
 animation sound dispatch, and restores the original Vigor controls. Original
@@ -29,10 +29,17 @@ night checkpoint. This does not prove shader or pixel parity. Light flicker,
 shadows, attenuation, complete focus effects, geometry/collision and exterior
 weather remain unresolved or unverified.
 
-The full repository gate is in progress for this working tree. There are no
-open PRs, and fetched main/origin still agree at the previous checkpoint.
-Current changes must pass the gate before publication. All work now stays in
-one main task; the user stopped parallel subagent work.
+The full repository gate passed on 2026-09-05, including both builds,
+formatting/analyzers, contract probes, launcher tests and native project loading.
+Selected owned light/audio and fresh native actor audits also pass. Main/origin
+include d6d7591 and there are no open PRs. All work stays in this task; the user
+stopped parallel subagent work.
+
+Fresh run room-47 exposes different startup pack order: retail shows Mercenary
+then Classic; OpenNV shows Classic then Mercenary. Native quest scheduling
+remains unbound. A separate harness fix now uses the requested tap duration as
+the engine lease; a live 25 ms check and the complete gate pass. Neither that
+fix nor source light inputs establish complete timing or scene parity.
 
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior

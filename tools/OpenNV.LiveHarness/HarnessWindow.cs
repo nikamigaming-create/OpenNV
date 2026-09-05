@@ -290,7 +290,9 @@ internal sealed class HarnessWindow : Form
                 var key = command.GetProperty("key").GetString()!;
                 var duration = command.TryGetProperty("milliseconds", out var value) ? value.GetInt32() : 120;
                 if (duration is < 20 or > 1000) throw new ArgumentException("Tap duration must be 20–1000 milliseconds.");
-                DispatchKey(key, true, target, driver, true);
+                // Each engine enforces the requested deadline locally. A load
+                // transition may postpone delivery of the explicit key-up.
+                DispatchKey(key, true, target, driver, true, duration);
                 var generations = Targets(target).ToDictionary(engine => engine,
                     engine => _inputGenerations[(engine, key.ToUpperInvariant())]);
                 _ = ReleaseAfter(key, generations, driver, duration);
@@ -354,14 +356,14 @@ internal sealed class HarnessWindow : Form
         });
     }
 
-    private void DispatchKey(string key, bool pressed, string target, string driver, bool record)
+    private void DispatchKey(string key, bool pressed, string target, string driver, bool record, int leaseMilliseconds = 900)
     {
         if (!RetailKeys.TryGetValue(key, out var scanCode)) throw new ArgumentException($"Unmapped key: {key}");
         foreach (var engine in Targets(target))
         {
             var command = engine == "retail"
-                ? pressed ? $"native.hold {scanCode} 900" : $"ReleaseKey {scanCode}"
-                : JsonSerializer.Serialize(new { op = "key", key, pressed, leaseMilliseconds = 900 }, Program.Json);
+                ? pressed ? $"native.hold {scanCode} {leaseMilliseconds}" : $"ReleaseKey {scanCode}"
+                : JsonSerializer.Serialize(new { op = "key", key, pressed, leaseMilliseconds }, Program.Json);
             Send(engine, command, driver, pressed ? $"{key} down" : $"{key} up", record);
             var identity = (engine, key.ToUpperInvariant());
             if (!pressed) _inputGenerations.Remove(identity);
