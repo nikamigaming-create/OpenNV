@@ -39,7 +39,7 @@ Fresh run room-47 exposes different startup pack states: retail was observed
 on Mercenary, Classic and Tribal; OpenNV queued Classic, Mercenary, Caravan and
 Tribal. The full retail startup order is uncertain because an earlier long
 Escape lease may have dismissed a message. Native quest registration, initial
-delay, recurring delay and modal timer behavior remain unbound. The native
+delay, shared SCPT ownership and pre-New lifetime remain unbound. The native
 lists match reverse source registration; numeric FormID order is insufficient.
 A separate harness fix now uses the requested tap duration as
 the engine lease; a live 25 ms check and the complete gate pass. Neither that
@@ -49,6 +49,16 @@ The default ShowMessage button now reads its own declaration from the selected
 owned executable instead of the separate sOk setting. The owned audit,
 synthetic rejection checks, full repository gate and ordinary run room-48 pass;
 the live button reads OK. Broader message layout/timing acceptance remains open.
+
+Quest-script recurrence now reads the installation's configured interval,
+preserves Float32 countdown/elapsed storage and overshoot, and advances during
+modal presentation without executing GameMode effects. Synthetic cold/save
+rejection checks, the selected owned-script audit and the full gate pass.
+In ordinary run room-50, the selected clock completes nine more recurrences
+over 44.46 seconds on the same Classic Pack dialog without executing the
+gameplay block again or changing inventory. Missing legacy clock state is
+reported before campaign restoration or save replacement. Startup order,
+MenuMode execution and complete timing remain open.
 
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior

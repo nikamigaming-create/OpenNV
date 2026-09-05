@@ -10,9 +10,10 @@ input, audio and pixel comparisons remain independent requirements.
 | Gurney opaque black fill | Source falloff pass retains opacity; owned audit passes; new live frame shows the open wheel | Matched surfaces, shadows and camera phase |
 | Skin texture over preview shirt | Clothing preserves its NIF texture; new live frame shows the dark shirt | Current preview material and lighting comparison |
 | Missing top-left item notice | Original gift icon, bracket, bitmap font and item text appear during Classic Pack | Queue timing, fading, wrapping, glow and retail event order |
-| Startup notification scheduling | Room-47 pack states differ; native initial delay, recurring delay and modal timers are absent from the runtime | Bind source registration and scheduling; recover the complete first-message sequence with the corrected tap lease |
+| Startup notification scheduling | Configured Float32 recurrence and modal countdown now pass synthetic, owned, full-gate and ordinary room-50 checks; GameMode effects and inventory do not repeat during the modal | Initial linking/phase, shared SCPT clocks, pre-New lifetime, MenuMode execution and complete first-message sequence remain open |
 | Tap spans a load boundary | Requested duration now reaches both local engine leases; live 25 ms check and full gate pass | Replay the movie/message boundary and compare consumed edges |
 | Default message button casing | Corrected: ShowMessage now reads its own owned declaration; synthetic, owned, full-gate and live room-48 checks pass | Component closed; broader message layout and timing remain open |
+| Opening movie audio underruns | Room-50 telemetry reported 556 underruns at 3.56 seconds before the ordinary skip | Determine refill/startup accounting and audible impact; no new cinematic acceptance claim |
 | Radio/remaining HUD notices | Open | Discovery events and remaining source HUD branches |
 | Missing Doc response gestures | Four source clips pass finite-playback and resumption audit | Complete matched motion, speech overlap and handoff timing |
 | Chair exit and walking | Owned audit passes exit, root continuity, NAVM travel and arrival | Ordinary replay, native pose/timing, later furniture entry |

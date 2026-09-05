@@ -35,20 +35,38 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
 }
 
 internal sealed record FalloutQuestScriptSnapshot(FalloutFormKey Quest, FalloutFormKey Script,
-    double Remaining, long Executions, string? Error);
+    double Remaining, long Executions, string? Error, FalloutQuestScriptClockSnapshot? Clock = null);
 internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScriptSnapshot> Instances,
-    IReadOnlyList<FalloutFormKey> Messages, FalloutHudNotificationsSnapshot? Notifications = null);
+    IReadOnlyList<FalloutFormKey> Messages, FalloutHudNotificationsSnapshot? Notifications = null)
+{
+    internal void Validate()
+    {
+        if (Instances is null || Messages is null)
+            throw new InvalidDataException("Saved quest script owners are missing.");
+        var quests = new HashSet<FalloutFormKey>();
+        foreach (var instance in Instances)
+        {
+            if (instance is null || !quests.Add(instance.Quest))
+                throw new InvalidDataException("Saved quest script owner is absent or duplicated.");
+            if (instance.Clock is null)
+                throw new NotSupportedException("Legacy quest scripts have no elapsed/cadence clock owner.");
+            instance.Clock.Validate();
+            if (instance.Remaining != instance.Clock.Remaining || instance.Executions < 0 ||
+                instance.Executions > instance.Clock.Invocations)
+                throw new InvalidDataException("Saved quest script scheduling is invalid.");
+        }
+    }
+}
 
 internal sealed class FalloutQuestScripts
 {
     // Engine-created player reference; it is not a placed record in an ESM.
     private const uint PlayerReferenceRuntimeFormId = 0x14;
-    private sealed class Instance(FalloutPluginRecord quest, FalloutPluginRecord script, FalloutGameModeProgram program, double delay)
+    private sealed class Instance(FalloutPluginRecord quest, FalloutPluginRecord script, FalloutGameModeProgram program, FalloutQuestScriptClock clock)
     {
         internal readonly FalloutPluginRecord Quest = quest, Script = script;
         internal readonly FalloutGameModeProgram Program = program;
-        internal readonly double Delay = delay;
-        internal double Remaining;
+        internal readonly FalloutQuestScriptClock Clock = clock;
         internal string? Error;
         internal long Executions;
     }
@@ -65,34 +83,35 @@ internal sealed class FalloutQuestScripts
 
     internal object State => new
     {
-        quests = _instances.Select(instance => new { quest = instance.Quest.FormKey.ToString(), script = instance.Script.FormKey.ToString(), instance.Executions, instance.Remaining, instance.Error }).ToArray(),
+        quests = _instances.Select(instance => new { quest = instance.Quest.FormKey.ToString(), script = instance.Script.FormKey.ToString(), instance.Executions, instance.Clock.Remaining, clock = instance.Clock.Capture(), instance.Clock.Interval, instance.Error }).ToArray(),
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
         notifications = _inventory.Notifications.Capture(),
-        scheduling = "source-delay; native ordering unverified",
+        scheduling = "source-configured Float32 recurrence; initial linking/phase and main-menu lifetime unbound",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
     internal bool TryTakeMessage(out FalloutSourceMessage? message) => _messages.TryDequeue(out message);
 
     internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null) => new(
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
-            instance.Remaining, instance.Executions, instance.Error)).ToArray(),
+            instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture())).ToArray(),
         (displayed is null ? Enumerable.Empty<FalloutFormKey>() : [displayed.Form]).Concat(_messages.Select(message => message.Form)).ToArray(),
         _inventory.Notifications.Capture());
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
-        if (_instances.Any(instance => instance.Executions != 0) || _messages.Count != 0)
+        if (_instances.Any(instance => instance.Executions != 0 || instance.Clock.Invocations != 0) || _messages.Count != 0)
             throw new InvalidOperationException("Script restoration requires a fresh owner.");
+        snapshot.Validate();
         var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
         if (states.Count != _instances.Count || _instances.Any(instance => !states.ContainsKey(instance.Quest.FormKey)))
             throw new InvalidDataException("Saved quest script owners differ from the winning source graph.");
         foreach (var instance in _instances)
         {
             var state = states[instance.Quest.FormKey];
-            if (state.Script != instance.Script.FormKey || !double.IsFinite(state.Remaining) || state.Remaining < 0 ||
-                state.Remaining > instance.Delay || state.Executions < 0)
+            instance.Clock.Validate(state.Clock!);
+            if (state.Script != instance.Script.FormKey)
                 throw new InvalidDataException("Saved quest script scheduling is invalid.");
         }
         var messages = snapshot.Messages.Select(form => FalloutSourceMessage.Read(_records.GetEffective(form))).ToArray();
@@ -101,7 +120,7 @@ internal sealed class FalloutQuestScripts
         foreach (var instance in _instances)
         {
             var state = states[instance.Quest.FormKey];
-            instance.Remaining = state.Remaining;
+            instance.Clock.Restore(state.Clock!);
             instance.Executions = state.Executions;
             instance.Error = state.Error;
             if (state.Error is not null) _unbound[instance.Quest.FormKey] = state.Error;
@@ -110,12 +129,16 @@ internal sealed class FalloutQuestScripts
     }
 
     internal FalloutQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimedQuests,
-        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null)
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, float? defaultProcessingDelay = null)
     {
         _records = records;
         _quests = quests;
         _inventory = inventory;
         _globals = globals;
+        var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
+            RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
+            .Number("MAIN", "fQuestScriptDelayTime");
+        if (!float.IsFinite(defaultDelay)) throw new InvalidDataException("Default quest script delay is invalid.");
         foreach (var quest in records.EffectiveRecords("QUST"))
         {
             if (claimedQuests.Contains(quest.FormKey)) continue;
@@ -130,29 +153,30 @@ internal sealed class FalloutQuestScripts
                 var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
                 if (source.Length != 1) throw new NotSupportedException("Quest script source is absent or ambiguous.");
                 var program = FalloutGameModeProgram.Read(source[0].Data.Span);
-                var delay = BinaryPrimitives.ReadSingleLittleEndian(data.Span[4..]);
-                // DATA flag 4 selects the authored processing delay. Zero is a
-                // valid delay (every GameMode frame), not a missing setting.
-                if ((data.Span[0] & 0x10) == 0)
-                    throw new NotSupportedException("Default quest scheduling needs an engine delay owner.");
-                if (!float.IsFinite(delay) || delay < 0) throw new InvalidDataException("Quest delay is invalid.");
-                _instances.Add(new(quest, script, program, delay));
+                float? delay = (data.Span[0] & 0x10) != 0 ? BinaryPrimitives.ReadSingleLittleEndian(data.Span[4..]) : null;
+                // Positive authored delays replace the configured interval.
+                // Zero uses that interval too. Initial phase remains the
+                // existing startup divergence until the full linker owns it.
+                _instances.Add(new(quest, script, program,
+                    new(defaultDelay, delay, 0)));
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException)
             { _unbound[quest.FormKey] = error.Message; }
         }
     }
 
-    internal void Advance(double seconds)
+    internal void Advance(double seconds, bool gameMode = true)
     {
-        if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
         foreach (var instance in _instances)
         {
             if (instance.Error is not null) continue;
-            instance.Remaining -= seconds;
-            if (instance.Remaining > 0) continue;
-            instance.Remaining = instance.Delay;
-            try { Execute(instance); ++instance.Executions; }
+            if (!instance.Clock.Advance((float)seconds)) continue;
+            try
+            {
+                if (gameMode) { Execute(instance); ++instance.Executions; }
+                instance.Clock.CompleteInvocation();
+            }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
             { instance.Error = error.Message; _unbound[instance.Quest.FormKey] = error.Message; }
         }

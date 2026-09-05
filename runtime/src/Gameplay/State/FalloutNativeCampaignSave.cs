@@ -299,5 +299,6 @@ internal static class FalloutNativeCampaignSave
         if (rotationLengthSquared is < MinimumUnitQuaternionLengthSquared or
             > MaximumUnitQuaternionLengthSquared)
             throw new InvalidDataException("Native campaign save rotation is not normalized.");
+        state.Scripts?.Validate();
     }
 }

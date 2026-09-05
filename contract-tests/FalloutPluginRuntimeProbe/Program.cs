@@ -7,6 +7,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
 HudNotificationsProbe.Run();
+QuestScriptClockProbe.Run();
 
 if (args is ["--audit-placed-lights", var lightRoot, var lightCell])
 {
@@ -117,12 +118,14 @@ try
         Subrecord("SLSD", variableData), Subrecord("SCVR", ZString("given")),
         Subrecord("SCRO", UInt32(0x14)), Subrecord("SCRO", UInt32(0x60)), Subrecord("SCRO", UInt32(0x01000079)),
         Subrecord("SCRO", UInt32(0x01000080))));
-    byte[] Quest(uint form, uint script) => Record("QUST", form, 0, Combine(
+    byte[] Quest(uint form, uint script, byte flags = 0x11, float delay = 0) => Record("QUST", form, 0, Combine(
         Subrecord("EDID", ZString("SyntheticQuest" + form)),
-        Subrecord("DATA", [0x11, 1, 0, 0, 0, 0, 0, 0]), Subrecord("SCRI", UInt32(script))));
+        Subrecord("DATA", Combine([flags, 1, 0, 0], BitConverter.GetBytes(delay))), Subrecord("SCRI", UInt32(script))));
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Scripts.esp"), Combine(
         Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
         Quest(0x01000070, 0x01000073), Quest(0x01000071, 0x01000074), Quest(0x01000072, 0x01000075),
+        Quest(0x01000076, 0x01000077, flags: 1, delay: float.NaN),
+        Script(0x01000077, "set given to 1"),
         Script(0x01000073, "if given == 0\nShowMessage SyntheticMessage\nPlayer.AddItem SyntheticArmor 2\nset SyntheticGlobal to SyntheticGlobal + 0.1\nset given to 1\nendif"),
         Script(0x01000074, "set given to 1\nset SyntheticGlobal to 999\nPlayer.AddItem SyntheticArmor 4\nShowMessage SyntheticMessage\nUnsupportedReachedCommand"),
         Script(0x01000075, "Player.AddItem SyntheticArmor 1.5"),
@@ -136,7 +139,7 @@ try
         var questState = new FalloutQuestState(scriptStack);
         var playerInventory = new FalloutPlayerInventory();
         var globals = FalloutGlobalState.Read(scriptStack);
-        var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory, globals);
+        var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory, globals, defaultProcessingDelay: 5);
         scriptRuntime.Advance(0);
         scriptRuntime.Advance(0);
         Require(playerInventory.Items is [{ Count: 2 }] &&
@@ -147,6 +150,20 @@ try
         Require(scriptRuntime.TryTakeMessage(out var message) && message is { Title: "Synthetic title", Text: "Synthetic body" } &&
             message.Buttons.SequenceEqual(["Synthetic choice"]) && !scriptRuntime.TryTakeMessage(out _),
             "Source message identity or transactional queue differs.");
+        var beforeMenu = scriptRuntime.Capture();
+        Require(beforeMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x76).Clock is
+            { Remaining: 5, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
+            "An unused authored delay overrode configured cadence or rejected a default-timed quest.");
+        scriptRuntime.Advance(2.25, gameMode: false);
+        var duringMenu = scriptRuntime.Capture();
+        Require(duringMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x70).Clock is
+            { Remaining: 2.75f, Elapsed: 2.25f } &&
+            duringMenu.Instances.Select(instance => instance.Executions).SequenceEqual(beforeMenu.Instances.Select(instance => instance.Executions)),
+            "Modal time froze the quest countdown or executed a GameMode block.");
+        scriptRuntime.Advance(3.25, gameMode: false);
+        Require(scriptRuntime.Capture().Instances.Single(instance => instance.Quest.ObjectId == 0x70).Clock is
+            { Remaining: 4.5f, Elapsed: 0, Invocations: 2 } && globals.Get(new("Scripts.esp", 0x80)) == 1.35f,
+            "A due modal invocation lost overshoot or committed GameMode effects.");
         var snapshotPath = Path.Combine(fixtureRoot, "quest-state.json");
         questState.SetVariable(new("Scripts.esp", 0x70), 1, 1.0000000000000002);
         File.WriteAllText(snapshotPath, JsonSerializer.Serialize(questState.Capture()));
@@ -159,9 +176,11 @@ try
             playerInventory.Items.Select(item => new FalloutCampaignInventoryRequest(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(), null), []);
         var coldGlobals = FalloutGlobalState.Read(scriptStack);
         coldGlobals.Restore(JsonSerializer.Deserialize<FalloutGlobalStateSnapshot>(JsonSerializer.Serialize(globals.Capture()))!);
-        var coldScripts = new FalloutQuestScripts(scriptStack, coldQuestState, new HashSet<FalloutFormKey>(), coldInventory, coldGlobals);
+        var coldScripts = new FalloutQuestScripts(scriptStack, coldQuestState, new HashSet<FalloutFormKey>(), coldInventory, coldGlobals, defaultProcessingDelay: 5);
         coldScripts.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scriptRuntime.Capture()))!);
         coldScripts.Advance(0);
+        Require(JsonSerializer.Serialize(coldScripts.Capture()) == JsonSerializer.Serialize(scriptRuntime.Capture()),
+            "Cold restore lost a partially elapsed quest script clock.");
         Require(coldInventory.Items is [{ Count: 2 }] && !coldScripts.TryTakeMessage(out _), "Cold restore awarded or announced a completed grant again.");
         Require(coldGlobals.Capture().Values.SequenceEqual(globals.Capture().Values), "Cold script restore changed shared globals.");
     }
@@ -1072,6 +1091,21 @@ try
             .SequenceEqual(syntheticCampaignState.PlayerPosition),
         "Saving a restored legacy player must upgrade its anchor without applying the offset twice.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
+    var validSaveBytes = File.ReadAllBytes(syntheticSavePath);
+    var missingScriptClock = syntheticCampaignState with
+    {
+        Quests = [],
+        Scripts = new([new(new("Master.esm", 0x70), new("Master.esm", 0x73), 0, 1, null)], []),
+    };
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, missingScriptClock),
+        "no elapsed/cadence clock owner");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(validSaveBytes),
+        "Rejected script clocks replaced a valid campaign save.");
+    var missingClockPath = Path.Combine(fixtureRoot, "missing-script-clock-save.json");
+    File.WriteAllText(missingClockPath, JsonSerializer.Serialize(missingScriptClock));
+    ExpectFailure(() => FalloutNativeCampaignSave.Read(missingClockPath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell),
+        "no elapsed/cadence clock owner");
     var syntheticRestore = FalloutNativeCampaignSave.Read(
         syntheticSavePath,
         syntheticSaveCompatibilityId,

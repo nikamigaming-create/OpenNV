@@ -47,7 +47,12 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
 
     public override void _Process(double delta)
     {
-        if (_error is not null || _layer is not null || GetTree().Paused) return;
+        if (_error is not null) return;
+        if (_layer is not null || GetTree().Paused)
+        {
+            Scripts.Advance(delta, gameMode: false);
+            return;
+        }
         if (Scripts.TryTakeMessage(out var restored)) { Show(restored!); return; }
         Scripts.Advance(delta);
         if (Scripts.TryTakeMessage(out var message)) Show(message!);
