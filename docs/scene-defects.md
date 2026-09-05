@@ -26,6 +26,9 @@ input, audio and pixel comparisons remain independent requirements.
 | Opening haze/distortion/focus | Source blur kernels/prefilter bind; selected tests pass | GPU replay, double vision, radial and remaining channels |
 | Reflectron background blur/DOF | Separate source menu-background capture/blur is wired; declaration tests pass | Fresh GPU replay and matched focus/background pixels |
 | Room hue, lighting and windows | XEMI LIGH/REGN bindings added; all 25 selected native light input triples, radii and dimmers match exact bits at a night checkpoint | Live clock phase, light selection, attenuation, shadows, fog and final pixels |
+| Stage global writes never reach the clock | Fixed through a general compiled-reference owner. Synthetic/owned checks, full gate and ordinary room-55 replay pass. Light RGB matches improve from 19/25 to 25/25, with all dimmers matching; the live night hour comes from the source stage | Renderer contribution remains too bright; authored ForceWeather, conditional/multiple result scripts and full stage execution remain separate gaps |
+| Doc resting pose at the name prompt | Same quest/menu checkpoint shows different head direction and hand positions | Bind animation phase, dialogue release and aiming; no pose acceptance from the menu match |
+| Name prompt text response | Original text and panel appear on both sides; prompt/name glyphs remain visibly thinner in OpenNV | Per-tile font selection, glow and text composition |
 | Cold global/sky continuity | Script globals, Float32 clock and sky identities persist; synthetic cold checks pass | Ordinary opening/Continue and exterior weather owner |
 | Reported clock blinking | Open | Continuous instance/material/controller capture |
 | Original Vigor interface | All eight native controls pass forward/backward, allocation limits, point restoration and completion | Matched framing, sound/gamepad and ordinary activation |

@@ -73,6 +73,17 @@ Enter. The complete gate, live rejection with no command written and paired
 Tribal dismissal pass; both runs subsequently show Classic. Different clock
 histories still prevent a synchronized comparison.
 
+At the original name prompt, retail's authored night hour differs from
+OpenNV's unchanged noon global. The opening stage adapter had omitted global
+assignments. A general owner now resolves these writes through each stage's
+compiled references, prepares ordered Float32 results and publishes them to
+shared state in source-line order. Synthetic binding/condition/overflow/cold
+storage checks, the selected owned audit and the full gate pass. Fresh ordinary
+run room-55 publishes the source night hour before the movie skip. Matched
+light RGB inputs improve from 19/25 to 25/25 against retail-54, with all dimmers
+matching. The room remains visibly too bright. Shader contribution, shadows,
+remaining weather commands and complete stage execution are open.
+
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior
 streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics, complete

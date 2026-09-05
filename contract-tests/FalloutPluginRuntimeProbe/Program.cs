@@ -9,6 +9,23 @@ using OpenNV.Runtime.Gameplay.State;
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 
+if (args is ["--audit-stage-globals", var stageRoot])
+{
+    RuntimeLiveContentSource.Configure(stageRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    var graph = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
+    var globals = FalloutGlobalState.Read(records);
+    foreach (var stage in graph.Quests.Values.SelectMany(stages => stages.Values))
+    {
+        var writes = FalloutStageGlobalProgram.Read(records, stage).Prepare(globals);
+        if (writes.Count != 0) Console.WriteLine(JsonSerializer.Serialize(new { stage.Quest, stage.Stage, writes }));
+        foreach (var write in writes) globals.Set(write.Form, write.Value);
+    }
+    Console.WriteLine("OPENNV_OWNED_STAGE_GLOBALS_PASS scope=compiled-stage-bindings-and-shared-storage parity=unverified");
+    return;
+}
+
 if (args is ["--audit-script-initialization", var initializationRoot])
 {
     RuntimeLiveContentSource.Configure(initializationRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
@@ -147,6 +164,11 @@ try
     byte[] Quest(uint form, uint script, byte flags = 0x11, float delay = 0) => Record("QUST", form, 0, Combine(
         Subrecord("EDID", ZString("SyntheticQuest" + form)),
         Subrecord("DATA", Combine([flags, 1, 0, 0], BitConverter.GetBytes(delay))), Subrecord("SCRI", UInt32(script))));
+    byte[] GlobalStage(uint form, string source, bool bound = true, uint? referenceCount = null) => Record("QUST", form, 0, Combine(
+        Subrecord("EDID", ZString("GlobalStage" + form)), Subrecord("DATA", new byte[8]),
+        Subrecord("INDX", new byte[2]), Subrecord("QSDT", [0]),
+        Subrecord("SCHR", Combine(new byte[4], UInt32(referenceCount ?? (bound ? 1u : 0u)), new byte[12])),
+        Subrecord("SCTX", Encoding.ASCII.GetBytes(source)), bound ? Subrecord("SCRO", UInt32(0x01000080)) : []));
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Scripts.esp"), Combine(
         Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
         Quest(0x01000070, 0x01000073), Quest(0x01000071, 0x01000074), Quest(0x01000072, 0x01000075),
@@ -157,11 +179,36 @@ try
         Script(0x01000075, "Player.AddItem SyntheticArmor 1.5"),
         Record("GLOB", 0x01000080, 0, Combine(Subrecord("EDID", ZString("SyntheticGlobal")),
             Subrecord("FNAM", [(byte)'s']), Subrecord("FLTV", BitConverter.GetBytes(1.25f)))),
+        GlobalStage(0x01000081, "set SyntheticGlobal to SyntheticGlobal + 0.1\nset SyntheticGlobal to SyntheticGlobal + 0.1"),
+        GlobalStage(0x01000082, "set SyntheticGlobal to 9", bound: false),
+        GlobalStage(0x01000083, "if 0\nset SyntheticGlobal to 9\nendif"),
+        GlobalStage(0x01000084, "set SyntheticGlobal to 9\nset SyntheticGlobal to 1e40"),
+        GlobalStage(0x01000085, "set SyntheticGlobal to 9", referenceCount: 2),
         Record("MESG", 0x01000079, 0, Combine(Subrecord("EDID", ZString("SyntheticMessage")),
             Subrecord("FULL", ZString("Synthetic title")), Subrecord("DESC", ZString("Synthetic body")),
             Subrecord("DNAM", UInt32(1)), Subrecord("INAM", UInt32(0)), Subrecord("ITXT", ZString("Synthetic choice"))))));
     using (var scriptStack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Scripts.esp"]))
     {
+        var stageGlobals = FalloutGlobalState.Read(scriptStack);
+        var globalGraph = FalloutOpeningPlayerControlResolver.Resolve(scriptStack,
+            Enumerable.Range(0x81, 5).Select(id => "GlobalStage" + (0x01000000u + (uint)id)).ToArray());
+        FalloutStageGlobalProgram GlobalProgram(int id) => FalloutStageGlobalProgram.Read(scriptStack,
+            globalGraph.Stage("GlobalStage" + (0x01000000u + (uint)id), 0));
+        var prepared = GlobalProgram(0x81).Prepare(stageGlobals);
+        var globalKey = new FalloutFormKey("Scripts.esp", 0x80);
+        Require(prepared.Count == 2 && prepared[0].Value == 1.35f && prepared[1].Value == 1.45f &&
+            prepared.Select(write => write.Line).SequenceEqual([0, 1]) && prepared.All(write => write.Form == globalKey) &&
+            stageGlobals.Get(globalKey) == 1.25f, "Stage globals lost ordered Float32 arithmetic or mutated during preparation.");
+        ExpectFailure(() => GlobalProgram(0x82), "compiled reference binding");
+        ExpectFailure(() => GlobalProgram(0x83), "unconditional");
+        ExpectFailure(() => GlobalProgram(0x84).Prepare(stageGlobals), "Float32 storage");
+        ExpectFailure(() => GlobalProgram(0x85), "reference count");
+        Require(stageGlobals.Get(globalKey) == 1.25f, "Rejected stage globals partially committed state.");
+        foreach (var write in prepared) stageGlobals.Set(write.Form, write.Value);
+        var coldStageGlobals = FalloutGlobalState.Read(scriptStack);
+        coldStageGlobals.Restore(JsonSerializer.Deserialize<FalloutGlobalStateSnapshot>(JsonSerializer.Serialize(stageGlobals.Capture()))!);
+        Require(coldStageGlobals.Get(globalKey) == 1.45f, "Cold globals lost a result-script write.");
+        Console.WriteLine("OPENNV_STAGE_GLOBALS_PASS references=true sourceOrder=true float32=true failureAtomic=true coldStorage=true");
         var questState = new FalloutQuestState(scriptStack);
         var playerInventory = new FalloutPlayerInventory();
         var globals = FalloutGlobalState.Read(scriptStack);

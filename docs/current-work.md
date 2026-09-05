@@ -125,6 +125,29 @@ different button. Live rejection writes no retail command. One paired Enter
 dismisses Tribal and both games subsequently show Classic. This verifies the
 input route; it does not establish clock or pixel alignment.
 
+Retail room-53 subsequently closed. Windows records an xNVSE fault in an
+exit-time string cleanup callback; the cause of closure is unknown. Retail
+room-54 was restarted independently with keyboard input. OpenNV room-51 and
+retail room-54 reach the original name prompt at VCG01 stage 10. The retained
+33-second transition recording has no reported native-frame transport gaps;
+audio was not recorded and timing alignment is unestablished.
+
+That same-checkpoint comparison exposes an earlier state error: OpenNV is
+near noon while retail is at 23:14. The owned entry result script writes the
+night hour through a compiled global reference, but the stage adapter never
+published global SETs. A general stage-global owner now prepares ordered
+Float32 writes from compiled references and applies them in source-line order.
+Unsupported conditional/multiple script contexts, missing bindings and
+overflow reject before global writes. Restoring presentation does not replay
+the saved stage's global assignments. Synthetic and selected owned checks pass;
+the complete gate and ordinary room-55 replay also pass. The live hour reaches
+23 before the movie skip and remains in the authored night period at the name
+prompt. Compared with retained retail-54 inputs, matching light RGB triples
+improve from 19/25 to 25/25; all 25 dimmers agree. The rendered room still looks
+too bright. Trace renderer inputs and light contribution next; do not retune
+the now-matching CPU light colours. Doc's rest/aim pose and text composition
+also differ. ForceWeather and complete result-script execution remain unbound.
+
 The harness previously gave every tap a 900 ms engine lease. A loading
 transition delayed retail's explicit release receipt; taps now send their
 requested duration as the local lease to both engines. A live 25 ms check
@@ -156,7 +179,10 @@ owned records and decoded resources stay outside the public repository.
 
 ## Next work
 
-1. Continue ordinary startup using keyboard input and fresh observed controls.
+1. Trace the remaining bright room/window discrepancy from the matching light
+   inputs into shader contributions, attenuation, ambient response and shadows.
+   Preserve room-55/retail-54 at the name prompt for this bounded check.
+   Continue ordinary startup using keyboard input and fresh observed controls.
    Exact block admission, MenuMode execution, mutable processing delays and
    dynamic quest start/stop remain separate gaps. Do not reopen proved
    initialization work without new contradictory evidence.

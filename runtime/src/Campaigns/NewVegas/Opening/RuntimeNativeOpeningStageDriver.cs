@@ -49,6 +49,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutGlobalState? _globals;
     private FalloutGameTime? _gameTime;
     private FalloutSkyLightingState? _skyLighting;
+    private bool _restoringEnteredStage;
     private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
     internal string? ExecutionError { get; private set; }
 
@@ -131,6 +132,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _globals = globals;
         _gameTime = gameTime;
         _skyLighting = skyLighting;
+        _restoringEnteredStage = restore is not null;
         _imageSpacePresenter = imageSpacePresenter;
         _machine = new FalloutOpeningStageMachine(
             transitions,
@@ -359,6 +361,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             while (_machine.TryTakeEnteredStage(out var stage))
             {
+                // Restoring presentation must not replay a saved stage's SETs.
+                var globalWrites = _restoringEnteredStage ? [] :
+                    FalloutStageGlobalProgram.Read(_pluginStack, stage!).Prepare(_globals);
+                _restoringEnteredStage = false;
                 _quests.EnterStage(stage!.Quest, stage.Stage);
                 // Validate complete source control-flow context before invoking
                 // admitted commands. The same owners also serve INFO results.
@@ -366,7 +372,15 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 _ = FalloutImageSpaceCommands.Read(stage.Source);
                 _ = FalloutActorPackageCommands.Read(stage.Source);
                 var lines = FalloutDialogueTopic.CodeLines(stage.Source).ToArray();
-                foreach (var line in lines) _ = TryApplyActorCommand(line);
+                for (var index = 0; index < lines.Length; index++)
+                {
+                    foreach (var write in globalWrites.Where(write => write.Line == index))
+                    {
+                        _globals!.Set(write.Form, write.Value);
+                        GD.Print($"OPENNV_NATIVE_STAGE_GLOBAL quest={stage.Quest} stage={stage.Stage} global={write.Form} value={write.Value:R}");
+                    }
+                    _ = TryApplyActorCommand(lines[index]);
+                }
             }
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException)

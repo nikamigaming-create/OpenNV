@@ -130,7 +130,7 @@ internal static class FalloutOpeningPlayerControlResolver
         return result;
     }
 
-    private static string ReadSource(
+    internal static string ReadSource(
         FalloutPluginRecord quest,
         ReadOnlySpan<byte> bytes)
     {
