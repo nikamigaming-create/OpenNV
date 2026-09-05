@@ -47,7 +47,8 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV formatting or analyzer checks failed." 
 & dotnet build $solution --configuration Debug --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Debug build failed." }
 
-& dotnet build (Join-Path $repository "tools\OpenNV.LiveHarness\OpenNV.LiveHarness.csproj") --configuration Release --nologo
+$harnessOutput = Join-Path $repository "tmp\runtime-gate\live-harness"
+& dotnet build (Join-Path $repository "tools\OpenNV.LiveHarness\OpenNV.LiveHarness.csproj") --configuration Release --nologo --output $harnessOutput
 if ($LASTEXITCODE -ne 0) { throw "OpenNV live harness build failed." }
 
 $probes = @(
