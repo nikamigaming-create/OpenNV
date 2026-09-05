@@ -448,12 +448,11 @@ public partial class RuntimeCoordinator
                     $"collisionBodies={built.CollisionBodies} collisionShapes={built.CollisionShapes} " +
                     $"collisionTriangles={built.CollisionTriangles}");
             }
-            var instance = prototype.Instantiate();
+            var instance = prototype.InstantiatePlaced(ReferenceTransform(reference));
             instance.Name = $"Reference_{reference.FormKey}";
             instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
             instance.SetMeta("opennv_source_model", baseObject.ModelPath);
             instance.SetMeta("opennv_source_form", baseObject.FormKey.ToString());
-            instance.Transform = ReferenceTransform(reference);
             root.AddChild(instance);
             var controllers = instance.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
             if (controllers.Length != 0)

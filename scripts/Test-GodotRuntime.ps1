@@ -109,4 +109,12 @@ if ($LASTEXITCODE -ne 0 -or $instanceText -match "(?m)^ERROR:" -or
 }
 Write-Output "OPENNV_NIF_INSTANCE_AUDIT_PASS controllers=independent targets=instance-owned prototype=unchanged"
 
+$traceOutput = & $Godot --headless --path $runtime res://tools/NativeRenderTraceAudit/NativeRenderTraceAudit.tscn 2>&1
+$traceText = $traceOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $traceText -match "(?m)^ERROR:" -or
+    $traceText -notmatch "OPENNV_NATIVE_RENDER_TRACE_AUDIT_PASS") {
+    throw "OpenNV render-trace projection failed:`n$traceText"
+}
+Write-Output "OPENNV_NATIVE_RENDER_TRACE_AUDIT_PASS nearPlane=clipped coverage=bounding-box-candidates exactPixels=unverified"
+
 Write-Output "OPENNV_CSHARP_GODOT_GATE_PASS"

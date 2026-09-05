@@ -2276,6 +2276,23 @@ internal sealed class RuntimeNativeNifPrototype
         return Scene.Root.Duplicate((int)Node.DuplicateFlags.UseInstantiation) as Node3D ??
             throw new InvalidOperationException("Could not instantiate a static native NIF.");
     }
+
+    internal Node3D InstantiatePlaced(Transform3D placement)
+    {
+        // A placed TES reference owns the loaded scene root's complete local
+        // transform. Native placement replaces the exported root transform;
+        // composing both rotates/translates whole room modules a second time.
+        // Descendant transforms and standalone/menu model assembly are intact.
+        if (_source.Roots.Count != 1)
+            throw new NotSupportedException("Placed multi-root NIF ownership has not been established.");
+        var instance = Instantiate();
+        var modelRoot = instance.GetChild<Node3D>(0);
+        modelRoot.SetMeta("opennv_nif_authored_root_transform", modelRoot.Transform);
+        modelRoot.SetMeta("opennv_nif_root_transform_owner", "placed-reference");
+        modelRoot.Transform = Transform3D.Identity;
+        instance.Transform = placement;
+        return instance;
+    }
 }
 
 internal static class NativeNifMeshBuilder

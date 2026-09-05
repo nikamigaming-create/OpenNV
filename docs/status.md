@@ -56,6 +56,14 @@ These components form the current recovery checkpoint; gameplay acceptance is
 separate from publication.
 See docs/current-work.md for implementation owners and current validation.
 
+Placed architecture now replaces its exported NIF root transform with the source
+reference placement. The previous composition rotated room modules a second
+time. A selected native observation agrees on 19 nodes across three modules,
+and ordinary replay visibly removes the wall obstructing the Vigor sightline.
+Render-trace click candidates also retain geometry crossing the near plane.
+Both regressions pass the complete repository gate. Complete room geometry,
+lighting, camera phase, collision behavior and final pixels remain unverified.
+
 The 2026-09-05 creation recovery replaces the live identity-panel code with the
 owned Reflectron model, original XML/bitmap controls and source player preview.
 The native diagnostic renders all twenty creation pages, and synthetic/owned

@@ -410,18 +410,49 @@ internal sealed class RuntimeRenderTrace : IDisposable
     {
         var camera = mesh.GetViewport().GetCamera3D();
         if (camera is null || !mesh.IsVisibleInTree()) return null;
-        var bounds = mesh.GetAabb();
-        var points = Enumerable.Range(0, 8).Select(index => mesh.GlobalTransform * bounds.GetEndpoint(index)).ToArray();
-        if (points.Any(camera.IsPositionBehind)) return null;
-        var screen = points.Select(camera.UnprojectPosition).ToArray();
+        var bounds = ProjectedBounds(camera, mesh.GetAabb(), mesh.GlobalTransform);
+        if (bounds is not { } rect) return null;
         return new
         {
-            x = screen.Min(point => point.X),
-            y = screen.Min(point => point.Y),
-            width = screen.Max(point => point.X) - screen.Min(point => point.X),
-            height = screen.Max(point => point.Y) - screen.Min(point => point.Y),
-            evidence = "static-AABB-candidate;occlusion-alpha-skinning-not-resolved"
+            x = rect.Position.X,
+            y = rect.Position.Y,
+            width = rect.Size.X,
+            height = rect.Size.Y,
+            evidence = "near-clipped-static-AABB-candidate;occlusion-alpha-skinning-not-resolved"
         };
+    }
+
+    internal static Rect2? ProjectedBounds(Camera3D camera, Aabb bounds, Transform3D worldTransform)
+    {
+        // A room module can surround the camera while still contributing visible
+        // walls. Clip the box's edges at the camera near plane before projection.
+        var toCamera = camera.GetCameraTransform().AffineInverse();
+        var points = new Vector3[8];
+        var distances = new float[8];
+        var clipped = new List<Vector3>(20);
+        for (var index = 0; index < points.Length; index++)
+        {
+            var corner = bounds.Position + bounds.Size * new Vector3(
+                index & 1, (index >> 1) & 1, (index >> 2) & 1);
+            points[index] = worldTransform * corner;
+            distances[index] = -(toCamera * points[index]).Z - camera.Near;
+            if (distances[index] >= 0) clipped.Add(points[index]);
+        }
+        for (var index = 0; index < points.Length; index++)
+        {
+            for (var axis = 1; axis <= 4; axis <<= 1)
+            {
+                var other = index ^ axis;
+                if (index >= other || (distances[index] >= 0) == (distances[other] >= 0)) continue;
+                var fraction = distances[index] / (distances[index] - distances[other]);
+                clipped.Add(points[index].Lerp(points[other], fraction));
+            }
+        }
+        if (clipped.Count == 0) return null;
+        var screen = clipped.Select(camera.UnprojectPosition).ToArray();
+        return new Rect2(new Vector2(screen.Min(point => point.X), screen.Min(point => point.Y)),
+            new Vector2(screen.Max(point => point.X) - screen.Min(point => point.X),
+                screen.Max(point => point.Y) - screen.Min(point => point.Y)));
     }
     private static IEnumerable<Node> Walk(Node root)
     {

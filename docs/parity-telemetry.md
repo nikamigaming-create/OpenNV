@@ -180,7 +180,8 @@ resources are identified as current observations, not a reconstructed history.
 The bounded source-event queue reports overflow explicitly.
 
 The inspector follows node-to-resource-to-source links. Clicking a viewport
-lists projected bounding-box candidates. It does not determine occlusion,
+lists projected bounding-box candidates, clipping edges at the camera near
+plane so surrounding room geometry remains selectable. It does not determine occlusion,
 alpha contribution, skinned coverage or exact pixel provenance. The byte
 comparator validates each blob's length and hash before reporting the first
 different byte, total differences and a surrounding hex window.

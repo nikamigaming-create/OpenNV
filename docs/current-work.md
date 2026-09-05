@@ -233,11 +233,32 @@ at the first Reflectron page. Turning tracing off detached the observers and
 cleared the source event queue while ordinary gameplay advanced. Collection is
 expensive and remains opt-in; these captures do not prove complete coverage.
 
-The current matched checkpoint is the first Reflectron page. Highest-priority
-remaining presentation defects are the missing item/radio HUD notices, original
-menu background blur and opening distortion/focus channels, and black regions
-on transparent device/room surfaces. Keep accepted hair work stable while fixing
-those owners. The full 33-row acceptance queue remains open.
+The current reference checkpoint is the first Reflectron page. The user's room
+geometry report takes priority: the showcase exposes a close wall across the
+right side of Doc's room. A ray through the captured mesh buffers identifies a
+placed architecture module. Its source reference has zero rotation, but OpenNV
+also composed the exported NIF root's quarter-turn; retail replaces that root
+transform with the reference placement. The placed-model path now replaces the
+root while preserving descendant transforms and standalone model assembly.
+A synthetic regression and a selected private native observation compare 19
+nodes across three room modules successfully. The normal opening replay now
+visibly removes the obstructing wall and exposes the Vigor machine and open
+floor. Retail and OpenNV are back at the first Reflectron page. Lighting and
+camera differences remain visible. The inspector also discarded large boxes
+crossing the camera plane; near-plane clipping now retains those candidates,
+with a native regression audit added. The selected owned placement audit and
+the complete repository gate pass for this publication.
+See nif-reference-placement.md. The reported obstructing-wall defect is verified;
+the room acceptance requirement remains open.
+
+HUD work is preserved separately in a local recovery stash: transactional
+item/timed-message events and their save state are drafted, but the original
+HUD presenter is not connected. Owned HUD declarations and a native tile
+observation establish the source templates, icon and layout; declaration
+extraction still has an unresolved candidate. Resume that preserved work next.
+Item/radio notices, menu blur, opening focus effects and transparent surfaces
+remain open. Keep accepted hair stable. All 33 acceptance requirements remain
+open; the geometry component does not close the room or starting sequence.
 
 1. Finish the original startup MessageMenu replay, loading transitions and HUD
    notifications. Confirm shared input, source state, message order and visible
