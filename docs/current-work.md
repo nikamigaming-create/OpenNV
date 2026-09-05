@@ -35,6 +35,14 @@ Component and transport results do not establish scene or campaign parity.
   agrees on 19 nodes across three modules; ordinary replay removes the wall
   obstructing the Vigor sightline. Published in c20d97c. Complete geometry,
   camera phase, collision and final pixels remain unverified.
+- Geometry now enables vertex colour from its complete source colour buffer.
+  The saved shader flag was absent on 91 lit surfaces across 20 owned room
+  models, although native bound properties enable it on all seven checked
+  surfaces. The original flags remain intact. Synthetic extent/flag checks,
+  the selected owned audit and the complete gate pass. Ordinary room-56 and
+  its draw trace confirm the binding on all 175 lit room instances. The checked
+  wall regions move closer to retail; floor and ceiling brightness barely
+  changes. This closes the missing binding, not lighting or pixel acceptance.
 - The restored HUD owner renders the original gift icon, bracket, bitmap font
   and item text during Classic Pack in ordinary run hud-45. Startup scripts
   produce 19 inventory grants through transactional shared state. Declaration,
@@ -144,8 +152,12 @@ the complete gate and ordinary room-55 replay also pass. The live hour reaches
 23 before the movie skip and remains in the authored night period at the name
 prompt. Compared with retained retail-54 inputs, matching light RGB triples
 improve from 19/25 to 25/25; all 25 dimmers agree. The rendered room still looks
-too bright. Trace renderer inputs and light contribution next; do not retune
-the now-matching CPU light colours. Doc's rest/aim pose and text composition
+too bright. Room-56 additionally restores the geometry-derived vertex-colour
+binding, improving the checked wall regions without changing the source lights.
+The current comparison is room-56/retail-54 at the original name prompt; the
+movie was skipped and all four pack messages were dismissed through ordinary
+input. Trace remaining light contribution and image-space state next; do not
+retune the matching CPU light colours. Doc's rest/aim pose and text composition
 also differ. ForceWeather and complete result-script execution remain unbound.
 
 The harness previously gave every tap a 900 ms engine lease. A loading
@@ -179,9 +191,10 @@ owned records and decoded resources stay outside the public repository.
 
 ## Next work
 
-1. Trace the remaining bright room/window discrepancy from the matching light
-   inputs into shader contributions, attenuation, ambient response and shadows.
-   Preserve room-55/retail-54 at the name prompt for this bounded check.
+1. Trace the remaining bright floor/ceiling/window discrepancy from the matching
+   light inputs and corrected vertex-colour binding into shader contributions,
+   attenuation, ambient response, image-space state and shadows.
+   Preserve room-56/retail-54 at the name prompt for this bounded check.
    Continue ordinary startup using keyboard input and fresh observed controls.
    Exact block admission, MenuMode execution, mutable processing delays and
    dynamic quest start/stop remain separate gaps. Do not reopen proved

@@ -13,7 +13,7 @@ internal static class NativeNifLightingMaterial
     private static readonly Dictionary<string, Shader> Shaders = new(StringComparer.Ordinal);
 
     internal static ShaderMaterial Build(StandardMaterial3D textures, FalloutNifShaderProperty source,
-        FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha)
+        FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha, FalloutNifVertexColorState vertexColors)
     {
         var state = alpha is null ? new FalloutNifAlphaState(FalloutNifBlendMode.Opaque, false, 0, 0, true)
             : FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold);
@@ -130,7 +130,7 @@ internal static class NativeNifLightingMaterial
         result.SetShaderParameter("use_hair", hair);
         result.SetShaderParameter("hair_tint", new Vector3(color.R, color.G, color.B));
         result.SetShaderParameter("base_factor", hair ? new Vector4(1, 1, 1, color.A) : new Vector4(color.R, color.G, color.B, color.A));
-        result.SetShaderParameter("use_vertex_color", (source.ShaderFlags2 & (1U << 5)) != 0);
+        result.SetShaderParameter("use_vertex_color", vertexColors.Enabled);
         result.SetShaderParameter("use_vertex_alpha", (source.ShaderFlags & 8) != 0);
         result.SetShaderParameter("emissive_color", material is null ? Vector3.Zero :
             new Vector3(material.Emissive.R, material.Emissive.G, material.Emissive.B));
@@ -140,6 +140,8 @@ internal static class NativeNifLightingMaterial
         result.SetShaderParameter("source_glossiness", material?.Glossiness ?? 1);
         result.SetMeta("opennv_nif_shader_flags", source.ShaderFlags);
         result.SetMeta("opennv_nif_shader_flags2", source.ShaderFlags2);
+        result.SetMeta("opennv_nif_effective_shader_flags2", vertexColors.EffectiveFlags2);
+        result.SetMeta("opennv_nif_vertex_color_owner", "bound-geometry-colour-buffer");
         result.SetMeta("opennv_nif_alpha_flags", alpha?.Flags ?? 0);
         result.SetMeta("opennv_source_lighting_domain", "encoded");
         if (hair)

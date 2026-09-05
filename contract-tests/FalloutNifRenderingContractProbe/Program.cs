@@ -10,6 +10,16 @@ var originalTriangles = sourceTriangles.ToArray();
 var indices = FalloutNifTriangleWinding.ToGodotIndices(sourceTriangles);
 Require(indices.SequenceEqual([0, 2, 1, 3, 0, 1]), "Source order or degenerate removal differs.");
 Require(sourceTriangles.SequenceEqual(originalTriangles), "Source triangle bytes were mutated.");
+var colored = FalloutNifVertexColorState.Resolve(0x8001, 3, 3);
+Require(colored.Enabled && colored.SourceFlags2 == 0x8001 && colored.EffectiveFlags2 == 0x8021,
+    "Complete geometry colours did not enable the runtime shader flag or changed unrelated flags.");
+var uncolored = FalloutNifVertexColorState.Resolve(0x8021, 3, 0);
+Require(!uncolored.Enabled && uncolored.SourceFlags2 == 0x8021 && uncolored.EffectiveFlags2 == 0x8001,
+    "A serialized colour flag invented a missing geometry colour buffer.");
+ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Resolve(1, 3, 2));
+ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Resolve(1, 3, 4));
+ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Resolve(1, -1, 0));
+Console.WriteLine("OPENNV_NIF_VERTEX_COLOR_BINDING_PASS geometryOwned=true sourceFlagsPreserved=true incompleteRejected=true");
 var godotVertices = sourceVertices.Select(value => new Vector3(value.X, value.Z, -value.Y)).ToArray();
 var clockwiseNormal = Vector3.Cross(
     godotVertices[indices[2]] - godotVertices[indices[0]],
@@ -111,7 +121,14 @@ if (args.Length == 2)
                 foreach (var property in geometry.Properties.Where(reference => reference >= 0)
                     .Select(nif.ReadObject))
                     if (property is FalloutNifShaderProperty lighting)
+                    {
                         _ = FalloutNifTextureAddressing.RepeatForGodot(lighting.TextureClampMode);
+                        var colors = FalloutNifVertexColorState.Resolve(lighting.ShaderFlags2,
+                            mesh.Vertices.Length, mesh.Colors.Length);
+                        Console.WriteLine($"OPENNV_OWNED_VERTEX_COLOR_BINDING model={path} shape={block.Index} " +
+                            $"sourceFlags2=0x{colors.SourceFlags2:x8} effectiveFlags2=0x{colors.EffectiveFlags2:x8} " +
+                            $"vertices={mesh.Vertices.Length} colors={mesh.Colors.Length} enabled={colors.Enabled}");
+                    }
                     else if (property is FalloutNifNoLightingProperty unlit)
                     {
                         _ = FalloutNifTextureAddressing.RepeatForGodot(unlit.TextureClampMode);

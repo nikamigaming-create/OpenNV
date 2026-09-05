@@ -84,6 +84,15 @@ light RGB inputs improve from 19/25 to 25/25 against retail-54, with all dimmers
 matching. The room remains visibly too bright. Shader contribution, shadows,
 remaining weather commands and complete stage execution are open.
 
+The runtime now derives the vertex-colour shader binding from the source mesh
+buffer. Serialized flags omitted that binding on 91 lit surfaces across 20
+owned room models; seven observed native bound properties enable it. Synthetic
+checks, the selected owned audit and the complete gate pass. Ordinary room-56
+and its draw trace enable the original colours on all 175 lit room instances.
+The checked wall regions improve against retail, while floor and ceiling
+brightness barely changes. Light contribution, window effects, shadows and
+complete final-pixel agreement remain open.
+
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior
 streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics, complete

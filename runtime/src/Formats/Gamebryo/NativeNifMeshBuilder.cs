@@ -1840,7 +1840,10 @@ internal static class RuntimeNativeNifMeshBuilder
             }
             ApplyAlpha(result, alpha);
             ApplyStencil(result, stencil, environment);
-            return NativeNifLightingMaterial.Build(result, shader, material, alpha);
+            var meshData = _source.ReadMeshData(geometry.Data);
+            var vertexColors = FalloutNifVertexColorState.Resolve(shader.ShaderFlags2,
+                meshData.Vertices.Length, meshData.Colors.Length);
+            return NativeNifLightingMaterial.Build(result, shader, material, alpha, vertexColors);
         }
 
         private StandardMaterial3D BuildVertexMaterialOnly(
