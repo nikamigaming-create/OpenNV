@@ -7,7 +7,16 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Content/FalloutWeatherLighting.cs" Link="FalloutWeatherLighting.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGameSettingFloats.cs" Link="FalloutGameSettingFloats.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutSkyLightingState.cs" Link="FalloutSkyLightingState.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutGlobalState.cs" Link="FalloutGlobalState.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutGameTime.cs" Link="FalloutGameTime.cs" />
     <Compile Include="../../runtime/src/Gameplay/State/FalloutPlayerInventory.cs" Link="FalloutPlayerInventory.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestScripts.cs" Link="FalloutQuestScripts.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />

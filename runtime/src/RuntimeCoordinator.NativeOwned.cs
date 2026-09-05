@@ -11,6 +11,7 @@ using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.Diagnostics.Parity;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World;
 
 namespace OpenNV.Runtime;
 
@@ -24,6 +25,11 @@ public partial class RuntimeCoordinator
     private FalloutPluginStack? _nativePluginStack;
     private FalloutQuestState? _nativeQuestState;
     private RuntimeNativeQuestScripts? _nativeQuestScripts;
+    private FalloutGlobalState? _nativeGlobals;
+    private FalloutGameTime? _nativeGameTime;
+    private FalloutSkyLightingState? _nativeSkyLighting;
+    private RuntimeNativeGameTime? _nativeGameTimeAdapter;
+    private string? _nativeGameTimeUnbound;
     private readonly FalloutPlayerInventory _nativeInventory = new();
     private FalloutCellScene? _nativeInitialCell;
     private FalloutCellScene? _nativeActiveCell;
@@ -91,6 +97,10 @@ public partial class RuntimeCoordinator
             actorDivergences = _nativeActorDivergences.ToArray(),
             speech = _nativeOpeningStageDriver?.SpeechState,
             questScripts = _nativeQuestScripts?.State,
+            gameTime = _nativeGameTimeAdapter?.State,
+            gameTimeUnbound = _nativeGameTimeUnbound,
+            skyLighting = _nativeSkyLighting?.Unbound is null ? _nativeSkyLighting?.Capture() : null,
+            skyLightingUnbound = _nativeSkyLighting?.Unbound,
             playerInventory = _nativeInventory.Items,
             questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Legacy save has no quest script state." : null,
             playerPackage = _nativeOpeningStageDriver?.PlayerPackageState,
@@ -110,6 +120,16 @@ public partial class RuntimeCoordinator
             }).ToArray(),
             actors = _nativeCurrentCellRoot?.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                 .Select(actor => new { reference = actor.Appearance.Reference?.ToString(), animation = actor.AnimationState }).ToArray(),
+            lights = _nativeCurrentCellRoot?.GetChildren().OfType<OmniLight3D>().Select(light => new
+            {
+                reference = light.GetMeta("opennv_ligh_reference", "").AsString(),
+                emittance = light.GetMeta("opennv_ligh_emittance", "").AsString(),
+                shaderRgb = light.GetMeta("opennv_ligh_shader_rgb").AsFloat32Array(),
+                position = Vector(light.GlobalPosition),
+                light.LightEnergy,
+                light.OmniRange,
+                light.ShadowEnabled,
+            }).ToArray(),
             objectAnimations = _nativeCurrentCellRoot?.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>()
                 .Select(controller => new
                 {
@@ -153,6 +173,10 @@ public partial class RuntimeCoordinator
             initialCell);
         if (content.Campaign == RuntimeLiveContentSource.FalloutNewVegasGame)
         {
+            _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
+            _nativeGameTime = new(_nativeGlobals, FalloutGameTimeBindings.Read(_nativePluginStack),
+                FalloutCalendar.Read(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe")));
+            _nativeSkyLighting = new(_nativePluginStack, FalloutGameSettingFloats.Read(_nativePluginStack, "fDaytimeColorExtension"));
             _nativeOpeningControls = FalloutOpeningPlayerControlResolver.Resolve(
                 _nativePluginStack,
                 ["VCG00", "VCG01"]);
@@ -305,6 +329,31 @@ public partial class RuntimeCoordinator
                 FalloutLandscapeTransportResolver.Resolve(stack, transition),
                 _configuration.World.GameUnitsToMeters));
         AddChild(root);
+        if (!fallout3)
+        {
+            if (restore is not null)
+            {
+                if (restore.State.SkyLighting is { } sky) _nativeSkyLighting!.Restore(sky);
+                else _nativeSkyLighting!.MarkUnbound("Legacy save has no sky/climate state; region emittance cannot be reconstructed.");
+            }
+            if (restore is null) _nativeGameTime!.InitializeNewGame();
+            else if (restore.State.Globals is { } globals && restore.State.GameTime is { } gameTime)
+            {
+                _nativeGlobals!.Restore(globals);
+                _nativeGameTime!.Restore(gameTime);
+            }
+            else
+            {
+                _nativeGameTimeUnbound = "Legacy save has no global/calendar state; its clock cannot be reconstructed.";
+                _nativeGlobals = null;
+                _nativeGameTime = null;
+            }
+            if (_nativeGameTime is not null)
+            {
+                _nativeGameTimeAdapter = new(_nativeGameTime);
+                AddChild(_nativeGameTimeAdapter);
+            }
+        }
         if (restore is not null)
         {
             _nativeInventory.Restore(restore.Inventory, restore.State.EquippedRuntimeFormIds.ToArray());
@@ -313,7 +362,7 @@ public partial class RuntimeCoordinator
         if (!fallout3 && (restore is null || restore.State.Scripts is not null))
         {
             var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
-            _nativeQuestScripts = new RuntimeNativeQuestScripts(stack, _nativeQuestState!, claimed, _nativeInventory);
+            _nativeQuestScripts = new RuntimeNativeQuestScripts(stack, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals);
             if (restore?.State.Scripts is { } scripts) _nativeQuestScripts.Scripts.Restore(scripts);
             AddChild(_nativeQuestScripts);
         }
@@ -606,6 +655,7 @@ public partial class RuntimeCoordinator
         ArgumentNullException.ThrowIfNull(cell);
         _nativeCurrentCellRoot = root;
         _nativeActiveCell = cell;
+        _nativeSkyLighting?.EnterCell(cell.Cell);
     }
 
     private void AddNativePlacedLight(
@@ -620,7 +670,10 @@ public partial class RuntimeCoordinator
             _configuration.World.GameUnitsToMeters,
             _configuration.Renderer.PointLightEnergyScale,
             _configuration.Renderer.MinimumPointLightEnergy,
-            _configuration.Renderer.AuthoredPointLightShadows));
+            _configuration.Renderer.AuthoredPointLightShadows,
+            _nativePluginStack,
+            region => (_nativeSkyLighting ?? throw new InvalidOperationException("Sky lighting state is absent."))
+                .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Sky has no simulation clock.")).Hour)));
     }
 
     private void AddNativePlayer(
@@ -675,6 +728,11 @@ public partial class RuntimeCoordinator
             _nativeQuestState!,
             _nativeInventory,
             () => _nativeQuestScripts?.Capture(),
+            _nativeGlobals,
+            _nativeGameTime,
+            _nativeSkyLighting,
+            () => _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeImageSpace>().SingleOrDefault() ??
+                throw new InvalidOperationException("Rendered creation has no world image-space owner."),
             "VCG00",
             0);
         AddChild(_nativeOpeningStageDriver);
@@ -817,7 +875,7 @@ public partial class RuntimeCoordinator
                 _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
             world.Compositor = application.Compositor;
             var presenter = new RuntimeNativeImageSpace();
-            presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect);
+            presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime);
             root.AddChild(presenter);
             world.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
             world.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);

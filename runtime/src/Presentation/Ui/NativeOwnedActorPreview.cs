@@ -46,6 +46,7 @@ internal sealed partial class NativeOwnedActorPreview : Node
         View.AddChild(_root);
         Actor = RuntimeNativeNpc.Create(appearance, _content, 1,
             (npc, part, nif, geometry) => NativeNpcMaterial.Resolve(npc, part, nif, geometry, records, Colors.Black));
+        Actor.ConfigureFaceAnimation(records);
         _root.AddChild(Actor);
         Actor.Position = GamebryoCoordinate.ConvertVector(new(0, -5, 0));
         const string lightPath = "meshes/terminals/PlayerFaceLights01.NIF";

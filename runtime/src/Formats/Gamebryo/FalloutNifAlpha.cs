@@ -5,6 +5,21 @@ internal enum FalloutNifBlendMode { Opaque, SourceAlpha, Add, Premultiplied, Mul
 internal readonly record struct FalloutNifAlphaState(
     FalloutNifBlendMode Blend, bool TestEnabled, byte TestFunction, byte Threshold, bool Sort)
 {
+    internal static FalloutNifAlphaState ForNoLighting(
+        FalloutNifNoLightingProperty shader, FalloutNifAlphaProperty? property)
+    {
+        var state = property is null
+            ? new FalloutNifAlphaState(FalloutNifBlendMode.Opaque, false, 0, 0, true)
+            : Read(property.Flags, property.Threshold);
+        // The no-lighting falloff pass participates in the alpha/decal batches
+        // even with the default (blend-disabled) NiAlphaProperty. Its computed
+        // opacity includes the authored vertex and angle-falloff channels.
+        // Explicit non-opaque blend factors and independent tests still apply.
+        return state.Blend == FalloutNifBlendMode.Opaque && (shader.ShaderFlags & (1U << 6)) != 0
+            ? state with { Blend = FalloutNifBlendMode.SourceAlpha }
+            : state;
+    }
+
     // NiAlphaProperty.AlphaFlags uses independent blend and test fields. An
     // enabled test does not remove the source's fractional-alpha blending.
     internal static FalloutNifAlphaState Read(ushort flags, byte threshold)

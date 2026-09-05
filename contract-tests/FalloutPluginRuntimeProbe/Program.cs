@@ -6,6 +6,19 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
+HudNotificationsProbe.Run();
+
+if (args is ["--audit-placed-lights", var lightRoot, var lightCell])
+{
+    PlacedLightProbe.Owned(lightRoot, lightCell);
+    return;
+}
+if (args is ["--audit-placed-lights", var timeLightRoot, var timeLightCell, var timeLightHour])
+{
+    PlacedLightProbe.Owned(timeLightRoot, timeLightCell, float.Parse(timeLightHour, System.Globalization.CultureInfo.InvariantCulture));
+    return;
+}
+
 if (args is ["--audit-quest-scripts", var sourceRoot])
 {
     RuntimeLiveContentSource.Configure(sourceRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
@@ -102,16 +115,19 @@ try
     byte[] Script(uint form, string body) => Record("SCPT", form, 0, Combine(
         Subrecord("SCTX", Encoding.ASCII.GetBytes("scn Synthetic\nshort given\nbegin GameMode\n" + body + "\nend")),
         Subrecord("SLSD", variableData), Subrecord("SCVR", ZString("given")),
-        Subrecord("SCRO", UInt32(0x14)), Subrecord("SCRO", UInt32(0x60)), Subrecord("SCRO", UInt32(0x01000079))));
+        Subrecord("SCRO", UInt32(0x14)), Subrecord("SCRO", UInt32(0x60)), Subrecord("SCRO", UInt32(0x01000079)),
+        Subrecord("SCRO", UInt32(0x01000080))));
     byte[] Quest(uint form, uint script) => Record("QUST", form, 0, Combine(
         Subrecord("EDID", ZString("SyntheticQuest" + form)),
         Subrecord("DATA", [0x11, 1, 0, 0, 0, 0, 0, 0]), Subrecord("SCRI", UInt32(script))));
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Scripts.esp"), Combine(
         Record("TES4", 0, 0, Subrecord("MAST", ZString("Master.esm"))),
         Quest(0x01000070, 0x01000073), Quest(0x01000071, 0x01000074), Quest(0x01000072, 0x01000075),
-        Script(0x01000073, "if given == 0\nShowMessage SyntheticMessage\nPlayer.AddItem SyntheticArmor 2\nset given to 1\nendif"),
-        Script(0x01000074, "set given to 1\nPlayer.AddItem SyntheticArmor 4\nShowMessage SyntheticMessage\nUnsupportedReachedCommand"),
+        Script(0x01000073, "if given == 0\nShowMessage SyntheticMessage\nPlayer.AddItem SyntheticArmor 2\nset SyntheticGlobal to SyntheticGlobal + 0.1\nset given to 1\nendif"),
+        Script(0x01000074, "set given to 1\nset SyntheticGlobal to 999\nPlayer.AddItem SyntheticArmor 4\nShowMessage SyntheticMessage\nUnsupportedReachedCommand"),
         Script(0x01000075, "Player.AddItem SyntheticArmor 1.5"),
+        Record("GLOB", 0x01000080, 0, Combine(Subrecord("EDID", ZString("SyntheticGlobal")),
+            Subrecord("FNAM", [(byte)'s']), Subrecord("FLTV", BitConverter.GetBytes(1.25f)))),
         Record("MESG", 0x01000079, 0, Combine(Subrecord("EDID", ZString("SyntheticMessage")),
             Subrecord("FULL", ZString("Synthetic title")), Subrecord("DESC", ZString("Synthetic body")),
             Subrecord("DNAM", UInt32(1)), Subrecord("INAM", UInt32(0)), Subrecord("ITXT", ZString("Synthetic choice"))))));
@@ -119,12 +135,15 @@ try
     {
         var questState = new FalloutQuestState(scriptStack);
         var playerInventory = new FalloutPlayerInventory();
-        var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory);
+        var globals = FalloutGlobalState.Read(scriptStack);
+        var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory, globals);
         scriptRuntime.Advance(0);
         scriptRuntime.Advance(0);
         Require(playerInventory.Items is [{ Count: 2 }] &&
             questState.Variable(new("Scripts.esp", 0x70), 1) == 1 && questState.Variable(new("Scripts.esp", 0x71), 1) == 0,
             "Script effects duplicated, fractional counts were admitted, or an unsupported command partially committed.");
+        Require(globals.Get(new("Scripts.esp", 0x80)) == 1.35f,
+            "Global script writes lost Float32 storage, repeated the grant, or committed a rejected transaction.");
         Require(scriptRuntime.TryTakeMessage(out var message) && message is { Title: "Synthetic title", Text: "Synthetic body" } &&
             message.Buttons.SequenceEqual(["Synthetic choice"]) && !scriptRuntime.TryTakeMessage(out _),
             "Source message identity or transactional queue differs.");
@@ -138,10 +157,13 @@ try
         var coldInventory = new FalloutPlayerInventory();
         coldInventory.Restore(FalloutCampaignInventoryResolver.Resolve(scriptStack,
             playerInventory.Items.Select(item => new FalloutCampaignInventoryRequest(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(), null), []);
-        var coldScripts = new FalloutQuestScripts(scriptStack, coldQuestState, new HashSet<FalloutFormKey>(), coldInventory);
+        var coldGlobals = FalloutGlobalState.Read(scriptStack);
+        coldGlobals.Restore(JsonSerializer.Deserialize<FalloutGlobalStateSnapshot>(JsonSerializer.Serialize(globals.Capture()))!);
+        var coldScripts = new FalloutQuestScripts(scriptStack, coldQuestState, new HashSet<FalloutFormKey>(), coldInventory, coldGlobals);
         coldScripts.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scriptRuntime.Capture()))!);
         coldScripts.Advance(0);
         Require(coldInventory.Items is [{ Count: 2 }] && !coldScripts.TryTakeMessage(out _), "Cold restore awarded or announced a completed grant again.");
+        Require(coldGlobals.Capture().Values.SequenceEqual(globals.Capture().Values), "Cold script restore changed shared globals.");
     }
     Require(stack.Plugins.Count == 2, "Plugin count differs.");
     Require(stack.Plugins[1].Plugin.Masters.SequenceEqual(["Master.esm"]), "Master casing was not canonicalized.");
@@ -348,8 +370,17 @@ try
     BinaryPrimitives.WriteSingleLittleEndian(farewellPrimitive.AsSpan(4), 90.0f);
     BinaryPrimitives.WriteSingleLittleEndian(farewellPrimitive.AsSpan(8), 70.0f);
     BinaryPrimitives.WriteUInt32LittleEndian(farewellPrimitive.AsSpan(28), 1);
+    byte[] ClockGlobal(uint form, float value) => Record("GLOB", form, 0, Combine(
+        Subrecord("EDID", ZString("SyntheticClock" + form)), Subrecord("FNAM", [(byte)'s']),
+        Subrecord("FLTV", BitConverter.GetBytes(value))));
+    var weatherColors = Enumerable.Range(0, 240).Select(value => (byte)(value % 251)).ToArray();
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Cell.esm"), Combine(
         Record("TES4", 0, 0, []),
+        ClockGlobal(0x35, 2210), ClockGlobal(0x36, 11), ClockGlobal(0x37, 31),
+        ClockGlobal(0x38, 23.99f), ClockGlobal(0x39, 10), ClockGlobal(0x3a, 60),
+        Record("WTHR", 0x15e, 0, Subrecord("NAM0", weatherColors)),
+        Record("CLMT", 0x15f, 0, Subrecord("TNAM", [24, 48, 96, 120, 0, 0])),
+        Record("REGN", 0x990, 0, Subrecord("EDID", ZString("SyntheticRegion"))),
         Record("CELL", 0x100, 0, Combine(
             Subrecord("EDID", ZString("SyntheticCell")),
             Subrecord("DATA", [1]),
@@ -676,6 +707,7 @@ try
                 Subrecord("XSCL", scale))),
             Record("REFR", 0x121, 0, Combine(
                 Subrecord("NAME", UInt32(0x111)),
+                Subrecord("XEMI", UInt32(0x111)),
                 Subrecord("DATA", transform),
                 Subrecord("XRDS", lightRadius))),
             Record("REFR", 0x122, 0x0000_0400, Combine(
@@ -977,6 +1009,26 @@ try
             value.EditorId == "SyntheticFarewellWeapon").Count == 1,
         "Native farewell conditional loadout differs.");
     const string syntheticSaveCompatibilityId = "standalone:synthetic-stack";
+    var campaignGlobals = FalloutGlobalState.Read(cellStack);
+    var campaignCalendar = new FalloutCalendar([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], "synthetic-calendar");
+    var campaignTime = new FalloutGameTime(campaignGlobals, FalloutGameTimeBindings.Read(cellStack), campaignCalendar);
+    campaignTime.InitializeNewGame();
+    campaignTime.AdvanceSimulation(0.5f);
+    var campaignSky = new FalloutSkyLightingState(cellStack, 0.5f);
+    var syntheticRegion = cellStack.RuntimeFormKey(0x990);
+    var nightColor = campaignSky.RegionEmittance(syntheticRegion, 23);
+    Require(nightColor.Zip(new[] { 108f / 255, 109f / 255, 110f / 255 }).All(pair => MathF.Abs(pair.First - pair.Second) < 1e-6f), "Default region weather did not use its source night sunlight.");
+    var noonColor = campaignSky.RegionEmittance(syntheticRegion, 12);
+    Require(noonColor.Zip(new[] { 112f / 255, 113f / 255, 114f / 255 }).All(pair => MathF.Abs(pair.First - pair.Second) < 1e-6f), "Sky noon ignored the fifth source colour sample.");
+    var sunriseColor = campaignSky.RegionEmittance(syntheticRegion, 5.75f);
+    Require(sunriseColor.Zip(new[] { 96f / 255, 97f / 255, 98f / 255 }).All(pair => MathF.Abs(pair.First - pair.Second) < 1e-6f), "Sky sunrise midpoint did not select the first source colour sample.");
+    var skyJson = JsonSerializer.Serialize(campaignSky.Capture());
+    var coldSky = new FalloutSkyLightingState(cellStack, 0.5f);
+    coldSky.Restore(JsonSerializer.Deserialize<FalloutSkyLightingSnapshot>(skyJson)!);
+    Require(coldSky.RegionEmittance(syntheticRegion, 23).SequenceEqual(nightColor), "Cold sky restore changed region emittance.");
+    ExpectFailure(() => coldSky.Restore(new(campaignSky.Climate.Form,
+        [new(syntheticRegion, cellStack.RuntimeFormKey(0x110))])), "does not resolve to WTHR");
+    Require(JsonSerializer.Serialize(coldSky.Capture()) == skyJson, "Rejected sky restore changed authoritative state.");
     var syntheticCampaignState = FalloutNativeCampaignSave.Capture(
         syntheticSaveCompatibilityId,
         syntheticCellForVigor.Cell.FormKey,
@@ -991,12 +1043,16 @@ try
         syntheticTraits,
         stageMachine.ControlState,
         [1.0f, 2.0f, 3.0f],
-        [0.0f, 0.0f, 0.0f, 1.0f]);
+        [0.0f, 0.0f, 0.0f, 1.0f],
+        globals: campaignGlobals.Capture(), gameTime: campaignTime.Capture(), skyLighting: campaignSky.Capture());
     var syntheticSavePath = Path.Combine(fixtureRoot, "native-campaign-save.json");
     var centeredState = syntheticCampaignState with
     {
         Schema = FalloutNativeCampaignSave.CapsuleCenteredSchema,
         PlayerPosition = [1.0f, 2.5f, 3.0f],
+        Globals = null,
+        GameTime = null,
+        SkyLighting = null,
     };
     FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
     var centeredRestore = FalloutNativeCampaignSave.Read(syntheticSavePath,
@@ -1011,7 +1067,7 @@ try
         centeredRestore.State.ActiveCell,
         FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f),
         centeredRestore.State.PlayerRotation);
-    Require(upgradedState.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+    Require(upgradedState.Schema == FalloutNativeCampaignSave.QuestScriptsSchema &&
         FalloutNativeCampaignSave.RestorePlayerPosition(upgradedState, 0.5f)
             .SequenceEqual(syntheticCampaignState.PlayerPosition),
         "Saving a restored legacy player must upgrade its anchor without applying the offset twice.");
@@ -1024,6 +1080,21 @@ try
         syntheticTagSkills,
         syntheticOpeningGrant,
         syntheticTraitFarewell);
+    var campaignColdGlobals = FalloutGlobalState.Read(cellStack);
+    campaignColdGlobals.Restore(syntheticRestore.State.Globals!);
+    var campaignColdTime = new FalloutGameTime(campaignColdGlobals, FalloutGameTimeBindings.Read(cellStack), campaignCalendar);
+    campaignColdTime.Restore(syntheticRestore.State.GameTime!);
+    for (var tick = 0; tick < 31; tick++)
+    {
+        campaignTime.AdvanceSimulation(1f / 60);
+        campaignColdTime.AdvanceSimulation(1f / 60);
+    }
+    Require(syntheticRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+        campaignColdGlobals.Capture().Values.SequenceEqual(campaignGlobals.Capture().Values) &&
+        campaignColdTime.Capture() == campaignTime.Capture(),
+        "Cold campaign Continue changed clock phase or Float32 globals after the same simulation ticks.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
+        syntheticCampaignState with { GameTime = null }), "save state is invalid");
     Require(
         syntheticRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
         syntheticRestore.State.ActiveCell == syntheticCellForVigor.Cell.FormKey &&
@@ -1189,9 +1260,19 @@ try
             }),
         "outside the evidenced active persistent reference contract");
     var syntheticLightBase = cell.BaseObjects[cell.References[1].Base];
-    var syntheticLight = FalloutPlacedLightResolver.Resolve(cell.References[1], syntheticLightBase);
+    var syntheticLight = FalloutPlacedLightResolver.Resolve(cell.References[1], syntheticLightBase, cellStack);
     Require(syntheticLight.RadiusGameUnits == 160.0f,
         "Native LIGH base plus REFR XRDS radius adjustment differs.");
+    Require(cell.References[1].Emittance == new FalloutFormKey("Cell.esm", 0x111) &&
+        syntheticLight.ShaderColorRgb.Zip(new[] { 10000f / 65025, 6400f / 65025, 1600f / 65025 })
+            .All(pair => MathF.Abs(pair.First - pair.Second) < 1e-7f) && syntheticLight.Intensity == 1.5f,
+        "XEMI must modulate RGB without replacing radius or multiplying the emittance record's dimmer.");
+    var untintedLight = FalloutPlacedLightResolver.Resolve(cell.References[1] with { Emittance = null }, syntheticLightBase);
+    Require(untintedLight.ShaderColorRgb[0] > syntheticLight.ShaderColorRgb[0] && untintedLight.Intensity == syntheticLight.Intensity,
+        "A reference without XEMI must retain its base color and intensity.");
+    ExpectFailure(() => FalloutPlacedLightResolver.Resolve(cell.References[1], syntheticLightBase), "no XEMI source resolver");
+    ExpectFailure(() => FalloutPlacedLightResolver.Resolve(cell.References[1] with { Emittance = new("Cell.esm", 0x110) },
+        syntheticLightBase, cellStack), "STAT emittance owner");
     ExpectFailure(
         () => FalloutPlacedLightResolver.Resolve(
             cell.References[1], syntheticLightBase with
@@ -1722,7 +1803,7 @@ if (args.Length > 0)
         .Where(value => value.Base.Light is not null)
         .ToArray();
     var resolvedLights = ownedLights
-        .Select(value => FalloutPlacedLightResolver.Resolve(value.Reference, value.Base))
+        .Select(value => FalloutPlacedLightResolver.Resolve(value.Reference, value.Base, owned))
         .ToArray();
     Console.WriteLine(
         $"OPENNV_FALLOUT_CELL_LIGHT_AUDIT lights={ownedLights.Length} enabled=" +

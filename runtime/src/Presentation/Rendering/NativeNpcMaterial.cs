@@ -32,7 +32,11 @@ internal static class NativeNpcMaterial
             hairColor = new Color(rgb.X, rgb.Y, rgb.Z);
         }
         var material = NativeNifMeshBuilder.BuildMaterial(nif, geometry, hairColor: hairColor);
-        if (part.TexturePath is null)
+        // A race body model can contain both skin and clothing/gore surfaces.
+        // Its ICON belongs to the skin shader; other shapes retain their NIF
+        // texture set instead of receiving a skin image over their clothing.
+        if (part.TexturePath is null || shaders.Length == 1 &&
+            !FalloutNpcFaceMaterial.UsesRecordTexture(part, shaders[0].ShaderType))
             return material;
         if (material is not ShaderMaterial lighting || lighting.ResourceName != NativeNifLightingMaterial.ResourceIdentity)
             throw new NotSupportedException($"NPC {appearance.Npc}: source texture substitution needs the declared shader owner.");

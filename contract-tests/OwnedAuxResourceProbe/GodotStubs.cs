@@ -1,7 +1,11 @@
 namespace Godot
 {
     internal enum Error { Ok }
-    internal abstract class AudioStream { }
+    internal abstract class AudioStream
+    {
+        internal readonly System.Collections.Generic.Dictionary<string, object> Metadata = [];
+        internal void SetMeta(string name, object value) => Metadata[name] = value;
+    }
     internal sealed class AudioStreamWav : AudioStream
     {
         internal static AudioStreamWav? LoadFromBuffer(

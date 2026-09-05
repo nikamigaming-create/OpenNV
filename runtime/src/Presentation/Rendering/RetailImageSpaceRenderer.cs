@@ -14,7 +14,9 @@ internal static class RetailImageSpaceRenderer
         var cinematic = new Vector4(source.Cinematic.X, source.Cinematic.Y, source.Cinematic.Z, source.Cinematic.W);
         var tint = new Vector4(source.Tint.X, source.Tint.Y, source.Tint.Z, source.Tint.W);
         var effect = new RetailHdrCompositorEffect(source.TargetLuminance, 1, cinematic, tint, Vector4.Zero,
-            configuration, capture, outputTransfer, runtimeAdaptation: true);
+            configuration, capture, outputTransfer, runtimeAdaptation: true,
+            FalloutImageSpacePrograms.Read(RuntimeLiveContentSource.Current ??
+                throw new InvalidOperationException("Owned image-space content is absent.")));
         var compositor = new Compositor { CompositorEffects = new Godot.Collections.Array<CompositorEffect> { effect } };
         return new Application(configuration.Schema, cinematic, tint, Vector4.Zero, 1, source.DnamSha256,
             [], effect, compositor);
@@ -103,6 +105,10 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private const int HorizontalBlurPass = 4;
     private const int HdrCombinePass = 5;
     private const int OutputTransferPass = 6;
+    private const int EffectPrefilterPass = 7;
+    private const int EffectBlurPass = 8;
+    private const int EffectBlurCompositePass = 9;
+    private const int EffectDoubleVisionPass = 10;
     private const uint TextureUsage =
         (uint)(RenderingDevice.TextureUsageBits.SamplingBit |
             RenderingDevice.TextureUsageBits.StorageBit |
@@ -127,7 +133,11 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             vec4 tint;
             vec4 fade;
             vec4 hdr_state;
+            vec4 image_effects;
+            vec4 double_vision;
         } params;
+
+        __SOURCE_EFFECT_FUNCTIONS__
 
         const float blur_weights[__BLUR_WEIGHT_COUNT__] = float[](
             __BLUR_WEIGHTS__);
@@ -218,7 +228,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
                     params.cinematic.z + params.cinematic.y;
                 color = mix(color, params.fade.rgb, params.fade.a);
                 result = vec4(clamp(color, vec3(0.0), vec3(1.0)), 1.0);
-            } else {
+            } __SOURCE_EFFECT_PASSES__ else {
                 // Godot sRGB-encodes the forward viewport when it is copied to
                 // the engine-owned PNG.  Retail wrote the pass-5 numeric result
                 // to X8R8G8B8 with sRGB write disabled.  Store the inverse
@@ -233,7 +243,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
 
     private static string BuildComputeShaderSource(
         RetailImageSpaceConfiguration configuration,
-        ColorTransferConfiguration outputTransfer)
+        ColorTransferConfiguration outputTransfer,
+        FalloutImageSpacePrograms? effects)
     {
         var hdr = configuration.HdrBlend;
         var blurCenterIndex = hdr.BlurWeights.Count / 2;
@@ -263,6 +274,24 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             .Replace("__VERTICAL_BLUR_PASS__", VerticalBlurPass.ToString(CultureInfo.InvariantCulture))
             .Replace("__HORIZONTAL_BLUR_PASS__", HorizontalBlurPass.ToString(CultureInfo.InvariantCulture))
             .Replace("__HDR_COMBINE_PASS__", HdrCombinePass.ToString(CultureInfo.InvariantCulture));
+        source = source.Replace("__SOURCE_EFFECT_FUNCTIONS__", effects?.ComputeFunctions() ?? string.Empty)
+            .Replace("__SOURCE_EFFECT_PASSES__", effects is null ? string.Empty : """
+                else if (pass == 7) {
+                    result = owned_blur_prefilter(uv);
+                } else if (pass == 8) {
+                    result = owned_blur(uv);
+                } else if (pass == 9) {
+                    vec4 filtered = owned_blur_prefilter(uv);
+                    // The source effect blends only a sub-unit radius. Its
+                    // final X8 color surface has opaque destination alpha.
+                    vec3 color = params.image_effects.x < 1.0
+                        ? mix(sampled(source_one, uv).rgb, filtered.rgb, filtered.a)
+                        : filtered.rgb;
+                    result = vec4(color, 1.0);
+                } else if (pass == 10) {
+                    result = owned_double_vision(uv);
+                }
+                """);
         if (source.Contains("__", StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "Retail HDR shader template contains an unresolved configuration token.");
@@ -273,13 +302,18 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         value.ToString("R", CultureInfo.InvariantCulture);
 
     private readonly float _matchedAdaptationSum;
-    private sealed record FrameParameters(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade, float DeltaSeconds);
+    private sealed record FrameParameters(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
+        float DeltaSeconds, float BlurRadius = 0, Vector2 DoubleVisionOffset = default);
     private FrameParameters _parameters;
     private FrameParameters _renderParameters;
+    private sealed record MenuBackgroundRequest(long Serial, FrameParameters Parameters);
+    private MenuBackgroundRequest? _menuBackground;
+    private readonly Dictionary<uint, long> _menuBackgroundCaptures = [];
     private readonly RetailHdrBlendConfiguration _hdr;
     private readonly CaptureConfiguration _capture;
     private readonly string _computeShaderSource;
     private readonly bool _runtimeAdaptation;
+    private readonly FalloutImageSpacePrograms? _sourceEffects;
     private readonly Dictionary<uint, bool> _writeAdaptationA = new();
     private readonly Dictionary<uint, Rid> _sceneCopies = new();
     private readonly Dictionary<uint, Rid> _postHdrScenes = new();
@@ -301,7 +335,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         RetailImageSpaceConfiguration configuration,
         CaptureConfiguration capture,
         ColorTransferConfiguration outputTransfer,
-        bool runtimeAdaptation)
+        bool runtimeAdaptation,
+        FalloutImageSpacePrograms? sourceEffects = null)
     {
         if (!float.IsFinite(matchedAdaptationSum) || matchedAdaptationSum <= 0.0f)
             throw new InvalidOperationException(
@@ -312,22 +347,44 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         _hdr = configuration.HdrBlend;
         _capture = capture;
         _runtimeAdaptation = runtimeAdaptation;
+        _sourceEffects = sourceEffects;
         _computeShaderSource = BuildComputeShaderSource(
             configuration,
-            outputTransfer);
+            outputTransfer,
+            sourceEffects);
         Enabled = true;
         EffectCallbackType = EffectCallbackTypeEnum.PostTransparent;
         AccessResolvedColor = true;
     }
 
     internal bool Operational => Volatile.Read(ref _operational) != 0;
+    internal string SourceProgramIdentity => _sourceEffects?.SourceIdentity ?? "unbound";
+    internal string SourceKernelSha256 => _sourceEffects?.Kernels.SourceSha256 ?? "unbound";
+    internal FalloutDoubleVisionPhase? DoubleVisionPhase => _sourceEffects?.DoubleVisionPhase;
 
     internal void SetSourceFrame(FalloutImageSpaceFrame frame, float deltaSeconds)
+        => Volatile.Write(ref _parameters, Parameters(frame, deltaSeconds));
+
+    internal void SetMenuBackground(long serial, FalloutImageSpaceFrame frame)
+        => Volatile.Write(ref _menuBackground, new(serial, Parameters(frame, 0)));
+
+    internal void ClearMenuBackground(long serial)
+    {
+        var current = Volatile.Read(ref _menuBackground);
+        if (current?.Serial == serial) Interlocked.CompareExchange(ref _menuBackground, null, current);
+    }
+
+    private FrameParameters Parameters(FalloutImageSpaceFrame frame, float deltaSeconds)
     {
         if (!float.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        if (frame.BlurRadius > 0 && (_sourceEffects is null || frame.BlurRadius > _sourceEffects.Blur.Count))
+            throw new NotSupportedException($"Owned image-space blur radius {frame.BlurRadius:R} has no program binding.");
+        if (frame.DoubleVisionOffset != System.Numerics.Vector2.Zero && _sourceEffects is null)
+            throw new NotSupportedException("Owned double-vision program is absent.");
         static Vector4 Vector(System.Numerics.Vector4 value) => new(value.X, value.Y, value.Z, value.W);
-        Volatile.Write(ref _parameters, new(frame.TargetLuminance, Vector(frame.Cinematic),
-            Vector(frame.Tint), Vector(frame.Fade), deltaSeconds));
+        return new(frame.TargetLuminance, Vector(frame.Cinematic),
+            Vector(frame.Tint), Vector(frame.Fade), deltaSeconds, frame.BlurRadius,
+            new Vector2(frame.DoubleVisionOffset.X, frame.DoubleVisionOffset.Y));
     }
 
     internal byte[] CapturePreHdrSceneColor(uint view = 0) =>
@@ -405,9 +462,10 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             }
 
             // One immutable game-clock publication owns every pass and both eyes.
-            _renderParameters = Volatile.Read(ref _parameters);
+            var menuBackground = Volatile.Read(ref _menuBackground);
+            _renderParameters = menuBackground?.Parameters ?? Volatile.Read(ref _parameters);
             for (uint view = 0; view < buffers.GetViewCount(); ++view)
-                RenderView(buffers, view, size);
+                RenderView(buffers, view, size, menuBackground);
             Volatile.Write(ref _operational, 1);
         }
         catch (Exception exception)
@@ -458,16 +516,29 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             throw new InvalidOperationException("RenderingDevice rejected a retail HDR sampler.");
     }
 
-    private void RenderView(RenderSceneBuffersRD buffers, uint view, Vector2I sceneSize)
+    private void RenderView(RenderSceneBuffersRD buffers, uint view, Vector2I sceneSize, MenuBackgroundRequest? menuBackground)
     {
         var suffix = view.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var scene = buffers.GetColorLayer(view);
+        var capturedBackground = default(Rid);
+        if (menuBackground is not null)
+        {
+            capturedBackground = Texture(buffers, $"menu_background_{suffix}", sceneSize, out var created);
+            if (!created && _menuBackgroundCaptures.TryGetValue(view, out var capturedSerial) && capturedSerial == menuBackground.Serial)
+            {
+                // Menu surfaces and rendered actor/device previews are drawn
+                // separately. Only the captured world is retained here.
+                Dispatch([Pass(capturedBackground, _pointSampler, capturedBackground, _pointSampler,
+                    scene, OutputTransferPass, sceneSize, sceneSize)]);
+                return;
+            }
+        }
         var targets = _hdr.Targets;
         var halfSize = Size(targets.HalfPixels);
         var sourceSize = Size(targets.SourcePixels);
         var adaptationSize = Size(targets.AdaptationPixels);
         var brightSize = Size(targets.BrightPixels);
         var bloomSize = Size(targets.BloomPixels);
-        var scene = buffers.GetColorLayer(view);
         var sceneCopy = Texture(buffers, $"scene_{suffix}", sceneSize, out _);
         _sceneCopies[view] = sceneCopy;
         var postHdrScene = Texture(buffers, $"post_{suffix}", sceneSize, out _);
@@ -581,16 +652,30 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             HdrCombinePass,
             sceneSize,
             bloomSize));
+        var postEffectsScene = AddSourceEffects(buffers, suffix, sceneSize, postHdrScene, passes);
+        if (menuBackground is not null)
+        {
+            passes.Add(Pass(postEffectsScene, _pointSampler, postEffectsScene, _pointSampler,
+                capturedBackground, CopyPass, sceneSize, sceneSize));
+            postEffectsScene = capturedBackground;
+        }
         passes.Add(Pass(
-            postHdrScene,
+            postEffectsScene,
             _pointSampler,
-            postHdrScene,
+            postEffectsScene,
             _pointSampler,
             scene,
             OutputTransferPass,
             sceneSize,
             sceneSize));
 
+        Dispatch(passes);
+        _writeAdaptationA[view] = !writeA;
+        if (menuBackground is not null) _menuBackgroundCaptures[view] = menuBackground.Serial;
+    }
+
+    private void Dispatch(IReadOnlyList<DispatchPass> passes)
+    {
         var computeList = _renderingDevice!.ComputeListBegin();
         _renderingDevice.ComputeListBindComputePipeline(computeList, _pipeline);
         for (var index = 0; index < passes.Count; ++index)
@@ -610,11 +695,43 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
                 _renderingDevice.ComputeListAddBarrier(computeList);
         }
         _renderingDevice.ComputeListEnd();
-        _writeAdaptationA[view] = !writeA;
     }
 
     private static Vector2I Size(IReadOnlyList<int> pixels) =>
         new(pixels[0], pixels[1]);
+
+    private Rid AddSourceEffects(RenderSceneBuffersRD buffers, string suffix, Vector2I sceneSize,
+        Rid source, List<DispatchPass> passes)
+    {
+        var result = AddSourceBlur(buffers, suffix, sceneSize, source, passes);
+        if (_renderParameters.DoubleVisionOffset == Vector2.Zero) return result;
+        var composite = Texture(buffers, $"fx_double_vision_{suffix}", sceneSize, out _);
+        passes.Add(Pass(result, _linearSampler, result, _linearSampler, composite,
+            EffectDoubleVisionPass, sceneSize, sceneSize));
+        return composite;
+    }
+
+    private Rid AddSourceBlur(RenderSceneBuffersRD buffers, string suffix, Vector2I sceneSize,
+        Rid source, List<DispatchPass> passes)
+    {
+        if (_renderParameters.BlurRadius <= 0) return source;
+        // The source blur target allocator reduces each back-buffer dimension
+        // by two binary shifts. This is independent of the HDR target chain.
+        var quarterSize = new Vector2I(Math.Max(1, sceneSize.X >> 2), Math.Max(1, sceneSize.Y >> 2));
+        var reduced = Texture(buffers, $"fx_reduced_{suffix}", quarterSize, out _);
+        var vertical = Texture(buffers, $"fx_vertical_{suffix}", quarterSize, out _);
+        var horizontal = Texture(buffers, $"fx_horizontal_{suffix}", quarterSize, out _);
+        var composite = Texture(buffers, $"fx_composite_{suffix}", sceneSize, out _);
+        passes.Add(Pass(source, _linearSampler, source, _linearSampler, reduced,
+            EffectPrefilterPass, quarterSize, sceneSize));
+        passes.Add(Pass(reduced, _linearSampler, reduced, _linearSampler, vertical,
+            EffectBlurPass, quarterSize, sceneSize));
+        passes.Add(Pass(vertical, _linearSampler, vertical, _linearSampler, horizontal,
+            EffectBlurPass, quarterSize, sceneSize, horizontalEffect: true));
+        passes.Add(Pass(horizontal, _linearSampler, source, _linearSampler, composite,
+            EffectBlurCompositePass, sceneSize, sceneSize));
+        return composite;
+    }
 
     private Rid Texture(
         RenderSceneBuffersRD buffers,
@@ -646,7 +763,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         int pass,
         Vector2I destinationSize,
         Vector2I sourceSize,
-        bool initializeAdaptation = false)
+        bool initializeAdaptation = false,
+        bool horizontalEffect = false)
     {
         var uniforms = new Godot.Collections.Array<RDUniform>
         {
@@ -659,7 +777,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             throw new InvalidOperationException("Could not bind a retail HDR compositor pass.");
         return new DispatchPass(
             uniformSet,
-            PushConstants(pass, destinationSize, sourceSize, initializeAdaptation),
+            PushConstants(pass, destinationSize, sourceSize, initializeAdaptation, horizontalEffect),
             Groups(destinationSize.X),
             Groups(destinationSize.Y));
     }
@@ -668,7 +786,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         int pass,
         Vector2I destinationSize,
         Vector2I sourceSize,
-        bool initializeAdaptation)
+        bool initializeAdaptation,
+        bool horizontalEffect)
     {
         var values = new[]
         {
@@ -696,6 +815,14 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             _runtimeAdaptation ? 1.0f : 0.0f,
             0.0f,
             0.0f,
+            _renderParameters.BlurRadius,
+            (float)sourceSize.X,
+            (float)sourceSize.Y,
+            horizontalEffect ? 1.0f : 0.0f,
+            _renderParameters.DoubleVisionOffset.X,
+            _renderParameters.DoubleVisionOffset.Y,
+            1.0f,
+            1.0f,
         };
         var bytes = new byte[values.Length * sizeof(float)];
         Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);

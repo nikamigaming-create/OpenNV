@@ -56,9 +56,10 @@ internal sealed class HarnessWindow : Form
         ["Shift"] = 42, ["Control"] = 29, ["1"] = 2, ["2"] = 3,
     };
 
-    internal HarnessWindow(HarnessConfiguration configuration)
+    internal HarnessWindow(HarnessConfiguration configuration, bool background = false)
     {
         _configuration = configuration;
+        if (background) { Opacity = 0; ShowInTaskbar = false; }
         Text = "OpenNV — LIVE RETAIL / GODOT DRIVE CONSOLE";
         BackColor = Color.FromArgb(18, 23, 31);
         ForeColor = Color.FromArgb(224, 231, 240);
@@ -127,7 +128,12 @@ internal sealed class HarnessWindow : Form
         Deactivate += (_, _) => ReleaseUserKeys();
         Resize += (_, _) => RefreshViews();
         _timer.Tick += (_, _) => Tick();
-        Shown += (_, _) => Start();
+        Shown += (_, _) =>
+        {
+            Start();
+            if (background) Hide();
+            else Activate();
+        };
         FormClosing += (_, _) => { Stop("system"); _shutdown.Cancel(); _timer.Stop(); foreach (var watcher in _watchers) watcher.Dispose(); _recording?.Stop().GetAwaiter().GetResult(); };
     }
 
@@ -152,7 +158,6 @@ internal sealed class HarnessWindow : Form
         _ = Task.Run(() => WatchFrames("opennv"));
         _timer.Start();
         RefreshViews();
-        Activate();
     }
 
     private void Tick()
@@ -235,6 +240,14 @@ internal sealed class HarnessWindow : Form
     {
         var operation = command.GetProperty("op").GetString() ?? throw new ArgumentException("Missing op.");
         if (operation == "state") return Snapshot();
+        if (operation == "display")
+        {
+            var visible = command.GetProperty("visible").GetBoolean();
+            if (visible) { Opacity = 1; ShowInTaskbar = true; Show(); }
+            else { Stop(driver); Hide(); ShowInTaskbar = false; }
+            Signal();
+            return new { visible = Visible };
+        }
         if (operation == "observe") return SaveObservation(command.GetProperty("directory").GetString()!);
         if (operation == "trace.compare") return HarnessByteCompare.Compare(command.GetProperty("left"), command.GetProperty("right"));
         if (operation == "trace.inspect")
@@ -487,6 +500,7 @@ internal sealed class HarnessWindow : Form
     private object Snapshot() => new
     {
         session = _configuration.Session, instance = _instance, revision = _revision, driver = _lastDriver,
+        comparisonVisible = Visible,
         recording = _recording?.Status,
         userHasControl = Environment.TickCount64 < _humanUntil,
         retailWindow = _retail.Connected, openNvWindow = _openNv.Connected,

@@ -54,7 +54,8 @@ internal sealed record FalloutPlacedReference(
     float? RadiusAdjustmentGameUnits,
     FalloutTeleportDestination? Teleport,
     FalloutFormKey? EnableParent,
-    bool EnableParentOpposite);
+    bool EnableParentOpposite,
+    FalloutFormKey? Emittance = null);
 
 internal sealed record FalloutTeleportDestination(
     FalloutFormKey Door,
@@ -191,6 +192,9 @@ internal static class FalloutCellSceneReader
                 radiusBytes.Length == sizeof(float)
                     ? ReadFiniteSingle(radiusBytes, 0, record, "reference light radius")
                     : throw Error(record, "XRDS must contain one float");
+            var emittanceBytes = OptionalSingle(values, "XEMI", record);
+            if (emittanceBytes is not null && emittanceBytes.Length != sizeof(uint))
+                throw Error(record, "XEMI must contain one FormID");
             var teleportBytes = OptionalSingle(values, "XTEL", record);
             FalloutTeleportDestination? teleport = null;
             if (teleportBytes is not null)
@@ -232,7 +236,9 @@ internal static class FalloutCellSceneReader
                 teleport,
                 enableBytes is null ? null : record.Plugin.AdjustOptionalFormId(
                     BinaryPrimitives.ReadUInt32LittleEndian(enableBytes)),
-                (enableFlags & 1u) != 0));
+                (enableFlags & 1u) != 0,
+                emittanceBytes is null ? null : record.Plugin.AdjustOptionalFormId(
+                    BinaryPrimitives.ReadUInt32LittleEndian(emittanceBytes))));
         }
 
         var bases = new Dictionary<FalloutFormKey, FalloutBaseObjectDefinition>();
@@ -285,6 +291,12 @@ internal static class FalloutCellSceneReader
 
     internal static bool IsInitiallyDisabled(FalloutPlacedReference reference) =>
         (reference.Flags & InitiallyDisabledFlag) != 0;
+
+    internal static FalloutLightDefinition ReadLight(FalloutPluginRecord record)
+    {
+        if (record.Signature != "LIGH") throw Error(record, "is not a light definition");
+        return ReadLight(Values(record), record);
+    }
 
     private static FalloutLightDefinition ReadLight(
         IReadOnlyDictionary<string, List<byte[]>> values,

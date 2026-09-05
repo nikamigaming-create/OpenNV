@@ -168,7 +168,7 @@ internal sealed class FalloutNifAnimationSampler
 
     private static void ValidateInterpolation(uint type, bool forward, bool backward)
     {
-        if (type is not (1 or 2))
+        if (type is not (1 or 2 or 5))
             throw new NotSupportedException($"Animation interpolation type {type} is not implemented.");
         if (type == 2 && (!forward || !backward))
             throw new InvalidDataException("Quadratic animation key lacks tangents.");
@@ -228,6 +228,9 @@ internal sealed class FalloutNifAnimationSampler
 
     private static float Interpolate(float a, float b, float? outgoing, float? incoming, uint type, float amount)
     {
+        // CONST_KEY holds the preceding sample until the next source key.
+        // Interval selects the next key exactly at its authored timestamp.
+        if (type == 5) return a;
         if (type == 1) return a + (b - a) * amount;
         var squared = amount * amount; var cubed = squared * amount;
         return a * (2 * cubed - 3 * squared + 1) + b * (-2 * cubed + 3 * squared) +

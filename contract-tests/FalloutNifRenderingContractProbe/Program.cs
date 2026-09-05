@@ -32,6 +32,24 @@ Require(Math.Abs(angle.Sample(0.5f) - 0.45f) < 0.00001f && angle.Sample(1) == 0.
     "Source cosine falloff does not preserve authored endpoints and interpolation.");
 Console.WriteLine("OPENNV_NIF_ALPHA_CONTRACT_OK independentBlendAndTest=true cosineFalloff=true");
 
+var unlitFalloff = new FalloutNifNoLightingProperty(new FalloutNifBlock(0, "BSShaderNoLightingProperty", 0, 0),
+    "", [], -1, 1, 33, (1U << 6) | (1U << 3) | (1U << 26), 1, 1, 3, "", 1, 0, 1, 0);
+Require(FalloutNifAlphaState.ForNoLighting(unlitFalloff, null).Blend == FalloutNifBlendMode.SourceAlpha,
+    "No-lighting falloff lost its pass-owned opacity when no alpha property was exported.");
+var defaultAlpha = new FalloutNifAlphaProperty(new FalloutNifBlock(1, "NiAlphaProperty", 0, 0), "", [], -1, 0xec, 0);
+Require(FalloutNifAlphaState.ForNoLighting(unlitFalloff, defaultAlpha).Blend == FalloutNifBlendMode.SourceAlpha,
+    "Default alpha state suppressed the no-lighting falloff pass.");
+Require(FalloutNifAlphaState.ForNoLighting(unlitFalloff with { ShaderFlags = 0 }, null).Blend == FalloutNifBlendMode.Opaque,
+    "An ordinary opaque no-lighting surface was promoted to transparency.");
+var cutoutFalloff = FalloutNifAlphaState.ForNoLighting(unlitFalloff, defaultAlpha with { Flags = 0x12ec, Threshold = 173 });
+Require(cutoutFalloff.Blend == FalloutNifBlendMode.SourceAlpha && cutoutFalloff.TestEnabled &&
+    cutoutFalloff.TestFunction == 4 && cutoutFalloff.Threshold == 173,
+    "The falloff pass discarded the independent source alpha test.");
+Require(FalloutNifAlphaState.ForNoLighting(unlitFalloff, defaultAlpha with { Flags = 0x100d }).Blend == FalloutNifBlendMode.Add &&
+    FalloutNifAlphaState.ForNoLighting(unlitFalloff, defaultAlpha with { Flags = 0x0043 }).Blend == FalloutNifBlendMode.Multiply,
+    "The falloff pass replaced authored additive or multiplicative blending.");
+Console.WriteLine("OPENNV_NIF_FALLOFF_ALPHA_CONTRACT_OK passOwnedOpacity=true explicitBlendPreserved=true independentTestPreserved=true");
+
 var hairDiffuse = new Vector3(0.2f, 0.4f, 0.6f);
 var hairLayer = new Vector4(0.8f, 0.2f, 0.4f, 0.25f);
 var hairTint = new Vector3(0.4f, 0.3f, 0.2f);
@@ -63,6 +81,16 @@ if (args.Length == 2)
             {
                 var geometry = nif.ReadGeometry(block.Index);
                 var mesh = nif.ReadMeshData(geometry.Data);
+                var properties = geometry.Properties.Where(reference => reference >= 0).Select(nif.ReadObject).ToArray();
+                if (properties.OfType<FalloutNifNoLightingProperty>().SingleOrDefault() is { } noLighting)
+                {
+                    var alpha = properties.OfType<FalloutNifAlphaProperty>().SingleOrDefault();
+                    var state = FalloutNifAlphaState.ForNoLighting(noLighting, alpha);
+                    var opacityCount = mesh.Colors.Select(color => color.A).Distinct().Count();
+                    Console.WriteLine($"OPENNV_OWNED_NOLIGHT_PASS model={path} shape={block.Index} shader={noLighting.Block.Index} " +
+                        $"flags=0x{noLighting.ShaderFlags:x8} alphaProperty={alpha is not null} " +
+                        $"blend={state.Blend} test={state.TestEnabled} vertexOpacityValues={opacityCount}");
+                }
                 var converted = FalloutNifTriangleWinding.ToGodotIndices(mesh.Triangles);
                 Require(converted.Length == mesh.Triangles.Count(value =>
                     value.A != value.B && value.A != value.C && value.B != value.C) * 3,

@@ -4,6 +4,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -45,6 +46,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutQuestState _quests = null!;
     private FalloutPlayerInventory _inventory = null!;
     private Func<FalloutQuestScriptsSnapshot?> _captureScripts = null!;
+    private FalloutGlobalState? _globals;
+    private FalloutGameTime? _gameTime;
+    private FalloutSkyLightingState? _skyLighting;
+    private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
     internal string? ExecutionError { get; private set; }
 
     internal string QuestEditorId => _machine.QuestEditorId;
@@ -75,6 +80,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutQuestState quests,
         FalloutPlayerInventory inventory,
         Func<FalloutQuestScriptsSnapshot?> captureScripts,
+        FalloutGlobalState? globals,
+        FalloutGameTime? gameTime,
+        FalloutSkyLightingState? skyLighting,
+        Func<RuntimeNativeImageSpace> imageSpacePresenter,
         string initialQuestEditorId,
         short initialStage)
     {
@@ -119,6 +128,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _quests = quests;
         _inventory = inventory;
         _captureScripts = captureScripts;
+        _globals = globals;
+        _gameTime = gameTime;
+        _skyLighting = skyLighting;
+        _imageSpacePresenter = imageSpacePresenter;
         _machine = new FalloutOpeningStageMachine(
             transitions,
             controls,
@@ -171,12 +184,12 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _vigorEntry = new RuntimeNativeVigorEntry();
         AddChild(_vigorEntry);
         _vigorEntry.Accepted += AcceptSpecial;
-        _vigorEntry.Configure(_vigorContract, _special);
+        _vigorEntry.Configure(_vigorContract, _special, _pluginStack);
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_OPEN stage={_machine.Stage} total={_vigorContract.RequiredTotal} " +
             $"reference={_vigorContract.TesterReference.FormKey} " +
-            "source=live-player-vigor-scripts presentation=first-party-functional");
+            "source=live-player-vigor-scripts presentation=owned-love-tester-menu parity=unverified");
     }
 
     internal void EnterFarewellTrigger()
@@ -232,6 +245,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player);
         _speech = new RuntimeNativeSpeech();
+        _speech.ResultCommand += line =>
+        {
+            if (FalloutDialogueTopic.CodeLines(line).Count() != 1 || !TryApplyActorCommand(line))
+                throw new NotSupportedException($"Dialogue result command has no runtime owner: {line}");
+        };
         _speech.Configure(_pluginStack, _lipConfiguration, (quest, stage) =>
         {
             _machine.CompleteDialogueResult(quest, stage);
@@ -323,7 +341,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 _machine.ControlState,
                 [transform.Origin.X, transform.Origin.Y, transform.Origin.Z],
                 [rotation.X, rotation.Y, rotation.Z, rotation.W],
-                scriptState is null ? null : _quests.Capture(), scriptState);
+                scriptState is null ? null : _quests.Capture(), scriptState,
+                _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture());
             FalloutNativeCampaignSave.Write(_savePath, state);
             _stage200Saved = true;
             GD.Print(
@@ -341,35 +360,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             while (_machine.TryTakeEnteredStage(out var stage))
             {
                 _quests.EnterStage(stage!.Quest, stage.Stage);
-                var packages = FalloutScriptPackageCommands.Read(stage!.Source).ToDictionary(command => command.Line);
-                var imageSpaces = FalloutImageSpaceCommands.Read(stage.Source).ToDictionary(command => command.Line);
+                // Validate complete source control-flow context before invoking
+                // admitted commands. The same owners also serve INFO results.
+                _ = FalloutScriptPackageCommands.Read(stage.Source);
+                _ = FalloutImageSpaceCommands.Read(stage.Source);
+                _ = FalloutActorPackageCommands.Read(stage.Source);
                 var lines = FalloutDialogueTopic.CodeLines(stage.Source).ToArray();
-                for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
-                {
-                    if (imageSpaces.TryGetValue(lineIndex, out var imageSpace))
-                    {
-                        var record = FalloutDialogueTopic.Find(_pluginStack, "IMAD", imageSpace.EditorId);
-                        if (imageSpace.Apply) _imageSpaceState.Apply(FalloutImageSpaceModifierReader.Read(record));
-                        else _imageSpaceState.Remove(record.FormKey);
-                        GD.Print($"OPENNV_NATIVE_IMAD_COMMAND source={record.FormKey} apply={imageSpace.Apply} " +
-                            "owner=source-script-imad cinematicFade=bound otherChannels=reported-unbound parity=unmeasured");
-                    }
-                    if (packages.TryGetValue(lineIndex, out var package))
-                    {
-                        if (!package.ActorEditorId.Equals("player", StringComparison.OrdinalIgnoreCase))
-                            throw new NotSupportedException($"Actor {package.ActorEditorId} script package simulation is unbound.");
-                        _playerPackage!.Apply(package.PackageEditorId);
-                    }
-                    foreach (var command in FalloutActorIdleCommands.Read(lines[lineIndex]))
-                    {
-                        var reference = FalloutDialogueTopic.Find(_pluginStack, "ACHR", command.ActorEditorId);
-                        var actors = GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
-                            .Where(actor => actor.Appearance.Reference == reference.FormKey).ToArray();
-                        if (actors.Length != 1)
-                            throw new InvalidDataException($"PlayIdle source actor {reference.FormKey} has {actors.Length} runtime owners.");
-                        actors[0].PlayIdle(_pluginStack, command.IdleEditorId);
-                    }
-                }
+                foreach (var line in lines) _ = TryApplyActorCommand(line);
             }
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException)
@@ -377,6 +374,45 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             ExecutionError = error.Message;
             GD.PushError($"OPENNV_NATIVE_STAGE_DIVERGENCE quest={QuestEditorId} stage={Stage}: {error.Message}");
         }
+    }
+
+    private bool TryApplyActorCommand(string line)
+    {
+        var admitted = false;
+        foreach (var imageSpace in FalloutImageSpaceCommands.Read(line))
+        {
+            var record = FalloutDialogueTopic.Find(_pluginStack, "IMAD", imageSpace.EditorId);
+            if (imageSpace.Apply) _imageSpaceState.Apply(FalloutImageSpaceModifierReader.Read(record));
+            else _imageSpaceState.Remove(record.FormKey);
+            GD.Print($"OPENNV_NATIVE_IMAD_COMMAND source={record.FormKey} apply={imageSpace.Apply} owner=source-script-imad parity=unmeasured");
+            admitted = true;
+        }
+        foreach (var package in FalloutScriptPackageCommands.Read(line))
+        {
+            if (!package.ActorEditorId.Equals("player", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException($"Actor {package.ActorEditorId} script package simulation is unbound.");
+            _playerPackage!.Apply(package.PackageEditorId);
+            admitted = true;
+        }
+        RuntimeNativeNpc Actor(string editorId)
+        {
+            var reference = FalloutDialogueTopic.Find(_pluginStack, "ACHR", editorId);
+            var actors = GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
+                .Where(actor => actor.Appearance.Reference == reference.FormKey).ToArray();
+            return actors.Length == 1 ? actors[0] : throw new InvalidDataException(
+                $"Source actor {reference.FormKey} has {actors.Length} runtime owners.");
+        }
+        foreach (var idle in FalloutActorIdleCommands.Read(line))
+        {
+            Actor(idle.ActorEditorId).PlayIdle(_pluginStack, idle.IdleEditorId);
+            admitted = true;
+        }
+        foreach (var package in FalloutActorPackageCommands.Read(line))
+        {
+            Actor(package.ActorEditorId).EvaluatePackages(package.Reset);
+            admitted = true;
+        }
+        return admitted;
     }
 
     internal FalloutNativeCampaignState PersistWorldState(FalloutFormKey activeCell)
@@ -399,6 +435,15 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             activeCell,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z],
             [rotation.X, rotation.Y, rotation.Z, rotation.W]);
+        var scripts = _captureScripts();
+        state = state with
+        {
+            Scripts = scripts,
+            Quests = scripts is null ? null : _quests.Capture(),
+            Globals = _globals?.Capture(),
+            GameTime = _gameTime?.Capture(),
+            SkyLighting = _skyLighting?.Capture(),
+        };
         FalloutNativeCampaignSave.Write(_savePath, state);
         _activeCell = activeCell;
         GD.Print(
@@ -468,7 +513,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         AddChild(_raceSexEntry);
         _raceSexEntry.Accepted += AcceptCharacter;
         _raceSexEntry.Failed += error => ExecutionError = error.Message;
-        _raceSexEntry.Configure(_raceSexContract, _character, _pluginStack);
+        _raceSexEntry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter());
         GD.Print(
             $"OPENNV_NATIVE_RACESEX_OPEN quest={_machine.QuestEditorId} stage={_machine.Stage} " +
             $"race={_character.RaceEditorId}/{_character.RaceRuntimeFormId:x8} " +

@@ -154,6 +154,11 @@ internal sealed class NativeOwnedMenuTree
     }
     internal void Bind(XElement tile, string trait, float value) => _values[(tile, trait)] = value;
     internal void BindText(XElement tile, string trait, string value) => _textValues[(tile, trait)] = value;
+    internal void SetFilename(XElement tile, string value)
+    {
+        tile.SetElementValue("filename", value);
+        _art.Remove(tile);
+    }
     internal string String(XElement tile, string trait = "string")
     {
         if (trait == "string" && Text.TryGetValue(tile, out var text)) return text;

@@ -10,6 +10,35 @@ internal static class NativeOwnedSoundPlayback
         FalloutSoundFlags.TwoDimensional |
         FalloutSoundFlags.DialogueSound;
 
+    internal static AudioStreamPlayer CreateMenu(FalloutSoundRecord descriptor,
+        RuntimeLiveContentSource source, FalloutSoundRandomState random)
+    {
+        var before = random.State;
+        var selected = descriptor.LogicalPath;
+        if (!descriptor.HasExactFile)
+        {
+            var prefix = FalloutBsaArchive.CanonicalPath(descriptor.LogicalPath).TrimEnd('\\') + "\\";
+            var variants = source.ResourcePathsUnder(descriptor.LogicalPath)
+                .Where(path => !path[prefix.Length..].Contains('\\') &&
+                    Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (variants.Length == 0) throw new InvalidDataException($"Menu SOUN {descriptor.FormKey} has no owned WAV variants in {descriptor.LogicalPath}.");
+            selected = variants[random.NextBounded((uint)variants.Length)];
+        }
+        // The menu event is an explicit 2D playback request. Its SOUN still
+        // supplies the winning asset, gain, pitch and loop declaration.
+        // Environmental/submersion gates belong to positioned sounds. A menu
+        // request has no world position or underwater listener relationship.
+        var menuFlags = descriptor.Flags & ~(FalloutSoundFlags.EnvironmentIgnored | FalloutSoundFlags.MuteWhenSubmerged);
+        var player = CreateTwoDimensional(descriptor with { LogicalPath = selected, Flags = menuFlags | FalloutSoundFlags.MenuSound });
+        player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
+        player.SetMeta("opennv_menu_sound_source_flags", (int)descriptor.Flags);
+        player.SetMeta("opennv_menu_sound_variant", selected);
+        player.SetMeta("opennv_menu_sound_random_before", before.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        player.SetMeta("opennv_menu_sound_random_after", random.State.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return player;
+    }
+
     internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
@@ -29,7 +58,7 @@ internal static class NativeOwnedSoundPlayback
         {
             Name = $"NativeSound_{descriptor.EditorId}",
             Stream = stream,
-            VolumeDb = descriptor.StaticAttenuationDb,
+            VolumeDb = -descriptor.StaticAttenuationDb,
             PitchScale = descriptor.FixedPitchScale,
         };
     }
@@ -149,7 +178,7 @@ internal sealed partial class NativeOwnedSoundPlayer3D : AudioStreamPlayer3D
         AttenuationModel = AttenuationModelEnum.Disabled;
         MaxDistance = descriptor.MaximumDistanceGameUnits * gameUnitsToMetres;
         AreaMask = environmentReverbAreaMask;
-        VolumeDb = descriptor.StaticAttenuationDb +
+        VolumeDb = -descriptor.StaticAttenuationDb +
             descriptor.AttenuationDbAtDistanceGameUnits(descriptor.MinimumDistanceGameUnits);
     }
 
@@ -179,7 +208,7 @@ internal sealed partial class NativeOwnedSoundPlayer3D : AudioStreamPlayer3D
             return;
         }
         var distanceGameUnits = GlobalPosition.DistanceTo(listenerGlobalPosition) / _gameUnitsToMetres;
-        VolumeDb = _descriptor.StaticAttenuationDb +
+        VolumeDb = -_descriptor.StaticAttenuationDb +
             _descriptor.AttenuationDbAtDistanceGameUnits(distanceGameUnits);
     }
 }

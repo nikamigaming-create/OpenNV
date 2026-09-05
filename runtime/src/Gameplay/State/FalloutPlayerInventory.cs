@@ -7,6 +7,7 @@ internal sealed class FalloutPlayerInventory
 {
     private readonly Dictionary<FalloutFormKey, FalloutCampaignItem> _items = [];
     private readonly HashSet<uint> _equipped = [];
+    internal FalloutHudNotifications Notifications { get; } = new();
     internal IReadOnlyList<FalloutCampaignItem> Items => _items.Values.OrderBy(item => item.RuntimeFormId).ToArray();
     internal IReadOnlyList<uint> Equipped => _equipped.Order().ToArray();
     internal FalloutCampaignItem? Item(FalloutFormKey form) => _items.GetValueOrDefault(form);

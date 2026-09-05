@@ -26,7 +26,10 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<float> PlayerPosition,
     IReadOnlyList<float> PlayerRotation,
     IReadOnlyList<FalloutQuestSnapshot>? Quests = null,
-    FalloutQuestScriptsSnapshot? Scripts = null);
+    FalloutQuestScriptsSnapshot? Scripts = null,
+    FalloutGlobalStateSnapshot? Globals = null,
+    FalloutGameTimeSnapshot? GameTime = null,
+    FalloutSkyLightingSnapshot? SkyLighting = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -34,7 +37,9 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v8";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v10";
+    internal const string GlobalClockSchema = "opennv-native-fnv-campaign-save/v9";
+    internal const string QuestScriptsSchema = "opennv-native-fnv-campaign-save/v8";
     internal const string FeetAnchoredSchema = "opennv-native-fnv-campaign-save/v7";
     internal const string CapsuleCenteredSchema = "opennv-native-fnv-campaign-save/v6";
     internal const string OpeningQuestEditorId = "VCG01";
@@ -63,14 +68,17 @@ internal static class FalloutNativeCampaignSave
         IReadOnlyList<float> playerPosition,
         IReadOnlyList<float> playerRotation,
         IReadOnlyList<FalloutQuestSnapshot>? quests = null,
-        FalloutQuestScriptsSnapshot? scripts = null)
+        FalloutQuestScriptsSnapshot? scripts = null,
+        FalloutGlobalStateSnapshot? globals = null,
+        FalloutGameTimeSnapshot? gameTime = null,
+        FalloutSkyLightingSnapshot? skyLighting = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         FalloutNativeVigorResolver.Validate(vigorContract, special);
         FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, traits);
         var state = new FalloutNativeCampaignState(
-            ExpectedSchema,
+            skyLighting is not null ? ExpectedSchema : globals is null ? QuestScriptsSchema : GlobalClockSchema,
             saveCompatibilityId,
             activeCell,
             OpeningQuestEditorId,
@@ -98,7 +106,7 @@ internal static class FalloutNativeCampaignSave
                 playerControls.Sneaking,
             ],
             playerPosition.ToArray(),
-            playerRotation.ToArray(), quests, scripts);
+            playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -189,6 +197,8 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException(
                 "Native campaign save loadout differs from the live farewell/tag-skill contract.");
         if (state.Quests is not null) new FalloutQuestState(stack).Restore(state.Quests);
+        if (state.Globals is not null) FalloutGlobalState.Read(stack).Restore(state.Globals);
+        if (state.SkyLighting is not null) FalloutSkyLightingState.ValidateSnapshot(stack, state.SkyLighting);
         return new FalloutNativeCampaignRestore(state, inventory);
     }
 
@@ -201,7 +211,7 @@ internal static class FalloutNativeCampaignSave
         ArgumentNullException.ThrowIfNull(state);
         var updated = state with
         {
-            Schema = ExpectedSchema,
+            Schema = state.SkyLighting is not null ? ExpectedSchema : state.Globals is null ? QuestScriptsSchema : GlobalClockSchema,
             ActiveCell = activeCell,
             PlayerPosition = playerPosition.ToArray(),
             PlayerRotation = playerRotation.ToArray(),
@@ -241,8 +251,13 @@ internal static class FalloutNativeCampaignSave
         FalloutNativeCampaignState state,
         string expectedSaveCompatibilityId)
     {
-        if ((state.Schema != ExpectedSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
+        if ((state.Schema != ExpectedSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
             (state.Scripts is null) != (state.Quests is null) ||
+            (state.Globals is null) != (state.GameTime is null) ||
+            (state.Schema is ExpectedSchema or GlobalClockSchema && state.Globals is null) ||
+            (state.Schema == ExpectedSchema && state.SkyLighting is null) ||
+            (state.SkyLighting is not null && state.Globals is null) ||
+            (state.GameTime is { } time && (!float.IsFinite(time.PreviousHour) || string.IsNullOrWhiteSpace(time.CalendarSha256))) ||
             string.IsNullOrWhiteSpace(expectedSaveCompatibilityId) ||
             state.SaveCompatibilityId != expectedSaveCompatibilityId ||
             string.IsNullOrWhiteSpace(state.ActiveCell.OwnerPlugin) ||

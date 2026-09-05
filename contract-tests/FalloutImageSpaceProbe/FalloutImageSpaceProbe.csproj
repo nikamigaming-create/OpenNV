@@ -1,14 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutGlobalState.cs" Link="FalloutGlobalState.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutGameTime.cs" Link="FalloutGameTime.cs" />
     <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
     <Compile Include="../../runtime/src/Content/FalloutImageSpace.cs" Link="FalloutImageSpace.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutImageSpaceKernels.cs" Link="FalloutImageSpaceKernels.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutImageSpacePrograms.cs" Link="FalloutImageSpacePrograms.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutD3D9PixelProgram.cs" Link="FalloutD3D9PixelProgram.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutShaderPackage.cs" Link="FalloutShaderPackage.cs" />
     <Compile Include="../../runtime/src/Content/FalloutImageSpaceModifier.cs" Link="FalloutImageSpaceModifier.cs" />
     <Compile Include="../../runtime/src/Content/FalloutImageSpaceState.cs" Link="FalloutImageSpaceState.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCameraProjection.cs" Link="FalloutCameraProjection.cs" />
     <Compile Include="../../runtime/src/Content/FalloutRenderedMenuProjection.cs" Link="FalloutRenderedMenuProjection.cs" />
     <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableImageEffects.cs" Link="FalloutExecutableImageEffects.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />

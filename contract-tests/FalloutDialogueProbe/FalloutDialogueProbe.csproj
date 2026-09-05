@@ -9,6 +9,13 @@
     <Compile Include="../../runtime/src/Content/FalloutAiPackages.cs" Link="FalloutAiPackages.cs" />
     <Compile Include="../../runtime/src/Content/FalloutFurnitureIdleTree.cs" Link="FalloutFurnitureIdleTree.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorIdleCommand.cs" Link="FalloutActorIdleCommand.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutActorPackageCommand.cs" Link="FalloutActorPackageCommand.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutActorActivityState.cs" Link="FalloutActorActivityState.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutFaceBlink.cs" Link="FalloutFaceBlink.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGameSettingFloats.cs" Link="FalloutGameSettingFloats.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutIdleCollectionPlayback.cs" Link="FalloutIdleCollectionPlayback.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutIdleAnimationData.cs" Link="FalloutIdleAnimationData.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutIdleAnimationPlayback.cs" Link="FalloutIdleAnimationPlayback.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptPackage.cs" Link="FalloutScriptPackage.cs" />
     <Compile Include="../../runtime/src/Content/FalloutImageSpaceCommands.cs" Link="FalloutImageSpaceCommands.cs" />
     <Compile Include="../../runtime/src/Content/FalloutMenuXml.cs" Link="FalloutMenuXml.cs" />
@@ -19,6 +26,8 @@
     <Compile Include="../../runtime/src/Content/FalloutGameSettingStrings.cs" Link="FalloutGameSettingStrings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameSettingIntegers.cs" Link="FalloutGameSettingIntegers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableControlTable.cs" Link="FalloutExecutableControlTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableHud.cs" Link="FalloutExecutableHud.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorIdleSource.cs" Link="FalloutActorIdleSource.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />

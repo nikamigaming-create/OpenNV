@@ -4,7 +4,7 @@ using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, string Text,
-    bool Modal, IReadOnlyList<string> Buttons)
+    bool Modal, IReadOnlyList<string> Buttons, FalloutFormKey? Icon = null, uint? DisplaySeconds = null, bool AutomaticTime = false)
 {
     internal static FalloutSourceMessage Read(FalloutPluginRecord record)
     {
@@ -22,17 +22,22 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
         if ((bits & ~3u) != 0 || fields.Any(field => field.Signature == "CTDA"))
             throw new NotSupportedException($"MESG {record.FormKey} flags or conditional buttons need an owner.");
         var icon = fields.SingleOrDefault(field => field.Signature == "INAM").Data;
-        if (icon.Length != 4 || BinaryPrimitives.ReadUInt32LittleEndian(icon.Span) != 0)
-            throw new NotSupportedException($"MESG {record.FormKey} icon needs a MICN owner.");
+        if (icon.Length != 4) throw new InvalidDataException("MESG icon extent is invalid.");
+        var iconId = BinaryPrimitives.ReadUInt32LittleEndian(icon.Span);
+        var time = fields.SingleOrDefault(field => field.Signature == "TNAM").Data;
+        if (time.Length != 0 && time.Length != 4) throw new InvalidDataException("MESG time extent is invalid.");
+        var seconds = time.Length == 0 ? (uint?)null : BinaryPrimitives.ReadUInt32LittleEndian(time.Span);
+        if ((bits & 3) == 0 && seconds is null or 0) throw new NotSupportedException("Timed MESG has no positive display time.");
         return new(record.FormKey, Text("FULL"), Text("DESC", true), (bits & 1) != 0,
-            fields.Where(field => field.Signature == "ITXT").Select(field => FalloutDialogueTopic.Text(field.Data.Span)).ToArray());
+            fields.Where(field => field.Signature == "ITXT").Select(field => FalloutDialogueTopic.Text(field.Data.Span)).ToArray(),
+            iconId == 0 ? null : record.Plugin.AdjustFormId(iconId), seconds, (bits & 2) != 0);
     }
 }
 
 internal sealed record FalloutQuestScriptSnapshot(FalloutFormKey Quest, FalloutFormKey Script,
     double Remaining, long Executions, string? Error);
 internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScriptSnapshot> Instances,
-    IReadOnlyList<FalloutFormKey> Messages);
+    IReadOnlyList<FalloutFormKey> Messages, FalloutHudNotificationsSnapshot? Notifications = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -55,6 +60,7 @@ internal sealed class FalloutQuestScripts
     private readonly Dictionary<FalloutFormKey, IReadOnlyDictionary<string, FalloutPluginRecord>> _references = [];
     private readonly Dictionary<FalloutFormKey, string> _unbound = [];
     private readonly FalloutPlayerInventory _inventory;
+    private readonly FalloutGlobalState? _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
 
     internal object State => new
@@ -63,6 +69,7 @@ internal sealed class FalloutQuestScripts
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
+        notifications = _inventory.Notifications.Capture(),
         scheduling = "source-delay; native ordering unverified",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
@@ -71,7 +78,8 @@ internal sealed class FalloutQuestScripts
     internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null) => new(
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
             instance.Remaining, instance.Executions, instance.Error)).ToArray(),
-        (displayed is null ? Enumerable.Empty<FalloutFormKey>() : [displayed.Form]).Concat(_messages.Select(message => message.Form)).ToArray());
+        (displayed is null ? Enumerable.Empty<FalloutFormKey>() : [displayed.Form]).Concat(_messages.Select(message => message.Form)).ToArray(),
+        _inventory.Notifications.Capture());
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
@@ -89,6 +97,7 @@ internal sealed class FalloutQuestScripts
         }
         var messages = snapshot.Messages.Select(form => FalloutSourceMessage.Read(_records.GetEffective(form))).ToArray();
         if (messages.Any(message => !message.Modal)) throw new NotSupportedException("Saved message needs a timed HUD owner.");
+        if (snapshot.Notifications is { } notifications) _inventory.Notifications.Restore(notifications);
         foreach (var instance in _instances)
         {
             var state = states[instance.Quest.FormKey];
@@ -101,11 +110,12 @@ internal sealed class FalloutQuestScripts
     }
 
     internal FalloutQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimedQuests,
-        FalloutPlayerInventory inventory)
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null)
     {
         _records = records;
         _quests = quests;
         _inventory = inventory;
+        _globals = globals;
         foreach (var quest in records.EffectiveRecords("QUST"))
         {
             if (claimedQuests.Contains(quest.FormKey)) continue;
@@ -151,9 +161,11 @@ internal sealed class FalloutQuestScripts
     private void Execute(Instance instance)
     {
         var writes = new Dictionary<(FalloutFormKey Quest, uint Index), double>();
+        var globalWrites = new Dictionary<FalloutFormKey, float>();
         var additions = new Dictionary<FalloutFormKey, FalloutCampaignItem>();
         var messages = new List<FalloutSourceMessage>();
-        FalloutPluginRecord Form(string name)
+        var notifications = new List<FalloutHudEvent>();
+        FalloutPluginRecord? TryForm(string name)
         {
             if (!_references.TryGetValue(instance.Script.FormKey, out var references))
             {
@@ -169,7 +181,20 @@ internal sealed class FalloutQuestScripts
                 }
                 _references[instance.Script.FormKey] = references = map;
             }
-            return references.TryGetValue(name, out var found) ? found : throw new NotSupportedException($"Script reference {name} is unbound.");
+            return references.GetValueOrDefault(name);
+        }
+        FalloutPluginRecord Form(string name) => TryForm(name) ?? throw new NotSupportedException($"Script reference {name} is unbound.");
+        FalloutFormKey? Global(string name)
+        {
+            if (TryForm(name) is not { Signature: "GLOB" } record) return null;
+            if (_globals is null) throw new NotSupportedException($"Script global {name} has no shared state owner.");
+            var source = FalloutGlobal.Read(record);
+            // GLOB operands always widen their Float32 storage into the expression
+            // value. FNAM does not use the separate local-variable coercion path.
+            if (instance.Script.ReadSubrecords().Any(field => field.Signature == "SCVR" &&
+                string.Equals(FalloutDialogueTopic.Text(field.Data.Span), name, StringComparison.OrdinalIgnoreCase)))
+                throw new NotSupportedException($"Script operand {name} has ambiguous local/global binding.");
+            return source.Form;
         }
         (FalloutFormKey Quest, uint Index) Variable(string name)
         {
@@ -201,11 +226,21 @@ internal sealed class FalloutQuestScripts
         }
         double Read(string name)
         {
+            if (Global(name) is { } global)
+                return globalWrites.TryGetValue(global, out var pending) ? pending : _globals!.Get(global);
             var key = Variable(name);
             return writes.TryGetValue(key, out var value) ? value : _quests.Variable(key.Quest, key.Index);
         }
         void Write(string name, double value)
         {
+            if (Global(name) is { } global)
+            {
+                _ = _globals!.Get(global);
+                var stored = (float)value;
+                if (!float.IsFinite(stored)) throw new InvalidDataException("Script global exceeds Float32 storage.");
+                globalWrites[global] = stored;
+                return;
+            }
             var key = Variable(name);
             _ = _quests.Variable(key.Quest, key.Index);
             if (!double.IsFinite(value)) throw new InvalidDataException("Script variable exceeds its runtime representation.");
@@ -218,10 +253,10 @@ internal sealed class FalloutQuestScripts
                 case "short" or "int" or "long" or "float" when arguments.Count == 1: _ = Variable(arguments[0]); break;
                 case "showmessage" when arguments.Count == 1:
                     var message = FalloutSourceMessage.Read(Form(arguments[0]));
-                    if (!message.Modal) throw new NotSupportedException("Timed HUD messages need a presentation owner.");
-                    messages.Add(message);
+                    if (message.Modal) messages.Add(message);
+                    else notifications.Add(new(FalloutHudEventKind.Message, message.Form, 0, instance.Quest.FormKey, instance.Script.FormKey));
                     break;
-                case "player.additem" when arguments.Count == 2:
+                case "player.additem" when arguments.Count is 2 or 3:
                     if (!instance.Script.ReadSubrecords().Any(field => field.Signature == "SCRO" && field.Data.Length == 4 &&
                         _records.RuntimeFormId(instance.Script.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span))) == PlayerReferenceRuntimeFormId))
                         throw new InvalidDataException("Player command has no bound engine reference in SCRO.");
@@ -234,13 +269,19 @@ internal sealed class FalloutQuestScripts
                     var request = new FalloutCampaignInventoryRequest(_records.RuntimeFormId(item.FormKey), arguments[0], item.Signature,
                         checked((previous?.Count ?? 0) + count));
                     additions[item.FormKey] = FalloutCampaignInventoryResolver.Resolve(_records, [request], null).Items.Single();
+                    var silent = arguments.Count == 3 ? FalloutGameModeProgram.Evaluate([arguments[2]], Read) : 0;
+                    if (silent is not (0 or 1)) throw new NotSupportedException("AddItem silent argument is not a boolean.");
+                    if (silent == 0) notifications.Add(new(FalloutHudEventKind.ItemAdded, item.FormKey, count, instance.Quest.FormKey, instance.Script.FormKey));
                     break;
                 default: throw new NotSupportedException($"Reached script command {command} with {arguments.Count} arguments has no owner.");
             }
         });
         // Validate the entire reached block before publishing any effects.
+        FalloutHudNotifications.Validate(notifications);
         foreach (var (key, value) in writes) _quests.SetVariable(key.Quest, key.Index, value);
+        foreach (var (form, value) in globalWrites) _globals!.Set(form, value);
         _inventory.Publish(additions.Values);
         foreach (var message in messages) _messages.Enqueue(message);
+        _inventory.Notifications.Publish(notifications);
     }
 }

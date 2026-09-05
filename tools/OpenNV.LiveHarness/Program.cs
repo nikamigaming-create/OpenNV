@@ -31,13 +31,15 @@ internal static class Program
                 Console.WriteLine(reader.ReadLine());
                 return 0;
             }
+            var background = args is ["--background", _];
+            if (background) args = [args[1]];
             if (args.Length != 1)
-                throw new ArgumentException("Use OpenNV.LiveHarness <private-session.json> or --send <session> <JSON>.");
+                throw new ArgumentException("Use OpenNV.LiveHarness [--background] <private-session.json> or --send <session> <JSON>.");
             var configuration = JsonSerializer.Deserialize<HarnessConfiguration>(File.ReadAllText(args[0]), Json)
                 ?? throw new InvalidDataException("Missing harness configuration.");
             configuration.Validate();
             ApplicationConfiguration.Initialize();
-            Application.Run(new HarnessWindow(configuration));
+            Application.Run(new HarnessWindow(configuration, background));
             return 0;
         }
         catch (Exception exception)

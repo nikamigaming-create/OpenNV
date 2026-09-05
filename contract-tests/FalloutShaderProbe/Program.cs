@@ -33,6 +33,18 @@ Reject(() => FalloutD3D9PixelProgram.Read(Words(0xffff0200, 0x03000042, 0x800f08
 var evaluated = program.Evaluate(Vector2.Zero, new Dictionary<int, Vector4> { [3] = new(-2, 0.5f, -0.25f, -1) },
     (_, _) => throw new Exception("An arithmetic program sampled a texture."));
 if (evaluated != new Vector4(1, 0, 0.25f, 1)) throw new Exception("CPU instruction modifiers differ from the source program.");
+var interpolated = FalloutD3D9PixelProgram.Read(Words(0xffff0200,
+    0x0200001f, 0x80000000, 0xb00f0001,
+    0x04000012, 0x800f0800, 0xa0e40000, 0xb0e40001, 0xa0e40001, 0xffff));
+var interpolation = interpolated.Evaluate(new(0.25f, 0.75f), new Dictionary<int, Vector4>
+    { [0] = new(0.5f), [1] = Vector4.One }, (_, _) => throw new Exception("An arithmetic program sampled a texture."));
+if (interpolation != new Vector4(0.625f, 0.875f, 0.5f, 1)) throw new Exception("Source LRP or second texture-coordinate register changed.");
+var computeFunction = interpolated.ComputeFunction("source_filter", new Dictionary<int, string>
+    { [0] = "params.weight", [1] = "params.color" }, new Dictionary<int, string>());
+if (!computeFunction.Contains("vec4 source_filter(vec2 coordinate)", StringComparison.Ordinal) ||
+    !computeFunction.Contains("params.weight.xyzw", StringComparison.Ordinal) || computeFunction.Contains("uniform ", StringComparison.Ordinal))
+    throw new Exception("Compute program did not preserve its body and external register bindings.");
+Reject(() => interpolated.ComputeFunction("source_filter", new Dictionary<int, string> { [0] = "params.weight" }, new Dictionary<int, string>()));
 Console.WriteLine("OPENNV_SHADER_CONTRACT_PASS modifiers=true truncationFails=true unknownOpcodeFails=true relativeAddressingFails=true");
 if (args is [var root])
 {

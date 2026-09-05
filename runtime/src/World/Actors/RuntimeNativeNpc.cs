@@ -14,18 +14,44 @@ internal partial class RuntimeNativeNpc : Node3D
     private RuntimeNativeNifAnimation? _baseAnimation;
     private float _baseAnimationSeconds;
     private float _animationSeconds;
+    private FalloutFormKey? _idleForm;
+    private string? _idleOwner;
+    private bool _responseIdleActive;
+    private long _idleRevision;
+    private FalloutIdleAnimationData? _idleData;
+    private FalloutIdleAnimationPlayback? _idlePlayback;
+    private readonly FalloutIdleReplayState _idleReplays = new();
+    private readonly List<object> _idleTextKeyEvents = [];
     private readonly List<Node3D> _animationObjects = [];
+    private NativeOwnedAnimationSoundPlayer? _animationSounds;
     internal event Action? PosePublished;
     internal float BaseSourceSeconds => _baseAnimationSeconds;
     internal string? AnimationError { get; private set; }
+    internal FalloutFormKey? ActiveIdle => _idleForm;
+    internal string? ActiveIdleOwner => _idleOwner;
     internal object AnimationState => new
     {
         sequence = _animation?.Sequence.Name,
+        idle = _idleForm?.ToString(),
+        idleOwner = _idleOwner,
+        idleRevision = _idleRevision,
+        responseIdleActive = _responseIdleActive,
         baseSequence = _baseAnimation?.Sequence.Name,
         baseSourceSeconds = _baseAnimationSeconds,
         ai = AiState,
         face = FaceState,
         sourceSeconds = _animationSeconds,
+        idleTiming = _idleData is null ? null : new
+        {
+            source = _idleData,
+            additionalLoops = _idlePlayback?.AdditionalLoops,
+            completedRepeats = _idlePlayback?.CompletedRepeats,
+            loopStart = _idlePlayback?.LoopStart,
+            loopEnd = _idlePlayback?.LoopEnd,
+        },
+        replayCooldowns = _idleReplays.Remaining.Select(value => new { idle = value.Key.ToString(), seconds = value.Value }).ToArray(),
+        textKeyCrossings = _idleTextKeyEvents.ToArray(),
+        animationSounds = _animationSounds?.State,
         sourceFloatProperties = Skeleton.FloatExtraData.Values.Select(value => new
         {
             node = value.Node,
@@ -47,12 +73,31 @@ internal partial class RuntimeNativeNpc : Node3D
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
         animation.ApplySourceTime(sequence.StartTime);
         _baseAnimation = animation; _baseAnimationSeconds = sequence.StartTime;
+        _baseElapsedSeconds = 0;
         SetMeta("opennv_base_animation_source", owner);
     }
 
     internal void PlayIdle(FalloutPluginStack stack, string editorId)
+        => PlayIdle(stack, FalloutDialogueTopic.Find(stack, "IDLE", editorId).FormKey, "script");
+
+    internal void BeginResponseAnimation(FalloutPluginStack stack, FalloutFormKey? animation)
     {
-        var idle = FalloutActorIdleSource.Resolve(stack, editorId);
+        _responseIdleActive = animation is not null;
+        if (animation is not { } idle) return;
+        // A result script can start the same IDLE before its response begins.
+        // Keep that live instance and its authored phase instead of replaying
+        // its first frame at the voice boundary.
+        if (_idleForm != idle || _animation is null) PlayIdle(stack, idle, "dialogue-response");
+        else _idleOwner = "dialogue-response";
+    }
+
+    internal void EndResponseAnimation() => _responseIdleActive = false;
+
+    private void PlayIdle(FalloutPluginStack stack, FalloutFormKey form, string owner)
+    {
+        var record = stack.GetEffective(form);
+        var idle = FalloutActorIdleSource.Resolve(stack, record);
+        var timing = FalloutIdleAnimationData.Read(record);
         var path = idle.AnimationPath;
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.");
         if (!content.TryRead(path, null, out var bytes, out var identity))
@@ -61,6 +106,10 @@ internal partial class RuntimeNativeNpc : Node3D
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         if (sequences.Length != 1)
             throw new NotSupportedException($"IDLE {idle.Form} requires one source KF sequence, found {sequences.Length}.");
+        if (!float.IsFinite(sequences[0].Frequency) || sequences[0].Frequency <= 0 ||
+            !float.IsFinite(sequences[0].StartTime) || !float.IsFinite(sequences[0].StopTime) ||
+            sequences[0].StopTime <= sequences[0].StartTime)
+            throw new InvalidDataException($"IDLE {idle.Form} has an invalid source clock.");
         var created = new List<Node3D>();
         var controlledNodes = sequences[0].ControlledBlocks
             .Where(link => link.ControllerType == "NiTransformController" && link.PropertyType.Length == 0 &&
@@ -96,6 +145,9 @@ internal partial class RuntimeNativeNpc : Node3D
                 };
             }
             var selected = new RuntimeNativeNifAnimation(source, sequences[0], Skeleton, BindObject);
+            var clock = new FalloutIdleAnimationPlayback(selected.Sequence.StartTime, selected.Sequence.StopTime,
+                selected.Sequence.Frequency, selected.Sequence.CycleType,
+                selected.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), timing.SelectAdditionalLoops(_aiRandom.NextBounded));
             if (_baseAnimation is null) selected.ApplySourceTime(selected.Sequence.StartTime);
             else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (selected, selected.Sequence.StartTime));
             foreach (var old in _animationObjects) old.Free();
@@ -103,7 +155,18 @@ internal partial class RuntimeNativeNpc : Node3D
             _animationObjects.AddRange(created);
             foreach (var item in created) item.Visible = true;
             _animation = selected;
+            _idleData = timing;
+            _idlePlayback = clock;
             _animationSeconds = selected.Sequence.StartTime;
+            _idleForm = idle.Form;
+            _idleOwner = owner;
+            _idleRevision++;
+            _idleReplays.Started(idle.Form, timing.ReplayDelaySeconds);
+            if (_animationSounds is null)
+            {
+                _animationSounds = new(stack, content, this, Skeleton.UnitsToMetres, _aiRandom);
+                AddChild(_animationSounds);
+            }
             AnimationError = null;
             SetMeta("opennv_selected_idle", idle.Form.ToString());
             SetMeta("opennv_selected_animation", identity);
@@ -121,30 +184,106 @@ internal partial class RuntimeNativeNpc : Node3D
         if ((_animation is null && _baseAnimation is null) || AnimationError is not null) return;
         try
         {
-            float Advance(RuntimeNativeNifAnimation animation, float time)
+            _idleTextKeyEvents.Clear();
+            _idleReplays.Advance((float)delta);
+            float Advance(RuntimeNativeNifAnimation animation, double elapsed)
             {
                 var sequence = animation.Sequence;
                 var duration = sequence.StopTime - sequence.StartTime;
-                var next = time + (float)delta * sequence.Frequency;
+                var next = elapsed * sequence.Frequency;
                 return sequence.CycleType switch
                 {
-                    0 when duration > 0 => sequence.StartTime + (next - sequence.StartTime) % duration,
-                    2 => Math.Min(next, sequence.StopTime),
+                    0 when duration > 0 => sequence.StartTime + (float)(next % duration),
+                    2 => sequence.StartTime + (float)Math.Min(next, duration),
                     _ => throw new NotSupportedException($"Source animation cycle {sequence.CycleType} has no clock owner."),
                 };
             }
-            if (_baseAnimation is not null) _baseAnimationSeconds = Advance(_baseAnimation, _baseAnimationSeconds);
-            if (_animation is not null) _animationSeconds = Advance(_animation, _animationSeconds);
+            var wasTraveling = _travelActive;
+            if (_baseAnimation is not null)
+            {
+                _baseElapsedSeconds += delta;
+                _baseAnimationSeconds = Advance(_baseAnimation, _baseElapsedSeconds);
+            }
+            var idleDelta = PreparePackageIdle(delta);
+            while (_animation is { } idle && idleDelta > 0)
+            {
+                var clock = _idlePlayback ?? throw new InvalidOperationException("The active IDLE has no source playback clock.");
+                idleDelta = clock.Advance(idleDelta, interval => PublishIdleTextKeys(idle, interval));
+                _animationSeconds = clock.SourceSeconds;
+                if (!clock.Complete) break;
+                idle.ApplySourceTime(_animationSeconds);
+                FinishIdle();
+                idleDelta = PreparePackageIdle(idleDelta);
+            }
+            Skeleton.ResetMorphPublication();
             if (_baseAnimation is not null && _animation is not null)
                 RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
             else if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
-            else _animation!.ApplySourceTime(_animationSeconds);
+            else _animation?.ApplySourceTime(_animationSeconds);
+            if (_sitting == 4 && _baseAnimation is { Sequence.CycleType: 2 } exit && _baseAnimationSeconds >= exit.Sequence.StopTime)
+                CompleteFurnitureExit();
+            if (wasTraveling && !_travelActive) PlayLocomotion(false);
+            AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
         }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentOutOfRangeException)
+        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentOutOfRangeException or InvalidOperationException)
         {
             AnimationError = error.Message;
             GD.PushError($"OPENNV_NATIVE_ANIMATION_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
+        }
+    }
+
+    private void FinishIdle()
+    {
+        if (_animation is null) return;
+        var completed = _idleForm;
+        var owner = _idleOwner;
+        _animation = null;
+        _idleData = null;
+        _idlePlayback = null;
+        _idleForm = null;
+        _idleOwner = null;
+        foreach (var item in _animationObjects) item.Free();
+        _animationObjects.Clear();
+        if (owner == "package-idle") _packageIdles!.Finish();
+        // Finished one-shots release their bone and ANIO ownership. The base
+        // procedure continues on its existing clock on the next publication.
+        if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
+        GD.Print($"OPENNV_NATIVE_IDLE_END reference={Appearance.Reference} idle={completed} owner={owner} sourceSeconds={_animationSeconds:R}");
+    }
+
+    private void CancelIdle()
+    {
+        _animation = null;
+        _idleData = null;
+        _idlePlayback = null;
+        _idleForm = null;
+        _idleOwner = null;
+        foreach (var item in _animationObjects) item.Free();
+        _animationObjects.Clear();
+    }
+
+    private void PublishIdleTextKeys(RuntimeNativeNifAnimation animation, FalloutIdleAnimationInterval interval)
+    {
+        foreach (var key in animation.TextKeys.Where(key => key.Time <= interval.To &&
+            (key.Time > interval.From || interval.IncludeFrom && key.Time == interval.From)))
+        {
+            foreach (var value in key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
+            {
+                var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) ||
+                    value.Equals("end", StringComparison.OrdinalIgnoreCase) ||
+                    value.Equals("StartLoop", StringComparison.OrdinalIgnoreCase) ||
+                    value.Equals("EndLoop", StringComparison.OrdinalIgnoreCase);
+                _idleTextKeyEvents.Add(new
+                {
+                    idle = _idleForm?.ToString(),
+                    sourceSeconds = key.Time,
+                    key = value,
+                    repeat = _idlePlayback!.CompletedRepeats,
+                    disposition = structural ? "source-phase-owner" :
+                        _animationSounds?.Dispatch(value) ?? "unbound-runtime-event",
+                });
+            }
         }
     }
 
@@ -154,8 +293,12 @@ internal partial class RuntimeNativeNpc : Node3D
         FalloutPlacedReference reference,
         float unitsToMetres,
         Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null)
-        => Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey), source,
+    {
+        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey), source,
             unitsToMetres, materialOwner);
+        try { actor.ConfigureFaceAnimation(stack); return actor; }
+        catch { actor.Free(); throw; }
+    }
 
     internal static RuntimeNativeNpc Create(FalloutNpcAppearance appearance, RuntimeLiveContentSource source,
         float unitsToMetres,

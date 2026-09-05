@@ -44,6 +44,16 @@ internal static class FaceMaterialSynthetic
             null, settings, _ => dds);
         Require(eyeInputs.BaseTexturePath == "textures/blue-eye.dds" && eyeInputs.NormalTexturePath == "textures/shared/flat_n.dds",
             "eye diffuse override retains source normal");
+        foreach (var role in new[] { "body", "hand-left", "hand-right" })
+        {
+            var mixedModel = head with { Role = role };
+            Require(FalloutNpcFaceMaterial.UsesRecordTexture(mixedModel, 14) &&
+                !FalloutNpcFaceMaterial.UsesRecordTexture(mixedModel, 1),
+                "race skin override must preserve clothing surfaces in a mixed model");
+        }
+        Require(FalloutNpcFaceMaterial.UsesRecordTexture(eye, 1) &&
+            !FalloutNpcFaceMaterial.UsesRecordTexture(head with { TexturePath = null }, 14),
+            "independent head-part texture overrides retain their ownership");
         Console.WriteLine("OPENNV_FACEGEN_MATERIAL_INPUTS_OK nativeDefaults=true ownedDds=true sourceIni=true textureIdentity=true missingResourceVisible=true");
     }
 

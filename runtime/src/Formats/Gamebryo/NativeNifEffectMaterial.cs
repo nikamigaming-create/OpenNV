@@ -46,8 +46,7 @@ internal static class NativeNifEffectMaterial
         FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha, Texture2D? texture,
         bool doubleSided)
     {
-        var state = alpha is null ? new FalloutNifAlphaState(FalloutNifBlendMode.Opaque, false, 0, 0, true)
-            : FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold);
+        var state = FalloutNifAlphaState.ForNoLighting(source, alpha);
         var useFalloff = (source.ShaderFlags & (1u << 6)) != 0;
         var falloff = useFalloff ? FalloutNifAngleFalloff.Read(source) : new(1, 0, 1, 1);
         var blend = state.Blend switch
@@ -81,6 +80,9 @@ internal static class NativeNifEffectMaterial
         result.SetShaderParameter("alpha_test_function", (int)state.TestFunction);
         result.SetShaderParameter("alpha_threshold", state.Threshold / 255.0f);
         result.SetMeta("opennv_nif_alpha_flags", alpha?.Flags ?? 0);
+        result.SetMeta("opennv_nif_effective_blend", state.Blend.ToString());
+        result.SetMeta("opennv_nif_alpha_owner", state.Blend == FalloutNifBlendMode.SourceAlpha &&
+            (alpha is null || (alpha.Flags & 1) == 0) ? "no-lighting-falloff-pass" : "source-alpha-property");
         result.SetMeta("opennv_nif_angle_falloff", useFalloff);
         return result;
     }

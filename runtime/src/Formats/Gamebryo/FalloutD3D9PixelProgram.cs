@@ -13,6 +13,8 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
     private sealed record Operation(uint Opcode, uint Destination, uint[] Sources);
     private IReadOnlyList<Operation> _operations = [];
     private IReadOnlyDictionary<int, Vector4> _definitions = new Dictionary<int, Vector4>();
+    private string _functionSource = "";
+    private IReadOnlyList<int> _coordinates = [];
 
     internal static FalloutD3D9PixelProgram Read(ReadOnlyMemory<byte> payload, IReadOnlySet<int>? repeatingSamplers = null)
     {
@@ -40,11 +42,11 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
             var name = type switch
             {
                 0 => $"r{index}",
-                3 when index == 0 => "t0",
+                3 when index < 8 => $"t{index}",
                 8 when index == 0 => "o0",
                 _ => throw new NotSupportedException($"Pixel register bank {type}/{index} is unbound."),
             };
-            declarations.TryAdd(name, name == "t0" ? "vec4(coordinate, 0.0, 1.0)" : "vec4(0.0)");
+            declarations.TryAdd(name, name.StartsWith('t') ? "vec4(coordinate, 0.0, 1.0)" : "vec4(0.0)");
             return name;
         }
         string Source(uint token)
@@ -76,6 +78,7 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
                 var register = Register(arguments[1]);
                 if (register.StartsWith('s') && ((arguments[0] >> 27) & 15) != 2)
                     throw new NotSupportedException("Pixel sampler requires a 2D texture owner.");
+                if (register.StartsWith('t')) initialized[register] = (arguments[1] >> 16) & 15;
                 continue;
             }
             if (opcode == 81)
@@ -88,7 +91,7 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
                 literalValues.Add((int)(arguments[0] & 0x7ff), new(values[0], values[1], values[2], values[3]));
                 continue;
             }
-            var expected = opcode switch { 1 or 6 or 7 or 35 => 2, 2 or 3 or 5 or 8 or 9 or 10 or 11 or 66 => 3, 4 or 88 or 90 => 4, _ => 0 };
+            var expected = opcode switch { 1 or 6 or 7 or 35 => 2, 2 or 3 or 5 or 8 or 9 or 10 or 11 or 66 => 3, 4 or 18 or 88 or 90 => 4, _ => 0 };
             if (expected == 0) throw new NotSupportedException($"Pixel opcode {opcode} is unbound.");
             if (count != expected) throw new InvalidDataException("Pixel instruction operand count is invalid.");
             var destination = Register(arguments[0]);
@@ -138,6 +141,7 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
                 9 => $"vec4(dot({a}, {b}))",
                 10 => $"min({a}, {b})",
                 11 => $"max({a}, {b})",
+                18 => $"({a} * {b} + (vec4(1.0) - {a}) * {c})",
                 35 => $"abs({a})",
                 66 => $"texture({Register(arguments[2])}, ({a}).xy)",
                 88 => $"mix({c}, {b}, greaterThanEqual({a}, vec4(0.0)))",
@@ -156,12 +160,41 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
         var result = new StringBuilder();
         foreach (var index in external) result.AppendLine($"uniform vec4 c{index};");
         foreach (var index in samplers.Order()) result.AppendLine($"uniform sampler2D s{index} : filter_linear, {(repeatingSamplers?.Contains(index) == true ? "repeat_enable" : "repeat_disable")};");
+        var functionStart = result.Length;
         result.AppendLine("vec4 owned_pixel_program(vec2 coordinate) {");
         foreach (var (name, value) in declarations) result.AppendLine($"    vec4 {name} = {value};");
         foreach (var (index, value) in definitions) result.AppendLine($"    vec4 c{index} = {value};");
         result.Append(body).AppendLine("    return o0;\n}");
         return new(result.ToString(), external, samplers.Order().ToArray(), partial)
-        { _operations = operations, _definitions = literalValues };
+        {
+            _operations = operations,
+            _definitions = literalValues,
+            _functionSource = result.ToString(functionStart, result.Length - functionStart),
+            _coordinates = declarations.Keys.Where(name => name.StartsWith('t')).Select(name => int.Parse(name[1..], CultureInfo.InvariantCulture)).ToArray(),
+        };
+    }
+
+    // The same decoded instruction body can execute in an RD compute pass.
+    // Bindings are supplied by the presentation owner; no shader instructions
+    // or literal coefficients are replaced with an approximate blur equation.
+    internal string ComputeFunction(string name, IReadOnlyDictionary<int, string> constants,
+        IReadOnlyDictionary<int, string> samplers)
+    {
+        if (string.IsNullOrEmpty(name) || name.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '_'))
+            throw new ArgumentException("A compute function requires a shader identifier.", nameof(name));
+        foreach (var index in Constants)
+            if (!constants.ContainsKey(index)) throw new InvalidDataException($"Image-space program constant c{index} has no source owner.");
+        foreach (var index in Samplers)
+            if (!samplers.ContainsKey(index)) throw new InvalidDataException($"Image-space program sampler s{index} has no source owner.");
+        var source = _functionSource.Replace("owned_pixel_program", name, StringComparison.Ordinal);
+        source = System.Text.RegularExpressions.Regex.Replace(source, @"\bc([0-9]+)\b", match =>
+            constants.TryGetValue(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), out var value) &&
+            !_definitions.ContainsKey(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)) ? value : match.Value);
+        source = System.Text.RegularExpressions.Regex.Replace(source, @"\bs([0-9]+)\b", match =>
+            samplers[int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)]);
+        // Compute shaders do not have implicit derivatives.
+        return $"vec4 {name}_sample(sampler2D source, vec2 coordinate) {{ return textureLod(source, coordinate, 0.0); }}\n" +
+            source.Replace("texture(", name + "_sample(", StringComparison.Ordinal);
     }
 
     // The input adapter evaluates the same admitted instruction stream to map
@@ -170,7 +203,8 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
     internal Vector4 Evaluate(Vector2 coordinate, IReadOnlyDictionary<int, Vector4> constants,
         Func<int, Vector2, Vector4> sample)
     {
-        var registers = new Dictionary<(uint Bank, int Index), Vector4> { [(3, 0)] = new(coordinate, 0, 1) };
+        var registers = _coordinates.ToDictionary(index => (3U, index), _ => new Vector4(coordinate, 0, 1));
+        registers.TryAdd((3, 0), new(coordinate, 0, 1));
         static (uint Bank, int Index) Key(uint token) => (((token >> 28) & 7) | ((token >> 8) & 0x18), (int)(token & 0x7ff));
         Vector4 Read(uint token)
         {
@@ -200,6 +234,7 @@ internal sealed record FalloutD3D9PixelProgram(string GodotSource, IReadOnlyList
                 9 => new Vector4(Vector4.Dot(a, b)),
                 10 => Vector4.Min(a, b),
                 11 => Vector4.Max(a, b),
+                18 => a * b + (Vector4.One - a) * c,
                 35 => Vector4.Abs(a),
                 66 => sample(Key(operation.Sources[1]).Index, new(a.X, a.Y)),
                 88 => new Vector4(a.X >= 0 ? b.X : c.X, a.Y >= 0 ? b.Y : c.Y, a.Z >= 0 ? b.Z : c.Z, a.W >= 0 ? b.W : c.W),

@@ -12,7 +12,15 @@ internal static class FalloutMenuXml
     {
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned menu source is absent.");
         if (!source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Owned menu XML is missing.", path);
+        return Parse(bytes);
+    }
+
+    internal static XElement Parse(ReadOnlySpan<byte> bytes)
+    {
         var text = Regex.Replace(Encoding.UTF8.GetString(bytes), @"<!--.*?-->", "", RegexOptions.Singleline);
+        // The owned tile grammar admits an empty property whose opening tag
+        // omits its final bracket. Keep it empty; never invent a trait value.
+        text = Regex.Replace(text, @"<([A-Za-z_][A-Za-z0-9_.-]*)</\1\s*>", "<$1></$1>");
         text = Regex.Replace(text, @"&(-?[A-Za-z_][A-Za-z0-9_]*);", match => "entity_" + match.Groups[1].Value);
         return XElement.Parse("<source>" + text + "</source>");
     }

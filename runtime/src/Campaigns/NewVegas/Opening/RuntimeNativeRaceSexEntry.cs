@@ -2,6 +2,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -16,6 +17,7 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     private NativeOwnedMessageMenu? _confirmation;
     private SceneTree? _pausedTree;
     private bool _previousPause;
+    private IDisposable? _background;
     private int _page, _previewRevision = -1;
     internal string? Error { get; private set; }
     internal event Action<FalloutNativeRaceSexSelection>? Accepted;
@@ -37,7 +39,8 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         parity = "unverified"
     };
 
-    internal void Configure(FalloutNativeRaceSexContract contract, FalloutNativeRaceSexSelection current, FalloutPluginStack records)
+    internal void Configure(FalloutNativeRaceSexContract contract, FalloutNativeRaceSexSelection current, FalloutPluginStack records,
+        RuntimeNativeImageSpace? imageSpace = null)
     {
         Name = "NativeRaceSexEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
         _records = records;
@@ -50,6 +53,7 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         _screen.Menu.Navigate += Navigate;
         GetViewport().SizeChanged += Resize;
         _pausedTree = GetTree(); _previousPause = _pausedTree.Paused; _pausedTree.Paused = true;
+        _background = imageSpace?.BeginMenuBackground(records, FalloutMenuBackgroundKind.Popup);
         Input.MouseMode = Input.MouseModeEnum.Visible;
         RefreshPreview(); ShowPage();
         GD.Print($"OPENNV_NATIVE_CREATION_PRESENTED pages={_creation.Headers.Count} controls={_creation.Controls.Controls.Count} source=owned-nif-xml-fnt-ctl-player-records parity=unverified");
@@ -178,9 +182,14 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         }
         catch (Exception error) { Fail(error); }
     }
-    private void Fail(Exception error) { Error = error.Message; GD.PushError($"OPENNV_NATIVE_CREATION_UNBOUND {error}"); Failed?.Invoke(error); }
+    private void Fail(Exception error)
+    {
+        _background?.Dispose(); _background = null;
+        Error = error.Message; GD.PushError($"OPENNV_NATIVE_CREATION_UNBOUND {error}"); Failed?.Invoke(error);
+    }
     internal void ReleasePause()
     {
+        _background?.Dispose(); _background = null;
         if (_pausedTree is null) return;
         _pausedTree.Paused = _previousPause; _pausedTree = null;
     }

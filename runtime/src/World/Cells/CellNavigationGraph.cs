@@ -3,7 +3,7 @@ using Godot;
 
 namespace OpenNV.Runtime.World.Cells;
 
-internal sealed class CellNavigationGraph
+internal sealed partial class CellNavigationGraph
 {
     private const string ExpectedSchema = "opennv-owned-cell-navigation/v1";
     private const int TriangleVertexCount = 3;

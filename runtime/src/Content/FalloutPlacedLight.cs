@@ -5,7 +5,9 @@ internal sealed record FalloutPlacedLight(
     FalloutFormKey Base,
     float RadiusGameUnits,
     byte[] ColorRgb,
-    float Intensity);
+    float Intensity,
+    float[] ShaderColorRgb,
+    FalloutFormKey? Emittance);
 
 internal static class FalloutPlacedLightResolver
 {
@@ -19,7 +21,9 @@ internal static class FalloutPlacedLightResolver
 
     internal static FalloutPlacedLight Resolve(
         FalloutPlacedReference reference,
-        FalloutBaseObjectDefinition baseObject)
+        FalloutBaseObjectDefinition baseObject,
+        FalloutPluginStack? records = null,
+        Func<FalloutFormKey, float[]>? regionEmittance = null)
     {
         if (baseObject.Signature != "LIGH" || baseObject.Light is not { } source)
             throw new InvalidDataException(
@@ -54,7 +58,39 @@ internal static class FalloutPlacedLightResolver
         if (!float.IsFinite(adjustment) || !float.IsFinite(radius) || radius <= 0.0f)
             throw new InvalidDataException(
                 $"Native light reference {reference.FormKey} has invalid effective radius {radius:R}.");
-        return new FalloutPlacedLight(
-            reference.FormKey, baseObject.FormKey, radius, source.ColorRgb, source.Intensity);
+        float[]? emittance = null;
+        if (reference.Emittance is { } form)
+        {
+            if (records is null) throw new InvalidDataException($"Light {reference.FormKey} has no XEMI source resolver.");
+            var record = records.GetEffective(form);
+            emittance = record.Signature switch
+            {
+                "LIGH" => NormalizeLightColor(FalloutCellSceneReader.ReadLight(record).ColorRgb),
+                "REGN" when regionEmittance is not null => regionEmittance(form),
+                _ => throw new NotSupportedException($"Light {reference.FormKey} needs a {record.Signature} emittance owner."),
+            };
+        }
+        return new FalloutPlacedLight(reference.FormKey, baseObject.FormKey, radius, source.ColorRgb,
+            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance);
+    }
+
+    // REFR.XEMI modulates the base light's encoded RGB. The emittance record's
+    // radius and dimmer do not replace or multiply the placed light's values.
+    internal static float[] ComposeColor(IReadOnlyList<byte> source, IReadOnlyList<byte>? emittance)
+        => ModulateColor(source, emittance is null ? null : NormalizeLightColor(emittance));
+
+    internal static float[] NormalizeLightColor(IReadOnlyList<byte> color) => ModulateColor(color, null);
+
+    internal static float[] ModulateColor(IReadOnlyList<byte> source, IReadOnlyList<float>? emittance)
+    {
+        if (source.Count != 3 || emittance is not null && emittance.Count != 3)
+            throw new InvalidDataException("Light RGB requires three source channels.");
+        if (emittance is not null && emittance.Any(value => !float.IsFinite(value) || value < 0))
+            throw new InvalidDataException("Light emittance is non-finite or negative.");
+        // The light colour conversion retains the engine's Float32 reciprocal
+        // and extended multiplication until the final channel store.
+        const float reciprocal = 1.0f / byte.MaxValue;
+        return Enumerable.Range(0, 3).Select(index => (float)(source[index] * (double)reciprocal *
+            (emittance is null ? 1.0f : emittance[index]))).ToArray();
     }
 }

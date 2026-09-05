@@ -11,6 +11,7 @@ internal sealed class RuntimeNativeNifSkeleton
     private readonly Dictionary<string, Attachment> _attachments = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _visibility = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Node, int Index), float> _morphWeights = [];
+    private readonly Dictionary<(string Node, int Index), float> _morphDefaults = [];
 
     internal RuntimeNativeNifSkeleton(FalloutNifFile source, float unitsToMetres)
     {
@@ -49,6 +50,18 @@ internal sealed class RuntimeNativeNifSkeleton
     };
 
     internal bool HasSourceTarget(string name) => _boneIndices.ContainsKey(name) || _attachments.ContainsKey(name);
+
+    internal IEnumerable<(string Node, string Name, float Weight)> NamedMorphWeights => _morphWeights.Select(row =>
+        (row.Key.Node, _attachments[row.Key.Node].Morph!.Data.Morphs[row.Key.Index].Name, row.Value));
+
+    internal void ResetMorphPublication()
+    {
+        foreach (var (key, value) in _morphDefaults)
+        {
+            _morphWeights[key] = value;
+            if (key.Index > 0) _attachments[key.Node].Mesh.SetBlendShapeValue(key.Index - 1, value);
+        }
+    }
 
     internal Action<float>? BindVisualChannel(FalloutNifFile source, FalloutNifControllerLink link)
     {
@@ -99,6 +112,7 @@ internal sealed class RuntimeNativeNifSkeleton
                     var weight = morph.EffectiveWeight(index, input.Interpolator < 0 ? input.Weight :
                         new FalloutNifFloatAnimation(Source, input.Interpolator).Sample(morph.Controller.Time.StartTime));
                     _morphWeights.Add((geometry.Name, index), weight);
+                    _morphDefaults.Add((geometry.Name, index), weight);
                     if (index > 0) mesh.SetBlendShapeValue(index - 1, weight);
                 }
         }

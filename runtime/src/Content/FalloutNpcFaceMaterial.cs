@@ -100,6 +100,10 @@ internal static class FalloutNpcFaceMaterial
     internal static FalloutFaceGenTextureInput DefaultDetailMod() =>
         Uniform("DefaultDetailModFaceGenTexture", 62, 65, 62, 64);
 
+    internal static bool UsesRecordTexture(FalloutNpcAppearancePart part, uint shaderType)
+        => part.TexturePath is not null &&
+            (part.Role is not ("body" or "hand-left" or "hand-right") || shaderType == 14);
+
     internal static FalloutNpcPartTexturePaths ResolvePartTexturePaths(FalloutNpcAppearancePart part,
         string baseTexturePath, string normalTexturePath, string? scatteringTexturePath)
     {

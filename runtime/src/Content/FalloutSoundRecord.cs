@@ -200,6 +200,8 @@ internal sealed class FalloutSoundRandomState
 
     internal ulong State { get; private set; }
 
+    internal float NextUnitFloat() => (float)(unchecked((uint)NextUInt64()) / 4294967296.0);
+
     internal uint NextBounded(uint exclusiveUpperBound)
     {
         if (exclusiveUpperBound == 0U)

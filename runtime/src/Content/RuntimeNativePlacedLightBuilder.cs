@@ -12,19 +12,19 @@ internal static class RuntimeNativePlacedLightBuilder
         float gameUnitsToMeters,
         float energyScale,
         float minimumEnergy,
-        bool shadows)
+        bool shadows,
+        FalloutPluginStack? records = null,
+        Func<FalloutFormKey, float[]>? regionEmittance = null)
     {
         if (!float.IsFinite(gameUnitsToMeters) || gameUnitsToMeters <= 0.0f ||
             !float.IsFinite(energyScale) || energyScale <= 0.0f ||
             !float.IsFinite(minimumEnergy) || minimumEnergy < 0.0f)
             throw new ArgumentOutOfRangeException(
                 nameof(gameUnitsToMeters), "Native placed-light calibration is invalid.");
-        var source = FalloutPlacedLightResolver.Resolve(reference, baseObject);
+        var source = FalloutPlacedLightResolver.Resolve(reference, baseObject, records, regionEmittance);
         var color = new Color(
-            source.ColorRgb[0] / (float)byte.MaxValue,
-            source.ColorRgb[1] / (float)byte.MaxValue,
-            source.ColorRgb[2] / (float)byte.MaxValue);
-        var light = new OmniLight3D
+            source.ShaderColorRgb[0], source.ShaderColorRgb[1], source.ShaderColorRgb[2]);
+        var light = new RuntimeNativePlacedLight
         {
             Name = $"LIGH_{reference.FormKey}",
             Transform = transform,
@@ -37,6 +37,15 @@ internal static class RuntimeNativePlacedLightBuilder
         };
         light.SetMeta("opennv_ligh_reference", reference.FormKey.ToString());
         light.SetMeta("opennv_ligh_base", baseObject.FormKey.ToString());
+        light.SetMeta("opennv_ligh_source_rgb", source.ColorRgb);
+        light.SetMeta("opennv_ligh_shader_rgb", source.ShaderColorRgb);
+        if (source.Emittance is { } emittance)
+        {
+            light.SetMeta("opennv_ligh_emittance", emittance.ToString());
+            if (records!.GetEffective(emittance).Signature == "REGN")
+                light.ConfigureRegionColor(() => FalloutPlacedLightResolver.ModulateColor(source.ColorRgb,
+                    regionEmittance!(emittance)));
+        }
         light.SetMeta("opennv_ligh_radius_game_units", source.RadiusGameUnits);
         light.SetMeta("opennv_ligh_base_radius_game_units", baseObject.Light!.RadiusGameUnits);
         light.SetMeta(

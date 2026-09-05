@@ -45,8 +45,11 @@ internal static class NativeOwnedMediaLoader
             throw new InvalidDataException(
                 $"Unsupported owned audio extension: {logicalPath}");
         }
-        return stream ?? throw new InvalidDataException(
-            $"Godot rejected owned audio data from {source}");
+        if (stream is null) throw new InvalidDataException($"Godot rejected owned audio data from {source}");
+        stream.SetMeta("opennv_owned_media_source", source);
+        stream.SetMeta("opennv_owned_media_path", logicalPath);
+        stream.SetMeta("opennv_owned_media_sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)));
+        return stream;
     }
 
     private static AudioStreamWav? LoadWav(byte[] payload)

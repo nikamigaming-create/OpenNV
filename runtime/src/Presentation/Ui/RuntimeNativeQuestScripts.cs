@@ -12,18 +12,37 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private FalloutSourceMessage? _current;
     private bool _pausedBefore;
     private string? _error;
-    internal object State => new { scripts = Scripts.State, message = _current, error = _error };
+    private readonly FalloutPlayerInventory _inventory;
+    private NativeOwnedHudMessages? _hud;
+    internal object State => new { scripts = Scripts.State, message = _current, hud = _hud?.State, error = _error };
 
     internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
 
     internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
-        FalloutPlayerInventory inventory)
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null)
     {
         Name = "NativeQuestScripts";
         _records = records;
-        Scripts = new(records, quests, claimed, inventory);
+        _inventory = inventory;
+        Scripts = new(records, quests, claimed, inventory, globals);
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue + 1;
+    }
+
+    public override void _Ready()
+    {
+        try
+        {
+            var hudLayer = new CanvasLayer { Name = "NativeHudLayer", Layer = 1, ProcessMode = ProcessModeEnum.Always };
+            AddChild(hudLayer);
+            _hud = new NativeOwnedHudMessages(_records, _inventory.Notifications);
+            hudLayer.AddChild(_hud);
+        }
+        catch (Exception error)
+        {
+            _error = error.Message;
+            GD.PushError($"OPENNV_HUD_OWNER_UNBOUND {error.Message}");
+        }
     }
 
     public override void _Process(double delta)

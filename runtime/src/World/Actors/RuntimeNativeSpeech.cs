@@ -22,6 +22,7 @@ internal partial class RuntimeNativeSpeech : Node
     private FaceGenLipAnimation? _lip;
     private float[] _lipWeights = [];
     private RuntimeNativeNpc? _speaker;
+    internal event Action<string>? ResultCommand;
     internal string? Error { get; private set; }
     internal bool Active => _info is not null;
     internal object State => new
@@ -35,7 +36,9 @@ internal partial class RuntimeNativeSpeech : Node
         facePoseOwner = _speaker is null ? "unbound" : "owned-tri-lip-morphs",
         face = _speaker?.FaceState,
         lipHeadMotionOwner = "unbound",
-        speakerAnimationOwner = "unbound",
+        speakerAnimation = _info?.Responses[_responseIndex].SpeakerAnimation?.ToString(),
+        speakerAnimationOwner = _info?.Responses[_responseIndex].SpeakerAnimation is null
+            ? "package-idle" : "owned-response-idle",
         spatialAudioOwner = "unbound",
         said = _said.Select(key => key.ToString()).ToArray(),
         error = Error,
@@ -78,6 +81,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (actors.Length != 1) throw new NotSupportedException($"SayTo source speaker {speaker.FormKey} has {actors.Length} runtime actors.");
         actors[0].ValidateSpeechFace(_lipConfiguration);
         _speaker?.ClearSpeechFace();
+        _speaker?.EndResponseAnimation();
         _speaker = actors[0];
         if (!_topics.TryGetValue(command.TopicEditorId, out var topic))
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, command.TopicEditorId));
@@ -114,10 +118,13 @@ internal partial class RuntimeNativeSpeech : Node
         _lip = FaceGenLipAnimation.Read(lipBytes, _lipConfiguration);
         _lipWeights = new float[_lip.TargetNames.Count];
         _voice.Stream = NativeOwnedMediaLoader.LoadAudio(audio[0]);
+        if (response.ListenerAnimation is not null)
+            throw new NotSupportedException($"Response listener IDLE {response.ListenerAnimation} requires its target animation owner.");
+        _speaker!.BeginResponseAnimation(_stack, response.SpeakerAnimation);
         _voice.Play();
         GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} " +
             $"speaker={_command!.SpeakerEditorId} voice={audio[0]} lip={lipPath} " +
-            "facePose=owned-tri-lip-morphs headMotion=unbound spatialAudio=unbound parity=unmeasured");
+            $"speakerIdle={response.SpeakerAnimation} facePose=owned-tri-lip-morphs headMotion=unbound spatialAudio=unbound parity=unmeasured");
     }
 
     public override void _Process(double delta)
@@ -132,6 +139,7 @@ internal partial class RuntimeNativeSpeech : Node
             }
             if (!_advance) return;
             _advance = false;
+            _speaker?.EndResponseAnimation();
             if (++_responseIndex < _info.Responses.Count) { PlayResponse(); return; }
             var completed = _info;
             _info = null;
@@ -149,7 +157,9 @@ internal partial class RuntimeNativeSpeech : Node
                 }
                 var commands = FalloutDialogueTopic.SayToCommands(line);
                 if (commands.Count == 1) { StartCore(commands[0]); continue; }
-                throw new NotSupportedException($"INFO {completed.Record.FormKey} result command is unbound: {line}");
+                if (ResultCommand is not { } result)
+                    throw new NotSupportedException($"INFO {completed.Record.FormKey} result command is unbound: {line}");
+                result(line);
             }
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
@@ -163,6 +173,7 @@ internal partial class RuntimeNativeSpeech : Node
         Error = error.Message;
         _voice.Stop();
         _speaker?.ClearSpeechFace();
+        _speaker?.EndResponseAnimation();
         _advance = false;
         GD.PushError($"OPENNV_NATIVE_SPEECH_DIVERGENCE {error.Message}");
     }

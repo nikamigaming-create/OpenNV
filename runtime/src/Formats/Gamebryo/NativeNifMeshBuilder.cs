@@ -1040,43 +1040,25 @@ internal static class RuntimeNativeNifMeshBuilder
         {
             if (link.Controller != multi.Block.Index || !string.IsNullOrEmpty(link.PropertyType) ||
                 !string.IsNullOrEmpty(link.Variable1) || !string.IsNullOrEmpty(link.Variable2) ||
-                !multi.ExtraTargets.Contains(targetBlock) ||
-                _source.ReadObject(link.Interpolator) is not FalloutNifTransformInterpolator interpolator ||
-                interpolator.Data == -1 ||
-                _source.ReadObject(interpolator.Data) is not FalloutNifTransformData data ||
-                data.RotationType != 4 || data.XyzRotations.Length != 3 ||
-                data.XyzRotations.Any(keys => !ValidateQuadraticKeys(
-                    keys, sequence.StartTime, sequence.StopTime)) ||
-                data.QuaternionRotations.Length != 0 ||
-                (data.Translations.Length != 0 && !ValidateQuadraticKeys(
-                    data.Translations, sequence.StartTime, sequence.StopTime)) ||
-                (data.Scales.Length != 0 && !ValidateQuadraticKeys(
-                    data.Scales, sequence.StartTime, sequence.StopTime)))
+                !multi.ExtraTargets.Contains(targetBlock))
                 throw new NotSupportedException(
-                    $"NIF sequence {sequence.Block.Index} transform channel is outside the XYZ rotation contract.");
-            var sourceTransform = _source.ReadNode(targetBlock).Transform;
-            var baseTranslation = interpolator.Translation.X == float.MinValue &&
-                interpolator.Translation.Y == float.MinValue &&
-                interpolator.Translation.Z == float.MinValue
-                ? sourceTransform.Translation
-                : interpolator.Translation;
-            var baseScale = interpolator.Scale == float.MinValue
-                ? sourceTransform.Scale
-                : interpolator.Scale;
+                    $"NIF sequence {sequence.Block.Index} transform target is outside its manager binding.");
+            var sourceTransform = _source.ReadObject(targetBlock) switch
+            {
+                FalloutNifNode node => node.Transform,
+                FalloutNifGeometry geometry => geometry.Transform,
+                _ => throw new NotSupportedException("Managed transform target has no source-local transform."),
+            };
+            // Managed NIFs use the same keyed/constant/spline interpolator
+            // contract as KF playback. A component without authored data keeps
+            // the instance's source bind value; it is not a missing clip.
+            var sampler = new FalloutNifAnimationSampler(_source, link.Interpolator);
             return new RuntimeNifControllerChannel(time =>
             {
-                var rotation = EulerXyzRowMajor(
-                    SampleScalar(data.XyzRotations[0], time),
-                    SampleScalar(data.XyzRotations[1], time),
-                    SampleScalar(data.XyzRotations[2], time));
-                var translation = data.Translations.Length == 0
-                    ? baseTranslation
-                    : SampleVector(data.Translations, time);
-                var scale = data.Scales.Length == 0
-                    ? baseScale
-                    : SampleScalar(data.Scales, time);
+                var sample = sampler.Sample(time);
+                var rotation = sample.Rotation is { } value ? QuaternionRowMajor(value) : sourceTransform.RotationRowMajor;
                 target.Transform = ConvertTransform(new FalloutNifTransform(
-                    translation, rotation, scale));
+                    sample.Translation ?? sourceTransform.Translation, rotation, sample.Scale ?? sourceTransform.Scale));
             });
         }
 

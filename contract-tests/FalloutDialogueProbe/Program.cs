@@ -2,6 +2,19 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
+IdleAnimationProbe.Run();
+
+ActorPackageCommandProbe.Exercise();
+IdleCollectionProbe.Run();
+HudDeclarationsProbe.Run();
+ActorFaceAnimationProbe.Run();
+
+if (args is ["--audit-hud-declarations", var hudExecutable])
+{
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(FalloutExecutableStringTable.ReadHudMessageDeclarations(hudExecutable)));
+    return;
+}
+
 if (args is ["--inspect-float-defaults", var floatExecutable, var floatPrefix])
 {
     foreach (var (key, value) in FalloutExecutableStringTable.ReadFloatDefaults(floatExecutable).Where(value => value.Key.StartsWith(floatPrefix, StringComparison.OrdinalIgnoreCase)))

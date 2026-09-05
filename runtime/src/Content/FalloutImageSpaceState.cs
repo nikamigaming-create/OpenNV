@@ -4,7 +4,8 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutActiveImageModifier(FalloutImageSpaceModifier Source, double ElapsedSeconds);
 internal sealed record FalloutImageSpaceFrame(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
-    IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels);
+    IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels, float BlurRadius = 0,
+    Vector2 DoubleVisionOffset = default);
 
 /// <summary>Gameplay-clock IMAD lifetime and source IMGS/IMAD composition, independent of captured state.</summary>
 internal sealed class FalloutImageSpaceState
@@ -35,8 +36,15 @@ internal sealed class FalloutImageSpaceState
         return expired;
     }
 
-    internal FalloutImageSpaceFrame Compose(FalloutImageSpace source)
+    internal FalloutImageSpaceFrame Compose(FalloutImageSpace source, float? gameHour = null, FalloutDoubleVisionPhase? phase = null,
+        FalloutImageSpaceModifier? presentationModifier = null)
     {
+        if (gameHour is { } hour && !float.IsFinite(hour)) throw new ArgumentOutOfRangeException(nameof(gameHour));
+        // Static menu backgrounds temporarily apply an IMAD while drawing the
+        // captured world. That request must never enter saved gameplay state.
+        var activeModifiers = presentationModifier is null ? _active.Values.ToArray() :
+            _active.Values.Where(active => active.Source.Form != presentationModifier.Form)
+                .Append(new(presentationModifier, 0)).ToArray();
         var traits = new float[33];
         if (source.SkinDimmer is null)
         {
@@ -55,8 +63,10 @@ internal sealed class FalloutImageSpaceState
         var fadeNumerator = Vector3.Zero;
         var fadeWeight = 0f;
         var strongestFade = 0f;
+        var blurRadius = 0f;
+        var doubleVision = 0f;
         var unbound = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var active in _active.Values)
+        foreach (var active in activeModifiers)
         {
             var modifier = active.Source;
             var time = modifier.NormalizedTime(active.ElapsedSeconds);
@@ -80,8 +90,15 @@ internal sealed class FalloutImageSpaceState
             fadeWeight += fadeStrength;
             strongestFade = MathF.Max(strongestFade, fadeStrength);
             foreach (var effect in modifier.Effects)
-                if (FalloutImageSpaceModifier.Sample(effect.Value, time, 0) != 0)
+            {
+                var value = FalloutImageSpaceModifier.Sample(effect.Value, time, 0);
+                // Scalar blur is the strongest active request, not an additive
+                // camera filter. Each modifier still owns its gameplay clock.
+                if (effect.Key == "BNAM") blurRadius = MathF.Max(blurRadius, value);
+                else if (effect.Key == "VNAM" && gameHour is not null && phase is not null) doubleVision = MathF.Max(doubleVision, value);
+                else if (value != 0)
                     unbound.Add($"{modifier.Form}/{effect.Key}");
+            }
             if (modifier.RadialFlags != 0 || modifier.DepthUsesTarget) unbound.Add($"{modifier.Form}/target");
             if (modifier.IntroSound is not null || modifier.OutroSound is not null) unbound.Add($"{modifier.Form}/audio");
         }
@@ -89,7 +106,11 @@ internal sealed class FalloutImageSpaceState
             traits[TraitIndices[index]] = traits[TraitIndices[index]] * (1 + multipliers[index]) + adds[index];
         var finalTint = tintWeight > 0 ? new Vector4(tintNumerator / tintWeight, strongestTint) : new Vector4(1, 1, 1, 0);
         var finalFade = fadeWeight > 0 ? new Vector4(fadeNumerator / fadeWeight, strongestFade) : Vector4.Zero;
+        // The original effect's rotation is one turn per game hour. It reads
+        // the shared game-time global, independently of the IMAD lifetime.
+        var angle = phase?.Angle(gameHour.GetValueOrDefault()) ?? 0;
+        var doubleVisionOffset = new Vector2((float)(Math.Cos(angle) * doubleVision), (float)(Math.Sin(angle) * doubleVision));
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
-            _active.Values.ToArray(), unbound.Order(StringComparer.Ordinal).ToArray());
+            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset);
     }
 }
