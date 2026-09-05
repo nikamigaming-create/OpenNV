@@ -518,6 +518,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
 
     private void RenderView(RenderSceneBuffersRD buffers, uint view, Vector2I sceneSize, MenuBackgroundRequest? menuBackground)
     {
+        _traceView = view;
         var suffix = view.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var scene = buffers.GetColorLayer(view);
         var capturedBackground = default(Rid);
@@ -695,6 +696,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
                 _renderingDevice.ComputeListAddBarrier(computeList);
         }
         _renderingDevice.ComputeListEnd();
+        if (Volatile.Read(ref _traceRequest) is not null)
+            foreach (var pass in passes) pass.Trace?.Submitted();
     }
 
     private static Vector2I Size(IReadOnlyList<int> pixels) =>
@@ -775,11 +778,13 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         var uniformSet = UniformSetCacheRD.GetCache(_shader, 0, uniforms);
         if (!uniformSet.IsValid)
             throw new InvalidOperationException("Could not bind a retail HDR compositor pass.");
+        var constants = PushConstants(pass, destinationSize, sourceSize, initializeAdaptation, horizontalEffect);
         return new DispatchPass(
             uniformSet,
-            PushConstants(pass, destinationSize, sourceSize, initializeAdaptation, horizontalEffect),
+            constants,
             Groups(destinationSize.X),
-            Groups(destinationSize.Y));
+            Groups(destinationSize.Y),
+            ObservePass(sourceZero, sourceOne, destination, constants));
     }
 
     private byte[] PushConstants(
@@ -875,5 +880,6 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         Rid UniformSet,
         byte[] PushConstants,
         uint GroupsX,
-        uint GroupsY);
+        uint GroupsY,
+        TracePass? Trace);
 }

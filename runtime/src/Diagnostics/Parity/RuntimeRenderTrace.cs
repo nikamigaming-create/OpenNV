@@ -5,6 +5,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Diagnostics.Parity;
 
@@ -22,6 +23,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
     private readonly Dictionary<ulong, object> _renderResources = [];
     private readonly Dictionary<string, object> _sources = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _missing = [];
+    private readonly List<(string Path, RetailHdrCompositorEffect Effect)> _imageSpaceTraces = [];
     private RenderTraceBlobStore? _blobs;
     private string? _captureDirectory;
     private object? _before;
@@ -31,6 +33,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
     private int _lostEvents;
     private string? _error;
     private string? _lastReport;
+    private string[] _lastMissing = ["native-GPU-draw-execution", "per-pixel-contributor-IDs", "retail-frame-join", "complete-audio-events"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     internal RuntimeRenderTrace(Node owner, string directory, Func<FalloutPluginStack?> stack, Func<object> gameplay)
@@ -48,8 +51,8 @@ internal sealed class RuntimeRenderTrace : IDisposable
         lostEvents = _lostEvents,
         report = _lastReport,
         error = _error,
-        coverage = "source-reads,scene-submission,bound-resources,pre-post-draw,pixels",
-        missing = new[] { "native-GPU-draw-execution", "per-pixel-contributor-IDs", "retail-frame-join", "complete-audio-events" }
+        coverage = "source-reads,scene-submission,bound-resources,image-space-pass-submission-and-readback,pre-post-draw,pixels",
+        missing = _lastMissing,
     };
 
     internal void SetEnabled(bool enabled)
@@ -61,6 +64,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
         FalloutPluginRecord.ReadObserver = enabled ? ObserveRecord : null;
         if (!enabled)
         {
+            CancelImageSpaceTraces();
             _request = 0; _before = null; _blobs = null;
             _records.Clear(); _events.Clear(); _queuedEvents = 0;
             _renderResources.Clear(); _sources.Clear(); _missing.Clear();
@@ -134,6 +138,12 @@ internal sealed class RuntimeRenderTrace : IDisposable
                 records,
                 events
             };
+            CancelImageSpaceTraces();
+            foreach (var imageSpace in Walk(_owner.GetTree().Root).OfType<RuntimeNativeImageSpace>())
+            {
+                _imageSpaceTraces.Add((imageSpace.GetPath().ToString(), imageSpace.Effect));
+                imageSpace.Effect.BeginRenderTrace(_request);
+            }
         }
         catch (Exception exception) { Fail(exception); }
     }
@@ -143,6 +153,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
         if (_before is null || _captureDirectory is null || _blobs is null) return;
         try
         {
+            var imageSpaces = CaptureImageSpaceTraces();
             var pixels = _blobs.Put(image.GetData());
             var preview = Path.Combine(_captureDirectory, "frame.png");
             File.WriteAllBytes(preview, image.SavePngToBuffer());
@@ -164,6 +175,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
             }).ToArray();
             var missing = _missing.Concat(new[] { "native-GPU-draw-execution", "per-pixel-contributor-IDs",
                 "retail-frame-join", "complete-audio-events" }).Distinct().Order().ToArray();
+            _lastMissing = missing;
             var report = new
             {
                 schema = "opennv-render-trace/v1",
@@ -174,6 +186,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
                 after = new { nanoseconds = end, drawCount = Engine.GetFramesDrawn(), gameplay = _gameplay() },
                 frame = new { pixels, preview, width = image.GetWidth(), height = image.GetHeight(), format = image.GetFormat().ToString() },
                 viewports,
+                imageSpaces,
                 missing,
                 lostEvents = _lostEvents,
                 parity = "unverified",
@@ -190,10 +203,73 @@ internal sealed class RuntimeRenderTrace : IDisposable
 
     private void Fail(Exception exception)
     {
+        CancelImageSpaceTraces();
         _error = exception.Message; _before = null; _request = 0;
         // Failure remains diagnostic state; tracing must not advance, reset or
         // terminate the game when an observation owner fails.
         GD.PushError("OPENNV_RENDER_TRACE_FAILED " + exception);
+    }
+
+    private object[] CaptureImageSpaceTraces()
+    {
+        var result = new List<object>();
+        foreach (var (path, effect) in _imageSpaceTraces)
+        {
+            try
+            {
+                var trace = effect.CaptureRenderTrace(_request);
+                foreach (var surface in trace.Surfaces.Where(surface => surface.Error is not null))
+                    _missing.Add(path + ":image-space-surface-" + surface.Resource + ":" + surface.Error);
+                result.Add(new
+                {
+                    path,
+                    trace.Request,
+                    trace.BeginNanoseconds,
+                    trace.EndNanoseconds,
+                    trace.SourcePrograms,
+                    computeProgram = _blobs!.Put(trace.ComputeSource),
+                    passes = trace.Passes.Select(pass => new
+                    {
+                        pass.Ordinal,
+                        pass.View,
+                        pass.DrawCount,
+                        pass.Nanoseconds,
+                        pass.SourceZero,
+                        pass.SourceOne,
+                        pass.Destination,
+                        pass.Submitted,
+                        pushConstants = _blobs.Put(pass.PushConstants),
+                    }).ToArray(),
+                    surfaces = trace.Surfaces.Select(surface => new
+                    {
+                        surface.Resource,
+                        surface.LastWriter,
+                        surface.Width,
+                        surface.Height,
+                        surface.Mipmaps,
+                        surface.UsageBits,
+                        surface.Format,
+                        surface.Error,
+                        pixels = _blobs.Put(surface.Pixels),
+                    }).ToArray(),
+                    observation = "retained-pass-destinations-after-last-writer;viewport-and-retail-frame-join-unverified",
+                });
+            }
+            catch (Exception exception)
+            {
+                _missing.Add(path + ":image-space-pass-readback");
+                result.Add(new { path, error = exception.Message });
+            }
+        }
+        CancelImageSpaceTraces();
+        return result.ToArray();
+    }
+
+    private void CancelImageSpaceTraces()
+    {
+        foreach (var (_, effect) in _imageSpaceTraces)
+            if (GodotObject.IsInstanceValid(effect)) effect.CancelRenderTrace();
+        _imageSpaceTraces.Clear();
     }
 
     private object NodeState(Node node)

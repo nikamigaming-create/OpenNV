@@ -1,7 +1,6 @@
 using System.Text;
 using Godot;
-
-
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Presentation.Rendering;
@@ -37,19 +36,11 @@ internal static class RetailLighting
     }
 
     internal static Vector3 SurfaceToLightFromXcllDegrees(
-        float rotationYDegrees,
+        float rotationXDegrees,
         float rotationZDegrees)
     {
-        if (!float.IsFinite(rotationYDegrees) || !float.IsFinite(rotationZDegrees))
-            throw new InvalidOperationException(
-                "Retail XCLL directional rotations must be finite.");
-        var rotationY = Mathf.DegToRad(rotationYDegrees);
-        var rotationZ = Mathf.DegToRad(rotationZDegrees);
-        var gamebryo = new Vector3(
-            Mathf.Sin(rotationY) * Mathf.Cos(rotationZ),
-            Mathf.Sin(rotationY) * Mathf.Sin(rotationZ),
-            Mathf.Cos(rotationY));
-        return GamebryoCoordinate.ConvertVector(gamebryo).Normalized();
+        var ray = FalloutCellDirectionalLight.RayDirection(rotationXDegrees, rotationZDegrees);
+        return -GamebryoCoordinate.ConvertVector(new Vector3(ray.X, ray.Y, ray.Z)).Normalized();
     }
 
     internal static Basis DirectionalLightBasis(Vector3 surfaceToLight)

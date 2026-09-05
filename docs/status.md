@@ -93,6 +93,18 @@ The checked wall regions improve against retail, while floor and ceiling
 brightness barely changes. Light contribution, window effects, shadows and
 complete final-pixel agreement remain open.
 
+CELL directional rotations now use the native emitted-ray convention instead
+of the previous spherical mapping. All three derived Float32 components match
+the selected native light direction and world-matrix column. Synthetic axis,
+mixed-angle and rejection checks, the owned audit and the full gate pass;
+ordinary room-60 verifies the corrected Godot light binding. The room remains
+too bright. Bounded tracing now retains ten intermediate image-space surfaces
+and exact constants for eleven submitted passes. It places the brightness
+discrepancy before HDR; native target luminance, cinematic, tint and fade bytes
+agree with the submitted constants. Unreadable GPU destinations remain visible
+as missing evidence. Complete light selection, fog, materials and shadows are
+still open.
+
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior
 streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics, complete

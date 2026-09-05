@@ -14,6 +14,7 @@ internal partial class RuntimeNativeImageSpace : Node
     private FalloutImageSpaceFrame? _menuBackground;
     private long _menuSerial;
     internal FalloutImageSpaceFrame? Frame { get; private set; }
+    internal RetailHdrCompositorEffect Effect => _effect;
 
     internal void Configure(FalloutImageSpace source, FalloutImageSpaceState state, RetailHdrCompositorEffect effect,
         FalloutGameTime? gameTime = null)

@@ -4,6 +4,12 @@ using OpenNV.Runtime.Content;
 
 GameTimeProbe.Run();
 ImageEffectsDeclarationsProbe.Run();
+DirectionalLightProbe.Run();
+if (args is ["--directional-light", var directionalRoot, var directionalCell])
+{
+    DirectionalLightProbe.Owned(directionalRoot, Convert.ToUInt32(directionalCell, 16));
+    return;
+}
 if (args is ["--menu-backgrounds", var menuRoot])
 {
     RuntimeLiveContentSource.Configure(menuRoot, RuntimeLiveContentSource.FalloutNewVegasGame);

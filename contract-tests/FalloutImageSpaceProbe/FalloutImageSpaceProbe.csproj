@@ -21,6 +21,7 @@
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutCellDirectionalLight.cs" Link="FalloutCellDirectionalLight.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />

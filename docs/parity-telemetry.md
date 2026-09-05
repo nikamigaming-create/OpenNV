@@ -179,6 +179,18 @@ Immutable SHA-256-addressed blobs preserve their exact bytes. Retained source
 resources are identified as current observations, not a reconstructed history.
 The bounded source-event queue reports overflow explicitly.
 
+An explicit trace also arms one compositor observation. It retains the actual
+submitted image-space pass order, view and draw counters, sampler-resource
+links, exact push-constant bytes, compute program and readable GPU destination
+surfaces. Readback runs together on the render thread after drawing; there is
+no intermediate GPU readback on ordinary frames. Each surface identifies its
+last writer and allocation dimensions, format, mip count and usage. A later
+write to an input resource must not be mistaken for the earlier input pixels.
+Unreadable destinations and extent mismatches remain in the report and live
+trace status. The final engine scene target can lack readback usage; the native
+viewport capture remains a separate output lane. Submission/readback evidence
+does not establish native per-draw execution or a retail/viewport frame join.
+
 The inspector follows node-to-resource-to-source links. Clicking a viewport
 lists projected bounding-box candidates, clipping edges at the camera near
 plane so surrounding room geometry remains selectable. It does not determine occlusion,

@@ -43,6 +43,15 @@ Component and transport results do not establish scene or campaign parity.
   its draw trace confirm the binding on all 175 lit room instances. The checked
   wall regions move closer to retail; floor and ceiling brightness barely
   changes. This closes the missing binding, not lighting or pixel acceptance.
+- CELL directional rotations now produce the native emitted-ray axis before
+  conversion to Godot's opposite surface-to-light axis. The old spherical
+  mapping tilted the selected light by 35 degrees. Cardinal/mixed-angle and
+  invalid-input tests, the selected owned audit and the complete gate pass.
+  All three source-derived Float32 ray components match the observed native
+  direction and world-matrix column. Ordinary room-60 verifies the corrected
+  local Godot binding. World composition differs by one ULP in one near-zero
+  component; GPU direction and pixels remain unverified. The floor, ceiling
+  and window brightness remain visibly wrong.
 - The restored HUD owner renders the original gift icon, bracket, bitmap font
   and item text during Classic Pack in ordinary run hud-45. Startup scripts
   produce 19 inventory grants through transactional shared state. Declaration,
@@ -154,11 +163,15 @@ prompt. Compared with retained retail-54 inputs, matching light RGB triples
 improve from 19/25 to 25/25; all 25 dimmers agree. The rendered room still looks
 too bright. Room-56 additionally restores the geometry-derived vertex-colour
 binding, improving the checked wall regions without changing the source lights.
-The current comparison is room-56/retail-54 at the original name prompt; the
+The current comparison is room-60/retail-54 at the original name prompt; the
 movie was skipped and all four pack messages were dismissed through ordinary
-input. Trace remaining light contribution and image-space state next; do not
-retune the matching CPU light colours. Doc's rest/aim pose and text composition
-also differ. ForceWeather and complete result-script execution remain unbound.
+input. Bounded GPU readbacks retain ten intermediate image-space surfaces and
+the exact constants for eleven submitted passes. Native target luminance,
+cinematic, tint and fade bytes agree with the submitted OpenNV parameters. The
+room is already too bright before HDR; the correction to directional rotation
+does not resolve that discrepancy. Trace material response, selected lights,
+fog and shadows next. Doc's rest/aim pose and text composition also differ.
+ForceWeather and complete result-script execution remain unbound.
 
 The harness previously gave every tap a 900 ms engine lease. A loading
 transition delayed retail's explicit release receipt; taps now send their
@@ -183,18 +196,24 @@ advancing. Do not read live-state files through exclusive file handles; use
 the harness state command or shared reads compatible with atomic replacement.
 
 Switchable tracing connects source ranges, decoded records/resources, scene
-instances, mesh/bone/material inputs and viewport captures. Keep it off except
-for bounded evidence. GPU execution, exact pixel contribution, native event
-identity, audio and final-frame correspondence remain incomplete. Each lane
+instances, mesh/bone/material inputs, submitted image-space passes, retained
+GPU surfaces and viewport captures. Keep it off except for bounded evidence.
+Readbacks preserve allocation extents, constants, resource links and last
+writers. Unreadable destinations remain explicit in the report and live status;
+the engine's final scene target is available through the separate viewport lane.
+Native GPU execution, exact pixel contribution, native event identity, audio
+and final-frame correspondence remain incomplete. Each lane
 must agree independently before a parity claim. Private captures, addresses,
 owned records and decoded resources stay outside the public repository.
 
 ## Next work
 
-1. Trace the remaining bright floor/ceiling/window discrepancy from the matching
-   light inputs and corrected vertex-colour binding into shader contributions,
-   attenuation, ambient response, image-space state and shadows.
-   Preserve room-56/retail-54 at the name prompt for this bounded check.
+1. Trace the remaining bright floor/ceiling/window discrepancy in the pre-HDR
+   scene. Preserve the matching source colours and corrected vertex-colour and
+   directional-axis bindings. Selected native geometry now has observed render
+   pass/light lists; pass admission, fog constants, material response and GPU
+   contribution still need binding. Do not fit HDR settings to this discrepancy.
+   Preserve room-60/retail-54 at the name prompt for this bounded check.
    Continue ordinary startup using keyboard input and fresh observed controls.
    Exact block admission, MenuMode execution, mutable processing delays and
    dynamic quest start/stop remain separate gaps. Do not reopen proved
