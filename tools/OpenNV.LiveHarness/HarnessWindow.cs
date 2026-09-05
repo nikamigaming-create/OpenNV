@@ -289,13 +289,7 @@ internal sealed class HarnessWindow : Form
             case "tap":
                 var key = command.GetProperty("key").GetString()!;
                 var duration = command.TryGetProperty("milliseconds", out var value) ? value.GetInt32() : 120;
-                if (duration is < 20 or > 1000) throw new ArgumentException("Tap duration must be 20–1000 milliseconds.");
-                // Each engine enforces the requested deadline locally. A load
-                // transition may postpone delivery of the explicit key-up.
-                DispatchKey(key, true, target, driver, true, duration);
-                var generations = Targets(target).ToDictionary(engine => engine,
-                    engine => _inputGenerations[(engine, key.ToUpperInvariant())]);
-                _ = ReleaseAfter(key, generations, driver, duration);
+                DispatchTap(key, target, driver, duration);
                 break;
             case "console":
                 if (target != "retail") throw new ArgumentException("Native retail console commands must target retail explicitly.");
@@ -324,12 +318,18 @@ internal sealed class HarnessWindow : Form
                     var openNvButton = RequireObservedButton("opennv", "path", openNvPath);
                     if (retailButton.GetProperty("text").GetString() != openNvButton.GetProperty("text").GetString())
                         throw new InvalidOperationException("Paired buttons do not describe the same observed action.");
+                    RequireKeyboardSelection(retailButton);
                     _recording?.Journal("paired-button", new { retailButton, openNvButton, state = Snapshot() });
-                    Send("retail", retailCommand, driver, "paired button");
+                    DispatchTap("Enter", "retail", driver, 120);
                     Send("opennv", JsonSerializer.Serialize(new { op = "button", path = openNvPath }, Program.Json), driver, "paired button");
                     break;
                 }
-                Send(target, target == "retail" ? command.GetProperty("nativeCommand").GetString()! : JsonSerializer.Serialize(new { op = "button", path = command.GetProperty("path").GetString() }, Program.Json), driver, "button");
+                if (target == "retail")
+                {
+                    RequireKeyboardSelection(RequireObservedButton("retail", "nativeCommand", command.GetProperty("nativeCommand").GetString()!));
+                    DispatchTap("Enter", "retail", driver, 120);
+                }
+                else Send(target, JsonSerializer.Serialize(new { op = "button", path = command.GetProperty("path").GetString() }, Program.Json), driver, "button");
                 break;
             case "capture":
                 foreach (var engine in Targets(target)) Send(engine, engine == "retail" ? "native.capture" : "{\"op\":\"capture\"}", driver, "capture");
@@ -342,6 +342,23 @@ internal sealed class HarnessWindow : Form
             default: throw new ArgumentException($"Unknown harness operation: {operation}");
         }
         return Snapshot();
+    }
+
+    private void DispatchTap(string key, string target, string driver, int duration)
+    {
+        if (duration is < 20 or > 1000) throw new ArgumentException("Tap duration must be 20–1000 milliseconds.");
+        // Each engine enforces the requested deadline locally. A load
+        // transition may postpone delivery of the explicit key-up.
+        DispatchKey(key, true, target, driver, true, duration);
+        var generations = Targets(target).ToDictionary(engine => engine,
+            engine => _inputGenerations[(engine, key.ToUpperInvariant())]);
+        _ = ReleaseAfter(key, generations, driver, duration);
+    }
+
+    private static void RequireKeyboardSelection(JsonElement button)
+    {
+        if (!button.TryGetProperty("keyboardSelected", out var selected) || selected.ValueKind != JsonValueKind.True)
+            throw new InvalidOperationException("Select the retail button with arrow keys first. Internal UI callbacks are not player input.");
     }
 
     private async Task ReleaseAfter(string key, IReadOnlyDictionary<string, long> generations, string driver, int delay)
@@ -390,6 +407,8 @@ internal sealed class HarnessWindow : Form
     {
         if (command.Length is < 1 or > 4096 || (target == "retail" && Encoding.UTF8.GetByteCount(command) > 512) || command.IndexOfAny(['\r', '\n', '\0']) >= 0)
             throw new ArgumentException("Command must be a single bounded line.");
+        if (target == "retail" && command.TrimStart().StartsWith("native.click", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Internal retail UI callbacks are disabled. Use ordinary keyboard input.");
         var sequence = _nextCommands[target]++;
         AtomicWrite(Path.Combine(EngineDirectory(target), $"{sequence:D10}.command"), command);
         if (record) Log(driver, target, "sent", $"#{sequence} {action}: {command}");
@@ -465,13 +484,16 @@ internal sealed class HarnessWindow : Form
         {
             var captured = item.Clone();
             var label = item.GetProperty("text").GetString() ?? "Button";
-            panel.Controls.Add(Button(label, () =>
+            var button = Button(label, () =>
             {
                 var action = target == "retail"
                     ? JsonSerializer.SerializeToElement(new { op = "button", target, nativeCommand = captured.GetProperty("nativeCommand").GetString() }, Program.Json)
                     : JsonSerializer.SerializeToElement(new { op = "button", target, path = captured.GetProperty("path").GetString() }, Program.Json);
                 try { Execute(action, "user"); } catch (Exception exception) { Log("user", target, "error", exception.Message); }
-            }));
+            });
+            if (target == "retail")
+                button.Enabled = captured.TryGetProperty("keyboardSelected", out var selected) && selected.ValueKind == JsonValueKind.True;
+            panel.Controls.Add(button);
         }
         panel.ResumeLayout();
     }

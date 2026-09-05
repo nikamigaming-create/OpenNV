@@ -39,8 +39,13 @@ Fresh run room-47 exposes different startup pack states: retail was observed
 on Mercenary, Classic and Tribal; OpenNV queued Classic, Mercenary, Caravan and
 Tribal. The full retail startup order is uncertain because an earlier long
 Escape lease may have dismissed a message. Native quest registration, initial
-delay, shared SCPT ownership and pre-New lifetime remain unbound. The native
-lists match reverse source registration; numeric FormID order is insufficient.
+delay, shared SCPT ownership and pre-New lifetime were missing. These owners
+now derive from the winning source graph: initialization includes embedded,
+inactive and unattached script declarations; shared definitions share clocks.
+All 252 retained initial countdowns match native Float32 bits. Synthetic
+override/shared/cold checks and the selected owned audit pass. Main-menu
+timers run without grants and survive ordinary New in room-51. This does not
+prove aligned running-clock timing or startup event order.
 A separate harness fix now uses the requested tap duration as
 the engine lease; a live 25 ms check and the complete gate pass. Neither that
 fix nor source light inputs establish complete timing or scene parity.
@@ -59,6 +64,14 @@ over 44.46 seconds on the same Classic Pack dialog without executing the
 gameplay block again or changing inventory. Missing legacy clock state is
 reported before campaign restoration or save replacement. Startup order,
 MenuMode execution and complete timing remain open.
+
+The callback-assisted retail run room-52 left a stale StartMenu entry and a
+white opening screen. Fresh room-53 uses ordinary keyboard navigation and
+reaches the Tribal Pack message. The harness now rejects internal native.click
+callbacks and activates only an observed keyboard-selected retail button with
+Enter. The complete gate, live rejection with no command written and paired
+Tribal dismissal pass; both runs subsequently show Classic. Different clock
+histories still prevent a synchronized comparison.
 
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior

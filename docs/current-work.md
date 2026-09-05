@@ -17,11 +17,13 @@ subsequent timed-input fix also passed the complete gate and a live 25 ms
 command/deadline check. The default ShowMessage button now reads its own owned
 executable declaration instead of sOk. Synthetic rejection checks, the owned
 declaration audit, the complete gate and ordinary run room-48 verify that
-binding and the visible OK label. Quest-script recurrence now uses the owned
+binding and the visible OK label. Quest-script recurrence uses the owned
 configured interval, Float32 countdown/elapsed storage and retained overshoot.
-Synthetic cold/save rejection checks, the selected owned-script audit, the
-complete gate and ordinary run room-50 pass. These results do not establish
-scene acceptance.
+Initialization now derives phases from the complete winning declaration graph,
+shares clocks by SCPT and preserves the main-menu session through New Game.
+Synthetic and selected owned checks, the complete gate, live callback
+rejection and ordinary selected-button dismissal pass. These results do not
+establish scene acceptance.
 
 All 33 requirements in recovery-checklist.md remain open. scene-defects.md
 tracks current component discrepancies and the evidence needed to close them.
@@ -43,9 +45,13 @@ Component and transport results do not establish scene or campaign parity.
   further recurrences over 44.46 seconds with the same modal visible; its
   GameMode execution count and all 19 inventory item kinds remain unchanged.
   Countdown and elapsed state survive cold restoration. Missing legacy clocks
-  are rejected before restoring a campaign or replacing a valid save. Initial
-  phase/linking, shared SCPT clocks, pre-New lifetime and MenuMode execution
-  still need owners.
+  and inconsistent shared-clock snapshots are rejected before restoration.
+  Initialization counts winning embedded declarations and all standalone
+  quest-type scripts in source registration order. All 252 retained native
+  initial countdowns match exact Float32 bits in the selected owned audit.
+  Main-menu recurrence runs without inventory grants; ordinary New retains
+  those clocks in room-51. MenuMode execution, exact block admission, mutable
+  delays and dynamic quest start/stop remain unbound.
 - Source opacity/falloff fixes remove the gurney wheel's opaque black fill in
   run hud-45. Clothing retains its NIF texture instead of a skin override;
   the original Reflectron preview shows the corrected dark shirt. Selected
@@ -97,19 +103,27 @@ remaining queue contains only Tribal. The earlier long Escape lease may have
 dismissed a preceding message; the complete retail startup order is not yet
 established. Do not fit a named pack order to this observation.
 
-Run room-50 rebuilt only OpenNV, used ordinary New and skipped the movie with
-a 25 ms tap. OpenNV is on Classic with the source OK label and advancing modal
-timers. The original gift icon, bracket, font and dark panel remain visible.
-Retail was restarted as room-49 and is at the main menu. The comparison stays
-hidden and is not aligned.
+Run room-51 rebuilt OpenNV with the source initialization owner. Its clocks
+advance behind the main menu without GameMode effects and persist through
+ordinary New and a 25 ms movie skip. The first displayed message is Tribal.
+Retail room-53 reaches Tribal through ordinary Down/Enter navigation and the
+same short movie skip. The two runs have different clock histories and are
+not time-aligned. The comparison stays hidden during implementation.
 Private observation matches all 640 quest and 3,707 script registrations to
-reverse first source registration order. The runtime instead iterates numeric
-FormIDs. Native script initialization spreads first runs across a delay and
-starts clocks before New Game. OpenNV still lacks those initialization owners
-and creates a separate clock per quest instead of per shared SCPT definition.
-The recurring default delay and modal countdown are now implemented. See
-quest-script-timing.md for the bounded contract and remaining gaps. Do not
-change ordering alone and call startup timing fixed.
+reverse first source registration order. OpenNV now uses this order for quest
+scheduling and script initialization. Winning embedded script headers account
+for the earlier initialization slots without a fitted counter or named pack
+order. Shared SCPT definitions own shared clocks. See quest-script-timing.md
+for the bounded contract and remaining gaps.
+
+Retail room-52 remained on the white opening frame with a stale StartMenu
+stack entry after callback-assisted New. Fresh room-53 keyboard navigation
+clears that entry and reaches the normal message. Internal UI callbacks are
+not ordinary input, so the harness now rejects native.click and only activates
+an observed keyboard-selected retail button with Enter. Arrow keys select a
+different button. Live rejection writes no retail command. One paired Enter
+dismisses Tribal and both games subsequently show Classic. This verifies the
+input route; it does not establish clock or pixel alignment.
 
 The harness previously gave every tap a 900 ms engine lease. A loading
 transition delayed retail's explicit release receipt; taps now send their
@@ -142,10 +156,10 @@ owned records and decoded resources stay outside the public repository.
 
 ## Next work
 
-1. Bind startup quest initialization, shared SCPT clock ownership, pre-New
-   lifetime and block admission from source registration and native observation.
-   Preserve the verified recurrence fix. Keep the current mismatch and all
-   independent visual/event lanes explicit. Publish only verified changes.
+1. Continue ordinary startup using keyboard input and fresh observed controls.
+   Exact block admission, MenuMode execution, mutable processing delays and
+   dynamic quest start/stop remain separate gaps. Do not reopen proved
+   initialization work without new contradictory evidence.
 2. Replay the corrected boundary, skip the intro, and capture the live
    HUD, Doc motion/animation sound, window/gurney alpha, clock-driven light
    colour, opening haze and Reflectron background/preview blinking. Reset and
