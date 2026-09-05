@@ -35,11 +35,20 @@ Selected owned light/audio and fresh native actor audits also pass. Main/origin
 include d6d7591 and there are no open PRs. All work stays in this task; the user
 stopped parallel subagent work.
 
-Fresh run room-47 exposes different startup pack order: retail shows Mercenary
-then Classic; OpenNV shows Classic then Mercenary. Native quest scheduling
-remains unbound. A separate harness fix now uses the requested tap duration as
+Fresh run room-47 exposes different startup pack states: retail was observed
+on Mercenary, Classic and Tribal; OpenNV queued Classic, Mercenary, Caravan and
+Tribal. The full retail startup order is uncertain because an earlier long
+Escape lease may have dismissed a message. Native quest registration, initial
+delay, recurring delay and modal timer behavior remain unbound. The native
+lists match reverse source registration; numeric FormID order is insufficient.
+A separate harness fix now uses the requested tap duration as
 the engine lease; a live 25 ms check and the complete gate pass. Neither that
 fix nor source light inputs establish complete timing or scene parity.
+
+The default ShowMessage button now reads its own declaration from the selected
+owned executable instead of the separate sOk setting. The owned audit,
+synthetic rejection checks, full repository gate and ordinary run room-48 pass;
+the live button reads OK. Broader message layout/timing acceptance remains open.
 
 Psychology, tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy presentation, room interactions and loot, radio discovery, exterior

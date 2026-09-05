@@ -28,6 +28,7 @@
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableControlTable.cs" Link="FalloutExecutableControlTable.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableHud.cs" Link="FalloutExecutableHud.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableMessageMenu.cs" Link="FalloutExecutableMessageMenu.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorIdleSource.cs" Link="FalloutActorIdleSource.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />

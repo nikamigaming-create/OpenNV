@@ -14,7 +14,10 @@ Continue in this task only. The presentation/clock changes are published as
 d6d7591 on main/origin, with no open PRs. The complete gate, selected owned
 light/audio audits and fresh native actor checks passed on 2026-09-05. The
 subsequent timed-input fix also passed the complete gate and a live 25 ms
-command/deadline check. These results do not establish scene acceptance.
+command/deadline check. The default ShowMessage button now reads its own owned
+executable declaration instead of sOk. Synthetic rejection checks, the owned
+declaration audit, the complete gate and ordinary run room-48 verify that
+binding and the visible OK label. These results do not establish scene acceptance.
 
 All 33 requirements in recovery-checklist.md remain open. scene-defects.md
 tracks current component discrepancies and the evidence needed to close them.
@@ -76,20 +79,30 @@ Component and transport results do not establish scene or campaign parity.
 
 ## Live comparison and evidence
 
-Fresh run room-47 reset both games and skipped the movie. It stopped at a
-confirmed pack-order discrepancy: retail shows Mercenary then Classic, while
-OpenNV shows Classic then Mercenary. OpenNV is now on Caravan; retail is on
-Classic. Do not describe this as matched state or advance it blindly. Trace
-native startup quest registration/scheduling; the runtime currently iterates
-the winning QUST index sorted by FormID. Do not hardcode the four pack names.
+Run room-47 observed retail Mercenary, Classic, then Tribal after the movie
+skip, while OpenNV queued Classic, Mercenary, Caravan and Tribal. Retail's
+remaining queue contains only Tribal. The earlier long Escape lease may have
+dismissed a preceding message; the complete retail startup order is not yet
+established. Do not fit a named pack order to this observation.
+
+Run room-48 rebuilt only OpenNV, used ordinary New and skipped the movie with
+a 25 ms tap. OpenNV is now on Classic with the corrected source OK label;
+retail remains on Tribal. The comparison stays hidden and is not aligned.
+Private observation matches all 640 quest and 3,707 script registrations to
+reverse first source registration order. The runtime instead iterates numeric
+FormIDs. More substantially, native script initialization spreads first runs
+across a delay, zero authored delay uses the engine default, and native script
+timers continue during the modal. OpenNV lacks those scheduling owners. See
+quest-script-timing.md for the bounded contract and unresolved initialization
+counter. Do not change ordering alone and call startup timing fixed.
 
 The harness previously gave every tap a 900 ms engine lease. A loading
 transition delayed retail's explicit release receipt; taps now send their
 requested duration as the local lease to both engines. A live 25 ms check
 confirms both commands carry 25 ms and both held-input states clear. This
-corrects a harness timing flaw, but does not resolve the source quest order.
-Original default-button casing also differs (Ok/OK); the paired-button guard
-correctly rejects that label mismatch. Ordinary keyboard input remains usable.
+corrects a harness timing flaw, but does not resolve source scheduling.
+The default-button casing defect is corrected through the owned declaration;
+the paired-button guard retains its exact-text check.
 Revalidate processes/states before control. Keep comparison hidden during code
 work and open it only for bounded matched checks.
 
@@ -114,8 +127,8 @@ owned records and decoded resources stay outside the public repository.
 
 ## Next work
 
-1. Fix startup quest ordering from source registration and native observation;
-   verify default MessageMenu button ownership. Keep the current mismatch and
+1. Bind startup quest initialization, recurring delay and modal timer behavior
+   from source registration and native observation. Keep the current mismatch and
    all independent visual/event lanes explicit. Publish only verified changes.
 2. Replay the corrected boundary, skip the intro, and capture the live
    HUD, Doc motion/animation sound, window/gurney alpha, clock-driven light

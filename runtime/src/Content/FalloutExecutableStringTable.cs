@@ -230,6 +230,37 @@ internal static partial class FalloutExecutableStringTable
     {
         internal uint Base { get; } = checked((uint)headers.PEHeader!.ImageBase);
 
+        internal ReadOnlySpan<byte> ScriptCommandBody(string name, byte[] code)
+        {
+            var codeBase = checked(Base + (uint)headers.SectionHeaders.Single(section => section.Name == ".text").VirtualAddress);
+            uint? execute = null;
+            foreach (var section in headers.SectionHeaders.Where(section =>
+                         (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0))
+            {
+                var data = bytes.AsSpan(section.PointerToRawData, section.SizeOfRawData);
+                // The Win32 command descriptor declares long/short names,
+                // opcode, help, parameter metadata and execute/parse/eval owners.
+                for (var at = 0; at <= data.Length - 40; at += 4)
+                {
+                    var row = data[at..];
+                    if (Literal(U32(row, 0)) != name) continue;
+                    var handler = U32(row, 24);
+                    if (Literal(U32(row, 4)) is null || Literal(U32(row, 12)) is null ||
+                        U32(row, 8) is < 0x1000 or > 0xffff || handler < codeBase || handler - codeBase >= code.Length)
+                        throw new NotSupportedException("Owned script command descriptor is unbound.");
+                    if (execute is not null) throw new InvalidDataException("Owned script command declaration is ambiguous.");
+                    execute = handler;
+                }
+            }
+            if (execute is null) throw new NotSupportedException($"Owned script command has no declaration: {name}.");
+            var body = code.AsSpan(checked((int)(execute.Value - codeBase)));
+            if (!body.StartsWith(new byte[] { 0x55, 0x8b, 0xec }))
+                throw new NotSupportedException("Owned script command entry is unbound.");
+            var end = body.IndexOf(new byte[] { 0x8b, 0xe5, 0x5d, 0xc3 });
+            if (end < 0) throw new NotSupportedException("Owned script command return is unbound.");
+            return body[..(end + 4)];
+        }
+
         internal byte[] Read(uint address, int count)
         {
             if (address < Base || count is < 0 or > 64 * 1024 * 1024) throw new InvalidDataException("Owned executable resource extent is invalid.");

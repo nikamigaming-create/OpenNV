@@ -7,7 +7,18 @@ IdleAnimationProbe.Run();
 ActorPackageCommandProbe.Exercise();
 IdleCollectionProbe.Run();
 HudDeclarationsProbe.Run();
+MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
+
+if (args is ["--audit-message-declarations", var messageExecutable])
+{
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+    {
+        command = "ShowMessage",
+        defaultButton = FalloutExecutableStringTable.ReadShowMessageDefaultButton(messageExecutable),
+    }));
+    return;
+}
 
 if (args is ["--audit-hud-declarations", var hudExecutable])
 {

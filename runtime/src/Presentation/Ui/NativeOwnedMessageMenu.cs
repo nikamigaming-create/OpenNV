@@ -26,7 +26,7 @@ internal sealed partial class NativeOwnedMessageMenu : Control
         _tiles.Text[_title] = message.Title; _tiles.Text[_body] = message.Text;
         _tiles.Bind(_title, "justify", 1); _tiles.Bind(_body, "justify", 1);
         _tiles.Bind(_title, "visible", message.Title.Length == 0 ? 0 : 1);
-        var labels = message.Buttons.Count == 0 ? new[] { FalloutGameSettingStrings.Read(records, "sOk") } : message.Buttons;
+        var labels = message.Buttons.Count == 0 ? new[] { FalloutMessageMenuDefaults.Button() } : message.Buttons;
         var template = Named("MM_ButtonTemplate").Elements().Single();
         foreach (var (label, index) in labels.Select((label, index) => (label, index)))
         {
