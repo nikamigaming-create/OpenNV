@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
@@ -15,7 +16,7 @@ internal static class NativeNifEffectMaterial
 
     private const string Fragment = $$"""
         shader_type spatial;
-        render_mode unshaded, __BLEND__, __DEPTH__, __CULL__;
+        render_mode unshaded, fog_disabled, __BLEND__, __DEPTH__, __CULL__;
         uniform sampler2D source_texture : filter_linear_mipmap, __REPEAT__;
         uniform bool source_has_texture;
         uniform vec4 source_color_multiplier;
@@ -27,17 +28,26 @@ internal static class NativeNifEffectMaterial
         uniform bool alpha_test_enabled;
         uniform int alpha_test_function;
         uniform float alpha_threshold;
+        uniform vec2 source_fog_blend;
+        instance uniform vec3 source_fog_color;
+        instance uniform vec3 source_fog_range;
+        instance uniform float source_fog_game_units_per_meter;
         varying float source_view_opacity;
+        varying float source_fog_factor;
+        {{RetailVertexFog.ShaderSource}}
+        {{FalloutNifFogBlend.ShaderSource}}
         {{FalloutNifAngleFalloff.ShaderSource}}
         {{NativeNifEmittanceMaterial.ShaderSource}}
         {{ColorFallbackShader}}
         void vertex() {
             UV += source_uv_offset;
+            vec4 view_position = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+            source_fog_factor = owned_vertex_fog(view_position,
+                PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
             source_view_opacity = 1.0;
             if (falloff_enabled) {
-                vec3 view_position = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
                 vec3 view_normal = mat3(MODELVIEW_MATRIX) * NORMAL;
-                source_view_opacity = owned_angle_opacity(dot(normalize(view_position), normalize(view_normal)), source_falloff);
+                source_view_opacity = owned_angle_opacity(dot(normalize(view_position.xyz), normalize(view_normal)), source_falloff);
             }
         }
         bool accepted(float alpha) {
@@ -57,7 +67,8 @@ internal static class NativeNifEffectMaterial
             alpha *= source_view_opacity;
             if (alpha_test_enabled && !accepted(alpha)) discard;
             vec3 material_color = owned_emissive_color(source_color_multiplier.rgb, source_emissive_multiple);
-            ALBEDO = sampled.rgb * COLOR.rgb * owned_no_light_color(material_color);
+            vec3 color = sampled.rgb * COLOR.rgb * owned_no_light_color(material_color);
+            ALBEDO = owned_no_light_fog(color, source_fog_color, source_fog_factor, source_fog_blend);
             __ALPHA_WRITE__
         }
         """;
@@ -67,6 +78,7 @@ internal static class NativeNifEffectMaterial
         bool doubleSided)
     {
         var state = FalloutNifAlphaState.ForNoLighting(source, alpha);
+        var fog = FalloutNifFogBlend.Read(alpha?.Flags);
         var useFalloff = (source.ShaderFlags & (1u << 6)) != 0;
         var falloff = useFalloff ? FalloutNifAngleFalloff.Read(source) : new(1, 0, 1, 1);
         var blend = state.Blend switch
@@ -102,6 +114,9 @@ internal static class NativeNifEffectMaterial
         result.SetShaderParameter("alpha_test_enabled", state.TestEnabled);
         result.SetShaderParameter("alpha_test_function", (int)state.TestFunction);
         result.SetShaderParameter("alpha_threshold", state.Threshold / 255.0f);
+        result.SetShaderParameter("source_fog_blend", new Vector2(fog.Additive ? 1 : 0, fog.DestinationColor ? 1 : 0));
+        result.SetMeta("opennv_nif_fog_owner", "projected-vertex;source-destination-blend-factor");
+        result.SetMeta("opennv_nif_fog_unbound", "native-pass-admission-and-GPU-draw-association");
         result.SetMeta("opennv_nif_alpha_flags", alpha?.Flags ?? 0);
         result.SetMeta("opennv_nif_effective_blend", state.Blend.ToString());
         result.SetMeta("opennv_nif_alpha_owner", state.Blend == FalloutNifBlendMode.SourceAlpha &&

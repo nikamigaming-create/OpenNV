@@ -55,7 +55,28 @@ to a clamped fraction t; opacity interpolates the authored endpoints with
 t squared times (3 minus 2t). This occurs at the vertex stage. The previous
 fragment-stage linear interpolation changed the shape and brightness of source
 window effects. Texture, material and vertex alpha retain their source owners.
-No-lighting fog/blend toggles and active native variant selection remain open.
+Active native variant selection and per-pass fog admission remain open.
+
+## No-lighting fog composition
+
+The supported ordinary no-lighting programs interpolate the same projected
+vertex fog factor. The pixel stage composes RGB before source blending. An
+absent alpha property selects the authored fog colour. When an alpha property
+exists, its destination factor selects the fog neutral independently of its
+source factor or blend-enable bit: ONE selects black, and SRC_COLOR selects
+white with the clamped source factor scale of 1.5. Other destination factors
+retain the ordinary fog colour. Texture, material, vertex and angular alpha
+remain independent of this RGB operation.
+
+The no-lighting shader disables Godot's additional fog treatment. A shared NIF
+environment binding now publishes fog to both lighting families, including
+later attachments and cell transfers, while preserving preview isolation.
+Ordinary room-67 binds exact fog inputs on 743 declared surfaces; all 68
+no-lighting selectors match owned properties. Twenty selected native alpha and
+retained pass records independently agree, and native fog constants match the
+owned CELL inputs. Pass records do not establish native GPU execution.
+Per-draw fog suppression, premultiplied-program selection, partial precision
+and exact frame correspondence remain unverified.
 
 ## Cell environment lifetime and provenance
 
@@ -97,6 +118,8 @@ renderer; the headless dummy renderer cannot run this audit. It exercises:
   isolation of both existing and later preview geometry.
 - Exact zero-colour fallback, preservation of nonzero/overbright colours and
   per-reference emittance lifetime without mutating shared materials.
+- 192 exact RGB fog evaluations covering ordinary, additive and destination-
+  colour branches, including zero/full fog and the clamped white endpoint.
 
 These checks pass on the selected Godot build. Owned fog inputs and ten owned
 angular-opacity variants independently support their respective contracts.
@@ -104,8 +127,8 @@ Ordinary input, live bindings and matched native/render evidence are separate
 lanes. Region-error comparisons remain diagnostics when camera, animation and
 frame timing are not aligned.
 
-The latest material GPU assertions pass but shutdown reports three ObjectDB
-instances; their types and owners remain unverified. The original Vigor audit
-also passes all eight forward/reverse pages and allocation bounds after the
+The latest material GPU assertions pass. Explicitly freeing its local GPU
+device removes the three reported shutdown instances. The original Vigor audit
+passes all eight forward/reverse pages and allocation bounds after the
 material-path change. These component results do not establish ordinary Vigor
 timing, audio or visual acceptance.

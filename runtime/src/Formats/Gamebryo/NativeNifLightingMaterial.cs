@@ -163,18 +163,6 @@ internal static class NativeNifLightingMaterial
         material.SetShaderParameter("use_" + slot + "_map", texture is not null);
     }
 
-    internal static void ApplyEnvironment(MeshInstance3D mesh, FalloutCellLighting lighting, float unitsToMeters)
-    {
-        if (mesh.Mesh is null) return;
-        if (!Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Any(index => mesh.GetActiveMaterial(index)?.ResourceName == ResourceIdentity)) return;
-        mesh.SetInstanceShaderParameter("source_ambient", Rgb(lighting.AmbientRgb));
-        mesh.SetInstanceShaderParameter("source_fog_color", Rgb(lighting.FogRgb));
-        mesh.SetInstanceShaderParameter("source_fog_range", new Vector3(lighting.FogNear,
-            lighting.FogFar, lighting.FogPower));
-        mesh.SetInstanceShaderParameter("source_fog_game_units_per_meter", 1f / unitsToMeters);
-    }
-
-    private static Vector3 Rgb(byte[] value) => new(value[0] / 255.0f, value[1] / 255.0f, value[2] / 255.0f);
     private static string TestExpression(byte function, byte threshold)
     {
         var value = (threshold / 255.0f).ToString("R", System.Globalization.CultureInfo.InvariantCulture);

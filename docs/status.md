@@ -54,16 +54,25 @@ managed colour/UV animation. The all-zero source colour rule, instance lifetime
 and original Vigor page checks pass. Lit fog still binds exactly on all 675
 declared instances. Checked wall error falls from 5.12 to 1.93 and beam error
 from 14.79 to 6.83 relative to room-64; ceiling error rises from 15.14 to 15.61.
-These are regional diagnostics, not aligned pixel acceptance. Three GPU
-material-audit shutdown instances still need identification.
+These are regional diagnostics, not aligned pixel acceptance.
+
+No-lighting fog now applies source vertex distance and destination-factor
+composition instead of the default fog treatment. Ordinary room-67 binds fog
+inputs exactly on all 743 declared surfaces; all 68 no-lighting selectors
+match owned properties, with 20 corroborated by retained native alpha/pass
+records. The 20 emittance matches remain intact. The 31-model owned audit,
+GPU branch/lifetime checks and full gate pass. Beam error improves modestly
+from 6.83 to 6.18, while wall/ceiling errors rise slightly. The three material
+audit shutdown leaks are resolved by freeing its local GPU device.
 
 Bounded tracing retains ten image-space GPU surfaces and constants for eleven
 passes. Selected native target/cinematic/tint/fade bytes agree with submitted
 constants; remaining brightness differences begin before HDR. Native GPU
 execution, selected shader/fog toggles, final per-pixel contributions, complete
 audio/events and frame correspondence remain incomplete. Opening haze, full
-focus/DOF, no-lighting fog/blend composition and the world camera far-plane
-owner still need verification. Private captures and owned data stay local.
+focus/DOF, native per-pass fog admission, premultiplied-program selection and
+the world camera far-plane owner still need verification. Private captures
+and owned data stay local.
 
 The full Release/Debug, formatting/analyzer, contract, launcher and native
 Godot loading gate passed on 2026-09-05. Selected owned material and GPU audits

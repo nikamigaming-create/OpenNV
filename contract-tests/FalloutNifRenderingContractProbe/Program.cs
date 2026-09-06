@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
@@ -47,6 +48,12 @@ var ascending = new FalloutNifAngleFalloff(0, 1, 0.2f, 0.8f);
 Require(Math.Abs(ascending.Sample(0.25f) - 0.29375f) < 0.000001f,
     "Reversed cosine endpoints changed opacity interpolation.");
 Console.WriteLine("OPENNV_NIF_ALPHA_CONTRACT_OK independentBlendAndTest=true cosineFalloff=true");
+Require(FalloutNifFogBlend.Read(null) == new FalloutNifFogBlend(false, false), "Missing alpha property invented a fog blend toggle.");
+Require(FalloutNifFogBlend.Read(0x100d) == new FalloutNifFogBlend(true, false), "Additive fog did not select black.");
+Require(FalloutNifFogBlend.Read(0x0043) == new FalloutNifFogBlend(false, true), "Destination-colour fog did not select white.");
+Require(FalloutNifFogBlend.Read(0x0029) == new FalloutNifFogBlend(false, false), "Source-colour multiplication was confused with the destination factor.");
+Require(FalloutNifFogBlend.Read(0) == new FalloutNifFogBlend(true, false), "Blend enable incorrectly gated the source fog constants.");
+Console.WriteLine("OPENNV_NIF_FOG_BLEND_CONTRACT_PASS destinationFactor=true sourceFactorIndependent=true blendEnableIndependent=true");
 
 var unlitFalloff = new FalloutNifNoLightingProperty(new FalloutNifBlock(0, "BSShaderNoLightingProperty", 0, 0),
     "", [], -1, 1, 33, (1U << 6) | (1U << 3) | (1U << 26), 1, 1, 3, "", 1, 0, 1, 0);
@@ -102,10 +109,16 @@ if (args.Length == 2)
                 {
                     var alpha = properties.OfType<FalloutNifAlphaProperty>().SingleOrDefault();
                     var state = FalloutNifAlphaState.ForNoLighting(noLighting, alpha);
+                    var fog = FalloutNifFogBlend.Read(alpha?.Flags);
                     var opacityCount = mesh.Colors.Select(color => color.A).Distinct().Count();
                     Console.WriteLine($"OPENNV_OWNED_NOLIGHT_PASS model={path} shape={block.Index} shader={noLighting.Block.Index} " +
                         $"flags=0x{noLighting.ShaderFlags:x8} alphaProperty={alpha is not null} " +
                         $"blend={state.Blend} test={state.TestEnabled} vertexOpacityValues={opacityCount}");
+                    Console.WriteLine(JsonSerializer.Serialize(new
+                    {
+                        schema = "opennv-owned-no-lighting-fog/v1", model = path, geometry = geometry.Name,
+                        alphaFlags = alpha?.Flags, fog.Additive, fog.DestinationColor,
+                    }));
                 }
                 var converted = FalloutNifTriangleWinding.ToGodotIndices(mesh.Triangles);
                 Require(converted.Length == mesh.Triangles.Count(value =>

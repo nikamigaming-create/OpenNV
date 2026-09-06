@@ -22,8 +22,11 @@ public partial class NativeVertexFogAudit
                 """,
         };
         using var material = new ShaderMaterial { Shader = shader, ResourceName = NativeNifLightingMaterial.ResourceIdentity };
+        var effectSource = new FalloutNifNoLightingProperty(new(0, "BSShaderNoLightingProperty", 0, 0),
+            "", [], -1, 1, 33, 1u << 31, 1, 1, 3, "", 1, 0, 1, 0);
+        using var effect = NativeNifEffectMaterial.Build(effectSource, null, null, null, false);
         using var geometry = new QuadMesh();
-        MeshInstance3D Mesh() => new() { Mesh = geometry, MaterialOverride = material };
+        MeshInstance3D Mesh(Material? surface = null) => new() { Mesh = geometry, MaterialOverride = surface ?? material };
         var firstLighting = new FalloutCellLighting([24, 48, 96], [0, 0, 0], [12, 36, 72], 8, 72, 0, 0, 1, 0, 0.75f);
         var secondLighting = firstLighting with { AmbientRgb = [96, 48, 24], FogNear = 16, FogFar = 144 };
         Node3D Cell(FalloutCellLighting lighting, float units)
@@ -40,10 +43,12 @@ public partial class NativeVertexFogAudit
         try
         {
             var early = Mesh(); first.AddChild(early);
+            var earlyEffect = Mesh(effect); first.AddChild(earlyEffect);
             var preview = new SubViewport { OwnWorld3D = true };
             var portrait = Mesh(); preview.AddChild(portrait); first.AddChild(preview);
             AddChild(first); AddChild(second); AddChild(unrelated);
             Check(early, firstLighting, 8);
+            Check(earlyEffect, firstLighting, 8, lit: false);
             Unbound(portrait); Unbound(unrelated);
 
             var attachment = new Node3D();
@@ -51,9 +56,12 @@ public partial class NativeVertexFogAudit
             var late = Mesh(); pivot.AddChild(late); first.AddChild(attachment);
             Check(late, firstLighting, 8);
             var latePortrait = Mesh(); preview.AddChild(latePortrait); Unbound(latePortrait);
+            var effectPortrait = Mesh(effect); preview.AddChild(effectPortrait); Unbound(effectPortrait);
+            var lateEffect = Mesh(effect); pivot.AddChild(lateEffect); Check(lateEffect, firstLighting, 8, lit: false);
 
             attachment.Reparent(second);
             Check(late, secondLighting, 16);
+            Check(lateEffect, secondLighting, 16, lit: false);
             Check(early, firstLighting, 8);
 
             RemoveChild(first);
@@ -61,14 +69,14 @@ public partial class NativeVertexFogAudit
             AddChild(first); Check(detached, firstLighting, 8);
             RemoveChild(first);
             var afterRemoval = Mesh(); second.AddChild(afterRemoval); Check(afterRemoval, secondLighting, 16);
-            GD.Print("OPENNV_CELL_ENVIRONMENT_LIFECYCLE_PASS initial=true lateAttachment=true transfer=true reentry=true previewIsolation=true removal=true");
+            GD.Print("OPENNV_CELL_ENVIRONMENT_LIFECYCLE_PASS lit=true noLighting=true initial=true lateAttachment=true transfer=true reentry=true previewIsolation=true removal=true");
         }
         finally { first.Free(); second.Free(); unrelated.Free(); }
 
-        static void Check(MeshInstance3D mesh, FalloutCellLighting source, float reciprocalUnits)
+        static void Check(MeshInstance3D mesh, FalloutCellLighting source, float reciprocalUnits, bool lit = true)
         {
-            if (mesh.GetInstanceShaderParameter("source_ambient").AsVector3() !=
-                    new Vector3(source.AmbientRgb[0] / 255f, source.AmbientRgb[1] / 255f, source.AmbientRgb[2] / 255f) ||
+            if ((lit && mesh.GetInstanceShaderParameter("source_ambient").AsVector3() !=
+                    new Vector3(source.AmbientRgb[0] / 255f, source.AmbientRgb[1] / 255f, source.AmbientRgb[2] / 255f)) ||
                 mesh.GetInstanceShaderParameter("source_fog_color").AsVector3() !=
                     new Vector3(source.FogRgb[0] / 255f, source.FogRgb[1] / 255f, source.FogRgb[2] / 255f) ||
                 mesh.GetInstanceShaderParameter("source_fog_range").AsVector3() != new Vector3(source.FogNear, source.FogFar, source.FogPower) ||

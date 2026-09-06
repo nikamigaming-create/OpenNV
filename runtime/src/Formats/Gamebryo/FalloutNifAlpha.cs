@@ -2,6 +2,24 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal enum FalloutNifBlendMode { Opaque, SourceAlpha, Add, Premultiplied, Multiply }
 
+internal readonly record struct FalloutNifFogBlend(bool Additive, bool DestinationColor)
+{
+    // The no-lighting constant owner examines the authored destination factor,
+    // independently of the blend-enable bit and the source factor.
+    internal static FalloutNifFogBlend Read(ushort? flags) => flags is { } value
+        ? new(((value >> 5) & 15) == 0, ((value >> 5) & 15) == 2) : default;
+
+    internal const string ShaderSource = """
+        vec3 owned_no_light_fog(vec3 color, vec3 fog_color, float factor, vec2 toggles) {
+            vec3 ordinary = mix(color, fog_color, factor);
+            vec3 additive = color * (1.0 - factor);
+            vec3 selected = mix(ordinary, additive, toggles.x);
+            vec3 destination_color = mix(color, vec3(1.0), clamp(factor * 1.5, 0.0, 1.0));
+            return mix(selected, destination_color, toggles.y);
+        }
+        """;
+}
+
 internal readonly record struct FalloutNifAlphaState(
     FalloutNifBlendMode Blend, bool TestEnabled, byte TestFunction, byte Threshold, bool Sort)
 {

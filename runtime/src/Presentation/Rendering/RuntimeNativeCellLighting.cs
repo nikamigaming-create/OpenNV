@@ -40,13 +40,13 @@ internal partial class RuntimeNativeCellLighting : Node
     {
         if (node is Viewport) return;
         if (node is MeshInstance3D mesh)
-            NativeNifLightingMaterial.ApplyEnvironment(mesh, _lighting, _unitsToMeters);
+            NativeNifMaterialEnvironment.Bind(mesh, _lighting, _unitsToMeters);
         foreach (var child in node.GetChildren()) BindExisting(child);
     }
 
     private void BindAdded(Node node)
     {
         if (node is MeshInstance3D mesh && _cell.IsAncestorOf(node) && node.GetViewport() == _cell.GetViewport())
-            NativeNifLightingMaterial.ApplyEnvironment(mesh, _lighting, _unitsToMeters);
+            NativeNifMaterialEnvironment.Bind(mesh, _lighting, _unitsToMeters);
     }
 }

@@ -72,6 +72,17 @@ tracks component discrepancies. Component results do not establish acceptance.
   Relative to room-64, checked wall error falls from 5.12 to 1.93 and beam error
   from 14.79 to 6.83 colour levels. Ceiling error rises from 15.14 to 15.61.
   These remain regional diagnostics without exact camera/pose/frame alignment.
+- No-lighting fog now uses source vertex distance and destination-factor
+  composition. Additive contributions fade toward black; destination-colour
+  blending fades toward white with the source clamped scale. Alpha remains
+  independent. The shared cell owner binds all 743 declared fog instances in
+  ordinary room-67, including 68 no-lighting surfaces. All 68 fog selectors
+  agree with owned properties; 20 also agree with retained native alpha/pass
+  records. The 20 emittance matches remain intact. The 31-model owned audit,
+  GPU branch/lifetime checks and full gate pass. Beam-region error moves from
+  6.83 to 6.18; wall and ceiling errors rise slightly. No aligned pixel claim.
+  Explicitly freeing the audit's local GPU device removes its three shutdown
+  leaks; the separate six actor-audit instances remain open.
 - Four source response gestures, finite release/resumption, chair exit/NAVM
   travel, IDLE repeats, KF sound dispatch, preview blink lifecycle and all eight
   original Vigor controls pass component audits. Complete ordinary movement,
@@ -84,8 +95,8 @@ tracks component discrepancies. Component results do not establish acceptance.
 
 ## Live comparison and evidence
 
-The retained retail room-54 and fresh OpenNV room-66 processes are at VCG01
-stage 10 / original name entry. Use the room-66 session configuration and
+The retained retail room-54 and fresh OpenNV room-67 processes are at VCG01
+stage 10 / original name entry. Use the room-67 session configuration and
 revalidate processes and state before control. Keep one instance of each game.
 A shared quest/menu checkpoint is not exact camera, clock or animation phase.
 
@@ -115,13 +126,12 @@ captures, native addresses and decoded resources stay outside the repository.
 ## Next owners
 
 1. Preserve the source colour, radius, direction, fog, angular-opacity and
-   material-emittance fixes. Retained no-lighting pass records and owned shader
-   programs identify destination-blend-dependent fog composition; this still
-   needs a runtime owner and native GPU draw/frame association. The observed
-   world camera far plane is 5000 game units;
-   OpenNV still uses 200 metres. Bind its source owner before changing it.
-   Light/shadow selection, fog toggles and ceiling material response remain;
-   do not fit HDR or authored colours to the image.
+   material-emittance fixes. Reconcile the camera and Doc animation phase at
+   the name/Reflectron boundary. The observed world camera far plane is 5000
+   game units; OpenNV still uses 200 metres. Bind its source owner before
+   changing it. Native GPU draw/frame association, per-pass fog admission,
+   premultiplied-program selection, light/shadow selection and ceiling response
+   remain open. Do not fit HDR or authored colours to the image.
 2. Resume ordinary input through original creation and Vigor. Capture the HUD,
    full Doc motion/audio, cigarette timing, gurney transparency, opening haze
    and Reflectron preview/background at matching states. Fix the first failed
@@ -129,8 +139,8 @@ captures, native addresses and decoded resources stay outside the repository.
 3. Replace remaining psychology/tag/trait/farewell panels through original
    source owners. Complete Pip-Boy, room loot/skull/pool/physics, doors/exterior,
    Sunny dialogue/combat/tutorial and cold Continue. Six actor audit shutdown
-   resources and three reported GPU material-audit shutdown instances remain
-   to identify. Broader gameplay/plugin behavior and integrated OpenXR remain.
+   resources remain to identify. Broader gameplay/plugin behavior and
+   integrated OpenXR remain.
 
 ## Required publication gate
 

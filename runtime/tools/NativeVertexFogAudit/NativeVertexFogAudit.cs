@@ -16,7 +16,11 @@ public partial class NativeVertexFogAudit : Node
         {
             using var device = RenderingServer.CreateLocalRenderingDevice()
                 ?? throw new InvalidOperationException("Vertex fog audit requires a local GPU rendering device.");
-            foreach (var clipFar in new[] { 0f, -1f }) Exercise(device, clipFar);
+            try
+            {
+                foreach (var clipFar in new[] { 0f, -1f }) Exercise(device, clipFar);
+            }
+            finally { device.Free(); }
             ExerciseInstanceInventory();
             ExerciseCellEnvironment();
             ExerciseReferenceEmittance();
@@ -56,6 +60,7 @@ public partial class NativeVertexFogAudit : Node
 
     private static void Exercise(RenderingDevice device, float clipFar)
     {
+        const int outputValues = 14;
         var input = new List<float>(); var expected = new List<float>();
         foreach (var perspective in new[] { true, false })
             foreach (var units in new[] { 1f, 64f })
@@ -92,6 +97,7 @@ public partial class NativeVertexFogAudit : Node
                 SourceCompute = $$"""
                     #version 450
                     layout(local_size_x = 1) in;
+                    const uint output_values = {{outputValues}}u;
                     const float CLIP_SPACE_FAR = {{(clipFar == 0 ? "0.0" : "-1.0")}};
                     struct Sample { vec4 position; vec4 fog; mat4 projection; };
                     layout(set=0, binding=0, std430) readonly buffer Inputs { Sample samples[]; };
@@ -99,16 +105,26 @@ public partial class NativeVertexFogAudit : Node
                     {{RetailVertexFog.ShaderSource}}
                     {{FalloutNifAngleFalloff.ShaderSource}}
                     {{NativeNifEffectMaterial.ColorFallbackShader}}
+                    {{FalloutNifFogBlend.ShaderSource}}
                     void main() {
                         uint i = gl_GlobalInvocationID.x;
-                        results[i * 5] = owned_vertex_fog(samples[i].position, samples[i].projection, samples[i].fog.xyz, samples[i].fog.w);
+                        uint offset = i * output_values;
+                        results[offset] = owned_vertex_fog(samples[i].position, samples[i].projection, samples[i].fog.xyz, samples[i].fog.w);
                         float cosine = float(i % 9) / 8.0 * (i % 2 == 0 ? 1.0 : -1.0);
-                        results[i * 5 + 1] = owned_angle_opacity(cosine, vec4(1.0, 0.0, 1.0, 0.0));
+                        results[offset + 1] = owned_angle_opacity(cosine, vec4(1.0, 0.0, 1.0, 0.0));
                         vec3 colors[4] = vec3[](vec3(0.0), vec3(0.0, 0.25, 0.75), vec3(2.0, 0.0, 0.0), vec3(0.0001));
                         vec3 resolved = owned_no_light_color(colors[i % 4]);
-                        results[i * 5 + 2] = resolved.x;
-                        results[i * 5 + 3] = resolved.y;
-                        results[i * 5 + 4] = resolved.z;
+                        results[offset + 2] = resolved.x;
+                        results[offset + 3] = resolved.y;
+                        results[offset + 4] = resolved.z;
+                        vec2 toggles[3] = vec2[](vec2(0.0), vec2(1.0, 0.0), vec2(0.0, 1.0));
+                        for (uint mode = 0; mode < 3; mode++) {
+                            vec3 fogged = owned_no_light_fog(vec3(0.25, 0.5, 0.75), vec3(0.75, 0.25, 0.5),
+                                float(i % 5) * 0.25, toggles[mode]);
+                            results[offset + 5 + mode * 3] = fogged.x;
+                            results[offset + 6 + mode * 3] = fogged.y;
+                            results[offset + 7 + mode * 3] = fogged.z;
+                        }
                     }
                     """,
             };
@@ -118,7 +134,7 @@ public partial class NativeVertexFogAudit : Node
             var pipeline = device.ComputePipelineCreate(shader); rids.Add(pipeline);
             var bytes = new byte[input.Count * sizeof(float)]; Buffer.BlockCopy(input.ToArray(), 0, bytes, 0, bytes.Length);
             var values = device.StorageBufferCreate((uint)bytes.Length, bytes); rids.Add(values);
-            var output = device.StorageBufferCreate((uint)(expected.Count * 5 * sizeof(float))); rids.Add(output);
+            var output = device.StorageBufferCreate((uint)(expected.Count * outputValues * sizeof(float))); rids.Add(output);
             using var inputUniform = new RDUniform { UniformType = RenderingDevice.UniformType.StorageBuffer, Binding = 0 };
             using var outputUniform = new RDUniform { UniformType = RenderingDevice.UniformType.StorageBuffer, Binding = 1 };
             inputUniform.AddId(values); outputUniform.AddId(output);
@@ -129,20 +145,35 @@ public partial class NativeVertexFogAudit : Node
             device.ComputeListDispatch(list, (uint)expected.Count, 1, 1);
             device.ComputeListEnd(); device.Submit(); device.Sync();
             var result = device.BufferGetData(output);
-            if (result.Length != expected.Count * 5 * sizeof(float)) throw new InvalidOperationException("Fog GPU output extent differs.");
+            if (result.Length != expected.Count * outputValues * sizeof(float)) throw new InvalidOperationException("Fog GPU output extent differs.");
             float[] opacity = [0, 0.04296875f, 0.15625f, 0.31640625f, 0.5f, 0.68359375f, 0.84375f, 0.95703125f, 1];
             Vec3[] fallback = [new(1), new(0, 0.25f, 0.75f), new(2, 0, 0), new(0.0001f)];
+            Vec3[][] foggedColors =
+            [
+                [new(0.25f, 0.5f, 0.75f), new(0.25f, 0.5f, 0.75f), new(0.25f, 0.5f, 0.75f)],
+                [new(0.375f, 0.4375f, 0.6875f), new(0.1875f, 0.375f, 0.5625f), new(0.53125f, 0.6875f, 0.84375f)],
+                [new(0.5f, 0.375f, 0.625f), new(0.125f, 0.25f, 0.375f), new(0.8125f, 0.875f, 0.9375f)],
+                [new(0.625f, 0.3125f, 0.5625f), new(0.0625f, 0.125f, 0.1875f), new(1)],
+                [new(0.75f, 0.25f, 0.5f), new(0), new(1)],
+            ];
             for (var i = 0; i < expected.Count; i++)
             {
-                var actual = BitConverter.ToSingle(result, i * 5 * sizeof(float));
+                var actual = BitConverter.ToSingle(result, i * outputValues * sizeof(float));
                 if (!float.IsFinite(actual) || MathF.Abs(actual - expected[i]) > 0.00002f)
                     throw new InvalidOperationException($"Fog projection fixture {clipFar}/{i}: expected {expected[i]:R}; actual {actual:R}.");
-                if (BitConverter.ToSingle(result, (i * 5 + 1) * sizeof(float)) != opacity[i % opacity.Length])
+                if (BitConverter.ToSingle(result, (i * outputValues + 1) * sizeof(float)) != opacity[i % opacity.Length])
                     throw new InvalidOperationException("GPU angle opacity differs from the smooth-curve fixture.");
-                var color = new Vec3(BitConverter.ToSingle(result, (i * 5 + 2) * sizeof(float)),
-                    BitConverter.ToSingle(result, (i * 5 + 3) * sizeof(float)), BitConverter.ToSingle(result, (i * 5 + 4) * sizeof(float)));
+                var color = new Vec3(BitConverter.ToSingle(result, (i * outputValues + 2) * sizeof(float)),
+                    BitConverter.ToSingle(result, (i * outputValues + 3) * sizeof(float)), BitConverter.ToSingle(result, (i * outputValues + 4) * sizeof(float)));
                 if (color != fallback[i % fallback.Length])
                     throw new InvalidOperationException("No-lighting zero-colour fallback changed a nonzero colour or lost source white.");
+                for (var mode = 0; mode < 3; mode++)
+                {
+                    var offset = (i * outputValues + 5 + mode * 3) * sizeof(float);
+                    var fogged = new Vec3(BitConverter.ToSingle(result, offset), BitConverter.ToSingle(result, offset + 4), BitConverter.ToSingle(result, offset + 8));
+                    if (fogged != foggedColors[i % foggedColors.Length][mode])
+                        throw new InvalidOperationException($"No-lighting fog fixture {i}/{mode} lost its source colour or blend neutral.");
+                }
             }
             GD.Print($"OPENNV_VERTEX_FOG_GPU_SAMPLES clipFar={clipFar} compared={expected.Count}");
         }
