@@ -1420,21 +1420,26 @@ internal static class RuntimeNativeNifMeshBuilder
         {
             var result = new Godot.Collections.Array<Godot.Collections.Array>();
             if (MorphOwner is null) return result;
-            mesh.BlendShapeMode = Mesh.BlendShapeMode.Relative;
+            // Godot packs every blend-shape normal/tangent as a unit direction;
+            // a zero relative delta cannot survive that representation. Use
+            // absolute targets with normalized blending so the source basis
+            // cancels independently of simultaneous expression weights.
+            mesh.BlendShapeMode = Mesh.BlendShapeMode.Normalized;
+            var baseVertices = sourceArrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
             foreach (var (name, values) in MorphOwner(_source, geometry, data))
             {
                 if (values.Length != data.Vertices.Length) throw new InvalidDataException("Source morph vertex order differs from geometry.");
                 mesh.AddBlendShape(name);
                 var arrays = new Godot.Collections.Array();
                 arrays.Resize((int)Mesh.ArrayType.Max);
-                arrays[(int)Mesh.ArrayType.Vertex] = vertexMap.Select(index =>
+                arrays[(int)Mesh.ArrayType.Vertex] = vertexMap.Select((index, row) => baseVertices[row] +
                     GamebryoCoordinate.ConvertVector(new(values[index].X, values[index].Y, values[index].Z)) * _unitsToMetres).ToArray();
-                // Preserve the source normal/tangent basis; expression normal updates
-                // remain a separately measured presentation lane.
+                // Dynamic expression normal recomputation is a separate lane;
+                // blinking must not add an unrelated packed unit direction.
                 if (sourceArrays[(int)Mesh.ArrayType.Normal].VariantType != Variant.Type.Nil)
-                    arrays[(int)Mesh.ArrayType.Normal] = new Vector3[vertexMap.Length];
+                    arrays[(int)Mesh.ArrayType.Normal] = sourceArrays[(int)Mesh.ArrayType.Normal];
                 if (sourceArrays[(int)Mesh.ArrayType.Tangent].VariantType != Variant.Type.Nil)
-                    arrays[(int)Mesh.ArrayType.Tangent] = new float[vertexMap.Length * 4];
+                    arrays[(int)Mesh.ArrayType.Tangent] = sourceArrays[(int)Mesh.ArrayType.Tangent];
                 result.Add(arrays);
             }
             return result;

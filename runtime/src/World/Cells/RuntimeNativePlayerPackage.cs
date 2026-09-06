@@ -33,6 +33,7 @@ internal sealed class RuntimeNativePlayerPackage(FalloutPluginStack stack, Runti
     {
         if (editorId is null)
         {
+            _package?.EventPrograms.GetValueOrDefault("POEA")?.RequireEmptyScript();
             if (_package?.Events.GetValueOrDefault("POEA") is not null)
                 throw new NotSupportedException("Player package exit animation requires deferred removal ownership.");
             _package = null;
@@ -45,6 +46,7 @@ internal sealed class RuntimeNativePlayerPackage(FalloutPluginStack stack, Runti
         if (package.Procedure != 6 || package.LocationType != 3)
             throw new NotSupportedException($"PACK {package.Form} needs travel/location ownership before player animation.");
         var eventName = _package?.Form == package.Form ? "POCA" : "POBA";
+        package.EventPrograms.GetValueOrDefault(eventName)?.RequireEmptyScript();
         _package = package;
         _cursor = 0;
         _complete = false;

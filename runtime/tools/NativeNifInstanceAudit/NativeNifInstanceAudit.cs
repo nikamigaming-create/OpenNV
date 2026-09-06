@@ -8,13 +8,20 @@ using OpenNV.Runtime.Presentation.Rendering;
 
 public partial class NativeNifInstanceAudit : Node
 {
-    public override void _Ready()
+    public override async void _Ready()
     {
         try
         {
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();
+            ExerciseMorphBasis();
+            if (OS.GetCmdlineUserArgs() is ["--morph-gpu"])
+            {
+                await ExerciseMorphPixels();
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--placement", var placementRoot, var cellHex, var observations])
             {
                 ExerciseObservedPlacement(placementRoot, cellHex, observations);
@@ -32,7 +39,17 @@ public partial class NativeNifInstanceAudit : Node
                 var actor = RuntimeNativeNpc.Create(appearance, content, 0.0142875f,
                     (npc, part, nif, geometry) => NativeNpcMaterial.Resolve(npc, part, nif, geometry, records, Colors.Black));
                 AddChild(actor);
+                var morphSurfaces = 0;
+                foreach (var mesh in actor.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
+                    .Where(mesh => mesh.Mesh is ArrayMesh array && array.GetBlendShapeCount() > 0))
+                {
+                    CheckMorphBasis(mesh);
+                    morphSurfaces++;
+                }
+                GD.Print($"OPENNV_OWNED_MORPH_BASIS_PASS surfaces={morphSurfaces} basis=packed-runtime-weights pixels=unverified");
                 GD.Print($"OPENNV_SOURCE_ACTOR_BUILD_PASS actor={appearance.Npc} parts={actor.Parts.Count} surfaces={actor.Parts.Sum(part => part.Surfaces)} dynamicFaceGen=true");
+                actor.Free();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 GetTree().Quit();
                 return;
             }

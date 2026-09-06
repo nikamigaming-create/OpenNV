@@ -194,17 +194,50 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     internal void ActivateVigorTester()
     {
-        if (_machine.QuestEditorId != FalloutNativeCampaignSave.OpeningQuestEditorId ||
-            _machine.Stage != _vigorContract.TesterStage || _vigorEntry is not null)
+        if (_vigorEntry is not null || ExecutionError is not null) return;
+        try
         {
-            GD.Print(
-                $"OPENNV_NATIVE_VIGOR_ACTIVATE accepted=false stage={_machine.QuestEditorId}:{_machine.Stage}");
-            return;
+            var source = _pluginStack.GetEffective(FalloutDialogueTopic.RequiredForm(
+                _pluginStack.GetEffective(_vigorContract.TesterReference.Base), "SCRI"));
+            var program = new FalloutActivationProgram(_pluginStack, source);
+            var calls = program.Prepare(_quests);
+            var effects = new List<Action>();
+            var menus = 0;
+            foreach (var call in calls)
+            {
+                if (call.Command.Equals("ShowLoveTesterMenuParams", StringComparison.OrdinalIgnoreCase) &&
+                    call.Arguments.Count == 1 && int.TryParse(call.Arguments[0], System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var total) && total == _vigorContract.RequiredTotal)
+                {
+                    if (++menus != 1) throw new NotSupportedException("Activation opens multiple rendered menus.");
+                    effects.Add(OpenVigorMenu);
+                }
+                else if (call.Command.Equals("SetStage", StringComparison.OrdinalIgnoreCase) && call.Arguments.Count == 2 &&
+                    short.TryParse(call.Arguments[1], System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var stage))
+                {
+                    var quest = program.Form(call.Arguments[0]);
+                    if (quest.Signature != "QUST") throw new InvalidDataException("Activation stage target is not QUST.");
+                    effects.Add(_scriptHost.PrepareSetStage(quest.FormKey, stage));
+                }
+                else throw new NotSupportedException($"Activation command {call.Command} has no runtime owner.");
+            }
+            foreach (var effect in effects) effect();
+            GD.Print($"OPENNV_NATIVE_ACTIVATION source={source.FormKey} effects={effects.Count} owner=source-onactivate");
         }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
+        {
+            ExecutionError = error.Message;
+            GD.PushError($"OPENNV_NATIVE_ACTIVATION_DIVERGENCE {error.Message}");
+        }
+    }
+
+    private void OpenVigorMenu()
+    {
         _vigorEntry = new RuntimeNativeVigorEntry();
         AddChild(_vigorEntry);
         _vigorEntry.Accepted += AcceptSpecial;
-        _vigorEntry.Configure(_vigorContract, _special, _pluginStack);
+        _vigorEntry.Configure(_vigorContract, _special, _pluginStack, _imageSpacePresenter());
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_OPEN stage={_machine.Stage} total={_vigorContract.RequiredTotal} " +
@@ -642,12 +675,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _player.SetModalInput(false);
         if (DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
-        _machine.EnterSourceStage(
-            FalloutNativeCampaignSave.OpeningQuestEditorId,
-            _vigorContract.CompletedStage);
         GD.Print(
             $"OPENNV_NATIVE_SPECIAL_ACCEPTED total={_special.Values.Sum()} " +
-            $"values={string.Join(',', _special.Values)} stage={_vigorContract.CompletedStage} " +
+            $"values={string.Join(',', _special.Values)} stage={_machine.Stage} " +
             "source=configured-player-input-live-vigor-contract");
         Synchronize();
     }

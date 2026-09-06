@@ -15,10 +15,11 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 ## Current verified state
 
-- Ordinary room-74 accepts original creation and Vigor allocation
+- Ordinary room-77 accepts original creation and Vigor allocation
   6/6/6/6/6/5/5, plays Doc's source reaction, then all three responses of his
-  psychology introduction and reaches stage 80. The next AI/package event
-  failure is visible; this is not completed couch interaction. Retail remains
+  psychology introduction and reaches stage 80. Doc now traverses all eight
+  NAVM waypoints before the authored end-event Look command fails visibly;
+  this is not completed couch interaction. Retail remains
   at stage 80, but actor/camera/time states are not aligned. We are still
   inside Doc's house. No ordinary save exists at this checkpoint.
 - Original name/Reflectron XML, bitmap controls, dynamic FaceGen, source hair
@@ -60,14 +61,17 @@ scene-defects.md tracks component corrections without claiming scene parity.
   stage results, synchronous effects after SetStage, exact claimed-script
   lifetime/MenuMode scheduling and dynamic quest start/stop remain unbound.
   The existing creation handoff executes its authored MenuMode block at close;
-  this does not establish native menu-time event order. The complete Vigor
-  OnActivate objective prerequisite also remains unbound.
+  this does not establish native menu-time event order. Reference-instance
+  state and general trigger/furniture scripts remain unbound.
 - The next package failure comes from a real event script, not a corrupt name.
   SCTX is size-delimited with an optional terminal null. Its general decoder
-  now handles both encodings and rejects embedded nulls; nonempty package
-  events remain fail-closed. The nine-package owned check admits eight and
-  retains the authored POEA event as unbound. Implement dispatch and Look/StopLook
-  at the proper lifecycle before claiming Doc's travel/aiming complete.
+  now handles both encodings and rejects embedded nulls. All nine package
+  declarations now load; events dispatch at begin, completion and change, with
+  unreached scripts retained in their own compiled-reference scopes. Eight
+  owned empty/comment event lifecycles pass; the real POEA Look fails at
+  arrival, without implicit replay or false completion. Look/StopLook, event
+  topics, deferred change idles and persistent event state remain unbound.
+  See package-events.md.
 - The replacement psychology panel and its direct skip to skill review are
   removed. Source couch/furniture activation and dialogue choices must own
   progression. Tag/trait and farewell replacements remain separate defects.
@@ -78,6 +82,23 @@ scene-defects.md tracks component corrections without claiming scene parity.
   exact timing and final pixels still differ. Original review acceptance is
   now exercised in ordinary gameplay; review keyboard adjustment still needs
   verification beyond the component's pointer checks.
+- Vigor activation now evaluates the source OnActivate predicates and orders
+  its effects through compiled bindings. An ordinary early E emits zero
+  effects while Doc continues speaking; the later E opens the menu and enters
+  stage 65 immediately, as retained native review telemetry shows. World-hour
+  bits and actor time remain unchanged throughout the paused allocation/review.
+  The original background blur is visible and releases on acceptance. Source
+  reaction/psychology playback then resumes. Six owned cases and synthetic
+  overrides/ordering pass. Camera size and the background cabinet still differ;
+  no world geometry is hidden. See activation-lifecycle.md.
+- The blink-induced whole-face whitening has a general morph representation
+  correction. Absolute targets preserve additive source movement and the
+  packed normal/tangent basis across concurrent and signed weights. The old
+  implementation fails the new regression; the candidate, 18 Forward+ samples,
+  ten owned Doc surfaces and full gate pass. A fresh 16-second ordinary replay
+  retains seven blink cycles, with no whitening in inspected blink frames.
+  Expression-normal recomputation, exact blink phase and matched retail skin/
+  lighting pixels remain open. See morph-lighting.md.
 - Post-creation retail HUD/crosshair and movement instructions remain missing.
   Paired movement distances and collisions differ; the route to Vigor used
   separate ordinary inputs and is not matched-motion evidence.
@@ -110,7 +131,7 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 Retain retail room-54 and the current OpenNV run/session configuration.
 Revalidate process IDs/state before input; keep one instance of each game.
-Room-74 reaches stage 80 with a visible package-event error. Retained paired
+Room-77 reaches stage 80 after actual travel, with a visible end-event error. Retained paired
 review evidence and matching stage numbers do not establish a current match.
 
 Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
@@ -131,12 +152,12 @@ derivatives and captures remain outside the repository.
 
 ## Next owners
 
-1. Execute source package events and Look/StopLook at their authored lifecycle.
-   The new source progression exposes this failure during Doc's psychology
-   introduction. Complete ordinary travel, couch activation and original
+1. Execute source Look/StopLook through the actor aiming owner. Package event
+   dispatch now exposes the actual end-event failure after Doc's travel.
+   Complete target/head/eye behavior, couch activation and original
    dialogue choices. Do not restore a replacement psychology confirmation.
-2. Continue the shared script owner through complete activation predicates,
-   conditional result programs and exact scheduling. Replace tag/trait and
+2. Continue the shared script owner through reference-instance state,
+   trigger/furniture events, conditional result programs and exact scheduling. Replace tag/trait and
    farewell panels with original interfaces. Never use placeholder
    confirmations or selected stage targets to claim progression support.
 3. Complete Pip-Boy, loot/skull/pool/physics, doors/exterior, Sunny's dialogue/
@@ -149,8 +170,10 @@ derivatives and captures remain outside the repository.
 
 ## Required publication gate
 
-The full gate, thirty owned reaction/sex cases and the nine-package source
-check passed on 2026-09-05 with the real POEA event explicitly unbound.
+The full gate, nine-package lifecycle, six owned activation cases, packed
+owned face basis and Forward+ morph checks pass. The original morph code fails
+the new regression. Ordinary room-77 verifies source activation, paused menu
+lifetime, acceptance, later speech/travel and the remaining POEA failure.
 Earlier selected idle/voice/creation and Vigor GPU/input evidence remains
 scoped to those components. Re-run relevant checks before publication:
 

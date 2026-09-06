@@ -368,11 +368,32 @@ try
         .Concat(EventPackage(0xd00, "; comment only"u8.ToArray()))
         .Concat(EventPackage(0xd01, "UnownedCommand"u8.ToArray())).ToArray());
     using var eventStack = FalloutPluginStack.Load(directory, ["EventScripts.esm"]);
-    _ = FalloutScriptPackage.Read(eventStack.GetEffective(new("EventScripts.esm", 0xd00)));
+    var commentPackage = FalloutScriptPackage.Read(eventStack.GetEffective(new("EventScripts.esm", 0xd00)));
+    var scriptedPackage = FalloutScriptPackage.Read(eventStack.GetEffective(new("EventScripts.esm", 0xd01)));
+    var eventOrder = new List<string>();
+    var lifecycle = new FalloutPackageEvents((owner, kind) =>
+    {
+        eventOrder.Add($"{owner.Form.ObjectId:x}:{kind}");
+        owner.EventPrograms.GetValueOrDefault(kind)?.RequireEmptyScript();
+    });
+    lifecycle.Change(commentPackage);
+    lifecycle.Change(commentPackage);
+    lifecycle.Complete();
+    lifecycle.Complete();
+    lifecycle.Change(scriptedPackage);
+    Require(eventOrder.SequenceEqual(new[] { "d00:POBA", "d00:POEA", "d00:POCA", "d01:POBA" }),
+        "Package begin/completion/change events repeated or executed before their lifecycle boundary.");
+    Require(lifecycle.Active == scriptedPackage && !lifecycle.Done && lifecycle.Error is null,
+        "An unreached package-change program prevented package admission.");
     var eventRejected = false;
-    try { FalloutScriptPackage.Read(eventStack.GetEffective(new("EventScripts.esm", 0xd01))); }
+    try { lifecycle.Change(null); }
     catch (NotSupportedException error) { eventRejected = error.Message.Contains("POCA", StringComparison.Ordinal); }
-    Require(eventRejected, "A real package event script was hidden by source decoding or admitted without an execution owner.");
+    Require(eventRejected && lifecycle.Active == scriptedPackage && lifecycle.Error is not null,
+        "A reached package script was admitted without an execution owner or advanced past its failure.");
+    var attempts = eventOrder.Count;
+    try { lifecycle.Change(null); }
+    catch (NotSupportedException) { }
+    Require(eventOrder.Count == attempts, "A failed package event was silently replayed.");
     var needle = Field("CTDA", Condition(0x900));
     var start = bytes.AsSpan().IndexOf(needle);
     Require(start >= 0, "Synthetic CTDA was not found.");

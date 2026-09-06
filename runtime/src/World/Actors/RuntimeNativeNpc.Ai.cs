@@ -19,6 +19,7 @@ internal partial class RuntimeNativeNpc
     private string? _aiError;
     private int _sitting;
     private FalloutScriptPackage? _packageIdleSource;
+    private FalloutPackageEvents? _packageEvents;
     private FalloutIdleCollectionPlayback? _packageIdles;
     private FalloutIdleConditions? _idleConditions;
     private IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = new Dictionary<FalloutFormKey, sbyte>();
@@ -53,6 +54,15 @@ internal partial class RuntimeNativeNpc
         marker = _seat?.MarkerId,
         sitting = _sitting,
         pendingPackage = _pendingPackage?.FormKey.ToString(),
+        packageEvents = _packageEvents is null ? null : new
+        {
+            package = _packageEvents.Active?.Form.ToString(),
+            _packageEvents.Done,
+            _packageEvents.Revision,
+            _packageEvents.LastEvent,
+            lastPackage = _packageEvents.LastPackage?.ToString(),
+            _packageEvents.Error,
+        },
         randomState = _aiRandom.State.ToString("x16", System.Globalization.CultureInfo.InvariantCulture),
         randomOwner = "opennv-authoritative-retail-stream-unmatched",
         activity = new
@@ -101,7 +111,22 @@ internal partial class RuntimeNativeNpc
         _questState = quests;
         _aiCell = cell;
         _referenceTransform = referenceTransform;
+        _packageEvents = new(DispatchPackageEvent);
         AdvanceAi();
+    }
+
+    private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
+    {
+        // Result scripts precede the event's topic and idle. An unsupported
+        // reached effect keeps this event failed, rather than replaying it.
+        package.EventPrograms.GetValueOrDefault(kind)?.RequireEmptyScript();
+        if (package.Events.GetValueOrDefault(kind) is { } idle)
+        {
+            if (kind == "POCA")
+                throw new NotSupportedException("Package-change idle needs deferred replacement ownership.");
+            PlayIdle(_aiStack!, idle, "package-event");
+        }
+        GD.Print($"OPENNV_NATIVE_PACKAGE_EVENT reference={Appearance.Reference} package={package.Form} event={kind} owner=actor-procedure");
     }
 
     internal void EvaluatePackages(bool reset)
@@ -158,7 +183,11 @@ internal partial class RuntimeNativeNpc
                     return;
                 }
                 CancelIdle();
+                _packageEvents!.Change(null);
                 _aiPackage = null;
+                _packageIdleSource = null;
+                _packageIdles = null;
+                _travelActive = false;
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
@@ -179,6 +208,7 @@ internal partial class RuntimeNativeNpc
             {
                 StartTravel(selected, reference);
                 _aiPackage = selected;
+                _packageEvents!.Change(_packageIdleSource);
                 return;
             }
             var path = _aiCell.BaseObjects[reference.Base].ModelPath ?? throw new InvalidDataException("Furniture has no model.");
@@ -199,6 +229,8 @@ internal partial class RuntimeNativeNpc
             Transform = placement.SourceTransform;
             _furnitureReference = target;
             _aiPackage = selected;
+            _packageEvents!.Change(_packageIdleSource);
+            _packageEvents.Complete();
             GD.Print($"OPENNV_NATIVE_FURNITURE_OCCUPIED reference={Appearance.Reference} package={selected.FormKey} " +
                 $"target={target} marker={seat.MarkerId} sourceIndex={seat.Index} animation={_baseAnimation!.Sequence.Name} parity=unmeasured");
         }
@@ -254,6 +286,7 @@ internal partial class RuntimeNativeNpc
         _seat = null;
         _furnitureReference = null;
         _sitting = 0;
+        _packageEvents!.Change(null);
         _aiPackage = null;
         _baseAnimation = null;
         _aiQuestRevision = -1;

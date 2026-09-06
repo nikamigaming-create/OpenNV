@@ -224,7 +224,11 @@ internal partial class RuntimeNativeNpc : Node3D
             else _animation?.ApplySourceTime(_animationSeconds);
             if (_sitting == 4 && _baseAnimation is { Sequence.CycleType: 2 } exit && _baseAnimationSeconds >= exit.Sequence.StopTime)
                 CompleteFurnitureExit();
-            if (wasTraveling && !_travelActive) PlayLocomotion(false);
+            if (wasTraveling && !_travelActive)
+            {
+                PlayLocomotion(false);
+                _packageEvents!.Complete();
+            }
             AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
         }

@@ -11,6 +11,7 @@ QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 QuestScriptExecutionProbe.Run();
+ActivationProgramProbe.Run();
 
 if (args is ["--audit-material-emittance", var materialRoot, var materialCell, var materialHour])
 {

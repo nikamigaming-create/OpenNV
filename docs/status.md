@@ -9,7 +9,8 @@ subagents are stopped at the user's request.
 
 Ordinary New now accepts original creation and the Vigor Tester's complete
 SPECIAL allocation, plays Doc's source reaction and psychology introduction,
-and reaches VCG01 stage 80 with a visible package-event failure. Paired original menus show
+and reaches VCG01 stage 80 after Doc's eight-waypoint travel, with a visible
+Look end-event failure. Paired original menus show
 the same 6/6/6/6/6/5/5 allocation. We are still inside Doc's house; Pip-Boy handoff,
 exit and Sunny remain unfinished. The name prompt and Reflectron use
 original XML, bitmap controls, dynamic FaceGen, source hair and
@@ -42,10 +43,29 @@ tester acceptance completes objective 30. General GameMode expression/function
 execution now publishes the source SPECIAL calculations before SetStage;
 thirty owned SPECIAL/sex cases pass, and the balanced case's six calculated
 values match retained native telemetry. Dialogue conditions use authoritative
-target sex and quest variables. Ordinary room-74 plays the reaction and the
-following three responses. Source package-event dispatch and actor aiming are
-the next observed failures. Post-creation HUD/instructions,
+target sex and quest variables. Ordinary room-77 plays the reaction and the
+following three responses. Package event declarations now retain their own
+script scope and dispatch once at begin, completion and change. Nine owned
+declarations load; eight empty/comment lifecycles pass and the reached Look
+command remains unbound. Actor aiming and couch interaction are the next
+observed failures. Post-creation HUD/instructions,
 movement/collision differences and Vigor framing remain explicit defects.
+
+Vigor's winning OnActivate program now enforces its stage/objective predicates.
+An ordinary early press emits no effects and allows Doc to finish speaking.
+The later press opens the original menu and immediately enters its next source
+stage. World time and actor animation pause throughout allocation/review, the
+original blurred background renders, and acceptance resumes source progression.
+Synthetic and six owned cases pass. Source camera framing and the visible
+background cabinet remain incorrect.
+
+The whole-face whitening during blinking was caused by zero relative normal
+and tangent deltas becoming packed unit directions. Absolute blend-shape
+targets now preserve both additive source geometry and the lighting basis.
+The original implementation fails the new regression; packed mesh checks, 18
+Forward+ samples, ten owned Doc surfaces and the full gate pass. Inspected
+ordinary replay frames show blinking without that whitening. Exact native
+blink phase, expression normals and complete skin/lighting pixels remain open.
 
 Source quest-clock initialization, shared script lifetime, Float32 recurrence,
 modal recurrence and cold consistency pass selected checks. All 252 selected
