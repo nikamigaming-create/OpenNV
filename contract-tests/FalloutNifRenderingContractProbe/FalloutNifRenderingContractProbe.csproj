@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutBc1Alpha.cs" Link="FalloutBc1Alpha.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifVertexColors.cs" Link="FalloutNifVertexColors.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifHairShading.cs" Link="FalloutNifHairShading.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifFile.cs" Link="FalloutNifFile.cs" />

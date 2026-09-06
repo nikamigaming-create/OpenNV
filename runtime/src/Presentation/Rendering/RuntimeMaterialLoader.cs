@@ -297,7 +297,7 @@ internal static class RuntimeMaterialLoader
                     loadedTexturePath)
                     ? 1
                     : 0;
-            var loadedTexture = ImageTexture.CreateFromImage(image);
+            var loadedTexture = NativeDdsTexture.Create(image);
             textures.Add(id, loadedTexture);
             Cubemap? loadedCubemap = null;
             if (texture.TryGetProperty("cubeFaces", out var cubeFaces))

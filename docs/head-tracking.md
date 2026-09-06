@@ -39,7 +39,7 @@ claimed.
 
 Look and StopLook need compiled-reference binding and actor-owned target
 selection/lifetime. Head pose publication must use the source tracking bone,
-its parent, authored pose and rig constraints, then apply the original angular
+its parent, authored pose and body-part cone, then apply the original angular
 step/easing behavior. A request must not be converted into whole-body facing or
 silently admitted without this presentation owner. Head and eye behavior,
 source animation overrides, frame timing and persistence remain independent

@@ -16,7 +16,12 @@ exit and Sunny remain unfinished. The name prompt and Reflectron use
 original XML, bitmap controls, dynamic FaceGen, source hair and
 voice/LIP. The user accepted the current hair/age appearance for advancing.
 Source placement removes the obstructing room wall; clothing retains its own
-texture and source opacity removes the gurney's black fill. Original HUD gift
+texture. The gurney wheel report exposed a separate BC1 upload failure after
+the earlier falloff correction. Source cutout alpha now survives GPU upload:
+all 349,525 owned texels across ten mip levels pass, while the old upload loses
+63,464 alpha samples. Ordinary room-79 shows open large-wheel and caster spokes
+after original creation, at free movement stage 55. Matched retail shadows,
+lighting and pixels remain open. See texture-alpha.md. Original HUD gift
 icons, brackets, bitmap font and inventory notices now render. Four Doc
 response gestures, chair exit/NAVM travel, IDLE repetition, animation sound,
 preview blinking and all eight original Vigor controls pass component audits.

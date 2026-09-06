@@ -64,7 +64,7 @@ internal static class NativeNpcMaterial
         var error = image.LoadDdsFromBuffer(bytes);
         if (error != Error.Ok || image.IsEmpty())
             throw new InvalidDataException($"NPC texture {identity} failed DDS decoding: {error}");
-        var texture = ImageTexture.CreateFromImage(image);
+        var texture = NativeDdsTexture.Create(image);
         texture.SetMeta("opennv_source_texture", identity);
         return texture;
     }

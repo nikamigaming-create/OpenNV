@@ -16,6 +16,13 @@ public partial class NativeNifInstanceAudit : Node
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();
             ExerciseMorphBasis();
+            ExerciseDdsImages();
+            if (OS.GetCmdlineUserArgs() is ["--dds-gpu", ..])
+            {
+                await ExerciseDdsPixels(OS.GetCmdlineUserArgs()[1..]);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--morph-gpu"])
             {
                 await ExerciseMorphPixels();

@@ -3,6 +3,8 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+Bc1AlphaContracts.Run();
+
 // A source XY triangle points toward +Z. The handedness-preserving (x,z,-y)
 // mapping puts that normal at +Y. Godot's clockwise front must face +Y too.
 Vector3[] sourceVertices = [new(0, 0, 0), new(2, 0, 0), new(0, 3, 0), new(1, 1, 1)];

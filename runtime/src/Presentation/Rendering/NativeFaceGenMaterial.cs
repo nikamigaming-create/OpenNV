@@ -164,7 +164,7 @@ internal static class NativeFaceGenMaterial
         var error = image.LoadDdsFromBuffer(bytes);
         if (error != Error.Ok || image.IsEmpty())
             throw new InvalidDataException($"Source FaceGen DDS failed to decode: {identity}, {error}.");
-        texture = ImageTexture.CreateFromImage(image);
+        texture = NativeDdsTexture.Create(image);
         texture.SetMeta("opennv_source_texture", identity);
         cache.Add(path, texture);
         return texture;

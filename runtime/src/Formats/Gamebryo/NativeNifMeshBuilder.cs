@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Godot;
+using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
@@ -2067,7 +2068,7 @@ internal static class RuntimeNativeNifMeshBuilder
             if (normal && image.GetFormat() == Image.Format.L8)
                 throw new NotSupportedException(
                     $"Native NIF normal texture has an unsupported single-channel format: {source}");
-            var texture = ImageTexture.CreateFromImage(image);
+            var texture = NativeDdsTexture.Create(image);
             texture.SetMeta("opennv_source_texture", source);
             texture.SetMeta("opennv_logical_texture", logicalPath);
             return texture;
@@ -2101,6 +2102,7 @@ internal static class RuntimeNativeNifMeshBuilder
                         $"Godot could not decode native NIF cubemap face {sourceFace} from {source}: {error}");
                 images.Add(image);
             }
+            NativeDdsTexture.PreserveCubeAlpha(images);
             var result = new Cubemap();
             var createError = result.CreateFromImages(images);
             if (createError != Error.Ok)

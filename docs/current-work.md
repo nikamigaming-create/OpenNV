@@ -15,6 +15,17 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 ## Current verified state
 
+- The reported gurney wheel cutouts now survive GPU upload. The previous fix
+  covered its separate falloff surface; native DXT1 upload still forced opaque
+  alpha on the wheel texture. The shared DDS owner preserves encoded BC1 alpha
+  and every authored mip, leaving opaque BC1 compressed. The owned GPU audit
+  samples all 349,525 texels across ten mip levels: the old upload loses 63,464
+  alpha values and the correction loses none. Ordinary room-79 skips the
+  cinematic, accepts original creation and reaches free movement at stage 55;
+  the close-up shows open spokes on both large wheels and the caster. Live
+  telemetry confirms only the alpha-bearing texture expands; normal/mask
+  formats and hashes stay unchanged. Matched retail lighting, shadows and
+  camera/pixels remain open. See texture-alpha.md.
 - Ordinary room-77 accepts original creation and Vigor allocation
   6/6/6/6/6/5/5, plays Doc's source reaction, then all three responses of his
   psychology introduction and reaches stage 80. Doc now traverses all eight
@@ -77,8 +88,8 @@ scene-defects.md tracks component corrections without claiming scene parity.
   owned audit reads all 58 loaded body-part records; five selected setting bits
   plus the humanoid body-part slot, node and cone agree with private native
   observation. Synthetic checks and the full gate pass. Target lifetime and
-  head/eye pose publication still need runtime owners; the room-77 event remains
-  failed. No ordinary replay was needed for this declaration-only correction.
+  head/eye pose publication still need runtime owners; retained room-77 evidence
+  shows the failed event. No ordinary replay was needed for that declaration-only correction.
   See head-tracking.md.
 - The replacement psychology panel and its direct skip to skill review are
   removed. Source couch/furniture activation and dialogue choices must own
@@ -111,8 +122,9 @@ scene-defects.md tracks component corrections without claiming scene parity.
   Paired movement distances and collisions differ; the route to Vigor used
   separate ordinary inputs and is not matched-motion evidence.
 - Source placement removes the obstructing room module; 19 selected native
-  transforms agree. Clothing preserves its texture and source opacity removes
-  the gurney's black fill. Original gift icons/brackets/bitmap text render and
+  transforms agree. Clothing preserves its texture. The separate falloff and
+  BC1 upload corrections remove the gurney's observed black fills. Original
+  gift icons/brackets/bitmap text render and
   startup scripts produce 19 grants. Remaining HUD/radio, queues, fading,
   loading transitions, complete geometry/alpha/collision and pixels remain.
 - Shared source quest clocks retain Float32 recurrence, overshoot and script
@@ -139,8 +151,10 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 Retain retail room-54 and the current OpenNV run/session configuration.
 Revalidate process IDs/state before input; keep one instance of each game.
-Room-77 reaches stage 80 after actual travel, with a visible end-event error. Retained paired
-review evidence and matching stage numbers do not establish a current match.
+Room-79 is the current ordinary run, at free movement stage 55 after the wheel
+replay. Retained room-77 reaches stage 80 after actual travel with a visible
+end-event error. Retail remains at stage 80 with its pause menu open. The
+current cameras, menus and states are not a matched comparison.
 
 Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
 The public harness rejects native.click callbacks; retail buttons require an
@@ -163,7 +177,7 @@ derivatives and captures remain outside the repository.
 1. Execute source Look/StopLook through the actor aiming owner. Package event
    dispatch now exposes the actual end-event failure after Doc's travel.
    The setting and BPTD node/cone readers are verified; next bind target lifetime,
-   authored rig constraints and head-pose publication before admitting the event.
+   source head/parent pose, body-part cone and head-pose publication before admitting the event.
    Complete target/head/eye behavior, couch activation and original
    dialogue choices. Do not restore a replacement psychology confirmation.
 2. Continue the shared script owner through reference-instance state,
@@ -179,6 +193,12 @@ derivatives and captures remain outside the repository.
    Do not fit HDR, authored colours or hide world geometry to match a frame.
 
 ## Required publication gate
+
+The BC1 source-alpha contracts, selected owned rendering audit, all-mip GPU
+comparison and full repository gate pass. Ordinary room-79 verifies open wheel
+spokes and the new upload-format telemetry. The image-format validators moved
+unchanged into their own file so the format-only probe does not need renderer
+stubs. No matched-retail scene completion is claimed.
 
 The full gate, nine-package lifecycle, six owned activation cases, packed
 owned face basis and Forward+ morph checks pass. The original morph code fails
