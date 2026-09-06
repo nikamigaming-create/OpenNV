@@ -8,7 +8,8 @@ requirements remain open. Work stays on main and in this task only; parallel
 subagents are stopped at the user's request.
 
 Ordinary New now accepts original creation and the Vigor Tester's complete
-SPECIAL allocation, advancing to VCG01 stage 70. Paired original menus show
+SPECIAL allocation, plays Doc's source reaction and psychology introduction,
+and reaches VCG01 stage 80 with a visible package-event failure. Paired original menus show
 the same 6/6/6/6/6/5/5 allocation. We are still inside Doc's house; Pip-Boy handoff,
 exit and Sunny remain unfinished. The name prompt and Reflectron use
 original XML, bitmap controls, dynamic FaceGen, source hair and
@@ -37,8 +38,13 @@ Vigor audits pass. Single-INFO Goodbye speech now plays the original Vigor
 audio/LIP, executes its objective update and releases its speech wait. Winning
 quest-objective declarations, flags, ordered changes, telemetry and save v11
 persistence now bind; synthetic and selected owned checks pass, and ordinary
-tester acceptance completes objective 30. The next blocker is the source
-SPECIAL reaction program and its dialogue-condition contexts. Post-creation HUD/instructions,
+tester acceptance completes objective 30. General GameMode expression/function
+execution now publishes the source SPECIAL calculations before SetStage;
+thirty owned SPECIAL/sex cases pass, and the balanced case's six calculated
+values match retained native telemetry. Dialogue conditions use authoritative
+target sex and quest variables. Ordinary room-74 plays the reaction and the
+following three responses. Source package-event dispatch and actor aiming are
+the next observed failures. Post-creation HUD/instructions,
 movement/collision differences and Vigor framing remain explicit defects.
 
 Source quest-clock initialization, shared script lifetime, Float32 recurrence,
@@ -102,7 +108,9 @@ The full Release/Debug, formatting/analyzer, contract, launcher and native
 Godot loading gate passed on 2026-09-05. Selected owned material and GPU audits
 also pass. Publication and scene acceptance are separate requirements.
 
-Psychology, tag/trait and farewell still contain replacement panels. Complete
+The replacement psychology panel and its stage-skip confirmation are removed;
+ordinary couch interaction and source dialogue choices remain unbound.
+Tag/trait and farewell still contain replacement panels. Complete
 Pip-Boy, room loot/skull/pool interactions, radio discovery, exterior
 streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics,
 complete saves/plugins, ordinary FO3/TTW and integrated OpenXR remain unfinished.

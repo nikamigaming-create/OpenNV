@@ -50,8 +50,8 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
                     throw new InvalidDataException("Package event has an invalid animation identity.");
             }
             else if (currentEvent is not null && field.Signature == "SCTX" &&
-                FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.Text(field.Data.Span)).Any())
-                throw new NotSupportedException($"PACK {record.FormKey} event script execution is unbound.");
+                FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(field.Data.Span)).Any())
+                throw new NotSupportedException($"PACK {record.FormKey} {currentEvent} event script execution is unbound.");
         }
         return new(record.FormKey, FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span),
             idleFlags, timer, idles, events)

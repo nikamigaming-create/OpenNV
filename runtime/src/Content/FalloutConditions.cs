@@ -23,14 +23,15 @@ internal sealed record FalloutCondition(FalloutPluginRecord Owner, byte Flags, f
             bytes.Length == 28 ? BinaryPrimitives.ReadUInt32LittleEndian(bytes[24..]) : 0);
     }
 
-    internal static bool AllPass(IReadOnlyList<FalloutCondition> conditions, Func<FalloutCondition, float> evaluate)
+    internal static bool AllPass(IReadOnlyList<FalloutCondition> conditions, Func<FalloutCondition, float> evaluate,
+        bool evaluateRunOn = false)
     {
         var group = false;
         foreach (var condition in conditions)
         {
             if (!group)
             {
-                if ((condition.Flags & 0x1e) != 0 || condition.RunOn != 0)
+                if ((condition.Flags & 0x1e) != 0 || condition.RunOn != 0 && !evaluateRunOn)
                     throw new NotSupportedException($"{condition.Owner.FormKey} CTDA needs its flags/run-on owner.");
                 var actual = evaluate(condition);
                 if (!float.IsFinite(actual)) throw new InvalidDataException("Non-finite condition result.");

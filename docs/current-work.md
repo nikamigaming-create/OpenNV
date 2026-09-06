@@ -15,12 +15,12 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 ## Current verified state
 
-- Ordinary room-73 accepts original creation, walks to the Vigor Tester,
-  allocates SPECIAL 6/6/6/6/6/5/5 and accepts the original review. OpenNV
-  advances through stage 65 to stage 70 and completes objective 30. Retained
-  room-72/retail captures show the same allocation through paired keyboard
-  input. Retail has continued to stage 80. The runs are no longer aligned.
-  We are still inside Doc's house. No ordinary save exists at this checkpoint.
+- Ordinary room-74 accepts original creation and Vigor allocation
+  6/6/6/6/6/5/5, plays Doc's source reaction, then all three responses of his
+  psychology introduction and reaches stage 80. The next AI/package event
+  failure is visible; this is not completed couch interaction. Retail remains
+  at stage 80, but actor/camera/time states are not aligned. We are still
+  inside Doc's house. No ordinary save exists at this checkpoint.
 - Original name/Reflectron XML, bitmap controls, dynamic FaceGen, source hair
   and voice/LIP are connected. The user accepted hair/age for advancing.
   The original No/Yes creation confirmation now works: source scroll-unit
@@ -46,11 +46,31 @@ scene-defects.md tracks component corrections without claiming scene parity.
   remain unbound. The broader sweep admits 633 quest owners and 1465 objective
   declarations; seven quests retain duplicate-variable errors. These counts
   are source coverage only. Missing saved objective state fails closed.
-- The next failed speech is Doc's post-Vigor reaction: INFO target-sex and
-  quest-variable condition contexts are unbound. More fundamentally, the
-  current timer adapter skips the source quest's SPECIAL reaction calculation.
-  Execute that source program before claiming any reaction branch. The Vigor
-  activation adapter also omits its source objective-display prerequisite.
+- Production timed transitions now execute the source GameMode program through
+  shared quest clocks. General function arguments, arithmetic and branches
+  publish compiled quest-variable slots before source SetStage. Thirty owned
+  SPECIAL/sex cases select eligible INFOs; all six balanced-case calculated
+  values agree with retained native telemetry. Target-sex and quest-variable
+  dialogue conditions read gameplay state. Ordinary room-74 plays the expected
+  reaction without a fitted table or initialized-default shortcut.
+- Stage quest-variable assignments now bind compiled references alongside
+  existing global assignments. Shared state exposes variable values and exact
+  storage bits. Synthetic source overrides, expression short circuits, staged
+  failure and cold recurrence pass. Mixed global/local expressions, conditional
+  stage results, synchronous effects after SetStage, exact claimed-script
+  lifetime/MenuMode scheduling and dynamic quest start/stop remain unbound.
+  The existing creation handoff executes its authored MenuMode block at close;
+  this does not establish native menu-time event order. The complete Vigor
+  OnActivate objective prerequisite also remains unbound.
+- The next package failure comes from a real event script, not a corrupt name.
+  SCTX is size-delimited with an optional terminal null. Its general decoder
+  now handles both encodings and rejects embedded nulls; nonempty package
+  events remain fail-closed. The nine-package owned check admits eight and
+  retains the authored POEA event as unbound. Implement dispatch and Look/StopLook
+  at the proper lifecycle before claiming Doc's travel/aiming complete.
+- The replacement psychology panel and its direct skip to skill review are
+  removed. Source couch/furniture activation and dialogue choices must own
+  progression. Tag/trait and farewell replacements remain separate defects.
 - Vigor plays its authored opening sequence onto Strength. Keyboard Up/Down
   changes the current attribute and retains review-row routing. The nested
   CanvasLayer camera lifecycle and owned eight-page/allocation audit pass;
@@ -88,10 +108,10 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 ## Live comparison and evidence
 
-Retain retail room-54 and OpenNV room-73, using the room-73 session configuration.
+Retain retail room-54 and the current OpenNV run/session configuration.
 Revalidate process IDs/state before input; keep one instance of each game.
-OpenNV is at stage 70 with a visible speech-condition error in telemetry;
-retail is at stage 80. Retained paired review evidence is not a current match.
+Room-74 reaches stage 80 with a visible package-event error. Retained paired
+review evidence and matching stage numbers do not establish a current match.
 
 Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
 The public harness rejects native.click callbacks; retail buttons require an
@@ -111,15 +131,14 @@ derivatives and captures remain outside the repository.
 
 ## Next owners
 
-1. Execute complete source conditional programs rather than just extracting
-   timer SetStage targets. The first observed missing block computes Doc's
-   reaction from player actor values using Abs, assignments and branches.
-   Bind shared quest-variable storage, target sex and quest-variable dialogue
-   contexts, and the complete source activation prerequisite. No fitted
-   reaction table, default branch or captured native value may replace this.
-2. Verify Doc's resulting speech and travel, then replace psychology,
-   tag/trait and farewell panels with the original source interfaces. Never
-   use their current placeholder confirmations to claim progression support.
+1. Execute source package events and Look/StopLook at their authored lifecycle.
+   The new source progression exposes this failure during Doc's psychology
+   introduction. Complete ordinary travel, couch activation and original
+   dialogue choices. Do not restore a replacement psychology confirmation.
+2. Continue the shared script owner through complete activation predicates,
+   conditional result programs and exact scheduling. Replace tag/trait and
+   farewell panels with original interfaces. Never use placeholder
+   confirmations or selected stage targets to claim progression support.
 3. Complete Pip-Boy, loot/skull/pool/physics, doors/exterior, Sunny's dialogue/
    combat/tutorial and cold Continue. Six actor-audit shutdown resources remain.
    Broader NV/FO3/TTW/plugin support and integrated OpenXR remain unfinished.
@@ -130,8 +149,10 @@ derivatives and captures remain outside the repository.
 
 ## Required publication gate
 
-The full gate, selected owned idle/voice/creation and Vigor GPU/input audits
-passed on 2026-09-05. Re-run after relevant changes and before publication:
+The full gate, thirty owned reaction/sex cases and the nine-package source
+check passed on 2026-09-05 with the real POEA event explicitly unbound.
+Earlier selected idle/voice/creation and Vigor GPU/input evidence remains
+scoped to those components. Re-run relevant checks before publication:
 
 ```powershell
 .\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe'

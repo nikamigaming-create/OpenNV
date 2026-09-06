@@ -353,9 +353,52 @@ try
     try { FalloutDialogueTopic.Read(random, "SyntheticTopic").Select(new FalloutFormKey("Random.esm", 0x900), new HashSet<FalloutFormKey>(), _ => 0); }
     catch (NotSupportedException) { randomRejected = true; }
     Require(randomRejected, "Goodbye admission also admitted unowned Random selection.");
+    Require(FalloutDialogueTopic.ScriptText("set value to 3"u8) == "set value to 3" &&
+        FalloutDialogueTopic.ScriptText("set value to 3\0"u8) == "set value to 3" &&
+        FalloutDialogueTopic.ScriptText([]) == "", "SCTX byte extents were treated as mandatory null-terminated names.");
+    var embeddedNullRejected = false;
+    try { FalloutDialogueTopic.ScriptText("one\0two"u8); }
+    catch (InvalidDataException) { embeddedNullRejected = true; }
+    Require(embeddedNullRejected, "An embedded source-script null was admitted.");
+    byte[] EventPackage(uint id, byte[] scriptBytes) => Record("PACK", id,
+        Field("EDID", Encoding.ASCII.GetBytes("EventPackage" + id + "\0"))
+            .Concat(Field("PKDT", packageData)).Concat(Field("PLDT", packageLocation))
+            .Concat(Field("POCA", [])).Concat(Field("SCTX", scriptBytes)).ToArray());
+    File.WriteAllBytes(Path.Combine(directory, "EventScripts.esm"), Record("TES4", 0, Field("HEDR", header))
+        .Concat(EventPackage(0xd00, "; comment only"u8.ToArray()))
+        .Concat(EventPackage(0xd01, "UnownedCommand"u8.ToArray())).ToArray());
+    using var eventStack = FalloutPluginStack.Load(directory, ["EventScripts.esm"]);
+    _ = FalloutScriptPackage.Read(eventStack.GetEffective(new("EventScripts.esm", 0xd00)));
+    var eventRejected = false;
+    try { FalloutScriptPackage.Read(eventStack.GetEffective(new("EventScripts.esm", 0xd01))); }
+    catch (NotSupportedException error) { eventRejected = error.Message.Contains("POCA", StringComparison.Ordinal); }
+    Require(eventRejected, "A real package event script was hidden by source decoding or admitted without an execution owner.");
     var needle = Field("CTDA", Condition(0x900));
     var start = bytes.AsSpan().IndexOf(needle);
     Require(start >= 0, "Synthetic CTDA was not found.");
+    var targetBytes = bytes.ToArray();
+    BinaryPrimitives.WriteUInt16LittleEndian(targetBytes.AsSpan(start + 14), 70);
+    BinaryPrimitives.WriteUInt32LittleEndian(targetBytes.AsSpan(start + 18), 0);
+    BinaryPrimitives.WriteUInt32LittleEndian(targetBytes.AsSpan(start + 26), 1);
+    File.WriteAllBytes(Path.Combine(directory, "Target.esm"), targetBytes);
+    using var targetStack = FalloutPluginStack.Load(directory, ["Target.esm"]);
+    var targetTopic = FalloutDialogueTopic.Read(targetStack, "SyntheticTopic");
+    var targetSpeaker = new FalloutFormKey("Target.esm", 0x900);
+    var targetRejected = false;
+    try { targetTopic.Select(targetSpeaker, new HashSet<FalloutFormKey>(), _ => 0); }
+    catch (NotSupportedException) { targetRejected = true; }
+    Require(targetRejected, "A target condition executed without a target state owner.");
+    var contextCalls = 0;
+    var targetInfo = targetTopic.Select(targetSpeaker, new HashSet<FalloutFormKey>(), _ => 0, condition =>
+    {
+        Require(condition.Function == 70 && condition.RunOn == 1 && condition.Argument1 == 0,
+            "Dialogue lost the target condition's function or arguments.");
+        contextCalls++; return 1;
+    });
+    Require(targetInfo?.Responses[0].Text == "First" && contextCalls == 1,
+        "The bound target condition did not select the authored INFO.");
+    Require(targetTopic.Select(targetSpeaker, new HashSet<FalloutFormKey>(), _ => 0, _ => 0)?.Responses[0].Text == "Second",
+        "A false target condition did not preserve source INFO selection order.");
     BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(start + 6 + 8), 999);
     var unknownPath = Path.Combine(directory, "Unknown.esm");
     File.WriteAllBytes(unknownPath, bytes);

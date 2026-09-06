@@ -13,6 +13,7 @@ internal partial class RuntimeNativeSpeech : Node
     private FaceGenLipConfiguration _lipConfiguration = null!;
     private Action<string, short> _stageResult = null!;
     private Func<FalloutFormKey, float> _questStage = null!;
+    private Func<FalloutCondition, float>? _conditionContext;
     private AudioStreamPlayer _voice = null!;
     private FalloutSayToCommand? _command;
     private FalloutDialogueInfo? _info;
@@ -46,12 +47,14 @@ internal partial class RuntimeNativeSpeech : Node
     };
 
     internal void Configure(FalloutPluginStack stack, FaceGenLipConfiguration lipConfiguration,
-        Action<string, short> stageResult, Func<FalloutFormKey, float> questStage)
+        Action<string, short> stageResult, Func<FalloutFormKey, float> questStage,
+        Func<FalloutCondition, float>? conditionContext = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _stageResult = stageResult;
         _questStage = questStage;
+        _conditionContext = conditionContext;
         Name = "SourceSpeech";
         _voice = new AudioStreamPlayer { Name = "OwnedVoice" };
         _voice.Finished += () => _advance = true;
@@ -86,7 +89,7 @@ internal partial class RuntimeNativeSpeech : Node
         _speaker = actors[0];
         if (!_topics.TryGetValue(command.TopicEditorId, out var topic))
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, command.TopicEditorId));
-        var info = topic.Select(npcKey, _said, _questStage) ??
+        var info = topic.Select(npcKey, _said, _questStage, _conditionContext) ??
             throw new InvalidOperationException($"No eligible source INFO in {command.TopicEditorId}.");
         if (FalloutDialogueTopic.CodeLines(info.BeginScript).Any())
             throw new NotSupportedException($"INFO {info.Record.FormKey} begin-script owner is unbound.");

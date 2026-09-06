@@ -190,7 +190,7 @@ public partial class RuntimeCoordinator
                 _nativeInitialCell);
             _nativeOpeningTransitions = FalloutOpeningStageTransitionResolver.Resolve(
                 _nativePluginStack,
-                _nativeOpeningControls);
+                _nativeOpeningControls, executeGameMode: true);
             _nativeOpeningTransitions = FalloutOpeningStageTransitionResolver.AddDialogueWaits(
                 _nativeOpeningControls, _nativeOpeningTransitions);
             _nativeTagSkillContract = FalloutNativeTagSkillResolver.Resolve(
@@ -761,6 +761,7 @@ public partial class RuntimeCoordinator
             _configuration.ActorCompiler.FaceGenAnimation.Lip,
             _nativeImageSpaceState,
             _nativeQuestState!,
+            _nativeQuestScripts?.Scripts ?? throw new InvalidOperationException("Native quest script owner is absent."),
             _nativeInventory,
             () => _nativeQuestScripts?.Capture(),
             _nativeGlobals,

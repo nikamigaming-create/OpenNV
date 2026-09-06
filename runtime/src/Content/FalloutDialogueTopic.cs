@@ -55,12 +55,12 @@ internal sealed partial class FalloutDialogueTopic
     }
 
     internal FalloutDialogueInfo? Select(FalloutFormKey speakerBase, IReadOnlySet<FalloutFormKey> said,
-        Func<FalloutFormKey, float> questStage)
+        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null)
     {
         foreach (var info in Infos)
         {
             if ((info.Flags & 4) != 0 && said.Contains(info.Record.FormKey)) continue;
-            if (!ConditionsPass(info, speakerBase, questStage)) continue;
+            if (!ConditionsPass(info, speakerBase, questStage, context)) continue;
             // SayTo owns one complete INFO and finishes after its responses and
             // end script. Goodbye requires no further conversational turn here;
             // it must not suppress the authored line. Random and other routing
@@ -113,6 +113,14 @@ internal sealed partial class FalloutDialogueTopic
         return CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetString(bytes[..end]);
     }
 
+    internal static string ScriptText(ReadOnlySpan<byte> bytes)
+    {
+        // SCTX has a declared byte extent; unlike EDID, its terminal null is optional.
+        if (bytes.Length != 0 && bytes[^1] == 0) bytes = bytes[..^1];
+        if (bytes.IndexOf((byte)0) >= 0) throw new InvalidDataException("Embedded null in source script.");
+        return CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetString(bytes);
+    }
+
     private static FalloutDialogueInfo Decode(FalloutPluginRecord record)
     {
         var fields = record.ReadSubrecords().ToArray();
@@ -129,10 +137,7 @@ internal sealed partial class FalloutDialogueTopic
             if (field.Signature == "NEXT") { afterNext = true; continue; }
             if (field.Signature == "SCTX")
             {
-                var script = field.Data.Span;
-                if (script.Length != 0 && script[^1] == 0) script = script[..^1];
-                if (script.IndexOf((byte)0) >= 0) throw new InvalidDataException("Embedded null in source script.");
-                (afterNext ? end : begin).Add(CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetString(script));
+                (afterNext ? end : begin).Add(ScriptText(field.Data.Span));
                 continue;
             }
             if (field.Signature == "CTDA") { conditions.Add(field.Data.ToArray()); continue; }
@@ -163,46 +168,18 @@ internal sealed partial class FalloutDialogueTopic
             data.Length == 4 ? data[3] : (byte)0, conditions, responses, string.Join('\n', begin), string.Join('\n', end));
     }
 
-    private static bool ConditionsPass(FalloutDialogueInfo info, FalloutFormKey speaker, Func<FalloutFormKey, float> questStage)
-    {
-        var group = false;
-        foreach (var condition in info.Conditions)
+    private static bool ConditionsPass(FalloutDialogueInfo info, FalloutFormKey speaker,
+        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context) =>
+        FalloutCondition.AllPass(info.Conditions.Select(bytes => FalloutCondition.Read(info.Record, bytes)).ToArray(), condition =>
         {
-            if (condition.Length is not (20 or 24 or 28)) throw new InvalidDataException("Invalid CTDA size.");
-            if ((condition[0] & 0x1e) != 0 || (condition.Length >= 24 && BinaryPrimitives.ReadUInt32LittleEndian(condition.AsSpan(20)) != 0))
-                throw new NotSupportedException($"INFO {info.Record.FormKey} requires an unbound condition context.");
-            if (!group)
+            if (condition.RunOn == 0)
             {
-                var function = BinaryPrimitives.ReadUInt16LittleEndian(condition.AsSpan(8));
-                var argument = info.Record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(condition.AsSpan(12)));
-                var value = function switch
-                {
-                    72 => argument == speaker ? 1.0f : 0.0f,
-                    58 => questStage(argument),
-                    _ => throw new NotSupportedException($"INFO {info.Record.FormKey} condition function {function} is unbound."),
-                };
-                var expected = BinaryPrimitives.ReadSingleLittleEndian(condition.AsSpan(4));
-                if (!float.IsFinite(value) || !float.IsFinite(expected)) throw new InvalidDataException("Non-finite dialogue condition.");
-                group = (condition[0] >> 5) switch
-                {
-                    0 => value == expected,
-                    1 => value != expected,
-                    2 => value > expected,
-                    3 => value >= expected,
-                    4 => value < expected,
-                    5 => value <= expected,
-                    _ => throw new InvalidDataException("Unknown condition comparison."),
-                };
+                if (condition.Function == 72) return condition.FormArgument1 == speaker ? 1 : 0;
+                if (condition.Function == 58) return questStage(condition.FormArgument1);
             }
-            if ((condition[0] & 1) == 0)
-            {
-                if (!group) return false;
-                group = false;
-            }
-        }
-        return info.Conditions.Count == 0 || (info.Conditions[^1][0] & 1) == 0 || group;
-    }
-
+            return context?.Invoke(condition) ?? throw new NotSupportedException(
+                $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
+        }, evaluateRunOn: true);
     [GeneratedRegex(@"^(?<speaker>[A-Za-z0-9_]+)\.sayto\s+(?<target>[A-Za-z0-9_]+)\s+(?<topic>[A-Za-z0-9_]+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SayToPattern();
 }

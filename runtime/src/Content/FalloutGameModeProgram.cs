@@ -4,6 +4,11 @@ using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
+internal enum FalloutScriptArgumentKind { Number, Identifier }
+internal readonly record struct FalloutScriptArgument(double Number, string? Identifier = null);
+internal sealed record FalloutScriptFunction(IReadOnlyList<FalloutScriptArgumentKind> Arguments,
+    Func<IReadOnlyList<FalloutScriptArgument>, double> Invoke);
+
 // A source-script owner, independent of menus, locations and quest identities.
 // Unsupported expressions/commands stop the caller before its staged effects commit.
 internal sealed class FalloutGameModeProgram
@@ -11,16 +16,16 @@ internal sealed class FalloutGameModeProgram
     private readonly IReadOnlyList<string> _lines;
     private FalloutGameModeProgram(IReadOnlyList<string> lines) => _lines = lines;
 
-    internal static FalloutGameModeProgram Read(ReadOnlySpan<byte> source)
+    internal static FalloutGameModeProgram Read(ReadOnlySpan<byte> source, string blockName = "GameMode", uint? argument = null)
     {
         if (source.IndexOfAnyInRange((byte)0x80, byte.MaxValue) >= 0)
             throw new NotSupportedException("Script source encoding is not ASCII.");
         var text = Encoding.ASCII.GetString(source).TrimEnd('\0');
         if (text.Contains('\0')) throw new InvalidDataException("Script source contains an embedded null.");
-        return Read(text);
+        return Read(text, blockName, argument);
     }
 
-    internal static FalloutGameModeProgram Read(string source)
+    internal static FalloutGameModeProgram Read(string source, string blockName = "GameMode", uint? argument = null)
     {
         var lines = new List<string>();
         var block = false;
@@ -37,9 +42,11 @@ internal sealed class FalloutGameModeProgram
             {
                 if (block || tokens.Length < 2) throw new InvalidDataException("Invalid script block start.");
                 block = true;
-                gameMode = tokens[1].Equals("GameMode", StringComparison.OrdinalIgnoreCase);
-                if (gameMode && tokens.Length != 2) throw new NotSupportedException("GameMode block arguments are unbound.");
-                if (gameMode && foundGameMode) throw new NotSupportedException("Multiple GameMode blocks need independent scheduling.");
+                gameMode = tokens[1].Equals(blockName, StringComparison.OrdinalIgnoreCase);
+                if (gameMode && argument is { } expected)
+                    gameMode = tokens.Length == 3 && uint.TryParse(tokens[2], NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value == expected;
+                else if (gameMode && tokens.Length != 2) throw new NotSupportedException($"{blockName} block arguments are unbound.");
+                if (gameMode && foundGameMode) throw new NotSupportedException($"Multiple {blockName} blocks need independent scheduling.");
                 foundGameMode |= gameMode;
                 continue;
             }
@@ -60,7 +67,7 @@ internal sealed class FalloutGameModeProgram
     }
 
     internal void Execute(Func<string, double> variable, Action<string, double> assign,
-        Action<string, IReadOnlyList<string>> call)
+        Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null)
     {
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
         var active = true;
@@ -70,14 +77,14 @@ internal sealed class FalloutGameModeProgram
             switch (tokens[0].ToLowerInvariant())
             {
                 case "if":
-                    var result = active && Evaluate(tokens[1..], variable) != 0;
+                    var result = active && Evaluate(tokens[1..], variable, function) != 0;
                     branches.Push((active, result, false));
                     active = result;
                     break;
                 case "elseif":
                     var prior = branches.Pop();
                     if (prior.Else) throw new InvalidDataException("Elseif follows else.");
-                    active = prior.Parent && !prior.Taken && Evaluate(tokens[1..], variable) != 0;
+                    active = prior.Parent && !prior.Taken && Evaluate(tokens[1..], variable, function) != 0;
                     branches.Push((prior.Parent, prior.Taken || active, false));
                     break;
                 case "else":
@@ -90,7 +97,7 @@ internal sealed class FalloutGameModeProgram
                 case "set" when active:
                     if (tokens.Length < 4 || !tokens[2].Equals("to", StringComparison.OrdinalIgnoreCase))
                         throw new NotSupportedException("Script assignment syntax is unbound.");
-                    assign(tokens[1], Evaluate(tokens[3..], variable));
+                    assign(tokens[1], Evaluate(tokens[3..], variable, function));
                     break;
                 case "return" when active: return;
                 default:
@@ -100,7 +107,8 @@ internal sealed class FalloutGameModeProgram
         }
     }
 
-    internal static double Evaluate(IReadOnlyList<string> tokens, Func<string, double> variable)
+    internal static double Evaluate(IReadOnlyList<string> tokens, Func<string, double> variable,
+        Func<string, FalloutScriptFunction?>? function = null)
     {
         var at = 0;
         double Read(int precedence, bool execute)
@@ -119,7 +127,26 @@ internal sealed class FalloutGameModeProgram
                 left = token == "-" ? -left : token == "!" ? left == 0 ? 1 : 0 : left;
             }
             else if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out left))
-                left = execute ? variable(token) : 0;
+            {
+                if (function?.Invoke(token) is { } command)
+                {
+                    var arguments = new List<FalloutScriptArgument>();
+                    foreach (var kind in command.Arguments)
+                    {
+                        if (kind == FalloutScriptArgumentKind.Number)
+                            arguments.Add(new(Read(7, execute)));
+                        else
+                        {
+                            if (at >= tokens.Count || !Regex.IsMatch(tokens[at], @"^[A-Za-z_][A-Za-z0-9_.]*$", RegexOptions.CultureInvariant))
+                                throw new InvalidDataException($"Script function {token} needs an identifier argument.");
+                            arguments.Add(new(0, tokens[at++]));
+                        }
+                    }
+                    left = execute ? command.Invoke(arguments) : 0;
+                }
+                else left = execute ? variable(token) : 0;
+            }
+            if (execute && !double.IsFinite(left)) throw new InvalidDataException("Script operand is non-finite.");
             while (at < tokens.Count && Priority(tokens[at]) is var priority && priority > precedence)
             {
                 var op = tokens[at++];

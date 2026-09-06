@@ -170,6 +170,23 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         ObjectiveChanged?.Invoke(new(quest, state.ObjectiveText[command.Index], before, after, Revision));
     }
 
+    internal short Stage(FalloutFormKey quest) => Require(quest).Stage;
+
+    internal object VariableState => _states.Where(pair => pair.Value.Variables.Count != 0).Select(pair => new
+    {
+        quest = pair.Key.ToString(),
+        variables = pair.Value.Variables.Select(variable => new
+        {
+            index = variable.Key,
+            value = variable.Value,
+            bits = BitConverter.DoubleToInt64Bits(variable.Value).ToString("x16", System.Globalization.CultureInfo.InvariantCulture),
+        }).ToArray(),
+    }).ToArray();
+
+    internal FalloutQuestObjectiveSnapshot Objective(FalloutFormKey quest, uint index) =>
+        Require(quest).Objectives.TryGetValue(index, out var objective) ? objective :
+            throw new NotSupportedException($"Quest {quest} has no declared objective {index}.");
+
     internal double Variable(FalloutFormKey quest, uint index) => Require(quest).Variables.TryGetValue(index, out var value)
         ? value : throw new NotSupportedException($"Quest {quest} has no declared variable {index}.");
 

@@ -66,6 +66,12 @@ internal sealed class FalloutOpeningStageMachine
         Enter(questEditorId, stage);
     }
 
+    internal void EnterScriptStage(string questEditorId, short stage)
+    {
+        _ = _controls.Stage(questEditorId, stage);
+        Enter(questEditorId, stage);
+    }
+
     internal bool CompleteBlocker(string blocker)
     {
         if (string.Equals(blocker, "sayto", StringComparison.OrdinalIgnoreCase) && _blockedTransition?.Kind == "dialogue-wait")
@@ -78,6 +84,7 @@ internal sealed class FalloutOpeningStageMachine
         var transition = _blockedTransition ??
             throw new InvalidOperationException("Native opening blocked transition is absent.");
         _blockedTransition = null;
+        if (transition.Kind == "script-wait") return true;
         if (transition.Kind == "timer" && transition.DelaySeconds is > 0.0f and { } delay)
         {
             _timerTransition = transition;
@@ -150,7 +157,7 @@ internal sealed class FalloutOpeningStageMachine
             _pendingBlockers.Clear();
 
             var immediate = _transitions.From(questEditorId, stage)
-                .Where(value => value.Kind is "stage-script" or "dialogue-result" or "dialogue-wait")
+                .Where(value => value.Kind is "stage-script" or "dialogue-result" or "dialogue-wait" or "script-wait")
                 .ToArray();
             if (immediate.Length > 1)
                 throw new InvalidOperationException(
@@ -231,7 +238,7 @@ internal static partial class FalloutOpeningStageTransitionResolver
 
     internal static FalloutOpeningStageTransitionGraph Resolve(
         FalloutPluginStack stack,
-        FalloutOpeningControlGraph stages)
+        FalloutOpeningControlGraph stages, bool executeGameMode = false)
     {
         ArgumentNullException.ThrowIfNull(stack);
         ArgumentNullException.ThrowIfNull(stages);
@@ -263,6 +270,14 @@ internal static partial class FalloutOpeningStageTransitionResolver
                         ReadBlockers(code)));
                 }
 
+                if (executeGameMode)
+                {
+                    var blockers = ReadBlockers(code);
+                    if (direct.Length == 0 && blockers.Count != 0)
+                        result.Add(new(blockers.Count == 1 && blockers[0] == "sayto" ? "dialogue-wait" : "script-wait",
+                            stage.QuestEditorId, stage.Stage, stage.QuestEditorId, stage.Stage, null, blockers));
+                    continue;
+                }
                 var timerTarget = ReadTimerTarget(scriptSource, stage.QuestEditorId, stage.Stage);
                 if (timerTarget is { } target)
                 {

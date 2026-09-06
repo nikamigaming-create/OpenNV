@@ -9,6 +9,8 @@ using OpenNV.Runtime.Gameplay.State;
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
+ScriptExpressionProbe.Run();
+QuestScriptExecutionProbe.Run();
 
 if (args is ["--audit-material-emittance", var materialRoot, var materialCell, var materialHour])
 {

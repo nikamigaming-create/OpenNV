@@ -24,6 +24,8 @@
     <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestScripts.cs" Link="FalloutQuestScripts.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptBindings.cs" Link="FalloutScriptBindings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutStageQuestVariableProgram.cs" Link="FalloutStageQuestVariableProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
     <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />

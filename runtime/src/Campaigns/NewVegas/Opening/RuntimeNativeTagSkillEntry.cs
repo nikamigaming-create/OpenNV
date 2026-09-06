@@ -3,52 +3,6 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
-internal partial class RuntimeNativePsychHandoffEntry : CanvasLayer
-{
-    private const int LayerIndex = 120;
-    private const float PanelWidthPixels = 620.0f;
-    private const float ShadeOpacity = 0.82f;
-
-    internal event Action? Accepted;
-
-    internal void Configure()
-    {
-        Name = "NativePsychHandoffEntry";
-        Layer = LayerIndex;
-        var shade = new ColorRect
-        {
-            Color = new Color(0.0f, 0.0f, 0.0f, ShadeOpacity),
-            LayoutMode = 1,
-            AnchorsPreset = (int)Control.LayoutPreset.FullRect,
-        };
-        AddChild(shade);
-        var center = new CenterContainer
-        {
-            LayoutMode = 1,
-            AnchorsPreset = (int)Control.LayoutPreset.FullRect,
-        };
-        AddChild(center);
-        var column = new VBoxContainer { CustomMinimumSize = new Vector2(PanelWidthPixels, 0.0f) };
-        center.AddChild(column);
-        column.AddChild(new Label
-        {
-            Text = "PSYCHOLOGICAL EVALUATION",
-            HorizontalAlignment = HorizontalAlignment.Center,
-        });
-        column.AddChild(new Label
-        {
-            Text = "The owned multi-question presentation is not reproduced in this bounded slice.\n" +
-                   "Its live INFO result graph converges on the tag-skill review.",
-            HorizontalAlignment = HorizontalAlignment.Center,
-        });
-        var confirm = new Button { Text = "CONTINUE TO SKILL REVIEW" };
-        confirm.Pressed += () => Accepted?.Invoke();
-        column.AddChild(confirm);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
-        confirm.GrabFocus();
-    }
-}
-
 internal partial class RuntimeNativeTagSkillEntry : CanvasLayer
 {
     private const int LayerIndex = 120;
