@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
 
 var furniture = GamebryoPackagePlacement.FromFurnitureMarker(
@@ -9,12 +10,37 @@ var furniture = GamebryoPackagePlacement.FromFurnitureMarker(
     new Vector3(0.5f, 1.0f, 1.5f),
     new Quaternion(Vector3.Up, Mathf.Pi),
     Vector3.One);
+var raceData = new byte[36];
+System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(raceData.AsSpan(32), 0x105);
+if (FalloutRaceProperties.ReadFlags(raceData) != 0x105)
+    throw new InvalidOperationException("Race flags lost child/playable or unrelated source bits.");
+var invalidRaceRejected = false;
+try { FalloutRaceProperties.ReadFlags(raceData.AsSpan(0, 35)); }
+catch (InvalidDataException) { invalidRaceRejected = true; }
+if (!invalidRaceRejected) throw new InvalidOperationException("A truncated race layout was admitted.");
 if (!furniture.SourceTransform.Origin.IsEqualApprox(new Vector3(1.5f, 3.0f, 2.5f)))
     throw new InvalidOperationException("Furniture marker root composition differs.");
 
 var grounded = GamebryoPackagePlacement.AdjustSupportHeight(
     furniture.SourceTransform,
     0.75f);
+var rootStart = new Vector3(0.02f, -0.04f, 0.3f);
+var rootEnd = new Vector3(-0.03f, 0.09f, -0.6f);
+var occupied = new Transform3D(new Basis(Vector3.Up, 0.7f).Scaled(Vector3.One * 1.2f), new(7, 3, -5));
+var entryMotion = NativeFurnitureRootMotion.Enter(occupied, 1.1f, rootEnd);
+var exitMotion = NativeFurnitureRootMotion.Exit(occupied, 1.1f, rootEnd);
+if (entryMotion.Sample(rootStart).Origin.DistanceTo(occupied.Origin) < 0.5f ||
+    !entryMotion.Sample(rootEnd).Origin.IsEqualApprox(occupied.Origin) ||
+    !exitMotion.Sample(rootEnd).Origin.IsEqualApprox(occupied.Origin) ||
+    !exitMotion.Sample(rootStart).IsEqualApprox(entryMotion.Sample(rootStart)))
+    throw new InvalidOperationException("Furniture root curve lost its occupied endpoint or reversible approach frame.");
+var translated = NativeFurnitureRootMotion.Enter(new(occupied.Basis, occupied.Origin + new Vector3(13, -9, 4)), 1.1f, rootEnd);
+if (!(translated.Sample(rootStart).Origin - entryMotion.Sample(rootStart).Origin).IsEqualApprox(new Vector3(13, -9, 4)))
+    throw new InvalidOperationException("Furniture accumulation depends on a fitted world location.");
+var invalidRootRejected = false;
+try { entryMotion.Sample(new Vector3(float.NaN, 0, 0)); }
+catch (InvalidDataException) { invalidRootRejected = true; }
+if (!invalidRootRejected) throw new InvalidOperationException("Non-finite furniture accumulation was admitted.");
 GamebryoPackagePlacement.RequireSupportHeightOnly(
     furniture.SourceTransform,
     grounded);

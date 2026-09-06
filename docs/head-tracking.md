@@ -46,7 +46,7 @@ no declared arguments; a trailing reference spelling does not become a target.
 Six target slots retain independent references and enabled flags. Script Look
 sets priority two; higher active priorities win. StopLook clears that slot,
 copies its former target into the default slot without changing the default
-enabled flag, and starts the winning hold timer. The cached selection and
+enabled flag, and starts the winning hold timer. The retained selection and
 current selection are separate. Float32 countdown overshoot is preserved;
 expiry does not invent automatic acquisition or erase the stored reference.
 
@@ -72,7 +72,7 @@ describes its current owner inventory; it does not prove native process absence.
 The separate reference extra-target bookkeeping is also not yet owned. These
 remain explicit state-lane gaps, beyond the loaded actor's head-slot/pose owner.
 
-Synthetic contracts cover target priority, invalidation, StopLook flag/cache
+Synthetic contracts cover target priority, invalidation, StopLook flag/selection
 lifetime, timer recurrence, script syntax and float-controller declarations.
 Native Godot checks cover physical rotation, cone clamping, publication limits,
 animation restoration, override suppression and distance gating. The selected
@@ -88,8 +88,10 @@ complete scene or questionnaire parity follows from these component checks.
 
 Ordinary room-81 skips the cinematic, accepts original creation and Vigor,
 executes Look during the later speech/approach, completes the package Look and
-subsequent StopLook, then traverses the eight-waypoint route to the living room.
-Doc is seated there at stage 80 without script, animation or package errors.
+subsequent StopLook. The eight-waypoint path belongs to the prior approach;
+the later furniture package directly places Doc in the living-room chair at
+stage 80. Its navigation and entry remain unbound. A retained path without
+package provenance caused the earlier incorrect travel claim.
 The bounded timeline retains active head publication, authored suppression and
 release; exact retail head motion was not aligned or visually accepted.
 

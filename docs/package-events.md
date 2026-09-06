@@ -17,8 +17,9 @@ The NPC travel owner emits completion after its authored locomotion reaches
 the NAVM destination. Package changes from occupied furniture wait for the
 existing source exit animation. Event idles use the shared owned IDLE/KF
 player; change idles still require deferred replacement ownership. Initial
-furniture placement retains its existing limitation: subsequent approaches
-to furniture do not yet own a full navigation and entry sequence.
+furniture placement retains its separate disposition. Subsequent furniture
+packages now use NAVM approach and finite source entry playback, with no done
+event until occupation. See furniture-motion.md for source and test scope.
 
 Synthetic coverage exercises same-package reevaluation, single completion,
 ordered replacement, delayed admission of an unreached script, reached
@@ -30,7 +31,10 @@ Private read-only observation of the native Look and StopLook handlers finds
 separate target-setting and target-clearing operations, with a distinct
 optional whole-body branch. The selected target-slot lifetime and physical head
 owner now execute these commands in their compiled scope. Ordinary room-81
-completes the former Look failure, subsequent speech/StopLook and couch travel.
+completes the former Look failure and subsequent speech/StopLook. The later
+furniture package in that run reported completion after direct placement,
+without approach or entry; its retained eight-waypoint path belonged to the
+previous package. The later correction is exercised in ordinary room-82.
 See head-tracking.md. Automatic/eye targeting, complete reference/process state,
 native event timing, event topics, deferred change idles and save restoration
 remain open. No native code or addresses are repository inputs.

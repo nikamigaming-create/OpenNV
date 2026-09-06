@@ -120,7 +120,17 @@ public partial class RuntimeCoordinator
                 finalStageOperational = presenter.GetMeta("opennv_image_space_operational", false).AsBool(),
             }).ToArray(),
             actors = _nativeCurrentCellRoot?.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
-                .Select(actor => new { reference = actor.Appearance.Reference?.ToString(), animation = actor.AnimationState }).ToArray(),
+                .Select(actor =>
+                {
+                    var rotation = actor.GlobalBasis.GetRotationQuaternion();
+                    return new
+                    {
+                        reference = actor.Appearance.Reference?.ToString(),
+                        position = new[] { actor.GlobalPosition.X, actor.GlobalPosition.Y, actor.GlobalPosition.Z },
+                        rotation = new[] { rotation.X, rotation.Y, rotation.Z, rotation.W },
+                        animation = actor.AnimationState,
+                    };
+                }).ToArray(),
             lights = _nativeCurrentCellRoot?.GetChildren().OfType<OmniLight3D>().Select(light => new
             {
                 reference = light.GetMeta("opennv_ligh_reference", "").AsString(),

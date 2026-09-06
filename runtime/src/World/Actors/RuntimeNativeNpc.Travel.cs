@@ -16,10 +16,16 @@ internal partial class RuntimeNativeNpc
     private float _travelPublishedDistance;
     private float _travelCycleDistance;
     private float _travelRootStart;
+    private FalloutFormKey? _travelPackage;
+    private FalloutFormKey? _travelTarget;
+    private string? _travelPurpose;
 
     private object TravelState => new
     {
         active = _travelActive,
+        package = _travelPackage?.ToString(),
+        reference = _travelTarget?.ToString(),
+        purpose = _travelPurpose,
         waypoints = _travelPath.Length,
         cursor = _travelCursor,
         target = new[] { _travelDestination.Origin.X, _travelDestination.Origin.Y, _travelDestination.Origin.Z },
@@ -28,18 +34,25 @@ internal partial class RuntimeNativeNpc
         unbound = new[] { "dynamic-obstacle-avoidance", "turn-blending", "retail-path-costs" },
     };
 
-    private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target)
+    private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target, Transform3D? furnitureApproach = null)
     {
-        if (!FalloutNewVegasBuiltinForms.IsInternalStatic(_aiCell!.BaseObjects[target.Base].Signature,
+        if (furnitureApproach is null && !FalloutNewVegasBuiltinForms.IsInternalStatic(_aiCell!.BaseObjects[target.Base].Signature,
             _aiStack!.RuntimeFormId(target.Base)))
             throw new NotSupportedException($"PACK {package.FormKey} requires its non-marker interaction owner.");
-        _navigation ??= CellNavigationGraph.LoadOwned(_aiStack!, _aiCell.Cell.FormKey);
+        _navigation ??= CellNavigationGraph.LoadOwned(_aiStack!, _aiCell!.Cell.FormKey);
         var units = Skeleton.UnitsToMetres;
         var sourceStart = new Vector3(Position.X, -Position.Z, Position.Y) / units;
-        var destination = new Vector3(target.Position[0], target.Position[1], target.Position[2]);
+        var destination = furnitureApproach is { } approach
+            ? new Vector3(approach.Origin.X, -approach.Origin.Z, approach.Origin.Y) / units
+            : new Vector3(target.Position[0], target.Position[1], target.Position[2]);
         _travelPath = _navigation.FindPath(sourceStart, destination).Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
         if (_travelPath.Length == 0) throw new InvalidDataException("Owned NAVM returned no travel corridor.");
-        _travelDestination = new(_referenceTransform!(target).Basis.Orthonormalized().Scaled(Scale), _travelPath[^1]);
+        if (furnitureApproach is { } entry && _travelPath[^1] != entry.Origin)
+            _travelPath = [.. _travelPath, entry.Origin];
+        _travelDestination = furnitureApproach ?? new(_referenceTransform!(target).Basis.Orthonormalized().Scaled(Scale), _travelPath[^1]);
+        _travelPackage = package.FormKey;
+        _travelTarget = target.FormKey;
+        _travelPurpose = furnitureApproach is null ? "reference-marker" : "furniture-approach";
         _travelCursor = 0;
         _travelPublishedDistance = 0;
         _travelActive = true;

@@ -37,6 +37,7 @@
     <Compile Include="..\..\runtime\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutCampaignInventory.cs" Link="FalloutCampaignInventory.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutNativeRaceSex.cs" Link="FalloutNativeRaceSex.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutRaceProperties.cs" Link="FalloutRaceProperties.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutNativeVigor.cs" Link="FalloutNativeVigor.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutNativeTagSkills.cs" Link="FalloutNativeTagSkills.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutNativeTraitsFarewell.cs" Link="FalloutNativeTraitsFarewell.cs" />

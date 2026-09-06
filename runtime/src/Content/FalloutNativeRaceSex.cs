@@ -125,12 +125,7 @@ internal static class FalloutNativeRaceSexResolver
         return result;
     }
 
-    private static bool IsPlayableRace(FalloutPluginRecord record)
-    {
-        var data = Single(record, "DATA");
-        if (data.Length != 36) throw new InvalidDataException($"RACE {record.FormKey} DATA layout is unsupported.");
-        return (BinaryPrimitives.ReadUInt32LittleEndian(data.Span[32..]) & 1) != 0;
-    }
+    private static bool IsPlayableRace(FalloutPluginRecord record) => FalloutRaceProperties.IsPlayable(record);
 
     private static FalloutNativeRaceSexRace Race(FalloutPluginStack stack, FalloutPluginRecord race)
     {

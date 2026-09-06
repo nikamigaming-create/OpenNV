@@ -10,6 +10,12 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--furniture", var furnitureRoot, var furnitureCell, var furnitureActor, var furnitureQuest, var furnitureStage])
+            {
+                ExerciseFurniture(furnitureRoot, furnitureCell, furnitureActor, furnitureQuest, furnitureStage);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length is not (4 or 6))
                 throw new ArgumentException("Expected owned Data root, CELL FormID, actor reference FormID, and dialogue topic EDID.");
             var (dataRoot, cellHex, referenceHex, topicId) = (args[0], args[1], args[2], args[3]);

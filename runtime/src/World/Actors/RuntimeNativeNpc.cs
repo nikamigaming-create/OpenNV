@@ -225,12 +225,14 @@ internal partial class RuntimeNativeNpc : Node3D
                 RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
             else if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
             else _animation?.ApplySourceTime(_animationSeconds);
-            if (_sitting == 4 && _baseAnimation is { Sequence.CycleType: 2 } exit && _baseAnimationSeconds >= exit.Sequence.StopTime)
-                CompleteFurnitureExit();
+            if (_baseAnimation is { Sequence.CycleType: 2 } transition && _baseAnimationSeconds >= transition.Sequence.StopTime)
+            {
+                if (_sitting == 2) CompleteFurnitureEntry();
+                else if (_sitting == 4) CompleteFurnitureExit();
+            }
             if (wasTraveling && !_travelActive)
             {
-                PlayLocomotion(false);
-                _packageEvents!.Complete();
+                CompleteTravel();
             }
             AdvanceHeadTracking((float)delta);
             AdvanceFaceAnimation(delta);

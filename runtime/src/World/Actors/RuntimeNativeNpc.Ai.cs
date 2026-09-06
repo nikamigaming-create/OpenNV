@@ -26,9 +26,6 @@ internal partial class RuntimeNativeNpc
     private string? _packageIdleError;
     private readonly FalloutSoundRandomState _aiRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     private FalloutPluginRecord? _pendingPackage;
-    private Transform3D _furnitureExitAnchor;
-    private Basis _furnitureOccupiedBasis;
-    private Vector3 _furnitureExitStart;
     internal FalloutActorActivityState Activity { get; } = new();
     internal bool WeaponDrawn => Activity.WeaponDrawn;
     private long _aiActivityRevision = -1;
@@ -40,7 +37,9 @@ internal partial class RuntimeNativeNpc
 
     // These are script-visible engine procedure codes. The currently owned
     // travel procedure ends on arrival; furniture exit has its own transition.
-    private int CurrentAiProcedure => _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive ? 0 : 17;
+    private int CurrentAiProcedure => _sitting == 2
+        ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
+        : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive ? 0 : 17;
     private int CurrentAiPackage => _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
     {
         6 => 14, // Source PACK travel type -> script-visible Travel package.
@@ -53,6 +52,14 @@ internal partial class RuntimeNativeNpc
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
         sitting = _sitting,
+        furniturePhase = _furnitureApproaching ? "approaching" : _sitting switch
+        {
+            1 => "occupied",
+            2 => "entering",
+            4 => "exiting",
+            _ => "none",
+        },
+        furnitureInitialPlacement = _furnitureInitialPlacement,
         pendingPackage = _pendingPackage?.FormKey.ToString(),
         packageEvents = _packageEvents is null ? null : new
         {
@@ -76,7 +83,7 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = CurrentAiProcedure,
+        currentProcedure = _sitting == 2 ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
         idleCollection = _packageIdleSource is null ? null : new
         {
@@ -99,7 +106,7 @@ internal partial class RuntimeNativeNpc
             error = _packageIdleError,
         },
         error = _aiError,
-        unbound = new[] { "retail-navigation-timing", "furniture-idle-variations", "idle-internal-loop-counts", "head-eye-aiming", "actor-save-restoration", "combat-event-dispatch" },
+        unbound = new[] { "retail-navigation-timing", "furniture-entry-script-procedure-code", "furniture-idle-variations", "idle-internal-loop-counts", "head-eye-aiming", "actor-save-restoration", "combat-event-dispatch" },
     };
 
     internal void ConfigureAi(FalloutPluginStack stack, FalloutQuestState quests, FalloutCellScene cell,
@@ -112,7 +119,7 @@ internal partial class RuntimeNativeNpc
         _aiCell = cell;
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
-        AdvanceAi();
+        AdvanceAi(initializing: true);
     }
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -155,7 +162,7 @@ internal partial class RuntimeNativeNpc
     private double PreparePackageIdle(double delta)
     {
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
-            _aiError is not null || _sitting == 4 || _travelActive) return delta;
+            _aiError is not null || _sitting is 2 or 4 || _travelActive) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
         try
         {
@@ -170,7 +177,7 @@ internal partial class RuntimeNativeNpc
         return remaining;
     }
 
-    private void AdvanceAi()
+    private void AdvanceAi(bool initializing = false)
     {
         if (_aiStack is null || _questState is null || _aiError is not null ||
             _aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision) return;
@@ -180,15 +187,14 @@ internal partial class RuntimeNativeNpc
         {
             var selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition);
             if (_aiPackage?.FormKey == selected?.FormKey) return;
-            if (_sitting == 4) { _pendingPackage = selected; return; }
+            if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
             if (_aiPackage is not null)
             {
-                if (_seat is not null)
+                if (_seat is not null && !_furnitureApproaching)
                 {
                     _pendingPackage = selected;
                     CancelIdle();
-                    _furnitureOccupiedBasis = Basis;
-                    _furnitureExitAnchor = new Transform3D(Basis * new Basis(Vector3.Up, _seat.HeadingDelta), Position);
+                    _furnitureOccupied = Transform;
                     _sitting = 4;
                     StartFurnitureAnimation();
                     return;
@@ -199,6 +205,7 @@ internal partial class RuntimeNativeNpc
                 _packageIdleSource = null;
                 _packageIdles = null;
                 _travelActive = false;
+                ClearFurniture();
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
@@ -222,87 +229,13 @@ internal partial class RuntimeNativeNpc
                 _packageEvents!.Change(_packageIdleSource);
                 return;
             }
-            var path = _aiCell.BaseObjects[reference.Base].ModelPath ?? throw new InvalidDataException("Furniture has no model.");
-            var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned files are absent.");
-            if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Furniture model is absent.", path);
-            var seat = FalloutFurnitureSource.Read(_aiStack, furniture, FalloutNifFile.Read(bytes));
-            _furnitureIdles ??= new(_aiStack, Appearance.SkeletonPath);
-            _seat = seat;
-            _sitting = 1;
-            StartFurnitureAnimation();
-            var units = Skeleton.UnitsToMetres;
-            var offset = seat.Marker.Offset;
-            var placement = GamebryoPackagePlacement.FromFurnitureMarker(target.ToString(), _referenceTransform!(reference),
-                GamebryoCoordinate.ConvertVector(new(offset.X, offset.Y, offset.Z)) * units,
-                new Quaternion(Vector3.Up, -seat.Marker.Orientation / 1000.0f),
-                GamebryoCoordinate.ConvertVector(new(seat.PlacementOffset[0], seat.PlacementOffset[1], seat.PlacementOffset[2])) * units,
-                new Quaternion(Vector3.Up, -seat.HeadingDelta), Scale);
-            Transform = placement.SourceTransform;
-            _furnitureReference = target;
-            _aiPackage = selected;
-            _packageEvents!.Change(_packageIdleSource);
-            _packageEvents.Complete();
-            GD.Print($"OPENNV_NATIVE_FURNITURE_OCCUPIED reference={Appearance.Reference} package={selected.FormKey} " +
-                $"target={target} marker={seat.MarkerId} sourceIndex={seat.Index} animation={_baseAnimation!.Sequence.Name} parity=unmeasured");
+            BeginFurniturePackage(selected, reference, furniture, initializing);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
             _aiError = error.Message;
             GD.PushError($"OPENNV_NATIVE_AI_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
         }
-    }
-
-    private void StartFurnitureAnimation()
-    {
-        var source = FalloutActorIdleSource.Resolve(_aiStack!, _furnitureIdles!.Select(EvaluateAiCondition));
-        if (source.Objects.Count != 0) throw new NotSupportedException("Furniture base ANIO requires object ownership.");
-        var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned files are absent.");
-        if (!content.TryRead(source.AnimationPath, null, out var bytes, out _)) throw new FileNotFoundException("Furniture animation is absent.", source.AnimationPath);
-        var nif = FalloutNifFile.Read(bytes);
-        var sequences = nif.Roots.Select(nif.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
-        if (sequences.Length != 1) throw new NotSupportedException("Furniture KF requires one sequence.");
-        Action<FalloutNifAnimationSample>? rootOwner = null;
-        if (_sitting == 4)
-        {
-            var root = sequences[0].ControlledBlocks.SingleOrDefault(link => link.NodeName == sequences[0].TargetName && link.ControllerType == "NiTransformController")
-                ?? throw new NotSupportedException("Furniture exit has no authored accumulation channel.");
-            var start = new FalloutNifAnimationSampler(nif, root.Interpolator).Sample(sequences[0].StartTime);
-            _furnitureExitStart = SourceTranslation(start);
-            rootOwner = sample =>
-            {
-                RequireTranslationOnlyRoot(sample);
-                Transform = new(_furnitureExitAnchor.Basis, _furnitureExitAnchor * (SourceTranslation(sample) - _furnitureExitStart));
-            };
-        }
-        var animation = new RuntimeNativeNifAnimation(nif, sequences[0], Skeleton, accumulationRoot: rootOwner);
-        // The actor/package owns the accumulation frame. A furniture sequence
-        // poses NonAccum beneath it; the skeleton file's preview placement is
-        // not an additional actor displacement.
-        var accumulation = Skeleton.BoneIndex(animation.Sequence.TargetName);
-        if (_sitting != 4 && animation.Sequence.ControlledBlocks.Any(link => link.NodeName == animation.Sequence.TargetName))
-            throw new NotSupportedException("Furniture accumulation channel requires root-motion extraction.");
-        Skeleton.Node.SetBonePose(accumulation, Transform3D.Identity);
-        animation.ApplySourceTime(animation.Sequence.StartTime);
-        _baseAnimation = animation;
-        _baseAnimationSeconds = animation.Sequence.StartTime;
-        _baseElapsedSeconds = 0;
-    }
-
-    private void CompleteFurnitureExit()
-    {
-        if (_sitting != 4) return;
-        // The source furniture heading is applied while occupying its marker;
-        // the exit's root curve runs in the marker's approach frame.
-        Basis = _furnitureOccupiedBasis;
-        _seat = null;
-        _furnitureReference = null;
-        _sitting = 0;
-        _packageEvents!.Change(null);
-        _aiPackage = null;
-        _baseAnimation = null;
-        _aiQuestRevision = -1;
-        _pendingPackage = null;
-        AdvanceAi();
     }
 
     private float EvaluateAiCondition(FalloutCondition condition) => condition.Function switch
@@ -326,6 +259,7 @@ internal partial class RuntimeNativeNpc
         286 => Activity.Sneaking ? 1 : 0,
         287 => Activity.Running ? 1 : 0,
         289 => Activity.InCombat ? 1 : 0,
+        365 => FalloutRaceProperties.IsChild(_aiStack!.GetEffective(Appearance.Race)) ? 1 : 0,
         392 => 0, // This owner is an NPC; the player's view cannot be its first-person view.
         247 => 0, // No acquired item is bound to this furniture procedure.
         _ => throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function} has no authoritative owner."),

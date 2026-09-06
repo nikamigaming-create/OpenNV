@@ -9,9 +9,14 @@ subagents are stopped at the user's request.
 
 Ordinary New now accepts original creation and the Vigor Tester's complete
 SPECIAL allocation, plays Doc's source reaction and psychology introduction,
-and reaches VCG01 stage 80 after Doc's eight-waypoint travel. Ordinary room-81
-executes the previously failing Look, source speech and StopLook, then completes
-the couch package with Doc seated and no script, animation or package error.
+and reaches VCG01 stage 80. Ordinary room-82 executes Look, source speech and
+StopLook, then completes the later furniture package through navigation and
+authored entry. The seated endpoint is visually inspected; complete live motion
+was not captured. The earlier eight-waypoint couch-route claim incorrectly
+used the previous package's retained path. Navigation now identifies its
+package/target and actors publish their actual world transforms. Synthetic
+continuity and the owned approach/entry/completion audit pass.
+See furniture-motion.md.
 Player couch activation and the questionnaire remain unbound. Paired original menus show
 the same 6/6/6/6/6/5/5 allocation. We are still inside Doc's house; Pip-Boy handoff,
 exit and Sunny remain unfinished. The name prompt and Reflectron use

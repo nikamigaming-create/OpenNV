@@ -26,16 +26,23 @@ scene-defects.md tracks component corrections without claiming scene parity.
   telemetry confirms only the alpha-bearing texture expands; normal/mask
   formats and hashes stay unchanged. Matched retail lighting, shadows and
   camera/pixels remain open. See texture-alpha.md.
-- Ordinary room-81 accepts original creation and Vigor allocation
+- Ordinary room-82 accepts original creation and Vigor allocation
   6/6/6/6/6/5/5, plays Doc's source reaction and psychology introduction, and
   reaches stage 80 without script, animation or package errors. The former
   Look end-event failure is resolved: the script target, physical head pose,
-  authored animation override and subsequent StopLook execute. Doc completes
-  the eight-waypoint route and is seated in the living room. Ordinary movement
-  brings the player into that room. Player couch activation and the original
-  questionnaire remain unbound. Retail remains at stage 80, with camera/time
-  states unaligned. We are still inside Doc's house; no ordinary save exists
-  at this checkpoint. See head-tracking.md.
+  authored animation override and subsequent StopLook execute. Doc's subsequent
+  furniture package now follows NAVM to its authored entry point, plays the
+  source sit-down sequence and completes once occupied. The selected owned
+  audit verifies every phase and continuity; ordinary room-82 records the new
+  package path and later occupation without initial placement. The seated
+  endpoint is visually inspected; the complete live entry motion was not
+  captured. Navigation now identifies its package and target, and actors
+  publish actual world transforms. The previous couch-route report mistakenly
+  used the prior package's eight-waypoint path. Player couch activation and the
+  original questionnaire remain unbound. Retail is seated at its first
+  questionnaire prompt; camera, menu and time states are unaligned. We are
+  still inside Doc's house; no ordinary save exists at this checkpoint.
+  See head-tracking.md and furniture-motion.md.
 - Original name/Reflectron XML, bitmap controls, dynamic FaceGen, source hair
   and voice/LIP are connected. The user accepted hair/age for advancing.
   The original No/Yes creation confirmation now works: source scroll-unit
@@ -83,7 +90,9 @@ scene-defects.md tracks component corrections without claiming scene parity.
   declarations now load; events dispatch at begin, completion and change, with
   unreached scripts retained in their own compiled-reference scopes. Empty/
   comment lifecycles and the reached POEA Look now execute through their owners.
-  Ordinary room-81 completes that event and the subsequent couch package.
+  Ordinary room-82 completes that event and the later furniture approach/entry.
+  Later furniture packages complete only after the finite source entry; initial
+  process placement remains a separate, explicitly identified disposition.
   Event topics, deferred change idles and persistent event state remain unbound.
   See package-events.md.
 - Head tracking now binds source settings/BPTD, compiled references, target-slot
@@ -156,10 +165,11 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 Retain retail room-54 and the current OpenNV run/session configuration.
 Revalidate process IDs/state before input; keep one instance of each game.
-Room-81 is the current ordinary run, at stage 80 in the living room with Doc
+Room-82 is the current ordinary run, at stage 80 in the living room with Doc
 seated and the reached package events complete. Room-79 retains the wheel
 close-up, and room-77 retains the former end-event failure. Retail remains at
-stage 80 with its pause menu open. Current cameras, menus and times are not a
+stage 80 in the original dialogue menu at the first questionnaire choice.
+Current cameras, menus and times are not a
 matched comparison.
 
 Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
@@ -180,8 +190,9 @@ derivatives and captures remain outside the repository.
 
 ## Next owners
 
-1. Bind ordinary player couch activation and the original questionnaire.
-   Doc's Look/StopLook, intervening speech and couch package now complete.
+1. Bind ordinary player couch activation, its temporary third-person body and
+   camera, and the original questionnaire. Doc's Look/StopLook, intervening
+   speech and subsequent furniture approach/entry now complete.
    Source furniture/trigger scripts and dialogue choices must own the next
    transition. Do not restore a replacement psychology confirmation. Automatic
    head/eye targeting and exact pose timing remain independent open owners.
@@ -201,9 +212,12 @@ derivatives and captures remain outside the repository.
 
 The head-target/pose contracts, owned script/skeleton audit and full repository
 gate pass. Ordinary room-81 verifies Look, its animation override, StopLook,
-later source speech and completed travel to the couch without an event error.
-This does not complete player furniture interaction or establish native pose/
-frame parity. Private evidence remains outside the repository.
+later source speech and the prior approach without an event error. Furniture
+placement/continuity contracts, the selected owned entry audit and the full
+gate pass. Ordinary room-82 verifies later navigation and occupation using
+that owner; only the seated endpoint was visually inspected. Player furniture
+interaction, native pose/frame parity and complete live motion review remain
+open. Private evidence remains outside the repository.
 
 The BC1 source-alpha contracts, selected owned rendering audit, all-mip GPU
 comparison and full repository gate pass. Ordinary room-79 verifies open wheel
