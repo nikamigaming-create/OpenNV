@@ -4,6 +4,22 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static IReadOnlyDictionary<FalloutFormKey, sbyte> ReadFactions(FalloutPluginStack stack, FalloutFormKey npc)
+    {
+        var owner = TemplateOwner(stack, stack.GetEffective(npc), 4);
+        var result = new Dictionary<FalloutFormKey, sbyte>();
+        foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "SNAM"))
+        {
+            if (field.Data.Length != 8) throw new InvalidDataException("NPC faction rank has an invalid extent.");
+            var faction = owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+            if (stack.GetEffective(faction).Signature != "FACT")
+                throw new InvalidDataException("NPC faction membership does not reference FACT.");
+            if (!result.TryAdd(faction, unchecked((sbyte)field.Data.Span[4])))
+                throw new InvalidDataException("NPC declares duplicate faction ranks.");
+        }
+        return result;
+    }
+
     internal static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort flag)
     {
         var visited = new HashSet<FalloutFormKey>();

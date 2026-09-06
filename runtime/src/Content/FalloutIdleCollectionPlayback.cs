@@ -1,9 +1,11 @@
 namespace OpenNV.Runtime.Content;
 
 /// <summary>Source package idle order and the wait between completed selections.</summary>
-internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source, FalloutIdleReplayState replay)
+internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source, FalloutIdleReplayState replay,
+    Func<FalloutFormKey, bool> eligible)
 {
     private int _cursor;
+    private int _selectionCount;
     internal FalloutScriptPackage Source { get; } = source;
     internal double WaitSeconds { get; private set; }
     internal bool Complete { get; private set; }
@@ -14,11 +16,14 @@ internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source,
         if (Complete || WaitSeconds > 0 || Source.Idles.Count == 0) return null;
         if (!Source.RunInSequence && Source.Idles.Count > 1)
             throw new NotSupportedException($"Package {Source.Form} requires the authoritative random idle selection owner.");
-        var next = _cursor >= Source.Idles.Count ? 0 : _cursor;
-        var idle = Source.Idles[next];
         // Cancellation releases the pose, not the actor's source replay delay.
-        // A blocked selection must not consume its place in an ordered package.
-        if (!replay.CanSelect(idle)) return null;
+        // Filter in source order before indexing the eligible collection. One
+        // ineligible entry must not starve a later eligible animation.
+        var candidates = Source.Idles.Where(idle => replay.CanSelect(idle) && eligible(idle)).ToArray();
+        if (candidates.Length == 0) return null;
+        var next = _cursor >= candidates.Length ? 0 : _cursor;
+        var idle = candidates[next];
+        _selectionCount = candidates.Length;
         _cursor = next + 1;
         return idle;
     }
@@ -26,7 +31,7 @@ internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source,
     internal void Finish()
     {
         if (_cursor == 0 || Complete) throw new InvalidOperationException("Package idle completion has no active selection.");
-        if (Source.RunInSequence && _cursor < Source.Idles.Count) return;
+        if (Source.RunInSequence && _cursor < _selectionCount) return;
         Complete = Source.DoOnce;
         if (!Complete) WaitSeconds = Source.IdleTimer;
     }

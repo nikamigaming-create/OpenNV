@@ -6,6 +6,7 @@ IdleAnimationProbe.Run();
 
 ActorPackageCommandProbe.Exercise();
 IdleCollectionProbe.Run();
+IdleConditionProbe.Run();
 HudDeclarationsProbe.Run();
 MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
@@ -291,7 +292,7 @@ try
     BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 3);
     var topic = Record("DIAL", 0x800, Field("EDID", Encoding.ASCII.GetBytes("SyntheticTopic\0")));
     // The first INFO has a larger ID: sorting by ID would pick the wrong line.
-    var first = Info(0x901, "First", 0x900);
+    var first = Info(0x901, "First", 0x900, flags: 5);
     var second = Info(0x811, "Second", 0x900);
     var group = new byte[24 + first.Length + second.Length];
     Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
@@ -336,11 +337,22 @@ try
     var speaker = new FalloutFormKey("Synthetic.esm", 0x900);
     var selected = source.Select(speaker, said, _ => throw new Exception("Unexpected quest condition."));
     Require(selected?.Responses[0].Text == "First", "INFO source order was replaced with FormID order.");
+    Require(selected!.Flags == 5, "SayTo rejected or erased the authored Goodbye and Say Once flags.");
     said.Add(selected!.Record.FormKey);
     Require(source.Select(speaker, said, _ => 0)?.Responses[0].Text == "Second", "Say Once did not advance selection.");
     Require(source.Select(new FalloutFormKey("Synthetic.esm", 0x999), said, _ => 0) is null, "GetIsID ignored source speaker.");
     Require(FalloutDialogueTopic.SayToCommands("; nobody.SayTo player Fake\nSpeaker.SayTo player Topic ; comment").Single() ==
         new FalloutSayToCommand("Speaker", "player", "Topic"), "Source SayTo parsing differs.");
+    var randomBytes = bytes.ToArray();
+    var flagOffset = randomBytes.AsSpan().IndexOf(Field("DATA", [1, 0, 5, 0]));
+    Require(flagOffset >= 0, "Synthetic INFO flags were not found.");
+    randomBytes[flagOffset + 8] |= 2;
+    File.WriteAllBytes(Path.Combine(directory, "Random.esm"), randomBytes);
+    using var random = FalloutPluginStack.Load(directory, ["Random.esm"]);
+    var randomRejected = false;
+    try { FalloutDialogueTopic.Read(random, "SyntheticTopic").Select(new FalloutFormKey("Random.esm", 0x900), new HashSet<FalloutFormKey>(), _ => 0); }
+    catch (NotSupportedException) { randomRejected = true; }
+    Require(randomRejected, "Goodbye admission also admitted unowned Random selection.");
     var needle = Field("CTDA", Condition(0x900));
     var start = bytes.AsSpan().IndexOf(needle);
     Require(start >= 0, "Synthetic CTDA was not found.");
@@ -379,10 +391,10 @@ if (args is [var dataRoot])
     Console.WriteLine($"OPENNV_OWNED_DIALOGUE_OK plugins={stack.Plugins.Count} infos={topic.Infos.Count} selected={info.Record.FormKey} responses={info.Responses.Count} endScript={info.EndScript.Trim()} voiceAndLip=owned-memory");
 }
 
-static byte[] Info(uint id, string text, uint npc)
+static byte[] Info(uint id, string text, uint npc, byte flags = 4)
 {
     var response = new byte[24]; response[12] = 1; response[13] = 0xff;
-    return Record("INFO", id, Field("DATA", [1, 0, 4, 0]).Concat(Field("QSTI", BitConverter.GetBytes(0x700u)))
+    return Record("INFO", id, Field("DATA", [1, 0, flags, 0]).Concat(Field("QSTI", BitConverter.GetBytes(0x700u)))
         .Concat(Field("TRDT", response)).Concat(Field("NAM1", Encoding.ASCII.GetBytes(text + "\0")))
         .Concat(Field("CTDA", Condition(npc))).Concat(Field("NEXT", []))
         .Concat(Field("SCTX", Encoding.ASCII.GetBytes("SetStage SyntheticQuest 5\0"))).ToArray());

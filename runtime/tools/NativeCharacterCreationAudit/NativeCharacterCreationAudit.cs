@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Presentation.Ui;
 
 public partial class NativeCharacterCreationAudit : Node
 {
@@ -57,6 +58,24 @@ public partial class NativeCharacterCreationAudit : Node
             if (entry.Error is not null) throw new InvalidOperationException(entry.Error);
             using (var pixels = GetViewport().GetTexture().GetImage()) pixels.SavePng(Path.Combine(args[1], "edited.png"));
             GD.Print("OPENNV_CREATION_INPUT_STATE_PASS sourceShapeSlider=true sourcePalette=true sourceRgbSlider=true reopenedAppearance=true parity=unverified");
+            entry.SelectPage(3);
+            var done = entry.FindChild("RSM_next_button", true, false) as BaseButton
+                ?? throw new InvalidOperationException("Original creation Done control is absent.");
+            done.GrabFocus(); Key(Godot.Key.Enter);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            if (entry.Error is not null) throw new InvalidOperationException(entry.Error);
+            var confirmation = entry.GetChildren().OfType<NativeOwnedMessageMenu>().Single();
+            var choices = confirmation.GetChildren().OfType<NativeBitmapMenuButton>().ToArray();
+            if (!confirmation.Visible || choices.Length != 2 || choices.Any(button => button.Disabled || button.Size.Y <= 0))
+                throw new InvalidOperationException("Original creation confirmation lost its two usable choices.");
+            using (var pixels = GetViewport().GetTexture().GetImage()) pixels.SavePng(Path.Combine(args[1], "confirmation.png"));
+            var accepted = false;
+            entry.Accepted += _ => accepted = true;
+            choices.Single(button => button.Text == FalloutGameSettingStrings.Read(records, "sYes")).GrabFocus();
+            Key(Godot.Key.Enter);
+            if (!accepted) throw new InvalidOperationException("Original confirmation input did not accept the source character.");
+            GD.Print("OPENNV_CREATION_CONFIRMATION_PASS originalDialog=true twoChoices=true keyboardAcceptance=true parity=unverified");
             GD.Print("OPENNV_CREATION_PAGE_AUDIT_PASS acceptedGameplay=false parity=unverified");
             entry.ReleasePause(); GetTree().Quit();
         }

@@ -20,6 +20,8 @@ internal partial class RuntimeNativeNpc
     private int _sitting;
     private FalloutScriptPackage? _packageIdleSource;
     private FalloutIdleCollectionPlayback? _packageIdles;
+    private FalloutIdleConditions? _idleConditions;
+    private IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = new Dictionary<FalloutFormKey, sbyte>();
     private string? _packageIdleError;
     private readonly FalloutSoundRandomState _aiRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     private FalloutPluginRecord? _pendingPackage;
@@ -35,6 +37,15 @@ internal partial class RuntimeNativeNpc
     internal bool Traveling => _travelActive;
     internal FalloutFormKey? CurrentPackage => _aiPackage?.FormKey;
 
+    // These are script-visible engine procedure codes. The currently owned
+    // travel procedure ends on arrival; furniture exit has its own transition.
+    private int CurrentAiProcedure => _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive ? 0 : 17;
+    private int CurrentAiPackage => _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
+    {
+        6 => 14, // Source PACK travel type -> script-visible Travel package.
+        _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
+    };
+
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
@@ -44,7 +55,18 @@ internal partial class RuntimeNativeNpc
         pendingPackage = _pendingPackage?.FormKey.ToString(),
         randomState = _aiRandom.State.ToString("x16", System.Globalization.CultureInfo.InvariantCulture),
         randomOwner = "opennv-authoritative-retail-stream-unmatched",
-        activity = new { Activity.Alerted, Activity.Attacked, Activity.WeaponDrawn, Activity.Revision },
+        activity = new
+        {
+            Activity.Alerted,
+            Activity.Attacked,
+            Activity.WeaponDrawn,
+            Activity.Running,
+            Activity.Sneaking,
+            Activity.InCombat,
+            Activity.Revision,
+        },
+        factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
+        currentProcedure = CurrentAiProcedure,
         navigation = TravelState,
         idleCollection = _packageIdleSource is null ? null : new
         {
@@ -53,6 +75,14 @@ internal partial class RuntimeNativeNpc
             timer = _packageIdleSource.IdleTimer,
             idles = _packageIdleSource.Idles.Select(value => value.ToString()).ToArray(),
             owner = _packageIdleSource.Idles.Count == 0 ? "empty-source-collection" : "source-collection-clock",
+            conditions = "candidate-then-source-parents",
+            lastConditionDecision = _idleConditions?.LastDecision is not { } decision ? null : new
+            {
+                candidate = decision.Candidate.ToString(),
+                decision.Eligible,
+                stoppedAt = decision.StoppedAt?.ToString(),
+                decision.ConditionsEvaluated,
+            },
             waitSeconds = _packageIdles?.WaitSeconds,
             complete = _packageIdles?.Complete,
             cursor = _packageIdles?.Cursor,
@@ -66,6 +96,8 @@ internal partial class RuntimeNativeNpc
         Func<FalloutPlacedReference, Transform3D> referenceTransform)
     {
         _aiStack = stack;
+        _idleConditions = new(stack);
+        _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc);
         _questState = quests;
         _aiCell = cell;
         _referenceTransform = referenceTransform;
@@ -89,8 +121,11 @@ internal partial class RuntimeNativeNpc
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
             _aiError is not null || _sitting == 4 || _travelActive) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
-        if (_packageIdles.Select() is not { } idle) return remaining;
-        try { PlayIdle(_aiStack!, idle, "package-idle"); }
+        try
+        {
+            if (_packageIdles.Select() is not { } idle) return remaining;
+            PlayIdle(_aiStack!, idle, "package-idle");
+        }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
         {
             _packageIdleError = error.Message;
@@ -127,7 +162,8 @@ internal partial class RuntimeNativeNpc
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
-            _packageIdles = new(_packageIdleSource, _idleReplays);
+            _packageIdles = new(_packageIdleSource, _idleReplays,
+                idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             var fields = selected.ReadSubrecords().ToArray();
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;
@@ -229,16 +265,23 @@ internal partial class RuntimeNativeNpc
     {
         58 or 59 or 79 or 546 => _questState!.Evaluate(condition),
         63 => Activity.Attacked ? 1 : 0,
+        69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,
         70 => (Appearance.Female ? 1u : 0u) == condition.Argument1 ? 1 : 0,
+        71 => _factions.TryGetValue(condition.FormArgument1, out var rank) && rank >= 0 ? 1 : 0,
         72 => Appearance.Npc == condition.FormArgument1 ? 1 : 0,
         77 => _aiRandom.NextBounded(100),
         91 => Activity.Alerted ? 1 : 0,
         101 => WeaponDrawn ? 1 : 0,
+        110 => CurrentAiPackage,
+        143 => CurrentAiProcedure,
         159 => _sitting,
         160 => _seat?.MarkerId ?? 0,
         162 => _furnitureReference == condition.FormArgument1 ? 1 : 0,
         163 => _seat?.Furniture == condition.FormArgument1 ? 1 : 0,
         182 => Appearance.EquippedArmor.Contains(condition.FormArgument1) ? 1 : 0,
+        286 => Activity.Sneaking ? 1 : 0,
+        287 => Activity.Running ? 1 : 0,
+        289 => Activity.InCombat ? 1 : 0,
         392 => 0, // This owner is an NPC; the player's view cannot be its first-person view.
         247 => 0, // No acquired item is bound to this furniture procedure.
         _ => throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function} has no authoritative owner."),

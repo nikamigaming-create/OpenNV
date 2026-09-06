@@ -7,8 +7,11 @@ presentation, shared gameplay and persistent saves. All 33 recovery acceptance
 requirements remain open. Work stays on main and in this task only; parallel
 subagents are stopped at the user's request.
 
-Ordinary New reaches source opening dialogue, the original name prompt and
-Reflectron with original XML, bitmap controls, dynamic FaceGen, source hair and
+Ordinary New now accepts original creation and reaches the Vigor Tester at
+VCG01 stage 60. Both original menus show Strength, and duplicated Up input
+allocates one point in each. We are still inside Doc's house; Pip-Boy handoff,
+exit and Sunny remain unfinished. The name prompt and Reflectron use
+original XML, bitmap controls, dynamic FaceGen, source hair and
 voice/LIP. The user accepted the current hair/age appearance for advancing.
 Source placement removes the obstructing room wall; clothing retains its own
 texture and source opacity removes the gurney's black fill. Original HUD gift
@@ -22,7 +25,18 @@ previously tracked without being checked. Interruption/replacement/expiry
 regressions, the selected owned audit and full gate pass. Ordinary room-68
 reaches name entry with the seated base and no premature smoking overlay.
 Native observation also finds only the seated base active, but phase and camera
-alignment remain open. Source IDLE/parent conditions still need binding.
+alignment remain open. Candidate/parent IDLE conditions now bind after cooldown,
+including source NPC faction inheritance and the selected activity/package
+predicates. Synthetic, nine owned scenarios and ordinary telemetry pass;
+dynamic factions and broader activity owners remain unbound.
+
+Original character confirmation now accepts No/Yes through source scroll-unit
+extents, removing false overflow. Vigor opens with its authored sequence and
+routes keyboard Up/Down to attribute adjustment. Owned creation and nested
+Vigor audits pass. Single-INFO Goodbye speech now plays the original Vigor
+audio/LIP, but its end script fails on the missing quest-objective owner.
+SetObjectiveDisplayed is the next blocker. Post-creation HUD/instructions,
+movement/collision differences and Vigor framing remain explicit defects.
 
 Source quest-clock initialization, shared script lifetime, Float32 recurrence,
 modal recurrence and cold consistency pass selected checks. All 252 selected

@@ -97,7 +97,6 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
             .Where(mesh => mesh.HasMeta("opennv_nif_source_name"))
             .ToDictionary(mesh => mesh.GetMeta("opennv_nif_source_name").AsString(), StringComparer.Ordinal);
         _animation = _animated.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Single();
-        _animation.PlaySourceSequence(_declaration.ForwardSequences[0]); _animation.SetProcess(false);
         _actions.Add(controls[0], () => Turn(1)); _actions.Add(controls[1], () => Turn(-1));
         _actions.Add(controls[2], () => Change(CurrentAttribute, 1)); _actions.Add(controls[3], () => Change(CurrentAttribute, -1));
         _actions.Add(controls[4], Submit); _actions.Add(controls[6], () => SelectIndex(-1)); _actions.Add(controls[7], () => SelectIndex(1));
@@ -130,14 +129,17 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
     }).ToArray();
     public override void _Ready()
     {
-        _animation.SeekSourceTime(_animation.SequenceRange(_declaration.ForwardSequences[0]).StartTime);
-        _animation.SetProcess(false);
+        // The owned initial sequence opens the cover onto the first attribute.
+        // Freezing its first frame leaves the menu on an extra, inert cover page.
+        _page = 1; _turning = true;
+        _animation.PlaySourceSequence(_declaration.ForwardSequences[0]);
+        Refresh();
         Layout();
     }
 
     private void Layout()
     {
-        if (!IsInsideTree() || Size.X <= 0 || Size.Y <= 0) return;
+        if (!IsInsideTree() || !_camera.IsInsideTree() || Size.X <= 0 || Size.Y <= 0) return;
         _view.Size = new(Math.Max(1, (int)Size.X), Math.Max(1, (int)Size.Y)); _pixels.Size = Size;
         var horizontal = _declaration.HorizontalSlope(_settings.Number("Display", "fDefaultFOV"));
         _camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
@@ -186,8 +188,8 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         {
             InputEventKey { Pressed: true, Echo: false, Keycode: Key.Left } => "xbuttonlt",
             InputEventKey { Pressed: true, Echo: false, Keycode: Key.Right } => "xbuttonrt",
-            InputEventKey { Pressed: true, Echo: false, Keycode: Key.Up } => "xup",
-            InputEventKey { Pressed: true, Echo: false, Keycode: Key.Down } => "xdown",
+            InputEventKey { Pressed: true, Echo: false, Keycode: Key.Up } => CurrentAttribute >= 0 ? "xright" : "xup",
+            InputEventKey { Pressed: true, Echo: false, Keycode: Key.Down } => CurrentAttribute >= 0 ? "xleft" : "xdown",
             InputEventKey { Pressed: true, Keycode: Key.Plus or Key.Equal or Key.KpAdd } => "xright",
             InputEventKey { Pressed: true, Keycode: Key.Minus or Key.Underscore or Key.KpSubtract } => "xleft",
             InputEventJoypadButton { Pressed: true, ButtonIndex: JoyButton.RightShoulder } => "xbuttonrt",

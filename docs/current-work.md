@@ -2,167 +2,122 @@
 
 ## Objective and boundaries
 
-Complete the ordinary New Vegas opening through Doc, original character
-creation, Vigor and psychology, the Pip-Boy handoff, leaving the house and
-Sunny's completed tutorial, then verify cold Continue. Preserve the broader
-NV/FO3/TTW objective in architecture.md. Owned files and shared C# gameplay own
+Complete ordinary New Vegas play through Doc, original character creation,
+Vigor and psychology, the Pip-Boy handoff, leaving the house and Sunny's full
+tutorial, then verify cold Continue. Owned files and shared C# gameplay own
 state; Godot presents it. No replacement menus, named scene fixes or captured
-reference values may become gameplay authority.
+reference values may become gameplay authority. Preserve architecture.md.
 
 Work stays on main and in this task only. All three subagents are stopped at
-the user's request. Do not restart delegation. Preserve unrelated work.
-All 33 requirements in recovery-checklist.md remain open; scene-defects.md
-tracks component discrepancies. Component results do not establish acceptance.
+the user's request. Do not resume delegation. Preserve unrelated work.
+All 33 recovery-checklist.md acceptance requirements remain open.
+scene-defects.md tracks component corrections without claiming scene parity.
 
 ## Current verified state
 
-- Ordinary New reaches the original name prompt, source night hour and
-  Reflectron. Original XML, bitmap controls, dynamic FaceGen, source hair and
-  voice/LIP are connected. The user accepted the current hair/age appearance
-  for advancing. Preserve that improvement.
-- Source root-placement correction removes the obstructing room module;
-  19 selected native transforms agree. Clothing retains its own texture, and
-  source opacity removes the gurney's black fill. Complete geometry, alpha,
-  camera, shadows and collision still require matching.
-- Original HUD gift icon, bracket, bitmap font and item text render during
-  Classic Pack. Shared startup scripts produce 19 inventory grants. Radio,
-  exact queue order, fading, glow, wrapping and loading transitions remain.
-- Shared source quest clocks retain Float32 recurrence, overshoot, script
-  identity and pre-New lifetime. All 252 selected initial native countdowns
-  match exact bits. Source stage-global SETs publish the authored night hour.
-  MenuMode execution, exact block admission, mutable delays, dynamic quest
-  start/stop and complete result scripts remain unbound. See
-  quest-script-timing.md; do not reopen established initialization without
-  contradictory evidence. ForceWeather remains unbound.
-- Geometry colour buffers enable the source vertex-colour binding. CELL
-  directional rotations now reproduce the native emitted-ray axis. All
-  25 selected light RGB/radius/dimmer inputs agree at the night checkpoint.
-  Point-light creation preserves source radius without the unsupported 41
-  percent expansion. Source colours, placement and HDR settings stay intact.
-- Lit-material fog now uses projected vertex distance and vertex interpolation,
-  with explicit game-unit conversion. Owned shader declarations and native
-  fog inputs corroborate this correction. A GPU audit covers perspective and
-  orthographic projection, both renderer clip conventions and unit scales.
-  Fog alone changes the checked room regions only slightly; it does not close
-  atmosphere or pixel acceptance.
-- No-lighting angular opacity now uses the source smooth curve at each vertex,
-  then interpolates it across the surface. Ten owned shader variants support
-  this contract. Synthetic/GPU and selected owned model audits pass. In the
-  room-62 to room-63 diagnostic, beam error falls from 33.97 to 14.79 and wall
-  error from 19.91 to 5.11 colour levels; ceiling error increases from 13.25
-  to 15.02. These are regional diagnostics, not aligned pixel acceptance.
-- Trace inventory now discovers declared mesh instance parameters instead of
-  enumerating selected names. Room-63 exposes 675 lit instances: 674 receive
-  source fog, while a later ANIO attachment has zero defaults. A general cell
-  environment owner now binds existing and newly attached geometry, follows
-  cell transfers, isolates preview viewports and unsubscribes on removal.
-  The GPU lifecycle audit passes. Ordinary room-64 now binds source fog inputs
-  exactly on all 675 declared instances, including the late attachment. Actor
-  skeleton and ANIO roots retain their source model provenance; both missing
-  source-model trace entries are resolved. Trace errors and lost events are zero.
-- REFR.XEMI now binds material emittance through winning LIGH/REGN records and
-  the shared sky clock. Source flags select eligible surfaces; instance values
-  keep shared materials independent and follow late attachments/transfers.
-  Ordinary room-66 matches all 20 sampled native material colour triples and
-  source multipliers, including nine window surfaces previously bypassed by
-  the no-falloff material path. No-lighting surfaces now share the source shader,
-  including managed colour/UV channels and the native all-zero-to-white rule.
-  Synthetic, owned, GPU lifecycle, Vigor and full-gate checks pass. All 675 lit
-  fog bindings still agree; source-model trace omissions and lost events are zero.
-  Relative to room-64, checked wall error falls from 5.12 to 1.93 and beam error
-  from 14.79 to 6.83 colour levels. Ceiling error rises from 15.14 to 15.61.
-  These remain regional diagnostics without exact camera/pose/frame alignment.
-- No-lighting fog now uses source vertex distance and destination-factor
-  composition. Additive contributions fade toward black; destination-colour
-  blending fades toward white with the source clamped scale. Alpha remains
-  independent. The shared cell owner binds all 743 declared fog instances in
-  ordinary room-67, including 68 no-lighting surfaces. All 68 fog selectors
-  agree with owned properties; 20 also agree with retained native alpha/pass
-  records. The 20 emittance matches remain intact. The 31-model owned audit,
-  GPU branch/lifetime checks and full gate pass. Beam-region error moves from
-  6.83 to 6.18; wall and ceiling errors rise slightly. No aligned pixel claim.
-  Explicitly freeing the audit's local GPU device removes its three shutdown
-  leaks; the separate six actor-audit instances remain open.
+- Ordinary room-71 accepts original character creation and walks to the Vigor
+  Tester at VCG01 stage 60. Both games now show the original Strength page;
+  a duplicated Up input increases Strength from 5 to 6 and leaves four points.
+  We are still inside Doc's house. No ordinary save exists at this checkpoint.
+- Original name/Reflectron XML, bitmap controls, dynamic FaceGen, source hair
+  and voice/LIP are connected. The user accepted hair/age for advancing.
+  The original No/Yes creation confirmation now works: source scroll-unit
+  extents prevent the false overflow that previously hid the entire dialog.
+  The full owned creation audit and ordinary confirmation pass.
+- Package idle playback evaluates candidate and parent IDLE conditions after
+  replay cooldowns, then selects among eligible source entries. Source NPC
+  faction inheritance and activity/package predicates bind the selected owner.
+  Doc's source faction excludes the premature smoking idle at name/creation;
+  a positive owned faction member passes. Synthetic, nine owned scenarios and
+  ordinary telemetry pass. Dynamic factions, broader activity ownership and
+  exact native animation phase/cigarette timing remain unbound.
+- Single-INFO SayTo now admits Goodbye with Say Once. The previously missing
+  Vigor introduction plays its original audio and LIP in ordinary room-71.
+  Its end script then fails visibly on SetObjectiveDisplayed: quest objectives
+  have no runtime owner. This is the next progression blocker, not a completed
+  speech lifecycle. Unsupported Random selection remains fail-closed.
+- Vigor plays its authored opening sequence onto Strength. Keyboard Up/Down
+  changes the current attribute and retains review-row routing. The nested
+  CanvasLayer camera lifecycle and owned eight-page/allocation audit pass;
+  ordinary activation and paired Up work. Framing, backdrop, illumination,
+  exact timing and final pixels still differ.
+- Post-creation retail HUD/crosshair and movement instructions remain missing.
+  Paired movement distances and collisions differ; the route to Vigor used
+  separate ordinary inputs and is not matched-motion evidence.
+- Source placement removes the obstructing room module; 19 selected native
+  transforms agree. Clothing preserves its texture and source opacity removes
+  the gurney's black fill. Original gift icons/brackets/bitmap text render and
+  startup scripts produce 19 grants. Remaining HUD/radio, queues, fading,
+  loading transitions, complete geometry/alpha/collision and pixels remain.
+- Shared source quest clocks retain Float32 recurrence, overshoot and script
+  lifetime. All 252 selected native initial countdowns match exact bits.
+  Stage-global SETs publish the authored night hour. Complete script admission,
+  MenuMode, mutable delays, dynamic quest start/stop and ForceWeather remain.
+  See quest-script-timing.md.
+- Preserve source vertex colours, CELL light direction, radius, projected fog,
+  angular opacity, material emittance and blend-dependent no-lighting fog.
+  Ordinary room-67 binds all 743 declared fog surfaces; all 68 no-lighting
+  selectors match owned properties, 20 have native corroboration, and the 20
+  material-emittance matches remain. Selected owned/GPU audits pass. Regional
+  image improvements do not prove exact camera/frame alignment or pixels.
+  See material-fog-and-falloff.md for contracts and retained diagnostic scope.
 - Four source response gestures, finite release/resumption, chair exit/NAVM
-  travel, IDLE repeats, KF sound dispatch, preview blink lifecycle and all eight
-  original Vigor controls pass component audits. Complete ordinary movement,
-  dialogue overlap, cigarette timing/smoke, audio and Vigor framing remain open.
-- Package idle selection now consults the actor's existing source replay delay.
-  Previously the clock was recorded but never checked, so an interrupted idle
-  could restart during its cooldown. Synthetic and selected owned checks cover
-  interruption, package replacement and expiry. Ordinary room-68 reaches name
-  entry with the seated base and no smoking overlay; retail also has only the
-  seated base active. Their base animation phases still differ. The full gate
-  passes. Package IDLE/parent conditions are also bypassed and remain a separate
-  recorded defect; this correction does not establish cigarette timing parity.
-- Source image programs, blur kernels, shared-clock double vision and the
-  separate original menu-background effect are connected. Full opening haze,
-  focus/DOF and matched GPU output remain unverified. Save v10 retains source
-  global/calendar, script/inventory and sky/climate identity owners; complete
-  cold progression and exterior weather remain open.
+  travel, IDLE repeats, KF sounds and preview blink pass component audits.
+  Complete motion, overlap, cigarette timing/smoke, audio and lighting remain.
+- Source image programs, blur kernels, shared-clock double vision and original
+  menu-background effects are connected. Opening haze/focus/DOF and final GPU
+  output remain unverified. Save v10 retains existing global/calendar/script/
+  inventory/sky identities; full cold progression remains open.
 
 ## Live comparison and evidence
 
-The retained retail room-54 and fresh OpenNV room-68 processes are at VCG01
-stage 10 / original name entry. Use the room-68 session configuration and
-revalidate processes and state before control. Keep one instance of each game.
-A shared quest/menu checkpoint is not exact camera, clock or animation phase.
+Retain retail room-54 and OpenNV room-71, using the room-71 session configuration.
+Revalidate process IDs/state before input; keep one instance of each game.
+The shared menu checkpoint is not exact camera, clock or animation alignment.
 
-The public harness rejects native.click callbacks and activates retail buttons
-only through observed keyboard selection and Enter. Requested tap duration
-reaches both local leases; a live 25 ms check passes. Use the private diagnostic
-input bridge for ordinary input, skip the cinematic with a short Escape, and
-stop on the first discrepancy. Never use OS/Computer Use input, forced stages,
-menu-state writes, clock edits or teleports. Native observation uses the Win32
-Ghidrust MCP in observe mode; helper calls are limited to attach/modules/read/
-detach. Retail observations never become gameplay authority.
+Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
+The public harness rejects native.click callbacks; retail buttons require an
+observed keyboard selection and Enter. Skip the cinematic with short Escape
+when rebuilding requires a fresh New. Never force stages, poses, clocks, menus
+or teleports. No OS/Computer Use input. Win32 Ghidrust observe helpers are
+limited to attach/modules/read/detach; observations never supply gameplay state.
 
-Use the harness state command or shared reads compatible with atomic file
-replacement. Parse and select fields from large trace/state files; do not dump
-entire JSON lines. Keep comparison hidden during implementation and open it
-only for bounded checks. Record both native buffers and states at a checkpoint.
-
-Switchable tracing links source ranges, decoded resources, meshes/bones,
-materials, submitted image-space passes and viewport captures. Ten GPU surfaces
-and constants for eleven passes place the remaining brightness discrepancy
-before HDR. Selected native target/cinematic/tint/fade bytes agree with the
-submitted constants. Unreadable destinations remain explicit. Native GPU
-execution, per-pixel contribution, complete audio/events and final-frame joins
-remain incomplete. Keep tracing off outside bounded evidence. All private
-captures, native addresses and decoded resources stay outside the repository.
+Keep the harness hidden while coding. Use bounded observe captures of both
+native buffers and states. Parse selected fields; never dump whole traces.
+Trace inventory links source ranges, decoded resources, geometry, materials,
+image-space passes and pixels; frame association and complete audio/event/draw
+lanes remain unbound. Tracing stays off outside evidence capture. Intermittent
+atomic live-state replacement failures are a separate open telemetry defect;
+zero trace-loss counts do not cover them. All private addresses, owned files,
+derivatives and captures remain outside the repository.
 
 ## Next owners
 
-1. Preserve the source colour, radius, direction, fog, angular-opacity and
-   material-emittance and idle cooldown fixes. Bind package idle conditions and
-   reconcile the camera and Doc animation phase at the name/Reflectron boundary.
-   The observed world camera far plane is 5000
-   game units; OpenNV still uses 200 metres. Bind its source owner before
-   changing it. Native GPU draw/frame association, per-pass fog admission,
-   premultiplied-program selection, light/shadow selection and ceiling response
-   remain open. Do not fit HDR or authored colours to the image.
-2. Resume ordinary input through original creation and Vigor. Capture the HUD,
-   full Doc motion/audio, cigarette timing, gurney transparency, opening haze
-   and Reflectron preview/background at matching states. Fix the first failed
-   owner and replay that boundary. Do not replay the already exercised movie.
-3. Replace remaining psychology/tag/trait/farewell panels through original
-   source owners. Complete Pip-Boy, room loot/skull/pool/physics, doors/exterior,
-   Sunny dialogue/combat/tutorial and cold Continue. Six actor audit shutdown
-   resources remain to identify. Broader gameplay/plugin behavior and
-   integrated OpenXR remain.
+1. Implement source quest-objective state and shared result-command execution
+   for the observed SetObjectiveDisplayed failure. Validate source declarations,
+   mutations, persistence and telemetry. Replay the Vigor boundary without
+   treating speech playback alone as successful result execution.
+2. Finish ordinary SPECIAL allocation and Doc's subsequent source reaction.
+   Resolve each failed dialogue predicate/result owner, then replace psychology,
+   tag/trait and farewell panels with the original source interfaces. Never
+   use their current placeholder confirmations to claim progression support.
+3. Complete Pip-Boy, loot/skull/pool/physics, doors/exterior, Sunny's dialogue/
+   combat/tutorial and cold Continue. Six actor-audit shutdown resources remain.
+   Broader NV/FO3/TTW/plugin support and integrated OpenXR remain unfinished.
+4. Preserve corrected source rendering. Remaining camera far-plane, native GPU
+   draw/frame association, per-pass fog admission, premultiplied selection,
+   lighting/shadows, ceiling response and Vigor framing need source owners.
+   Do not fit HDR, authored colours or hide world geometry to match a frame.
 
 ## Required publication gate
 
-The full gate and selected owned/GPU material checks passed on 2026-09-05.
-Re-run when code changes require it, plus the selected owned-data audit:
+The full gate, selected owned idle/voice/creation and Vigor GPU/input audits
+passed on 2026-09-05. Re-run after relevant changes and before publication:
 
 ```powershell
 .\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe'
 git diff --check
 ```
 
-The optional NativeVertexFogAudit scene requires the normal Forward+ renderer;
-the headless dummy renderer cannot create its local GPU device. See
-material-fog-and-falloff.md for this bounded audit and remaining evidence lanes.
-Read architecture.md, status.md, clean-room.md and parity-telemetry.md alongside
-this file. A build or plausible frame is not gameplay acceptance.
+GPU audits require the normal Forward+ renderer. Read architecture.md,
+status.md, clean-room.md and parity-telemetry.md alongside this file.

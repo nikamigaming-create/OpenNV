@@ -43,6 +43,8 @@ internal partial class RuntimeNativeNpc
         _travelCursor = 0;
         _travelPublishedDistance = 0;
         _travelActive = true;
+        // This locomotion owner publishes the ordinary walking group.
+        Activity.SetMovement(running: false, sneaking: false);
         PlayLocomotion(true);
         GD.Print($"OPENNV_NATIVE_PACKAGE_TRAVEL reference={Appearance.Reference} package={package.FormKey} target={target.FormKey} " +
             $"navmeshes={_navigation.NavMeshes} waypoints={_travelPath.Length} distancePerCycle={_travelCycleDistance:R} parity=unmeasured");

@@ -6,6 +6,9 @@ internal sealed class FalloutActorActivityState
     internal bool Alerted { get; private set; }
     internal bool Attacked { get; private set; }
     internal bool WeaponDrawn { get; private set; }
+    internal bool Running { get; private set; }
+    internal bool Sneaking { get; private set; }
+    internal bool InCombat { get; private set; }
     internal long Revision { get; private set; }
 
     internal void SetAlerted(bool value)
@@ -26,6 +29,21 @@ internal sealed class FalloutActorActivityState
     {
         if (WeaponDrawn == value) return;
         WeaponDrawn = value;
+        Revision++;
+    }
+
+    internal void SetMovement(bool running, bool sneaking)
+    {
+        if (Running == running && Sneaking == sneaking) return;
+        Running = running;
+        Sneaking = sneaking;
+        Revision++;
+    }
+
+    internal void SetCombat(bool value)
+    {
+        if (InCombat == value) return;
+        InCombat = value;
         Revision++;
     }
 }

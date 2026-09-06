@@ -61,7 +61,11 @@ internal sealed partial class FalloutDialogueTopic
         {
             if ((info.Flags & 4) != 0 && said.Contains(info.Record.FormKey)) continue;
             if (!ConditionsPass(info, speakerBase, questStage)) continue;
-            if (info.Type != 1 || info.NextSpeaker != 0 || (info.Flags & ~4) != 0 || info.Flags2 != 0)
+            // SayTo owns one complete INFO and finishes after its responses and
+            // end script. Goodbye requires no further conversational turn here;
+            // it must not suppress the authored line. Random and other routing
+            // flags still require their own selection owners.
+            if (info.Type != 1 || info.NextSpeaker != 0 || (info.Flags & ~5) != 0 || info.Flags2 != 0)
                 throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");
             return info;
         }

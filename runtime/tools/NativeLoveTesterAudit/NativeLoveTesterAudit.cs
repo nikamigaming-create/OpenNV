@@ -18,9 +18,14 @@ public partial class NativeLoveTesterAudit : Node
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var scene = FalloutCellSceneReader.Read(records, records.RuntimeFormKey(Convert.ToUInt32(cell, 16)));
             var contract = FalloutNativeVigorResolver.Resolve(records, scene);
-            var menu = new NativeOwnedLoveTesterMenu(contract, contract.Initial, records) { Size = new(1280, 720) };
+            var layer = new CanvasLayer();
+            var menu = new NativeOwnedLoveTesterMenu(contract, contract.Initial, records)
+            {
+                LayoutMode = 1,
+                AnchorsPreset = (int)Control.LayoutPreset.FullRect,
+            };
             FalloutNativeSpecialState? accepted = null; menu.Accepted += value => accepted = value;
-            AddChild(menu);
+            layer.AddChild(menu); AddChild(layer);
             var animation = menu.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().Single();
             var pages = new List<object>();
             async Task Snapshot(int page)
@@ -65,13 +70,23 @@ public partial class NativeLoveTesterAudit : Node
                 animation.SeekSourceTime(animation.SequenceRange(animation.ActiveSequence!).StopTime);
                 animation.SetProcess(false); menu._Process(0);
             }
-            await Snapshot(0);
-            Click("LookInside_Btn:0"); FinishTurn();
+            var openingDeadline = Time.GetTicksMsec() + 10000;
+            while (menu.GetMeta("opennv_love_tester_turning").AsBool() && Time.GetTicksMsec() < openingDeadline)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (menu.GetMeta("opennv_love_tester_turning").AsBool() || menu.GetMeta("opennv_love_tester_page").AsInt32() != 1)
+                throw new InvalidDataException("The owned opening sequence did not finish on the first attribute.");
+            var initialPoints = menu.GetMeta("opennv_love_tester_remaining").AsInt32();
+            menu._UnhandledInput(new InputEventKey { Keycode = Key.Up, Pressed = true });
+            if (menu.GetMeta("opennv_love_tester_remaining").AsInt32() != initialPoints - 1)
+                throw new InvalidDataException("Attribute Up did not allocate a point.");
+            menu._UnhandledInput(new InputEventKey { Keycode = Key.Down, Pressed = true });
+            if (menu.GetMeta("opennv_love_tester_remaining").AsInt32() != initialPoints)
+                throw new InvalidDataException("Attribute Down did not restore a point.");
             for (var page = 1; page <= contract.Initial.Values.Count; page++)
             {
                 if (menu.GetMeta("opennv_love_tester_page").AsInt32() != page) throw new InvalidDataException("Source next-page click did not advance.");
                 await Snapshot(page);
-                menu._UnhandledInput(new InputEventKey { Keycode = Key.Equal, Pressed = true });
+                menu._UnhandledInput(new InputEventKey { Keycode = Key.Up, Pressed = true });
                 Click("P1_RT_Btn:0"); FinishTurn();
             }
             await Snapshot(8);

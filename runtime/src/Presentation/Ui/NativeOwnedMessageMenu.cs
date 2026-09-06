@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.Presentation.Ui;
 internal sealed partial class NativeOwnedMessageMenu : Control
 {
     private readonly NativeOwnedMenuTree _tiles;
-    private readonly XElement _panel, _title, _body, _list;
+    private readonly XElement _panel, _title, _body, _list, _scrollbar;
     private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _buttons = [];
     private bool _submitted;
     private readonly Action<Exception> _failed;
@@ -48,9 +48,8 @@ internal sealed partial class NativeOwnedMessageMenu : Control
         }
         menu.Elements("template").Remove();
         _tiles.Bind(_list, "_enabled", 1);
-        var scrollbar = _list.Elements().Single(tile => (string?)tile.Attribute("name") == "lb_scrollbar");
-        _tiles.Bind(scrollbar, "_current_value", 0);
-        _tiles.Bind(scrollbar, "_number_of_items", _buttons.Count);
+        _scrollbar = _list.Elements().Single(tile => (string?)tile.Attribute("name") == "lb_scrollbar");
+        _tiles.Bind(_scrollbar, "_current_value", 0);
         SetMeta("opennv_ui_source", "menus/message_menu.xml");
         SetMeta("opennv_ui_message", message.Form.ToString());
         SetMeta("opennv_ui_unbound", "scrolling,focus-sound,exact-layout-timing");
@@ -99,6 +98,13 @@ internal sealed partial class NativeOwnedMessageMenu : Control
         var maximum = FalloutMenuXml.Number(cap, (_, _) => throw new NotSupportedException("Message list height cap is unbound."));
         if (height > maximum) throw new NotSupportedException("Message button list requires scrolling.");
         _tiles.Bind(_list, "height", height);
+        // The prefab measures both extents in source scroll units. Publishing
+        // a button count with its default one-unit viewport invented overflow
+        // for every multi-button dialog, including character confirmation.
+        var scrollUnit = _tiles.Number(_list, "_scroll_delta");
+        if (!float.IsFinite(scrollUnit) || scrollUnit <= 0) throw new InvalidDataException("Message list scroll unit is invalid.");
+        _tiles.Bind(_scrollbar, "_number_of_items", height / scrollUnit);
+        _tiles.Bind(_scrollbar, "_number_of_visible_items", _tiles.Number(_list, "height") / scrollUnit);
         Select(_buttons[0].Tile);
         foreach (var (tile, button) in _buttons)
         {
