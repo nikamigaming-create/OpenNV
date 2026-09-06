@@ -1,6 +1,6 @@
 # Opening scene defects
 
-This discrepancy ledger supplements the 33 requirements in recovery-checklist.md.
+This discrepancy ledger supplements the 36 requirements in recovery-checklist.md.
 A fixed component does not close a scene or establish retail parity. Timing,
 input, audio and pixel comparisons remain independent requirements.
 

@@ -3,6 +3,7 @@
 OpenNV is a clean, first-party C# and Godot/OpenXR reimplementation that reads
 a user-owned Fallout installation directly. Every task starts by reading
 `docs/current-work.md`, `docs/architecture.md`, and `docs/status.md`.
+The current user-directed implementation plan is `docs/implementation-plan.md`.
 
 ## Product objective
 

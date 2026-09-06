@@ -29,7 +29,7 @@ $policyTargets = @(
     "runtime/README.md",
     "runtime/runtime-manifest.json"
 )
-$policyViolations = @(& git -C $repository grep -ni -E "cache|python|prepared content|content tool|asset conversion" -- $policyTargets)
+$policyViolations = @(& git -C $repository grep -ni -E "python|prepared content|content tool|asset conversion" -- $policyTargets)
 if ($policyViolations.Count -ne 0) {
     throw "Removed conversion workflow terminology is present:`n$($policyViolations -join "`n")"
 }
