@@ -8,6 +8,7 @@ using OpenNV.Runtime.Gameplay.State;
 
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
+QuestObjectiveProbe.Run();
 
 if (args is ["--audit-material-emittance", var materialRoot, var materialCell, var materialHour])
 {
@@ -1004,6 +1005,13 @@ try
     var enteredStages = new List<short>();
     while (sourceDialogue.TryTakeEnteredStage(out var entered)) enteredStages.Add(entered!.Stage);
     Require(enteredStages.SequenceEqual(new short[] { 12, 87 }), "Entered source-stage order was lost.");
+    var completedSpeech = new FalloutOpeningStageMachine(waits, arbitraryControls, "ArbitraryQuest", 12);
+    Require(completedSpeech.TryTakeEnteredStage(out _), "Initial speech stage was not published.");
+    completedSpeech.CompleteDialogueSpeech();
+    Require(completedSpeech.Stage == 12 && completedSpeech.PendingBlockers.Count == 0 &&
+        !completedSpeech.TryTakeEnteredStage(out _), "Speech completion replayed the stage or retained its wait.");
+    completedSpeech.EnterSourceStage("ArbitraryQuest", 87);
+    Require(completedSpeech.Stage == 87, "Completed speech blocked a later ordinary activation result.");
     var transitionGraph = FalloutOpeningStageTransitionResolver.Resolve(cellStack, controlGraph);
     transitionGraph = FalloutOpeningStageTransitionResolver.AddDialogueResults(
         cellStack,

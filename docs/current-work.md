@@ -15,9 +15,11 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 ## Current verified state
 
-- Ordinary room-71 accepts original character creation and walks to the Vigor
-  Tester at VCG01 stage 60. Both games now show the original Strength page;
-  a duplicated Up input increases Strength from 5 to 6 and leaves four points.
+- Ordinary room-73 accepts original creation, walks to the Vigor Tester,
+  allocates SPECIAL 6/6/6/6/6/5/5 and accepts the original review. OpenNV
+  advances through stage 65 to stage 70 and completes objective 30. Retained
+  room-72/retail captures show the same allocation through paired keyboard
+  input. Retail has continued to stage 80. The runs are no longer aligned.
   We are still inside Doc's house. No ordinary save exists at this checkpoint.
 - Original name/Reflectron XML, bitmap controls, dynamic FaceGen, source hair
   and voice/LIP are connected. The user accepted hair/age for advancing.
@@ -31,16 +33,31 @@ scene-defects.md tracks component corrections without claiming scene parity.
   a positive owned faction member passes. Synthetic, nine owned scenarios and
   ordinary telemetry pass. Dynamic factions, broader activity ownership and
   exact native animation phase/cigarette timing remain unbound.
-- Single-INFO SayTo now admits Goodbye with Say Once. The previously missing
-  Vigor introduction plays its original audio and LIP in ordinary room-71.
-  Its end script then fails visibly on SetObjectiveDisplayed: quest objectives
-  have no runtime owner. This is the next progression blocker, not a completed
-  speech lifecycle. Unsupported Random selection remains fail-closed.
+- Single-INFO SayTo admits Goodbye with Say Once. The Vigor introduction now
+  plays its original audio/LIP, executes SetObjectiveDisplayed and releases
+  its speech wait without replaying the stage. Ordinary room-73 verifies the
+  complete introduction and subsequent tester acceptance. Unsupported Random
+  selection remains fail-closed.
+- Shared quest state now binds winning QOBJ/NNAM declarations, displayed and
+  completed flags, ordered change events, telemetry and persistence. Six owned
+  opening commands and JSON round trips pass. Ordinary stage 55 displays
+  objective 10, stage 60 completes it, the INFO displays objective 30, and
+  tester acceptance completes it. HUD objective messages and target navigation
+  remain unbound. The broader sweep admits 633 quest owners and 1465 objective
+  declarations; seven quests retain duplicate-variable errors. These counts
+  are source coverage only. Missing saved objective state fails closed.
+- The next failed speech is Doc's post-Vigor reaction: INFO target-sex and
+  quest-variable condition contexts are unbound. More fundamentally, the
+  current timer adapter skips the source quest's SPECIAL reaction calculation.
+  Execute that source program before claiming any reaction branch. The Vigor
+  activation adapter also omits its source objective-display prerequisite.
 - Vigor plays its authored opening sequence onto Strength. Keyboard Up/Down
   changes the current attribute and retains review-row routing. The nested
   CanvasLayer camera lifecycle and owned eight-page/allocation audit pass;
   ordinary activation and paired Up work. Framing, backdrop, illumination,
-  exact timing and final pixels still differ.
+  exact timing and final pixels still differ. Original review acceptance is
+  now exercised in ordinary gameplay; review keyboard adjustment still needs
+  verification beyond the component's pointer checks.
 - Post-creation retail HUD/crosshair and movement instructions remain missing.
   Paired movement distances and collisions differ; the route to Vigor used
   separate ordinary inputs and is not matched-motion evidence.
@@ -66,14 +83,15 @@ scene-defects.md tracks component corrections without claiming scene parity.
   Complete motion, overlap, cigarette timing/smoke, audio and lighting remain.
 - Source image programs, blur kernels, shared-clock double vision and original
   menu-background effects are connected. Opening haze/focus/DOF and final GPU
-  output remain unverified. Save v10 retains existing global/calendar/script/
-  inventory/sky identities; full cold progression remains open.
+  output remain unverified. Save v11 adds objective state to existing global/
+  calendar/script/inventory/sky identities; full cold progression remains open.
 
 ## Live comparison and evidence
 
-Retain retail room-54 and OpenNV room-71, using the room-71 session configuration.
+Retain retail room-54 and OpenNV room-73, using the room-73 session configuration.
 Revalidate process IDs/state before input; keep one instance of each game.
-The shared menu checkpoint is not exact camera, clock or animation alignment.
+OpenNV is at stage 70 with a visible speech-condition error in telemetry;
+retail is at stage 80. Retained paired review evidence is not a current match.
 
 Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
 The public harness rejects native.click callbacks; retail buttons require an
@@ -93,12 +111,13 @@ derivatives and captures remain outside the repository.
 
 ## Next owners
 
-1. Implement source quest-objective state and shared result-command execution
-   for the observed SetObjectiveDisplayed failure. Validate source declarations,
-   mutations, persistence and telemetry. Replay the Vigor boundary without
-   treating speech playback alone as successful result execution.
-2. Finish ordinary SPECIAL allocation and Doc's subsequent source reaction.
-   Resolve each failed dialogue predicate/result owner, then replace psychology,
+1. Execute complete source conditional programs rather than just extracting
+   timer SetStage targets. The first observed missing block computes Doc's
+   reaction from player actor values using Abs, assignments and branches.
+   Bind shared quest-variable storage, target sex and quest-variable dialogue
+   contexts, and the complete source activation prerequisite. No fitted
+   reaction table, default branch or captured native value may replace this.
+2. Verify Doc's resulting speech and travel, then replace psychology,
    tag/trait and farewell panels with the original source interfaces. Never
    use their current placeholder confirmations to claim progression support.
 3. Complete Pip-Boy, loot/skull/pool/physics, doors/exterior, Sunny's dialogue/

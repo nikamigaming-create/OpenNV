@@ -93,6 +93,7 @@ internal sealed class FalloutQuestScripts
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
         notifications = _inventory.Notifications.Capture(),
+        objectives = _quests.ObjectiveState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
         scheduling = "source registration, embedded declarations and shared SCPT clocks; MenuMode execution and dynamic scheduling unbound",
     };

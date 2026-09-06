@@ -23,6 +23,7 @@ internal partial class RuntimeNativeSpeech : Node
     private float[] _lipWeights = [];
     private RuntimeNativeNpc? _speaker;
     internal event Action<string>? ResultCommand;
+    internal event Action<FalloutFormKey>? InfoCompleted;
     internal string? Error { get; private set; }
     internal bool Active => _info is not null;
     internal object State => new
@@ -161,6 +162,7 @@ internal partial class RuntimeNativeSpeech : Node
                     throw new NotSupportedException($"INFO {completed.Record.FormKey} result command is unbound: {line}");
                 result(line);
             }
+            InfoCompleted?.Invoke(completed.Record.FormKey);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {

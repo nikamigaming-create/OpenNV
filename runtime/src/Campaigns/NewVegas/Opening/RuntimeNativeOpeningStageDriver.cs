@@ -252,6 +252,15 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (FalloutDialogueTopic.CodeLines(line).Count() != 1 || !TryApplyActorCommand(line))
                 throw new NotSupportedException($"Dialogue result command has no runtime owner: {line}");
         };
+        _speech.InfoCompleted += _ =>
+        {
+            if (!_speech.Active && _speechStage == $"{_machine.QuestEditorId}:{_machine.Stage}" &&
+                _machine.PendingBlockers.Contains("sayto", StringComparer.OrdinalIgnoreCase))
+            {
+                _machine.CompleteDialogueSpeech();
+                Synchronize();
+            }
+        };
         _speech.Configure(_pluginStack, _lipConfiguration, (quest, stage) =>
         {
             _machine.CompleteDialogueResult(quest, stage);
@@ -371,6 +380,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 _ = FalloutScriptPackageCommands.Read(stage.Source);
                 _ = FalloutImageSpaceCommands.Read(stage.Source);
                 _ = FalloutActorPackageCommands.Read(stage.Source);
+                _ = FalloutQuestState.ReadObjectiveCommands(stage.Source);
                 var lines = FalloutDialogueTopic.CodeLines(stage.Source).ToArray();
                 for (var index = 0; index < lines.Length; index++)
                 {
@@ -393,6 +403,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private bool TryApplyActorCommand(string line)
     {
         var admitted = false;
+        foreach (var objective in FalloutQuestState.ReadObjectiveCommands(line))
+        {
+            _quests.ApplyObjective(objective);
+            GD.Print($"OPENNV_NATIVE_OBJECTIVE_COMMAND quest={objective.QuestEditorId} index={objective.Index} " +
+                $"display={objective.Display} value={objective.Value} revision={_quests.Revision} presentation=unbound");
+            admitted = true;
+        }
         foreach (var imageSpace in FalloutImageSpaceCommands.Read(line))
         {
             var record = FalloutDialogueTopic.Find(_pluginStack, "IMAD", imageSpace.EditorId);
@@ -557,6 +574,16 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     }
 
     private void AcceptSpecial(FalloutNativeSpecialState state)
+    {
+        try { AcceptSpecialCore(state); }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException)
+        {
+            ExecutionError = error.Message;
+            GD.PushError($"OPENNV_NATIVE_VIGOR_DIVERGENCE {error.Message}");
+        }
+    }
+
+    private void AcceptSpecialCore(FalloutNativeSpecialState state)
     {
         FalloutNativeVigorResolver.Validate(_vigorContract, state);
         _special = state;

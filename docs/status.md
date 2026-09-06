@@ -7,9 +7,9 @@ presentation, shared gameplay and persistent saves. All 33 recovery acceptance
 requirements remain open. Work stays on main and in this task only; parallel
 subagents are stopped at the user's request.
 
-Ordinary New now accepts original creation and reaches the Vigor Tester at
-VCG01 stage 60. Both original menus show Strength, and duplicated Up input
-allocates one point in each. We are still inside Doc's house; Pip-Boy handoff,
+Ordinary New now accepts original creation and the Vigor Tester's complete
+SPECIAL allocation, advancing to VCG01 stage 70. Paired original menus show
+the same 6/6/6/6/6/5/5 allocation. We are still inside Doc's house; Pip-Boy handoff,
 exit and Sunny remain unfinished. The name prompt and Reflectron use
 original XML, bitmap controls, dynamic FaceGen, source hair and
 voice/LIP. The user accepted the current hair/age appearance for advancing.
@@ -34,8 +34,11 @@ Original character confirmation now accepts No/Yes through source scroll-unit
 extents, removing false overflow. Vigor opens with its authored sequence and
 routes keyboard Up/Down to attribute adjustment. Owned creation and nested
 Vigor audits pass. Single-INFO Goodbye speech now plays the original Vigor
-audio/LIP, but its end script fails on the missing quest-objective owner.
-SetObjectiveDisplayed is the next blocker. Post-creation HUD/instructions,
+audio/LIP, executes its objective update and releases its speech wait. Winning
+quest-objective declarations, flags, ordered changes, telemetry and save v11
+persistence now bind; synthetic and selected owned checks pass, and ordinary
+tester acceptance completes objective 30. The next blocker is the source
+SPECIAL reaction program and its dialogue-condition contexts. Post-creation HUD/instructions,
 movement/collision differences and Vigor framing remain explicit defects.
 
 Source quest-clock initialization, shared script lifetime, Float32 recurrence,

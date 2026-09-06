@@ -118,6 +118,21 @@ internal sealed class FalloutOpeningStageMachine
         Enter(questEditorId, stage);
     }
 
+    internal void CompleteDialogueSpeech()
+    {
+        if (_pendingBlockers.Count != 1 || !_pendingBlockers.Contains("sayto") || _blockedTransition is null)
+            throw new InvalidOperationException("Completed speech has no matching SayTo owner.");
+        if (_blockedTransition.Kind != "dialogue-wait")
+        {
+            CompleteBlocker("sayto");
+            return;
+        }
+        // A completed INFO may publish objectives without changing stages.
+        // Release its wait without replaying the current stage's side effects.
+        _pendingBlockers.Clear();
+        _blockedTransition = null;
+    }
+
     private void Enter(string questEditorId, short stage)
     {
         for (var count = 0; count < MaximumImmediateTransitions; ++count)

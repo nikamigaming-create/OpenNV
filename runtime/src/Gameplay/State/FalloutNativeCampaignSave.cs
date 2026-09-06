@@ -37,7 +37,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v10";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v11";
+    internal const string SkyLightingSchema = "opennv-native-fnv-campaign-save/v10";
     internal const string GlobalClockSchema = "opennv-native-fnv-campaign-save/v9";
     internal const string QuestScriptsSchema = "opennv-native-fnv-campaign-save/v8";
     internal const string FeetAnchoredSchema = "opennv-native-fnv-campaign-save/v7";
@@ -251,11 +252,11 @@ internal static class FalloutNativeCampaignSave
         FalloutNativeCampaignState state,
         string expectedSaveCompatibilityId)
     {
-        if ((state.Schema != ExpectedSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
+        if ((state.Schema != ExpectedSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
             (state.Scripts is null) != (state.Quests is null) ||
             (state.Globals is null) != (state.GameTime is null) ||
-            (state.Schema is ExpectedSchema or GlobalClockSchema && state.Globals is null) ||
-            (state.Schema == ExpectedSchema && state.SkyLighting is null) ||
+            (state.Schema is ExpectedSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
+            (state.Schema is ExpectedSchema or SkyLightingSchema && state.SkyLighting is null) ||
             (state.SkyLighting is not null && state.Globals is null) ||
             (state.GameTime is { } time && (!float.IsFinite(time.PreviousHour) || string.IsNullOrWhiteSpace(time.CalendarSha256))) ||
             string.IsNullOrWhiteSpace(expectedSaveCompatibilityId) ||

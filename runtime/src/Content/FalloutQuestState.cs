@@ -3,7 +3,13 @@ using System.Buffers.Binary;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutQuestSnapshot(FalloutFormKey Quest, short Stage, bool Completed,
-    IReadOnlyList<short> EnteredStages, IReadOnlyDictionary<uint, double> Variables);
+    IReadOnlyList<short> EnteredStages, IReadOnlyDictionary<uint, double> Variables,
+    IReadOnlyList<FalloutQuestObjectiveSnapshot>? Objectives = null);
+
+internal sealed record FalloutQuestObjectiveSnapshot(uint Index, bool Displayed, bool Completed);
+internal sealed record FalloutQuestObjectiveCommand(string QuestEditorId, uint Index, bool Display, bool Value);
+internal sealed record FalloutQuestObjectiveChange(FalloutFormKey Quest, string Text,
+    FalloutQuestObjectiveSnapshot Before, FalloutQuestObjectiveSnapshot After, long Revision);
 
 /// <summary>Authoritative new-game quest values; observations never populate this owner.</summary>
 internal sealed class FalloutQuestState(FalloutPluginStack stack)
@@ -14,14 +20,36 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         internal bool Completed;
         internal readonly HashSet<short> Stages = [];
         internal readonly Dictionary<uint, double> Variables = [];
+        internal readonly Dictionary<uint, string> ObjectiveText = [];
+        internal readonly Dictionary<uint, FalloutQuestObjectiveSnapshot> Objectives = [];
     }
 
     private readonly Dictionary<FalloutFormKey, State> _states = [];
     internal long Revision { get; private set; }
+    internal event Action<FalloutQuestObjectiveChange>? ObjectiveChanged;
 
     internal IReadOnlyList<FalloutQuestSnapshot> Capture() => _states.OrderBy(pair => stack.RuntimeFormId(pair.Key))
         .Select(pair => new FalloutQuestSnapshot(pair.Key, pair.Value.Stage, pair.Value.Completed,
-            pair.Value.Stages.Order().ToArray(), new Dictionary<uint, double>(pair.Value.Variables))).ToArray();
+            pair.Value.Stages.Order().ToArray(), new Dictionary<uint, double>(pair.Value.Variables),
+            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray())).ToArray();
+
+    internal object ObjectiveState => new
+    {
+        revision = Revision,
+        quests = _states.Where(pair => pair.Value.Objectives.Count != 0).Select(pair => new
+        {
+            quest = pair.Key.ToString(),
+            objectives = pair.Value.Objectives.Values.OrderBy(value => value.Index).Select(value => new
+            {
+                value.Index,
+                text = pair.Value.ObjectiveText[value.Index],
+                value.Displayed,
+                value.Completed,
+            }).ToArray(),
+        }).ToArray(),
+        presentation = "unbound",
+        targets = "unbound",
+    };
 
     internal void Restore(IReadOnlyList<FalloutQuestSnapshot> snapshots)
     {
@@ -36,10 +64,16 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
             var state = validated.Require(snapshot.Quest);
             if (!state.Variables.Keys.Order().SequenceEqual(snapshot.Variables.Keys.Order()))
                 throw new InvalidDataException("Saved quest variables differ from the winning script declarations.");
+            if (snapshot.Objectives is null && state.Objectives.Count != 0)
+                throw new InvalidDataException("Saved quest objectives are absent; their state cannot be inferred from quest stages.");
+            var objectives = snapshot.Objectives ?? [];
+            if (!state.Objectives.Keys.Order().SequenceEqual(objectives.Select(value => value.Index).Order()))
+                throw new InvalidDataException("Saved quest objectives differ from the winning declarations or contain duplicates.");
             state.Stage = snapshot.Stage;
             state.Completed = snapshot.Completed;
             state.Stages.UnionWith(snapshot.EnteredStages);
             foreach (var (key, value) in snapshot.Variables) state.Variables[key] = value;
+            foreach (var objective in objectives) state.Objectives[objective.Index] = objective;
         }
         _states.Clear();
         foreach (var (quest, state) in validated._states) _states.Add(quest, state);
@@ -52,6 +86,25 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         var record = stack.GetEffective(quest);
         if (record.Signature != "QUST") throw new InvalidDataException($"Quest state target {quest} is not QUST.");
         state = new();
+        uint? objective = null;
+        var textIndices = new HashSet<uint>();
+        foreach (var field in record.ReadSubrecords())
+        {
+            if (field.Signature == "QOBJ")
+            {
+                if (field.Data.Length != 4) throw new InvalidDataException("Quest objective index extent is invalid.");
+                objective = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
+                if (!state.Objectives.TryAdd(objective.Value, new(objective.Value, false, false)))
+                    throw new InvalidDataException("Duplicate source quest objective index.");
+                state.ObjectiveText.Add(objective.Value, "");
+            }
+            else if (field.Signature == "NNAM")
+            {
+                if (objective is not { } index || !textIndices.Add(index))
+                    throw new InvalidDataException("Quest objective text has no unique source index.");
+                state.ObjectiveText[index] = FalloutDialogueTopic.Text(field.Data.Span);
+            }
+        }
         var scripts = record.ReadSubrecords().Where(field => field.Signature == "SCRI").ToArray();
         if (scripts.Length != 0)
         {
@@ -82,6 +135,39 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         if (state.Completed) return;
         state.Completed = true;
         Revision++;
+    }
+
+    internal static IReadOnlyList<FalloutQuestObjectiveCommand> ReadObjectiveCommands(string source)
+    {
+        var lines = FalloutDialogueTopic.CodeLines(source).ToArray();
+        var commands = new List<FalloutQuestObjectiveCommand>();
+        foreach (var line in lines)
+        {
+            var words = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var display = words[0].Equals("SetObjectiveDisplayed", StringComparison.OrdinalIgnoreCase);
+            if (!display && !words[0].Equals("SetObjectiveCompleted", StringComparison.OrdinalIgnoreCase)) continue;
+            if (words.Length != 4 || !uint.TryParse(words[2], System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var index) || words[3] is not ("0" or "1"))
+                throw new NotSupportedException($"Quest objective command arguments are unbound: {line}");
+            commands.Add(new(words[1], index, display, words[3] == "1"));
+        }
+        if (commands.Count != 0 && lines.Any(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0]
+                .ToLowerInvariant() is "if" or "elseif" or "else" or "endif"))
+            throw new NotSupportedException("Conditional quest-objective commands require their script control-flow owner.");
+        return commands;
+    }
+
+    internal void ApplyObjective(FalloutQuestObjectiveCommand command)
+    {
+        var quest = FalloutDialogueTopic.Find(stack, "QUST", command.QuestEditorId).FormKey;
+        var state = Require(quest);
+        if (!state.Objectives.TryGetValue(command.Index, out var before))
+            throw new NotSupportedException($"Quest {quest} has no declared objective {command.Index}.");
+        var after = command.Display ? before with { Displayed = command.Value } : before with { Completed = command.Value };
+        if (after == before) return;
+        state.Objectives[command.Index] = after;
+        Revision++;
+        ObjectiveChanged?.Invoke(new(quest, state.ObjectiveText[command.Index], before, after, Revision));
     }
 
     internal double Variable(FalloutFormKey quest, uint index) => Require(quest).Variables.TryGetValue(index, out var value)
