@@ -11,6 +11,7 @@ internal sealed class FalloutScriptBindings
     private readonly Dictionary<string, FalloutPluginRecord> _forms = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<FalloutFormKey, Dictionary<string, uint>> _variables = [];
     internal bool HasPlayerReference { get; }
+    private readonly FalloutFormKey? _playerReference;
 
     internal FalloutScriptBindings(FalloutPluginStack records, FalloutPluginRecord quest,
         FalloutPluginRecord source, IEnumerable<FalloutPluginSubrecord> fields)
@@ -21,7 +22,7 @@ internal sealed class FalloutScriptBindings
         {
             if (field.Data.Length != 4) throw new InvalidDataException("Script reference extent is invalid.");
             var form = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
-            if (records.RuntimeFormId(form) == 0x14) { HasPlayerReference = true; continue; }
+            if (records.RuntimeFormId(form) == 0x14) { HasPlayerReference = true; _playerReference = form; continue; }
             var record = records.GetEffective(form);
             var ids = record.ReadSubrecords().Where(value => value.Signature == "EDID").ToArray();
             if (ids.Length == 0) continue;
@@ -36,6 +37,15 @@ internal sealed class FalloutScriptBindings
     internal FalloutPluginRecord? TryForm(string name) => _forms.GetValueOrDefault(name);
     internal FalloutPluginRecord Form(string name) => TryForm(name) ??
         throw new NotSupportedException($"Script reference {name} has no compiled binding.");
+
+    internal FalloutFormKey Reference(string name)
+    {
+        if (name.Equals("player", StringComparison.OrdinalIgnoreCase))
+            return _playerReference ?? throw new NotSupportedException("Player reference has no compiled binding.");
+        var record = Form(name);
+        return record.Signature is "REFR" or "ACHR" or "ACRE" ? record.FormKey :
+            throw new NotSupportedException($"Script target {name} is not an admitted placed reference.");
+    }
 
     internal (FalloutFormKey Quest, uint Index) Variable(string name)
     {

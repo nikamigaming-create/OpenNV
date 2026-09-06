@@ -119,7 +119,18 @@ internal partial class RuntimeNativeNpc
     {
         // Result scripts precede the event's topic and idle. An unsupported
         // reached effect keeps this event failed, rather than replaying it.
-        package.EventPrograms.GetValueOrDefault(kind)?.RequireEmptyScript();
+        if (package.EventPrograms.GetValueOrDefault(kind) is { } program)
+        {
+            var commands = FalloutHeadTrackingPrograms.Bind(program.Source,
+                new(_aiStack!, program.Package, program.Package, program.Fields), Appearance.Reference).ToDictionary(command => command.Line);
+            var index = 0;
+            program.ExecuteScript(line =>
+            {
+                if (!commands.TryGetValue(index++, out var command))
+                    throw new NotSupportedException($"Package event command is unbound: {line}");
+                ApplyBoundHeadTrackingCommand(command);
+            });
+        }
         if (package.Events.GetValueOrDefault(kind) is { } idle)
         {
             if (kind == "POCA")

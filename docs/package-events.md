@@ -7,8 +7,8 @@ Reevaluating the same active package does not create another begin event.
 Repeated observations of arrival do not execute its end event again.
 
 The reader retains each section's script and compiled references separately.
-At dispatch, the result script precedes the event's other effects. Empty and
-comment-only programs are admitted; compiled extent mismatches, compiled code
+At dispatch, the result script precedes the event's other effects. Empty,
+comment-only and bound Look/StopLook programs are admitted; compiled extent mismatches, compiled code
 without an available source program, nonempty unimplemented scripts and event
 topics remain explicit failures. A failed event cannot be retried implicitly
 or reported as completed. No actor or location identity selects these rules.
@@ -28,7 +28,9 @@ are component contracts, not matched timing or visual acceptance.
 
 Private read-only observation of the native Look and StopLook handlers finds
 separate target-setting and target-clearing operations, with a distinct
-optional whole-body branch. The observed handlers and owned end-event program
-identify the next missing command owner. Head/eye solving, target lifetime,
+optional whole-body branch. The selected target-slot lifetime and physical head
+owner now execute these commands in their compiled scope. Ordinary room-81
+completes the former Look failure, subsequent speech/StopLook and couch travel.
+See head-tracking.md. Automatic/eye targeting, complete reference/process state,
 native event timing, event topics, deferred change idles and save restoration
 remain open. No native code or addresses are repository inputs.

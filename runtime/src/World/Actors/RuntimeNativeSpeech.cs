@@ -23,7 +23,7 @@ internal partial class RuntimeNativeSpeech : Node
     private FaceGenLipAnimation? _lip;
     private float[] _lipWeights = [];
     private RuntimeNativeNpc? _speaker;
-    internal event Action<string>? ResultCommand;
+    internal event Action<FalloutDialogueInfo, FalloutFormKey?, int, string>? ResultCommand;
     internal event Action<FalloutFormKey>? InfoCompleted;
     internal string? Error { get; private set; }
     internal bool Active => _info is not null;
@@ -146,12 +146,13 @@ internal partial class RuntimeNativeSpeech : Node
             _speaker?.EndResponseAnimation();
             if (++_responseIndex < _info.Responses.Count) { PlayResponse(); return; }
             var completed = _info;
+            var completedSpeaker = _speaker?.Appearance.Reference;
             _info = null;
             _lip = null;
             _lipWeights = [];
             _speaker?.ClearSpeechFace();
             GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} owner=audio-finished");
-            foreach (var line in FalloutDialogueTopic.CodeLines(completed.EndScript))
+            foreach (var (line, index) in FalloutDialogueTopic.CodeLines(completed.EndScript).Select((line, index) => (line, index)))
             {
                 var stage = StagePattern().Match(line);
                 if (stage.Success)
@@ -163,7 +164,7 @@ internal partial class RuntimeNativeSpeech : Node
                 if (commands.Count == 1) { StartCore(commands[0]); continue; }
                 if (ResultCommand is not { } result)
                     throw new NotSupportedException($"INFO {completed.Record.FormKey} result command is unbound: {line}");
-                result(line);
+                result(completed, completedSpeaker, index, line);
             }
             InfoCompleted?.Invoke(completed.Record.FormKey);
         }

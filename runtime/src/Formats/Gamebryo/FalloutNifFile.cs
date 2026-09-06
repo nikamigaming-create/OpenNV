@@ -166,6 +166,10 @@ internal sealed class FalloutNifFile
             "NiTextureTransformController" => ReadTextureTransformController(block, ref cursor),
             "NiMaterialColorController" => ReadMaterialColorController(block, ref cursor),
             "NiTransformController" => ReadTransformController(block, ref cursor),
+            "NiFloatExtraDataController" => new FalloutNifFloatExtraDataController(block,
+                ReadTimeController(ref cursor, "float extra-data controller"),
+                ReadReference(ref cursor, "float extra-data interpolator"),
+                ReadStringReference(ref cursor, "float extra-data name")),
             "NiBSBoneLODController" => ReadBoneLodController(block, ref cursor),
             "NiControllerManager" => ReadControllerManager(block, ref cursor),
             "NiMultiTargetTransformController" => ReadMultiTargetTransformController(block, ref cursor),
@@ -1851,6 +1855,12 @@ internal sealed record FalloutNifTransformController(
     FalloutNifBlock Block,
     FalloutNifTimeController Time,
     int Interpolator) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifFloatExtraDataController(
+    FalloutNifBlock Block,
+    FalloutNifTimeController Time,
+    int Interpolator,
+    string ExtraDataName) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifBoneLodController(
     FalloutNifBlock Block,

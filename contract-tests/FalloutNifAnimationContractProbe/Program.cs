@@ -52,6 +52,18 @@ var constantFloat = new FalloutNifFloatAnimation(Wrap(("NiFloatInterpolator",
 Near(constantFloat.Sample(9), 4.25f, "Authored constant scalar");
 Console.WriteLine("OPENNV_NIF_FLOAT_CHANNEL_OK declaredTargets=true arbitraryNames=true linearKeys=true constant=true missingTargetFails=true unsetFails=true");
 
+var declaredFloatController = (FalloutNifFloatExtraDataController)WrapNamed(["Arbitrary override"],
+    ("NiFloatExtraDataController", Bytes(writer =>
+    {
+        writer.Write(-1); writer.Write((ushort)8); writer.Write(1f); writer.Write(0f);
+        writer.Write(2f); writer.Write(9f); writer.Write(1); writer.Write(2); writer.Write(0);
+    })), ("NiFloatExtraData", Bytes(writer => { writer.Write(0); writer.Write(7f); })),
+    ("NiFloatInterpolator", Bytes(writer => { writer.Write(7f); writer.Write(-1); }))).ReadObject(0);
+Require(declaredFloatController.Time.Target == 1 && declaredFloatController.Time.NextController == -1 &&
+    declaredFloatController.Interpolator == 2 && declaredFloatController.ExtraDataName == "Arbitrary override" &&
+    declaredFloatController.Time.StartTime == 2 && declaredFloatController.Time.StopTime == 9,
+    "Float controller lost its target, name, chain or time declaration.");
+
 var booleanSource = Wrap(("NiBoolInterpolator", Bytes(writer => { writer.Write((byte)2); writer.Write(1); })),
     ("NiBoolData", Bytes(writer =>
     {

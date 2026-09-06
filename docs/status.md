@@ -9,8 +9,10 @@ subagents are stopped at the user's request.
 
 Ordinary New now accepts original creation and the Vigor Tester's complete
 SPECIAL allocation, plays Doc's source reaction and psychology introduction,
-and reaches VCG01 stage 80 after Doc's eight-waypoint travel, with a visible
-Look end-event failure. Paired original menus show
+and reaches VCG01 stage 80 after Doc's eight-waypoint travel. Ordinary room-81
+executes the previously failing Look, source speech and StopLook, then completes
+the couch package with Doc seated and no script, animation or package error.
+Player couch activation and the questionnaire remain unbound. Paired original menus show
 the same 6/6/6/6/6/5/5 allocation. We are still inside Doc's house; Pip-Boy handoff,
 exit and Sunny remain unfinished. The name prompt and Reflectron use
 original XML, bitmap controls, dynamic FaceGen, source hair and
@@ -27,10 +29,13 @@ response gestures, chair exit/NAVM travel, IDLE repetition, animation sound,
 preview blinking and all eight original Vigor controls pass component audits.
 Complete ordinary timing, audio, motion and visual acceptance remain open.
 
-Head-tracking source readers now admit optimized float defaults and the BPTD
-tracking node/cone. The selected native bits and bindings, synthetic contracts,
-58-record owned audit and full gate pass. Look/StopLook target lifetime and
-actor pose publication remain unbound; this does not advance the couch event.
+Head tracking now binds optimized float defaults, BPTD, compiled script targets,
+slot lifetime and source-bone rotation. Synthetic and native Godot checks,
+seven owned opening commands plus the package command, and the full gate pass.
+Ordinary room-81 records head publication, animation override and target release.
+Dormant introductory references retain an explicit no-process disposition;
+missing loaded actors still fail. Automatic/default targeting, eyes, whole-body
+mode, process/save restoration and matched pose/frame timing remain unbound.
 See head-tracking.md.
 
 Package playback now enforces the actor's source idle replay delay, which was
@@ -57,9 +62,9 @@ values match retained native telemetry. Dialogue conditions use authoritative
 target sex and quest variables. Ordinary room-77 plays the reaction and the
 following three responses. Package event declarations now retain their own
 script scope and dispatch once at begin, completion and change. Nine owned
-declarations load; eight empty/comment lifecycles pass and the reached Look
-command remains unbound. Actor aiming and couch interaction are the next
-observed failures. Post-creation HUD/instructions,
+declarations load; empty/comment lifecycles and the reached Look now execute.
+Player couch interaction and original questionnaire choices are the next
+owners. Post-creation HUD/instructions,
 movement/collision differences and Vigor framing remain explicit defects.
 
 Vigor's winning OnActivate program now enforces its stage/objective predicates.

@@ -82,6 +82,7 @@ public partial class RuntimeCoordinator
                 stage = _nativeOpeningStageDriver.Stage,
                 timerSeconds = _nativeOpeningStageDriver.TimerSeconds,
                 pending = _nativeOpeningStageDriver.PendingBlockers.ToArray(),
+                headTrackingCommands = _nativeOpeningStageDriver.HeadTrackingCommands,
                 error = _nativeOpeningStageDriver.ExecutionError,
             },
             movies = _nativeOpeningStageDriver?.GetChildren().OfType<NativeGamebryoMovie>()
@@ -481,6 +482,13 @@ public partial class RuntimeCoordinator
                             NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                                 ByteColor((cell.Cell.Lighting ?? throw new InvalidDataException("NPC CELL lighting is absent.")).AmbientRgb)));
                     actor.Transform = ReferenceTransform(reference);
+                    actor.ConfigureHeadTracking(_nativePluginStack!, source, target =>
+                    {
+                        if (_nativePluginStack!.RuntimeFormId(target) == 0x14)
+                            return _nativePlayer?.Camera.GlobalPosition;
+                        return root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
+                            .SingleOrDefault(value => value.Appearance.Reference == target)?.HeadTargetPoint;
+                    });
                     actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform);
                     root.AddChild(actor);
                     AddNativeReferenceEmittance(actor, reference);

@@ -58,7 +58,7 @@ internal partial class RuntimeNativeNpc : Node3D
             name = value.Name,
             value = value.Value,
         }).ToArray(),
-        lookAtOwner = "unbound",
+        headTracking = HeadTrackingState,
         visualChannels = Skeleton.VisualChannelState,
         absentBaseTargets = _baseAnimation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
         absentIdleTargets = _animation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
@@ -67,6 +67,7 @@ internal partial class RuntimeNativeNpc : Node3D
 
     internal void PlayBaseSequence(FalloutNifFile source, FalloutNifControllerSequence sequence, string owner)
     {
+        RestoreAuthoredHeadPose();
         var animation = new RuntimeNativeNifAnimation(source, sequence, Skeleton);
         if (sequence.ControlledBlocks.Any(link => link.NodeName == sequence.TargetName && link.ControllerType == "NiTransformController"))
             throw new NotSupportedException("Base animation accumulation requires a root-motion owner.");
@@ -95,6 +96,7 @@ internal partial class RuntimeNativeNpc : Node3D
 
     private void PlayIdle(FalloutPluginStack stack, FalloutFormKey form, string owner)
     {
+        RestoreAuthoredHeadPose();
         var record = stack.GetEffective(form);
         var idle = FalloutActorIdleSource.Resolve(stack, record);
         var timing = FalloutIdleAnimationData.Read(record);
@@ -182,8 +184,9 @@ internal partial class RuntimeNativeNpc : Node3D
 
     public override void _Process(double delta)
     {
+        RestoreAuthoredHeadPose();
         AdvanceAi();
-        if ((_animation is null && _baseAnimation is null) || AnimationError is not null) return;
+        if ((_animation is null && _baseAnimation is null && _headTargets is null) || AnimationError is not null) return;
         try
         {
             _idleTextKeyEvents.Clear();
@@ -229,6 +232,7 @@ internal partial class RuntimeNativeNpc : Node3D
                 PlayLocomotion(false);
                 _packageEvents!.Complete();
             }
+            AdvanceHeadTracking((float)delta);
             AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
         }

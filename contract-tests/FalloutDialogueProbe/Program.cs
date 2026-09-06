@@ -12,6 +12,7 @@ MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
 FloatInitializerContracts.Run();
 BodyPartLookProbe.Run();
+HeadTrackingProbe.Run();
 
 if (args is ["--audit-look-sources", var lookRoot])
 {
@@ -378,10 +379,16 @@ try
     try { FalloutDialogueTopic.ScriptText("one\0two"u8); }
     catch (InvalidDataException) { embeddedNullRejected = true; }
     Require(embeddedNullRejected, "An embedded source-script null was admitted.");
-    byte[] EventPackage(uint id, byte[] scriptBytes) => Record("PACK", id,
-        Field("EDID", Encoding.ASCII.GetBytes("EventPackage" + id + "\0"))
+    byte[] EventPackage(uint id, byte[] scriptBytes)
+    {
+        var eventHeader = new byte[20];
+        var eventCode = FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(scriptBytes)).Any() ? new byte[] { 0 } : [];
+        BinaryPrimitives.WriteUInt32LittleEndian(eventHeader.AsSpan(8), (uint)eventCode.Length);
+        return Record("PACK", id, Field("EDID", Encoding.ASCII.GetBytes("EventPackage" + id + "\0"))
             .Concat(Field("PKDT", packageData)).Concat(Field("PLDT", packageLocation))
-            .Concat(Field("POCA", [])).Concat(Field("SCTX", scriptBytes)).ToArray());
+            .Concat(Field("POCA", [])).Concat(Field("SCHR", eventHeader)).Concat(Field("SCDA", eventCode))
+            .Concat(Field("SCTX", scriptBytes)).ToArray());
+    }
     File.WriteAllBytes(Path.Combine(directory, "EventScripts.esm"), Record("TES4", 0, Field("HEDR", header))
         .Concat(EventPackage(0xd00, "; comment only"u8.ToArray()))
         .Concat(EventPackage(0xd01, "UnownedCommand"u8.ToArray())).ToArray());

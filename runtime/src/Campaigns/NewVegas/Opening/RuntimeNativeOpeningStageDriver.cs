@@ -53,6 +53,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private bool _restoringEnteredStage;
     private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
     internal string? ExecutionError { get; private set; }
+    private readonly List<object> _headTrackingCommands = [];
+    internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
     internal string QuestEditorId => _machine.QuestEditorId;
     internal short Stage => _machine.Stage;
@@ -309,8 +311,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player);
         _speech = new RuntimeNativeSpeech();
-        _speech.ResultCommand += line =>
+        _speech.ResultCommand += (info, speaker, index, line) =>
         {
+            var look = FalloutHeadTrackingPrograms.InfoEnd(_pluginStack, info, speaker).SingleOrDefault(command => command.Line == index);
+            if (look is not null) { ApplyLookCommand(look); return; }
             if (FalloutDialogueTopic.CodeLines(line).Count() != 1 || !TryApplyActorCommand(line))
                 throw new NotSupportedException($"Dialogue result command has no runtime owner: {line}");
         };
@@ -452,6 +456,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 _ = FalloutImageSpaceCommands.Read(stage.Source);
                 _ = FalloutActorPackageCommands.Read(stage.Source);
                 _ = FalloutQuestState.ReadObjectiveCommands(stage.Source);
+                var lookCommands = FalloutHeadTrackingPrograms.Stage(_pluginStack, stage);
                 var lines = FalloutDialogueTopic.CodeLines(stage.Source).ToArray();
                 for (var index = 0; index < lines.Length; index++)
                 {
@@ -465,7 +470,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                         _quests.SetVariable(write.Quest, write.Index, write.Value);
                         GD.Print($"OPENNV_NATIVE_STAGE_VARIABLE quest={write.Quest} stage={stage.Stage} index={write.Index} value={write.Value:R}");
                     }
-                    _ = TryApplyActorCommand(lines[index]);
+                    if (lookCommands.SingleOrDefault(command => command.Line == index) is { } look) ApplyLookCommand(look);
+                    else _ = TryApplyActorCommand(lines[index]);
                 }
             }
         }
@@ -474,6 +480,22 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             ExecutionError = error.Message;
             GD.PushError($"OPENNV_NATIVE_STAGE_DIVERGENCE quest={QuestEditorId} stage={Stage}: {error.Message}");
         }
+    }
+
+    private void ApplyLookCommand(FalloutBoundLookCommand command)
+    {
+        var actor = GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
+            .SingleOrDefault(value => value.Appearance.Reference == command.Actor);
+        var requiresProcess = FalloutHeadTrackingPrograms.RequiresProcess(_pluginStack.GetEffective(command.Actor), _activeCell, actor is not null);
+        if (requiresProcess) actor!.ApplyBoundHeadTrackingCommand(command);
+        _headTrackingCommands.Add(new
+        {
+            actor = command.Actor.ToString(),
+            target = command.Target?.ToString(),
+            sourceLine = command.Line,
+            disposition = requiresProcess ? "script-head-target" : "no-active-actor-process",
+        });
+        GD.Print($"OPENNV_NATIVE_LOOK_RESULT actor={command.Actor} target={command.Target?.ToString() ?? "none"} process={requiresProcess}");
     }
 
     private bool TryApplyActorCommand(string line)

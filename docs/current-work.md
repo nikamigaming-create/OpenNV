@@ -26,13 +26,16 @@ scene-defects.md tracks component corrections without claiming scene parity.
   telemetry confirms only the alpha-bearing texture expands; normal/mask
   formats and hashes stay unchanged. Matched retail lighting, shadows and
   camera/pixels remain open. See texture-alpha.md.
-- Ordinary room-77 accepts original creation and Vigor allocation
-  6/6/6/6/6/5/5, plays Doc's source reaction, then all three responses of his
-  psychology introduction and reaches stage 80. Doc now traverses all eight
-  NAVM waypoints before the authored end-event Look command fails visibly;
-  this is not completed couch interaction. Retail remains
-  at stage 80, but actor/camera/time states are not aligned. We are still
-  inside Doc's house. No ordinary save exists at this checkpoint.
+- Ordinary room-81 accepts original creation and Vigor allocation
+  6/6/6/6/6/5/5, plays Doc's source reaction and psychology introduction, and
+  reaches stage 80 without script, animation or package errors. The former
+  Look end-event failure is resolved: the script target, physical head pose,
+  authored animation override and subsequent StopLook execute. Doc completes
+  the eight-waypoint route and is seated in the living room. Ordinary movement
+  brings the player into that room. Player couch activation and the original
+  questionnaire remain unbound. Retail remains at stage 80, with camera/time
+  states unaligned. We are still inside Doc's house; no ordinary save exists
+  at this checkpoint. See head-tracking.md.
 - Original name/Reflectron XML, bitmap controls, dynamic FaceGen, source hair
   and voice/LIP are connected. The user accepted hair/age for advancing.
   The original No/Yes creation confirmation now works: source scroll-unit
@@ -78,19 +81,21 @@ scene-defects.md tracks component corrections without claiming scene parity.
   SCTX is size-delimited with an optional terminal null. Its general decoder
   now handles both encodings and rejects embedded nulls. All nine package
   declarations now load; events dispatch at begin, completion and change, with
-  unreached scripts retained in their own compiled-reference scopes. Eight
-  owned empty/comment event lifecycles pass; the real POEA Look fails at
-  arrival, without implicit replay or false completion. Look/StopLook, event
-  topics, deferred change idles and persistent event state remain unbound.
+  unreached scripts retained in their own compiled-reference scopes. Empty/
+  comment lifecycles and the reached POEA Look now execute through their owners.
+  Ordinary room-81 completes that event and the subsequent couch package.
+  Event topics, deferred change idles and persistent event state remain unbound.
   See package-events.md.
-- The look-source prerequisite now binds optimized float initializers, including
-  encoded zero/unit constants, and BPTD tracking-node/cone declarations. The
-  owned audit reads all 58 loaded body-part records; five selected setting bits
-  plus the humanoid body-part slot, node and cone agree with private native
-  observation. Synthetic checks and the full gate pass. Target lifetime and
-  head/eye pose publication still need runtime owners; retained room-77 evidence
-  shows the failed event. No ordinary replay was needed for that declaration-only correction.
-  See head-tracking.md.
+- Head tracking now binds source settings/BPTD, compiled references, target-slot
+  lifetime and post-animation head rotation. Native observation confirms the
+  default humanoid binding, first-person target, override threshold and rest
+  axes. Synthetic/Godot checks, seven owned opening commands plus the package
+  command, and the full gate pass. The first replay exposed skipped introductory
+  commands against dormant references; those now retain an explicit no-process
+  disposition, while a missing loaded actor still fails. Ordinary room-81
+  records active head publication and subsequent source release. Automatic
+  targeting, eye aiming, whole-body mode, complete process lifetime, persistence
+  and matched native pose/frame timing remain unbound. See head-tracking.md.
 - The replacement psychology panel and its direct skip to skill review are
   removed. Source couch/furniture activation and dialogue choices must own
   progression. Tag/trait and farewell replacements remain separate defects.
@@ -151,10 +156,11 @@ scene-defects.md tracks component corrections without claiming scene parity.
 
 Retain retail room-54 and the current OpenNV run/session configuration.
 Revalidate process IDs/state before input; keep one instance of each game.
-Room-79 is the current ordinary run, at free movement stage 55 after the wheel
-replay. Retained room-77 reaches stage 80 after actual travel with a visible
-end-event error. Retail remains at stage 80 with its pause menu open. The
-current cameras, menus and states are not a matched comparison.
+Room-81 is the current ordinary run, at stage 80 in the living room with Doc
+seated and the reached package events complete. Room-79 retains the wheel
+close-up, and room-77 retains the former end-event failure. Retail remains at
+stage 80 with its pause menu open. Current cameras, menus and times are not a
+matched comparison.
 
 Use the private diagnostic bridge for ordinary keyboard/relative mouse input.
 The public harness rejects native.click callbacks; retail buttons require an
@@ -174,12 +180,11 @@ derivatives and captures remain outside the repository.
 
 ## Next owners
 
-1. Execute source Look/StopLook through the actor aiming owner. Package event
-   dispatch now exposes the actual end-event failure after Doc's travel.
-   The setting and BPTD node/cone readers are verified; next bind target lifetime,
-   source head/parent pose, body-part cone and head-pose publication before admitting the event.
-   Complete target/head/eye behavior, couch activation and original
-   dialogue choices. Do not restore a replacement psychology confirmation.
+1. Bind ordinary player couch activation and the original questionnaire.
+   Doc's Look/StopLook, intervening speech and couch package now complete.
+   Source furniture/trigger scripts and dialogue choices must own the next
+   transition. Do not restore a replacement psychology confirmation. Automatic
+   head/eye targeting and exact pose timing remain independent open owners.
 2. Continue the shared script owner through reference-instance state,
    trigger/furniture events, conditional result programs and exact scheduling. Replace tag/trait and
    farewell panels with original interfaces. Never use placeholder
@@ -193,6 +198,12 @@ derivatives and captures remain outside the repository.
    Do not fit HDR, authored colours or hide world geometry to match a frame.
 
 ## Required publication gate
+
+The head-target/pose contracts, owned script/skeleton audit and full repository
+gate pass. Ordinary room-81 verifies Look, its animation override, StopLook,
+later source speech and completed travel to the couch without an event error.
+This does not complete player furniture interaction or establish native pose/
+frame parity. Private evidence remains outside the repository.
 
 The BC1 source-alpha contracts, selected owned rendering audit, all-mip GPU
 comparison and full repository gate pass. Ordinary room-79 verifies open wheel

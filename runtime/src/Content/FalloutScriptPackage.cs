@@ -91,6 +91,9 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
     }
 
     internal void RequireEmptyScript()
+        => ExecuteScript(_ => throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event script execution is unbound."));
+
+    internal void ExecuteScript(Action<string> execute)
     {
         var compiled = Fields.Where(field => field.Signature == "SCDA").ToArray();
         if (compiled.Length > 1) throw new InvalidDataException("Package event repeats its compiled program.");
@@ -103,8 +106,10 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
             throw new InvalidDataException("Package event compiled extents disagree with its header.");
         if (compiled.Length == 1 && compiled[0].Data.Length != 0 && !FalloutDialogueTopic.CodeLines(Source).Any())
             throw new NotSupportedException($"PACK {Package.FormKey} {Kind} compiled program has no source execution owner.");
-        if (FalloutDialogueTopic.CodeLines(Source).Any())
-            throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event script execution is unbound.");
+        if (FalloutDialogueTopic.CodeLines(Source).Any() &&
+            (headers.Length != 1 || compiled.Length != 1 || compiled[0].Data.Length == 0))
+            throw new InvalidDataException("Package event source has no complete compiled program owner.");
+        foreach (var line in FalloutDialogueTopic.CodeLines(Source)) execute(line);
         foreach (var topic in Fields.Where(field => field.Signature == "TNAM"))
             if (topic.Data.Length != 4 || BinaryPrimitives.ReadUInt32LittleEndian(topic.Data.Span) != 0)
                 throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event topic execution is unbound.");

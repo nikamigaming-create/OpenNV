@@ -14,6 +14,8 @@
     <Compile Include="../../runtime/src/Content/FalloutFaceBlink.cs" Link="FalloutFaceBlink.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameSettingFloats.cs" Link="FalloutGameSettingFloats.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBodyPartLook.cs" Link="FalloutBodyPartLook.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutHeadTrackingState.cs" Link="FalloutHeadTrackingState.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutLookCommands.cs" Link="FalloutLookCommands.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleCollectionPlayback.cs" Link="FalloutIdleCollectionPlayback.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleConditions.cs" Link="FalloutIdleConditions.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationData.cs" Link="FalloutIdleAnimationData.cs" />

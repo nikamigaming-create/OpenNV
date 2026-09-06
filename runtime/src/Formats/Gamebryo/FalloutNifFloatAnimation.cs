@@ -38,6 +38,9 @@ internal sealed class FalloutNifFloatExtraDataState
     internal IEnumerable<(string Node, string Name, float Value)> Values =>
         _values.Select(item => (item.Key.Node, item.Key.Name, item.Value));
 
+    internal float Get(string node, string name) => _values.TryGetValue((node, name), out var value)
+        ? value : throw new InvalidDataException($"Float property has no source declaration: {node}/{name}.");
+
     internal void Add(string node, string name, float value)
     {
         if (node.Length == 0 || name.Length == 0 || !float.IsFinite(value) || !_values.TryAdd((node, name), value))

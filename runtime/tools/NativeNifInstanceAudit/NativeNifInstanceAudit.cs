@@ -17,6 +17,13 @@ public partial class NativeNifInstanceAudit : Node
             ExercisePlacedLights();
             ExerciseMorphBasis();
             ExerciseDdsImages();
+            ExerciseHeadTracking();
+            if (OS.GetCmdlineUserArgs() is ["--look", var lookRoot, var lookActor, var lookQuest])
+            {
+                ExerciseOwnedHeadTracking(lookRoot, lookActor, lookQuest);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--dds-gpu", ..])
             {
                 await ExerciseDdsPixels(OS.GetCmdlineUserArgs()[1..]);
