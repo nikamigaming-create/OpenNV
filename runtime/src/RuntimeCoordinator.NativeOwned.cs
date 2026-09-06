@@ -24,6 +24,7 @@ public partial class RuntimeCoordinator
     private const int NativeMenuCanvasLayer = 100;
     private FalloutPluginStack? _nativePluginStack;
     private FalloutQuestState? _nativeQuestState;
+    private FalloutReferenceWorld? _nativeReferences;
     private RuntimeNativeQuestScripts? _nativeQuestScripts;
     private FalloutGlobalState? _nativeGlobals;
     private FalloutGameTime? _nativeGameTime;
@@ -59,6 +60,13 @@ public partial class RuntimeCoordinator
         return new
         {
             paused = GetTree().Paused,
+            references = _nativeReferences is null ? null : new
+            {
+                _nativeReferences.InstanceCount,
+                _nativeReferences.ResidentCellCount,
+                _nativeReferences.ScriptDefinitionCount,
+                state = _nativeReferences.Capture()
+            },
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
             player = _nativePlayer is null ? null : new
             {
@@ -176,6 +184,8 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("Live retail source was not configured.");
         _nativePluginStack = FalloutPluginStack.Load(sources, out var loadMetrics);
         _nativeQuestState = new(_nativePluginStack);
+        _nativeReferences?.Dispose();
+        _nativeReferences = new(_nativePluginStack);
         var initialCell = content.Campaign == RuntimeLiveContentSource.Fallout3Game
             ? new FalloutFormKey(NativeFallout3InitialCellPlugin, NativeFallout3InitialCellObjectId)
             : new FalloutFormKey(NativeNewVegasInitialCellPlugin, 0x103df9);
@@ -320,6 +330,13 @@ public partial class RuntimeCoordinator
             ? _nativeOpeningRestore ?? throw new InvalidOperationException(
                 "Native Continue was selected without a valid cold save.")
             : null;
+        if (restore is not null)
+        {
+            _nativeReferences?.Dispose();
+            _nativeReferences = new(stack);
+            if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
+            else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
+        }
         var activeCell = restore?.State.ActiveCell ?? cell.Cell.FormKey;
         var sourceSide = true;
         var activeScene = cell;
@@ -404,7 +421,7 @@ public partial class RuntimeCoordinator
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
     {
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
-        var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals);
+        var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals, _nativeReferences);
         if (restore is not null) scripts.Scripts.Restore(restore);
         if (_nativeQuestScripts is not null)
         {
@@ -694,6 +711,11 @@ public partial class RuntimeCoordinator
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(cell);
+        if (_nativeReferences is { } references && _nativeActiveCell?.Cell.FormKey != cell.Cell.FormKey)
+        {
+            if (_nativeActiveCell is { } previous) references.UnloadCell(previous.Cell.FormKey);
+            references.LoadCell(cell);
+        }
         _nativeCurrentCellRoot = root;
         _nativeActiveCell = cell;
         _nativeSkyLighting?.EnterCell(cell.Cell);

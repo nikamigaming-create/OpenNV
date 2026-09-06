@@ -33,6 +33,20 @@ installation in place and publish authoritative state to Godot.
 - `contract-tests`: C# synthetic contracts and explicitly selected owned-data
   audits.
 - `desktop`: launcher registration and invocation.
+- `tools/OpenNV.DevelopmentLab`: separate headless corpus, reference-lifecycle
+  and event-replay operations that call these runtime owners directly.
+
+Placed-reference script locals belong to `FalloutReferenceWorld`, including
+references with no model and initially disabled objects. Resident cell membership
+is separate from retained world state. Bindings resolve winning base/script
+attachments and declared slots; instances share immutable declarations without
+sharing mutable locals. Campaign reference snapshots carry script identity and
+hashes; restoration rejects changed declarations. Physical reference events and
+ordinary dialogue integration remain incomplete.
+
+The winning cell-child index is built once for each requested record signature.
+Subsequent cell queries visit only that cell's indexed children. The lab's
+all-cell sweep exercises the same index and lifetime owner as ordinary loading.
 
 ## Launch sequence
 

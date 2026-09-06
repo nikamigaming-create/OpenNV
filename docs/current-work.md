@@ -1,76 +1,79 @@
 # Current work
 
-## Objective
+## Objective and authority
 
-Implement the user's [durable plan](implementation-plan.md): general,
-source-driven gameplay and an aggressive development lab, then complete the
-opening, Pip-Boy, house exit, Easy Pete, Sunny's tutorial and every Goodsprings
-interior/exterior cell. Verify persistence and shared flat/OpenXR behavior.
-All installed DLC and winning plugin behavior remain in scope.
+Follow [implementation-plan.md](implementation-plan.md): general source-driven
+NV/FO3/TTW gameplay, a separate aggressive lab, the complete opening and Sunny
+route, every Goodsprings interior/exterior and installed winning DLC/plugin
+behavior, cold persistence and shared flat/OpenXR state. All 36 requirements
+in recovery-checklist.md remain open. No ordinary gameplay or parity acceptance
+has been added by the headless work below.
 
-There are 36 open requirements in recovery-checklist.md; none has complete
-acceptance evidence. R01-R33 are preserved. R34-R36 record the September 6
-Goodsprings, generalization and laboratory-tool instructions.
+Work directly on main. One implementation task; no subagents. Existing
+first-party code is replaceable. Preserve owned inputs and clean-room boundaries.
 
-## Implementation authority
+## Current executable state
 
-The user explicitly permits replacing or removing existing first-party code,
-tests and tools. This is greenfield work, with no requirement to retain the
-current design. Inspect source evidence and decide independently. Previous
-conclusions are starting points to check, not constraints on the next design.
-Preserve architecture.md's product boundaries and unrelated user work.
+- tools/OpenNV.DevelopmentLab now inventories the complete loaded corpus,
+  exercises arbitrary/all-cell reference lifetimes, and replays scripted events
+  against the shared runtime. See its README for reproducible commands.
+- The corpus pass read 628,395 winning records from ten official plugins and
+  inventoried 182,177 members in 21 selected BSAs. It records layouts, script
+  event types and every parser/declaration failure with its source identity.
+  Asset contents, compiled bytecode and behavior are separate unverified lanes.
+- Shared event parsing now supports filtered/unfiltered blocks together and
+  preserves source order. The source-body parser failure count fell from 237 to
+  183. Parsing does not establish executed branches or game support.
+  Seven additional SCPT declaration conflicts are retained separately.
+- Cell child indexing now groups winning references once per record type.
+  The previous implementation rescanned the full type on every new cell.
+  The indexed all-cell lifecycle sweep completed 44,517 cells: 44,516 passed
+  reference-state checks, one failed on conflicting duplicate variable slots.
+  Successful cases contained 421,226 references and 10,584 scripted instances.
+  Every case repeats teardown/reassembly 30 times and checks a fresh-world JSON
+  state restoration. Many CELL records are empty; these are not playable cells.
+- Identical repeated variable declarations resolve to one local. Conflicting
+  slot/name/storage declarations still fail closed. The remaining failed CELL
+  is FalloutNV.esm:0846ea; preserve its failure for source/bytecode investigation.
+- Reference locals have world lifetime, independent of meshes and cell residency.
+  Ordinary quest/stage/activation query owners can address them. Campaign v12
+  saves include reference locals and faults, checked against winning script
+  hashes on restore. The existing stage-200 save restriction remains.
+- The owned couch-before-Doc replay executes trigger guards, cross-reference
+  writes, timers, control-command outputs and conversation-command output across
+  a fresh reference/quest owner restore. Furniture facts and effect observation
+  are lab boundaries. This does not establish ordinary sitting or dialogue.
 
-Use main directly. One implementation task at a time; no subagents. The new
-implementation task takes over after this documentation handoff is published.
-The previous task must not keep editing the same checkout concurrently.
+## Ordinary runtime and next owner
 
-## Last verified runtime state
+The last ordinary playthrough remains the stage-80 run at 80c4db0. Original
+creation/Vigor and selected NPC furniture behavior were exercised. Player couch
+activation, original questionnaire, tag/trait/farewell presentation, Pip-Boy,
+house exit, Easy Pete and Sunny remain unfinished. No ordinary stage-80 save
+exists. Model-less reference presentation/trigger volumes remain unbound, even
+though those objects now have an authoritative reference-state owner.
 
-- Runtime code at 80c4db0 reached stage 80 by ordinary New, original creation
-  and Vigor. Doc's source Look/speech/StopLook and later furniture approach,
-  entry and occupation execute. The seated endpoint was visually checked;
-  complete matched entry motion was not captured.
-- Player couch activation, the original questionnaire, Pip-Boy handoff,
-  ordinary exterior progression and Sunny remain unfinished. There is no
-  ordinary OpenNV save at the stage-80 checkpoint.
-- Shared corrections exist for source texture alpha/mips, face morph lighting,
-  NIF placement, selected lighting/fog, script calculations/objectives and
-  NPC animation. These are component evidence, not cell/game completion.
-  See texture-alpha.md, morph-lighting.md, head-tracking.md,
-  furniture-motion.md and scene-defects.md for their limitations.
-- Inspection finds skipped model-less references, missing reference-instance
-  script state, selected activation handling and replacement tag/trait/
-  farewell panels. Recheck these and the surrounding system independently;
-  do not assume this is a complete defect inventory or the only root cause.
-- Both game processes and the harness were absent at the September 6 handoff
-  check. Old session files are stale. Revalidate actual handles before input;
-  do not wait on or reuse a dead process. No game has been relaunched during
-  preparation of this plan.
-
-## Next executable outcome
-
-Read implementation-plan.md, inspect the current tree, and choose the smallest
-complete shared gameplay change that removes the ordinary progression block
-and demonstrates reuse elsewhere. Use development tools to load arbitrary
-source cells/actors, reproduce failures and stress the real runtime. Do not
-resume manual screenshot-by-screenshot scene construction or repeat the
-cinematic. Complete a playable interaction and cold restoration; a new parser,
-audit count or plausible still alone is insufficient.
-
-Derive a Goodsprings scope/capability manifest from owned records and links.
-Keep every unsupported object/behavior visible. Exercise unrelated instances,
-source overrides and another cell before claiming general behavior. The new
-task may replace the current architecture substantially to achieve this.
+Next: use the whole-corpus failures and reusable event owner to bind physical
+reference events, furniture and source dialogue to the ordinary runtime. Resolve
+conflicting source declarations through compiled/source contracts without hiding
+ambiguity. Extend the lab to actual actor/physics/animation/equipment operations,
+full asset decoding and source-to-runtime coverage, and add ordinary intermediate
+save restoration. Do not return to manual scene construction or call the
+reference sweep whole-cell support. Exact independent evidence requirements and
+all 36 acceptance conditions remain unchanged.
 
 ## Verification and publication
 
-Before this handoff, main matched origin/main and there were no open PRs.
-Revalidate before publication. The last published runtime has its selected
-owned furniture audit and full gate evidence; they do not prove the new scope.
-Run relevant owned-data checks and the full AGENTS.md gate before pushing
-runtime or claim changes. Matched independent evidence is required for parity.
+Synthetic reference contracts cover overrides, identical/conflicting duplicate
+locals, per-instance isolation, filtered event order, cross-cell state, teardown,
+Float64 cold state, persistent failures and changed-source rejection. Existing
+script/save contracts pass. Selected owned checks are Doc, saloon, schoolhouse,
+Hoover Dam power plant, and the couch-before-Doc replay. The broad corpus and
+all-cell failures remain explicit machine-local reports under
+`tmp/development-lab`; they are not distributed assets.
 
-Owned inputs and private captures/observations remain outside the repository.
-Use private Win32 Ghidrust observe-mode reads for retail and ordinary diagnostic
-keyboard/mouse input. Lab state manipulation is allowed only in disposable
-OpenNV tests and cannot establish ordinary gameplay or retail equivalence.
+The AGENTS.md full runtime gate passed; its log is
+`tmp/development-lab/runtime-gate-publish.log`. The selected owned checks passed,
+and git diff --check passed. Rerun the required checks before later publication.
+No ordinary games were launched in this work block; diagnostic reports are not
+live retail/OpenNV sessions. Revalidate processes before further ordinary input.

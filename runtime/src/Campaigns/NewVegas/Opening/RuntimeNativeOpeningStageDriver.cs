@@ -202,7 +202,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             var source = _pluginStack.GetEffective(FalloutDialogueTopic.RequiredForm(
                 _pluginStack.GetEffective(_vigorContract.TesterReference.Base), "SCRI"));
             var program = new FalloutActivationProgram(_pluginStack, source);
-            var calls = program.Prepare(_quests);
+            var calls = program.Prepare(_quests, _scripts.References);
             var effects = new List<Action>();
             var menus = 0;
             foreach (var call in calls)
@@ -426,7 +426,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 [transform.Origin.X, transform.Origin.Y, transform.Origin.Z],
                 [rotation.X, rotation.Y, rotation.Z, rotation.W],
                 scriptState is null ? null : _quests.Capture(), scriptState,
-                _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture());
+                _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture());
             FalloutNativeCampaignSave.Write(_savePath, state);
             _stage200Saved = true;
             GD.Print(
@@ -447,7 +447,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 var globalWrites = _restoringEnteredStage ? [] :
                     FalloutStageGlobalProgram.Read(_pluginStack, stage!).Prepare(_globals);
                 var variableWrites = _restoringEnteredStage ? [] :
-                    FalloutStageQuestVariableProgram.Read(_pluginStack, stage!).Prepare(_quests, _globals);
+                    FalloutStageQuestVariableProgram.Read(_pluginStack, stage!).Prepare(_quests, _globals, _scripts.References);
                 _restoringEnteredStage = false;
                 _quests.EnterStage(stage!.Quest, stage.Stage);
                 // Validate complete source control-flow context before invoking
@@ -467,8 +467,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                     }
                     foreach (var write in variableWrites.Where(write => write.Line == index))
                     {
-                        _quests.SetVariable(write.Quest, write.Index, write.Value);
-                        GD.Print($"OPENNV_NATIVE_STAGE_VARIABLE quest={write.Quest} stage={stage.Stage} index={write.Index} value={write.Value:R}");
+                        _scripts.SetVariable(write.Owner, write.Index, write.Value);
+                        GD.Print($"OPENNV_NATIVE_STAGE_VARIABLE owner={write.Owner} stage={stage.Stage} index={write.Index} value={write.Value:R}");
                     }
                     if (lookCommands.SingleOrDefault(command => command.Line == index) is { } look) ApplyLookCommand(look);
                     else _ = TryApplyActorCommand(lines[index]);
@@ -572,6 +572,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             Globals = _globals?.Capture(),
             GameTime = _gameTime?.Capture(),
             SkyLighting = _skyLighting?.Capture(),
+            References = _scripts.References?.Capture(),
+            Schema = _scripts.References is null ? state.Schema : FalloutNativeCampaignSave.ExpectedSchema,
         };
         FalloutNativeCampaignSave.Write(_savePath, state);
         _activeCell = activeCell;

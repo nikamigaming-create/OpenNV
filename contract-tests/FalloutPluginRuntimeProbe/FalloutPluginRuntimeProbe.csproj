@@ -7,6 +7,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/World/Cells/FalloutReferenceWorld.cs" Link="FalloutReferenceWorld.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActivationProgram.cs" Link="FalloutActivationProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutWeatherLighting.cs" Link="FalloutWeatherLighting.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameSettingFloats.cs" Link="FalloutGameSettingFloats.cs" />

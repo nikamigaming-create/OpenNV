@@ -1,3 +1,5 @@
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutActivationCall(string Command, IReadOnlyList<string> Arguments);
@@ -22,7 +24,7 @@ internal sealed class FalloutActivationProgram
 
     internal FalloutPluginRecord Form(string name) => _bindings.Form(name);
 
-    internal IReadOnlyList<FalloutActivationCall> Prepare(FalloutQuestState quests)
+    internal IReadOnlyList<FalloutActivationCall> Prepare(FalloutQuestState quests, FalloutReferenceWorld? references = null)
     {
         var calls = new List<FalloutActivationCall>();
         void BeforeEffect()
@@ -40,7 +42,7 @@ internal sealed class FalloutActivationProgram
         {
             BeforeEffect();
             var key = _bindings.Variable(name);
-            return quests.Variable(key.Quest, key.Index);
+            return references?.ReadVariable(quests, key.Owner, key.Index) ?? quests.Variable(key.Owner, key.Index);
         }
         double Objective(IReadOnlyList<FalloutScriptArgument> arguments, bool completed)
         {

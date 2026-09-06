@@ -1,0 +1,29 @@
+{
+  "steps": [
+    { "operation": "load", "target": "GSDocMitchellHouse" },
+    { "operation": "objective", "target": "VCG01", "index": 40, "state": "displayed", "value": true },
+    { "operation": "furniture", "target": "player", "seat": "DocMitchellCouchREF" },
+    { "operation": "event", "target": "VCG01DocMitchellCouchTriggerREF", "name": "OnTrigger", "actor": "player" },
+    { "operation": "assert-reference", "target": "VCG01DocMitchellCouchTriggerREF", "name": "bRunTimer", "value": 0 },
+    { "operation": "assert-effects", "kind": "PlayerControls", "value": 2 },
+    { "operation": "furniture", "target": "DocMitchellREF", "seat": "DocMitchellChairREF" },
+    { "operation": "event", "target": "VCG01DocMitchellChairTriggerREF", "name": "OnTrigger", "actor": "DocMitchellREF" },
+    { "operation": "event", "target": "VCG01DocMitchellChairTriggerREF", "name": "GameMode", "seconds": 2.5 },
+    { "operation": "cold-restore" },
+    { "operation": "load", "target": "GSDocMitchellHouse" },
+    { "operation": "event", "target": "VCG01DocMitchellChairTriggerREF", "name": "GameMode", "seconds": 0.1 },
+    { "operation": "assert-reference", "target": "VCG01DocMitchellChairTriggerREF", "name": "bDocInChair", "value": 1 },
+    { "operation": "event", "target": "VCG01DocMitchellChairTriggerREF", "name": "OnTrigger", "actor": "DocMitchellREF" },
+    { "operation": "assert-reference", "target": "VCG01DocMitchellCouchTriggerREF", "name": "bRunTimer", "value": 1 },
+    { "operation": "event", "target": "VCG01DocMitchellCouchTriggerREF", "name": "GameMode", "seconds": 2.0 },
+    { "operation": "assert-effects", "kind": "Conversation", "value": 0 },
+    { "operation": "event", "target": "VCG01DocMitchellCouchTriggerREF", "name": "GameMode", "seconds": 0.1 },
+    { "operation": "assert-quest", "target": "VCG01", "name": "bGiveTest", "value": 1 },
+    { "operation": "assert-effects", "kind": "Conversation", "value": 1 },
+    { "operation": "quest-variable", "target": "VCG01", "name": "bBeganTest", "value": 1 },
+    { "operation": "unload", "target": "GSDocMitchellHouse" },
+    { "operation": "load", "target": "GSDocMitchellHouse" },
+    { "operation": "event", "target": "VCG01DocMitchellCouchTriggerREF", "name": "GameMode", "seconds": 10 },
+    { "operation": "assert-effects", "kind": "Conversation", "value": 1 }
+  ]
+}

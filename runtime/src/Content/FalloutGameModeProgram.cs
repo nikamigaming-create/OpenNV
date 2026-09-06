@@ -8,13 +8,14 @@ internal enum FalloutScriptArgumentKind { Number, Identifier }
 internal readonly record struct FalloutScriptArgument(double Number, string? Identifier = null);
 internal sealed record FalloutScriptFunction(IReadOnlyList<FalloutScriptArgumentKind> Arguments,
     Func<IReadOnlyList<FalloutScriptArgument>, double> Invoke);
+internal sealed record FalloutScriptEventProgram(string Event, string? Filter, FalloutGameModeProgram Program);
 
 // A source-script owner, independent of menus, locations and quest identities.
 // Unsupported expressions/commands stop the caller before its staged effects commit.
 internal sealed class FalloutGameModeProgram
 {
-    private readonly IReadOnlyList<string> _lines;
-    private FalloutGameModeProgram(IReadOnlyList<string> lines) => _lines = lines;
+    private readonly IReadOnlyList<string[]> _lines;
+    private FalloutGameModeProgram(IReadOnlyList<string[]> lines) => _lines = lines;
 
     internal static FalloutGameModeProgram Read(ReadOnlySpan<byte> source, string blockName = "GameMode", uint? argument = null)
     {
@@ -25,12 +26,11 @@ internal sealed class FalloutGameModeProgram
         return Read(text, blockName, argument);
     }
 
-    internal static FalloutGameModeProgram Read(string source, string blockName = "GameMode", uint? argument = null)
+    internal static IReadOnlyList<FalloutScriptEventProgram> ReadEvents(string source)
     {
-        var lines = new List<string>();
-        var block = false;
-        var gameMode = false;
-        var foundGameMode = false;
+        var events = new List<FalloutScriptEventProgram>();
+        List<string[]>? lines = null;
+        string? eventName = null, filter = null;
         var depth = 0;
         foreach (var raw in source.Split('\n'))
         {
@@ -40,40 +40,48 @@ internal sealed class FalloutGameModeProgram
             var command = tokens[0].ToLowerInvariant();
             if (command == "begin")
             {
-                if (block || tokens.Length < 2) throw new InvalidDataException("Invalid script block start.");
-                block = true;
-                gameMode = tokens[1].Equals(blockName, StringComparison.OrdinalIgnoreCase);
-                if (gameMode && argument is { } expected)
-                    gameMode = tokens.Length == 3 && uint.TryParse(tokens[2], NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value == expected;
-                else if (gameMode && tokens.Length != 2) throw new NotSupportedException($"{blockName} block arguments are unbound.");
-                if (gameMode && foundGameMode) throw new NotSupportedException($"Multiple {blockName} blocks need independent scheduling.");
-                foundGameMode |= gameMode;
+                if (lines is not null || tokens.Length < 2) throw new InvalidDataException("Invalid script block start.");
+                if (tokens.Length > 3) throw new NotSupportedException("Script event header arguments are unbound.");
+                lines = [];
+                eventName = tokens[1];
+                filter = tokens.Length == 3 ? tokens[2] : null;
                 continue;
             }
             if (command == "end")
             {
-                if (!block || tokens.Length != 1 || depth != 0) throw new InvalidDataException("Invalid script block end.");
-                block = gameMode = false;
+                if (lines is null || tokens.Length != 1 || depth != 0) throw new InvalidDataException("Invalid script block end.");
+                events.Add(new(eventName!, filter, new(lines)));
+                lines = null;
                 continue;
             }
-            if (!gameMode) continue;
+            if (lines is null) continue;
             if (command == "if") ++depth;
             if (command == "endif" && --depth < 0) throw new InvalidDataException("Unmatched script endif.");
             if (command is "else" or "elseif" && depth == 0) throw new InvalidDataException("Unmatched script branch.");
-            lines.Add(line);
+            lines.Add(tokens);
         }
-        if (block || depth != 0) throw new InvalidDataException("Unterminated source script block.");
-        return new(lines);
+        if (lines is not null || depth != 0) throw new InvalidDataException("Unterminated source script block.");
+        return events;
     }
 
+    internal static FalloutGameModeProgram Read(string source, string blockName = "GameMode", uint? argument = null)
+    {
+        var matching = ReadEvents(source).Where(block => block.Event.Equals(blockName, StringComparison.OrdinalIgnoreCase));
+        if (argument is { } expected)
+            matching = matching.Where(block => uint.TryParse(block.Filter, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value == expected);
+        var blocks = matching.ToArray();
+        if (argument is null && blocks.Any(block => block.Filter is not null))
+            throw new NotSupportedException($"{blockName} block arguments are unbound.");
+        if (blocks.Length > 1) throw new NotSupportedException($"Multiple {blockName} blocks need independent scheduling.");
+        return blocks.Length == 0 ? new([]) : blocks[0].Program;
+    }
     internal void Execute(Func<string, double> variable, Action<string, double> assign,
         Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null)
     {
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
         var active = true;
-        foreach (var line in _lines)
+        foreach (var tokens in _lines)
         {
-            var tokens = Tokens(line);
             switch (tokens[0].ToLowerInvariant())
             {
                 case "if":

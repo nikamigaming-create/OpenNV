@@ -1,9 +1,10 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutStageQuestVariableWrite(int Line, FalloutFormKey Quest, uint Index, double Value);
+internal sealed record FalloutStageQuestVariableWrite(int Line, FalloutFormKey Owner, uint Index, double Value);
 
 internal sealed class FalloutStageQuestVariableProgram
 {
@@ -51,10 +52,13 @@ internal sealed class FalloutStageQuestVariableProgram
         return result;
     }
 
-    internal IReadOnlyList<FalloutStageQuestVariableWrite> Prepare(FalloutQuestState quests, FalloutGlobalState? globals)
+    internal IReadOnlyList<FalloutStageQuestVariableWrite> Prepare(FalloutQuestState quests, FalloutGlobalState? globals,
+        FalloutReferenceWorld? references = null)
     {
-        var pending = new Dictionary<(FalloutFormKey Quest, uint Index), double>();
+        var pending = new Dictionary<(FalloutFormKey Owner, uint Index), double>();
         var writes = new List<FalloutStageQuestVariableWrite>();
+        double Variable((FalloutFormKey Owner, uint Index) key) => references?.ReadVariable(quests, key.Owner, key.Index) ??
+            quests.Variable(key.Owner, key.Index);
         double Read(string name)
         {
             if (_bindings!.TryForm(name) is { Signature: "GLOB" } global)
@@ -64,15 +68,15 @@ internal sealed class FalloutStageQuestVariableProgram
                 return globals?.Get(global.FormKey) ?? throw new NotSupportedException("Stage expression has no global state owner.");
             }
             var key = _bindings.Variable(name);
-            return pending.TryGetValue(key, out var value) ? value : quests.Variable(key.Quest, key.Index);
+            return pending.TryGetValue(key, out var value) ? value : Variable(key);
         }
         foreach (var assignment in _assignments)
         {
             var key = _bindings!.Variable(assignment.Target);
-            _ = quests.Variable(key.Quest, key.Index);
+            _ = Variable(key);
             var value = FalloutGameModeProgram.Evaluate(assignment.Expression, Read);
             pending[key] = value;
-            writes.Add(new(assignment.Line, key.Quest, key.Index, value));
+            writes.Add(new(assignment.Line, key.Owner, key.Index, value));
         }
         return writes;
     }

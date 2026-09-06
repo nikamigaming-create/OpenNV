@@ -324,25 +324,25 @@ internal sealed class FalloutPluginStack : IDisposable
         {
             if (!_cellChildrenBySignatureAndCell.TryGetValue(signature, out var byCell))
             {
-                byCell = new Dictionary<FalloutFormKey, IReadOnlyList<FalloutPluginRecord>>(
+                // Build this source index once. Scanning all placed records for
+                // every first cell visit makes a world sweep O(cells * records).
+                var groups = new Dictionary<FalloutFormKey, List<FalloutPluginRecord>>(FalloutFormKeyComparer.Instance);
+                if (_winnerKeysBySignature.TryGetValue(signature, out var keys))
+                {
+                    foreach (var key in keys)
+                    {
+                        var record = _winners[key];
+                        if (FalloutCellSceneReader.ParentCell(record) is not { } parent) continue;
+                        if (!groups.TryGetValue(parent, out var children)) groups.Add(parent, children = []);
+                        children.Add(record);
+                    }
+                }
+                byCell = groups.ToDictionary(pair => pair.Key,
+                    pair => (IReadOnlyList<FalloutPluginRecord>)pair.Value.OrderBy(record => RuntimeFormId(record.FormKey)).ToArray(),
                     FalloutFormKeyComparer.Instance);
                 _cellChildrenBySignatureAndCell.Add(signature, byCell);
             }
-            if (byCell.TryGetValue(cell, out var existing))
-                return existing;
-            var records = _winnerKeysBySignature.TryGetValue(signature, out var keys)
-                ? keys.Select(key => _winners[key])
-                    .Where(record =>
-                    {
-                        var parent = FalloutCellSceneReader.ParentCell(record);
-                        return parent is not null &&
-                            FalloutFormKeyComparer.Instance.Equals(parent.Value, cell);
-                    })
-                    .OrderBy(record => RuntimeFormId(record.FormKey))
-                    .ToArray()
-                : [];
-            byCell.Add(cell, records);
-            return records;
+            return byCell.GetValueOrDefault(cell) ?? [];
         }
     }
 

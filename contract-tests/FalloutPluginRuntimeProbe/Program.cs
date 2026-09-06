@@ -1243,6 +1243,14 @@ try
         "Saving a restored legacy player must upgrade its anchor without applying the offset twice.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
     var validSaveBytes = File.ReadAllBytes(syntheticSavePath);
+    var referenceSave = syntheticCampaignState with { Schema = FalloutNativeCampaignSave.ExpectedSchema, References = [] };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave);
+    var referenceRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
+        "Campaign save lost its explicit reference state owner.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { References = null }), "save state is invalid");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
     var missingScriptClock = syntheticCampaignState with
     {
         Quests = [],
@@ -1274,7 +1282,7 @@ try
         campaignTime.AdvanceSimulation(1f / 60);
         campaignColdTime.AdvanceSimulation(1f / 60);
     }
-    Require(syntheticRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+    Require(syntheticRestore.State.Schema == FalloutNativeCampaignSave.QuestClockSchema &&
         campaignColdGlobals.Capture().Values.SequenceEqual(campaignGlobals.Capture().Values) &&
         campaignColdTime.Capture() == campaignTime.Capture(),
         "Cold campaign Continue changed clock phase or Float32 globals after the same simulation ticks.");

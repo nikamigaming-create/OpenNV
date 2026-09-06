@@ -77,6 +77,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
     internal string Campaign { get; }
     internal string ContentRoot { get; }
     internal Task ArchiveWarmup { get; }
+    internal IReadOnlyList<string> ArchivePaths => _archivePaths;
     // Opt-in diagnostics. Ordinary reads do not hash, copy or journal payloads.
     internal Action<string, string, ReadOnlyMemory<byte>>? ResourceReadObserver { get; set; }
 

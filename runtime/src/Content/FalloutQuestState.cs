@@ -110,12 +110,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         {
             var script = stack.GetEffective(FalloutDialogueTopic.RequiredForm(record, "SCRI"));
             if (script.Signature != "SCPT") throw new InvalidDataException("Quest script target is not SCPT.");
-            foreach (var field in script.ReadSubrecords().Where(field => field.Signature == "SLSD"))
-            {
-                if (field.Data.Length != 24) throw new InvalidDataException("Quest variable declaration has an invalid extent.");
-                var index = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
-                if (!state.Variables.TryAdd(index, 0)) throw new InvalidDataException("Duplicate quest variable declaration.");
-            }
+            foreach (var index in FalloutScriptLocals.Read(script).Values) state.Variables.Add(index, 0);
         }
         _states.Add(quest, state);
         return state;
@@ -160,14 +155,19 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
     internal void ApplyObjective(FalloutQuestObjectiveCommand command)
     {
         var quest = FalloutDialogueTopic.Find(stack, "QUST", command.QuestEditorId).FormKey;
+        ApplyObjective(quest, command.Index, command.Display, command.Value);
+    }
+
+    internal void ApplyObjective(FalloutFormKey quest, uint index, bool display, bool value)
+    {
         var state = Require(quest);
-        if (!state.Objectives.TryGetValue(command.Index, out var before))
-            throw new NotSupportedException($"Quest {quest} has no declared objective {command.Index}.");
-        var after = command.Display ? before with { Displayed = command.Value } : before with { Completed = command.Value };
+        if (!state.Objectives.TryGetValue(index, out var before))
+            throw new NotSupportedException($"Quest {quest} has no declared objective {index}.");
+        var after = display ? before with { Displayed = value } : before with { Completed = value };
         if (after == before) return;
-        state.Objectives[command.Index] = after;
+        state.Objectives[index] = after;
         Revision++;
-        ObjectiveChanged?.Invoke(new(quest, state.ObjectiveText[command.Index], before, after, Revision));
+        ObjectiveChanged?.Invoke(new(quest, state.ObjectiveText[index], before, after, Revision));
     }
 
     internal short Stage(FalloutFormKey quest) => Require(quest).Stage;

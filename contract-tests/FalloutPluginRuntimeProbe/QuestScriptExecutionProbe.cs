@@ -23,7 +23,7 @@ internal static class QuestScriptExecutionProbe
             var writes = FalloutStageQuestVariableProgram.Read(records, graph.Stage("ProbeQuest", 0)).Prepare(state, null);
             Require(writes.Select(write => write.Index).SequenceEqual([19u, 11u, 27u]),
                 "Stage assignments ignored winning compiled variable slots or source order.");
-            foreach (var write in writes) state.SetVariable(write.Quest, write.Index, write.Value);
+            foreach (var write in writes) state.SetVariable(write.Owner, write.Index, write.Value);
             state.EnterStage(quest.FormKey, 0);
             var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(quest, "SCRI"));
             var bindings = new FalloutScriptBindings(records, quest, script, script.ReadSubrecords());

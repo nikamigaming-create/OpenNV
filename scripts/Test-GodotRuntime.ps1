@@ -52,6 +52,7 @@ $harnessOutput = Join-Path $repository "tmp\runtime-gate\live-harness"
 if ($LASTEXITCODE -ne 0) { throw "OpenNV live harness build failed." }
 
 $probes = @(
+    "ReferenceScriptContractProbe",
     "ActorAnimationPlaybackProbe",
     "ActorComplexionContractProbe",
     "ClassicMapInitializationProbe",

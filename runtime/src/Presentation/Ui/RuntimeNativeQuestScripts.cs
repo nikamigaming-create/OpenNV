@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
@@ -21,12 +22,12 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     internal void ActivateWorld() => _worldActive = true;
 
     internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
-        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null)
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null)
     {
         Name = "NativeQuestScripts";
         _records = records;
         _inventory = inventory;
-        Scripts = new(records, quests, claimed, inventory, globals);
+        Scripts = new(records, quests, claimed, inventory, globals, references: references);
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue + 1;
     }

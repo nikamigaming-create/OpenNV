@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Content;
 
@@ -89,6 +90,13 @@ internal sealed class FalloutQuestScripts
     private readonly FalloutGlobalState? _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
     private readonly FalloutQuestScriptInitialization _initialization;
+    internal FalloutReferenceWorld? References { get; }
+    internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
+    internal void SetVariable(FalloutFormKey owner, uint index, double value)
+    {
+        if (References is null) _quests.SetVariable(owner, index, value);
+        else References.WriteVariable(_quests, owner, index, value);
+    }
 
     internal object State => new
     {
@@ -141,12 +149,14 @@ internal sealed class FalloutQuestScripts
     }
 
     internal FalloutQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimedQuests,
-        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, float? defaultProcessingDelay = null)
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, float? defaultProcessingDelay = null,
+        FalloutReferenceWorld? references = null)
     {
         _records = records;
         _quests = quests;
         _inventory = inventory;
         _globals = globals;
+        References = references;
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
             .Number("MAIN", "fQuestScriptDelayTime");
@@ -227,7 +237,7 @@ internal sealed class FalloutQuestScripts
 
     private void Execute(Instance instance, FalloutQuestScriptHost? host, FalloutGameModeProgram? program = null)
     {
-        var writes = new Dictionary<(FalloutFormKey Quest, uint Index), double>();
+        var writes = new Dictionary<(FalloutFormKey Owner, uint Index), double>();
         var globalWrites = new Dictionary<FalloutFormKey, float>();
         var additions = new Dictionary<FalloutFormKey, FalloutCampaignItem>();
         var messages = new List<FalloutSourceMessage>();
@@ -235,7 +245,7 @@ internal sealed class FalloutQuestScripts
         (FalloutFormKey Quest, short Stage, Action Publish)? stageWrite = null;
         FalloutPluginRecord? TryForm(string name) => instance.Bindings.TryForm(name);
         FalloutPluginRecord Form(string name) => instance.Bindings.Form(name);
-        (FalloutFormKey Quest, uint Index) Variable(string name) => instance.Bindings.Variable(name);
+        (FalloutFormKey Owner, uint Index) Variable(string name) => instance.Bindings.Variable(name);
         FalloutFormKey? Global(string name)
         {
             if (TryForm(name) is not { Signature: "GLOB" } record) return null;
@@ -251,7 +261,7 @@ internal sealed class FalloutQuestScripts
             if (Global(name) is { } global)
                 return globalWrites.TryGetValue(global, out var pending) ? pending : _globals!.Get(global);
             var key = Variable(name);
-            return writes.TryGetValue(key, out var value) ? value : _quests.Variable(key.Quest, key.Index);
+            return writes.TryGetValue(key, out var value) ? value : this.Variable(key.Owner, key.Index);
         }
         void Write(string name, double value)
         {
@@ -266,7 +276,7 @@ internal sealed class FalloutQuestScripts
                 return;
             }
             var key = Variable(name);
-            _ = _quests.Variable(key.Quest, key.Index);
+            _ = this.Variable(key.Owner, key.Index);
             if (!double.IsFinite(value)) throw new InvalidDataException("Script variable exceeds its runtime representation.");
             writes[key] = value;
         }
@@ -338,7 +348,7 @@ internal sealed class FalloutQuestScripts
         }, Function);
         // Validate the entire reached block before publishing any effects.
         FalloutHudNotifications.Validate(notifications);
-        foreach (var (key, value) in writes) _quests.SetVariable(key.Quest, key.Index, value);
+        foreach (var (key, value) in writes) SetVariable(key.Owner, key.Index, value);
         foreach (var (form, value) in globalWrites) _globals!.Set(form, value);
         _inventory.Publish(additions.Values);
         foreach (var message in messages) _messages.Enqueue(message);
