@@ -10,6 +10,24 @@ IdleConditionProbe.Run();
 HudDeclarationsProbe.Run();
 MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
+FloatInitializerContracts.Run();
+BodyPartLookProbe.Run();
+
+if (args is ["--audit-look-sources", var lookRoot])
+{
+    RuntimeLiveContentSource.Configure(lookRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var source = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(source.PluginSources);
+    var settings = FalloutLookSettings.Read(FalloutInstallationSettings.Read(source));
+    var declarations = records.EffectiveRecords("BPTD").Select(FalloutBodyPartLook.Read).ToArray();
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+    {
+        settings, declarations = declarations.Where(value => value is not null),
+        withoutTracking = declarations.Count(value => value is null),
+        scope = "owned-declarations-only-actor-pose-unbound",
+    }));
+    return;
+}
 
 if (args is ["--audit-message-declarations", var messageExecutable])
 {

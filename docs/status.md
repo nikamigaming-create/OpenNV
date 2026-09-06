@@ -22,6 +22,12 @@ response gestures, chair exit/NAVM travel, IDLE repetition, animation sound,
 preview blinking and all eight original Vigor controls pass component audits.
 Complete ordinary timing, audio, motion and visual acceptance remain open.
 
+Head-tracking source readers now admit optimized float defaults and the BPTD
+tracking node/cone. The selected native bits and bindings, synthetic contracts,
+58-record owned audit and full gate pass. Look/StopLook target lifetime and
+actor pose publication remain unbound; this does not advance the couch event.
+See head-tracking.md.
+
 Package playback now enforces the actor's source idle replay delay, which was
 previously tracked without being checked. Interruption/replacement/expiry
 regressions, the selected owned audit and full gate pass. Ordinary room-68

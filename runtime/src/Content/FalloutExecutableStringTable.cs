@@ -75,18 +75,36 @@ internal static partial class FalloutExecutableStringTable
         Func<uint, string?> literal, Func<uint, bool> writableObject, Func<uint, float> constant)
     {
         var result = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        for (var at = 0; at <= code.Length - 28; ++at)
+        for (var at = 0; at <= code.Length - 21; ++at)
         {
             var candidate = code[at..];
             // MSVC float-setting initializer: store a referenced Float32 on
             // the argument stack, then pass the name and descriptor to its
             // constructor. Values and identities both belong to the owned PE.
-            if (!candidate[..6].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x51, 0xd9, 0x05 }) ||
-                !candidate.Slice(10, 4).SequenceEqual(new byte[] { 0xd9, 0x1c, 0x24, 0x68 }) ||
-                candidate[18] != 0xb9 || candidate[23] != 0xe8 || !writableObject(U32(candidate, 19))) continue;
-            var name = literal(U32(candidate, 14));
+            int valueAt, nameAt, objectAt;
+            if (candidate.Length >= 28 && candidate[..6].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x51, 0xd9, 0x05 }) &&
+                candidate.Slice(10, 4).SequenceEqual(new byte[] { 0xd9, 0x1c, 0x24, 0x68 }) &&
+                candidate[18] == 0xb9 && candidate[23] == 0xe8)
+                (valueAt, nameAt, objectAt) = (6, 14, 19);
+            // Optimized initializers omit the frame and reserve the argument
+            // after loading its value. Preserve the same name/value/receiver
+            // relationship; section addresses and setting values stay source-owned.
+            else if (candidate.Length >= 25 && candidate[..2].SequenceEqual(new byte[] { 0xd9, 0x05 }) &&
+                candidate.Slice(6, 5).SequenceEqual(new byte[] { 0x51, 0xd9, 0x1c, 0x24, 0x68 }) &&
+                candidate[15] == 0xb9 && candidate[20] == 0xe8)
+                (valueAt, nameAt, objectAt) = (2, 11, 16);
+            // The x87 unit/zero constant form also schedules the receiver
+            // before the name argument. Its literal is encoded by the load,
+            // not a guessed fallback for a particular setting.
+            else if (candidate[0] == 0xd9 && candidate[1] is 0xe8 or 0xee &&
+                candidate.Slice(2, 5).SequenceEqual(new byte[] { 0x51, 0xd9, 0x1c, 0x24, 0xb9 }) &&
+                candidate[11] == 0x68 && candidate[16] == 0xe8)
+                (valueAt, nameAt, objectAt) = (-1, 12, 7);
+            else continue;
+            if (!writableObject(U32(candidate, objectAt))) continue;
+            var name = literal(U32(candidate, nameAt));
             if (name is null || !Regex.IsMatch(name, @"^f[A-Z][A-Za-z0-9_]+(?::[A-Za-z0-9_]+)?$", RegexOptions.CultureInvariant)) continue;
-            var value = constant(U32(candidate, 6));
+            var value = valueAt < 0 ? (candidate[1] == 0xe8 ? 1.0f : 0.0f) : constant(U32(candidate, valueAt));
             if (!float.IsFinite(value)) throw new InvalidDataException($"Owned float setting is non-finite: {name}.");
             if (!result.TryAdd(name, value)) throw new InvalidDataException($"Multiple source initializers declare {name}.");
         }

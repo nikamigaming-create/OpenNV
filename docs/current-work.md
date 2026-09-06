@@ -72,6 +72,14 @@ scene-defects.md tracks component corrections without claiming scene parity.
   arrival, without implicit replay or false completion. Look/StopLook, event
   topics, deferred change idles and persistent event state remain unbound.
   See package-events.md.
+- The look-source prerequisite now binds optimized float initializers, including
+  encoded zero/unit constants, and BPTD tracking-node/cone declarations. The
+  owned audit reads all 58 loaded body-part records; five selected setting bits
+  plus the humanoid body-part slot, node and cone agree with private native
+  observation. Synthetic checks and the full gate pass. Target lifetime and
+  head/eye pose publication still need runtime owners; the room-77 event remains
+  failed. No ordinary replay was needed for this declaration-only correction.
+  See head-tracking.md.
 - The replacement psychology panel and its direct skip to skill review are
   removed. Source couch/furniture activation and dialogue choices must own
   progression. Tag/trait and farewell replacements remain separate defects.
@@ -154,6 +162,8 @@ derivatives and captures remain outside the repository.
 
 1. Execute source Look/StopLook through the actor aiming owner. Package event
    dispatch now exposes the actual end-event failure after Doc's travel.
+   The setting and BPTD node/cone readers are verified; next bind target lifetime,
+   authored rig constraints and head-pose publication before admitting the event.
    Complete target/head/eye behavior, couch activation and original
    dialogue choices. Do not restore a replacement psychology confirmation.
 2. Continue the shared script owner through reference-instance state,
