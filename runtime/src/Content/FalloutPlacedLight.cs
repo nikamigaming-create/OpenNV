@@ -62,13 +62,7 @@ internal static class FalloutPlacedLightResolver
         if (reference.Emittance is { } form)
         {
             if (records is null) throw new InvalidDataException($"Light {reference.FormKey} has no XEMI source resolver.");
-            var record = records.GetEffective(form);
-            emittance = record.Signature switch
-            {
-                "LIGH" => NormalizeLightColor(FalloutCellSceneReader.ReadLight(record).ColorRgb),
-                "REGN" when regionEmittance is not null => regionEmittance(form),
-                _ => throw new NotSupportedException($"Light {reference.FormKey} needs a {record.Signature} emittance owner."),
-            };
+            emittance = new FalloutExternalEmittance(records, form, regionEmittance).Sample();
         }
         return new FalloutPlacedLight(reference.FormKey, baseObject.FormKey, radius, source.ColorRgb,
             source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance);

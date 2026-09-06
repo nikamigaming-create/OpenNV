@@ -483,6 +483,7 @@ public partial class RuntimeCoordinator
                     actor.Transform = ReferenceTransform(reference);
                     actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform);
                     root.AddChild(actor);
+                    AddNativeReferenceEmittance(actor, reference);
                     _nativeActorDivergences[reference.FormKey.ToString()] =
                         "animation-selection-blending, face-pose, gameplay, material-lighting-output parity unbound";
                     _parityObservations.Observe(parityScope, ParityIdentity(reference),
@@ -524,6 +525,7 @@ public partial class RuntimeCoordinator
             instance.SetMeta("opennv_source_model", baseObject.ModelPath);
             instance.SetMeta("opennv_source_form", baseObject.FormKey.ToString());
             root.AddChild(instance);
+            AddNativeReferenceEmittance(instance, reference);
             var controllers = instance.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
             if (controllers.Length != 0)
                 GD.Print($"OPENNV_NATIVE_REFERENCE_CONTROLLERS source={reference.FormKey} " +
@@ -677,6 +679,18 @@ public partial class RuntimeCoordinator
         _nativeCurrentCellRoot = root;
         _nativeActiveCell = cell;
         _nativeSkyLighting?.EnterCell(cell.Cell);
+    }
+
+    private void AddNativeReferenceEmittance(Node3D instance, FalloutPlacedReference reference)
+    {
+        if (reference.Emittance is not { } emittance) return;
+        var source = new FalloutExternalEmittance(_nativePluginStack!, emittance,
+            region => (_nativeSkyLighting ?? throw new InvalidOperationException("Sky lighting state is absent."))
+                .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Sky has no simulation clock.")).Hour));
+        var binding = new RuntimeNativeReferenceEmittance { Name = "NativeMaterialEmittance" };
+        binding.Configure(source.Sample);
+        binding.SetMeta("opennv_material_emittance_source", emittance.ToString());
+        instance.AddChild(binding);
     }
 
     private void AddNativePlacedLight(

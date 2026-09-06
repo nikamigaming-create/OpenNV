@@ -60,6 +60,18 @@ tracks component discrepancies. Component results do not establish acceptance.
   exactly on all 675 declared instances, including the late attachment. Actor
   skeleton and ANIO roots retain their source model provenance; both missing
   source-model trace entries are resolved. Trace errors and lost events are zero.
+- REFR.XEMI now binds material emittance through winning LIGH/REGN records and
+  the shared sky clock. Source flags select eligible surfaces; instance values
+  keep shared materials independent and follow late attachments/transfers.
+  Ordinary room-66 matches all 20 sampled native material colour triples and
+  source multipliers, including nine window surfaces previously bypassed by
+  the no-falloff material path. No-lighting surfaces now share the source shader,
+  including managed colour/UV channels and the native all-zero-to-white rule.
+  Synthetic, owned, GPU lifecycle, Vigor and full-gate checks pass. All 675 lit
+  fog bindings still agree; source-model trace omissions and lost events are zero.
+  Relative to room-64, checked wall error falls from 5.12 to 1.93 and beam error
+  from 14.79 to 6.83 colour levels. Ceiling error rises from 15.14 to 15.61.
+  These remain regional diagnostics without exact camera/pose/frame alignment.
 - Four source response gestures, finite release/resumption, chair exit/NAVM
   travel, IDLE repeats, KF sound dispatch, preview blink lifecycle and all eight
   original Vigor controls pass component audits. Complete ordinary movement,
@@ -72,8 +84,8 @@ tracks component discrepancies. Component results do not establish acceptance.
 
 ## Live comparison and evidence
 
-The retained retail room-54 and fresh OpenNV room-64 processes are at VCG01
-stage 10 / original name entry. Use the room-64 session configuration and
+The retained retail room-54 and fresh OpenNV room-66 processes are at VCG01
+stage 10 / original name entry. Use the room-66 session configuration and
 revalidate processes and state before control. Keep one instance of each game.
 A shared quest/menu checkpoint is not exact camera, clock or animation phase.
 
@@ -102,9 +114,11 @@ captures, native addresses and decoded resources stay outside the repository.
 
 ## Next owners
 
-1. Preserve the source colour, radius, direction, fog and angular-opacity fixes.
-   Remaining window composition needs the active native no-lighting shader and
-   fog/blend toggles. The observed world camera far plane is 5000 game units;
+1. Preserve the source colour, radius, direction, fog, angular-opacity and
+   material-emittance fixes. Retained no-lighting pass records and owned shader
+   programs identify destination-blend-dependent fog composition; this still
+   needs a runtime owner and native GPU draw/frame association. The observed
+   world camera far plane is 5000 game units;
    OpenNV still uses 200 metres. Bind its source owner before changing it.
    Light/shadow selection, fog toggles and ceiling material response remain;
    do not fit HDR or authored colours to the image.
@@ -115,7 +129,8 @@ captures, native addresses and decoded resources stay outside the repository.
 3. Replace remaining psychology/tag/trait/farewell panels through original
    source owners. Complete Pip-Boy, room loot/skull/pool/physics, doors/exterior,
    Sunny dialogue/combat/tutorial and cold Continue. Six actor audit shutdown
-   resources, broader gameplay/plugin behavior and integrated OpenXR remain.
+   resources and three reported GPU material-audit shutdown instances remain
+   to identify. Broader gameplay/plugin behavior and integrated OpenXR remain.
 
 ## Required publication gate
 

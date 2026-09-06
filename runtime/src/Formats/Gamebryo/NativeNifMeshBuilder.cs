@@ -1088,7 +1088,9 @@ internal static class RuntimeNativeNifMeshBuilder
                 var color = new Color(value.X, value.Y, value.Z);
                 foreach (var material in materials)
                 {
-                    if (material is ShaderMaterial shader)
+                    if (material is ShaderMaterial effect && material.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
+                        NativeNifEffectMaterial.ApplyEmissiveColor(effect, new Vector3(color.R, color.G, color.B));
+                    else if (material is ShaderMaterial shader)
                         shader.SetShaderParameter("emissive_color", new Vector3(color.R, color.G, color.B));
                     else if (material is StandardMaterial3D standard)
                     {
@@ -1125,8 +1127,17 @@ internal static class RuntimeNativeNifMeshBuilder
             return new RuntimeNifControllerChannel(time =>
             {
                 var value = SampleScalar(data.Keys, time);
-                foreach (var material in materials.Cast<StandardMaterial3D>())
-                    material.Uv1Offset = new Vector3(material.Uv1Offset.X, value, material.Uv1Offset.Z);
+                foreach (var material in materials)
+                {
+                    if (material is ShaderMaterial effect && material.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
+                    {
+                        var offset = effect.GetShaderParameter("source_uv_offset").AsVector2();
+                        effect.SetShaderParameter("source_uv_offset", new Vector2(offset.X, value));
+                    }
+                    else if (material is StandardMaterial3D standard)
+                        standard.Uv1Offset = new Vector3(standard.Uv1Offset.X, value, standard.Uv1Offset.Z);
+                    else throw new NotSupportedException("Texture transform material has no parameter owner.");
+                }
             });
         }
 
@@ -1648,7 +1659,8 @@ internal static class RuntimeNativeNifMeshBuilder
             if (overridden is not null)
                 return overridden;
             var result = BuildMaterialCore(geometry, hairColor);
-            if (result is not StandardMaterial3D && result.ResourceName != NativeNifLightingMaterial.ResourceIdentity)
+            if (result is not StandardMaterial3D && result.ResourceName is not
+                (NativeNifLightingMaterial.ResourceIdentity or NativeNifEffectMaterial.ResourceIdentity))
                 return result;
             foreach (var reference in geometry.Properties.Where(reference => reference != -1))
             {
@@ -1912,7 +1924,7 @@ internal static class RuntimeNativeNifMeshBuilder
                     throw new NotSupportedException(
                         $"NIF legacy texturing property {texturing.Block.Index} differs from its no-lighting shader texture.");
             }
-            var result = new StandardMaterial3D
+            using var result = new StandardMaterial3D
             {
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 VertexColorUseAsAlbedo = true,
@@ -1924,15 +1936,9 @@ internal static class RuntimeNativeNifMeshBuilder
             if ((shader.ShaderFlags2 & ShaderFlagZBufferWrite) == 0)
                 result.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
             ApplyStencil(result, stencil, environmentPass: false);
-            if ((shader.ShaderFlags & ShaderFlagUseFalloff) != 0)
-            {
-                if (material?.Controller >= 0 || texturing?.Controller >= 0)
-                    throw new NotSupportedException("Animated angle-falloff materials require a shader-parameter controller owner.");
-                return NativeNifEffectMaterial.Build(shader, material, alpha,
-                    result.AlbedoTexture,
-                    result.CullMode == BaseMaterial3D.CullModeEnum.Disabled);
-            }
-            return result;
+            return NativeNifEffectMaterial.Build(shader, material, alpha,
+                result.AlbedoTexture,
+                result.CullMode == BaseMaterial3D.CullModeEnum.Disabled);
         }
 
         private string ValidateLegacyTexturing(FalloutNifTexturingProperty texturing)

@@ -9,6 +9,12 @@ using OpenNV.Runtime.Gameplay.State;
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 
+if (args is ["--audit-material-emittance", var materialRoot, var materialCell, var materialHour])
+{
+    PlacedLightProbe.OwnedMaterials(materialRoot, materialCell, float.Parse(materialHour, System.Globalization.CultureInfo.InvariantCulture));
+    return;
+}
+
 if (args is ["--audit-stage-globals", var stageRoot])
 {
     RuntimeLiveContentSource.Configure(stageRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
@@ -1165,6 +1171,14 @@ try
     Require(nightColor.Zip(new[] { 108f / 255, 109f / 255, 110f / 255 }).All(pair => MathF.Abs(pair.First - pair.Second) < 1e-6f), "Default region weather did not use its source night sunlight.");
     var noonColor = campaignSky.RegionEmittance(syntheticRegion, 12);
     Require(noonColor.Zip(new[] { 112f / 255, 113f / 255, 114f / 255 }).All(pair => MathF.Abs(pair.First - pair.Second) < 1e-6f), "Sky noon ignored the fifth source colour sample.");
+    var emittanceHour = 23f;
+    var externalEmittance = new FalloutExternalEmittance(cellStack, syntheticRegion,
+        region => campaignSky.RegionEmittance(region, emittanceHour));
+    Require(externalEmittance.Sample().SequenceEqual(nightColor), "Reference emittance did not sample shared night state.");
+    emittanceHour = 12;
+    Require(externalEmittance.Sample().SequenceEqual(noonColor), "Reference emittance retained a stale clock sample.");
+    ExpectFailure(() => new FalloutExternalEmittance(cellStack, syntheticRegion, null), "REGN emittance owner");
+    ExpectFailure(() => new FalloutExternalEmittance(cellStack, syntheticRegion, _ => [float.NaN, 0, 0]).Sample(), "invalid RGB");
     var sunriseColor = campaignSky.RegionEmittance(syntheticRegion, 5.75f);
     Require(sunriseColor.Zip(new[] { 96f / 255, 97f / 255, 98f / 255 }).All(pair => MathF.Abs(pair.First - pair.Second) < 1e-6f), "Sky sunrise midpoint did not select the first source colour sample.");
     var skyJson = JsonSerializer.Serialize(campaignSky.Capture());

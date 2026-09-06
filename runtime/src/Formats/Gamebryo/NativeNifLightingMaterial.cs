@@ -63,6 +63,7 @@ internal static class NativeNifLightingMaterial
             {{NativeNifPointLighting.ShaderSource}}
             {{FalloutNifHairShading.ShaderSource}}
             {{RetailVertexFog.ShaderSource}}
+            {{NativeNifEmittanceMaterial.ShaderSource}}
             void vertex() {
                 source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
                     PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
@@ -96,7 +97,7 @@ internal static class NativeNifLightingMaterial
                 ALBEDO = lit;
                 vec3 glow = use_emissive_map ? texture(emissive_map, UV).rgb : vec3(1.0);
                 EMISSION = lit * (source_ambient + owned_point_irradiance(VERTEX, NORMAL, VIEW, false));
-                if (!use_hair) EMISSION += glow * emissive_color * emissive_multiple;
+                if (!use_hair) EMISSION += glow * owned_emissive_color(emissive_color * emissive_multiple, emissive_multiple);
                 if (!environment_light_fade) EMISSION += reflection;
                 EMISSION = owned_output_color(EMISSION);
                 FOG = vec4(source_fog_color, source_fog_factor);
@@ -144,6 +145,7 @@ internal static class NativeNifLightingMaterial
         result.SetMeta("opennv_nif_vertex_color_owner", "bound-geometry-colour-buffer");
         result.SetMeta("opennv_nif_alpha_flags", alpha?.Flags ?? 0);
         result.SetMeta("opennv_source_lighting_domain", "encoded");
+        NativeNifEmittanceMaterial.Configure(result, source.ShaderFlags);
         if (hair)
         {
             result.SetMeta("opennv_hair_rgb", new Vector3(color.R, color.G, color.B));

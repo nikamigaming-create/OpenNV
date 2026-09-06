@@ -4,12 +4,23 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class NativeNifEffectMaterial
 {
+    internal const string ResourceIdentity = "Owned NIF no-lighting";
+    // The no-lighting material owner substitutes white only when the complete
+    // resolved emissive colour is zero, preserving texture and vertex colour.
+    internal const string ColorFallbackShader = """
+        vec3 owned_no_light_color(vec3 color) {
+            return all(equal(color, vec3(0.0))) ? vec3(1.0) : color;
+        }
+        """;
+
     private const string Fragment = $$"""
         shader_type spatial;
         render_mode unshaded, __BLEND__, __DEPTH__, __CULL__;
         uniform sampler2D source_texture : filter_linear_mipmap, __REPEAT__;
         uniform bool source_has_texture;
         uniform vec4 source_color_multiplier;
+        uniform float source_emissive_multiple;
+        uniform vec2 source_uv_offset;
         uniform vec4 source_falloff;
         uniform bool falloff_enabled;
         uniform bool vertex_alpha_enabled;
@@ -18,7 +29,10 @@ internal static class NativeNifEffectMaterial
         uniform float alpha_threshold;
         varying float source_view_opacity;
         {{FalloutNifAngleFalloff.ShaderSource}}
+        {{NativeNifEmittanceMaterial.ShaderSource}}
+        {{ColorFallbackShader}}
         void vertex() {
+            UV += source_uv_offset;
             source_view_opacity = 1.0;
             if (falloff_enabled) {
                 vec3 view_position = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -42,7 +56,8 @@ internal static class NativeNifEffectMaterial
             if (vertex_alpha_enabled) alpha *= COLOR.a;
             alpha *= source_view_opacity;
             if (alpha_test_enabled && !accepted(alpha)) discard;
-            ALBEDO = sampled.rgb * COLOR.rgb * source_color_multiplier.rgb;
+            vec3 material_color = owned_emissive_color(source_color_multiplier.rgb, source_emissive_multiple);
+            ALBEDO = sampled.rgb * COLOR.rgb * owned_no_light_color(material_color);
             __ALPHA_WRITE__
         }
         """;
@@ -63,6 +78,7 @@ internal static class NativeNifEffectMaterial
         };
         var result = new ShaderMaterial
         {
+            ResourceName = ResourceIdentity,
             Shader = new Shader
             {
                 Code = Fragment
@@ -75,6 +91,8 @@ internal static class NativeNifEffectMaterial
         };
         if (texture is not null) result.SetShaderParameter("source_texture", texture);
         result.SetShaderParameter("source_has_texture", texture is not null);
+        result.SetShaderParameter("source_emissive_multiple", material?.EmissiveMultiple ?? 1);
+        NativeNifEmittanceMaterial.Configure(result, source.ShaderFlags);
         result.SetShaderParameter("source_color_multiplier", material is null ? Vector4.One :
             new Vector4(material.Emissive.R * material.EmissiveMultiple, material.Emissive.G * material.EmissiveMultiple,
                 material.Emissive.B * material.EmissiveMultiple, material.Alpha));
@@ -91,5 +109,13 @@ internal static class NativeNifEffectMaterial
         result.SetMeta("opennv_nif_angle_falloff", useFalloff);
         if (useFalloff) result.SetMeta("opennv_nif_falloff_owner", "vertex-view-normal-and-position;smooth-cosine-opacity");
         return result;
+    }
+
+    internal static void ApplyEmissiveColor(ShaderMaterial material, Vector3 color)
+    {
+        var previous = material.GetShaderParameter("source_color_multiplier").AsVector4();
+        var multiple = material.GetShaderParameter("source_emissive_multiple").AsSingle();
+        material.SetShaderParameter("source_color_multiplier", new Vector4(
+            color.X * multiple, color.Y * multiple, color.Z * multiple, previous.W));
     }
 }

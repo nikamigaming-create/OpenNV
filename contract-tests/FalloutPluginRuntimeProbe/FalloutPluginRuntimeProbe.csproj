@@ -42,6 +42,7 @@
     <Compile Include="..\..\runtime\src\Gameplay\State\FalloutNativeCampaignSave.cs" Link="FalloutNativeCampaignSave.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutPlacedLight.cs" Link="FalloutPlacedLight.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExternalEmittance.cs" Link="FalloutExternalEmittance.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutNewGamePlayerStart.cs" Link="FalloutNewGamePlayerStart.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutDoorTransition.cs" Link="FalloutDoorTransition.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutLandscapeTransport.cs" Link="FalloutLandscapeTransport.cs" />

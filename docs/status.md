@@ -46,6 +46,17 @@ ordinary room-64 binds source fog inputs exactly on all 675 declared instances.
 Both missing skeleton/ANIO model trace entries are resolved; trace errors and
 lost events are zero. See material-fog-and-falloff.md for audit scope.
 
+Reference material emittance now follows winning LIGH/REGN sources, shared sky
+time and authored shader flags. Ordinary room-66 matches all 20 sampled native
+colour triples and material multipliers. Nine window surfaces formerly used a
+fallback path; no-lighting surfaces now share the source shader and retain
+managed colour/UV animation. The all-zero source colour rule, instance lifetime
+and original Vigor page checks pass. Lit fog still binds exactly on all 675
+declared instances. Checked wall error falls from 5.12 to 1.93 and beam error
+from 14.79 to 6.83 relative to room-64; ceiling error rises from 15.14 to 15.61.
+These are regional diagnostics, not aligned pixel acceptance. Three GPU
+material-audit shutdown instances still need identification.
+
 Bounded tracing retains ten image-space GPU surfaces and constants for eleven
 passes. Selected native target/cinematic/tint/fade bytes agree with submitted
 constants; remaining brightness differences begin before HDR. Native GPU

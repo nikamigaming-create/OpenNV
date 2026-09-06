@@ -1,8 +1,35 @@
-# Material fog, angular opacity and late attachments
+# Material colours, fog, angular opacity and late attachments
 
 These are bounded rendering contracts, not a scene-parity claim. Owned shader
 programs and private native observations remain local; the runtime evaluates
 general source fields and never reads comparison measurements as authority.
+
+## Reference material emittance
+
+REFR.XEMI resolves through the winning record graph. A LIGH contributes its
+source RGB conversion; a REGN samples the existing shared sky/time owner.
+Loading a material does not choose or change the region's weather. Unsupported
+record kinds, absent owners and invalid colour samples fail closed.
+
+The authored external-emittance shader flag admits a surface. Per-reference
+instance uniforms replace its emissive RGB before the authored multiplier;
+they do not mutate a shared material. The owner binds initial and later
+geometry, follows transfers, clears removed bindings and isolates preview
+viewports. Clock changes update bound values without a per-frame scene walk.
+
+No-lighting surfaces use this same source material path with or without angular
+falloff. The previous split sent non-falloff windows through a default material,
+omitting their emittance. Managed colour and UV channels now target source
+shader parameters. The native no-lighting colour rule substitutes white only
+when the entire resolved RGB is zero; individual zero channels, small nonzero
+colours, overbright values and source alpha remain intact.
+
+The selected owned reference audit, private native properties and ordinary
+room-66 instance trace agree on all 20 material RGB triples and multipliers.
+This includes nine window surfaces and eleven angular effects. Native program
+observations corroborate the no-lighting colour rule. Native selected GPU draw
+execution, general HDR-mode multiplier policy, fog/blend composition and final
+frame correspondence remain separate open evidence lanes.
 
 ## Lit vertex fog
 
@@ -51,6 +78,7 @@ and native project loading. The selected owned fog audit is:
 
 ```powershell
 dotnet run --project contract-tests/FalloutImageSpaceProbe -c Release -- --cell-fog $ownedDataRoot $cellHex
+dotnet run --project contract-tests/FalloutPluginRuntimeProbe -c Release -- --audit-material-emittance $ownedDataRoot $cellHex $hour
 ```
 
 The selected NIF rendering probe also accepts an owned data root and a text
@@ -67,9 +95,17 @@ renderer; the headless dummy renderer cannot run this audit. It exercises:
 - Discovery of arbitrary declared instance parameters without preset names.
 - Existing and late geometry, subtree transfers, owner removal/re-entry and
   isolation of both existing and later preview geometry.
+- Exact zero-colour fallback, preservation of nonzero/overbright colours and
+  per-reference emittance lifetime without mutating shared materials.
 
 These checks pass on the selected Godot build. Owned fog inputs and ten owned
 angular-opacity variants independently support their respective contracts.
 Ordinary input, live bindings and matched native/render evidence are separate
 lanes. Region-error comparisons remain diagnostics when camera, animation and
 frame timing are not aligned.
+
+The latest material GPU assertions pass but shutdown reports three ObjectDB
+instances; their types and owners remain unverified. The original Vigor audit
+also passes all eight forward/reverse pages and allocation bounds after the
+material-path change. These component results do not establish ordinary Vigor
+timing, audio or visual acceptance.
