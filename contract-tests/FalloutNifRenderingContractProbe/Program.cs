@@ -40,6 +40,12 @@ ExpectException<NotSupportedException>(() => FalloutNifAlphaState.Read(0x0001, 0
 var angle = new FalloutNifAngleFalloff(0.8f, 0.2f, 0.75f, 0.15f);
 Require(Math.Abs(angle.Sample(0.5f) - 0.45f) < 0.00001f && angle.Sample(1) == 0.75f && angle.Sample(0) == 0.15f,
     "Source cosine falloff does not preserve authored endpoints and interpolation.");
+var eased = new FalloutNifAngleFalloff(1, 0, 1, 0);
+Require(eased.Sample(0.25f) == 0.15625f && eased.Sample(0.75f) == 0.84375f &&
+    eased.Sample(-0.25f) == eased.Sample(0.25f), "Angle opacity lost its smooth curve or two-sided cosine.");
+var ascending = new FalloutNifAngleFalloff(0, 1, 0.2f, 0.8f);
+Require(Math.Abs(ascending.Sample(0.25f) - 0.29375f) < 0.000001f,
+    "Reversed cosine endpoints changed opacity interpolation.");
 Console.WriteLine("OPENNV_NIF_ALPHA_CONTRACT_OK independentBlendAndTest=true cosineFalloff=true");
 
 var unlitFalloff = new FalloutNifNoLightingProperty(new FalloutNifBlock(0, "BSShaderNoLightingProperty", 0, 0),

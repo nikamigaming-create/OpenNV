@@ -1,131 +1,66 @@
 # Current product status
 
 OpenNV is not yet a fully playable implementation of Fallout: New Vegas,
-Fallout 3, Tale of Two Wastelands or the classic Fallout games. The active goal
-is the complete ordinary NV opening through Sunny's finished tutorial, with
-source-driven gameplay, original presentation and persistent saves.
+Fallout 3, Tale of Two Wastelands or the classic games. The active goal is the
+ordinary NV opening through Sunny's completed tutorial with original
+presentation, shared gameplay and persistent saves. All 33 recovery acceptance
+requirements remain open. Work stays on main and in this task only; parallel
+subagents are stopped at the user's request.
 
-The published main checkpoint c20d97c fixes placed architecture ownership and
-near-plane trace selection. Ordinary replay removes the wall obstructing Doc's
-room; selected native evidence agrees on 19 transforms across three modules.
+Ordinary New reaches source opening dialogue, the original name prompt and
+Reflectron with original XML, bitmap controls, dynamic FaceGen, source hair and
+voice/LIP. The user accepted the current hair/age appearance for advancing.
+Source placement removes the obstructing room wall; clothing retains its own
+texture and source opacity removes the gurney's black fill. Original HUD gift
+icons, brackets, bitmap font and inventory notices now render. Four Doc
+response gestures, chair exit/NAVM travel, IDLE repetition, animation sound,
+preview blinking and all eight original Vigor controls pass component audits.
+Complete ordinary timing, audio, motion and visual acceptance remain open.
 
-Published commit d6d7591 restores original startup HUD notifications,
-fixes the gurney's opaque fill and the Reflectron shirt texture, adds source
-response gestures, chair exit/travel, preview blinking, IDLE repetition and
-animation sound dispatch, and restores the original Vigor controls. Original
-Reflectron and source voice/LIP already run through ordinary New. Selected
-component audits and several live checkpoints exercise these paths; complete
-motion, UI, sound, timing and final-pixel acceptance remain pending.
+Source quest-clock initialization, shared script lifetime, Float32 recurrence,
+modal recurrence and cold consistency pass selected checks. All 252 selected
+native initial countdowns match exact bits. Source stage-global writes now
+publish the authored night hour. Complete script/block admission, MenuMode,
+mutable delays, dynamic start/stop, ForceWeather and aligned event order remain
+unbound. The harness uses ordinary keyboard input for retail, rejects internal
+UI callbacks and preserves the requested local input lease duration.
 
-Source image programs, blur kernels and the separate menu-background effect
-are connected. The shared global/calendar owner drives double vision and
-region light colour. Transactional script globals and cold clock restoration
-pass component tests. Save v10 also retains sky/climate and regional weather
-identities. Older saves report missing owners instead of inventing their state.
+Room materials now bind their source vertex colours. CELL direction uses the
+native emitted-ray convention, and point lights preserve source radius without
+the former 41 percent expansion. All 25 selected night light input triples,
+radii and dimmers agree with retained native values. Region diagnostics show
+closer floor/wall rendering; these input results do not prove light selection,
+shadows, flicker or final pixels.
 
-Placed lights now honor source XEMI emittance. All 25 selected room lights
-match the recorded native Float32 colour, radius and dimmer inputs at one
-night checkpoint. This does not prove shader or pixel parity. Light flicker,
-shadows, attenuation, complete focus effects, geometry/collision and exterior
-weather remain unresolved or unverified.
+Lit fog now uses projected vertex distance and interpolation. No-lighting
+angular opacity uses the source smooth curve at the vertex stage. Owned source
+programs, selected native fog inputs, synthetic contracts and real GPU audits
+support these changes. The selected beam region improves from 33.97 to 14.79
+colour levels of error, while ceiling error increases from 13.25 to 15.02.
+Exact camera/animation/frame alignment remains unestablished.
 
-The full repository gate passed on 2026-09-05, including both builds,
-formatting/analyzers, contract probes, launcher tests and native project loading.
-Selected owned light/audio and fresh native actor audits also pass. Main/origin
-include d6d7591 and there are no open PRs. All work stays in this task; the user
-stopped parallel subagent work.
+The trace discovers declared instance parameters and exposed a late attachment
+with missing room fog. The cell environment owner now binds new geometry and
+cell transfers while isolating preview scenes. GPU lifecycle checks pass, and
+ordinary room-64 binds source fog inputs exactly on all 675 declared instances.
+Both missing skeleton/ANIO model trace entries are resolved; trace errors and
+lost events are zero. See material-fog-and-falloff.md for audit scope.
 
-Fresh run room-47 exposes different startup pack states: retail was observed
-on Mercenary, Classic and Tribal; OpenNV queued Classic, Mercenary, Caravan and
-Tribal. The full retail startup order is uncertain because an earlier long
-Escape lease may have dismissed a message. Native quest registration, initial
-delay, shared SCPT ownership and pre-New lifetime were missing. These owners
-now derive from the winning source graph: initialization includes embedded,
-inactive and unattached script declarations; shared definitions share clocks.
-All 252 retained initial countdowns match native Float32 bits. Synthetic
-override/shared/cold checks and the selected owned audit pass. Main-menu
-timers run without grants and survive ordinary New in room-51. This does not
-prove aligned running-clock timing or startup event order.
-A separate harness fix now uses the requested tap duration as
-the engine lease; a live 25 ms check and the complete gate pass. Neither that
-fix nor source light inputs establish complete timing or scene parity.
+Bounded tracing retains ten image-space GPU surfaces and constants for eleven
+passes. Selected native target/cinematic/tint/fade bytes agree with submitted
+constants; remaining brightness differences begin before HDR. Native GPU
+execution, selected shader/fog toggles, final per-pixel contributions, complete
+audio/events and frame correspondence remain incomplete. Opening haze, full
+focus/DOF, no-lighting fog/blend composition and the world camera far-plane
+owner still need verification. Private captures and owned data stay local.
 
-The default ShowMessage button now reads its own declaration from the selected
-owned executable instead of the separate sOk setting. The owned audit,
-synthetic rejection checks, full repository gate and ordinary run room-48 pass;
-the live button reads OK. Broader message layout/timing acceptance remains open.
-
-Quest-script recurrence now reads the installation's configured interval,
-preserves Float32 countdown/elapsed storage and overshoot, and advances during
-modal presentation without executing GameMode effects. Synthetic cold/save
-rejection checks, the selected owned-script audit and the full gate pass.
-In ordinary run room-50, the selected clock completes nine more recurrences
-over 44.46 seconds on the same Classic Pack dialog without executing the
-gameplay block again or changing inventory. Missing legacy clock state is
-reported before campaign restoration or save replacement. Startup order,
-MenuMode execution and complete timing remain open.
-
-The callback-assisted retail run room-52 left a stale StartMenu entry and a
-white opening screen. Fresh room-53 uses ordinary keyboard navigation and
-reaches the Tribal Pack message. The harness now rejects internal native.click
-callbacks and activates only an observed keyboard-selected retail button with
-Enter. The complete gate, live rejection with no command written and paired
-Tribal dismissal pass; both runs subsequently show Classic. Different clock
-histories still prevent a synchronized comparison.
-
-At the original name prompt, retail's authored night hour differs from
-OpenNV's unchanged noon global. The opening stage adapter had omitted global
-assignments. A general owner now resolves these writes through each stage's
-compiled references, prepares ordered Float32 results and publishes them to
-shared state in source-line order. Synthetic binding/condition/overflow/cold
-storage checks, the selected owned audit and the full gate pass. Fresh ordinary
-run room-55 publishes the source night hour before the movie skip. Matched
-light RGB inputs improve from 19/25 to 25/25 against retail-54, with all dimmers
-matching. The room remains visibly too bright. Shader contribution, shadows,
-remaining weather commands and complete stage execution are open.
-
-The runtime now derives the vertex-colour shader binding from the source mesh
-buffer. Serialized flags omitted that binding on 91 lit surfaces across 20
-owned room models; seven observed native bound properties enable it. Synthetic
-checks, the selected owned audit and the complete gate pass. Ordinary room-56
-and its draw trace enable the original colours on all 175 lit room instances.
-The checked wall regions improve against retail, while floor and ceiling
-brightness barely changes. Light contribution, window effects, shadows and
-complete final-pixel agreement remain open.
-
-CELL directional rotations now use the native emitted-ray convention instead
-of the previous spherical mapping. All three derived Float32 components match
-the selected native light direction and world-matrix column. Synthetic axis,
-mixed-angle and rejection checks, the owned audit and the full gate pass;
-ordinary room-60 verifies the corrected Godot light binding. The room remains
-too bright. Bounded tracing now retains ten intermediate image-space surfaces
-and exact constants for eleven submitted passes. It places the brightness
-discrepancy before HDR; native target luminance, cinematic, tint and fade bytes
-agree with the submitted constants. Unreadable GPU destinations remain visible
-as missing evidence. Complete light selection, fog, materials and shadows are
-still open.
-
-Point-light creation no longer expands the resolved source radius by the
-square root of two. Retained native shader inputs and independently checked
-scale handling establish the source radius contract. Synthetic binding checks,
-the 25-light owned audit and the full gate pass; ordinary room-61 confirms all
-25 Godot radii with exact Float32 unit conversion and unchanged source colours
-and placement. Checked floor/ceiling region error decreases substantially.
-Window beams, fog projection/interpolation, light selection, shadows and full
-pixel agreement remain open. The original name prompt is the current live
-checkpoint; exact camera/animation/frame alignment remains unestablished.
+The full Release/Debug, formatting/analyzer, contract, launcher and native
+Godot loading gate passed on 2026-09-05. Selected owned material and GPU audits
+also pass. Publication and scene acceptance are separate requirements.
 
 Psychology, tag/trait and farewell still contain replacement panels. Complete
-Pip-Boy presentation, room interactions and loot, radio discovery, exterior
-streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics, complete
-saves, supported plugin behavior, ordinary FO3/TTW and integrated OpenXR remain
-unfinished. All 33 recovery acceptance requirements remain open.
-
-The CLI harness supplies native capture and ordinary input through the private
-bridge. Switchable tracing connects disk data to runtime and renderer inputs.
-Full native event identity, GPU execution, exact pixel contribution, audio and
-matched frame correspondence are not complete. No whole-scene, opening,
-tutorial or campaign parity claim has been established.
-
-See current-work.md for the current owners and next actions, scene-defects.md
-for component discrepancies, and recovery-checklist.md for acceptance scope.
+Pip-Boy, room loot/skull/pool interactions, radio discovery, exterior
+streaming/weather, Sunny's tutorial, broad AI/combat/creatures/physics,
+complete saves/plugins, ordinary FO3/TTW and integrated OpenXR remain unfinished.
+No whole-scene, opening, tutorial or campaign parity claim has been established.
+See current-work.md for current owners and scene-defects.md for discrepancies.

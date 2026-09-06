@@ -123,6 +123,8 @@ internal partial class RuntimeNativeNpc : Node3D
                     throw new FileNotFoundException($"Source ANIO model is absent: {item.ModelPath}");
                 var part = NativeNifMeshBuilder.AddActorPart(model, Skeleton, externalTransformTargets: controlledNodes);
                 part.Root.Visible = false;
+                part.Root.SetMeta("opennv_source_model", item.ModelPath);
+                part.Root.SetMeta("opennv_source_form", item.Form.ToString());
                 part.Root.SetMeta("opennv_animation_object_form", item.Form.ToString());
                 created.Add(part.Root);
             }
@@ -314,6 +316,7 @@ internal partial class RuntimeNativeNpc : Node3D
         try
         {
             actor.Skeleton = NativeNifMeshBuilder.BuildActorSkeleton(Read(appearance.SkeletonPath), unitsToMetres);
+            actor.Skeleton.Node.SetMeta("opennv_source_model", appearance.SkeletonPath);
             actor.AddChild(actor.Skeleton.Node);
             // The NPC NAM6/NAM7 fields are unused in this engine. In particular,
             // their legal zero values must not collapse the entire skeleton.

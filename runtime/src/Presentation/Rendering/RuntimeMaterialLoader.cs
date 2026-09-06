@@ -1150,19 +1150,14 @@ internal static class RuntimeMaterialLoader
         source.AppendLine("uniform float emission_energy;");
         source.AppendLine("uniform float alpha_cutoff;");
         source.AppendLine("varying float retail_fog_factor;");
+        source.AppendLine(RetailVertexFog.ShaderSource);
         source.AppendLine("void vertex() {");
-        source.AppendLine(
-            "    vec3 retail_view = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
-        source.AppendLine(
-            "    float retail_distance = length(retail_view) * retail_game_units_per_meter;");
         source.AppendLine("    retail_fog_factor = 0.0;");
         source.AppendLine("    if (retail_fog_enabled) {");
         source.AppendLine(
-            "        float retail_fog_range = retail_fog_far_game_units - retail_fog_near_game_units;");
+            "        retail_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX,");
         source.AppendLine(
-            "        float retail_fog_base = clamp((retail_distance - retail_fog_near_game_units) / retail_fog_range, 0.0, 1.0);");
-        source.AppendLine(
-            "        retail_fog_factor = pow(retail_fog_base, retail_fog_power);");
+            "            vec3(retail_fog_near_game_units, retail_fog_far_game_units, retail_fog_power), retail_game_units_per_meter);");
         source.AppendLine("    }");
         source.AppendLine("}");
         source.AppendLine("void fragment() {");
@@ -1347,17 +1342,12 @@ internal static class RuntimeMaterialLoader
                 $"uniform sampler2D weight_map_{index} : filter_nearest, repeat_disable;");
             source.AppendLine($"varying vec4 land_weights_{index};");
         }
+        source.AppendLine(RetailVertexFog.ShaderSource);
         source.AppendLine("void vertex() {");
         source.AppendLine(
-            "    vec3 retail_view = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+            "    retail_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX,");
         source.AppendLine(
-            "    float retail_distance = length(retail_view) * retail_game_units_per_meter;");
-        source.AppendLine(
-            "    float retail_fog_range = retail_fog_far_game_units - retail_fog_near_game_units;");
-        source.AppendLine(
-            "    float retail_fog_base = clamp((retail_distance - retail_fog_near_game_units) / retail_fog_range, 0.0, 1.0);");
-        source.AppendLine(
-            "    retail_fog_factor = pow(retail_fog_base, retail_fog_power);");
+            "        vec3(retail_fog_near_game_units, retail_fog_far_game_units, retail_fog_power), retail_game_units_per_meter);");
         if (weightMapCount > 0)
         {
             source.AppendLine(

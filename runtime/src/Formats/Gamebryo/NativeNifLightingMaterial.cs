@@ -57,15 +57,15 @@ internal static class NativeNifLightingMaterial
             instance uniform vec3 source_ambient;
             instance uniform vec3 source_fog_color;
             instance uniform vec3 source_fog_range;
+            instance uniform float source_fog_game_units_per_meter;
             varying float source_fog_factor;
             varying float source_specular_mask;
             {{NativeNifPointLighting.ShaderSource}}
             {{FalloutNifHairShading.ShaderSource}}
+            {{RetailVertexFog.ShaderSource}}
             void vertex() {
-                float distance_to_eye = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
-                float extent = source_fog_range.y - source_fog_range.x;
-                source_fog_factor = extent > 0.0 ? pow(clamp(
-                    (distance_to_eye - source_fog_range.x) / extent, 0.0, 1.0), source_fog_range.z) : 0.0;
+                source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
+                    PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
             }
             void fragment() {
                 vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);
@@ -161,15 +161,15 @@ internal static class NativeNifLightingMaterial
         material.SetShaderParameter("use_" + slot + "_map", texture is not null);
     }
 
-    internal static void ApplyEnvironment(Node root, FalloutCellLighting lighting, float unitsToMeters)
+    internal static void ApplyEnvironment(MeshInstance3D mesh, FalloutCellLighting lighting, float unitsToMeters)
     {
-        foreach (var child in root.GetChildren()) ApplyEnvironment(child, lighting, unitsToMeters);
-        if (root is not MeshInstance3D mesh || mesh.Mesh is null) return;
+        if (mesh.Mesh is null) return;
         if (!Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Any(index => mesh.GetActiveMaterial(index)?.ResourceName == ResourceIdentity)) return;
         mesh.SetInstanceShaderParameter("source_ambient", Rgb(lighting.AmbientRgb));
         mesh.SetInstanceShaderParameter("source_fog_color", Rgb(lighting.FogRgb));
-        mesh.SetInstanceShaderParameter("source_fog_range", new Vector3(lighting.FogNear * unitsToMeters,
-            lighting.FogFar * unitsToMeters, lighting.FogPower));
+        mesh.SetInstanceShaderParameter("source_fog_range", new Vector3(lighting.FogNear,
+            lighting.FogFar, lighting.FogPower));
+        mesh.SetInstanceShaderParameter("source_fog_game_units_per_meter", 1f / unitsToMeters);
     }
 
     private static Vector3 Rgb(byte[] value) => new(value[0] / 255.0f, value[1] / 255.0f, value[2] / 255.0f);

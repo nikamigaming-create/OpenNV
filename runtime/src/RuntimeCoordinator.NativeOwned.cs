@@ -865,7 +865,10 @@ public partial class RuntimeCoordinator
         var lighting = cell.Cell.Lighting ??
             throw new InvalidDataException(
                 $"Native CELL {cell.Cell.FormKey} has no resolved XCLL/LGTM lighting.");
-        NativeNifLightingMaterial.ApplyEnvironment(root, lighting, _configuration.World.GameUnitsToMeters);
+        var materialEnvironment = new RuntimeNativeCellLighting { Name = "NativeMaterialEnvironment" };
+        materialEnvironment.Configure(lighting, _configuration.World.GameUnitsToMeters);
+        materialEnvironment.SetMeta("opennv_cell_lighting_source", cell.Cell.FormKey.ToString());
+        root.AddChild(materialEnvironment);
         var environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,

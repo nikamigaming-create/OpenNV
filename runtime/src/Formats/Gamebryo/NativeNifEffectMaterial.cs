@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class NativeNifEffectMaterial
 {
-    private const string Fragment = """
+    private const string Fragment = $$"""
         shader_type spatial;
         render_mode unshaded, __BLEND__, __DEPTH__, __CULL__;
         uniform sampler2D source_texture : filter_linear_mipmap, __REPEAT__;
@@ -16,6 +16,16 @@ internal static class NativeNifEffectMaterial
         uniform bool alpha_test_enabled;
         uniform int alpha_test_function;
         uniform float alpha_threshold;
+        varying float source_view_opacity;
+        {{FalloutNifAngleFalloff.ShaderSource}}
+        void vertex() {
+            source_view_opacity = 1.0;
+            if (falloff_enabled) {
+                vec3 view_position = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+                vec3 view_normal = mat3(MODELVIEW_MATRIX) * NORMAL;
+                source_view_opacity = owned_angle_opacity(dot(normalize(view_position), normalize(view_normal)), source_falloff);
+            }
+        }
         bool accepted(float alpha) {
             if (alpha_test_function == 0) return true;
             if (alpha_test_function == 1) return alpha < alpha_threshold;
@@ -30,12 +40,7 @@ internal static class NativeNifEffectMaterial
             vec4 sampled = source_has_texture ? texture(source_texture, UV) : vec4(1.0);
             float alpha = sampled.a * source_color_multiplier.a;
             if (vertex_alpha_enabled) alpha *= COLOR.a;
-            if (falloff_enabled) {
-                float span = source_falloff.x - source_falloff.y;
-                float fraction = span == 0.0 ? 1.0 : clamp(
-                    (abs(dot(normalize(NORMAL), normalize(VIEW))) - source_falloff.y) / span, 0.0, 1.0);
-                alpha *= mix(source_falloff.w, source_falloff.z, fraction);
-            }
+            alpha *= source_view_opacity;
             if (alpha_test_enabled && !accepted(alpha)) discard;
             ALBEDO = sampled.rgb * COLOR.rgb * source_color_multiplier.rgb;
             __ALPHA_WRITE__
@@ -84,6 +89,7 @@ internal static class NativeNifEffectMaterial
         result.SetMeta("opennv_nif_alpha_owner", state.Blend == FalloutNifBlendMode.SourceAlpha &&
             (alpha is null || (alpha.Flags & 1) == 0) ? "no-lighting-falloff-pass" : "source-alpha-property");
         result.SetMeta("opennv_nif_angle_falloff", useFalloff);
+        if (useFalloff) result.SetMeta("opennv_nif_falloff_owner", "vertex-view-normal-and-position;smooth-cosine-opacity");
         return result;
     }
 }

@@ -44,6 +44,16 @@ internal readonly record struct FalloutNifAlphaState(
 
 internal readonly record struct FalloutNifAngleFalloff(float StartCosine, float StopCosine, float StartOpacity, float StopOpacity)
 {
+    internal const string ShaderSource = """
+        float owned_angle_opacity(float cosine, vec4 endpoints) {
+            float span = endpoints.y - endpoints.x;
+            if (span == 0.0) return endpoints.z;
+            float fraction = clamp((abs(cosine) - endpoints.x) / span, 0.0, 1.0);
+            float smooth_fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+            return mix(endpoints.z, endpoints.w, smooth_fraction);
+        }
+        """;
+
     internal static FalloutNifAngleFalloff Read(FalloutNifNoLightingProperty source)
     {
         var result = new FalloutNifAngleFalloff(source.FalloffStartAngle, source.FalloffStopAngle,
@@ -62,7 +72,10 @@ internal readonly record struct FalloutNifAngleFalloff(float StartCosine, float 
     {
         if (!float.IsFinite(cosine)) throw new ArgumentOutOfRangeException(nameof(cosine));
         if (StartCosine == StopCosine) return StartOpacity;
-        var fraction = Math.Clamp((cosine - StopCosine) / (StartCosine - StopCosine), 0, 1);
-        return StopOpacity + (StartOpacity - StopOpacity) * fraction;
+        var fraction = Math.Clamp((MathF.Abs(cosine) - StartCosine) / (StopCosine - StartCosine), 0, 1);
+        if (fraction == 0) return StartOpacity;
+        if (fraction == 1) return StopOpacity;
+        var smoothFraction = fraction * fraction * (3 - 2 * fraction);
+        return StartOpacity + (StopOpacity - StartOpacity) * smoothFraction;
     }
 }

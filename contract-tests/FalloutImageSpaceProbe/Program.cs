@@ -5,6 +5,11 @@ using OpenNV.Runtime.Content;
 GameTimeProbe.Run();
 ImageEffectsDeclarationsProbe.Run();
 DirectionalLightProbe.Run();
+if (args is ["--cell-fog", var fogRoot, var fogCell])
+{
+    VertexFogProbe.Owned(fogRoot, Convert.ToUInt32(fogCell, 16));
+    return;
+}
 if (args is ["--directional-light", var directionalRoot, var directionalCell])
 {
     DirectionalLightProbe.Owned(directionalRoot, Convert.ToUInt32(directionalCell, 16));

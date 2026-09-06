@@ -13,7 +13,7 @@ internal static class RetailFaceGenMaterial
 
     private static string BuildShaderSource()
     {
-        var source = new StringBuilder("""
+        var source = new StringBuilder($$"""
         shader_type spatial;
         render_mode cull_back, ambient_light_disabled, specular_disabled;
 
@@ -59,15 +59,10 @@ internal static class RetailFaceGenMaterial
                 lessThanEqual(encoded_color, vec3(transfer_encoded_cutoff)));
         }
 
+        {{RetailVertexFog.ShaderSource}}
         void vertex() {
-            vec4 retail_view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
-            float retail_distance = length(retail_view.xyz) * retail_game_units_per_meter;
-            float retail_fog_range = retail_fog_far_game_units - retail_fog_near_game_units;
-            float retail_fog_base = clamp(
-                (retail_distance - retail_fog_near_game_units) / retail_fog_range,
-                0.0,
-                1.0);
-            retail_fog_factor = pow(retail_fog_base, retail_fog_power);
+            retail_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX,
+                vec3(retail_fog_near_game_units, retail_fog_far_game_units, retail_fog_power), retail_game_units_per_meter);
         }
 
         void fragment() {

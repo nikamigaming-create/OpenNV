@@ -305,8 +305,8 @@ internal sealed class RuntimeRenderTrace : IDisposable
                 surface = index,
                 bound = mesh.GetActiveMaterial(index) is { } material ? ResourceState(material) : null,
             }).ToArray();
-            properties["instanceParameters"] = new[] { "source_ambient", "source_fog_color", "source_fog_range" }
-                .ToDictionary(name => name, name => Value(mesh.GetInstanceShaderParameter(name)));
+            properties["instanceParameters"] = InstanceShaderParameters(mesh)
+                .ToDictionary(pair => pair.Key, pair => Value(pair.Value), StringComparer.Ordinal);
             properties["blendShapes"] = Enumerable.Range(0, mesh.GetBlendShapeCount()).Select(index => new
             {
                 name = geometry is ArrayMesh shaped ? shaped.GetBlendShapeName(index).ToString() : index.ToString(CultureInfo.InvariantCulture),
@@ -410,6 +410,11 @@ internal sealed class RuntimeRenderTrace : IDisposable
         var identity = record.Plugin.Path + ":" + record.HeaderOffset;
         if (!_records.ContainsKey(identity)) _records[identity] = (record, record.ReadDataForObservation());
     }
+
+    internal static IReadOnlyDictionary<string, Variant> InstanceShaderParameters(GeometryInstance3D instance) =>
+        RenderingServer.InstanceGeometryGetShaderParameterList(instance.GetInstance())
+            .Select(property => property["name"].AsString())
+            .ToDictionary(name => name, name => instance.GetInstanceShaderParameter(name), StringComparer.Ordinal);
 
     private object? Value(Variant value)
     {
