@@ -127,7 +127,7 @@ internal partial class RuntimeNativeNpc
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
-            _packageIdles = new(_packageIdleSource);
+            _packageIdles = new(_packageIdleSource, _idleReplays);
             var fields = selected.ReadSubrecords().ToArray();
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;

@@ -87,6 +87,14 @@ tracks component discrepancies. Component results do not establish acceptance.
   travel, IDLE repeats, KF sound dispatch, preview blink lifecycle and all eight
   original Vigor controls pass component audits. Complete ordinary movement,
   dialogue overlap, cigarette timing/smoke, audio and Vigor framing remain open.
+- Package idle selection now consults the actor's existing source replay delay.
+  Previously the clock was recorded but never checked, so an interrupted idle
+  could restart during its cooldown. Synthetic and selected owned checks cover
+  interruption, package replacement and expiry. Ordinary room-68 reaches name
+  entry with the seated base and no smoking overlay; retail also has only the
+  seated base active. Their base animation phases still differ. The full gate
+  passes. Package IDLE/parent conditions are also bypassed and remain a separate
+  recorded defect; this correction does not establish cigarette timing parity.
 - Source image programs, blur kernels, shared-clock double vision and the
   separate original menu-background effect are connected. Full opening haze,
   focus/DOF and matched GPU output remain unverified. Save v10 retains source
@@ -95,8 +103,8 @@ tracks component discrepancies. Component results do not establish acceptance.
 
 ## Live comparison and evidence
 
-The retained retail room-54 and fresh OpenNV room-67 processes are at VCG01
-stage 10 / original name entry. Use the room-67 session configuration and
+The retained retail room-54 and fresh OpenNV room-68 processes are at VCG01
+stage 10 / original name entry. Use the room-68 session configuration and
 revalidate processes and state before control. Keep one instance of each game.
 A shared quest/menu checkpoint is not exact camera, clock or animation phase.
 
@@ -126,8 +134,9 @@ captures, native addresses and decoded resources stay outside the repository.
 ## Next owners
 
 1. Preserve the source colour, radius, direction, fog, angular-opacity and
-   material-emittance fixes. Reconcile the camera and Doc animation phase at
-   the name/Reflectron boundary. The observed world camera far plane is 5000
+   material-emittance and idle cooldown fixes. Bind package idle conditions and
+   reconcile the camera and Doc animation phase at the name/Reflectron boundary.
+   The observed world camera far plane is 5000
    game units; OpenNV still uses 200 metres. Bind its source owner before
    changing it. Native GPU draw/frame association, per-pass fog admission,
    premultiplied-program selection, light/shadow selection and ceiling response

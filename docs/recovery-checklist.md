@@ -37,7 +37,7 @@ Existing failures stay in this queue when user input changes the immediate order
 | R03 | Wake-up, sit-up, seated and exit camera transforms/projection/pause agree at matched times | Source KF hierarchy/FOV bind; complete matched timeline and exit open |
 | R04 | Doc's source body, outfit, face, hair, materials and attachments remain correct in motion | Direct assembly works; face/material correspondence unverified |
 | R05 | Correct chair occupancy, sitting layers, entry and exit, with source root transfer | Run room-17 visibly fixes floating root; complete entry/exit still open |
-| R06 | Source package idles, cigarette/object attachment, gesture layers and interruption/resumption | Seated base applies; package idle collection not yet invoked |
+| R06 | Source package idles, cigarette/object attachment, gesture layers and interruption/resumption | Seated base, collection playback, ANIO and source replay cooldown bind; condition admission, full timing and matched motion remain open |
 | R07 | Source effects, including any smoking effects, start/stop/attach correctly | Old smoke uses custom sphere puffs; this is not source-driven smoke support |
 | R08 | Complete opening voice, response ordering, subtitles and interaction/skip rules | Four initial INFOs and post-name mirror handoff exercised; full dialogue open |
 | R09 | Voice-timed lips, expressions, listener reactions, eye/head aiming and blinking | Owned TRI morphs now follow LIP speech time on actual meshes; private paired run30 shows mouth motion. Idle/speech face blending, aiming, reactions and complete matched timing remain open |

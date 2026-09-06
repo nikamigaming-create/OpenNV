@@ -1,7 +1,7 @@
 namespace OpenNV.Runtime.Content;
 
 /// <summary>Source package idle order and the wait between completed selections.</summary>
-internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source)
+internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source, FalloutIdleReplayState replay)
 {
     private int _cursor;
     internal FalloutScriptPackage Source { get; } = source;
@@ -14,8 +14,13 @@ internal sealed class FalloutIdleCollectionPlayback(FalloutScriptPackage source)
         if (Complete || WaitSeconds > 0 || Source.Idles.Count == 0) return null;
         if (!Source.RunInSequence && Source.Idles.Count > 1)
             throw new NotSupportedException($"Package {Source.Form} requires the authoritative random idle selection owner.");
-        if (_cursor >= Source.Idles.Count) _cursor = 0;
-        return Source.Idles[_cursor++];
+        var next = _cursor >= Source.Idles.Count ? 0 : _cursor;
+        var idle = Source.Idles[next];
+        // Cancellation releases the pose, not the actor's source replay delay.
+        // A blocked selection must not consume its place in an ordered package.
+        if (!replay.CanSelect(idle)) return null;
+        _cursor = next + 1;
+        return idle;
     }
 
     internal void Finish()

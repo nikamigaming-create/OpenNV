@@ -17,6 +17,13 @@ response gestures, chair exit/NAVM travel, IDLE repetition, animation sound,
 preview blinking and all eight original Vigor controls pass component audits.
 Complete ordinary timing, audio, motion and visual acceptance remain open.
 
+Package playback now enforces the actor's source idle replay delay, which was
+previously tracked without being checked. Interruption/replacement/expiry
+regressions, the selected owned audit and full gate pass. Ordinary room-68
+reaches name entry with the seated base and no premature smoking overlay.
+Native observation also finds only the seated base active, but phase and camera
+alignment remain open. Source IDLE/parent conditions still need binding.
+
 Source quest-clock initialization, shared script lifetime, Float32 recurrence,
 modal recurrence and cold consistency pass selected checks. All 252 selected
 native initial countdowns match exact bits. Source stage-global writes now
