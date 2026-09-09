@@ -1,7 +1,16 @@
 # Product status
 
-The current user priority is the complete visible VR body with head-only eye
-exclusion, reactive gameplay control and a single-eye recording. Preserve physical
+The current user priority is a flat gecko/raider ragdoll and dismemberment
+showcase. The 74-second private recording includes ordinary pistol kills and
+explicitly labeled controlled limb detachment. Source joint release, capped
+skin separation and saved cut poses are implemented; an ordinary raider cold
+load retains all five detached parts. Automatic weapon selection, exploded
+gore, combat AI and full combat remain incomplete. NPC manual/autocalculated
+health and equipped armor defense now admit the selected raider; source and
+owned physics checks remain separate from retail parity. See [actor damage](actor-damage.md).
+
+Preserve the complete visible VR body with head-only eye exclusion, reactive
+gameplay control and single-eye recording. Preserve physical
 hands, weapon handling, measured performance, the trip to the Strip and universal cell repairs;
 see [current work](current-work.md) and [the cell workflow](cell-parity-review.md).
 Source hand/weapon sweeps, dynamic prop pushing, two-hand support and live wrist

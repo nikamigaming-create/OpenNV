@@ -5,7 +5,7 @@ using OpenNV.Runtime.World.Actors;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutActorInjury(bool Dead, FalloutFormKey? Killer,
-    IReadOnlyDictionary<byte, float> LimbDamage, bool DeathInventoryGranted = false);
+    IReadOnlyDictionary<byte, float> LimbDamage, bool DeathInventoryGranted = false, IReadOnlyList<byte>? SeveredParts = null);
 
 internal sealed record FalloutActorHit(FalloutFormKey Reference, byte Part, float HealthBefore, float HealthAfter,
     float HealthDamage, float LimbDamage, bool Died, bool Dead, uint ImpactMaterial);
@@ -71,7 +71,13 @@ internal sealed partial class FalloutReferenceWorld
         if (died && !injury.DeathInventoryGranted && source.DeathItem is { } item)
             Inventory(reference, level, globals).Contents.Add(records, item, 1, level, true, globals);
         actor.ActorValues["health"] = changed;
-        actor.Injury = new(injury.Dead || died, died ? attacker : injury.Killer, limbs, injury.DeathInventoryGranted || died);
+        actor.Injury = injury with
+        {
+            Dead = injury.Dead || died,
+            Killer = died ? attacker : injury.Killer,
+            LimbDamage = limbs,
+            DeathInventoryGranted = injury.DeathInventoryGranted || died
+        };
         return new(reference, partType, health.Current, changed.Current, healthDamage, limbDamage, died, actor.Injury.Dead, source.ImpactMaterial);
     }
 
@@ -84,6 +90,19 @@ internal sealed partial class FalloutReferenceWorld
         var body = BodyParts(actor.Reference);
         if (injury.LimbDamage.Keys.Any(key => !body.Parts.Any(part => part.Type == key)))
             throw new InvalidDataException("Saved limb is absent from the winning body-part source.");
-        actor.Injury = injury with { LimbDamage = new Dictionary<byte, float>(injury.LimbDamage) };
+        if (injury.SeveredParts is { } severed && (!injury.Dead && severed.Count != 0 ||
+            severed.Distinct().Count() != severed.Count || severed.Any(type => !body.Parts.Any(part => part.Type == type && (part.Flags & 1) != 0))))
+            throw new InvalidDataException("Saved severed limb is invalid for its source body.");
+        actor.Injury = injury with { LimbDamage = new Dictionary<byte, float>(injury.LimbDamage), SeveredParts = injury.SeveredParts?.ToArray() };
+    }
+
+    internal void SeverLimb(FalloutFormKey reference, byte type)
+    {
+        var actor = Actor(reference);
+        if (actor.Injury is not { Dead: true } injury) throw new InvalidOperationException("Limb separation requires a dead actor.");
+        if (!BodyParts(reference).Parts.Any(part => part.Type == type && (part.Flags & 1) != 0))
+            throw new NotSupportedException("The source body part is not severable.");
+        var parts = injury.SeveredParts ?? [];
+        if (!parts.Contains(type)) actor.Injury = injury with { SeveredParts = parts.Append(type).Order().ToArray() };
     }
 }

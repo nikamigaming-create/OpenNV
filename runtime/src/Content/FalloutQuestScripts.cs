@@ -41,10 +41,12 @@ internal sealed record FalloutQuestScriptSnapshot(FalloutFormKey Quest, FalloutF
 internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScriptSnapshot> Instances,
     IReadOnlyList<FalloutMessageRequest> Messages, FalloutHudNotificationsSnapshot? Notifications = null,
     FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
-    IReadOnlyList<FalloutFormKey>? SaidInfos = null)
+    IReadOnlyList<FalloutFormKey>? SaidInfos = null, int ParserVersion = 0)
 {
     internal void Validate()
     {
+        if (ParserVersion is < 0 or > FalloutGameModeProgram.ParserVersion)
+            throw new NotSupportedException("Saved quest script parser version is unsupported.");
         if (Instances is null || Messages is null)
             throw new InvalidDataException("Saved quest script owners are missing.");
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
@@ -117,6 +119,7 @@ internal sealed class FalloutQuestScripts
     private readonly FalloutQuestState _quests;
     private readonly List<Instance> _instances = [];
     private readonly Dictionary<FalloutFormKey, string> _unbound = [];
+    private readonly List<FalloutFormKey> _newlyParsed = [];
     private readonly FalloutPlayerInventory _inventory;
     private readonly FalloutGlobalState? _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
@@ -137,6 +140,7 @@ internal sealed class FalloutQuestScripts
     {
         quests = _instances.Select(instance => new { quest = instance.Quest.FormKey.ToString(), script = instance.Script.FormKey.ToString(), instance.Claimed, instance.Executions, instance.Clock.Remaining, clock = instance.Clock.Capture(), instance.Clock.Interval, instance.Error }).ToArray(),
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
+        newlyParsedOnRestore = _newlyParsed.Select(key => key.ToString()).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
         messageResults = MessageResults.Capture(),
@@ -165,7 +169,8 @@ internal sealed class FalloutQuestScripts
             instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture())).ToArray(),
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
             .Concat(_messages.Select(message => message.Request!)).ToArray(),
-        _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray());
+        _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
+        FalloutGameModeProgram.ParserVersion);
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
@@ -173,11 +178,15 @@ internal sealed class FalloutQuestScripts
             throw new InvalidOperationException("Script restoration requires a fresh owner.");
         snapshot.Validate();
         var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
-        if (states.Count != _instances.Count || _instances.Any(instance => !states.ContainsKey(instance.Quest.FormKey)))
+        var owners = _instances.Select(instance => instance.Quest.FormKey).ToHashSet();
+        var newlyParsed = _instances.Where(instance => !states.ContainsKey(instance.Quest.FormKey)).ToArray();
+        if (states.Keys.Any(key => !owners.Contains(key)) || newlyParsed.Any(instance => snapshot.ParserVersion != 0 ||
+            !FalloutGameModeProgram.HasArgumentSeparator(FalloutDialogueTopic.ScriptText(
+                instance.Script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span))))
             throw new InvalidDataException("Saved quest script owners differ from the winning source graph.");
         foreach (var instance in _instances)
         {
-            var state = states[instance.Quest.FormKey];
+            if (!states.TryGetValue(instance.Quest.FormKey, out var state)) continue;
             instance.Clock.Validate(state.Clock!);
             if (state.Script != instance.Script.FormKey)
                 throw new InvalidDataException("Saved quest script scheduling is invalid.");
@@ -194,12 +203,16 @@ internal sealed class FalloutQuestScripts
         }
         foreach (var instance in _instances)
         {
-            var state = states[instance.Quest.FormKey];
+            if (!states.TryGetValue(instance.Quest.FormKey, out var state)) continue;
             instance.Clock.Restore(state.Clock!);
             instance.Executions = state.Executions;
             instance.Error = state.Error;
             if (state.Error is not null) _unbound[instance.Quest.FormKey] = state.Error;
         }
+        // Newly supported programs had no prior invocation. Their original
+        // initialization clock is retained; quest locals/progression live in
+        // the separately restored quest state and are never reset here.
+        _newlyParsed.AddRange(newlyParsed.Select(instance => instance.Quest.FormKey));
         foreach (var message in messages) _messages.Enqueue(message);
     }
 

@@ -35,6 +35,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             {
                 ragdoll.Validate();
                 if (snapshot.Injury?.Dead != true) throw new InvalidDataException("Living reference has a saved death ragdoll.");
+                if (!(ragdoll.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual((snapshot.Injury.SeveredParts ?? []).Order()))
+                    throw new InvalidDataException("Saved cut poses disagree with the severed source limbs.");
             }
         }
     }
@@ -214,7 +216,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
             foreach (var (index, value) in snapshot.Variables) instance.Write(index, value);
             // Older builds incorrectly retained failed engine default actions
             // as source-program faults even on objects with no script.
-            instance.ScriptError = instance.Script is null ? null : snapshot.ScriptError;
+            // Parsing executes no source statements. Retry it after a cold
+            // load so a parser correction can recover an existing save.
+            // Reached execution failures retain their applied prefix/error.
+            instance.ScriptError = instance.Script is null ||
+                snapshot.ScriptError?.StartsWith("Parse:", StringComparison.OrdinalIgnoreCase) == true
+                ? null : snapshot.ScriptError;
             instance.Enabled = snapshot.Enabled ?? instance.Enabled;
             instance.EnableRequest = snapshot.EnableRequest;
             instance.Opacity = snapshot.Opacity;

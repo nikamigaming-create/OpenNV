@@ -43,7 +43,7 @@ internal partial class RuntimeNativePlayer
         damageError = _damageError,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "NPC-health,armor-resistance,skill-condition-spread,critical,sneak,weapon-wear,impact-decal,tracers,flight,explosions,automatic-fire"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,weapon-limb-selection,impact-decal,tracers,flight,explosions,automatic-fire"
     };
 
     private void RequestWeaponFire()

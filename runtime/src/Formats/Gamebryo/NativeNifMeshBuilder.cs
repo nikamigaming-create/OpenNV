@@ -440,6 +440,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 rendered.SetMeta("opennv_nif_skin_instance", instance.Block.Index);
                 rendered.SetMeta("opennv_nif_skin_partition", partition.PartitionIndex);
                 rendered.SetMeta("opennv_nif_skin_vertex_map", partition.VertexMap.Select(value => (int)value).ToArray());
+                rendered.SetMeta("opennv_nif_authored_visible", visible && (geometry.Flags & HiddenFlag) == 0);
                 if (partition.BodyPart is { } bodyPart)
                 {
                     rendered.SetMeta("opennv_nif_body_part", bodyPart.BodyPart);

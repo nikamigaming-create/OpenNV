@@ -26,12 +26,26 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
         {
             var data = Field(stats, "DATA", 11);
             var initial = BinaryPrimitives.ReadInt32LittleEndian(data.Span);
-            // Source-zero NPCs are placed corpses. Living NPC derivation is
-            // admitted separately once the engine's level term is established.
-            if (initial != 0) throw new NotSupportedException("NPC derived health formula is not yet bound.");
-            health = 0;
+            if (initial < 0) throw new InvalidDataException("NPC source health is negative.");
+            health = initial;
+            if (initial != 0)
+            {
+                var derived = (data.Span[6] + (double)FalloutGameSettingFloats.Read(records, "fAVDNPCHealthEnduranceOffset")) *
+                    FalloutGameSettingFloats.Read(records, "fAVDNPCHealthEnduranceMult");
+                // Only the autocalculated NPC path adds the level term. Its
+                // derived contribution is truncated and clamped independently
+                // of the authored base; manually configured NPCs retain the
+                // floating endurance contribution. See actor-damage.md.
+                if ((BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 0x10) != 0)
+                {
+                    var level = Math.Max(1, (int)BinaryPrimitives.ReadUInt16LittleEndian(acbs.Span[8..]));
+                    derived += (level - 1d) * FalloutGameSettingFloats.Read(records, "fAVDNPCHealthLevelMult");
+                    derived = Math.Max(0, Math.Truncate(derived));
+                }
+                health += (float)derived;
+            }
         }
-        if (health < 0) throw new InvalidDataException("Actor base health is negative.");
+        if (!float.IsFinite(health) || health < 0) throw new InvalidDataException("Actor base health is invalid.");
         var body = source.Signature == "NPC_" ? records.RuntimeFormKey(0x1d) : FalloutDialogueTopic.RequiredForm(model, "PNAM");
         var death = inventory.ReadSubrecords().SingleOrDefault(field => field.Signature == "INAM").Data;
         if (!death.IsEmpty && death.Length != 4) throw new InvalidDataException("Actor death item has an invalid extent.");

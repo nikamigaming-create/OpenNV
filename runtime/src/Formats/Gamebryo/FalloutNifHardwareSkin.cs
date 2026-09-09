@@ -26,6 +26,15 @@ internal static class FalloutNifHardwareSkin
         _ => throw new NotSupportedException($"Unknown Fallout body partition {partition.Value.BodyPart}."),
     };
 
+    internal static bool VisibleAfterSevering(ushort part, IReadOnlyCollection<byte> severed) => part switch
+    {
+        <= 13 => true,
+        >= 101 and <= 113 => severed.Contains((byte)(part - 100)),
+        >= 200 and <= 213 => severed.Contains((byte)(part - 200)),
+        >= 1000 and <= 13000 when part % 1000 == 0 => !severed.Contains((byte)(part / 1000)),
+        _ => throw new NotSupportedException($"Unknown Fallout body partition {part}.")
+    };
+
     internal static IReadOnlyList<FalloutNifHardwareSkinPartition> Read(
         FalloutNifSkinInstance instance,
         FalloutNifSkinData data,

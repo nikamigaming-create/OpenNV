@@ -14,6 +14,7 @@ internal sealed record FalloutScriptEventProgram(string Event, string? Filter, F
 // Unsupported expressions/commands stop the caller before its staged effects commit.
 internal sealed class FalloutGameModeProgram
 {
+    internal const int ParserVersion = 1;
     private readonly IReadOnlyList<string[]> _lines;
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines) => _lines = lines;
 
@@ -204,11 +205,20 @@ internal sealed class FalloutGameModeProgram
         var at = 0;
         foreach (Match match in matches)
         {
-            if (!string.IsNullOrWhiteSpace(line[at..match.Index])) throw new NotSupportedException("Script contains an unbound token.");
+            if (!Separators(line.AsSpan(at, match.Index - at))) throw new NotSupportedException("Script contains an unbound token.");
             at = match.Index + match.Length;
         }
-        if (!string.IsNullOrWhiteSpace(line[at..])) throw new NotSupportedException("Script contains an unbound token.");
+        if (!Separators(line.AsSpan(at))) throw new NotSupportedException("Script contains an unbound token.");
         return matches.Select(match => match.Value).ToArray();
+
+        // Source command arguments permit optional commas. Quoted strings are
+        // complete tokens above, so their commas remain part of the argument.
+        static bool Separators(ReadOnlySpan<char> value)
+        {
+            foreach (var character in value)
+                if (!char.IsWhiteSpace(character) && character != ',') return false;
+            return true;
+        }
     }
 
     private static string StripComment(string line)
@@ -220,5 +230,23 @@ internal sealed class FalloutGameModeProgram
             if (line[index] == ';' && !quoted) return line[..index];
         }
         return line;
+    }
+
+    // Version-zero saves omitted every quest whose source contained an
+    // argument comma, even in an inactive event. This identifies exactly that
+    // legacy parse rejection without treating quoted/comment text as syntax.
+    internal static bool HasArgumentSeparator(string source)
+    {
+        var quoted = false;
+        var comment = false;
+        foreach (var character in source)
+        {
+            if (character is '\r' or '\n') { quoted = false; comment = false; continue; }
+            if (comment) continue;
+            if (character == '"') quoted = !quoted;
+            else if (!quoted && character == ';') comment = true;
+            else if (!quoted && character == ',') return true;
+        }
+        return false;
     }
 }

@@ -65,6 +65,9 @@ internal static class FalloutNpcAppearanceResolver
         var raceData = Bytes(race, "DATA", 36);
         var raceParts = ReadRaceParts(stack, race, female, out var raceFace);
         var parts = new List<FalloutNpcAppearancePart>(raceParts.Where(part => part.ModelPath?.EndsWith(".nif", StringComparison.OrdinalIgnoreCase) == true));
+        // ENAM overrides the race eye model's authored material. Its absence
+        // retains the RACE/NIF texture; it does not require choosing a random
+        // entry from the race's list of available eyes.
         var eye = appearanceState?.Eyes ?? OptionalForm(model, "ENAM");
         if (eye is { } eyeKey)
         {
@@ -91,8 +94,6 @@ internal static class FalloutNpcAppearanceResolver
             .Concat(equippedArmor ?? []).DistinctBy(key => key.ToString(), StringComparer.OrdinalIgnoreCase).ToArray();
         var armors = armorKeys.Select(key => ReadArmor(stack, key, female)).ToArray();
         var blockers = new List<string>();
-        if (eye is null && parts.Any(part => part.Role is "eye-left" or "eye-right"))
-            blockers.Add("default-eye-selection-required");
         foreach (var item in inventory.Where(item => item.Count < 0))
             blockers.Add($"negative-inventory-count-semantics-required:{item.Item}");
         var selected = equippedArmor?.ToArray() ?? armorKeys;

@@ -28,9 +28,26 @@ internal static class ActorDamageContracts
                 Record("MISC", 3, Field("EDID", Text("SourceDeathLoot")), Field("DATA", new byte[8])),
                 Record("LVLI", 4, Field("LVLD", [0]), Field("LVLF", [0]), Field("LVLO", entry)),
                 Record("BPTD", 5, Field("BPNN", Text("Root")), Field("BPND", new byte[83])),
+                Npc(0x10, 30, 3, 8, 0), Npc(0x11, 30, 3, 8, 0x10), Npc(0x12, 0, 20, 8, 0),
+                Npc(0x13, 30, 3, 8, 0x90), Npc(0x14, 30, 0, 0, 0x10), Npc(0x15, 30, 0, 8, 0),
+                Record("BPTD", 0x1d, Part(0, 1, "Root"), Part(1, 2, "Neck")),
+                Setting(0x61, "fAVDNPCHealthEnduranceOffset", -1), Setting(0x62, "fAVDNPCHealthEnduranceMult", 5.25f),
+                Setting(0x63, "fAVDNPCHealthLevelMult", 5),
+                Armor(0x70, 500, 6, true), Armor(0x71, 1250, 0, false), Armor(0x72, 0, float.NaN, true),
                 Record("CELL", 0x80, Field("EDID", Text("SourceCell")), Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            Check(FalloutActorHealthSource.Read(records, Key(0x10)).Health == 40.5f &&
+                FalloutActorHealthSource.Read(records, Key(0x11)).Health == 75 &&
+                FalloutActorHealthSource.Read(records, Key(0x12)).Health == 0 &&
+                FalloutActorHealthSource.Read(records, Key(0x14)).Health == 30 &&
+                FalloutActorHealthSource.Read(records, Key(0x15)).Health == 24.75f,
+                "NPC manual/autocalculated health, independent truncation/clamp or zero-health corpse changed.");
+            Reject(() => FalloutActorHealthSource.Read(records, Key(0x13)));
+            Check(FalloutArmorDefense.Read(records.GetEffective(Key(0x70))) == new FalloutArmorDefense(6, 5) &&
+                FalloutArmorDefense.Read(records.GetEffective(Key(0x71))) == new FalloutArmorDefense(0, 12.5f),
+                "Armor threshold or hundredths resistance changed.");
+            Reject(() => FalloutArmorDefense.Read(records.GetEffective(Key(0x72))));
             var parts = FalloutBodyPartData.Read(records.GetEffective(Key(2)));
             Check(parts.Parts[1] is { Type: 1, DamageMultiplier: 2, ReplacementModel: "meshes/Gore/source-head.nif", GoreBone: "Neck" },
                 "Post-BPND model/attachment fields escaped their source body part.");
@@ -48,6 +65,15 @@ internal static class ActorDamageContracts
             var player = new FalloutPlayerInventory();
             world.Inventory(Key(0x91), 1).Contents.TransferTo(player, Key(3), 1);
             var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+            world.SeverLimb(Key(0x91), 1); world.SeverLimb(Key(0x91), 1);
+            Check(world.Get(Key(0x91)).Injury!.SeveredParts!.SequenceEqual(new byte[] { 1 }), "Severed source limb duplicated.");
+            using var coldSever = new FalloutReferenceWorld(records);
+            coldSever.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+            Check(coldSever.Get(Key(0x91)).Injury!.SeveredParts!.Single() == 1, "Cold injury lost its severed limb.");
+            Reject(() => world.SeverLimb(Key(0x91), 13));
+            using var invalidSever = new FalloutReferenceWorld(records);
+            Reject(() => invalidSever.Restore(saved.Select(value => value.Reference == Key(0x92) ?
+                value with { Injury = value.Injury! with { SeveredParts = [1] } } : value).ToArray()));
             using var cold = new FalloutReferenceWorld(records); cold.Restore(saved); cold.LoadCell(cell);
             var corpse = cold.DamageActor(Key(0x91), Key(0x92), 1, 25, 1, 1);
             Check(corpse is { Died: false, Dead: true, HealthDamage: 0, HealthAfter: -10 } &&
@@ -63,6 +89,10 @@ internal static class ActorDamageContracts
             Reject(() => (pose with { Bodies = [body with { LinearVelocity = [float.NaN, 0, 0] }] }).Validate());
             Reject(() => (pose with { Bodies = [null!] }).Validate());
             Reject(() => (pose with { SkeletonSha256 = "missing" }).Validate());
+            var cut = new FalloutRagdollCutPose(1, [body.Transform]);
+            (pose with { Cuts = [cut] }).Validate();
+            Reject(() => (pose with { Cuts = [cut, cut] }).Validate());
+            Reject(() => (pose with { Cuts = [cut with { Bones = [new float[12]] }] }).Validate());
             using var livingPose = new FalloutReferenceWorld(records);
             Reject(() => livingPose.Restore(saved.Select(value => value.Reference == Key(0x92) ? value with { Ragdoll = pose } : value).ToArray()));
             using var savedPose = new FalloutReferenceWorld(records);
@@ -71,6 +101,21 @@ internal static class ActorDamageContracts
             Console.WriteLine("OPENNV_ACTOR_DAMAGE_CONTRACT_PASS health=source limbDamage=source deathLoot=once coldRestore=true corpseTransfer=conserved");
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static byte[] Npc(uint id, int health, byte endurance, ushort level, uint flags)
+    {
+        var data = new byte[11]; BinaryPrimitives.WriteInt32LittleEndian(data, health); data[6] = endurance;
+        var acbs = new byte[24]; UInt(acbs, 0, flags); BinaryPrimitives.WriteUInt16LittleEndian(acbs.AsSpan(8), level);
+        return Record("NPC_", id, Field("ACBS", acbs), Field("DATA", data), Field("NAM4", BitConverter.GetBytes(6u)));
+    }
+    private static byte[] Setting(uint id, string name, float value) =>
+        Record("GMST", id, Field("EDID", Text(name)), Field("DATA", BitConverter.GetBytes(value)));
+    private static byte[] Armor(uint id, short rating, float threshold, bool newVegas)
+    {
+        var data = new byte[newVegas ? 12 : 4]; BinaryPrimitives.WriteInt16LittleEndian(data, rating);
+        if (newVegas) Float(data, 4, threshold);
+        return Record("ARMO", id, Field("DNAM", data));
     }
 
     private static byte[] Part(byte type, float multiplier, string node)

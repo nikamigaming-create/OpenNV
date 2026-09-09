@@ -27,7 +27,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         injury = _state.Injury,
         ragdoll = _ragdoll?.Observation,
         error = Error,
-        unbound = "critical,sneak,armor-and-resistance-modifiers,damage-reactions,combat-AI,hit-and-death-script-events,death-XP,limb-destruction"
+        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI,hit-and-death-script-events,death-XP,weapon-limb-selection,exploded-limbs"
     };
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
@@ -104,7 +104,17 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         catch (Exception error) { Error = error.Message; throw; }
     }
 
-    private void PrepareDeath() => _ragdoll ??= RuntimeNativeActorRagdoll.Prepare(_actor, _skeleton, _state, _content, _skeletonPath, _layer, _mask);
+    private void PrepareDeath() => _ragdoll ??= RuntimeNativeActorRagdoll.Prepare(_actor, _skeleton, _state, _content, _skeletonPath, _layer, _mask,
+        _world.BodyParts(_state.Reference).Parts);
+
+    internal void SeverLimb(byte type)
+    {
+        if (!Dead) throw new InvalidOperationException("Source limb separation requires a dead actor.");
+        PrepareDeath();
+        _ragdoll!.RequireSeverable(type);
+        _ragdoll.Sever(type);
+        _world.SeverLimb(_state.Reference, type);
+    }
 
     private void BeginDeath()
     {

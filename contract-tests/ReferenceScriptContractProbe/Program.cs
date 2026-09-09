@@ -96,6 +96,15 @@ try
     var coldScripts = new FalloutReferenceScripts(records, restored, quests, new((_, _) => false, _ => { }));
     Require(coldScripts.Dispatch(Key(0x900), "GameMode").Error == failure.Error && restored.Get(Key(0x900)).Read(1) == 7,
         "Cold restoration reran a failed block or discarded its error.");
+    using var reparsed = new FalloutReferenceWorld(records);
+    var priorParseFailure = snapshots.Single(snapshot => snapshot.Reference == Key(0x901)) with
+    { ScriptError = "Parse: Script contains an unbound token." };
+    reparsed.Restore([priorParseFailure]);
+    reparsed.LoadCell(firstCell);
+    var reparsedScripts = new FalloutReferenceScripts(records, reparsed, quests, new((_, _) => false, _ => { }));
+    Require(reparsedScripts.Dispatch(Key(0x901), "GameMode").Error is null &&
+        reparsed.Get(Key(0x901)).Read(2) == priorParseFailure.Variables[2],
+        "Cold restoration retained a stale parse rejection or reset script locals.");
     using var rejected = new FalloutReferenceWorld(records);
     Reject(() => rejected.Restore([snapshots[0], snapshots[0]]));
     Require(rejected.InstanceCount == 0, "Failed restore partially published reference state.");

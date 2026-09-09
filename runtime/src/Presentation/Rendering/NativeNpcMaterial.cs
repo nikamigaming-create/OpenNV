@@ -44,7 +44,7 @@ internal static class NativeNpcMaterial
             nif.ReadObject(shaders[0].TextureSet) is not FalloutNifShaderTextureSet original || original.Textures.Length != 6)
             throw new NotSupportedException("Actor texture substitution requires its source shader texture set.");
         var paths = FalloutNpcFaceMaterial.ResolvePartTexturePaths(part, original.Textures[0], original.Textures[1],
-            string.IsNullOrEmpty(original.Textures[2]) ? null : original.Textures[2]);
+            string.IsNullOrEmpty(original.Textures[2]) ? null : original.Textures[2], path => source.TryResolve(path, null, out _));
         NativeNifLightingMaterial.SetTexture(lighting, "base", Load(source, paths.BaseTexturePath));
         if (!paths.NormalTexturePath.Equals(original.Textures[1], StringComparison.OrdinalIgnoreCase))
         {

@@ -46,7 +46,8 @@ internal static class FalloutNpcFaceMaterial
             appearance.Npc.OwnerPlugin.Equals("FalloutNV.esm", StringComparison.OrdinalIgnoreCase))
             blockers.Add("player-facegen-texture-generation-required");
 
-        var texturePaths = ResolvePartTexturePaths(part, baseTexturePath, normalTexturePath, scatteringTexturePath);
+        var texturePaths = ResolvePartTexturePaths(part, baseTexturePath, normalTexturePath, scatteringTexturePath,
+            path => readResource(path) is not null);
         baseTexturePath = texturePaths.BaseTexturePath;
         normalTexturePath = texturePaths.NormalTexturePath;
         scatteringTexturePath = texturePaths.ScatteringTexturePath;
@@ -105,7 +106,7 @@ internal static class FalloutNpcFaceMaterial
             (part.Role is not ("body" or "hand-left" or "hand-right") || shaderType == 14);
 
     internal static FalloutNpcPartTexturePaths ResolvePartTexturePaths(FalloutNpcAppearancePart part,
-        string baseTexturePath, string normalTexturePath, string? scatteringTexturePath)
+        string baseTexturePath, string normalTexturePath, string? scatteringTexturePath, Func<string, bool>? available = null)
     {
         if (part.TexturePath is not { } replacement)
             return new(baseTexturePath, normalTexturePath, scatteringTexturePath);
@@ -113,7 +114,13 @@ internal static class FalloutNpcFaceMaterial
         // RACE facial textures replace their normal companions. EYES and HAIR supply
         // a diffuse override only, retaining the source NIF's normal/highlight maps.
         if (part.Role is "head" or "ears" or "mouth" or "teeth-lower" or "teeth-upper" or "tongue")
-            normalTexturePath = Companion(replacement, "_n");
+        {
+            var companion = Companion(replacement, "_n");
+            // The record names its diffuse override. An optional inferred
+            // companion cannot invalidate the normal explicitly authored in
+            // the NIF (for example the raider mouth shares the human normal).
+            if (available is null || available(companion)) normalTexturePath = companion;
+        }
         if (part.Role == "head") scatteringTexturePath = Companion(replacement, "_sk");
         return new(baseTexturePath, normalTexturePath, scatteringTexturePath);
     }

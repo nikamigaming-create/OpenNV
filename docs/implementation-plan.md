@@ -1,6 +1,13 @@
 # Generic runtime and Goodsprings implementation plan
 
-The latest user priority is a complete visible VR body with head-only eye
+The latest user priority is a flat ragdoll/dismemberment showcase with geckos
+and raiders. The private recording now shows ordinary pistol kills and labeled
+controlled detachment of both legs, both arms and the head. Finish weapon-driven
+limb selection, source gore/effects, collision/solver differences and combat
+behavior through the shared owners; the controlled command does not close those
+requirements. Follow [actor damage](actor-damage.md) and current-work.md.
+
+Preserve the complete visible VR body with head-only eye
 exclusion, continuous reactive gameplay and a single-eye recording with game
 audio. Preserve physical VR hands, one/two-handed weapon handling,
 real interaction and measured performance, while retaining the ordinary trip
@@ -36,7 +43,7 @@ source casing ejection, muzzle lighting and material-selected impact presentatio
 have bounded simulator evidence. Constant-health creature damage, source ragdoll
 death and persistent corpse loot now have ordinary flat evidence. Continue with
 source limb destruction after the ordinary SIM kill, blood and corpse-loot pass;
-living NPC damage, combat AI and death scripts/XP remain required. Use the checkpoint and remaining
+complete NPC/encounter damage, combat AI and death scripts/XP remain required. Use the checkpoint and remaining
 effects limitations in current-work.md. Measure CPU/GPU time and allocations
 before choosing optimizations. Integrated controls, readability, motion and the
 broader campaign/VR objective remain required; simulator success cannot replace

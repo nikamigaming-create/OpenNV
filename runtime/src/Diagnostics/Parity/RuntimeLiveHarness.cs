@@ -4,6 +4,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.Bots;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Diagnostics.Parity;
 
@@ -34,6 +35,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private float _botSensitivity;
     private Key _botForward, _botActivate;
     private Action? _pumpBotInput;
+    private object? _lastPhysicsTest;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly bool JitOptimizationDisabled = typeof(RuntimeLiveHarness).Assembly
         .GetCustomAttributes(typeof(DebuggableAttribute), false).OfType<DebuggableAttribute>()
@@ -160,6 +162,20 @@ internal sealed partial class RuntimeLiveHarness : Node
             _bot?.Stop();
         switch (command.GetProperty("op").GetString())
         {
+            case "physics.sever":
+                // Explicit development-harness operation for the requested
+                // limb physics check. This is never ordinary player input or
+                // evidence that weapon dismemberment selection is implemented.
+                var reference = command.GetProperty("reference").GetString()!;
+                var part = command.GetProperty("part").GetByte();
+                var target = GetTree().Root.FindChildren("*", "Node3D", true, false).OfType<Node3D>()
+                    .Single(node => (node is RuntimeNativeNpc or RuntimeNativeCreature) &&
+                        node.GetMeta("opennv_reference_form_key", "").AsString() == reference);
+                var combat = target is RuntimeNativeNpc npc ? npc.Combat : ((RuntimeNativeCreature)target).Combat;
+                (combat ?? throw new InvalidOperationException("Resident actor has no combat owner.")).SeverLimb(part);
+                _lastPhysicsTest = new { reference, part, request, operation = "controlled-source-limb-detachment", ordinaryInput = false };
+                GD.Print($"OPENNV_DIAGNOSTIC_LIMB_DETACH reference={reference} part={part} request={request}");
+                break;
             case "bot":
                 if (_bot is null) throw new NotSupportedException("Bot observation/input adapter is unavailable.");
                 var mode = command.GetProperty("mode").GetString()!;
@@ -346,6 +362,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             commandReadFailure = _commandReadFailure,
             gameplay = _captureSummary(),
             bot = _bot?.State,
+            physicsTest = _lastPhysicsTest,
             performance = new
             {
                 jitOptimizationDisabled = JitOptimizationDisabled,

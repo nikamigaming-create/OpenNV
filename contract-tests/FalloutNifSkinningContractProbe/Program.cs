@@ -13,6 +13,12 @@ for (ushort body = 1; body <= 13; body++)
     Require(!FalloutNifHardwareSkin.VisibleOnIntactBody(new(0x101, (ushort)(100 + body))), "Section cap shown on intact actor.");
     Require(!FalloutNifHardwareSkin.VisibleOnIntactBody(new(0x101, (ushort)(200 + body))), "Torso cap shown on intact actor.");
     Require(FalloutNifHardwareSkin.VisibleOnIntactBody(new(0, (ushort)(1000 * body))), "Torso section hidden on intact actor.");
+    var severed = new byte[] { (byte)body };
+    Require(FalloutNifHardwareSkin.VisibleAfterSevering(body, severed), "Severed limb geometry was removed instead of detached.");
+    Require(FalloutNifHardwareSkin.VisibleAfterSevering((ushort)(100 + body), severed) &&
+        FalloutNifHardwareSkin.VisibleAfterSevering((ushort)(200 + body), severed), "Severed wound caps are absent.");
+    Require(!FalloutNifHardwareSkin.VisibleAfterSevering((ushort)(1000 * body), severed), "Severed connecting torso section remains.");
+    Require(!FalloutNifHardwareSkin.VisibleAfterSevering((ushort)(100 + body), []), "An unrelated wound cap was exposed.");
 }
 try
 {

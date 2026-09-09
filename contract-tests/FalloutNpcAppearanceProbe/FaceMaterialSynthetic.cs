@@ -40,6 +40,12 @@ internal static class FaceMaterialSynthetic
         Require(!absent.CanRender && absent.Blockers.Any(value => value.StartsWith("facegen-base-mod-resource-absent:")),
             "missing face DDS remains visible");
         var eye = head with { Role = "eye-left", TexturePath = "textures/blue-eye.dds" };
+        var mouth = head with { Role = "mouth", TexturePath = "textures/raider-mouth.dds" };
+        var sharedNormal = FalloutNpcFaceMaterial.ResolvePartTexturePaths(mouth, "textures/mouth.dds", "textures/mouth_n.dds", null, _ => false);
+        Require(sharedNormal.BaseTexturePath == mouth.TexturePath && sharedNormal.NormalTexturePath == "textures/mouth_n.dds",
+            "an absent inferred companion must retain the source NIF normal");
+        var ownedNormal = FalloutNpcFaceMaterial.ResolvePartTexturePaths(mouth, "textures/mouth.dds", "textures/mouth_n.dds", null, _ => true);
+        Require(ownedNormal.NormalTexturePath == "textures/raider-mouth_n.dds", "owned record companion normal is selected");
         var eyeInputs = FalloutNpcFaceMaterial.Resolve(stack, appearance, eye, "textures/eye.dds", "textures/shared/flat_n.dds",
             null, settings, _ => dds);
         Require(eyeInputs.BaseTexturePath == "textures/blue-eye.dds" && eyeInputs.NormalTexturePath == "textures/shared/flat_n.dds",

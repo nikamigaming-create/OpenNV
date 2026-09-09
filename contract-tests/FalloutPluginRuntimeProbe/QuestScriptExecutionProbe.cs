@@ -64,6 +64,26 @@ internal static class QuestScriptExecutionProbe
             }
             Require(state.Stage(quest.FormKey) == 42 && state.Variable(quest.FormKey, 27) == 10,
                 "The complete source calculation did not drive progression.");
+            Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { Instances = [], ParserVersion = 0 }));
+            Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { ParserVersion = 2 }));
+            File.WriteAllBytes(Path.Combine(directory, "Commas.esm"), Header().Concat(Quest())
+                .Concat(Script("set result to 7\nSetStage ProbeQuest,42", [1, 2, 3])).ToArray());
+            using var commas = FalloutPluginStack.Load(directory, ["Commas.esm"]);
+            var commaQuest = new FalloutFormKey("Commas.esm", 0x100);
+            var commaState = new FalloutQuestState(commas);
+            commaState.SetVariable(commaQuest, 2, 123.5);
+            FalloutQuestScripts CommaScripts() => new(commas, commaState, new HashSet<FalloutFormKey>(),
+                new FalloutPlayerInventory(), defaultProcessingDelay: 1);
+            var commaScripts = CommaScripts();
+            var commaInitial = commaScripts.Capture();
+            commaScripts.Restore(commaInitial with { Instances = [], ParserVersion = 0 });
+            Require(commaState.Variable(commaQuest, 2) == 123.5 && commaScripts.Capture().Instances.Single().Executions == 0 &&
+                commaScripts.Capture().Instances.Single().Clock!.HasSameBits(commaInitial.Instances.Single().Clock!),
+                "Legacy parser migration reset quest locals or invented script executions/timing.");
+            Reject(() => CommaScripts().Restore(commaInitial with { Instances = [] }));
+            var commaCold = CommaScripts(); commaCold.Restore(commaScripts.Capture());
+            Require(JsonSerializer.Serialize(commaCold.Capture()) == JsonSerializer.Serialize(commaScripts.Capture()),
+                "Migrated script owners did not survive a current-version cold restore.");
             File.WriteAllBytes(Path.Combine(directory, "Bad.esm"), Header().Concat(Quest())
                 .Concat(Script("set result to 99\nUnknownReachedCommand", [1, 2, 3])).ToArray());
             using var bad = FalloutPluginStack.Load(directory, ["Bad.esm"]);
@@ -80,7 +100,7 @@ internal static class QuestScriptExecutionProbe
         }
         finally
         {
-            foreach (var file in new[] { "Base.esm", "Override.esp", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
+            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
             Directory.Delete(directory);
         }
         Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true");

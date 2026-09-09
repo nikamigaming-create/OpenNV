@@ -29,6 +29,20 @@ internal static class ScriptExpressionProbe
             "Short circuit invoked an inactive function.");
         Require(Evaluate("Measure -2 + 3") == 5 && Evaluate("Measure (Measure -2 - 4)") == 2,
             "A numeric function argument consumed an outer operator or nested expression incorrectly.");
+        Require(FalloutGameModeProgram.Tokens("Notify \"one, two\", Example, -2")
+            .SequenceEqual(["Notify", "\"one, two\"", "Example", "-", "2"]),
+            "Optional argument commas changed quoted text or signed arguments.");
+        Require(Evaluate("State, Example == 7 && Measure, -2 == 2") == 1,
+            "Optional commas prevented source function evaluation.");
+        var separated = new List<string>();
+        FalloutGameModeProgram.Read("begin GameMode\nNotify Example,1,2\nend")
+            .Execute(_ => 0, (_, _) => { }, (name, arguments) => separated.Add(name + ":" + string.Join('|', arguments)));
+        Require(separated.SequenceEqual(["Notify:Example|1|2"]), "Comma-separated command arguments changed order.");
+        Reject(() => FalloutGameModeProgram.Tokens("Notify Example@, 1"));
+        Reject(() => Evaluate("1, 2"));
+        Require(FalloutGameModeProgram.HasArgumentSeparator("Notify One, 2") &&
+            !FalloutGameModeProgram.HasArgumentSeparator("Notify \"one, two\" ; comment, too\nNotify One"),
+            "Legacy comma migration confused quoted/comment text with argument syntax.");
         Reject(() => Evaluate("State 7"));
         Reject(() => Evaluate("Measure"));
         Reject(() => Evaluate("Invalid == 0"));

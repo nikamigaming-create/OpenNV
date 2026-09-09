@@ -12,7 +12,13 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 {
     private sealed record Body(int Source, int Bone, Transform3D Attachment, RigidBody3D Node);
     private readonly List<Body> _bodies = [];
-    private readonly List<Rid> _joints = [];
+    private sealed record Joint(int Source, Body First, Body Second, Rid Handle);
+    private readonly List<Joint> _joints = [];
+    private readonly HashSet<byte> _severed = [];
+    private readonly List<FalloutRagdollCutPose> _cuts = [];
+    private IReadOnlyList<FalloutBodyPart> _parts = [];
+    private MeshInstance3D[] _partMeshes = [];
+    private MeshInstance3D[] _skinMeshes = [];
     private RuntimeNativeNifSkeleton _skeleton = null!;
     private FalloutReferenceInstance _state = null!;
     private string _sourceHash = "";
@@ -24,12 +30,20 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         active = _active,
         bodies = _bodies.Count,
         joints = _joints.Count,
+        severed = _severed.Order().Select(part => (int)part).ToArray(),
+        bodyCenters = _bodies.Select(body => new
+        {
+            sourceBody = body.Source,
+            bone = _skeleton.Node.GetBoneName(body.Bone).ToString(),
+            position = new[] { body.Node.GlobalPosition.X, body.Node.GlobalPosition.Y, body.Node.GlobalPosition.Z }
+        }).ToArray(),
         source = _sourceHash,
         boundary = "Godot-6dof-angular-envelope;Havok-cone-friction-inertia-and-malleable-solver-parity-unverified"
     };
 
     internal static RuntimeNativeActorRagdoll Prepare(Node3D actor, RuntimeNativeNifSkeleton skeleton,
-        FalloutReferenceInstance state, RuntimeLiveContentSource content, string path, uint layer, uint mask)
+        FalloutReferenceInstance state, RuntimeLiveContentSource content, string path, uint layer, uint mask,
+        IReadOnlyList<FalloutBodyPart> parts)
     {
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Ragdoll skeleton is absent: " + path);
         var result = new RuntimeNativeActorRagdoll
@@ -37,6 +51,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             Name = "SourceDeathRagdoll",
             _skeleton = skeleton,
             _state = state,
+            _parts = parts,
             _sourceHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()
         };
         try
@@ -92,6 +107,9 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             foreach (var body in result._bodies)
                 body.Node.GlobalTransform = skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(body.Bone) * body.Attachment;
             foreach (var joint in joints) result.BuildJoint(joint);
+            result._skinMeshes = actor.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()
+                .Where(mesh => mesh.Skin is not null).ToArray();
+            result._partMeshes = result._skinMeshes.Where(mesh => mesh.HasMeta("opennv_nif_body_part")).ToArray();
             result.SetMeta("opennv_body_layer", layer);
             return result;
         }
@@ -101,7 +119,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private void BuildJoint(FalloutNifRagdollConstraint source)
     {
         var first = _bySource[source.Header.EntityA]; var second = _bySource[source.Header.EntityB];
-        var joint = PhysicsServer3D.JointCreate(); _joints.Add(joint);
+        var joint = PhysicsServer3D.JointCreate(); _joints.Add(new(source.Header.Block.Index, first, second, joint));
         var scale = _skeleton.Node.GlobalBasis.Scale;
         if (MathF.Abs(scale.X - scale.Y) > .001f || MathF.Abs(scale.X - scale.Z) > .001f)
             throw new NotSupportedException("Nonuniform ragdoll scale is unsupported.");
@@ -158,8 +176,54 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
                 body.Node.Sleeping = snapshot.Sleeping;
             }
         }
+        var severed = _state.Injury!.SeveredParts ?? [];
+        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual(severed.Order()))
+            throw new InvalidDataException("Saved limb separation lacks its cut-time skin pose.");
+        foreach (var cut in saved?.Cuts ?? []) Sever(cut.Part, cut);
         _active = true; _state.CaptureRagdoll = Capture;
         Publish();
+    }
+
+    internal void RequireSeverable(byte type)
+    {
+        var part = _parts.Single(value => value.Type == type);
+        if ((part.Flags & 1) == 0) throw new NotSupportedException("Source limb is not severable.");
+        var root = _skeleton.BoneIndex(part.Node);
+        if (!_bodies.Any(body => DescendsFrom(body.Bone, root)))
+            throw new NotSupportedException("Source limb has no physical body.");
+        if (!_severed.Contains(type) && !_joints.Any(joint => DescendsFrom(joint.First.Bone, root) != DescendsFrom(joint.Second.Bone, root)))
+            throw new NotSupportedException("Source limb has no remaining joint to its parent.");
+        if (!_partMeshes.Any(mesh => mesh.GetMeta("opennv_nif_body_part").AsInt32() == type))
+            throw new NotSupportedException("Source limb has no dismember skin partition.");
+    }
+
+    internal void Sever(byte type, FalloutRagdollCutPose? saved = null)
+    {
+        if (_severed.Contains(type)) return;
+        RequireSeverable(type);
+        var root = _skeleton.BoneIndex(_parts.Single(part => part.Type == type).Node);
+        var cut = saved ?? new FalloutRagdollCutPose(type, Enumerable.Range(0, _skeleton.Node.GetBoneCount())
+            .Select(bone => WriteTransform(_skeleton.Node.GetBoneGlobalPose(bone))).ToArray());
+        RuntimeNativeDismemberSkin.Separate(_skinMeshes, _skeleton.Node, type, root, cut.Bones.Select(ReadTransform).ToArray());
+        foreach (var joint in _joints.Where(joint => DescendsFrom(joint.First.Bone, root) != DescendsFrom(joint.Second.Bone, root)).ToArray())
+        {
+            PhysicsServer3D.JointDisableCollisionsBetweenBodies(joint.Handle, false);
+            PhysicsServer3D.FreeRid(joint.Handle);
+            _joints.Remove(joint);
+        }
+        _severed.Add(type);
+        _cuts.Add(cut);
+        foreach (var mesh in _partMeshes)
+            mesh.Visible = mesh.GetMeta("opennv_nif_authored_visible", true).AsBool() &&
+                FalloutNifHardwareSkin.VisibleAfterSevering(checked((ushort)mesh.GetMeta("opennv_nif_body_part").AsInt32()), _severed);
+        foreach (var body in _bodies) body.Node.Sleeping = false;
+    }
+
+    private bool DescendsFrom(int bone, int parent)
+    {
+        for (var current = bone; current >= 0; current = _skeleton.Node.GetBoneParent(current))
+            if (current == parent) return true;
+        return false;
     }
 
     public override void _Process(double delta) { if (_active) Publish(); }
@@ -176,12 +240,12 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     }
 
     internal FalloutActorRagdollState Capture() => new(_sourceHash, _bodies.Select(body => new FalloutRagdollBodyState(body.Source,
-        WriteTransform(body.Node.Transform), WriteVector(body.Node.LinearVelocity), WriteVector(body.Node.AngularVelocity), body.Node.Sleeping)).ToArray());
+        WriteTransform(body.Node.Transform), WriteVector(body.Node.LinearVelocity), WriteVector(body.Node.AngularVelocity), body.Node.Sleeping)).ToArray(), _cuts.ToArray());
 
     public override void _ExitTree()
     {
         if (_active) { _state.Ragdoll = Capture(); _state.CaptureRagdoll = null; }
-        foreach (var joint in _joints) PhysicsServer3D.FreeRid(joint);
+        foreach (var joint in _joints) PhysicsServer3D.FreeRid(joint.Handle);
         _joints.Clear();
     }
 

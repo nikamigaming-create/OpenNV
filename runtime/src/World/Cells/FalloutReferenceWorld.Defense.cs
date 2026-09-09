@@ -13,23 +13,25 @@ internal readonly record struct FalloutActorDefense(float Threshold, float Resis
 internal sealed partial class FalloutReferenceWorld
 {
     private readonly Dictionary<FalloutFormKey, FalloutActorDefense> _defenseSources = [];
+    private readonly Dictionary<FalloutFormKey, FalloutArmorDefense> _armorDefense = [];
+    private readonly Dictionary<FalloutFormKey, FalloutActorDefense> _armorEffects = [];
+    private readonly FalloutAbilityModifiers _defenseAbilities = new(records);
+    private (float Base, float Maximum)? _armorRating;
 
     internal FalloutActorDefense Defense(FalloutFormKey reference, int level, FalloutGlobalState globals)
     {
         var actor = Actor(reference);
-        if (EquippedArmor(reference, level, globals).Count != 0)
-            throw new NotSupportedException("Equipped armor requires its damage-resistance owner.");
+        var equipped = EquippedArmor(reference, level, globals);
         if (!_defenseSources.TryGetValue(actor.Base, out var source))
         {
             var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 8);
-            var abilities = new FalloutAbilityModifiers(records);
             var threshold = 0f; var resistance = 0f;
             foreach (var field in effects.ReadSubrecords().Where(field => field.Signature == "SPLO"))
             {
                 if (field.Data.Length != 4) throw new InvalidDataException("Actor ability identity extent is invalid.");
                 var spell = effects.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
                 if (spell is null) continue;
-                foreach (var effect in abilities.Spell(spell.Value))
+                foreach (var effect in _defenseAbilities.Spell(spell.Value))
                 {
                     if (effect.ActorValue is not (12 or 76)) continue;
                     if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional actor resistance requires its condition owner.");
@@ -38,6 +40,39 @@ internal sealed partial class FalloutReferenceWorld
             }
             source = new(threshold, resistance); _defenseSources.Add(actor.Base, source);
         }
-        return source;
+        var armorThreshold = 0f; var armorResistance = 0f;
+        foreach (var key in equipped)
+        {
+            if (!_armorDefense.TryGetValue(key, out var armor))
+                _armorDefense.Add(key, armor = FalloutArmorDefense.Read(records.GetEffective(key)));
+            var item = actor.Inventory!.Contents.Item(key)!;
+            var conditions = (item.Variants ?? []).Select(variant => variant.Condition ?? 1).Distinct().ToArray();
+            if (conditions.Length > 1) throw new NotSupportedException("Equipped armor instance selection is unbound.");
+            var condition = conditions.Length == 0 ? 1 : conditions[0];
+            var rating = _armorRating ??= (FalloutGameSettingFloats.Read(records, "fArmorRatingBase"), FalloutGameSettingFloats.Read(records, "fArmorRatingMax"));
+            var factor = rating.Base + condition * (rating.Maximum - rating.Base);
+            armorThreshold += armor.Threshold * factor;
+            armorResistance += armor.Resistance * factor;
+            if (!_armorEffects.TryGetValue(key, out var modifiers))
+            {
+                var armorRecord = records.GetEffective(key);
+                var threshold = 0f; var resistance = 0f;
+                foreach (var field in armorRecord.ReadSubrecords().Where(field => field.Signature == "EITM"))
+                {
+                    if (field.Data.Length != 4) throw new InvalidDataException("Armor effect identity extent is invalid.");
+                    var form = armorRecord.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+                    if (form is null) continue;
+                    foreach (var effect in _defenseAbilities.Spell(form.Value))
+                    {
+                        if (effect.ActorValue is not (12 or 76)) continue;
+                        if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional armor resistance requires its condition owner.");
+                        if (effect.ActorValue == 76) threshold += effect.Amount; else resistance += effect.Amount;
+                    }
+                }
+                modifiers = new(threshold, resistance); _armorEffects.Add(key, modifiers);
+            }
+            armorThreshold += modifiers.Threshold; armorResistance += modifiers.Resistance;
+        }
+        return new(source.Threshold + armorThreshold, source.Resistance + armorResistance);
     }
 }

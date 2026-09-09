@@ -18,6 +18,9 @@ internal static class Synthetic
                 Npc(0x10c, 0, 0, head: 0x304),
                 Npc(0x10d, 321, 0x703), Npc(0x10e, 64, 0x705), Npc(0x10f, 64, 0x706),
                 Npc(0x110, 64, 0x707), Npc(0x111, 64, 0x708),
+                Npc(0x112, 0, 0, eyes: null), Npc(0x113, 0, 0, eyes: 0),
+                Npc(0x114, 0, 0, female: true, eyes: null), Npc(0x115, 64, 0x112),
+                Npc(0x116, 0, 0, eyes: 0x300),
                 ActorList(0x703, 0, 1, (1, 0x704), (1, 0x704)), ActorList(0x704, 0, 0, (1, 0x101)),
                 ActorList(0x705, 0, 0, (1, 0x100), (1, 0x101)), ActorList(0x706, 25, 0, (1, 0x101)),
                 ActorList(0x707, 0, 0, (2, 0x101)), ActorList(0x708, 0, 0, (1, 0x708)),
@@ -43,6 +46,20 @@ internal static class Synthetic
                 Armor(0x400, "winning.nif", 4, 0x410), Record("TXST", 0x500, Field("TX00", Z("winning.dds")))));
             using var stack = FalloutPluginStack.Load(directory.FullName, ["base.esm", "override.esp"]);
             var appearance = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100));
+            Require(appearance.Models.Where(part => part.Role is "eye-left" or "eye-right")
+                .All(part => part.TexturePath == "textures/eye.dds" && part.TextureSource == Key(0x310)),
+                "Explicit ENAM must override both eye textures with its winning EYES record.");
+            foreach (var identity in new uint[] { 0x112, 0x113, 0x114, 0x115 })
+            {
+                var sourceEyes = FalloutNpcAppearanceResolver.Resolve(stack, Key(identity));
+                Require(sourceEyes.CanConstruct && sourceEyes.Eyes is null && sourceEyes.Models
+                    .Where(part => part.Role is "eye-left" or "eye-right")
+                    .All(part => part.TexturePath == sourceEyes.RaceParts.Single(race => race.Role == part.Role).TexturePath &&
+                        part.TextureSource == sourceEyes.Race),
+                    "Absent, null and inherited ENAM must preserve the sex-specific race eye material.");
+            }
+            Throws(() => FalloutNpcAppearanceResolver.Resolve(stack, Key(0x116)),
+                "An invalid explicit eye selection must not fall back to the model material.");
             FaceMaterialSynthetic.Run(stack, appearance);
             var hairPart = appearance.Models.Single(part => part.Role == "hair");
             Require(FalloutNpcAppearanceHairShape.Select(appearance, hairPart) == "NoHat",
@@ -105,13 +122,13 @@ internal static class Synthetic
             Field("LVLO", Combine(BitConverter.GetBytes(entry.Level), new byte[2], U32(entry.Form), new byte[] { 1, 0, 0, 0 })))).ToArray());
 
     private static byte[] Npc(uint id, ushort templateFlags, uint template, bool female = false, uint race = 0x200,
-        uint armor = 0x400, uint hair = 0x300, uint head = 0x302, uint extraArmor = 0)
+        uint armor = 0x400, uint hair = 0x300, uint head = 0x302, uint extraArmor = 0, uint? eyes = 0x310)
     {
         var acbs = new byte[24];
         BinaryPrimitives.WriteUInt32LittleEndian(acbs, female ? 1u : 0u);
         BinaryPrimitives.WriteUInt16LittleEndian(acbs.AsSpan(22), templateFlags);
         var fields = new List<byte[]> { Field("ACBS", acbs), Field("RNAM", U32(race)), Field("MODL", Z("skeleton.nif")),
-            Field("TPLT", U32(template)), Field("HNAM", U32(hair)), Field("ENAM", U32(0x310)),
+            Field("TPLT", U32(template)), Field("HNAM", U32(hair)), eyes is { } selectedEye ? Field("ENAM", U32(selectedEye)) : [],
             Field("PNAM", U32(head)), Field("HCLR", [1, 2, 3, 4]), Field("LNAM", F32(0.25f)),
             Field("CNTO", Combine(U32(armor), U32(1))),
             Field("FGGS", Enumerable.Repeat((byte)(id % 251), 200).ToArray()), Field("FGGA", new byte[120]), Field("FGTS", new byte[200]) };
