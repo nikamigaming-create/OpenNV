@@ -53,6 +53,7 @@ public partial class RuntimeCoordinator
         GD.Print($"OPENNV_PARITY_PUBLISHER_READY channel={channel}");
     }
 
+    private string ParityStateKey => _nativeActiveCell is { } active ? $"cell:{active.Cell.FormKey}" : "startup";
     private ParityTelemetryFrame CaptureParityFrame(ulong sequence)
     {
         var fields = new List<ParityTelemetryField>
@@ -66,10 +67,9 @@ public partial class RuntimeCoordinator
                 RendererField,
                 RenderingServer.GetCurrentRenderingMethod().ToString()),
         };
-        var stateKey = "startup";
+        var stateKey = ParityStateKey;
         if (_nativeActiveCell is { } cell)
         {
-            stateKey = $"cell:{cell.Cell.FormKey}";
             fields.Add(ParityTelemetryField.Utf8(
                 ParityCategory.World,
                 CellField,

@@ -1,10 +1,12 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutQuestSnapshot(FalloutFormKey Quest, short Stage, bool Completed,
     IReadOnlyList<short> EnteredStages, IReadOnlyDictionary<uint, double> Variables,
-    IReadOnlyList<FalloutQuestObjectiveSnapshot>? Objectives = null);
+    IReadOnlyList<FalloutQuestObjectiveSnapshot>? Objectives = null, bool? Running = null, FalloutFormKey? NextQuest = null,
+    bool Active = false);
 
 internal sealed record FalloutQuestObjectiveSnapshot(uint Index, bool Displayed, bool Completed);
 internal sealed record FalloutQuestObjectiveCommand(string QuestEditorId, uint Index, bool Display, bool Value);
@@ -12,12 +14,15 @@ internal sealed record FalloutQuestObjectiveChange(FalloutFormKey Quest, string 
     FalloutQuestObjectiveSnapshot Before, FalloutQuestObjectiveSnapshot After, long Revision);
 
 /// <summary>Authoritative new-game quest values; observations never populate this owner.</summary>
-internal sealed class FalloutQuestState(FalloutPluginStack stack)
+internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNotifications? notifications = null)
 {
     private sealed class State
     {
         internal short Stage;
         internal bool Completed;
+        internal bool Running;
+        internal FalloutFormKey? NextQuest;
+        internal bool Active;
         internal readonly HashSet<short> Stages = [];
         internal readonly Dictionary<uint, double> Variables = [];
         internal readonly Dictionary<uint, string> ObjectiveText = [];
@@ -31,7 +36,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
     internal IReadOnlyList<FalloutQuestSnapshot> Capture() => _states.OrderBy(pair => stack.RuntimeFormId(pair.Key))
         .Select(pair => new FalloutQuestSnapshot(pair.Key, pair.Value.Stage, pair.Value.Completed,
             pair.Value.Stages.Order().ToArray(), new Dictionary<uint, double>(pair.Value.Variables),
-            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray())).ToArray();
+            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray(), pair.Value.Running, pair.Value.NextQuest, pair.Value.Active)).ToArray();
 
     internal object ObjectiveState => new
     {
@@ -54,6 +59,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
     internal void Restore(IReadOnlyList<FalloutQuestSnapshot> snapshots)
     {
         if (Revision != 0) throw new InvalidOperationException("Quest restoration requires an unmodified owner.");
+        if (snapshots.Count(state => state.Active) > 1) throw new InvalidDataException("Saved quests contain competing active selections.");
         var validated = new FalloutQuestState(stack);
         foreach (var snapshot in snapshots)
         {
@@ -71,6 +77,11 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
                 throw new InvalidDataException("Saved quest objectives differ from the winning declarations or contain duplicates.");
             state.Stage = snapshot.Stage;
             state.Completed = snapshot.Completed;
+            state.Running = snapshot.Running ?? state.Running;
+            if (snapshot.NextQuest is { } next && stack.GetEffective(next).Signature != "QUST")
+                throw new InvalidDataException("Saved next-quest identity is not a quest.");
+            state.NextQuest = snapshot.NextQuest;
+            state.Active = snapshot.Active;
             state.Stages.UnionWith(snapshot.EnteredStages);
             foreach (var (key, value) in snapshot.Variables) state.Variables[key] = value;
             foreach (var objective in objectives) state.Objectives[objective.Index] = objective;
@@ -86,6 +97,9 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         var record = stack.GetEffective(quest);
         if (record.Signature != "QUST") throw new InvalidDataException($"Quest state target {quest} is not QUST.");
         state = new();
+        var header = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "DATA").Data;
+        if (!header.IsEmpty && header.Length is not (2 or 8)) throw new InvalidDataException("Quest header has an invalid extent.");
+        state.Running = !header.IsEmpty && (header.Span[0] & 1) != 0;
         uint? objective = null;
         var textIndices = new HashSet<uint>();
         foreach (var field in record.ReadSubrecords())
@@ -167,10 +181,38 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         if (after == before) return;
         state.Objectives[index] = after;
         Revision++;
+        if (after.Displayed && (!before.Displayed || !before.Completed && after.Completed))
+            notifications?.Publish([new(after.Completed ? FalloutHudEventKind.ObjectiveCompleted : FalloutHudEventKind.ObjectiveDisplayed,
+                quest, 0, Quest: quest, ObjectiveIndex: index)]);
         ObjectiveChanged?.Invoke(new(quest, state.ObjectiveText[index], before, after, Revision));
     }
 
     internal short Stage(FalloutFormKey quest) => Require(quest).Stage;
+    internal bool IsRunning(FalloutFormKey quest) => Require(quest).Running;
+    internal bool IsCompleted(FalloutFormKey quest) => Require(quest).Completed;
+    internal FalloutFormKey? ActiveQuest => _states.Where(pair => pair.Value.Active).Select(pair => (FalloutFormKey?)pair.Key).SingleOrDefault();
+    internal string ObjectiveText(FalloutFormKey quest, uint index) => Require(quest).ObjectiveText[index];
+    internal void ForceActive(FalloutFormKey quest)
+    {
+        var selected = Require(quest);
+        if (selected.Active) return;
+        foreach (var state in _states.Values) state.Active = false;
+        selected.Active = true; ++Revision;
+    }
+    internal void SetNextQuest(FalloutFormKey quest, FalloutFormKey next)
+    {
+        if (stack.GetEffective(next).Signature != "QUST") throw new InvalidDataException("Next-quest identity is not QUST.");
+        Require(quest).NextQuest = next;
+        Revision++;
+    }
+    internal void SetRunning(FalloutFormKey quest, bool running)
+    {
+        var state = Require(quest);
+        if (state.Running == running) return;
+        state.Running = running;
+        Revision++;
+    }
+    internal bool StageDone(FalloutFormKey quest, short stage) => Require(quest).Stages.Contains(stage);
 
     internal object VariableState => _states.Where(pair => pair.Value.Variables.Count != 0).Select(pair => new
     {
@@ -204,11 +246,14 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack)
         var state = Require(condition.FormArgument1);
         return condition.Function switch
         {
+            56 => state.Running ? 1 : 0,
             58 => state.Stage,
             59 => state.Stages.Contains(checked((short)condition.Argument2)) ? 1 : 0,
             79 => state.Variables.TryGetValue(condition.Argument2, out var value) ? (float)value :
                 throw new NotSupportedException($"Quest {condition.FormArgument1} has no declared variable {condition.Argument2}."),
             546 => state.Completed ? 1 : 0,
+            420 => state.Objectives.TryGetValue(condition.Argument2, out var completed) && completed.Completed ? 1 : 0,
+            421 => state.Objectives.TryGetValue(condition.Argument2, out var displayed) && displayed.Displayed ? 1 : 0,
             _ => throw new NotSupportedException($"Quest condition {condition.Function} has no runtime owner."),
         };
     }

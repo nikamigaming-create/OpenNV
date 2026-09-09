@@ -119,7 +119,13 @@ internal sealed class FalloutDat1Archive
 
     internal bool Contains(string logicalPath) => _entries.ContainsKey(CanonicalPath(logicalPath));
 
-    internal byte[] Read(string logicalPath)
+    internal byte[] Read(string logicalPath) => Read(logicalPath, false);
+
+    // Only the native-save recovery owner may reproduce the old decoder, to
+    // verify a saved source hash before rebasing state onto corrected bytes.
+    internal byte[] ReadForNativeSaveRecovery(string logicalPath) => Read(logicalPath, true);
+
+    private byte[] Read(string logicalPath, bool priorNativeDecoder)
     {
         var canonical = CanonicalPath(logicalPath);
         if (!_entries.TryGetValue(canonical, out var entry))
@@ -130,7 +136,7 @@ internal sealed class FalloutDat1Archive
             stream.Position = entry.StoredOffset;
             stream.ReadExactly(payload);
         }
-        return entry.Compressed ? DecodeLzssBlocks(payload, entry.UncompressedBytes) : payload;
+        return entry.Compressed ? DecodeLzssBlocks(payload, entry.UncompressedBytes, priorNativeDecoder) : payload;
     }
 
     internal static string CanonicalPath(string value)
@@ -144,7 +150,7 @@ internal sealed class FalloutDat1Archive
         return string.Join('\\', segments).ToLowerInvariant();
     }
 
-    private static byte[] DecodeLzssBlocks(ReadOnlySpan<byte> payload, uint expectedBytes)
+    private static byte[] DecodeLzssBlocks(ReadOnlySpan<byte> payload, uint expectedBytes, bool priorNativeDecoder)
     {
         if (expectedBytes > int.MaxValue)
             throw new InvalidDataException($"DAT1 member declares unsupported size {expectedBytes}.");
@@ -154,21 +160,27 @@ internal sealed class FalloutDat1Archive
         var cursor = 0;
         while (cursor + sizeof(short) <= payload.Length)
         {
-            var blockSize = BinaryPrimitives.ReadInt16BigEndian(payload[cursor..]);
+            var blockSize = BinaryPrimitives.ReadUInt16BigEndian(payload[cursor..]);
             cursor += sizeof(short);
             if (blockSize == 0)
                 break;
-            var storedBytes = Math.Abs((int)blockSize);
+            // The high bit marks a stored block; the low fifteen bits are
+            // its length. It is not a signed negative byte count.
+            var storedBytes = priorNativeDecoder ? Math.Abs((int)unchecked((short)blockSize)) : blockSize & 0x7fff;
             if (storedBytes > payload.Length - cursor)
                 throw new InvalidDataException("DAT1 LZSS block escapes the stored member.");
             var block = payload.Slice(cursor, storedBytes);
             cursor += storedBytes;
-            if (blockSize < 0)
+            if ((blockSize & 0x8000) != 0)
             {
                 AppendBlock(output, block, expectedBytes);
                 continue;
             }
 
+            // Each compressed block starts a new LZSS dictionary. Carrying the
+            // cursor over a block boundary preserves the byte count while
+            // silently corrupting source files which span multiple blocks.
+            if (!priorNativeDecoder) { Array.Fill(dictionary, (byte)' '); writeCursor = InitialWriteCursor; }
             var blockCursor = 0;
             while (blockCursor < block.Length)
             {

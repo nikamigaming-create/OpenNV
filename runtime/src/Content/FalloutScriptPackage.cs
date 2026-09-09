@@ -84,7 +84,7 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
     {
         get
         {
-            var source = Fields.Where(field => field.Signature == "SCTX").ToArray();
+            var source = Fields.Where(subrecord => subrecord.Signature == "SCTX").ToArray();
             if (source.Length > 1) throw new InvalidDataException("Package event repeats its source program.");
             return source.Length == 0 ? "" : FalloutDialogueTopic.ScriptText(source[0].Data.Span);
         }

@@ -7,6 +7,7 @@ namespace OpenNV.Runtime.Presentation.Rendering;
 
 internal static class NativeFaceGenMaterial
 {
+    internal const string ResourceIdentity = "Owned NIF FaceGen skin";
     private const uint SkinShaderType = 14;
     private const uint SpecularFlag = 1U;
     private const uint SkinnedFlag = 1U << 1;
@@ -75,7 +76,7 @@ internal static class NativeFaceGenMaterial
         var code = BuildShader(string.Join(", ", modes), repeats);
         if (!Shaders.TryGetValue(code, out var compiled))
             Shaders.Add(code, compiled = new Shader { Code = code });
-        var result = new ShaderMaterial { Shader = compiled, ResourceName = "Owned NIF FaceGen skin" };
+        var result = new ShaderMaterial { Shader = compiled, ResourceName = ResourceIdentity };
         result.SetShaderParameter("base_map", Load(content, inputs.BaseTexturePath));
         result.SetShaderParameter("normal_map", Load(content, inputs.NormalTexturePath));
         result.SetShaderParameter("base_mod_map", Load(content, inputs.BaseMod));

@@ -187,46 +187,24 @@ internal static class FalloutSoundPlaybackContract
         new($"SOUN {descriptor.FormKey} cannot play because OpenNV does not yet implement {behavior}.");
 }
 
-internal sealed class FalloutSoundRandomState
-{
-    private const ulong WeylIncrement = 0x9e3779b97f4a7c15UL;
-    private const ulong FirstMixMultiplier = 0xbf58476d1ce4e5b9UL;
-    private const ulong SecondMixMultiplier = 0x94d049bb133111ebUL;
-    private const int FirstMixShift = 30;
-    private const int SecondMixShift = 27;
-    private const int FinalMixShift = 31;
-
-    internal FalloutSoundRandomState(ulong state) => State = state;
-
-    internal ulong State { get; private set; }
-
-    internal float NextUnitFloat() => (float)(unchecked((uint)NextUInt64()) / 4294967296.0);
-
-    internal uint NextBounded(uint exclusiveUpperBound)
-    {
-        if (exclusiveUpperBound == 0U)
-            throw new ArgumentOutOfRangeException(nameof(exclusiveUpperBound));
-        var rejectionThreshold = unchecked((uint)(0U - exclusiveUpperBound)) % exclusiveUpperBound;
-        while (true)
-        {
-            var candidate = unchecked((uint)NextUInt64());
-            if (candidate >= rejectionThreshold)
-                return candidate % exclusiveUpperBound;
-        }
-    }
-
-    private ulong NextUInt64()
-    {
-        State = unchecked(State + WeylIncrement);
-        var mixed = State;
-        mixed = (mixed ^ (mixed >> FirstMixShift)) * FirstMixMultiplier;
-        mixed = (mixed ^ (mixed >> SecondMixShift)) * SecondMixMultiplier;
-        return mixed ^ (mixed >> FinalMixShift);
-    }
-}
-
 internal static class FalloutSoundRecordReader
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack,
+        Lazy<IReadOnlyDictionary<string, FalloutPluginRecord[]>>> Names = new();
+
+    internal static FalloutPluginRecord Find(FalloutPluginStack stack, string editorId)
+    {
+        // One immutable winning-name index per installation/load order. Event
+        // playback must not scan every SOUN again for each placed emitter.
+        var names = Names.GetValue(stack, owner => new(() => owner.EffectiveRecords("SOUN")
+            .SelectMany(record => record.ReadSubrecords().Where(field => field.Signature == "EDID")
+                .Select(field => (Name: System.Text.Encoding.ASCII.GetString(field.Data.Span).TrimEnd('\0'), Record: record)))
+            .GroupBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Select(row => row.Record).ToArray(), StringComparer.OrdinalIgnoreCase))).Value;
+        return names.TryGetValue(editorId, out var matches) && matches.Length == 1 ? matches[0] :
+            throw new InvalidDataException($"Sound {editorId} does not have one unique winning SOUN owner.");
+    }
+
     private const int LegacyDataBytes = 12;
     private const int CurrentDataBytes = 36;
     private const int CurvePoints = 5;

@@ -2,7 +2,7 @@
 param(
     [string]$Godot = "",
     [ValidateSet("Debug", "Release")]
-    [string]$Configuration = "Debug",
+    [string]$Configuration = "Release",
     [switch]$ValidateOnly
 )
 
@@ -80,11 +80,6 @@ $dotnet = Get-Command dotnet -CommandType Application -ErrorAction SilentlyConti
 if ($null -eq $dotnet) {
     throw "dotnet was not found. Install the .NET SDK required by the OpenNV runtime."
 }
-& $dotnet.Source build $runtimeProject --configuration $Configuration
-if ($LASTEXITCODE -ne 0) {
-    throw "OpenNV runtime $Configuration build failed."
-}
-
 foreach ($requiredFile in @(
     (Join-Path $runtimeRoot "project.godot"),
     (Join-Path $runtimeRoot "runtime-manifest.json"),
@@ -104,12 +99,46 @@ if ($null -eq $npm) {
     throw "npm was not found. Install a current Node.js LTS release first."
 }
 
+if ($Configuration -eq "Release") {
+    # The editor's --path runner always loads Debug OpenNV and GodotSharp.
+    # ExportRelease compiles both against the optimized runtime and uses the
+    # launcher's existing packaged-executable route, with the same campaigns.
+    $exportRoot = Join-Path $repoRoot "tmp\development-runtime\windows"
+    [IO.Directory]::CreateDirectory($exportRoot) | Out-Null
+    $exportExecutable = Join-Path $exportRoot "OpenNV.exe"
+    & $versionCheckPath --headless --path $runtimeRoot --xr-mode off --export-release "Windows Experimental" $exportExecutable
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exportExecutable -PathType Leaf)) {
+        throw "OpenNV release export failed. Install the matching Godot 4.7.2 Mono export templates."
+    }
+    $exportManifest = Get-Content -LiteralPath (Join-Path $runtimeRoot "runtime-manifest.json") -Raw | ConvertFrom-Json
+    $exportManifest.runtime | Add-Member -NotePropertyName executables -NotePropertyValue @{ win32 = "OpenNV.exe" } -Force
+    [IO.File]::WriteAllText((Join-Path $exportRoot "runtime-manifest.json"),
+        ($exportManifest | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+    $runtimeRoot = $exportRoot
+} else {
+    & $dotnet.Source build $runtimeProject --configuration Debug
+    if ($LASTEXITCODE -ne 0) { throw "OpenNV runtime Debug build failed." }
+}
+
 $env:OPENNV_RUNTIME_ROOT = $runtimeRoot
 $env:OPENNV_GODOT = $godotPath
 
 if ($ValidateOnly) {
     Write-Host "OpenNV developer launch ready: Godot $version; runtime $runtimeRoot; configuration $Configuration"
     return
+}
+
+# Keep normal packaged-launcher starts on this same build after the shell
+# exits. Environment variables alone disappear with the development launcher.
+if ($env:OS -eq "Windows_NT") {
+    $runtimeRegistration = Join-Path ([Environment]::GetFolderPath("ApplicationData")) "@open-nevada\launcher\runtime.json"
+    $registration = if (Test-Path -LiteralPath $runtimeRegistration -PathType Leaf) {
+        Get-Content -LiteralPath $runtimeRegistration -Raw | ConvertFrom-Json
+    } else { [PSCustomObject]@{} }
+    $registration | Add-Member -NotePropertyName runtimeRoot -NotePropertyValue $runtimeRoot -Force
+    $registration | Add-Member -NotePropertyName godotExecutable -NotePropertyValue $godotPath -Force
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($runtimeRegistration)) | Out-Null
+    [IO.File]::WriteAllText($runtimeRegistration, ($registration | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 }
 
 if ($env:OS -eq "Windows_NT") {

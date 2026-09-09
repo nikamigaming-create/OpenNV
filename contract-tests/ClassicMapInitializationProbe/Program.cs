@@ -1077,6 +1077,7 @@ foreach (var path in args)
                     restored.MapVariables[20] != 2 ||
                     restored.GlobalVariables[10] != 2 ||
                     restored.ValueStack.Count != 0 ||
+                    restored.RandomState is null ||
                     restored.RandomState.SeedState !=
                         completed.State.RandomState.SeedState ||
                     restored.RandomState.RandomState.Seed !=

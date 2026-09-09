@@ -12,7 +12,7 @@ namespace OpenNV.Runtime.Presentation.Rendering;
 internal static class RetailEnvironmentRenderer
 {
     private const string WeatherCloudLayerGeometrySemantic = "weather-cloud-layer-geometry";
-    private const string AtmosphereShaderSource = """
+    internal const string AtmosphereShaderSource = """
         shader_type spatial;
         render_mode unshaded, blend_mix, cull_back, depth_draw_never, fog_disabled;
 
@@ -26,7 +26,9 @@ internal static class RetailEnvironmentRenderer
         void vertex() {
             source_vertex_color = COLOR;
             vec3 world_direction = normalize(mat3(MODEL_MATRIX) * VERTEX);
-            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 1.0);
+            // A sky direction is at infinity. w=1 admits the XR eye-translation
+            // term and makes a normalized dome appear one metre from the eyes.
+            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 0.0);
             POSITION.z = 0.0;
         }
 
@@ -43,7 +45,7 @@ internal static class RetailEnvironmentRenderer
         }
         """;
 
-    private const string CloudShaderSource = """
+    internal const string CloudShaderSource = """
         shader_type spatial;
         render_mode unshaded, blend_mix, cull_back, depth_draw_never, fog_disabled;
 
@@ -75,7 +77,7 @@ internal static class RetailEnvironmentRenderer
         void vertex() {
             source_vertex_color = COLOR;
             vec3 world_direction = normalize(mat3(MODEL_MATRIX) * VERTEX);
-            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 1.0);
+            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 0.0);
             POSITION.z = 0.0;
         }
 
@@ -99,16 +101,16 @@ internal static class RetailEnvironmentRenderer
         }
         """;
 
-    private const string NightSkyShaderSource = """
+    internal const string NightSkyShaderSource = """
         shader_type spatial;
         render_mode unshaded, blend_mix, cull_back, depth_draw_never, fog_disabled;
 
-        uniform sampler2D star_map : source_color, filter_linear_mipmap_anisotropic;
+        uniform sampler2D star_map : filter_linear_mipmap_anisotropic;
         uniform vec4 stars_encoded;
 
         void vertex() {
             vec3 world_direction = normalize(mat3(MODEL_MATRIX) * VERTEX);
-            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 1.0);
+            POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 0.0);
             POSITION.z = 0.0;
         }
 

@@ -7,8 +7,19 @@ namespace OpenNV.Runtime.Content;
 internal static class FalloutGameSettingStrings
 {
     private static readonly ConditionalWeakTable<RuntimeLiveContentSource, IReadOnlyDictionary<string, string>> Defaults = new();
+    private static readonly ConditionalWeakTable<FalloutPluginStack, Dictionary<string, string>> Resolved = new();
 
     internal static string Read(FalloutPluginStack records, string name)
+    {
+        var cache = Resolved.GetValue(records, _ => new(StringComparer.OrdinalIgnoreCase));
+        lock (cache)
+        {
+            if (!cache.TryGetValue(name, out var value)) cache.Add(name, value = ReadUncached(records, name));
+            return value;
+        }
+    }
+
+    private static string ReadUncached(FalloutPluginStack records, string name)
     {
         var overrides = records.EffectiveRecords("GMST").Where(record => record.ReadSubrecords().Any(field =>
             field.Signature == "EDID" && FalloutDialogueTopic.Text(field.Data.Span).Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();

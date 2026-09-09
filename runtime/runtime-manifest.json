@@ -8,16 +8,102 @@
     "canLaunch": true
   },
   "campaigns": [
-    { "id": "Fallout1", "launchable": true, "status": "bounded native V13ENT slice; full campaign incomplete" },
-    { "id": "Fallout2", "launchable": true, "status": "bounded native Arroyo Map 3 slice; full campaign incomplete" },
-    { "id": "NewVegas", "launchable": true, "status": "direct ESM/ESP/BSA and loose-file runtime; full campaign incomplete" },
-    { "id": "Fallout3", "launchable": true, "status": "direct owned-data runtime is incomplete" },
-    { "id": "TTW", "launchable": false, "status": "direct runtime support is not implemented" },
-    { "id": "JAM", "launchable": false, "status": "complete plugin semantics are not implemented" }
+    {
+      "id": "Fallout1",
+      "launchable": true,
+      "status": "Saved characters, source hex movement and original HUD; combat, Pip-Boy and campaign scripts remain incomplete",
+      "presentations": {
+        "hex-tactical": {
+          "launchable": true,
+          "previewOnly": true,
+          "status": "Owned map/elevation world, hex movement, original HUD and save/continue; campaign gameplay and visual acceptance remain incomplete"
+        },
+        "first-person": {
+          "launchable": false,
+          "previewOnly": false,
+          "status": "FPS gameplay from the earlier build awaits restoration"
+        },
+        "openxr": {
+          "launchable": false,
+          "previewOnly": false,
+          "status": "VR integration and headset acceptance remain incomplete"
+        }
+      }
+    },
+    {
+      "id": "Fallout2",
+      "launchable": true,
+      "status": "Shared owned-map world, original character picker, tribal player art and HUD; campaign scripts and combat remain incomplete",
+      "presentations": {
+        "hex-tactical": {
+          "launchable": true,
+          "previewOnly": true,
+          "status": "Temple entry, owned map/elevation browser, hex movement and save/continue; campaign gameplay and visual acceptance remain incomplete"
+        },
+        "first-person": {
+          "launchable": false,
+          "previewOnly": false,
+          "status": "FPS gameplay is incomplete"
+        },
+        "openxr": {
+          "launchable": false,
+          "previewOnly": false,
+          "status": "VR integration and headset acceptance remain incomplete"
+        }
+      }
+    },
+    {
+      "id": "NewVegas",
+      "launchable": true,
+      "status": "New Vegas opening and campaign gameplay remain incomplete",
+      "presentations": {
+        "first-person": {
+          "launchable": true,
+          "previewOnly": false,
+          "status": "Original opening and direct owned-data runtime; gameplay is incomplete"
+        },
+        "openxr": {
+          "launchable": false,
+          "previewOnly": false,
+          "status": "Physical headset acceptance remains incomplete"
+        }
+      }
+    },
+    {
+      "id": "Fallout3",
+      "launchable": true,
+      "status": "Vault 101 opening and campaign gameplay remain incomplete",
+      "presentations": {
+        "first-person": {
+          "launchable": true,
+          "previewOnly": false,
+          "status": "Direct owned-data opening; campaign gameplay is incomplete"
+        }
+      }
+    },
+    {
+      "id": "TTW",
+      "launchable": false,
+      "status": "direct runtime support is not implemented",
+      "presentations": {}
+    },
+    {
+      "id": "JAM",
+      "launchable": false,
+      "status": "complete plugin semantics are not implemented",
+      "presentations": {}
+    }
   ],
   "dataFlow": {
-    "inputs": ["owned plugins", "owned archives", "owned loose files"],
-    "writes": ["OpenNV settings", "OpenNV saves"],
+    "inputs": [
+      "owned plugins",
+      "owned archives",
+      "owned loose files"
+    ],
+    "writes": [
+      "OpenNV settings",
+      "OpenNV saves"
+    ],
     "generatedRetailAssets": false
   }
 }

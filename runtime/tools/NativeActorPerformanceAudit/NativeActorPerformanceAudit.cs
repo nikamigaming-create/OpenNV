@@ -10,6 +10,30 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--appearance", var appearanceRoot, .. var references])
+            {
+                ExerciseAppearances(appearanceRoot, references);
+                GetTree().Quit();
+                return;
+            }
+            if (args is ["--idle", var idleRoot, var idleCell, var idleActor, var idleName])
+            {
+                RuntimeLiveContentSource.Configure(idleRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+                using var source = RuntimeLiveContentSource.Current!;
+                using var stack = FalloutPluginStack.Load(source.PluginSources);
+                var scene = FalloutCellSceneReader.Read(stack, FalloutDialogueTopic.Find(stack, "CELL", idleCell).FormKey);
+                var idleReference = scene.References.Single(reference => reference.EditorId == idleActor);
+                var idleSubject = RuntimeNativeNpc.Create(stack, source, idleReference, 0.0142875f, (_, _, _, _) => new StandardMaterial3D());
+                AddChild(idleSubject);
+                var idle = FalloutActorIdleSource.Resolve(stack, idleName);
+                GD.Print($"OPENNV_IDLE_PREFLIGHT source={idle.Form} objects={string.Join(',', idle.Objects.Select(value => value.ModelPath))}");
+                idleSubject.PlayIdle(stack, idleName);
+                var idleBefore = BonePoses(idleSubject);
+                idleSubject._Process(.7);
+                if (idleSubject.AnimationError is not null || BonePoses(idleSubject).SequenceEqual(idleBefore)) throw new InvalidDataException("Source idle did not move the actor: " + idleSubject.AnimationError);
+                GD.Print($"OPENNV_IDLE_PREFLIGHT_PASS idle={idle.Form} objects={idle.Objects.Count} animated=true ordinaryPresentation=unverified");
+                idleSubject.Free(); GetTree().Quit(); return;
+            }
             if (args is ["--furniture", var furnitureRoot, var furnitureCell, var furnitureActor, var furnitureQuest, var furnitureStage])
             {
                 ExerciseFurniture(furnitureRoot, furnitureCell, furnitureActor, furnitureQuest, furnitureStage);

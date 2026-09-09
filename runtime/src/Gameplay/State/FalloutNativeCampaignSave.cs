@@ -8,7 +8,8 @@ internal sealed record FalloutNativeSavedItem(
     uint RuntimeFormId,
     string EditorId,
     string RecordType,
-    int Count);
+    int Count,
+    IReadOnlyList<FalloutItemVariant>? Variants = null);
 
 internal sealed record FalloutNativeCampaignState(
     string Schema,
@@ -31,7 +32,9 @@ internal sealed record FalloutNativeCampaignState(
     FalloutGlobalStateSnapshot? Globals = null,
     FalloutGameTimeSnapshot? GameTime = null,
     FalloutSkyLightingSnapshot? SkyLighting = null,
-    IReadOnlyList<FalloutReferenceSnapshot>? References = null);
+    IReadOnlyList<FalloutReferenceSnapshot>? References = null,
+    ulong? InventoryRandomState = null, bool CharacterCreationComplete = true, GameplayVitals? Vitals = null,
+    FalloutWeaponHandlingSnapshot? WeaponHandling = null, float? PlayerViewPitchRadians = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -39,7 +42,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v12";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v13";
+    internal const string ReferenceStateSchema = "opennv-native-fnv-campaign-save/v12";
     internal const string QuestClockSchema = "opennv-native-fnv-campaign-save/v11";
     internal const string SkyLightingSchema = "opennv-native-fnv-campaign-save/v10";
     internal const string GlobalClockSchema = "opennv-native-fnv-campaign-save/v9";
@@ -76,18 +80,19 @@ internal static class FalloutNativeCampaignSave
         FalloutGlobalStateSnapshot? globals = null,
         FalloutGameTimeSnapshot? gameTime = null,
         FalloutSkyLightingSnapshot? skyLighting = null,
-        IReadOnlyList<FalloutReferenceSnapshot>? references = null)
+        IReadOnlyList<FalloutReferenceSnapshot>? references = null, string questEditorId = OpeningQuestEditorId,
+        short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0)
     {
         ArgumentNullException.ThrowIfNull(grant);
-        FalloutNativeVigorResolver.Validate(vigorContract, special);
-        FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills);
+        FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
+        FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills, allowUnspent: !characterCreationComplete);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, traits);
         var state = new FalloutNativeCampaignState(
             references is not null ? ExpectedSchema : skyLighting is not null ? QuestClockSchema : globals is null ? QuestScriptsSchema : GlobalClockSchema,
             saveCompatibilityId,
             activeCell,
-            OpeningQuestEditorId,
-            CompletedOpeningStage,
+            questEditorId,
+            stage,
             playerName,
             character,
             special,
@@ -98,7 +103,7 @@ internal static class FalloutNativeCampaignSave
                     value.RuntimeFormId,
                     value.EditorId,
                     value.RecordType,
-                    value.Count))
+                    value.Count, value.Variants))
                 .ToArray(),
             grant.EquippedRuntimeFormIds.Order().ToArray(),
             [
@@ -111,7 +116,8 @@ internal static class FalloutNativeCampaignSave
                 playerControls.Sneaking,
             ],
             playerPosition.ToArray(),
-            playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references);
+            playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references, grant.InventoryRandomState, characterCreationComplete,
+            PlayerViewPitchRadians: playerViewPitchRadians);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -170,10 +176,10 @@ internal static class FalloutNativeCampaignSave
             foreach (var id in face.HeadParts)
                 if (stack.GetEffective(stack.RuntimeFormKey(id)).Signature != "HDPT") throw new InvalidDataException("Saved player head part is not an owned HDPT.");
         }
-        FalloutNativeVigorResolver.Validate(vigorContract, state.Special);
-        FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills);
+        FalloutNativeVigorResolver.Validate(vigorContract, state.Special, allowUnspent: !state.CharacterCreationComplete);
+        FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, state.Traits);
-        var expectedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(
+        var expectedGrant = state.Scripts is not null ? null : FalloutNativeTraitFarewellResolver.ResolveGrant(
             traitFarewellContract,
             openingGrant,
             state.TagSkills);
@@ -185,6 +191,10 @@ internal static class FalloutNativeCampaignSave
                 value.RecordType,
                 value.Count)).ToArray(),
             null);
+        var savedItems = state.Inventory.ToDictionary(item => item.RuntimeFormId);
+        inventory = inventory with { Items = inventory.Items.Select(item => item with { Variants = savedItems[item.RuntimeFormId].Variants }).ToArray() };
+        var validatedInventory = new FalloutPlayerInventory();
+        validatedInventory.Restore(inventory, state.EquippedRuntimeFormIds.ToArray(), state.InventoryRandomState);
         if (!inventory.Items.OrderBy(value => value.RuntimeFormId)
                 .Select(value => (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))
                 .SequenceEqual(state.Inventory.OrderBy(value => value.RuntimeFormId)
@@ -194,11 +204,11 @@ internal static class FalloutNativeCampaignSave
                 "Native campaign save inventory differs from the live winning records.");
         if (state.Scripts is null && (!state.Inventory.OrderBy(value => value.RuntimeFormId)
                 .Select(value => (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))
-                .SequenceEqual(expectedGrant.Inventory.Items.OrderBy(value => value.RuntimeFormId)
+                .SequenceEqual(expectedGrant!.Inventory.Items.OrderBy(value => value.RuntimeFormId)
                     .Select(value =>
                         (value.RuntimeFormId, value.EditorId, value.RecordType, value.Count))) ||
             !state.EquippedRuntimeFormIds.Order()
-                .SequenceEqual(expectedGrant.EquippedRuntimeFormIds.Order())))
+                .SequenceEqual(expectedGrant!.EquippedRuntimeFormIds.Order())))
             throw new InvalidDataException(
                 "Native campaign save loadout differs from the live farewell/tag-skill contract.");
         if (state.Quests is not null) new FalloutQuestState(stack).Restore(state.Quests);
@@ -216,7 +226,7 @@ internal static class FalloutNativeCampaignSave
         FalloutNativeCampaignState state,
         FalloutFormKey activeCell,
         IReadOnlyList<float> playerPosition,
-        IReadOnlyList<float> playerRotation)
+        IReadOnlyList<float> playerRotation, float? playerViewPitchRadians = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         var updated = state with
@@ -225,9 +235,17 @@ internal static class FalloutNativeCampaignSave
             ActiveCell = activeCell,
             PlayerPosition = playerPosition.ToArray(),
             PlayerRotation = playerRotation.ToArray(),
+            PlayerViewPitchRadians = playerViewPitchRadians ?? RestorePlayerViewPitch(state),
         };
         Validate(updated, state.SaveCompatibilityId);
         return updated;
+    }
+
+    internal static float RestorePlayerViewPitch(FalloutNativeCampaignState state)
+    {
+        Validate(state, state.SaveCompatibilityId);
+        // Saves through v12 did not capture the independent desktop look angle.
+        return state.PlayerViewPitchRadians ?? 0;
     }
 
     internal static float[] RestorePlayerPosition(FalloutNativeCampaignState state, float legacyCapsuleCenterHeight)
@@ -261,20 +279,24 @@ internal static class FalloutNativeCampaignSave
         FalloutNativeCampaignState state,
         string expectedSaveCompatibilityId)
     {
-        if ((state.Schema != ExpectedSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
+        state.Vitals?.Validate();
+        if (state.WeaponHandling is { } handling) FalloutWeaponHandling.Validate(handling);
+        if ((state.Schema != ExpectedSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
             (state.Scripts is null) != (state.Quests is null) ||
             (state.Globals is null) != (state.GameTime is null) ||
-            (state.Schema is ExpectedSchema or QuestClockSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
-            (state.Schema is ExpectedSchema or QuestClockSchema or SkyLightingSchema && state.SkyLighting is null) ||
-            (state.Schema == ExpectedSchema && state.References is null) ||
+            (state.Schema is ExpectedSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
+            (state.Schema is ExpectedSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema && state.SkyLighting is null) ||
+            (state.Schema is ExpectedSchema or ReferenceStateSchema && state.References is null) ||
+            (state.Schema == ExpectedSchema && state.PlayerViewPitchRadians is null) ||
+            (state.PlayerViewPitchRadians is { } pitch && (!float.IsFinite(pitch) || MathF.Abs(pitch) > MathF.PI / 2)) ||
             (state.SkyLighting is not null && state.Globals is null) ||
             (state.GameTime is { } time && (!float.IsFinite(time.PreviousHour) || string.IsNullOrWhiteSpace(time.CalendarSha256))) ||
             string.IsNullOrWhiteSpace(expectedSaveCompatibilityId) ||
             state.SaveCompatibilityId != expectedSaveCompatibilityId ||
             string.IsNullOrWhiteSpace(state.ActiveCell.OwnerPlugin) ||
             state.ActiveCell.ObjectId == 0 ||
-            state.QuestEditorId != OpeningQuestEditorId ||
-            state.Stage != CompletedOpeningStage ||
+            string.IsNullOrWhiteSpace(state.QuestEditorId) || state.Stage < 0 ||
+            (!state.CharacterCreationComplete && (state.Quests is null || state.Scripts is null || state.References is null)) ||
             string.IsNullOrWhiteSpace(state.PlayerName) ||
             state.PlayerName != state.PlayerName.Trim() ||
             state.PlayerName.Any(char.IsControl) ||
@@ -288,15 +310,12 @@ internal static class FalloutNativeCampaignSave
             state.Special is null ||
             state.Special.Values.Count != FalloutNativeVigorResolver.AttributeNames.Count ||
             state.TagSkills is null ||
-            state.TagSkills.Count == 0 ||
             state.Traits is null ||
-            state.Inventory.Count == 0 ||
             state.Inventory.Any(value =>
                 value.RuntimeFormId == 0 || string.IsNullOrWhiteSpace(value.EditorId) ||
                 value.RecordType.Length != FalloutPlugin.SignatureSize || value.Count <= 0) ||
             state.Inventory.Select(value => value.RuntimeFormId).Distinct().Count() !=
                 state.Inventory.Count ||
-            state.EquippedRuntimeFormIds.Count == 0 ||
             state.EquippedRuntimeFormIds.Distinct().Count() != state.EquippedRuntimeFormIds.Count ||
             state.EquippedRuntimeFormIds.Any(value =>
                 !state.Inventory.Any(item => item.RuntimeFormId == value)) ||

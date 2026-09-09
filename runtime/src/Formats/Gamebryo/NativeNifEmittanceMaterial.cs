@@ -8,8 +8,8 @@ internal static class NativeNifEmittanceMaterial
     private const string Capability = "opennv_nif_external_emittance";
     internal const string ShaderSource = """
         uniform bool accepts_external_emittance;
-        instance uniform bool source_use_external_emittance;
-        instance uniform vec3 source_external_emittance;
+        instance uniform bool source_use_external_emittance : instance_index(4);
+        instance uniform vec3 source_external_emittance : instance_index(5);
         vec3 owned_emissive_color(vec3 authored_color, float multiple) {
             return accepts_external_emittance && source_use_external_emittance
                 ? source_external_emittance * multiple : authored_color;

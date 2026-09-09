@@ -170,6 +170,19 @@ var ambiguousDefaultRejected = false;
 try { FalloutExecutableStringTable.ReadInitializers(initializer.Concat(initializer).ToArray(), SourceLiteral, _ => true); }
 catch (InvalidDataException) { ambiguousDefaultRejected = true; }
 Require(ambiguousDefaultRejected, "Ambiguous setting initializers silently chose one source.");
+var allocatedInitializer = new byte[24];
+new byte[] { 0x83, 0x7d, 0xe4, 0, 0x74, 0x1a, 0x68 }.CopyTo(allocatedInitializer, 0);
+BinaryPrimitives.WriteUInt32LittleEndian(allocatedInitializer.AsSpan(7), 0x200);
+allocatedInitializer[11] = 0x68;
+BinaryPrimitives.WriteUInt32LittleEndian(allocatedInitializer.AsSpan(12), 0x100);
+new byte[] { 0x8b, 0x4d, 0xe4, 0xe8 }.CopyTo(allocatedInitializer, 16);
+Require(FalloutExecutableStringTable.ReadInitializers(allocatedInitializer, SourceLiteral, _ => false)["sProbePooled"] == "Shared\nsource literal",
+    "Allocated setting descriptors lost the owned name/value association.");
+Require(FalloutExecutableStringTable.ReadInitializers(allocatedInitializer.AsSpan(0, 23), SourceLiteral, _ => false).Count == 0,
+    "A truncated allocated setting constructor was admitted.");
+allocatedInitializer[18] = 0xd4;
+Require(FalloutExecutableStringTable.ReadInitializers(allocatedInitializer, SourceLiteral, _ => false).Count == 0,
+    "Allocated setting constructor admitted a different receiver than its null guard.");
 var integerInitializer = initializer.ToArray();
 BinaryPrimitives.WriteUInt32LittleEndian(integerInitializer.AsSpan(4), 0xff12a0e7);
 var integerDefaults = FalloutExecutableStringTable.ReadIntegerInitializers(integerInitializer,
@@ -467,15 +480,13 @@ if (args is [var dataRoot])
     var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
     var said = new HashSet<FalloutFormKey>();
     var info = topic.Select(npcKey, said, _ => throw new InvalidOperationException("Unexpected quest condition."))!;
-    var voiceType = stack.GetEffective(FalloutDialogueTopic.RequiredForm(stack.GetEffective(npcKey), "VTCK"));
-    var voiceName = FalloutDialogueTopic.Text(voiceType.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span);
-    var paths = source.ResourcePathsUnder($"sound/voice/{info.Record.Plugin.Name}/{voiceName}");
-    foreach (var response in info.Responses)
+    var voiceSpeaker = FalloutDialogueSpeaker.Read(stack, npcKey);
+    var voices = new FalloutDialogueVoiceIndex(source.ResourcePathsUnder("sound/voice"));
+    for (var response = 0; response < info.Responses.Count; response++)
     {
-        var suffix = $"_{info.Record.FormKey.ObjectId:x8}_{response.Number}.ogg";
-        var voice = paths.Single(path => path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
-        Require(source.TryRead(voice, null, out var voiceBytes, out _) && voiceBytes.AsSpan(0, 4).SequenceEqual("OggS"u8), "Owned voice missing.");
-        Require(source.TryRead(Path.ChangeExtension(voice, ".lip"), null, out var lip, out _) && lip.Length > 12, "Owned LIP missing.");
+        var voice = voices.Resolve(voiceSpeaker, info, response);
+        Require(source.TryRead(voice.AudioPath, null, out var voiceBytes, out _) && voiceBytes.AsSpan(0, 4).SequenceEqual("OggS"u8), "Owned voice missing.");
+        Require(source.TryRead(voice.LipPath, null, out var lip, out _) && lip.Length > 12, "Owned LIP missing.");
     }
     Console.WriteLine($"OPENNV_OWNED_DIALOGUE_OK plugins={stack.Plugins.Count} infos={topic.Infos.Count} selected={info.Record.FormKey} responses={info.Responses.Count} endScript={info.EndScript.Trim()} voiceAndLip=owned-memory");
 }

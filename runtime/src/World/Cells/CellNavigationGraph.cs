@@ -77,11 +77,10 @@ internal sealed partial class CellNavigationGraph
         NavigationNode source,
         NavigationNode target)
     {
-        var reciprocal = target.NavMesh.Triangles[target.TriangleIndex]
-            .AdjacentTriangles
-            .Where(adjacent => !target.NavMesh.IsInternalNeighbor(
-                target.TriangleIndex,
-                adjacent))
+        var targetTriangle = target.NavMesh.Triangles[target.TriangleIndex];
+        var reciprocal = Enumerable.Range(0, TriangleEdgeCount)
+            .Where(edge => (targetTriangle.Flags & (1u << edge)) != 0)
+            .Select(edge => targetTriangle.AdjacentTriangles[edge])
             .Where(adjacent => adjacent >= 0 &&
                 adjacent < target.NavMesh.ExternalConnections.Count)
             .Select(adjacent => target.NavMesh.ExternalConnections[adjacent])
@@ -218,10 +217,14 @@ internal sealed partial class CellNavigationGraph
     private IEnumerable<NavigationNode> Neighbors(NavigationNode node)
     {
         var triangle = node.NavMesh.Triangles[node.TriangleIndex];
-        foreach (var adjacent in triangle.AdjacentTriangles.Distinct().Order())
+        for (var edge = 0; edge < TriangleEdgeCount; edge++)
         {
-            if (node.NavMesh.IsInternalNeighbor(node.TriangleIndex, adjacent))
+            var adjacent = triangle.AdjacentTriangles[edge];
+            if (adjacent < 0) continue;
+            if ((triangle.Flags & (1u << edge)) == 0)
             {
+                if (!node.NavMesh.IsInternalNeighbor(node.TriangleIndex, adjacent) ||
+                    (node.NavMesh.Triangles[adjacent].Flags & 8) != 0) continue;
                 yield return new NavigationNode(node.NavMesh, adjacent);
                 continue;
             }
@@ -231,7 +234,7 @@ internal sealed partial class CellNavigationGraph
             if (!_navmeshesByFormId.TryGetValue(external.NavMeshFormId, out var target))
                 continue;
             if (external.TriangleIndex < 0 ||
-                external.TriangleIndex >= target.Triangles.Count)
+                external.TriangleIndex >= target.Triangles.Count || (target.Triangles[external.TriangleIndex].Flags & 8) != 0)
                 continue;
             yield return new NavigationNode(target, external.TriangleIndex);
         }
@@ -329,11 +332,14 @@ internal sealed partial class CellNavigationGraph
         {
             for (var triangleIndex = 0; triangleIndex < Triangles.Count; triangleIndex++)
             {
-                foreach (var adjacent in Triangles[triangleIndex].AdjacentTriangles)
+                var triangle = Triangles[triangleIndex];
+                if ((triangle.Flags & 8) != 0) continue;
+                for (var edge = 0; edge < TriangleEdgeCount; edge++)
                 {
+                    var adjacent = triangle.AdjacentTriangles[edge];
                     if (adjacent == NoAdjacentTriangle ||
-                        IsInternalNeighbor(triangleIndex, adjacent) ||
-                        adjacent < ExternalConnections.Count)
+                        ((triangle.Flags & (1u << edge)) != 0 ? adjacent < ExternalConnections.Count :
+                            IsInternalNeighbor(triangleIndex, adjacent)))
                         continue;
                     else
                         throw new InvalidOperationException(
@@ -344,18 +350,16 @@ internal sealed partial class CellNavigationGraph
 
         internal NearestTriangleResult NearestTriangle(Vector3 point)
         {
-            var results = Triangles.Select((_, index) =>
-                {
-                    var nearest = ClosestPoint(index, point);
-                    return new NearestTriangleResult(
-                        index,
-                        nearest,
-                        point.DistanceSquaredTo(nearest));
-                })
-                .OrderBy(value => value.DistanceSquared)
-                .ThenBy(value => value.Index)
-                .ToArray();
-            return results[0];
+            var best = new NearestTriangleResult(-1, default, float.PositiveInfinity);
+            for (var index = 0; index < Triangles.Count; index++)
+            {
+                if ((Triangles[index].Flags & 8) != 0) continue;
+                var nearest = ClosestPoint(index, point);
+                var distance = point.DistanceSquaredTo(nearest);
+                if (float.IsFinite(distance) && distance < best.DistanceSquared)
+                    best = new(index, nearest, distance);
+            }
+            return best.Index >= 0 ? best : throw new InvalidDataException($"Owned NAVM {FormId} has no finite floor projection.");
         }
 
         internal bool CanReach(int start, int destination)
@@ -405,7 +409,10 @@ internal sealed partial class CellNavigationGraph
             adjacent >= 0 &&
             adjacent < Triangles.Count &&
             adjacent != source &&
-            Triangles[adjacent].AdjacentTriangles.Contains(source) &&
+            Enumerable.Range(0, TriangleEdgeCount).Any(edge => Triangles[source].AdjacentTriangles[edge] == adjacent &&
+                (Triangles[source].Flags & (1u << edge)) == 0) &&
+            Enumerable.Range(0, TriangleEdgeCount).Any(edge => Triangles[adjacent].AdjacentTriangles[edge] == source &&
+                (Triangles[adjacent].Flags & (1u << edge)) == 0) &&
             SharedVertices(source, adjacent).Count == SharedEdgeVertexCount;
 
         internal Vector3 Centroid(int triangleIndex)
@@ -419,6 +426,9 @@ internal sealed partial class CellNavigationGraph
 
         private Vector3 ClosestPoint(int triangleIndex, Vector3 point)
         {
+            // World queries can be kilometres from a small source triangle.
+            // Float dot-product determinants lose their differences there.
+            static double Dot(Vector3 a, Vector3 b) => (double)a.X * b.X + (double)a.Y * b.Y + (double)a.Z * b.Z;
             var triangle = Triangles[triangleIndex];
             var first = Vertices[triangle.VertexIndices[0]];
             var second = Vertices[triangle.VertexIndices[1]];
@@ -426,14 +436,14 @@ internal sealed partial class CellNavigationGraph
             var firstToSecond = second - first;
             var firstToThird = third - first;
             var firstToPoint = point - first;
-            var firstSecondProjection = firstToSecond.Dot(firstToPoint);
-            var firstThirdProjection = firstToThird.Dot(firstToPoint);
+            var firstSecondProjection = Dot(firstToSecond, firstToPoint);
+            var firstThirdProjection = Dot(firstToThird, firstToPoint);
             if (firstSecondProjection <= 0.0f && firstThirdProjection <= 0.0f)
                 return first;
 
             var secondToPoint = point - second;
-            var secondFirstProjection = firstToSecond.Dot(secondToPoint);
-            var secondThirdProjection = firstToThird.Dot(secondToPoint);
+            var secondFirstProjection = Dot(firstToSecond, secondToPoint);
+            var secondThirdProjection = Dot(firstToThird, secondToPoint);
             if (secondFirstProjection >= 0.0f &&
                 secondThirdProjection <= secondFirstProjection)
                 return second;
@@ -447,12 +457,12 @@ internal sealed partial class CellNavigationGraph
             {
                 var weight = firstSecondProjection /
                     (firstSecondProjection - secondFirstProjection);
-                return first + weight * firstToSecond;
+                return first + (float)weight * firstToSecond;
             }
 
             var thirdToPoint = point - third;
-            var thirdSecondProjection = firstToSecond.Dot(thirdToPoint);
-            var thirdFirstProjection = firstToThird.Dot(thirdToPoint);
+            var thirdSecondProjection = Dot(firstToSecond, thirdToPoint);
+            var thirdFirstProjection = Dot(firstToThird, thirdToPoint);
             if (thirdFirstProjection >= 0.0f &&
                 thirdSecondProjection <= thirdFirstProjection)
                 return third;
@@ -466,7 +476,7 @@ internal sealed partial class CellNavigationGraph
             {
                 var weight = firstThirdProjection /
                     (firstThirdProjection - thirdFirstProjection);
-                return first + weight * firstToThird;
+                return first + (float)weight * firstToThird;
             }
 
             var secondThirdRegion =
@@ -482,15 +492,15 @@ internal sealed partial class CellNavigationGraph
             {
                 var weight = secondThirdFirst /
                     (secondThirdFirst + secondThirdSecond);
-                return second + weight * (third - second);
+                return second + (float)weight * (third - second);
             }
 
             var denominator = BarycentricUnit /
                 (secondThirdRegion + firstThirdRegion + firstSecondRegion);
             var secondWeight = firstThirdRegion * denominator;
             var thirdWeight = firstSecondRegion * denominator;
-            return first + firstToSecond * secondWeight +
-                firstToThird * thirdWeight;
+            return first + firstToSecond * (float)secondWeight +
+                firstToThird * (float)thirdWeight;
         }
     }
 

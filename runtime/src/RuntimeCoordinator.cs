@@ -101,6 +101,7 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.TryGetValue("data-root", out var dataRoot))
             {
                 _nativeInstallation = NativeGameInstallation.Detect(dataRoot);
+                RuntimeLaunchValidator.ValidateInstallation(_options, _nativeInstallation);
                 if (_nativeInstallation.Game is NativeGame.Fallout3 or NativeGame.FalloutNewVegas)
                     RuntimeLiveContentSource.Configure(
                         dataRoot,
@@ -121,7 +122,8 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.TryGetValue("live-harness", out var harnessDirectory))
             {
                 var harness = new Diagnostics.Parity.RuntimeLiveHarness();
-                harness.Configure(harnessDirectory, CaptureParityFrame, CaptureNativeDriveState, () => _nativePluginStack);
+                harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
+                    () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal));
                 AddChild(harness);
             }
             GetWindow().Size = new Vector2I(

@@ -57,11 +57,12 @@ internal sealed partial class NativeOwnedMessageMenu : Control
 
     public override void _Ready()
     {
-        GetViewport().SizeChanged += Layout;
         Layout();
         if (!_faulted) Callable.From(_buttons[0].Button.GrabFocus).CallDeferred();
     }
-    public override void _ExitTree() => GetViewport().SizeChanged -= Layout;
+    private NativeViewportLayout? _viewportLayout;
+    public override void _EnterTree() => _viewportLayout = new(this, Layout);
+    public override void _ExitTree() => _viewportLayout?.Dispose();
     private void Select(XElement tile)
     {
         _tiles.Bind(_list, "_highlight_y", _tiles.Number(tile, "_y"));
@@ -143,6 +144,7 @@ internal sealed class NativeOwnedMenuTree
     private readonly HashSet<(XElement, string)> _evaluatingText = [];
     private readonly Dictionary<XElement, NativeOwnedUiArt> _art = [];
     private readonly Dictionary<int, NativeBitmapFontAsset> _fonts = [];
+    private readonly Dictionary<string, XElement> _named = new(StringComparer.Ordinal);
     private readonly FalloutInstallationSettings _settings;
     private readonly Func<string, string>? _stringSetting;
     private readonly XElement _globals = FalloutMenuXml.Read("menus/globals.xml").Elements().Single();
@@ -160,6 +162,15 @@ internal sealed class NativeOwnedMenuTree
     }
     internal void Bind(XElement tile, string trait, float value) => _values[(tile, trait)] = value;
     internal void BindText(XElement tile, string trait, string value) => _textValues[(tile, trait)] = value;
+    internal void Forget(XElement tile)
+    {
+        var removed = tile.DescendantsAndSelf().ToHashSet();
+        foreach (var key in Text.Keys.Where(removed.Contains).ToArray()) Text.Remove(key);
+        foreach (var key in _art.Keys.Where(removed.Contains).ToArray()) _art.Remove(key);
+        foreach (var key in _values.Keys.Where(key => removed.Contains(key.Item1)).ToArray()) _values.Remove(key);
+        foreach (var key in _textValues.Keys.Where(key => removed.Contains(key.Item1)).ToArray()) _textValues.Remove(key);
+        _named.Clear();
+    }
     internal void SetFilename(XElement tile, string value)
     {
         tile.SetElementValue("filename", value);
@@ -189,16 +200,26 @@ internal sealed class NativeOwnedMenuTree
     {
         "me()" => tile,
         "parent()" => tile.Parent!,
+        "grandparent()" => tile.Parent?.Parent ?? throw new InvalidDataException("Owned tile has no grandparent."),
         "io()" => Root,
         "globals()" => _globals,
         _ when source == (string?)Root.Attribute("name") => Root,
         _ when source.StartsWith("sibling(", StringComparison.Ordinal) => tile.Parent!.Elements().Single(value => (string?)value.Attribute("name") == source[8..^1]),
         _ when source.StartsWith("child(", StringComparison.Ordinal) => tile.Elements().Single(value => (string?)value.Attribute("name") == source[6..^1]),
-        _ => throw new NotSupportedException($"Owned tile source {source} is unbound."),
+        _ => NamedOwner(source),
     };
+    private XElement NamedOwner(string name)
+    {
+        if (_named.TryGetValue(name, out var found)) return found;
+        var matches = Root.DescendantsAndSelf().Where(tile => (string?)tile.Attribute("name") == name &&
+            !tile.AncestorsAndSelf("template").Any()).ToArray();
+        if (matches.Length != 1) throw new NotSupportedException($"Owned tile source {name} is absent or ambiguous ({matches.Length}).");
+        _named.Add(name, matches[0]);
+        return matches[0];
+    }
     internal Color TileColor(XElement tile)
     {
-        var value = tile.Element("systemcolor")?.Value.Trim();
+        var value = tile.Element("systemcolor")?.Value.Trim().ToLowerInvariant();
         if (value is null) return tile.Parent is { } parent ? TileColor(parent) : Color;
         if (value == "entity_terminal")
         {
@@ -212,6 +233,12 @@ internal sealed class NativeOwnedMenuTree
             return new Color(Component("Red"), Component("Green"), Component("Blue"));
         }
         if (value == "entity_hudmain") return Color;
+        if (value == "entity_pipboy")
+        {
+            var packed = _settings.Unsigned("Interface", "uPipboyColor");
+            return new Color((packed >> 24) / 255f, ((packed >> 16) & 255) / 255f, ((packed >> 8) & 255) / 255f);
+        }
+        if (value == "entity_nosystemcolor") return new Color(1, 1, 1);
         throw new NotSupportedException($"Owned menu system color is unbound: {value}.");
     }
     internal NativeBitmapFontAsset Font(XElement tile)
@@ -245,11 +272,12 @@ internal sealed class NativeOwnedMenuTree
     internal float Number(XElement tile, string trait, bool bindings = true)
     {
         if (bindings && _values.TryGetValue((tile, trait), out var bound)) return bound;
-        if (trait == "string") return String(tile).Length == 0 ? 0 : 1;
+        if (trait is "string" or "_PCButtonText") return String(tile, trait).Length == 0 ? 0 : 1;
         if (trait is "filewidth" or "fileheight")
         {
             if (!_art.TryGetValue(tile, out var art)) _art[tile] = art = NativeOwnedUiArt.Read(tile, Filename(tile));
-            return trait == "filewidth" ? art.Region.Size.X : art.Region.Size.Y;
+            var zoom = Number(tile, "zoom");
+            return zoom <= 0 ? 0 : (trait == "filewidth" ? art.Region.Size.X : art.Region.Size.Y) * zoom / 100;
         }
         if (tile.Name == "text" && trait is "width" or "height")
             return trait == "width" ? Lines(tile).Max(line => Font(tile).Font.Measure(line)) : Lines(tile).Length * Font(tile).Font.Height;
@@ -258,8 +286,10 @@ internal sealed class NativeOwnedMenuTree
             return trait switch
             {
                 "alpha" or "brightness" => 255,
+                "zoom" => 100,
+                "cropx" or "cropy" => 0,
                 "visible" => 1,
-                "justify" or "mouseover" or "target" => 0,
+                "justify" or "mouseover" or "target" or "clicked" => 0,
                 "font" => tile.Parent is { } parent ? Number(parent, trait) : 0,
                 "x" or "y" or "width" or "height" or "locus" or "_glow" => 0,
                 _ => throw new NotSupportedException($"Owned tile {(string?)tile.Attribute("name")}/{trait} needs a runtime binding.")
@@ -269,7 +299,15 @@ internal sealed class NativeOwnedMenuTree
         {
             return FalloutMenuXml.Number(property, (source, key) =>
             {
-                if (source == "screen()") return key switch { "width" => Screen.X, "height" => Screen.Y, "resolutionconverter" => ResolutionConverter, _ => throw new NotSupportedException($"Screen trait {key} is unbound.") };
+                if (source == "screen()") return key switch
+                {
+                    "width" => Screen.X,
+                    "height" => Screen.Y,
+                    "resolutionconverter" => ResolutionConverter,
+                    "cropx" => _settings.Number("Interface", Screen.X / Screen.Y > 4f / 3f ? "iSafeZoneXWide" : "iSafeZoneX"),
+                    "cropy" => _settings.Number("Interface", Screen.X / Screen.Y > 4f / 3f ? "iSafeZoneYWide" : "iSafeZoneY"),
+                    _ => throw new NotSupportedException($"Screen trait {key} is unbound."),
+                };
                 return Number(Owner(tile, source), key);
             });
         }
@@ -290,15 +328,16 @@ internal sealed class NativeOwnedMenuTree
         string? value = null;
         foreach (var operation in property.Elements())
         {
-            if (operation.Name != "copy" || (string?)operation.Attribute("src") != "me()")
+            if (operation.Name != "copy" || operation.Attribute("src") is not { } source)
                 throw new NotSupportedException("Owned texture expression operator is unbound.");
+            var owner = Owner(tile, source.Value);
             var key = (string?)operation.Attribute("trait") ?? throw new InvalidDataException("Texture expression has no trait.");
             if (key.EndsWith('_'))
             {
                 if (index != MathF.Truncate(index)) throw new InvalidDataException("Texture trait index is not integral.");
-                value = Filename(tile, key + index.ToString(CultureInfo.InvariantCulture));
+                value = Filename(owner, key + index.ToString(CultureInfo.InvariantCulture));
             }
-            else index = Number(tile, key);
+            else index = Number(owner, key);
         }
         return value ?? throw new NotSupportedException("Texture expression did not resolve a source filename.");
     }
@@ -329,11 +368,23 @@ internal sealed class NativeOwnedMenuTree
     }
     internal void Draw(CanvasItem canvas)
     {
+        Rect2? Clip(XElement tile)
+        {
+            if (tile.Element("clips") is null || Number(tile, "clips") == 0) return null;
+            Rect2? result = null;
+            foreach (var parent in tile.Ancestors().Where(parent => parent.Element("clipwindow") is not null && Number(parent, "clipwindow") != 0))
+            {
+                var bounds = new Rect2(Position(parent), new(Number(parent, "width"), Number(parent, "height")));
+                result = result?.Intersection(bounds) ?? bounds;
+            }
+            return result;
+        }
         void Render(XElement tile, bool visible)
         {
             visible &= Number(tile, "visible") != 0;
             if (!visible) return;
             var color = TileColor(tile);
+            var clip = Clip(tile);
             if (tile.Element("filename") is not null)
             {
                 if (!_art.TryGetValue(tile, out var art)) _art[tile] = art = NativeOwnedUiArt.Read(tile, Filename(tile));
@@ -341,8 +392,26 @@ internal sealed class NativeOwnedMenuTree
                 if (size.X > 0 && size.Y > 0)
                 {
                     var brightness = Number(tile, "brightness") / 255;
-                    canvas.DrawTextureRectRegion(art.Texture, new Rect2(Position(tile), size), art.Region,
-                        new Color(color.R * brightness, color.G * brightness, color.B * brightness, Number(tile, "alpha") / 255));
+                    var tint = new Color(color.R * brightness, color.G * brightness, color.B * brightness, Number(tile, "alpha") / 255);
+                    var position = Position(tile);
+                    // Atlas members already declare their texture rectangle.
+                    // Keep that mapping for members without an explicit zoom.
+                    var zoom = tile.Element("texatlas") is not null && tile.Element("zoom") is null ? -1 : Number(tile, "zoom");
+                    var crop = new Vector2(Number(tile, "cropx"), Number(tile, "cropy"));
+                    if (tile.Element("tile") is not null && Number(tile, "tile") != 0 && zoom > 0)
+                    {
+                        var repeat = art.Region.Size * zoom / 100;
+                        if (repeat.X <= 0 || repeat.Y <= 0) throw new InvalidDataException("Owned tiled image has no positive period.");
+                        var window = new Rect2(position, size);
+                        var bounds = clip?.Intersection(window) ?? window;
+                        for (var y = -Mathf.PosMod(crop.Y, repeat.Y); y < size.Y; y += repeat.Y)
+                            for (var x = -Mathf.PosMod(crop.X, repeat.X); x < size.X; x += repeat.X)
+                            {
+                                NativeUiClip.Draw(canvas, art.Texture, new Rect2(position + new Vector2(x, y), repeat), art.Region, tint, bounds);
+                            }
+                    }
+                    else if (NativeUiImage.Sample(new(position, size), art.Region, zoom, crop) is { } sample)
+                        NativeUiClip.Draw(canvas, art.Texture, sample.Destination, sample.Source, tint, clip);
                 }
             }
             if (tile.Name == "text")
@@ -355,7 +424,7 @@ internal sealed class NativeOwnedMenuTree
                 foreach (var line in Lines(tile))
                 {
                     font.Draw(canvas, origin - new Vector2(MathF.Truncate(font.Font.Measure(line) * justify / 2), 0),
-                        line, textColor, font.Font.TileBaseline);
+                        line, textColor, font.Font.TileBaseline, clip);
                     origin.Y += font.Font.Height;
                 }
             }

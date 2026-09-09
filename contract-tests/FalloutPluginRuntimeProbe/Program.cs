@@ -11,7 +11,14 @@ QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 QuestScriptExecutionProbe.Run();
-ActivationProgramProbe.Run();
+ExteriorLodProbe.Run();
+LoadOrderContracts.Run();
+
+if (args.Length == 2 && args[0] == "--audit-load-order")
+{
+    LoadOrderContracts.Owned(args[1]);
+    return;
+}
 
 if (args is ["--audit-material-emittance", var materialRoot, var materialCell, var materialHour])
 {
@@ -45,11 +52,16 @@ if (args is ["--audit-script-initialization", var initializationRoot])
         FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime"));
     Console.WriteLine(JsonSerializer.Serialize(new
     {
-        initial.DefaultDelay, initial.EmbeddedQuestScripts, initial.Initializations,
+        initial.DefaultDelay,
+        initial.EmbeddedQuestScripts,
+        initial.Initializations,
         definitions = initial.Definitions.Values.Select(definition => new
         {
-            script = records.RuntimeFormId(definition.Script), quest = definition.Quest,
-            definition.InitializationOrdinal, definition.ProcessingDelay, definition.InitialPhase,
+            script = records.RuntimeFormId(definition.Script),
+            quest = definition.Quest,
+            definition.InitializationOrdinal,
+            definition.ProcessingDelay,
+            definition.InitialPhase,
             phaseBytes = Convert.ToHexString(BitConverter.GetBytes(definition.InitialPhase)),
         }),
     }));
@@ -225,27 +237,32 @@ try
         var scriptRuntime = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(), playerInventory, globals, defaultProcessingDelay: 5);
         scriptRuntime.Advance(5);
         scriptRuntime.Advance(0);
-        Require(playerInventory.Items is [{ Count: 2 }] &&
-            questState.Variable(new("Scripts.esp", 0x70), 1) == 1 && questState.Variable(new("Scripts.esp", 0x71), 1) == 0,
-            "Script effects duplicated, fractional counts were admitted, or an unsupported command partially committed.");
-        Require(globals.Get(new("Scripts.esp", 0x80)) == 1.35f,
-            "Global script writes lost Float32 storage, repeated the grant, or committed a rejected transaction.");
+        Require(playerInventory.Items is [{ Count: 6 }] &&
+            questState.Variable(new("Scripts.esp", 0x70), 1) == 1 && questState.Variable(new("Scripts.esp", 0x71), 1) == 1,
+            "Script effects duplicated, fractional counts were admitted, or an executed failure prefix was discarded.");
+        Require(globals.Get(new("Scripts.esp", 0x80)) == 999.1f,
+            "Global script writes did not retain the executed prefix.");
         Require(scriptRuntime.TryTakeMessage(out var message) && message is { Title: "Synthetic title", Text: "Synthetic body" } &&
-            message.Buttons.SequenceEqual(["Synthetic choice"]) && !scriptRuntime.TryTakeMessage(out _),
-            "Source message identity or transactional queue differs.");
+            message.Buttons.SequenceEqual(["Synthetic choice"]), "Source message identity differs.");
+        Require(scriptRuntime.TryTakeMessage(out var laterMessage) && !scriptRuntime.TryTakeMessage(out _) &&
+            message!.Request?.Caller == new FalloutFormKey("Scripts.esp", 0x74) && laterMessage!.Request?.Caller == new FalloutFormKey("Scripts.esp", 0x73) &&
+            !scriptRuntime.MessageResults.Select(message.Request, 0) && scriptRuntime.MessageResults.Select(laterMessage.Request, 0) &&
+            scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x74)) == -1 && scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == 0 &&
+            scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == -1,
+            "Executed messages lost their SCPT caller, replacement semantics or consumptive result.");
         var beforeMenu = scriptRuntime.Capture();
         Require(beforeMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x76).Clock is
-            { Remaining: 0.125f, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
+        { Remaining: 0.125f, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
             "An unrelated quest flag suppressed the source processing delay.");
         scriptRuntime.Advance(2.25, gameMode: false);
         var duringMenu = scriptRuntime.Capture();
         Require(duringMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x70).Clock is
-            { Remaining: 4, Elapsed: 0, Invocations: 2 } &&
+        { Remaining: 4, Elapsed: 0, Invocations: 2 } &&
             duringMenu.Instances.Select(instance => instance.Executions).SequenceEqual(beforeMenu.Instances.Select(instance => instance.Executions)),
             "Modal time froze the quest countdown or executed a GameMode block.");
         scriptRuntime.Advance(3.25, gameMode: false);
         Require(scriptRuntime.Capture().Instances.Single(instance => instance.Quest.ObjectId == 0x70).Clock is
-            { Remaining: 0.75f, Elapsed: 3.25f, Invocations: 2 } && globals.Get(new("Scripts.esp", 0x80)) == 1.35f,
+        { Remaining: 0.75f, Elapsed: 3.25f, Invocations: 2 } && globals.Get(new("Scripts.esp", 0x80)) == 999.1f,
             "A due modal invocation lost overshoot or committed GameMode effects.");
         var snapshotPath = Path.Combine(fixtureRoot, "quest-state.json");
         questState.SetVariable(new("Scripts.esp", 0x70), 1, 1.0000000000000002);
@@ -265,7 +282,7 @@ try
         scriptRuntime.Advance(0, gameMode: false);
         Require(JsonSerializer.Serialize(coldScripts.Capture()) == JsonSerializer.Serialize(scriptRuntime.Capture()),
             "Cold restore lost a partially elapsed quest script clock.");
-        Require(coldInventory.Items is [{ Count: 2 }] && !coldScripts.TryTakeMessage(out _), "Cold restore awarded or announced a completed grant again.");
+        Require(coldInventory.Items is [{ Count: 6 }] && !coldScripts.TryTakeMessage(out _), "Cold restore awarded or announced a completed grant again.");
         Require(coldGlobals.Capture().Values.SequenceEqual(globals.Capture().Values), "Cold script restore changed shared globals.");
     }
     var objectHeader = (byte[])questScriptHeader.Clone();
@@ -1034,7 +1051,8 @@ try
     Require(
         controlGraph.Quests.Count == 2 &&
         !vcg00StageZeroControls.Movement && !vcg00StageZeroControls.PipBoy &&
-        vcg00StageZeroControls.Fighting && !vcg00StageZeroControls.Looking &&
+        !vcg00StageZeroControls.Fighting && !vcg00StageZeroControls.PointOfView && !vcg00StageZeroControls.Looking &&
+        vcg00StageZeroControls.RolloverText && vcg00StageZeroControls.Sneaking &&
         !vcg01StageZeroControls.Movement && !vcg01StageZeroControls.Fighting &&
         vcg01StageZeroControls.Looking &&
         vcg01Stage55Controls.Movement && vcg01Stage55Controls.Looking &&
@@ -1214,7 +1232,8 @@ try
         stageMachine.ControlState,
         [1.0f, 2.0f, 3.0f],
         [0.0f, 0.0f, 0.0f, 1.0f],
-        globals: campaignGlobals.Capture(), gameTime: campaignTime.Capture(), skyLighting: campaignSky.Capture());
+        globals: campaignGlobals.Capture(), gameTime: campaignTime.Capture(), skyLighting: campaignSky.Capture(),
+        playerViewPitchRadians: -0.3562573f);
     var syntheticSavePath = Path.Combine(fixtureRoot, "native-campaign-save.json");
     var centeredState = syntheticCampaignState with
     {
@@ -1250,6 +1269,27 @@ try
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { References = null }), "save state is invalid");
+    Require(FalloutNativeCampaignSave.RestorePlayerViewPitch(referenceRestore.State) == -0.3562573f,
+        "Cold campaign save lost the independent player look pitch.");
+    var pitchedSaveBytes = File.ReadAllBytes(syntheticSavePath);
+    foreach (var invalidPitch in new float?[] { null, float.NaN, float.PositiveInfinity, 2f, -2f })
+        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
+            referenceSave with { PlayerViewPitchRadians = invalidPitch }), "save state is invalid");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(pitchedSaveBytes),
+        "Rejected camera state replaced a valid campaign save.");
+    var legacyPitchSave = JsonSerializer.SerializeToNode(referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.ReferenceStateSchema,
+    })!.AsObject();
+    legacyPitchSave.Remove(nameof(FalloutNativeCampaignState.PlayerViewPitchRadians));
+    File.WriteAllText(syntheticSavePath, legacyPitchSave.ToJsonString());
+    var legacyPitchRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.RestorePlayerViewPitch(legacyPitchRestore.State) == 0 &&
+        FalloutNativeCampaignSave.WithWorldState(legacyPitchRestore.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation) is
+        { Schema: FalloutNativeCampaignSave.ExpectedSchema, PlayerViewPitchRadians: 0 },
+        "Legacy save without pitch did not upgrade with its documented level view.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
     var missingScriptClock = syntheticCampaignState with
     {
@@ -1321,7 +1361,8 @@ try
         syntheticTraitFarewell);
     Require(
         movedRestore.State.ActiveCell == syntheticExteriorCell &&
-        movedRestore.State.PlayerPosition.SequenceEqual([4.0f, 5.0f, 6.0f]),
+        movedRestore.State.PlayerPosition.SequenceEqual([4.0f, 5.0f, 6.0f]) &&
+        FalloutNativeCampaignSave.RestorePlayerViewPitch(movedRestore.State) == -0.3562573f,
         "Native campaign world state did not cold-restore its active CELL and player transform.");
     var staleCharacterState = syntheticCampaignState with
     {
@@ -1384,6 +1425,7 @@ try
         syntheticDoor.DestinationDoor.Teleport!.Door == syntheticDoor.SourceDoor.FormKey,
         "Native XTEL/CELL/WRLD reciprocal door transition differs.");
     var syntheticLandscape = FalloutLandscapeTransportResolver.Resolve(cellStack, syntheticDoor);
+    LandscapeMaterialProbe.Run();
     Require(
         syntheticLandscape.ActiveCell == new FalloutFormKey("Cell.esm", 0x101) &&
         syntheticLandscape.Landscape == new FalloutFormKey("Cell.esm", 0x170) &&
@@ -1392,8 +1434,9 @@ try
         syntheticLandscape.AlphaLayers.Single().UsesQuadrantDefault &&
         syntheticLandscape.Textures.Count == 1,
         "Native active-set LAND/LTEX/TXST transport differs.");
-    ExpectFailure(
-        () => FalloutLandscapeTransportResolver.Resolve(
+    var defaultLandscapeTexture = new FalloutLandscapeTexture(null, string.Empty, null, string.Empty,
+        "textures\\landscape\\synthetic-default.dds", "textures\\landscape\\synthetic-default_n.dds");
+    var partiallyPainted = FalloutLandscapeTransportResolver.Resolve(
             cellStack,
             syntheticDoor with
             {
@@ -1404,8 +1447,13 @@ try
                         Position = [5000.0f, 200.0f, 300.0f],
                     },
                 },
-            }),
-        "must author one BTXT for each quadrant");
+            }, defaultLandscapeTexture);
+    Require(partiallyPainted.BaseLayers.Count == 4 &&
+        partiallyPainted.BaseLayers.Single(layer => layer.Quadrant == 3) is { UsesQuadrantDefault: true, Texture.ObjectId: 0 } &&
+        partiallyPainted.BaseLayers.Count(layer => layer.Texture.ObjectId == 0) == 1 &&
+        partiallyPainted.Textures.Values.Contains(defaultLandscapeTexture) &&
+        partiallyPainted.Heights.SequenceEqual(syntheticLandscape.Heights),
+        "An unpainted LAND quadrant lost its installation texture default or source geometry.");
     ExpectFailure(
         () => FalloutDoorTransitionResolver.Resolve(
             cellStack,
@@ -1514,8 +1562,13 @@ if (args.Length > 0)
             : officialNames.All(name => File.Exists(Path.Combine(args[0], name)))
                 ? officialNames
                 : ["FalloutNV.esm"];
-    using var owned = manifestMode
-        ? FalloutPluginStack.Load(ReadManifestPluginSources(args[1]))
+    var manifestSources = manifestMode ? ReadManifestPluginSources(args[1]) : null;
+    var ownedRoot = manifestSources is null ? args[0] : Path.GetDirectoryName(manifestSources.Single(
+        source => source.Name.Equals("FalloutNV.esm", StringComparison.OrdinalIgnoreCase)).AbsolutePath)!;
+    RuntimeLiveContentSource.Configure(ownedRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var ownedContent = RuntimeLiveContentSource.Current!;
+    using var owned = manifestSources is not null
+        ? FalloutPluginStack.Load(manifestSources)
         : FalloutPluginStack.Load(args[0], names);
     var cells = owned.EffectiveRecords("CELL");
     if (names.Contains("GunRunnersArsenal.esm", StringComparer.OrdinalIgnoreCase))
@@ -1844,7 +1897,7 @@ if (args.Length > 0)
                 liveTraits,
                 completedControls,
                 [12.5f, 2.0f, -8.25f],
-                [0.0f, 0.0f, 0.0f, 1.0f]);
+                [0.0f, 0.0f, 0.0f, 1.0f], playerViewPitchRadians: 0.425f);
             FalloutNativeCampaignSave.Write(liveSavePath, liveSave);
             var liveRestore = FalloutNativeCampaignSave.Read(
                 liveSavePath,
@@ -1857,6 +1910,7 @@ if (args.Length > 0)
             Require(
                 liveRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
                 liveRestore.State.PlayerName == "Live Courier" &&
+                FalloutNativeCampaignSave.RestorePlayerViewPitch(liveRestore.State) == 0.425f &&
                 liveRestore.State.Character == liveRaceSex.Female &&
                 liveRestore.State.Special == liveSpecial &&
                 liveRestore.State.TagSkills.SequenceEqual(liveTags) &&
@@ -1995,8 +2049,12 @@ if (args.Length > 0)
         .Select(reference => (Reference: reference, Base: docMitchell.BaseObjects[reference.Base]))
         .Where(value => value.Base.Light is not null)
         .ToArray();
+    var ownedLightSky = new FalloutSkyLightingState(owned, FalloutGameSettingFloats.Read(owned, "fDaytimeColorExtension"));
+    ownedLightSky.EnterCell(docMitchell.Cell);
+    var ownedLightHour = FalloutGlobalState.Read(owned).Get(FalloutGameTimeBindings.Read(owned).Hour);
     var resolvedLights = ownedLights
-        .Select(value => FalloutPlacedLightResolver.Resolve(value.Reference, value.Base, owned))
+        .Select(value => FalloutPlacedLightResolver.Resolve(value.Reference, value.Base, owned,
+            region => ownedLightSky.RegionEmittance(region, ownedLightHour)))
         .ToArray();
     Console.WriteLine(
         $"OPENNV_FALLOUT_CELL_LIGHT_AUDIT lights={ownedLights.Length} enabled=" +

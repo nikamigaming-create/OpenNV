@@ -18,7 +18,12 @@ config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 project/assembly_name="OpenNV"
 
+[rendering]
+
+limits/global_shader_variables/buffer_size=1048576
+
 [xr]
 
 openxr/startup_alert=false
+openxr/default_action_map="res://openxr_action_map.tres"
 shaders/enabled=true

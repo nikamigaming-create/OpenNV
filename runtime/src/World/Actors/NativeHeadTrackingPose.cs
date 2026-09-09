@@ -35,6 +35,7 @@ internal sealed class NativeHeadTrackingPose
     }
 
     internal Vector3 WorldPosition => _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(_bone).Origin;
+    internal Vector3 WorldForward => (_skeleton.GlobalBasis * _skeleton.GetBoneGlobalPose(_bone).Basis * _headForward).Normalized();
     internal object State => new
     {
         bone = _skeleton.GetBoneName(_bone).ToString(),

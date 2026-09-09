@@ -10,6 +10,7 @@ internal partial class RuntimeNativeNpc : Node3D
     internal FalloutNpcAppearance Appearance { get; private set; } = null!;
     internal RuntimeNativeNifSkeleton Skeleton { get; private set; } = null!;
     internal IReadOnlyList<RuntimeNativeNifScene> Parts { get; private set; } = [];
+    internal RuntimeNativeActorCombat? Combat { get; set; }
     private RuntimeNativeNifAnimation? _animation;
     private RuntimeNativeNifAnimation? _baseAnimation;
     private float _baseAnimationSeconds;
@@ -63,6 +64,7 @@ internal partial class RuntimeNativeNpc : Node3D
         absentBaseTargets = _baseAnimation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
         absentIdleTargets = _animation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
         error = AnimationError,
+        combat = Combat?.Observation,
     };
 
     internal void PlayBaseSequence(FalloutNifFile source, FalloutNifControllerSequence sequence, string owner)
@@ -114,7 +116,7 @@ internal partial class RuntimeNativeNpc : Node3D
             throw new InvalidDataException($"IDLE {idle.Form} has an invalid source clock.");
         var created = new List<Node3D>();
         var controlledNodes = sequences[0].ControlledBlocks
-            .Where(link => link.ControllerType == "NiTransformController" && link.PropertyType.Length == 0 &&
+            .Where(link => link.ControllerType is "NiTransformController" or "NiVisController" && link.PropertyType.Length == 0 &&
                 link.Variable1.Length == 0 && link.Variable2.Length == 0)
             .Select(link => link.NodeName).ToHashSet(StringComparer.Ordinal);
         try
@@ -132,11 +134,16 @@ internal partial class RuntimeNativeNpc : Node3D
             }
             Action<float>? BindObject(FalloutNifControllerLink link)
             {
-                if (link.ControllerType != "NiTransformController" || link.PropertyType.Length != 0 ||
+                if (link.ControllerType is not ("NiTransformController" or "NiVisController") || link.PropertyType.Length != 0 ||
                     link.Variable1.Length != 0 || link.Variable2.Length != 0) return null;
                 var matches = created.SelectMany(root => root.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(root))
                     .Where(node => node.Name.ToString().Equals(link.NodeName, StringComparison.Ordinal)).ToArray();
                 if (matches.Length != 1) return null;
+                if (link.ControllerType == "NiVisController")
+                {
+                    var visibility = new FalloutNifBoolAnimation(source, link.Interpolator);
+                    return time => matches[0].Visible = visibility.Sample(time);
+                }
                 var sampler = new FalloutNifAnimationSampler(source, link.Interpolator);
                 return time =>
                 {
@@ -184,6 +191,7 @@ internal partial class RuntimeNativeNpc : Node3D
 
     public override void _Process(double delta)
     {
+        if (Combat?.Dead == true) return;
         RestoreAuthoredHeadPose();
         AdvanceAi();
         if ((_animation is null && _baseAnimation is null && _headTargets is null) || AnimationError is not null) return;
@@ -234,6 +242,7 @@ internal partial class RuntimeNativeNpc : Node3D
             {
                 CompleteTravel();
             }
+            AdvanceDialoguePackage();
             AdvanceHeadTracking((float)delta);
             AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
@@ -304,9 +313,10 @@ internal partial class RuntimeNativeNpc : Node3D
         RuntimeLiveContentSource source,
         FalloutPlacedReference reference,
         float unitsToMetres,
-        Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null)
+        Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null,
+        IReadOnlyList<FalloutFormKey>? equippedArmor = null)
     {
-        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey), source,
+        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor), source,
             unitsToMetres, materialOwner);
         try { actor.ConfigureFaceAnimation(stack); return actor; }
         catch { actor.Free(); throw; }
@@ -351,7 +361,8 @@ internal partial class RuntimeNativeNpc : Node3D
                         rigidFaceBinds: FalloutNpcFaceAttachment.UsesHeadModelSpace(part.Role)
                             ? headBinds ?? throw new NotSupportedException("Rigid FaceGen part has no source skinned head owner.") : null,
                         selectedGeometryName: selectedShape,
-                        morphOwner: expressions is null ? null : expressions.Build);
+                        morphOwner: expressions is null ? null : expressions.Build,
+                        contentSource: source, bipedSlots: part.Role is "armor" or "armor-addon" ? part.BipedSlots : 0);
                     scene.Root.SetMeta("opennv_source_model", part.ModelPath);
                     scene.Root.SetMeta("opennv_source_part", part.Role);
                     scene.Root.SetMeta("opennv_source_form", part.Source.ToString());

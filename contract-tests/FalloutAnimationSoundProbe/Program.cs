@@ -19,11 +19,24 @@ Require(choices.Zip(replay).All(pair => pair.First.Path == pair.Second.Path && p
 Require(choices.All(value => value.Play && value.GainDb == -8.37f && value.PitchScale is >= .9f and <= 1.1f && value.Unbound.Count == 0) &&
     choices.Any(value => value.PitchScale < 1) && choices.Any(value => value.PitchScale > 1), "Source variance, attenuation sign or bounds were lost.");
 var fixedSound = source with { FrequencyAdjustment = -5, Flags = FalloutSoundFlags.EnvironmentIgnored };
+var lfeSound = source with { Flags = FalloutSoundFlags.TwoDimensional | FalloutSoundFlags.Lfe360 };
+Reject(() => FalloutAnimationSound.Select(lfeSound, variants, first));
+Require(FalloutAnimationSound.Select(lfeSound, variants, first, stereoOutput: true) is { Play: true, Unbound.Count: > 0 },
+    "Stereo output discarded the full-band sound or hid the missing discrete LFE send.");
 var noRoll = first.State; var fixedSelection = FalloutAnimationSound.Select(fixedSound, variants.Take(1).ToArray(), first);
 Require(first.State == noRoll && fixedSelection.PitchScale == .95f, "Fixed-pitch exact variants consumed random state.");
 Require(FalloutAnimationSound.Select(source with { Flags = FalloutSoundFlags.MuteWhenSubmerged, ReverbAttenuation = 80 }, variants, first)
     .Unbound.SequenceEqual(new[] { "source-environment-reverb-send", "authoritative-listener-submersion" }), "Unsupported wet/submerged lanes were hidden.");
 Reject(() => FalloutAnimationSound.Select(source with { Flags = FalloutSoundFlags.Loop }, variants, first));
+var envelope = source with { Flags = FalloutSoundFlags.EnvelopeFast, LoopStartSample = 1200, LoopEndSample = 4800 };
+Reject(() => FalloutAnimationSound.Select(envelope, variants, first));
+Require(FalloutAnimationSound.Select(envelope, variants, first, ownsLoopStop: true).Play &&
+    FalloutSoundLoop.Read(envelope).ReleasePosition(48000) == .1 &&
+    FalloutSoundLoop.Read(envelope with { Flags = FalloutSoundFlags.EnvelopeSlow }).ReleasePosition(48000) is null,
+    "Fast/slow envelope release discarded the source sample clock.");
+Reject(() => FalloutSoundLoop.Read(envelope with { LoopEndSample = 1100 }));
+Reject(() => FalloutSoundLoop.Read(envelope with { Flags = FalloutSoundFlags.Loop | FalloutSoundFlags.EnvelopeFast }));
+Reject(() => FalloutSoundLoop.Read(envelope with { Flags = 0 }));
 Console.WriteLine("OPENNV_ANIMATION_SOUND_CONTRACT_PASS sourceEvent=true variants=true savedRandom=true signedPitchVariance=true attenuationIsLoss=true partialLanesVisible=true");
 if (args.Length == 0) return;
 if (args.Length != 1) throw new ArgumentException("Optional argument: owned FalloutNV installation.");

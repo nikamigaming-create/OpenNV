@@ -159,6 +159,7 @@ internal sealed class Fo2NativeOwnedSource : IFalloutClassicOwnedSource
     private const string ProfileSchema = "opennv-fo2-owned-profile/v1";
     private const int Sha256Characters = 64;
     private readonly IReadOnlyList<Fo2Dat2Archive> _precedence;
+    private IReadOnlyDictionary<string, string> _loose = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     private Fo2NativeOwnedSource(string profileId, IReadOnlyList<Fo2Dat2Archive> precedence)
     {
@@ -227,15 +228,22 @@ internal sealed class Fo2NativeOwnedSource : IFalloutClassicOwnedSource
                 archives["master.dat"].DirectorySha256(),
             }))))
             .ToLowerInvariant();
-        return new Fo2NativeOwnedSource(profileId, new[]
+        var result = new Fo2NativeOwnedSource(profileId, new[]
         {
             archives["patch000.dat"], archives["critter.dat"], archives["master.dat"],
         });
+        var dataRoot = Path.Combine(installRoot, "data");
+        if (Directory.Exists(dataRoot))
+            result._loose = Directory.EnumerateFiles(dataRoot, "*", SearchOption.AllDirectories)
+                .ToDictionary(path => Fo2Dat2Archive.CanonicalPath(Path.GetRelativePath(dataRoot, path)), path => path,
+                    StringComparer.OrdinalIgnoreCase);
+        return result;
     }
 
     public byte[] Read(string logicalPath, out int archiveIndex)
     {
         var canonical = Fo2Dat2Archive.CanonicalPath(logicalPath);
+        if (_loose.TryGetValue(canonical, out var loose)) { archiveIndex = -1; return File.ReadAllBytes(loose); }
         for (var index = 0; index < _precedence.Count; ++index)
             if (_precedence[index].Contains(canonical))
             {
@@ -250,6 +258,7 @@ internal sealed class Fo2NativeOwnedSource : IFalloutClassicOwnedSource
         var canonicalPrefix = Fo2Dat2Archive.CanonicalPath(prefix).TrimEnd('\\') + "\\";
         return _precedence
             .SelectMany(archive => archive.LogicalPaths)
+            .Concat(_loose.Keys)
             .Where(path => path.StartsWith(canonicalPrefix, StringComparison.OrdinalIgnoreCase) &&
                 path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)

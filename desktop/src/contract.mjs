@@ -1,4 +1,5 @@
 import launcherState from "./launcher-state.json" with { type: "json" };
+import { resolveRuntimeCampaign, validateRuntimeManifest } from "./runtime-manifest-contract.mjs";
 export {
   FO3_STAGE10_ROUTE_CONTRACT,
   preflightFo3Stage10Launch,
@@ -63,11 +64,6 @@ export function createOfflineState({ platform = hostPlatform } = {}) {
   };
 }
 
-function findCampaign(candidate) {
-  const id = String(candidate?.id ?? "").toLowerCase();
-  return CAMPAIGNS.find((campaign) => campaign.id === id || campaign.engineCampaign.toLowerCase() === id);
-}
-
 export function mergeRuntimeState(
   baseState,
   runtimeState,
@@ -81,12 +77,10 @@ export function mergeRuntimeState(
   } = {}
 ) {
   if (!runtimeState || !Array.isArray(runtimeState.campaigns)) return baseState;
+  validateRuntimeManifest(runtimeState);
 
   const campaigns = baseState.campaigns.map((campaign) => {
-    const runtimeCampaign = runtimeState.campaigns.find((entry) => findCampaign(entry)?.id === campaign.id);
-    const variants = runtimeCampaign?.variants ?? {};
-    const selectedVariant = variants[campaign.runtimeVariant] ?? {};
-    const jam = variants.jam ?? null;
+    const availability = resolveRuntimeCampaign(runtimeState, campaign);
     const profileRequired = ["fallout1", "fallout2", "newvegas", "fallout3", "ttw"].includes(campaign.id);
     const requiredProfile = campaign.id === "fallout1"
       ? fallout1Profile
@@ -100,24 +94,25 @@ export function mergeRuntimeState(
         ? ttwProfile
         : null;
     const profileReady = !profileRequired || Boolean(requiredProfile?.ready);
-    const runtimePresentations = selectedVariant.presentations ?? {};
-    const presentations = (campaign.presentations || []).filter(
-      (id) => runtimePresentations[id]?.ready === true);
-    const ready = Boolean(selectedVariant.ready) && profileReady && presentations.length > 0;
+    const presentations = Object.keys(availability.presentations).filter(
+      (id) => availability.presentations[id].launchable);
+    const ready = availability.launchable && profileReady;
     return {
       ...campaign,
       presentations,
+      presentationStatus: availability.presentations,
+      previewOnly: presentations.length > 0 &&
+        presentations.every((id) => availability.presentations[id].previewOnly),
       ready,
       readiness: ready
-        ? "Ready in the installed runtime."
-        : (profileRequired && selectedVariant.ready
+        ? availability.status
+        : (profileRequired && availability.launchable
           ? (requiredProfile?.message || CONTRACT.copy.readinessUnavailable)
-          : (requiredProfile?.validated && requiredProfile?.message
-            ? requiredProfile.message
-            : (selectedVariant.message || CONTRACT.copy.readinessUnavailable))),
-      jamReady: Boolean(campaign.jam && jam?.ready && jamProfile?.ready),
-      jamReadiness: jamProfile?.message || jam?.message || CONTRACT.copy.jamProfileUnavailable,
-      unavailableDlc: Array.isArray(selectedVariant.unavailableDlc) ? selectedVariant.unavailableDlc : []
+          : availability.status),
+      jamReady: Boolean(campaign.jam && jamProfile?.ready &&
+        runtimeState.campaigns.some((entry) => entry.id === "JAM" && entry.launchable)),
+      jamReadiness: jamProfile?.message || CONTRACT.copy.jamProfileUnavailable,
+      unavailableDlc: availability.unavailableDlc
     };
   });
 
@@ -196,23 +191,35 @@ export function createRuntimeArguments(
       "--",
       "--data-root", fallout1Profile.dataRoot,
       "--campaign", "fallout-1",
-      "--fo1-start-presentation", presentation,
-      "--save-path", fallout1Profile.savePath
+      "--presentation", presentation,
+      "--save-path", fallout1Profile.savePath,
+      ...(newVegasProfile?.ready && newVegasProfile?.dataRoot
+        ? ["--appearance-data-root", newVegasProfile.dataRoot] : []),
+      ...(fallout3Profile?.ready && fallout3Profile?.dataRoot
+        ? ["--world-fallout3-data-root", fallout3Profile.dataRoot] : [])
     ];
   }
   if (campaign.id === "fallout2") {
     if (!fallout2Profile?.ready || !fallout2Profile?.dataRoot || !fallout2Profile?.savePath)
       throw new Error(CONTRACT.copy.fallout2ProfileUnavailable);
     if (presentation !== "hex-tactical") throw new Error(CONTRACT.copy.invalidPresentation);
+    if (!["forward_plus", "mobile", "gl_compatibility"].includes(campaign.desktopRenderingMethod)) {
+      throw new Error("Fallout 2 has no valid desktop rendering method.");
+    }
     return [
       "--xr-mode", "off",
+      "--rendering-method", campaign.desktopRenderingMethod,
       "--windowed",
       "--resolution", "1280x720",
       "--",
       "--data-root", fallout2Profile.dataRoot,
       "--campaign", "fallout-2",
+      "--presentation", presentation,
       "--save-path", fallout2Profile.savePath,
-      "--fo2-save", fallout2Profile.savePath
+      ...(newVegasProfile?.ready && newVegasProfile?.dataRoot
+        ? ["--appearance-data-root", newVegasProfile.dataRoot] : []),
+      ...(fallout3Profile?.ready && fallout3Profile?.dataRoot
+        ? ["--world-fallout3-data-root", fallout3Profile.dataRoot] : [])
     ];
   }
   if (campaign.id === "fallout3") {

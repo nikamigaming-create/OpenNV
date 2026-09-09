@@ -993,31 +993,10 @@ internal sealed record OpeningGameplayVitalsContract(
         opening.Validate();
         var endurance = ReadSpecial(opening, "AVEndurance");
         var agility = ReadSpecial(opening, "AVAgility");
-        var maximumHitPoints = ExactInt(
-            PlayerBase.BaseHealth +
-            endurance * Setting("fAVDHealthEnduranceMult") +
-            (PlayerBase.InitialLevel - 1) * Setting("fAVDHealthLevelMult"),
-            "maximum hit points");
-        var maximumActionPoints = ExactInt(
-            Setting("fAVDActionPointsBase") +
-            agility * Setting("fAVDActionPointsMult"),
-            "maximum action points");
-        var targetLevel = PlayerBase.InitialLevel + 1;
-        var nextLevelExperiencePoints = ExactInt(
-            (targetLevel - 1) *
-            (((targetLevel - 2) * Setting("iXPBumpBase")) / 2.0 +
-             Setting("iXPBase")),
-            "next-level experience threshold");
-        var result = new GameplayVitals(
-            PlayerBase.InitialLevel,
-            maximumHitPoints,
-            maximumHitPoints,
-            maximumActionPoints,
-            maximumActionPoints,
-            InitialExperiencePoints,
-            nextLevelExperiencePoints);
-        result.Validate();
-        return result;
+        return GameplayVitals.Derive(PlayerBase.BaseHealth, PlayerBase.InitialLevel, endurance, agility,
+            Setting("fAVDHealthEnduranceMult"), Setting("fAVDHealthLevelMult"),
+            Setting("fAVDActionPointsBase"), Setting("fAVDActionPointsMult"),
+            InitialExperiencePoints, Setting("iXPBase"), Setting("iXPBumpBase"));
     }
 
     internal double JumpHeightGameUnits => Setting("fJumpHeightMin");
@@ -1104,15 +1083,6 @@ internal sealed record OpeningGameplayVitalsContract(
 
     private double Setting(string editorId) => GameSettings[editorId].Value;
 
-    private static int ExactInt(double value, string name)
-    {
-        var rounded = Math.Round(value);
-        if (!double.IsFinite(value) || Math.Abs(value - rounded) > 0.000001 ||
-            rounded <= 0 || rounded > int.MaxValue)
-            throw new InvalidOperationException(
-                $"Owned gameplay-vitals derivation did not produce an exact positive {name}.");
-        return checked((int)rounded);
-    }
 }
 
 internal sealed record OpeningVitalsPlayerBase(

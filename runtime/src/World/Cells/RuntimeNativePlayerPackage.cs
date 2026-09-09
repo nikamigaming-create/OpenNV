@@ -132,19 +132,5 @@ internal sealed class RuntimeNativePlayerPackage(FalloutPluginStack stack, Runti
         }
     }
 
-    private void ApplySample(float sourceTime)
-    {
-        var transform = Transform3D.Identity;
-        foreach (var (rest, sample) in _animation!.Sample(sourceTime))
-        {
-            var translation = sample?.Translation ?? rest.Translation;
-            var scale = sample?.Scale ?? rest.Scale;
-            var basis = sample?.Rotation is { } rotation
-                ? new Basis(new Quaternion(rotation.X, rotation.Z, -rotation.Y, rotation.W).Normalized()).Scaled(Vector3.One * scale)
-                : GamebryoCoordinate.ConvertBasis(rest.RotationRowMajor, scale, "source camera parent");
-            transform *= new Transform3D(basis, GamebryoCoordinate.ConvertVector(
-                new Vector3(translation.X, translation.Y, translation.Z)) * player.UnitsToMeters);
-        }
-        player.ApplySourceCamera(new Transform3D(transform.Basis.Orthonormalized(), transform.Origin));
-    }
+    private void ApplySample(float sourceTime) => player.ApplyCameraPath(_animation!, sourceTime);
 }

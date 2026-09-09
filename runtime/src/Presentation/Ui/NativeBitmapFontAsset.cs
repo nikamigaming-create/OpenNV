@@ -51,17 +51,17 @@ internal sealed record NativeBitmapFontAsset(FalloutBitmapFont Font, Texture2D A
         return new NativeBitmapFontAsset(font, ImageTexture.CreateFromImage(image));
     }
 
-    internal void Draw(CanvasItem canvas, Vector2 origin, string text, Color color, float? baseline = null)
+    internal void Draw(CanvasItem canvas, Vector2 origin, string text, Color color, float? baseline = null, Rect2? clip = null)
     {
         var cursor = origin.X;
         foreach (var character in text)
         {
             var glyph = Font.Glyph(character);
             if (glyph.Width > 0 && glyph.Height > 0)
-                canvas.DrawTextureRectRegion(Atlas,
+                NativeUiClip.Draw(canvas, Atlas,
                     new Rect2(cursor + glyph.LeftBearing, origin.Y + (baseline ?? Font.Ascent) - glyph.Ascent, glyph.Width, glyph.Height),
                     new Rect2(glyph.Left * Atlas.GetWidth(), glyph.Top * Atlas.GetHeight(),
-                        (glyph.Right - glyph.Left) * Atlas.GetWidth(), (glyph.Bottom - glyph.Top) * Atlas.GetHeight()), color);
+                        (glyph.Right - glyph.Left) * Atlas.GetWidth(), (glyph.Bottom - glyph.Top) * Atlas.GetHeight()), color, clip);
             cursor += glyph.Advance;
         }
     }

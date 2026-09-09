@@ -107,11 +107,11 @@ internal static partial class FalloutNativeTagSkillResolver
 
     internal static void Validate(
         FalloutNativeTagSkillContract contract,
-        IReadOnlyList<FalloutNativeSkillIdentity> selection)
+        IReadOnlyList<FalloutNativeSkillIdentity> selection, bool allowUnspent = false)
     {
         ArgumentNullException.ThrowIfNull(contract);
         ArgumentNullException.ThrowIfNull(selection);
-        if (selection.Count != contract.RequiredCount ||
+        if ((allowUnspent ? selection.Count > contract.RequiredCount : selection.Count != contract.RequiredCount) ||
             selection.Select(value => value.RuntimeFormId).Distinct().Count() != selection.Count ||
             selection.Any(value => !contract.Skills.Contains(value)))
             throw new InvalidDataException(

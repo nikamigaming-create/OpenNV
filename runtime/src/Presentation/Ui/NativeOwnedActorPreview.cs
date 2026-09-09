@@ -16,6 +16,10 @@ internal sealed partial class NativeOwnedActorPreview : Node
     private readonly RuntimeLiveContentSource _content;
     private readonly FalloutInstallationSettings _settings;
     private readonly float _zoom;
+    private readonly Godot.Environment _environment;
+
+    internal void SetIllustratedBackdrop(bool illustrated)
+        => _environment.BackgroundColor = illustrated ? Colors.Black : new Color(0.125f, 0.161f, 0.141f);
 
     internal NativeOwnedActorPreview(FalloutPluginStack records, FalloutNpcAppearance appearance,
         FalloutInstallationSettings settings, int pixels)
@@ -32,7 +36,7 @@ internal sealed partial class NativeOwnedActorPreview : Node
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
         };
         AddChild(View);
-        var environment = new Godot.Environment
+        var environment = _environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
             BackgroundColor = new Color(0.125f, 0.161f, 0.141f),

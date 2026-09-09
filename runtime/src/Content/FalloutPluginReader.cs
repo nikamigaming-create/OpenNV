@@ -255,6 +255,16 @@ internal sealed class FalloutPlugin : IDisposable
     internal IReadOnlyList<string> Namespaces => _namespaces;
     internal IReadOnlyList<FalloutPluginRecord> Records => _records;
 
+    internal static bool ReadMasterFlag(string path)
+    {
+        using var stream = File.OpenRead(path);
+        Span<byte> header = stackalloc byte[RecordHeaderSize];
+        stream.ReadExactly(header);
+        if (!header[..SignatureSize].SequenceEqual("TES4"u8))
+            throw new FalloutPluginFormatException($"Plugin must begin with TES4: {path}");
+        return (BinaryPrimitives.ReadUInt32LittleEndian(header[RecordFlagsOffset..]) & 1) != 0;
+    }
+
     internal static FalloutPlugin Open(string path, string? canonicalName = null)
     {
         var fullPath = System.IO.Path.GetFullPath(path);

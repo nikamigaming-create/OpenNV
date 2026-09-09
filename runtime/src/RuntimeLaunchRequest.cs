@@ -22,7 +22,6 @@ internal sealed record RuntimeLaunchRequest(
     internal static RuntimeLaunchRequest Create(IReadOnlyDictionary<string, string> options)
     {
         ArgumentNullException.ThrowIfNull(options);
-
         var removed = LegacyLaunchOptions.FirstOrDefault(options.ContainsKey);
         if (removed is not null)
             throw new ArgumentException(

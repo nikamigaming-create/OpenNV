@@ -71,6 +71,8 @@ internal sealed class FalloutNifBoolAnimation
 {
     private readonly bool _constant;
     private readonly FalloutNifBoolKey[] _keys;
+    internal bool? ConstantValue => _keys.Length == 0 ? _constant :
+        _keys.All(key => key.Value == _keys[0].Value) ? _keys[0].Value : null;
     internal FalloutNifBoolAnimation(FalloutNifFile source, int interpolator)
     {
         var value = source.ReadObject(interpolator) as FalloutNifBoolInterpolator ?? throw new NotSupportedException("Visibility requires a boolean interpolator.");

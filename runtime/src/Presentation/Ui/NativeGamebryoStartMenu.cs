@@ -120,7 +120,6 @@ internal sealed partial class NativeGamebryoStartMenu : Control
     public override void _Ready()
     {
         Input.MouseMode = Input.MouseModeEnum.Visible;
-        GetViewport().SizeChanged += Layout;
         Layout();
         _music = new AudioStreamPlayer { Name = "OwnedMainTitleMusic", Stream = NativeOwnedMediaLoader.LoadAudio("music\\" + _settings.Require("General", "SMainMenuMusicTrack")) };
         _music.AddToGroup("opennv_music");
@@ -190,7 +189,9 @@ internal sealed partial class NativeGamebryoStartMenu : Control
         }
     }
 
-    public override void _ExitTree() => GetViewport().SizeChanged -= Layout;
+    private NativeViewportLayout? _viewportLayout;
+    public override void _EnterTree() => _viewportLayout = new(this, Layout);
+    public override void _ExitTree() => _viewportLayout?.Dispose();
 
     private static XElement Named(XElement parent, string name) => parent.DescendantsAndSelf().First(element => (string?)element.Attribute("name") == name);
     private static float Literal(XElement element, string trait) => float.Parse(element.Element(trait)?.Value.Trim() ?? throw new InvalidDataException($"Missing owned menu trait {trait}."), CultureInfo.InvariantCulture);

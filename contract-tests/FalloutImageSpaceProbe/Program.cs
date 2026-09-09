@@ -111,7 +111,7 @@ Expect<InvalidDataException>(() => FalloutRendererConfiguration.Read("Shader Pac
 Expect<InvalidDataException>(() => FalloutRendererConfiguration.Read("Shader Package: ../3"));
 Expect<InvalidDataException>(() => FalloutRendererConfiguration.Read("Shader Package: 0"));
 var classicBytes = new byte[132];
-var modernBytes = new byte[148];
+var modernBytes = new byte[152];
 for (var index = 0; index < 32; index++)
 {
     var value = (index + 1) / 40f;
@@ -123,24 +123,28 @@ BinaryPrimitives.WriteSingleLittleEndian(modernBytes.AsSpan(56), 2.75f);
 classicBytes.AsSpan(128).Fill(0xff);
 modernBytes.AsSpan(132).Fill(0xff);
 var classic = FalloutImageSpaceReader.Decode(form, 1, classicBytes);
-var modern = FalloutImageSpaceReader.Decode(form, 11, modernBytes);
+var modern = FalloutImageSpaceReader.Decode(form, 15, modernBytes);
 Require(classic.Cinematic == modern.Cinematic && classic.Tint == modern.Tint, "Versioned cinematic channels shifted.");
 Require(classic.SkinDimmer is null && modern.SkinDimmer == 2.75f, "Versioned Skin Dimmer lost its presence semantics.");
 Require(classic.RawTraits.Length == 32 && modern.RawTraits.Length == 33, "Reserved DNAM bytes became traits.");
-var flaggedBytes = new byte[152];
-modernBytes.CopyTo(flaggedBytes, 0);
-var disabled = FalloutImageSpaceReader.Decode(form, 13, flaggedBytes);
-Require(disabled.Cinematic == new Vector4(1, 0, 1, 1) && disabled.Tint.W == 0, "Disabled cinematic channels remain effective.");
-flaggedBytes[148] = 15;
-var enabled = FalloutImageSpaceReader.Decode(form, 13, flaggedBytes);
-Require(enabled.Cinematic == modern.Cinematic && enabled.Tint == modern.Tint, "Enabled cinematic channels lost source values.");
-Expect<InvalidDataException>(() => FalloutImageSpaceReader.Decode(form, 11, classicBytes));
-Expect<InvalidDataException>(() => FalloutImageSpaceReader.Decode(form, 1, modernBytes));
-flaggedBytes[148] = 0x10;
-Expect<NotSupportedException>(() => FalloutImageSpaceReader.Decode(form, 13, flaggedBytes));
+var legacyExtended = new byte[148];
+classicBytes.CopyTo(legacyExtended, 0);
+legacyExtended.AsSpan(128).Fill(0xff);
+foreach (var version in new ushort[] { 1, 9, 11, 13, 15 })
+{
+    var extended = FalloutImageSpaceReader.Decode(form, version, legacyExtended);
+    Require(extended.SkinDimmer is null && extended.Cinematic == classic.Cinematic && extended.Tint == classic.Tint,
+        "Record version shifted the 148-byte legacy layout and desaturated its image.");
+    Require(extended.ReservedData.Length == 20 && extended.ReservedData.All(value => value == 0xff),
+        "Opaque trailer became color traits or an invented cinematic enable mask.");
+    Require(FalloutImageSpaceReader.Decode(form, version, modernBytes).Cinematic == modern.Cinematic,
+        "The 152-byte layout was not selected by its DNAM extent.");
+}
+Expect<InvalidDataException>(() => FalloutImageSpaceReader.Decode(form, 15, new byte[131]));
+Expect<InvalidDataException>(() => FalloutImageSpaceReader.Decode(form, 15, new byte[153]));
 BinaryPrimitives.WriteSingleLittleEndian(classicBytes, float.NaN);
 Expect<InvalidDataException>(() => FalloutImageSpaceReader.Decode(form, 1, classicBytes));
-Console.WriteLine("OPENNV_IMAGE_SPACE_CONTRACT_OK oldAndNewLayouts=true independentCinematicFlags=true reservedBytesPreserved=true");
+Console.WriteLine("OPENNV_IMAGE_SPACE_CONTRACT_OK extentLayouts=true versionIndependent=true reservedBytesPreserved=true");
 
 var projection = FalloutCameraProjection.FromReferenceFov(90, 3);
 Require(MathF.Abs(MathF.Tan(projection.VerticalFovDegrees * MathF.PI / 360) - 0.75f) < 0.000001f,

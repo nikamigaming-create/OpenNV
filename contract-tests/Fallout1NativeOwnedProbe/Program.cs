@@ -153,6 +153,7 @@ var after = Snapshot(profileDirectory);
 var installAfter = Snapshot(source.InstallRoot);
 if (!before.SequenceEqual(after) || !installBefore.SequenceEqual(installAfter))
     throw new InvalidOperationException("The Fallout 1 audit changed profile or owned-install files.");
+var firstObject = map.FirstObject ?? throw new InvalidDataException("The selected source fixture requires a placed object.");
 Console.WriteLine(
     $"OPENNV_FO1_NATIVE_PROBE_PASS profile={source.ProfileId} overlay={string.Join('>', source.OverlayOrder)} " +
     $"loose={source.LooseFileCount} map={map.Name} mapSource={mapResource.Source} " +
@@ -160,8 +161,8 @@ Console.WriteLine(
     $"fid=0x{prototype.Fid:x8} frm={artPath} frmSource={frmResource.Source} " +
     $"looseSource={looseFrame.Source} critterMember={critterPath} critterBytes={critterResource.Bytes.Length} " +
     $"floorPatches={nonDefaultFloors} roofPatches={nonDefaultRoofs} " +
-    $"firstObjectTile={map.FirstObject.Tile} firstObjectRotation={map.FirstObject.Rotation} " +
-    $"firstObjectScript=0x{map.FirstObject.ScriptId:x8} firstObjectInventory={map.FirstObject.InventoryLength} " +
+    $"firstObjectTile={firstObject.Tile} firstObjectRotation={firstObject.Rotation} " +
+    $"firstObjectScript=0x{firstObject.ScriptId:x8} firstObjectInventory={firstObject.InventoryLength} " +
     $"topLevelObjects={objectGraph.TotalTopLevelObjects} nestedObjects={objectGraph.NestedObjects} " +
     $"frame={frame.Width}x{frame.Height} preparedInputs=0 writes=0 " +
     "blockers=script-execution,destination-map-loading,general-input,palette-effects,gameplay");

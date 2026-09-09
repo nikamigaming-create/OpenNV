@@ -5,6 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 var decoded = (FalloutNifSkinPartition)FalloutNifFile.Read(Wrap(PartitionBytes(), "NiSkinPartition")).ReadObject(0);
 Require(FalloutNifHardwareSkin.VisibleOnIntactBody(null), "Ordinary skin was hidden.");
+Require(!FalloutNifHardwareSkin.VisibleOnIntactBody(new(0x101, 200)), "Root body cap shown on intact actor.");
 for (ushort body = 0; body <= 13; body++)
     Require(FalloutNifHardwareSkin.VisibleOnIntactBody(new(0, body)), "Intact body part was hidden.");
 for (ushort body = 1; body <= 13; body++)
@@ -41,6 +42,12 @@ invalid = partition with { VertexWeights = partition.VertexWeights.Select(row =>
 invalid.VertexWeights[0][0] = float.NaN;
 ExpectInvalid(() => FalloutNifHardwareSkin.Read(instance, data, decoded with { Partitions = [invalid] }, 4));
 Console.WriteLine("OPENNV_NIF_SKINNING_CONTRACT_OK stripRestarts=true palettes=true originalWeightBits=true");
+
+_ = FalloutNifHardwareSkin.Read(instance, data, decoded, 5, [new(0, 1, 2), new(4, 0, 4)]);
+ExpectInvalid(() => FalloutNifHardwareSkin.Read(instance, data, decoded, 5, [new(4, 0, 1)]));
+ExpectInvalid(() => FalloutNifHardwareSkin.Read(instance, data, decoded, 5, [new(5, 0, 1)]));
+ExpectInvalid(() => FalloutNifHardwareSkin.Read(instance, data, decoded, 5, [new(5, 5, 0)]));
+Console.WriteLine("OPENNV_SKIN_DEGENERATE_STITCH_PASS unusedStitchVertices=true drawableOmissionsRejected=true");
 
 if (args.Length is 3 or 4)
 {

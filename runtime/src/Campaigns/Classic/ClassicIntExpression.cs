@@ -39,7 +39,15 @@ internal sealed record ClassicIntExpressionContext(
     int? FixedParameter = null,
     int? CurrentMapIndex = null,
     IReadOnlyDictionary<(int TraitType, int Object, int Trait), int>? Traits = null,
-    ClassicIntInventoryContract? InventoryContract = null);
+    ClassicIntInventoryContract? InventoryContract = null,
+    int? ScriptAction = null,
+    IClassicIntMessageSource? MessageSource = null);
+
+internal interface IClassicIntMessageSource
+{
+    int Handle(int list, int id);
+    ClassicIntMessageEffect Resolve(int handle, int? objectHandle, int? color);
+}
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,

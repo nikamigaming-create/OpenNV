@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\runtime\src\Campaigns\Classic\Native\FalloutClassicOwnedSource.cs" Link="FalloutClassicOwnedSource.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutDat1Archive.cs" Link="FalloutDat1Archive.cs" />
     <Compile Include="..\..\runtime\src\Content\Fallout1OwnedContentSource.cs" Link="Fallout1OwnedContentSource.cs" />
     <Compile Include="..\..\runtime\src\Content\Fallout1NativeFormats.cs" Link="Fallout1NativeFormats.cs" />

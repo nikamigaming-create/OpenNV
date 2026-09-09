@@ -142,14 +142,14 @@ internal static partial class FalloutNativeVigorResolver
 
     internal static void Validate(
         FalloutNativeVigorContract contract,
-        FalloutNativeSpecialState state)
+        FalloutNativeSpecialState state, bool allowUnspent = false)
     {
         ArgumentNullException.ThrowIfNull(contract);
         ArgumentNullException.ThrowIfNull(state);
         if (state.Values.Count != AttributeCount ||
             state.Values.Any(value =>
                 value < contract.MinimumAttribute || value > contract.MaximumAttribute) ||
-            state.Values.Sum() != contract.RequiredTotal)
+            (allowUnspent ? state.Values.Sum() > contract.RequiredTotal : state.Values.Sum() != contract.RequiredTotal))
             throw new InvalidDataException(
                 "Native campaign SPECIAL state differs from the live Vigor allocation contract.");
     }

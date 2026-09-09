@@ -5,7 +5,7 @@ internal readonly record struct FalloutNifBsxEvidence(
     bool HasBlendCollision,
     bool HasConstrainedCollision,
     bool HasEditorMarker,
-    bool HasExternalEmittanceShader);
+    bool HasExternalEmittanceShader, bool HasAddonNodes = false);
 
 internal static class FalloutNifBsxContract
 {
@@ -13,18 +13,21 @@ internal static class FalloutNifBsxContract
     internal const uint Havok = 1U << 1;
     internal const uint Ragdoll = 1U << 2;
     internal const uint Complex = 1U << 3;
+    internal const uint FlameNodes = 1U << 4;
     internal const uint EditorMarkers = 1U << 5;
     internal const uint Dynamic = 1U << 6;
     internal const uint Articulated = 1U << 7;
     internal const uint ExternalEmit = 1U << 9;
 
-    private const uint SupportedFlags = Animated | Havok | Ragdoll | Complex | EditorMarkers |
+    private const uint SupportedFlags = Animated | Havok | Ragdoll | Complex | FlameNodes | EditorMarkers |
         Dynamic | Articulated | ExternalEmit;
 
     internal static void Validate(uint flags, FalloutNifBsxEvidence evidence)
     {
         if ((flags & ~SupportedFlags) != 0)
             throw Unsupported(flags, "contains an unimplemented flag");
+        if ((flags & FlameNodes) != 0 && !evidence.HasAddonNodes)
+            throw Unsupported(flags, "declares addon nodes without a decoded source binding");
         if ((flags & Havok) != 0 && !evidence.HasCollision)
             throw Unsupported(flags, "declares Havok without a decoded collision attachment");
         if ((flags & Ragdoll) != 0 && !evidence.HasBlendCollision)
@@ -35,8 +38,9 @@ internal static class FalloutNifBsxContract
             throw Unsupported(flags, "dynamic content has no decoded collision attachment");
         if ((flags & Articulated) != 0 && !evidence.HasConstrainedCollision)
             throw Unsupported(flags, "articulated content has no decoded constrained rigid body");
-        if ((flags & EditorMarkers) != 0 && !evidence.HasEditorMarker)
-            throw Unsupported(flags, "declares editor markers without the exact marker subtree");
+        // This is a request to remove editor-marker subtrees if present. Owned
+        // released effects retain the bit after their markers were stripped.
+        // It is not an assertion that a marker must exist in the saved file.
         if ((flags & ExternalEmit) != 0 && !evidence.HasExternalEmittanceShader)
             throw Unsupported(flags, "external emission has no matching shader contract");
     }

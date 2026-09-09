@@ -12,12 +12,15 @@ internal sealed class RuntimeNativeNifSkeleton
     private readonly Dictionary<string, bool> _visibility = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Node, int Index), float> _morphWeights = [];
     private readonly Dictionary<(string Node, int Index), float> _morphDefaults = [];
+    private NativeNifAnimationBlend? _animationBlend;
+    internal NativeNifAnimationBlend AnimationBlend => _animationBlend ??= new(Node.GetBoneCount());
 
     internal RuntimeNativeNifSkeleton(FalloutNifFile source, float unitsToMetres)
     {
         Source = source;
         UnitsToMetres = unitsToMetres;
         Node = new Skeleton3D { Name = "NativeSkeleton" };
+        Node.TreeEntered += PublishRetainedPoses;
         try
         {
             var visited = new HashSet<int>();
@@ -41,7 +44,26 @@ internal sealed class RuntimeNativeNifSkeleton
     internal Skeleton3D Node { get; }
     internal float UnitsToMetres { get; }
     internal FalloutNifFloatExtraDataState FloatExtraData { get; } = new();
+    internal RuntimeNativeNifMaterialChannels MaterialChannels { get; } = new();
     internal IReadOnlyList<(int ParentBone, FalloutNifGeometry Geometry)> GeometryAttachments => _geometryAttachments;
+
+    private void PublishRetainedPoses()
+    {
+        // Godot pose setters invalidate global bone caches only inside the
+        // scene tree. Skin binding can populate those caches during assembly,
+        // before source package/animation owners publish their initial poses.
+        // Republish the retained local poses on entry; never replace them with
+        // rest transforms or change the authored actor/furniture placement.
+        for (var bone = 0; bone < Node.GetBoneCount(); bone++)
+        {
+            // Republish components directly. Matrix decomposition here rounds
+            // rotations/scales again and makes a restored pose differ from the
+            // same continuously running animation.
+            Node.SetBonePosePosition(bone, Node.GetBonePosePosition(bone));
+            Node.SetBonePoseRotation(bone, Node.GetBonePoseRotation(bone));
+            Node.SetBonePoseScale(bone, Node.GetBonePoseScale(bone));
+        }
+    }
     internal object VisualChannelState => new
     {
         visibility = _visibility.Select(row => new { node = row.Key, visible = row.Value }).ToArray(),
@@ -65,6 +87,7 @@ internal sealed class RuntimeNativeNifSkeleton
 
     internal Action<float>? BindVisualChannel(FalloutNifFile source, FalloutNifControllerLink link)
     {
+        if (MaterialChannels.Bind(source, link) is { } material) return material;
         if (link.PropertyType.Length != 0 || link.Variable1.Length != 0) return null;
         if (link.ControllerType == "NiVisController" && link.Variable2.Length == 0 && HasSourceTarget(link.NodeName))
         {

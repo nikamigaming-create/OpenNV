@@ -13,6 +13,16 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
     private readonly Dictionary<int, Image> _effectImages = [];
     private Vector2? _lastPointer;
     private TextureRect? _portrait;
+    private CharacterCreation.ClassicPortraitMode _portraitMode;
+    private readonly List<Control> _externalControls = [];
+
+    internal void RegisterExternalControl(Control control) => _externalControls.Add(control);
+
+    internal void SetPortraitMode(CharacterCreation.ClassicPortraitMode mode)
+    {
+        _portraitMode = mode;
+        if (_portrait is not null) _portrait.Material = CharacterCreation.ClassicPortraitProjection.Create(mode);
+    }
     internal SubViewport ContentView { get; }
     internal NativeOwnedRaceSexMenu Menu { get; }
 
@@ -105,6 +115,14 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
 
     public override void _Input(InputEvent input)
     {
+        var focus = GetViewport().GuiGetFocusOwner();
+        var externalFocus = focus is not null && _externalControls.Any(control => control == focus || control.IsAncestorOf(focus));
+        if (input is InputEventMouse pointer)
+        {
+            if (_externalControls.Any(control => control.Visible && control.GetGlobalRect().HasPoint(pointer.Position))) return;
+            if (externalFocus && input is InputEventMouseButton { Pressed: true }) GetViewport().GuiReleaseFocus();
+        }
+        else if (externalFocus) return;
         if (input is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion)
         {
             ContentView.PushInput(input, true); GetViewport().SetInputAsHandled(); return;
@@ -143,6 +161,7 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
             Size = new(1280, 960),
             StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = Control.MouseFilterEnum.Ignore,
+            Material = CharacterCreation.ClassicPortraitProjection.Create(_portraitMode),
         };
         ContentView.AddChild(_portrait); ContentView.MoveChild(_portrait, 0);
         if (_portrait.Size != new Vector2(1280, 960)) throw new InvalidOperationException("Portrait canvas extent changed.");

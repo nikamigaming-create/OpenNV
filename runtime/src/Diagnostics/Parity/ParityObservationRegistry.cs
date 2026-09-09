@@ -10,12 +10,16 @@ internal sealed record ParityObservationSnapshot(
     int Observed,
     IReadOnlyList<string> Missing);
 
+internal sealed record ParityObservationCoverage(ulong EventOrdinal, int Discovered, int Observed, IReadOnlyList<string> Missing);
+
 internal sealed class ParityObservationRegistry
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, Observation> _observations =
         new(StringComparer.Ordinal);
     private ulong _eventOrdinal;
+    private ParityObservationSnapshot? _snapshot;
+    private string[]? _missing;
 
     internal void ReplaceScope(
         string scope,
@@ -42,6 +46,8 @@ internal sealed class ParityObservationRegistry
                 var key = $"{scope}/{row.Identity}";
                 _observations.Add(key, new Observation(row.Category, row.SourceState, null));
             }
+            _snapshot = null;
+            _missing = null;
         }
     }
 
@@ -56,6 +62,8 @@ internal sealed class ParityObservationRegistry
             if (runtimeState.IsEmpty)
                 throw new InvalidDataException("Parity runtime observation state is empty.");
             _observations[key] = source with { RuntimeState = runtimeState.ToArray() };
+            if (source.RuntimeState is null) _missing = null;
+            _snapshot = null;
         }
     }
 
@@ -71,6 +79,7 @@ internal sealed class ParityObservationRegistry
             _eventOrdinal = checked(_eventOrdinal + 1);
             var key = $"events/{_eventOrdinal:D20}/{identity}";
             _observations.Add(key, new Observation(category, state.ToArray(), state.ToArray()));
+            _snapshot = null;
             return _eventOrdinal;
         }
     }
@@ -79,6 +88,7 @@ internal sealed class ParityObservationRegistry
     {
         lock (_gate)
         {
+            if (_snapshot is not null) return _snapshot;
             var fields = new List<ParityTelemetryField>(_observations.Count * 2 + 4);
             var missing = new List<string>();
             foreach (var (identity, observation) in _observations.OrderBy(row => row.Key))
@@ -102,12 +112,21 @@ internal sealed class ParityObservationRegistry
                 ParityCategory.Coverage,
                 ParityStableId.FromName("coverage.missing.identity-sha256"),
                 SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', missing)))));
-            return new ParityObservationSnapshot(
+            return _snapshot = new ParityObservationSnapshot(
                 fields,
                 _eventOrdinal,
                 _observations.Count,
                 _observations.Count - missing.Count,
                 missing);
+        }
+    }
+
+    internal ParityObservationCoverage Coverage()
+    {
+        lock (_gate)
+        {
+            _missing ??= _observations.Where(row => row.Value.RuntimeState is null).OrderBy(row => row.Key).Select(row => row.Key).ToArray();
+            return new(_eventOrdinal, _observations.Count, _observations.Count - _missing.Length, _missing);
         }
     }
 

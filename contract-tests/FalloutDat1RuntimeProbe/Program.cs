@@ -9,18 +9,27 @@ try
     var stored = Encoding.ASCII.GetBytes("stored-owned-bytes");
     var compressedSource = Encoding.ASCII.GetBytes("compressed-owned-bytes");
     var compressed = RawLzssBlock(compressedSource);
+    // Independent compressor blocks reuse dictionary index 0xfee. A decoder
+    // that accidentally retains its prior cursor produces the right length
+    // but substitutes the previous block's characters in the second phrase.
+    byte[] blocks = [0, 6, 7, (byte)'A', (byte)'B', (byte)'C', 0xee, 0xf0,
+        0x80, 0x01, (byte)'!',
+        0, 6, 7, (byte)'X', (byte)'Y', (byte)'Z', 0xee, 0xf3, 0, 0];
+    var blockSource = Encoding.ASCII.GetBytes("ABCABC!XYZXYZXYZ");
     var archivePath = Path.Combine(root, "master.dat");
     File.WriteAllBytes(archivePath, Archive([
         new FixtureEntry("compressed.bin", FalloutDat1Fixture.LzssFlag, compressedSource, compressed),
+        new FixtureEntry("independent.bin", FalloutDat1Fixture.LzssFlag, blockSource, blocks),
         new FixtureEntry("stored.bin", FalloutDat1Fixture.StoredFlag, stored, stored),
     ]));
 
     var archive = new FalloutDat1Archive(archivePath);
-    Require(archive.Entries.Count == 2, "DAT1 entry count differs.");
+    Require(archive.Entries.Count == 3, "DAT1 entry count differs.");
     Require(archive.HeaderValues.SequenceEqual([1u, 2u, 3u]), "DAT1 header values differ.");
     Require(archive.Contains("STORED.BIN"), "DAT1 case-insensitive lookup failed.");
     Require(archive.Read("stored.bin").SequenceEqual(stored), "Stored DAT1 payload differs.");
     Require(archive.Read("COMPRESSED.BIN").SequenceEqual(compressedSource), "LZSS DAT1 payload differs.");
+    Require(archive.Read("independent.bin").SequenceEqual(blockSource), "Independent LZSS block dictionary or overlapping back-reference differs.");
     ExpectFailure(() => archive.Read("../master.dat"), "escapes");
 
     var badFlag = Archive([
@@ -44,6 +53,19 @@ try
         var map = master.Read(@"maps\v13ent.map");
         var player = critter.Read(@"art\critters\hmjmpsaa.frm");
         Require(map.Length > 0 && player.Length > 0, "Owned DAT1 closure contains an empty member.");
+        var scripts = Encoding.ASCII.GetString(master.Read(@"scripts\scripts.lst"))
+            .Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        Require(scripts.Length == 960 && scripts[342].StartsWith("V13Door.int", StringComparison.OrdinalIgnoreCase) &&
+            scripts[775].StartsWith("MetlDoor.int", StringComparison.OrdinalIgnoreCase) && scripts.All(row => !row.Contains('\r')),
+            "Owned multi-block script list or MAP script index bindings are corrupt.");
+        var decoded = 0;
+        foreach (var ownedArchive in new[] { master, critter })
+            foreach (var entry in ownedArchive.Entries.Values.Where(row => row.Compressed))
+            {
+                try { Require(ownedArchive.Read(entry.LogicalPath).Length == entry.UncompressedBytes, "Owned block extent differs."); decoded++; }
+                catch (InvalidDataException error) { throw new InvalidDataException($"Owned {entry.LogicalPath}, stored={entry.StoredBytes}, offset={entry.StoredOffset}: {error.Message}", error); }
+            }
+        Console.WriteLine($"PASS independent compressed blocks, intervening raw block, overlapping match, owned script index bindings and {decoded} compressed owned members.");
         Console.WriteLine(
             $"OPENNV_FALLOUT_DAT1_OWNED_INPUT_PASS masterEntries={master.Entries.Count} " +
             $"critterEntries={critter.Entries.Count} map=maps/v13ent.map mapBytes={map.Length} " +
@@ -96,7 +118,7 @@ static byte[] RawLzssBlock(byte[] source)
     if (source.Length > short.MaxValue)
         throw new ArgumentOutOfRangeException(nameof(source));
     var result = new byte[source.Length + sizeof(short) * 2];
-    BinaryPrimitives.WriteInt16BigEndian(result, checked((short)-source.Length));
+    BinaryPrimitives.WriteUInt16BigEndian(result, (ushort)(0x8000 | source.Length));
     source.CopyTo(result, sizeof(short));
     BinaryPrimitives.WriteInt16BigEndian(result.AsSpan(sizeof(short) + source.Length), 0);
     return result;

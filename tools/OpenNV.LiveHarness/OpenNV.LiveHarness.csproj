@@ -10,5 +10,6 @@
   <ItemGroup>
     <Compile Include="../../runtime/src/Diagnostics/Parity/LiveHarnessFrameBuffer.cs" Link="LiveHarnessFrameBuffer.cs" />
     <Compile Include="../../runtime/src/Diagnostics/Parity/LiveHarnessFrameMailbox.cs" Link="LiveHarnessFrameMailbox.cs" />
+    <Compile Include="../../runtime/src/Diagnostics/Parity/TemporaryCaptureDirectory.cs" Link="TemporaryCaptureDirectory.cs" />
   </ItemGroup>
 </Project>

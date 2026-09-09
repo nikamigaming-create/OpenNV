@@ -9,7 +9,10 @@ internal sealed record ClassicIntProcedure(
     string Name,
     int BodyOffset,
     int? CanonicalEpilogueOffset,
-    IReadOnlyList<ClassicIntInstruction> Instructions);
+    IReadOnlyList<ClassicIntInstruction> Instructions)
+{
+    internal int ArgumentCount { get; init; }
+}
 
 internal sealed record ClassicIntProgram(
     string Identity,
@@ -17,7 +20,11 @@ internal sealed record ClassicIntProgram(
     IReadOnlyDictionary<string, ClassicIntProcedure> Procedures,
     IReadOnlyDictionary<int, ClassicIntInstruction> Instructions,
     IReadOnlyDictionary<int, string> IdentifierReferences,
-    IReadOnlyDictionary<int, string> StringReferences);
+    IReadOnlyDictionary<int, string> StringReferences)
+{
+    internal IReadOnlyDictionary<int, int> InitialVariables { get; init; } = new Dictionary<int, int>();
+    internal string? StartupProcedure { get; init; }
+}
 
 internal sealed record ClassicIntDoorObjectState(bool Open, bool Locked);
 
@@ -385,7 +392,7 @@ internal sealed record ClassicIntProcedureState(
     IReadOnlyDictionary<int, int> MapVariables,
     IReadOnlyDictionary<int, int> GlobalVariables,
     IReadOnlyList<int> ValueStack,
-    ClassicRetailRandomLifecycleState RandomState)
+    ClassicRetailRandomLifecycleState? RandomState)
 {
     internal object Save() => this;
 
@@ -414,14 +421,20 @@ internal sealed record ClassicIntProcedureResult(
     int ReturnValue,
     IReadOnlyList<ClassicIntMessageEffect> MessageEffects,
     IReadOnlyList<string> SoundEffects,
-    ClassicIntWorldObjectState WorldObjects);
+    ClassicIntWorldObjectState WorldObjects)
+{
+    internal IReadOnlyDictionary<string, int> ExternalVariables { get; init; } = new Dictionary<string, int>();
+}
 
 internal sealed record ClassicIntMessageEffect(
     int MessageList,
     int MessageId,
     int MessageHandle,
     int? ObjectHandle,
-    int? Color);
+    int? Color)
+{
+    internal string? Text { get; init; }
+}
 
 internal static class ClassicIntProcedureVm
 {
@@ -435,6 +448,7 @@ internal static class ClassicIntProcedureVm
     private const ushort FetchProgram = 0x8012;
     private const ushort StoreProgram = 0x8013;
     private const ushort FetchExternal = 0x8014;
+    private const ushort StoreExternal = 0x8015;
     private const ushort PushBase = 0x802B;
     private const ushort PopBase = 0x8029;
     private const ushort PopToBase = 0x802A;
@@ -473,6 +487,7 @@ internal static class ClassicIntProcedureVm
     private const ushort SetMapVariable = 0x80C4;
     private const ushort GlobalVariable = 0x80C5;
     private const ushort SetGlobalVariable = 0x80C6;
+    private const ushort ScriptAction = 0x80C7;
     private const ushort AnimateMoveObjectToTile = 0x80CE;
     private const ushort Attack = 0x80D0;
     private const ushort TileDistanceObjects = 0x80D3;
@@ -498,6 +513,7 @@ internal static class ClassicIntProcedureVm
     private const ushort CurrentMapIndex = 0x8101;
     private const ushort CritterAddTrait = 0x8102;
     private const ushort DoorLock = 0x812E;
+    private const ushort DoorIsLocked = 0x812D;
     private const ushort DoorUnlock = 0x812F;
     private const ushort DoorIsOpen = 0x8130;
     private const ushort DoorOpen = 0x8131;
@@ -581,10 +597,10 @@ internal static class ClassicIntProcedureVm
         ClassicIntProcedureState source,
         ClassicIntExpressionContext game,
         IClassicIntWorldObjectState sourceWorldObjects,
-        ClassicRetailRandomContract randomContract,
+        ClassicRetailRandomContract? randomContract,
         int instructionBudget)
     {
-        if (!program.Procedures.TryGetValue(procedure, out var entry) ||
+        if (!program.Procedures.TryGetValue(procedure, out var entry) || entry.ArgumentCount != 0 ||
             instructionBudget <= 0)
             throw new InvalidOperationException(
                 $"Classic INT procedure dispatch is invalid: {program.Identity}:{procedure}.");
@@ -593,6 +609,7 @@ internal static class ClassicIntProcedureVm
         var scriptLocals = new Dictionary<int, int>(source.ScriptLocalVariables);
         var mapVariables = new Dictionary<int, int>(source.MapVariables);
         var globals = new Dictionary<int, int>(source.GlobalVariables);
+        var externalVariables = new Dictionary<string, int>(game.ExternalVariables, StringComparer.Ordinal);
         var stack = source.ValueStack.ToList();
         var addressStack = new Stack<int>();
         var bases = new Stack<int>();
@@ -694,10 +711,20 @@ internal static class ClassicIntProcedureVm
                         var reference = Pop(stack, program, procedure, offset);
                         var name = Read(program.IdentifierReferences, reference,
                             program, procedure, offset, "identifier-reference");
-                        stack.Add(Read(game.ExternalVariables, name,
+                        stack.Add(Read(externalVariables, name,
                             program, procedure, offset, "external-variable"));
                         break;
                     }
+                case StoreExternal:
+                    {
+                        var reference = Pop(stack, program, procedure, offset);
+                        var name = Read(program.IdentifierReferences, reference, program, procedure, offset, "identifier-reference");
+                        externalVariables[name] = Pop(stack, program, procedure, offset);
+                        break;
+                    }
+                case ScriptAction:
+                    stack.Add(game.ScriptAction ?? throw Failure(program, procedure, offset, "missing-script-action"));
+                    break;
                 case FetchLocal:
                     stack.Add(ReadOrInitialize(
                         locals,
@@ -805,6 +832,7 @@ internal static class ClassicIntProcedureVm
                 case Negate: stack.Add(unchecked(-Pop(stack, program, procedure, offset))); break;
                 case Random:
                     {
+                        if (random is null || randomContract is null) throw Failure(program, procedure, offset, "campaign-random-owner-unbound");
                         var maximum = Pop(stack, program, procedure, offset);
                         var minimum = Pop(stack, program, procedure, offset);
                         var result = ClassicRetailRandomLifecycle.Consume(
@@ -950,13 +978,16 @@ internal static class ClassicIntProcedureVm
                     {
                         var messageId = Pop(stack, program, procedure, offset);
                         var messageList = Pop(stack, program, procedure, offset);
-                        stack.Add(Read(game.MessageHandles,
+                        stack.Add(game.MessageSource?.Handle(messageList, messageId) ?? Read(game.MessageHandles,
                             (messageList, messageId), program, procedure, offset,
                             "message"));
                         break;
                     }
                 case DoorIsOpen:
                     stack.Add(Bool(Door(Pop(stack, program, procedure, offset)).Open));
+                    break;
+                case DoorIsLocked:
+                    stack.Add(Bool(Door(Pop(stack, program, procedure, offset)).Locked));
                     break;
                 case DoorOpen:
                     SetDoor(Pop(stack, program, procedure, offset), open: true);
@@ -1183,7 +1214,7 @@ internal static class ClassicIntProcedureVm
                             procedureIndex >= program.ProcedureOrder.Count)
                             throw Failure(program, procedure, offset, "call-target");
                         var called = program.ProcedureOrder[procedureIndex];
-                        if (argumentCount != 0 || called.Instructions.Count == 0)
+                        if (argumentCount != 0 || called.ArgumentCount != argumentCount || called.Instructions.Count == 0)
                             throw Failure(program, procedure, offset, "call-arguments");
                         if (!addressStack.TryPop(out var returnOffset) ||
                             returnOffset != next)
@@ -1233,7 +1264,8 @@ internal static class ClassicIntProcedureVm
                 DialogueReplies = dialogueReplies,
                 DialogueOptions = dialogueOptions,
                 DialogueReady = dialogueReady,
-            });
+            })
+        { ExternalVariables = externalVariables };
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
             doors.TryGetValue(objectHandle, out var door)
@@ -1331,9 +1363,13 @@ internal static class ClassicIntProcedureVm
             int? objectHandle,
             int? color)
         {
+            if (game.MessageSource is not null && handle < 0)
+                return game.MessageSource.Resolve(handle, objectHandle, color);
             var matches = game.MessageHandles
                 .Where(row => row.Value == handle).Select(row => row.Key)
                 .Take(2).ToArray();
+            if (matches.Length == 0 && program.StringReferences.TryGetValue(handle, out var text))
+                return new(0, 0, handle, objectHandle, color) { Text = text };
             if (matches.Length != 1)
                 throw Failure(program, procedure, offset,
                     "ambiguous-message-handle");

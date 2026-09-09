@@ -17,12 +17,13 @@ internal sealed class HarnessRecording
     private long _end;
     private readonly object _journalLock = new();
     private readonly StreamWriter _journal;
+    private readonly TemporaryCaptureDirectory _temporary;
     private Task? _completion;
-    private volatile bool _finished;
+    private volatile bool _framesFinalized;
     private readonly List<string> _failures = [];
     internal string DirectoryPath { get; }
     internal bool Active => _completion is null;
-    internal bool Finished => _finished;
+    internal bool Finished => _completion is { IsCompleted: true };
 
     internal HarnessRecording(string directory, string encoder, object initialState)
     {
@@ -30,18 +31,36 @@ internal sealed class HarnessRecording
             throw new ArgumentException("Recording requires a new absolute private directory.");
         if (!Path.IsPathFullyQualified(encoder) || !File.Exists(encoder))
             throw new ArgumentException("Recording requires an installed ffmpeg executable path.");
-        DirectoryPath = directory;
-        Directory.CreateDirectory(directory);
-        _journal = new StreamWriter(Path.Combine(directory, "timeline.jsonl"), false, new UTF8Encoding(false)) { AutoFlush = true };
-        _streams = new[] { "retail", "opennv" }.ToDictionary(target => target,
-            target => new FrameArchive(Path.Combine(directory, target), encoder, _begin));
-        Journal("recording-start", initialState);
-        WriteStatus();
+        _temporary = new TemporaryCaptureDirectory(directory);
+        DirectoryPath = _temporary.Path;
+        _streams = [];
+        try
+        {
+            _journal = new StreamWriter(Path.Combine(directory, "timeline.jsonl"), false, new UTF8Encoding(false)) { AutoFlush = true };
+            foreach (var target in new[] { "retail", "opennv" })
+                _streams.Add(target, new FrameArchive(Path.Combine(directory, target), encoder, _begin, FailAndStop));
+            Journal("recording-start", initialState);
+            WriteStatus();
+        }
+        catch
+        {
+            try
+            {
+                Task.WhenAll(_streams.Values.Select(stream => stream.Stop())).GetAwaiter().GetResult();
+            }
+            finally
+            {
+                try { _journal?.Dispose(); }
+                finally { _temporary.Dispose(); }
+            }
+            throw;
+        }
     }
 
     internal object Status => new
     {
-        directory = DirectoryPath, active = Active, finished = Finished,
+        directory = DirectoryPath, active = Active, finished = _framesFinalized,
+        temporary = true, cleanupComplete = Finished && !Directory.Exists(DirectoryPath),
         beginNanoseconds = _begin, seconds = ((Interlocked.Read(ref _end) is var end && end != 0 ? end : Now()) - _begin) / 1e9,
         audio = "not-recorded", alignment = "unestablished",
         failures = Failures(),
@@ -51,7 +70,10 @@ internal sealed class HarnessRecording
 
     internal void Accept(string target, LiveHarnessSurface frame)
     {
-        if (Active) _streams[target].Accept(frame);
+        lock (_journalLock)
+        {
+            if (Active) _streams[target].Accept(frame);
+        }
     }
 
     internal void Fail(string reason)
@@ -74,25 +96,60 @@ internal sealed class HarnessRecording
         lock (_journalLock)
         {
             if (_completion is not null) return;
-            _journal.WriteLine(JsonSerializer.Serialize(new
+            var line = JsonSerializer.Serialize(new
             {
                 seconds = (Now() - _begin) / 1e9, nanoseconds = Now(), kind, value,
-            }, Program.Json));
+            }, Program.Json);
+            try { _journal.WriteLine(line); }
+            catch (IOException exception)
+            {
+                _failures.Add($"Recording journal failed: {exception.Message}");
+                _ = Stop();
+            }
         }
     }
 
-    internal Task Stop()
+    private void FailAndStop(string reason)
+    {
+        Fail(reason);
+        _ = Stop();
+    }
+
+    internal Task Stop() => Finish(null);
+
+    internal Task Export(string configurationPath)
+    {
+        var configuration = JsonSerializer.Deserialize<HarnessSbsConfiguration>(File.ReadAllText(configurationPath), Program.Json)
+            ?? throw new InvalidDataException("Missing SBS configuration.");
+        if (!string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(configuration.RecordingDirectory)),
+            DirectoryPath, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Export must use the active recording.");
+        return Finish(() => HarnessSbsExport.Run(configurationPath));
+    }
+
+    private Task Finish(Action? export)
     {
         lock (_journalLock)
         {
             if (_completion is not null) return _completion;
             Interlocked.Exchange(ref _end, Now());
-            _journal.Dispose();
+            try { _journal.Dispose(); }
+            catch (IOException exception) { _failures.Add($"Recording journal close failed: {exception.Message}"); }
             _completion = Task.Run(async () =>
             {
-                await Task.WhenAll(_streams.Values.Select(stream => stream.Stop()));
-                _finished = true;
-                WriteStatus();
+                try
+                {
+                    await Task.WhenAll(_streams.Values.Select(stream => stream.Stop()));
+                    _framesFinalized = true;
+                    WriteStatus();
+                    export?.Invoke();
+                }
+                catch (Exception exception) { Fail(exception.Message); }
+                finally
+                {
+                    try { _temporary.Dispose(); }
+                    catch (Exception exception) { Fail($"Capture cleanup failed: {exception.Message}"); }
+                }
             });
             return _completion;
         }
@@ -110,6 +167,7 @@ internal sealed class HarnessRecording
         private readonly string _encoder;
         private readonly long _begin;
         private readonly Task _writer;
+        private readonly Action<string> _failed;
         private long _received;
         private long _written;
         private long _lastSequence;
@@ -117,9 +175,10 @@ internal sealed class HarnessRecording
         private long _overflow;
         private string? _error;
 
-        internal FrameArchive(string directory, string encoder, long begin)
+        internal FrameArchive(string directory, string encoder, long begin, Action<string> failed)
         {
             _directory = directory; _encoder = encoder; _begin = begin;
+            _failed = failed;
             Directory.CreateDirectory(directory);
             _writer = Task.Run(Write);
         }
@@ -141,7 +200,8 @@ internal sealed class HarnessRecording
             if (!_pending.Writer.TryWrite(frame))
             {
                 Interlocked.Increment(ref _overflow);
-                _error = "Recording queue overflow: frame coverage failed. Inspect the retained sequence/timestamp index.";
+                _error = "Recording queue overflow: frame coverage failed; capture stopped.";
+                _failed(_error);
             }
         }
 
@@ -200,6 +260,7 @@ internal sealed class HarnessRecording
             {
                 _error = exception.Message;
                 _pending.Writer.TryComplete(exception);
+                _failed(_error);
             }
             finally
             {
@@ -213,12 +274,18 @@ internal sealed class HarnessRecording
                         var output = await errors!;
                         if (encoder.ExitCode != 0) _error = $"Frame encoder exited {encoder.ExitCode}: {output}";
                     }
-                    catch (OperationCanceledException) { encoder.Kill(); _error = "Frame encoder did not finalize in time."; }
+                    catch (OperationCanceledException)
+                    {
+                        encoder.Kill();
+                        await encoder.WaitForExitAsync();
+                        _error = "Frame encoder did not finalize in time.";
+                    }
                     encoder.Dispose();
                 }
                 var files = Directory.EnumerateFiles(_directory, "*.png").LongCount();
                 if (files != Interlocked.Read(ref _written))
                     _error = $"Encoded frame count differs: {files} files / {_written} indexed frames. {_error}";
+                if (_error is not null) _failed(_error);
             }
         }
     }

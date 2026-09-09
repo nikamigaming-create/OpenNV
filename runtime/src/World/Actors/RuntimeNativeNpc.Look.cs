@@ -61,6 +61,7 @@ internal partial class RuntimeNativeNpc
     }
 
     internal Vector3? HeadTargetPoint => _headPose?.WorldPosition;
+    internal Vector3? HeadFacingDirection => _headPose?.WorldForward;
 
     internal void ApplyBoundHeadTrackingCommand(FalloutBoundLookCommand command)
     {

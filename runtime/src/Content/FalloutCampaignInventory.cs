@@ -24,7 +24,8 @@ internal sealed record FalloutCampaignItem(
     string RecordType,
     int Count,
     int? Value,
-    float? Weight);
+    float? Weight,
+    IReadOnlyList<FalloutItemVariant>? Variants = null);
 
 internal sealed record FalloutCampaignWeapon(
     FalloutCampaignItem Item,
@@ -41,7 +42,8 @@ internal sealed record FalloutCampaignInventory(
 
 internal sealed record FalloutOpeningInventoryGrant(
     FalloutCampaignInventory Inventory,
-    IReadOnlyList<uint> EquippedRuntimeFormIds);
+    IReadOnlyList<uint> EquippedRuntimeFormIds,
+    ulong? InventoryRandomState = null);
 
 internal static class FalloutOpeningInventoryGrantResolver
 {
@@ -264,6 +266,15 @@ internal static class FalloutCampaignInventoryResolver
         FalloutPluginRecord record,
         IReadOnlyList<FalloutPluginSubrecord> subrecords)
     {
+        if (record.Signature == "ALCH")
+        {
+            var effect = RequiredSingle(record, subrecords, "ENIT", 20).Span;
+            var ingestibleValue = BinaryPrimitives.ReadInt32LittleEndian(effect);
+            var ingestibleWeight = BinaryPrimitives.ReadSingleLittleEndian(RequiredSingle(record, subrecords, "DATA", 4).Span);
+            if (ingestibleValue < 0 || !float.IsFinite(ingestibleWeight) || ingestibleWeight < 0)
+                throw Error(record, "DATA/ENIT contains invalid ingestible economics");
+            return (ingestibleValue, ingestibleWeight);
+        }
         var layout = record.Signature switch
         {
             "IMOD" or "KEYM" or "MISC" => (Bytes: SimpleItemDataBytes, WeightOffset: SimpleItemWeightOffset),

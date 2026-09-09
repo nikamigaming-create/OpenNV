@@ -10,6 +10,7 @@ internal partial class RuntimeNativeNpc
     private FalloutPluginStack? _aiStack;
     private FalloutQuestState? _questState;
     private FalloutCellScene? _aiCell;
+    internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
     private FalloutPluginRecord? _aiPackage;
     private FalloutFurnitureIdleTree? _furnitureIdles;
@@ -32,6 +33,7 @@ internal partial class RuntimeNativeNpc
     internal string? PackageIdleError => _packageIdleError;
     internal string? AiError => _aiError;
     internal int SittingState => _sitting;
+    internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
     internal bool Traveling => _travelActive;
     internal FalloutFormKey? CurrentPackage => _aiPackage?.FormKey;
 
@@ -85,6 +87,12 @@ internal partial class RuntimeNativeNpc
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
         currentProcedure = _sitting == 2 ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
+        dialoguePackage = _dialoguePackage is null ? null : new
+        {
+            source = _dialoguePackage,
+            requested = _dialoguePackageRequested,
+            unbound = new[] { "package-camera-zoom", "package-head-target-priority", "pre-conversation-target-movement" }
+        },
         idleCollection = _packageIdleSource is null ? null : new
         {
             source = _packageIdleSource.Form.ToString(),
@@ -119,6 +127,10 @@ internal partial class RuntimeNativeNpc
         _aiCell = cell;
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
+        // A stationary, unarmed actor owns its source movement-group idle
+        // independently of package selection. An unsupported package must not
+        // erase that motion owner and leave the skeleton in its bind pose.
+        PlayLocomotion(moving: false);
         AdvanceAi(initializing: true);
     }
 
@@ -206,6 +218,7 @@ internal partial class RuntimeNativeNpc
                 _packageIdles = null;
                 _travelActive = false;
                 ClearFurniture();
+                _dialoguePackage = null; _dialoguePackageRequested = false;
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
@@ -215,12 +228,17 @@ internal partial class RuntimeNativeNpc
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;
             if (data.Length != 12 || location.Length != 12) throw new InvalidDataException("AI package has an invalid field extent.");
-            if (data.Span[4] != 6 || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0 ||
+            if (data.Span[4] is not (6 or 15) || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0 ||
                 BinaryPrimitives.ReadInt32LittleEndian(location.Span[8..]) != 0)
                 throw new NotSupportedException($"PACK {selected.FormKey} requires its travel/procedure owner.");
             var target = selected.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(location.Span[4..]));
             var reference = _aiCell!.References.SingleOrDefault(value => value.FormKey == target) ??
                 throw new NotSupportedException($"PACK {selected.FormKey} target {target} is outside the active cell.");
+            if (data.Span[4] == 15)
+            {
+                BeginDialoguePackage(selected, reference);
+                return;
+            }
             var furniture = _aiStack.GetEffective(reference.Base);
             if (furniture.Signature != "FURN")
             {

@@ -2,12 +2,13 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.Campaigns.Classic.Native;
 
 namespace OpenNV.Runtime.Content;
 
 internal sealed record Fallout1OwnedResource(string LogicalPath, string Source, byte[] Bytes);
 
-internal sealed class Fallout1OwnedContentSource
+internal sealed class Fallout1OwnedContentSource : IFalloutClassicOwnedSource
 {
     internal const string ProfileSchema = "opennv-fo1-owned-profile/v1";
     private const string Campaign = "Fallout1";
@@ -33,11 +34,30 @@ internal sealed class Fallout1OwnedContentSource
         _archives = archives;
     }
 
-    internal string ProfileId { get; }
+    public string ProfileId { get; }
     internal string InstallRoot { get; }
     internal int LooseFileCount => _loose.Count;
     internal IReadOnlyList<string> OverlayOrder =>
         ["loose:data", CritterArchive, MasterArchive];
+
+    public byte[] Read(string logicalPath, out int sourceIndex)
+    {
+        var resource = Read(logicalPath);
+        sourceIndex = resource.Source.StartsWith("loose:", StringComparison.Ordinal) ? 0 :
+            resource.Source.StartsWith("dat1:critter.dat:", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
+        return resource.Bytes;
+    }
+
+    public void Dispose() { }
+
+    public IReadOnlyList<string> EffectiveLogicalPaths(string prefix, string extension)
+    {
+        var canonicalPrefix = prefix.Replace('/', '\\');
+        return _loose.Keys.Concat(_archives.SelectMany(row => row.Archive.Entries.Keys))
+            .Where(path => path.StartsWith(canonicalPrefix, StringComparison.OrdinalIgnoreCase) &&
+                path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
 
     internal static Fallout1OwnedContentSource Load(string profilePath)
     {
@@ -160,6 +180,15 @@ internal sealed class Fallout1OwnedContentSource
             if (archive.Contains(canonical))
                 return new Fallout1OwnedResource(canonical, $"dat1:{name}:{canonical}", archive.Read(canonical));
         throw new FileNotFoundException($"No registered Fallout 1 source contains {canonical}.");
+    }
+
+    internal byte[] ReadForNativeSaveRecovery(string logicalPath)
+    {
+        var canonical = FalloutDat1Archive.CanonicalPath(logicalPath);
+        if (_loose.ContainsKey(canonical)) return Read(canonical).Bytes;
+        foreach (var (_, archive) in _archives)
+            if (archive.Contains(canonical)) return archive.ReadForNativeSaveRecovery(canonical);
+        throw new FileNotFoundException("Native save source member is absent: " + canonical);
     }
 
     internal string FirstArchiveMember(string archiveName)

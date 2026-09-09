@@ -39,27 +39,32 @@ internal partial class RuntimeNativeNpc
         if (furnitureApproach is null && !FalloutNewVegasBuiltinForms.IsInternalStatic(_aiCell!.BaseObjects[target.Base].Signature,
             _aiStack!.RuntimeFormId(target.Base)))
             throw new NotSupportedException($"PACK {package.FormKey} requires its non-marker interaction owner.");
+        var destination = furnitureApproach ?? _referenceTransform!(target);
+        StartTravelTo(package, target.FormKey, destination,
+            furnitureApproach is null ? "reference-marker" : "furniture-approach", furnitureApproach is not null);
+    }
+
+    private void StartTravelTo(FalloutPluginRecord package, FalloutFormKey target, Transform3D destination,
+        string purpose, bool exact = false)
+    {
         _navigation ??= CellNavigationGraph.LoadOwned(_aiStack!, _aiCell!.Cell.FormKey);
         var units = Skeleton.UnitsToMetres;
         var sourceStart = new Vector3(Position.X, -Position.Z, Position.Y) / units;
-        var destination = furnitureApproach is { } approach
-            ? new Vector3(approach.Origin.X, -approach.Origin.Z, approach.Origin.Y) / units
-            : new Vector3(target.Position[0], target.Position[1], target.Position[2]);
-        _travelPath = _navigation.FindPath(sourceStart, destination).Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
+        var sourceDestination = new Vector3(destination.Origin.X, -destination.Origin.Z, destination.Origin.Y) / units;
+        _travelPath = _navigation.FindPath(sourceStart, sourceDestination).Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
         if (_travelPath.Length == 0) throw new InvalidDataException("Owned NAVM returned no travel corridor.");
-        if (furnitureApproach is { } entry && _travelPath[^1] != entry.Origin)
-            _travelPath = [.. _travelPath, entry.Origin];
-        _travelDestination = furnitureApproach ?? new(_referenceTransform!(target).Basis.Orthonormalized().Scaled(Scale), _travelPath[^1]);
+        if (exact && _travelPath[^1] != destination.Origin) _travelPath = [.. _travelPath, destination.Origin];
+        _travelDestination = exact ? destination : new(destination.Basis.Orthonormalized().Scaled(Scale), _travelPath[^1]);
         _travelPackage = package.FormKey;
-        _travelTarget = target.FormKey;
-        _travelPurpose = furnitureApproach is null ? "reference-marker" : "furniture-approach";
+        _travelTarget = target;
+        _travelPurpose = purpose;
         _travelCursor = 0;
         _travelPublishedDistance = 0;
         _travelActive = true;
         // This locomotion owner publishes the ordinary walking group.
         Activity.SetMovement(running: false, sneaking: false);
         PlayLocomotion(true);
-        GD.Print($"OPENNV_NATIVE_PACKAGE_TRAVEL reference={Appearance.Reference} package={package.FormKey} target={target.FormKey} " +
+        GD.Print($"OPENNV_NATIVE_PACKAGE_TRAVEL reference={Appearance.Reference} package={package.FormKey} target={target} " +
             $"navmeshes={_navigation.NavMeshes} waypoints={_travelPath.Length} distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
     }
 

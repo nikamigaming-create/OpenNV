@@ -1,0 +1,2230 @@
+{
+  "Schema": "opennv-classic-owned-world/v1",
+  "CaveWallPattern": "^ca[0-9]+\\.frm$",
+  "VaultWallPattern": "^(?:va|vb|vcn|vt|vtx|ve|dv|mmb)[0-9]+\\.frm$",
+  "VaultFramePattern": "^(?:vd[0-9]+|velvdr[0-9]+)\\.frm$",
+  "RockPattern": "^rock[0-9]+\\.frm$",
+  "StalagmitePattern": "^cstalag[0-9]+\\.frm$",
+  "RockModel": "meshes/dungeons/caves/rocks/rockcave01.nif",
+  "StalagmiteModel": "meshes/dungeons/caves/rocks/cavestalagmite05.nif",
+  "GroundSinkFraction": 0.08,
+  "CaveWall": {
+    "Albedo": "textures/dungeons/caves/caverockwall03.dds",
+    "Normal": "textures/dungeons/caves/caverockwall03_n.dds",
+    "Tint": "b8b09e",
+    "RepeatMeters": 1.85,
+    "Roughness": 0.96,
+    "NormalScale": 0.96
+  },
+  "VaultWall": {
+    "Albedo": "textures/dungeons/vault/vwall01.dds",
+    "Normal": "textures/dungeons/vault/vwall01_n.dds",
+    "Tint": "a3a89e",
+    "RepeatMeters": 2.15,
+    "Roughness": 0.82,
+    "NormalScale": 0.68
+  },
+  "CaveFloor": {
+    "Albedo": "textures/dungeons/caves/cavesmoothfloor01.dds",
+    "Normal": "textures/dungeons/caves/cavesmoothfloor01_n.dds",
+    "Tint": "b8ad9c",
+    "RepeatMeters": 2.2,
+    "Roughness": 0.94,
+    "NormalScale": 0.62
+  },
+  "WallShape": {
+    "SmoothPasses": 5,
+    "SmoothStrength": 0.24,
+    "Layers": 7,
+    "BulgeMeters": 0.14,
+    "HeightNoiseMeters": 0.12,
+    "NoiseWavelength": 3.2
+  },
+  "Props": [
+    {
+      "ArtPattern": "^knife\\.frm$",
+      "Pids": [
+        4
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/combatknife.nif",
+      "PitchDegrees": 90
+    },
+    {
+      "ArtPattern": "^ammo\\.frm$",
+      "Pids": [
+        29,
+        30
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/10mmammo.nif"
+    },
+    {
+      "ArtPattern": "^pistol\\.frm$",
+      "Pids": [
+        8
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/10mmpistol.nif",
+      "PitchDegrees": 90
+    },
+    {
+      "ArtPattern": "^uzi\\.frm$",
+      "Pids": [
+        9
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/10mmsubmachinegun.nif",
+      "PitchDegrees": 90
+    },
+    {
+      "ArtPattern": "^spear\\.frm$",
+      "Pids": [
+        7
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/spear.nif",
+      "PitchDegrees": 0
+    },
+    {
+      "ArtPattern": "^v13bones\\.frm$",
+      "Model": "meshes/clutter/skeleton/skeletonwholebodyclothed.nif",
+      "PitchDegrees": 90,
+      "YawDegrees": 150,
+      "Palette": [
+        {
+          "TexturePattern": "^textures/clutter/skeleton/outfitmale\\.dds$",
+          "Color": "1c304c"
+        }
+      ]
+    },
+    {
+      "ArtPattern": "^arbones\\.frm$",
+      "Model": "meshes/nvdlc03/clutter/nvdlc03skeletonstatic.nif",
+      "PitchDegrees": 90
+    },
+    {
+      "ArtPattern": "^(?:barrel2|brl1000|brl2000)\\.frm$",
+      "Model": "meshes/clutter/barrel01.nif"
+    },
+    {
+      "ArtPattern": "^barrel3\\.frm$",
+      "Model": "meshes/clutter/barrel01.nif",
+      "Count": 2
+    },
+    {
+      "ArtPattern": "^barrel4\\.frm$",
+      "Model": "meshes/clutter/barrel01.nif",
+      "Count": 3
+    },
+    {
+      "ArtPattern": "^barrel5\\.frm$",
+      "Model": "meshes/clutter/barrel01.nif",
+      "Count": 4
+    },
+    {
+      "ArtPattern": "^crate1\\.frm$",
+      "Model": "meshes/dlc03/clutter/woodencrate/dlc03woodencrate01.nif"
+    },
+    {
+      "ArtPattern": "^toilet1\\.frm$",
+      "Model": "meshes/clutter/bathroom/toilet01.nif"
+    },
+    {
+      "ArtPattern": "^toilet2\\.frm$",
+      "Model": "meshes/clutter/bathroom/toilet01.nif",
+      "YawDegrees": 120
+    },
+    {
+      "ArtPattern": "^sink1\\.frm$",
+      "Model": "meshes/clutter/bathroom/sink01.nif"
+    },
+    {
+      "ArtPattern": "^sink2\\.frm$",
+      "Model": "meshes/clutter/bathroom/sink01.nif",
+      "YawDegrees": 120
+    },
+    {
+      "ArtPattern": "^tree7\\.frm$",
+      "Model": "meshes/landscape/trees/treedead03.nif"
+    },
+    {
+      "ArtPattern": "^tree8\\.frm$",
+      "Model": "meshes/landscape/trees/treedead04.nif"
+    },
+    {
+      "ArtPattern": "^tree9\\.frm$",
+      "Model": "meshes/landscape/trees/treedead02.nif"
+    },
+    {
+      "ArtPattern": "^(?:ltharmor\\.frm)$",
+      "Pids": [
+        1
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/leatherarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:mtlarmor\\.frm)$",
+      "Pids": [
+        2
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/metalarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:pwrarmor\\.frm)$",
+      "Pids": [
+        3,
+        232
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/t-51bpowerarmor/armorgo.nif"
+    },
+    {
+      "ArtPattern": "^(?:cmbtflx\\.frm)$",
+      "Pids": [
+        17
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/combatarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        236
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/combatknife.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        45
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/throwingknife.nif"
+    },
+    {
+      "ArtPattern": "^(?:club\\.frm)$",
+      "Pids": [
+        5
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/baton.nif"
+    },
+    {
+      "ArtPattern": "^(?:sledge\\.frm)$",
+      "Pids": [
+        6
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handmelee/sledgehammer.nif"
+    },
+    {
+      "ArtPattern": "^(?:sledge\\.frm)$",
+      "Pids": [
+        115
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handmelee/supersledge.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        116
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/ripper.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        10
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/huntingrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        11
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/flamergo.nif"
+    },
+    {
+      "ArtPattern": "^(?:minigun\\.frm)$",
+      "Pids": [
+        12
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/minigungo.nif"
+    },
+    {
+      "ArtPattern": "^(?:rlaunch\\.frm)$",
+      "Pids": [
+        13
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handlauncher/missilelauncher.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        15
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/plasmacaster.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        16
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/laserpistol.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        118
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/laserrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        24
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/plasmadefender.nif"
+    },
+    {
+      "ArtPattern": "^(?:minigun\\.frm)$",
+      "Pids": [
+        28
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/gatlinglasergo.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        23
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handautomatic/assaultrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        21
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/brassknucklesworldobject.nif"
+    },
+    {
+      "ArtPattern": "^(?:thand\\.frm)$",
+      "Pids": [
+        235
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/powerfistworldobject.nif"
+    },
+    {
+      "ArtPattern": "^(?:gernade\\.frm)$",
+      "Pids": [
+        25
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/grenadefrag.nif"
+    },
+    {
+      "ArtPattern": "^(?:gernade\\.frm)$",
+      "Pids": [
+        26
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/plasmagrenade.nif"
+    },
+    {
+      "ArtPattern": "^(?:gernade\\.frm)$",
+      "Pids": [
+        27
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/pulsegrenade.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        120
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/alienblaster.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        122
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/mauserpistol01.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        31
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/44magnumammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        111
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/44magnumammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        35
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/5mmammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        36
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/5mmammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        95
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/shotgunshellbox.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        121
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/9mmammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:tanks\\.frm)$",
+      "Pids": [
+        32
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/flamerfuel.nif"
+    },
+    {
+      "ArtPattern": "^(?:battery\\.frm)$",
+      "Pids": [
+        38
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/smallenergycell.nif"
+    },
+    {
+      "ArtPattern": "^(?:battery\\.frm)$",
+      "Pids": [
+        39
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/microfusioncell.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        40
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/stimpak01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        144
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/superstimpak01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bag\\.frm)$",
+      "Pids": [
+        41
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/nukacolacap.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm|reserved\\.frm)$",
+      "Pids": [
+        47,
+        218,
+        219,
+        220
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/firstaidkit01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        48
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/radaway01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        53
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/chems/mentats01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        87
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/chems/buffout01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        109
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/radx01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        110
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/psychochem01.nif"
+    },
+    {
+      "ArtPattern": "^(?:dynamite\\.frm)$",
+      "Pids": [
+        51
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/dynamite_go.nif"
+    },
+    {
+      "ArtPattern": "^(?:plstic\\.frm)$",
+      "Pids": [
+        85
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handminedrop/c4.nif"
+    },
+    {
+      "ArtPattern": "^(?:box2\\.frm)$",
+      "Pids": [
+        54
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/stealthboy.nif"
+    },
+    {
+      "ArtPattern": "^(?:docbag\\.frm)$",
+      "Pids": [
+        91
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/doctorbag.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        73,
+        237
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookscience01.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        76
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookelectronics01.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        102
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookguns01.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        80
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookdcjournal.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        81
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/iguanaonastick01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        103
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/iguanaonastick01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        82
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/key01dirty.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        105
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/key01dirty.nif"
+    },
+    {
+      "ArtPattern": "^(?:ltharmor\\.frm)$",
+      "Pids": [
+        1
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/leatherarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:mtlarmor\\.frm)$",
+      "Pids": [
+        2
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/metalarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:pwrarmor\\.frm)$",
+      "Pids": [
+        3,
+        232
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/t-51bpowerarmor/armorgo.nif"
+    },
+    {
+      "ArtPattern": "^(?:cmbtflx\\.frm)$",
+      "Pids": [
+        17
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/combatarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:parmor2\\.frm)$",
+      "Pids": [
+        348,
+        349
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/advancedpowerarmor/adpowerarmorgo.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        236
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/combatknife.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        45
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/throwingknife.nif"
+    },
+    {
+      "ArtPattern": "^(?:club\\.frm)$",
+      "Pids": [
+        5
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/baton.nif"
+    },
+    {
+      "ArtPattern": "^(?:sledge\\.frm)$",
+      "Pids": [
+        6
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handmelee/sledgehammer.nif"
+    },
+    {
+      "ArtPattern": "^(?:sledge\\.frm)$",
+      "Pids": [
+        115
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handmelee/supersledge.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        116
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/ripper.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        10
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/huntingrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        11
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/flamergo.nif"
+    },
+    {
+      "ArtPattern": "^(?:minigun\\.frm)$",
+      "Pids": [
+        12
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/minigungo.nif"
+    },
+    {
+      "ArtPattern": "^(?:rlaunch\\.frm)$",
+      "Pids": [
+        13
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handlauncher/missilelauncher.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        15
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/plasmacaster.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        16
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/laserpistol.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        118
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/laserrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        24
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/plasmadefender.nif"
+    },
+    {
+      "ArtPattern": "^(?:minigun\\.frm)$",
+      "Pids": [
+        28
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/gatlinglasergo.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        23
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handautomatic/assaultrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        21
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/brassknucklesworldobject.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        235
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/powerfistworldobject.nif"
+    },
+    {
+      "ArtPattern": "^(?:gernade\\.frm)$",
+      "Pids": [
+        25
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/grenadefrag.nif"
+    },
+    {
+      "ArtPattern": "^(?:gernade\\.frm)$",
+      "Pids": [
+        26
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/plasmagrenade.nif"
+    },
+    {
+      "ArtPattern": "^(?:gernade\\.frm)$",
+      "Pids": [
+        27
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/pulsegrenade.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        120
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/alienblaster.nif"
+    },
+    {
+      "ArtPattern": "^(?:pistol\\.frm)$",
+      "Pids": [
+        122
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/mauserpistol01.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        31
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/44magnumammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        111
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/44magnumammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        35
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/5mmammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        36
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/5mmammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        95
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/shotgunshellbox.nif"
+    },
+    {
+      "ArtPattern": "^(?:ammo\\.frm)$",
+      "Pids": [
+        121
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/9mmammo.nif"
+    },
+    {
+      "ArtPattern": "^(?:tanks\\.frm)$",
+      "Pids": [
+        32
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/ammo/flamerfuel.nif"
+    },
+    {
+      "ArtPattern": "^(?:battery\\.frm)$",
+      "Pids": [
+        38
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/smallenergycell.nif"
+    },
+    {
+      "ArtPattern": "^(?:battery\\.frm)$",
+      "Pids": [
+        39
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/microfusioncell.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        40
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/stimpak01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        144
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/superstimpak01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bag\\.frm)$",
+      "Pids": [
+        41
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/nukacolacap.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        47
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/firstaidkit01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        48
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/radaway01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        53
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/chems/mentats01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        87
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/chems/buffout01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        109
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/radx01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        110
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/psychochem01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        259
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/chems/jet01.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        416
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/chems/jet01.nif"
+    },
+    {
+      "ArtPattern": "^(?:dynamite\\.frm)$",
+      "Pids": [
+        51
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/dynamite_go.nif"
+    },
+    {
+      "ArtPattern": "^(?:plstic\\.frm)$",
+      "Pids": [
+        85
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handminedrop/c4.nif"
+    },
+    {
+      "ArtPattern": "^(?:box2\\.frm)$",
+      "Pids": [
+        54
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/stealthboy.nif"
+    },
+    {
+      "ArtPattern": "^(?:docbag\\.frm)$",
+      "Pids": [
+        91
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/doctorbag.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        73,
+        237
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookscience01.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        76
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookelectronics01.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        102
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookguns01.nif"
+    },
+    {
+      "ArtPattern": "^(?:book\\.frm)$",
+      "Pids": [
+        80
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/bookdcjournal.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        81
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/iguanaonastick01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        103
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/iguanaonastick01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        82,
+        298
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/key01dirty.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        105
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/key01dirty.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        49
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/antivenomgen.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        56
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/questitems/holodogtag01.nif"
+    },
+    {
+      "ArtPattern": "^(?:box2\\.frm|smalbox2\\.frm)$",
+      "Pids": [
+        58,
+        164,
+        190,
+        191,
+        192,
+        193,
+        194,
+        196,
+        215,
+        216,
+        217,
+        230,
+        231,
+        238
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/holodisk/holodisk01havok.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        96
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/holodisk/passcardred.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        97
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/holodisk/passcardblue.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        106
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/sodabottleclosed01.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        124
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/beerbottle01.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        125
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/liquorbottles/whiskeybottle01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        126
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/waterpurified01.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        143
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/sniperrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:club\\.frm)$",
+      "Pids": [
+        160
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/cattleprodgo.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        161
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/bbgun01.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        162
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/bbgununique.nif"
+    },
+    {
+      "ArtPattern": "^(?:dynamite\\.frm)$",
+      "Pids": [
+        206
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/dynamite.nif"
+    },
+    {
+      "ArtPattern": "^(?:plstic\\.frm)$",
+      "Pids": [
+        209
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handminedrop/c4.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        234
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/spikedknucklesworldobject.nif"
+    },
+    {
+      "ArtPattern": "^(?:cmbtflx\\.frm)$",
+      "Pids": [
+        239
+      ],
+      "Campaigns": [
+        "fallout-1"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/combatarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        49,
+        260
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/antivenomgen.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        56,
+        441,
+        442,
+        443
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/questitems/holodogtag01.nif"
+    },
+    {
+      "ArtPattern": "^(?:box2\\.frm|smalbox2\\.frm)$",
+      "Pids": [
+        58,
+        164,
+        190,
+        191,
+        192,
+        193,
+        194,
+        196,
+        215,
+        216,
+        217,
+        230,
+        231,
+        238,
+        294,
+        302,
+        303,
+        337,
+        338,
+        339,
+        447,
+        458,
+        459,
+        460,
+        461,
+        462,
+        463,
+        464,
+        465,
+        472,
+        477,
+        478,
+        490,
+        493
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/holodisk/holodisk01havok.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        96,
+        306,
+        373
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/holodisk/passcardred.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        97
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/holodisk/passcardblue.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        106
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/sodabottleclosed01.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        124
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/beerbottle01.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        125
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/liquorbottles/whiskeybottle01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        126,
+        267
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/food/waterpurified01.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        143
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/sniperrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:club\\.frm)$",
+      "Pids": [
+        160,
+        399
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/cattleprodgo.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        161,
+        261
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/bbgun01.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        162
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/bbgununique.nif"
+    },
+    {
+      "ArtPattern": "^(?:dynamite\\.frm)$",
+      "Pids": [
+        206
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/dynamite.nif"
+    },
+    {
+      "ArtPattern": "^(?:plstic\\.frm)$",
+      "Pids": [
+        209
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handminedrop/c4.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        234
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/spikedknucklesworldobject.nif"
+    },
+    {
+      "ArtPattern": "^(?:cmbtflx\\.frm)$",
+      "Pids": [
+        239,
+        381
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/combatarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        255,
+        341,
+        466,
+        487
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/paper01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        256,
+        263,
+        476
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/paper02.nif"
+    },
+    {
+      "ArtPattern": "^(?:brocflwr\\.frm)$",
+      "Pids": [
+        271
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/nv/brocflowerbud.nif"
+    },
+    {
+      "ArtPattern": "^(?:xander\\.frm)$",
+      "Pids": [
+        272
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/nv/xanderroot.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        273
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/healingpowder/healingpowder.nif"
+    },
+    {
+      "ArtPattern": "^(?:box2\\.frm)$",
+      "Pids": [
+        276
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/hides/nvgeckohide.nif"
+    },
+    {
+      "ArtPattern": "^(?:box2\\.frm)$",
+      "Pids": [
+        277
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/hides/nvgeckohidegolden.nif"
+    },
+    {
+      "ArtPattern": "^(?:spear\\.frm)$",
+      "Pids": [
+        280
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handgrenadethrow/spear.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        287
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/huntingriflescope.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        292,
+        496
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/boxingglove_go.nif"
+    },
+    {
+      "ArtPattern": "^(?:wepnbox\\.frm)$",
+      "Pids": [
+        293,
+        497
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/hand2hand/boxinggold_go.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        340
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/office/officepapers01.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        350
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/nvdlc05/weapons/2handautomatic/nvdlc05bozarmachinegun.nif"
+    },
+    {
+      "ArtPattern": "^(?:geck\\.frm)$",
+      "Pids": [
+        366
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/questitems/mq08geck.nif"
+    },
+    {
+      "ArtPattern": "^(?:ltharmor\\.frm)$",
+      "Pids": [
+        379
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/leatherarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:mtlarmor\\.frm)$",
+      "Pids": [
+        380
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/armor/metalarmor/m/go.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        385
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handpistol/sawedoffshotgun.nif"
+    },
+    {
+      "ArtPattern": "^(?:minigun\\.frm)$",
+      "Pids": [
+        389
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/minigununiquego.nif"
+    },
+    {
+      "ArtPattern": "^(?:rifle\\.frm)$",
+      "Pids": [
+        392
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handrifle/gaussrifle.nif"
+    },
+    {
+      "ArtPattern": "^(?:flamethr\\.frm)$",
+      "Pids": [
+        400
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/2handhandle/flamerexpandedtanksgo.nif"
+    },
+    {
+      "ArtPattern": "^(?:bpack2\\.frm)$",
+      "Pids": [
+        408
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/firstaidkit01.nif"
+    },
+    {
+      "ArtPattern": "^(?:docbag\\.frm)$",
+      "Pids": [
+        409
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/health/doctorbag.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        414
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/key01clean.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        436,
+        437
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/cards/nv_carddeck01_static.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        438,
+        456
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/key01dirty.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        446
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/junk/blueprintpaper01.nif"
+    },
+    {
+      "ArtPattern": "^(?:smalbox2\\.frm)$",
+      "Pids": [
+        457
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/office/clipboard01.nif"
+    },
+    {
+      "ArtPattern": "^(?:beer\\.frm)$",
+      "Pids": [
+        469
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/clutter/liquorbottles/whiskeybottle02.nif"
+    },
+    {
+      "ArtPattern": "^(?:knife\\.frm)$",
+      "Pids": [
+        517
+      ],
+      "Campaigns": [
+        "fallout-2"
+      ],
+      "FitSourceArt": false,
+      "Model": "meshes/weapons/1handmelee/switchblade.nif"
+    }
+  ],
+  "GroundLayers": [
+    {
+      "ArtPattern": "^edg[0-9s][0-9]+\\.frm$",
+      "Surface": {
+        "Albedo": "textures/landscape/dirtpebblescanyon01.dds",
+        "Normal": "textures/landscape/dirtpebblescanyon01_n.dds",
+        "Tint": "ffffff",
+        "RepeatMeters": 1.6,
+        "Roughness": 0.96,
+        "NormalScale": 0.58
+      },
+      "SourceMipBias": 0.3,
+      "GrainStrength": 0.7,
+      "DustStrength": 0.16
+    }
+  ]
+}

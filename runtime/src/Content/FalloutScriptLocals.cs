@@ -22,9 +22,9 @@ internal static class FalloutScriptLocals
     {
         if (script.Signature != "SCPT") throw new InvalidDataException("Variable declaration owner is not SCPT.");
         var variables = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
-        var declarations = new Dictionary<uint, (byte[] Data, string Name)>();
+        var declarations = new Dictionary<uint, (byte Flags, string Name)>();
         uint? index = null;
-        byte[]? declaration = null;
+        byte flags = 0;
         foreach (var field in script.ReadSubrecords())
         {
             if (field.Signature == "SLSD")
@@ -32,23 +32,23 @@ internal static class FalloutScriptLocals
                 if (field.Data.Length != 24 || index is not null)
                     throw new InvalidDataException("Script variable declaration extent or name is invalid.");
                 index = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
-                declaration = field.Data.ToArray();
+                flags = field.Data.Span[16];
             }
             if (field.Signature != "SCVR") continue;
             if (index is null) throw new InvalidDataException("Script variable identity is ambiguous.");
             var name = FalloutDialogueTopic.Text(field.Data.Span);
             if (declarations.TryGetValue(index.Value, out var previous))
             {
-                // Owned scripts can repeat the same declaration. One identical
-                // slot/name/storage declaration still denotes one local; a
-                // conflicting name or storage description remains ambiguous.
-                if (previous.Name != name || !previous.Data.AsSpan().SequenceEqual(declaration))
-                    throw new InvalidDataException("Conflicting duplicate script variable slot.");
+                // SLSD has an index, one flag byte and 19 unused bytes. Owned
+                // duplicate declarations contain different compiler padding;
+                // only the slot, name and flags define the same local.
+                if (previous.Name != name || previous.Flags != flags)
+                    throw new InvalidDataException($"Conflicting duplicate script variable slot {index} in {script.FormKey}.");
             }
             else
             {
                 if (!variables.TryAdd(name, index.Value)) throw new InvalidDataException("Script variable identity is ambiguous.");
-                declarations.Add(index.Value, (declaration!, name));
+                declarations.Add(index.Value, (flags, name));
             }
             index = null;
         }

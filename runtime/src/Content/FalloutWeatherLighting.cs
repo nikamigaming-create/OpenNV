@@ -59,6 +59,7 @@ internal readonly record struct FalloutWeatherTimeWeights(int First, int Second,
 
 internal sealed record FalloutWeatherLighting(FalloutFormKey Form, byte[] SunlightRgba, string SourceSha256)
 {
+    internal byte[] Colors { get; init; } = [];
     internal static FalloutWeatherLighting Read(FalloutPluginRecord record)
     {
         if (record.Signature != "WTHR") throw new InvalidDataException("Sky weather does not resolve to WTHR.");
@@ -66,12 +67,23 @@ internal sealed record FalloutWeatherLighting(FalloutFormKey Form, byte[] Sunlig
         // FNV NAM0 stores ten colour classes, each with six RGBA time samples.
         if (data.Length != 10 * 6 * 4) throw new NotSupportedException("Weather NAM0 colour layout is unbound.");
         return new(record.FormKey, data.Slice(4 * 6 * 4, 6 * 4).ToArray(),
-            Convert.ToHexString(SHA256.HashData(data.Span)).ToLowerInvariant());
+            Convert.ToHexString(SHA256.HashData(data.Span)).ToLowerInvariant())
+        { Colors = data.ToArray() };
     }
 
     internal float[] Sample(FalloutWeatherTimeWeights weights)
+        => SampleColor(SunlightRgba, weights);
+
+    internal float[] Sample(FalloutWeatherTimeWeights weights, int colorClass)
     {
-        if (SunlightRgba.Length != 24 || weights.First is < 0 or > 5 || weights.Second is < 0 or > 5 ||
+        if (Colors.Length != 240 || colorClass is < 0 or > 9)
+            throw new InvalidDataException("Weather colour class is absent or invalid.");
+        return SampleColor(Colors.AsSpan(colorClass * 24, 24), weights);
+    }
+
+    private static float[] SampleColor(ReadOnlySpan<byte> samples, FalloutWeatherTimeWeights weights)
+    {
+        if (samples.Length != 24 || weights.First is < 0 or > 5 || weights.Second is < 0 or > 5 ||
             !float.IsFinite(weights.FirstWeight) || !float.IsFinite(weights.SecondWeight) ||
             weights.FirstWeight < 0 || weights.SecondWeight < 0)
             throw new InvalidDataException("Weather sunlight samples or weights are invalid.");
@@ -80,8 +92,8 @@ internal sealed record FalloutWeatherLighting(FalloutFormKey Form, byte[] Sunlig
         {
             // The native accumulator stores after each weighted sample. Its
             // Float64 normalization declaration widens a Float32 reciprocal.
-            var first = (float)(SunlightRgba[weights.First * 4 + channel] * (double)weights.FirstWeight);
-            var sum = (float)(first + SunlightRgba[weights.Second * 4 + channel] * (double)weights.SecondWeight);
+            var first = (float)(samples[weights.First * 4 + channel] * (double)weights.FirstWeight);
+            var sum = (float)(first + samples[weights.Second * 4 + channel] * (double)weights.SecondWeight);
             color[channel] = (float)(sum * (double)(1.0f / byte.MaxValue));
         }
         return color;

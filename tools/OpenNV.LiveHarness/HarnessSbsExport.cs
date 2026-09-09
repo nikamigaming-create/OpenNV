@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.Diagnostics.Parity;
 
 namespace OpenNV.LiveHarness;
 
@@ -24,8 +25,25 @@ internal static class HarnessSbsExport
             !double.IsFinite(config.BeginSeconds) || !double.IsFinite(config.EndSeconds) || config.BeginSeconds < 0 ||
             config.EndSeconds <= config.BeginSeconds || config.FramesPerSecond is < 1 or > 240)
             throw new ArgumentException("SBS requires a new private output directory, installed tools and a finite shared interval.");
+        var recordingRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(config.RecordingDirectory));
+        var outputRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(config.OutputDirectory));
+        if (outputRoot.Equals(recordingRoot, StringComparison.OrdinalIgnoreCase) ||
+            outputRoot.StartsWith(recordingRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The saved video must be outside the temporary recording directory.");
         using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(config.RecordingDirectory, "recording.json")));
         if (!status.RootElement.GetProperty("finished").GetBoolean()) throw new InvalidOperationException("Finalize the recording before exporting.");
+        try { Export(config, configurationPath, status.RootElement); }
+        finally
+        {
+            TemporaryCaptureDirectory.DeleteIfOwned(config.RecordingDirectory);
+            if (Directory.Exists(config.OutputDirectory))
+                foreach (var name in new[] { "retail.ffconcat", "opennv.ffconcat" })
+                    File.Delete(Path.Combine(config.OutputDirectory, name));
+        }
+    }
+
+    private static void Export(HarnessSbsConfiguration config, string configurationPath, JsonElement status)
+    {
         var streams = new[] { "retail", "opennv" }.ToDictionary(engine => engine, engine => Read(config, engine));
         var first = streams["retail"][0];
         if (streams.Values.SelectMany(frames => frames).Any(frame => frame.Width != first.Width || frame.Height != first.Height))
@@ -53,7 +71,12 @@ internal static class HarnessSbsExport
         var error = encoder.StandardError.ReadToEnd();
         encoder.WaitForExit();
         File.WriteAllText(Path.Combine(config.OutputDirectory, "encoder.log"), error);
-        if (encoder.ExitCode != 0) throw new IOException("SBS encoder failed; inspect encoder.log.");
+        if (encoder.ExitCode != 0)
+        {
+            File.Delete(video);
+            throw new IOException("SBS encoder failed; inspect encoder.log.");
+        }
+        File.Delete(Path.Combine(config.OutputDirectory, "encoder.log"));
         object Descriptor(string path)
         {
             using var input = File.OpenRead(path);
@@ -67,7 +90,7 @@ internal static class HarnessSbsExport
             alignment = "shared capture clock only; game-state and event alignment unverified", audio = "not-recorded",
             policy = "Original native dimensions; common start/end; no per-engine time offset, speed change, crop, hue or exposure adjustment. Frame durations derive from the source index; output samples that timeline at the configured rate.",
             configuration = Descriptor(configurationPath), video = Descriptor(video),
-            recording = status.RootElement.Clone(),
+            recording = status.Clone(), sourceFrameRetention = "temporary; deleted after export",
             timeline = Descriptor(Path.Combine(config.RecordingDirectory, "timeline.jsonl")),
             streams = streams.Select(pair => new
             {

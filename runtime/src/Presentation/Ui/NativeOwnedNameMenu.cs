@@ -115,13 +115,14 @@ internal partial class NativeOwnedNameMenu : Control
 
     public override void _Ready()
     {
-        GetViewport().SizeChanged += Layout;
         Layout();
         _entry.GrabFocus();
         _entry.CaretColumn = _entry.Text.Length;
     }
 
-    public override void _ExitTree() => GetViewport().SizeChanged -= Layout;
+    private NativeViewportLayout? _viewportLayout;
+    public override void _EnterTree() => _viewportLayout = new(this, Layout);
+    public override void _ExitTree() => _viewportLayout?.Dispose();
 
     private void Layout()
     {

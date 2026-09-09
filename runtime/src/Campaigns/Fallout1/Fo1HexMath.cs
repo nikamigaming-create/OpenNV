@@ -46,9 +46,8 @@ internal static class Fo1HexMath
 
     internal static int FloorIndex(int tile)
     {
-        var coordinate = Coordinate(tile);
-        return (coordinate.Y / 2) * FloorWidth +
-            (FloorWidth - 1 - coordinate.X / 2);
+        _ = Coordinate(tile);
+        return Classic.ClassicHexGrid.FloorIndex(tile);
     }
 
     internal static Vector3 FloorPatchCenter(int index)
@@ -58,15 +57,8 @@ internal static class Fo1HexMath
                 nameof(index),
                 index,
                 "Fallout floor tile must be in the 100x100 grid.");
-        var floorX = FloorWidth - 1 - index % FloorWidth;
-        var floorY = index / FloorWidth;
-        var center = Vector3.Zero;
-        for (var offsetY = 0; offsetY < 2; offsetY++)
-            for (var offsetX = 0; offsetX < 2; offsetX++)
-                center += Center(
-                    (floorY * 2 + offsetY) * Width +
-                    floorX * 2 + offsetX);
-        return center / 4.0f;
+        var center = Classic.ClassicMapProjection.FloorCenter(index);
+        return new((float)center.X, 0, (float)center.Z);
     }
 
     internal static int NearestTile(Vector3 world)
@@ -124,33 +116,13 @@ internal static class Fo1HexMath
 
     internal static int TileInDirection(int tile, int rotation)
     {
-        var coordinate = Coordinate(tile);
-        if (rotation is < 0 or >= DirectionCount)
-            throw new ArgumentOutOfRangeException(
-                nameof(rotation),
-                rotation,
-                "Fallout rotation is invalid.");
-        var odd = (coordinate.X & 1) != 0;
-        var offset = rotation switch
-        {
-            0 => new Vector2I(-1, odd ? -1 : 0),
-            1 => new Vector2I(-1, odd ? 0 : 1),
-            2 => new Vector2I(0, 1),
-            3 => new Vector2I(1, odd ? 0 : 1),
-            4 => new Vector2I(1, odd ? -1 : 0),
-            Fo1HexMathNumericContracts.GeometryInt5 => new Vector2I(0, -1),
-            _ => throw new InvalidOperationException("Fallout rotation dispatch failed."),
-        };
-        return Tile(coordinate + offset);
+        return Classic.ClassicHexGrid.Neighbor(tile, rotation);
     }
 
     internal static int Distance(int firstTile, int secondTile)
     {
-        var first = Cube(firstTile);
-        var second = Cube(secondTile);
-        return Math.Max(
-            Math.Abs(first.X - second.X),
-            Math.Max(Math.Abs(first.Y - second.Y), Math.Abs(first.Z - second.Z)));
+        _ = Coordinate(firstTile); _ = Coordinate(secondTile);
+        return Classic.ClassicHexGrid.Distance(firstTile, secondTile);
     }
 
     internal static Vector3[] Corners(int tile, float radiusScale = 1.0f)
@@ -176,11 +148,4 @@ internal static class Fo1HexMath
             MathF.Sin(angle) * radius);
     }
 
-    private static Vector3I Cube(int tile)
-    {
-        var coordinate = Coordinate(tile);
-        var q = coordinate.X;
-        var r = coordinate.Y - (coordinate.X + (coordinate.X & 1)) / 2;
-        return new Vector3I(q, -q - r, r);
-    }
 }

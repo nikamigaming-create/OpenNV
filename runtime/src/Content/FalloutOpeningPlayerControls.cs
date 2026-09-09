@@ -25,6 +25,7 @@ internal sealed record FalloutPlayerControlCommand(
 
     internal FalloutPlayerControlState Apply(FalloutPlayerControlState state)
     {
+        if (Arguments.Count > 7) throw new InvalidDataException("Player control mask has more than seven flags.");
         var values = new[]
         {
             state.Movement,
@@ -35,9 +36,12 @@ internal sealed record FalloutPlayerControlCommand(
             state.RolloverText,
             state.Sneaking,
         };
-        for (var index = 0; index < Arguments.Count; ++index)
+        var arguments = Enable ? new[] { true, true, true, true, true, true, true } :
+            new[] { true, true, true, true, false, false, false };
+        for (var index = 0; index < Arguments.Count; ++index) arguments[index] = Arguments[index];
+        for (var index = 0; index < arguments.Length; ++index)
         {
-            if (Arguments[index])
+            if (arguments[index])
                 values[index] = Enable;
         }
         return new FalloutPlayerControlState(
@@ -157,7 +161,7 @@ internal static class FalloutOpeningPlayerControlResolver
             var disable = tokens[0].Equals("DisablePlayerControls", StringComparison.OrdinalIgnoreCase);
             if (!enable && !disable)
                 continue;
-            if (tokens.Length is < 2 or > ControlCount + 1 ||
+            if (tokens.Length > ControlCount + 1 ||
                 tokens.Skip(1).Any(token => token is not ("0" or "1")))
                 throw Error(quest, $"player-control syntax is unsupported: {line}");
             result.Add(new FalloutPlayerControlCommand(

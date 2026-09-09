@@ -21,7 +21,9 @@ internal static class FalloutMenuXml
         // The owned tile grammar admits an empty property whose opening tag
         // omits its final bracket. Keep it empty; never invent a trait value.
         text = Regex.Replace(text, @"<([A-Za-z_][A-Za-z0-9_.-]*)</\1\s*>", "<$1></$1>");
-        text = Regex.Replace(text, @"&(-?[A-Za-z_][A-Za-z0-9_]*);", match => "entity_" + match.Groups[1].Value);
+        // The retail tile grammar also terminates engine entities at
+        // whitespace/end-of-property (the owned Stats title omits ';').
+        text = Regex.Replace(text, @"&(-?[A-Za-z_][A-Za-z0-9_]*)(?:;|(?=\s|<|$))", match => "entity_" + match.Groups[1].Value);
         return XElement.Parse("<source>" + text + "</source>");
     }
 
@@ -48,15 +50,21 @@ internal static class FalloutMenuXml
             return token switch
             {
                 "entity_true" => 1,
-                "entity_false" or "entity_console" or "entity_left" => 0,
+                "entity_false" or "entity_console" or "entity_xbox" or "entity_left" => 0,
                 "entity_center" => 1,
                 "entity_right" => 2,
+                "entity_scale" => -1,
                 _ => throw new NotSupportedException($"Menu numeric token has no owner: {token}"),
             };
         }
         var value = 0.0f;
         foreach (var operation in property.Elements())
         {
+            if (operation.Name == "and" && value == 0 || operation.Name == "or" && value != 0)
+            {
+                value = value == 0 ? 0 : 1;
+                continue;
+            }
             var operand = Number(operation, reference, value);
             value = operation.Name.LocalName switch
             {
@@ -67,6 +75,8 @@ internal static class FalloutMenuXml
                 "min" => Math.Min(value, operand),
                 "max" => Math.Max(value, operand),
                 "div" when operand != 0 => value / operand,
+                "floor" => MathF.Floor(value),
+                "ceil" => MathF.Ceiling(value),
                 "eq" => value == operand ? 1 : 0,
                 "neq" => value != operand ? 1 : 0,
                 "gt" => value > operand ? 1 : 0,

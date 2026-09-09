@@ -9,11 +9,22 @@ internal sealed record FalloutDialogueResponse(byte Number, string Text, uint Em
     FalloutFormKey? Sound, FalloutFormKey? SpeakerAnimation, FalloutFormKey? ListenerAnimation, byte[] SourceBytes);
 internal sealed record FalloutDialogueInfo(FalloutPluginRecord Record, FalloutFormKey Quest, byte Type,
     byte NextSpeaker, byte Flags, byte Flags2, IReadOnlyList<byte[]> Conditions,
-    IReadOnlyList<FalloutDialogueResponse> Responses, string BeginScript, string EndScript);
+    IReadOnlyList<FalloutDialogueResponse> Responses, string BeginScript, string EndScript)
+{
+    internal IReadOnlyList<FalloutFormKey> Choices { get; init; } = [];
+    internal IReadOnlyList<FalloutFormKey> AddedTopics { get; init; } = [];
+    internal IReadOnlyList<FalloutFormKey> FollowUps { get; init; } = [];
+    internal string? Prompt { get; init; }
+    internal FalloutFormKey? Speaker { get; init; }
+}
 
 /// <summary>Winning INFO data and file order, with explicit PNAM insertion.</summary>
 internal sealed partial class FalloutDialogueTopic
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack,
+        IReadOnlyDictionary<FalloutFormKey, IReadOnlyList<FalloutPluginRecord>>> InfoIndexes = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack,
+        IReadOnlyDictionary<FalloutFormKey, (byte Type, byte Flags, float Priority)>> TopicHeaders = new();
     internal FalloutPluginRecord Topic { get; }
     internal IReadOnlyList<FalloutDialogueInfo> Infos { get; }
 
@@ -23,50 +34,89 @@ internal sealed partial class FalloutDialogueTopic
         Infos = infos;
     }
 
-    internal static FalloutDialogueTopic Read(FalloutPluginStack stack, string editorId)
-    {
-        var topic = Find(stack, "DIAL", editorId);
-        var order = new List<FalloutFormKey>();
-        foreach (var context in stack.Plugins)
+    // DIAL top-level flags expose the default topic list after an unlinked
+    // response. INFO/quest conditions are evaluated anew for this speaker and
+    // world state; the previous menu is not a source of available topics.
+    internal static IEnumerable<FalloutFormKey> DefaultTopics(FalloutPluginStack stack) => Headers(stack)
+        .Where(pair => (pair.Value.Flags & 2) != 0 && (pair.Value.Type == 0 || IsGoodbye(stack, pair.Key))).Select(pair => pair.Key);
+
+    // The built-in GOODBYE lives on the conversation tab but is also a
+    // top-level player choice. Its eligible INFO and voice belong to the actor.
+    internal static bool IsGoodbye(FalloutPluginStack stack, FalloutFormKey topic) => Headers(stack)[topic].Type == 1 &&
+        stack.GetEffective(topic).ReadSubrecords().Any(field => field.Signature == "EDID" &&
+            Text(field.Data.Span).Equals("GOODBYE", StringComparison.OrdinalIgnoreCase));
+
+    internal static float Priority(FalloutPluginStack stack, FalloutFormKey topic) => Headers(stack).TryGetValue(topic, out var header)
+        ? header.Priority : throw new InvalidDataException($"Dialogue choice {topic} is not a winning DIAL.");
+
+    private static IReadOnlyDictionary<FalloutFormKey, (byte Type, byte Flags, float Priority)> Headers(FalloutPluginStack stack) =>
+        TopicHeaders.GetValue(stack, records => records.EffectiveRecords("DIAL").ToDictionary(record => record.FormKey, record =>
         {
-            foreach (var record in context.Plugin.Records.Where(record => record.Signature == "INFO" &&
-                record.Groups.Any(group => group.Type == 7 && record.Plugin.AdjustFormId(group.LabelAsUInt32) == topic.FormKey)))
+            var fields = record.ReadSubrecords().ToArray();
+            var data = fields.Where(field => field.Signature == "DATA").ToArray();
+            var priorities = fields.Where(field => field.Signature == "PNAM").ToArray();
+            if (data.Length != 1 || data[0].Data.Length is not (1 or 2) || priorities.Length > 1 ||
+                priorities.Length == 1 && priorities[0].Data.Length != 4)
+                throw new InvalidDataException($"DIAL {record.FormKey} has invalid type/priority metadata.");
+            var type = data[0].Data.Span[0];
+            var flags = data[0].Data.Length == 2 ? data[0].Data.Span[1] : (byte)0;
+            // Legacy built-in topics omit PNAM; the field's source default is 50.
+            var priority = priorities.Length == 0 ? 50 : BinaryPrimitives.ReadSingleLittleEndian(priorities[0].Data.Span);
+            if (type > 7 || (flags & ~3) != 0 || !float.IsFinite(priority))
+                throw new NotSupportedException($"DIAL {record.FormKey} type, flags or priority are unsupported.");
+            return (type, flags, priority);
+        }));
+
+    internal static FalloutDialogueTopic Read(FalloutPluginStack stack, string editorId)
+        => Read(stack, Find(stack, "DIAL", editorId).FormKey);
+
+    internal static FalloutDialogueTopic Read(FalloutPluginStack stack, FalloutFormKey form)
+    {
+        var topic = stack.GetEffective(form);
+        if (topic.Signature != "DIAL") throw new InvalidDataException("Dialogue topic is not DIAL.");
+        var index = InfoIndexes.GetValue(stack, records => records.Plugins.SelectMany(context => context.Plugin.Records)
+            .Where(record => record.Signature == "INFO")
+            .GroupBy(record => record.Plugin.AdjustFormId(record.Groups.Single(group => group.Type == 7).LabelAsUInt32))
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<FalloutPluginRecord>)group.ToArray()));
+        var order = new List<FalloutFormKey>();
+        foreach (var record in index.GetValueOrDefault(form) ?? [])
+        {
+            var previous = record.ReadSubrecords().Where(field => field.Signature == "PNAM").ToArray();
+            if (previous.Length > 1 || (previous.Length == 1 && previous[0].Data.Length != 4))
+                throw new InvalidDataException($"INFO {record.FormKey} has invalid PNAM.");
+            if (record.IsDeleted) { order.Remove(record.FormKey); continue; }
+            if (previous.Length == 0)
             {
-                var previous = record.ReadSubrecords().Where(field => field.Signature == "PNAM").ToArray();
-                if (previous.Length > 1 || (previous.Length == 1 && previous[0].Data.Length != 4))
-                    throw new InvalidDataException($"INFO {record.FormKey} has invalid PNAM.");
-                if (record.IsDeleted) { order.Remove(record.FormKey); continue; }
-                if (previous.Length == 0)
-                {
-                    if (!order.Contains(record.FormKey)) order.Add(record.FormKey);
-                    continue;
-                }
-                order.Remove(record.FormKey);
-                var raw = BinaryPrimitives.ReadUInt32LittleEndian(previous[0].Data.Span);
-                var insertion = raw == 0 ? 0 : order.IndexOf(record.Plugin.AdjustFormId(raw)) + 1;
-                if (raw != 0 && insertion == 0)
-                    throw new NotSupportedException($"INFO {record.FormKey} PNAM precedes an unavailable INFO.");
-                order.Insert(insertion, record.FormKey);
+                if (!order.Contains(record.FormKey)) order.Add(record.FormKey);
+                continue;
             }
+            order.Remove(record.FormKey);
+            var raw = BinaryPrimitives.ReadUInt32LittleEndian(previous[0].Data.Span);
+            var insertion = raw == 0 ? 0 : order.IndexOf(record.Plugin.AdjustFormId(raw)) + 1;
+            if (raw != 0 && insertion == 0)
+                throw new NotSupportedException($"INFO {record.FormKey} PNAM precedes an unavailable INFO.");
+            order.Insert(insertion, record.FormKey);
         }
         var infos = order.Where(key => stack.TryGetEffective(key, out _)).Select(key => Decode(stack.GetEffective(key))).ToArray();
-        if (infos.Length == 0) throw new InvalidDataException($"DIAL {topic.FormKey} has no winning INFO.");
+        // Authored topic lists can contain empty placeholders. They remain
+        // real DIAL records but contribute no eligible response or choice.
         return new FalloutDialogueTopic(topic, infos);
     }
 
     internal FalloutDialogueInfo? Select(FalloutFormKey speakerBase, IReadOnlySet<FalloutFormKey> said,
-        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null)
+        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null,
+        Func<FalloutFormKey, bool>? questEligible = null, Func<FalloutFormKey, int>? questPriority = null,
+        bool conversation = false)
     {
-        foreach (var info in Infos)
+        IEnumerable<FalloutDialogueInfo> candidates = questPriority is null ? Infos : Infos.OrderByDescending(info => questPriority(info.Quest));
+        foreach (var info in candidates)
         {
-            if ((info.Flags & 4) != 0 && said.Contains(info.Record.FormKey)) continue;
-            if (!ConditionsPass(info, speakerBase, questStage, context)) continue;
+            if (!Eligible(info, speakerBase, said, questStage, context, questEligible)) continue;
             // SayTo owns one complete INFO and finishes after its responses and
             // end script. Goodbye requires no further conversational turn here;
             // it must not suppress the authored line. Random and other routing
             // flags still require their own selection owners.
-            if (info.Type != 1 || info.NextSpeaker != 0 || (info.Flags & ~5) != 0 || info.Flags2 != 0)
-                throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");
+            RequireFlags(info, conversation);
             return info;
         }
         return null;
@@ -121,8 +171,9 @@ internal sealed partial class FalloutDialogueTopic
         return CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetString(bytes);
     }
 
-    private static FalloutDialogueInfo Decode(FalloutPluginRecord record)
+    internal static FalloutDialogueInfo Decode(FalloutPluginRecord record)
     {
+        if (record.Signature != "INFO") throw new InvalidDataException("Dialogue response target is not INFO.");
         var fields = record.ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DATA").Data.ToArray();
         if (data.Length is not (3 or 4)) throw new InvalidDataException($"INFO {record.FormKey} DATA size is unsupported.");
@@ -164,11 +215,25 @@ internal sealed partial class FalloutDialogueTopic
         }
         if (responses.Count == 0 || responses.Select(response => response.Number).Distinct().Count() != responses.Count)
             throw new InvalidDataException($"INFO {record.FormKey} has absent/duplicate responses.");
+        IReadOnlyList<FalloutFormKey> Forms(string signature) => fields.Where(field => field.Signature == signature).Select(field =>
+            field.Data.Length == 4 ? record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) :
+                throw new InvalidDataException($"INFO {record.FormKey} has an invalid {signature} extent.")).ToArray();
+        var prompts = fields.Where(field => field.Signature == "RNAM").ToArray();
+        if (prompts.Length > 1) throw new InvalidDataException("INFO prompt is duplicated.");
+        var speakers = Forms("ANAM");
+        if (speakers.Count > 1) throw new InvalidDataException("INFO speaker is duplicated.");
         return new FalloutDialogueInfo(record, RequiredForm(record, "QSTI"), data[0], data[1], data[2],
-            data.Length == 4 ? data[3] : (byte)0, conditions, responses, string.Join('\n', begin), string.Join('\n', end));
+            data.Length == 4 ? data[3] : (byte)0, conditions, responses, string.Join('\n', begin), string.Join('\n', end))
+        {
+            Choices = Forms("TCLT"),
+            AddedTopics = Forms("NAME"),
+            FollowUps = Forms("TCFU"),
+            Prompt = prompts.Length == 0 ? null : Text(prompts[0].Data.Span),
+            Speaker = speakers.Count == 0 ? null : speakers[0],
+        };
     }
 
-    private static bool ConditionsPass(FalloutDialogueInfo info, FalloutFormKey speaker,
+    internal static bool ConditionsPass(FalloutDialogueInfo info, FalloutFormKey speaker,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context) =>
         FalloutCondition.AllPass(info.Conditions.Select(bytes => FalloutCondition.Read(info.Record, bytes)).ToArray(), condition =>
         {
@@ -180,6 +245,45 @@ internal sealed partial class FalloutDialogueTopic
             return context?.Invoke(condition) ?? throw new NotSupportedException(
                 $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
         }, evaluateRunOn: true);
+
+    internal static void RequireFlags(FalloutDialogueInfo info, bool conversation)
+    {
+        if (info.Type != (conversation ? 0 : 1) || info.NextSpeaker != 0 || (info.Flags & ~5) != 0 || info.Flags2 != 0)
+            throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");
+    }
+
+    internal static bool Eligible(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
+        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
+        Func<FalloutFormKey, bool>? questEligible = null) =>
+        !((info.Flags & 4) != 0 && said.Contains(info.Record.FormKey)) &&
+        (info.Speaker is null || info.Speaker == speaker) && AdmitsSpeaker(info, speaker, context) &&
+        (questEligible is null || questEligible(info.Quest)) && ConditionsPass(info, speaker, questStage, context);
+
+    private static bool AdmitsSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker, Func<FalloutCondition, float>? context)
+    {
+        var conditions = info.Conditions.Select(bytes => FalloutCondition.Read(info.Record, bytes)).ToArray();
+        // Pure actor restrictions can prove a line belongs to another actor
+        // before unrelated quest/service queries need evaluation. Never split
+        // an OR group or move predicates across random queries.
+        if (conditions.Any(condition => condition.Function == 77)) return true;
+        for (var index = 0; index < conditions.Length; index++)
+        {
+            var condition = conditions[index];
+            if (condition.RunOn != 0 || (condition.Flags & 0x1f) != 0 || index != 0 && (conditions[index - 1].Flags & 1) != 0) continue;
+            if (condition.Function == 72)
+            {
+                if (!FalloutCondition.AllPass([condition], value => value.FormArgument1 == speaker ? 1 : 0)) return false;
+            }
+            else if (condition.Function is 69 or 70 or 71 or 365 or 427 && context is not null)
+            {
+                // Some scalar callers lack actor traits. In that case the
+                // ordinary ordered evaluator retains the unresolved query.
+                try { if (!FalloutCondition.AllPass([condition], context)) return false; }
+                catch (NotSupportedException) { }
+            }
+        }
+        return true;
+    }
     [GeneratedRegex(@"^(?<speaker>[A-Za-z0-9_]+)\.sayto\s+(?<target>[A-Za-z0-9_]+)\s+(?<topic>[A-Za-z0-9_]+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SayToPattern();
 }

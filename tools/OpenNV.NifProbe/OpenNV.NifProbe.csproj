@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Particles.cs" Link="FalloutNifFile.Particles.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
