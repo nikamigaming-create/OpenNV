@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../runtime/src/Content/ClassicCharacterProfile.cs" Link="ClassicCharacterProfile.cs" />
+    <Compile Include="../../runtime/src/Campaigns/Classic/Native/ClassicTextLayout.cs" Link="ClassicTextLayout.cs" />
+  </ItemGroup>
+</Project>

@@ -40,13 +40,20 @@ internal static class FloatInitializerContracts
         Reject(() => Read(Build(false).Concat(Build(true)).ToArray()));
         foreach (var operation in new byte[] { 0xe8, 0xee })
         {
-            byte[] unit = [0xd9, operation, 0x51, 0xd9, 0x1c, 0x24, 0xb9, 0x60, 8, 0, 0,
-                0x68, 0x50, 4, 0, 0, 0xe8, 0, 0, 0, 0];
-            if (Read(unit)["fSyntheticRotation:Probe"] != (operation == 0xe8 ? 1 : 0))
-                throw new Exception("Encoded floating constant lost its value.");
-            for (var count = 0; count < unit.Length; ++count)
-                if (Read(unit[..count]).Count != 0) throw new Exception("Truncated constant initializer admitted.");
-            Reject(() => Read(unit.Concat(Build(true)).ToArray()));
+            byte[][] layouts = [
+                [0xd9, operation, 0x51, 0xd9, 0x1c, 0x24, 0xb9, 0x60, 8, 0, 0,
+                    0x68, 0x50, 4, 0, 0, 0xe8, 0, 0, 0, 0],
+                [0x55, 0x8b, 0xec, 0x51, 0xd9, operation, 0xd9, 0x1c, 0x24, 0x68,
+                    0x50, 4, 0, 0, 0xb9, 0x60, 8, 0, 0, 0xe8, 0, 0, 0, 0]
+            ];
+            foreach (var unit in layouts)
+            {
+                if (Read(unit)["fSyntheticRotation:Probe"] != (operation == 0xe8 ? 1 : 0) || Read(unit, false).Count != 0)
+                    throw new Exception("Encoded floating constant lost its value or receiver.");
+                for (var count = 0; count < unit.Length; ++count)
+                    if (Read(unit[..count]).Count != 0) throw new Exception("Truncated constant initializer admitted.");
+                Reject(() => Read(unit.Concat(Build(true)).ToArray()));
+            }
         }
         Console.WriteLine("Float default frame and optimized initializer contracts passed.");
     }

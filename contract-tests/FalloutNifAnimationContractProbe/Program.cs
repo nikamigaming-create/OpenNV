@@ -3,6 +3,63 @@ using System.Text;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+TextKeyContracts.Run();
+var heldRotation = new FalloutNifAnimationSampler(StepRotation(), 0);
+foreach (var time in new[] { -1f, 0f, .4f, .99999f })
+    Require(heldRotation.Sample(time).Rotation == new FalloutNifQuaternion(1, 0, 0, 0), "Constant rotation interpolated before the next source key.");
+foreach (var time in new[] { 1f, 1.01f, 5f })
+    Require(heldRotation.Sample(time).Rotation == new FalloutNifQuaternion(0, 0, 0, 1), "Constant rotation missed the exact key or end clamp.");
+Console.WriteLine("OPENNV_NIF_CONST_ROTATION_PASS fullReader=true exactBoundary=true");
+var directClock = new FalloutNifTimeController(-1, 0x48, 2, .125f, -.1f, 2.9f, 0, 0);
+FalloutNifControllerClock.Validate(directClock);
+FalloutNifControllerClock.Validate(directClock with { Flags = 8 });
+Near((float)FalloutNifControllerClock.Resolve(directClock, 0), .125f, "Direct phase is absolute source time");
+Near((float)FalloutNifControllerClock.Resolve(directClock, 1.5), .125f, "Direct negative-start loop");
+Near((float)FalloutNifControllerClock.Resolve(directClock, FalloutNifControllerClock.ElapsedAt(directClock, 1.4)), 1.4f, "Direct seek retains phase and frequency");
+Near((float)FalloutNifControllerClock.Resolve(directClock with { Flags = 0x4c }, 10), 2.9f, "Direct clamp end");
+var managerRejected = false;
+try { FalloutNifControllerClock.Validate(directClock with { Flags = 0x68 }); } catch (NotSupportedException) { managerRejected = true; }
+Require(managerRejected, "A manager-owned clock was advanced autonomously.");
+foreach (var compactPoint in new[] { false, true })
+{
+    var pointSource = PointSpline(compactPoint, 0);
+    var pointSampler = new FalloutNifPoint3Animation(pointSource, 0);
+    Near(pointSampler.Sample(0).X, compactPoint ? -3 : 0, "Point3 spline first endpoint");
+    Near(pointSampler.Sample(1).X, compactPoint ? 7 : 3, "Point3 spline final endpoint");
+    Near(pointSampler.Sample(.5f).X, compactPoint ? 2 : 1.5f, "Point3 spline middle");
+    ExpectInvalid(() => new FalloutNifPoint3Animation(PointSpline(compactPoint, 1), 0));
+}
+Console.WriteLine("OPENNV_NIF_POINT3_CLOCK_PASS compressed=true completeReader=true phase=true seek=true");
+foreach (var compactFloat in new[] { false, true })
+{
+    var scalar = new FalloutNifFloatAnimation(ScalarSpline(compactFloat, 0), 0);
+    Near(scalar.Sample(-1), compactFloat ? -3 : 0, "Scalar spline clamps first endpoint");
+    Near(scalar.Sample(2), compactFloat ? 7 : 3, "Scalar spline clamps final endpoint");
+    Near(scalar.Sample(.5f), compactFloat ? 2 : 1.5f, "Scalar spline affine midpoint");
+    ExpectInvalid(() => new FalloutNifFloatAnimation(ScalarSpline(compactFloat, 1), 0));
+    Near(new FalloutNifFloatAnimation(ScalarSpline(compactFloat, ushort.MaxValue), 0).Sample(9), 4.25f,
+        "Scalar spline absent handle retains its source constant");
+}
+Console.WriteLine("OPENNV_NIF_SCALAR_SPLINE_PASS completeReader=true signedCompact=true endpoints=true handlesValidated=true");
+
+// Constant angular velocity must survive nonuniform source key spacing,
+// quaternion sign aliases and endpoint clamping in the cubic rotation path.
+var rotationTimes = new[] { 0f, 0.3f, 1.1f, 2f };
+var tcbKeys = rotationTimes.Select((time, index) =>
+{
+    var q = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, time * 0.4f);
+    if (index % 2 != 0) q = -q;
+    return new FalloutNifQuaternionKey(time, new(q.W, q.X, q.Y, q.Z), null, null, new(0, 0, 0));
+}).ToArray();
+foreach (var time in new[] { -1f, 0f, 0.1f, 0.6f, 1.5f, 2f, 3f })
+{
+    var sample = FalloutNifAnimationSampler.SampleQuaternion(tcbKeys, time, 3);
+    var q = new Quaternion(sample.X, sample.Y, sample.Z, sample.W);
+    var expected = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, Math.Clamp(time, 0, 2) * 0.4f);
+    Near(MathF.Abs(Quaternion.Dot(q, expected)), 1, "TCB nonuniform constant angular speed");
+}
+Console.WriteLine("OPENNV_NIF_TCB_ROTATION_OK nonuniformTimes=true signAliases=true endpoints=true");
+
 var spline = Spline(false, 4, [0, 2, 0, 1, 2, 0, 2, 2, 0, 3, 2, 0]);
 var sampler = new FalloutNifAnimationSampler(spline, 0);
 foreach (var time in new float[] { 0, 0.25f, 0.5f, 0.75f, 1 })
@@ -25,6 +82,29 @@ Require(((FalloutNifSplineData)compact.ReadObject(1)).CompactControlPoints[1] ==
 ExpectInvalid(() => new FalloutNifAnimationSampler(Spline(false, 5, [0, 0, 0]), 0));
 ExpectInvalid(() => new FalloutNifAnimationSampler(Spline(false, 3, new float[9]), 0));
 var keyed = new FalloutNifAnimationSampler(Keyed(), 0);
+foreach (var allocationSampler in new[] { heldRotation, sampler, interior, compactSampler, keyed })
+{
+    for (var warmup = 0; warmup < 100; warmup++) _ = allocationSampler.Sample(.5f);
+    var before = GC.GetAllocatedBytesForCurrentThread();
+    var total = 0f;
+    for (var frame = 0; frame < 1000; frame++) total += allocationSampler.Sample((frame % 90) / 90f).Scale ?? 0;
+    var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+    Require(bytes == 0, $"Repeated source transform sampling allocated {bytes} bytes.");
+    GC.KeepAlive(total);
+}
+Console.WriteLine("OPENNV_NIF_SAMPLING_ALLOCATION_PASS keyed=true spline=true compact=true samples=5000 bytes=0");
+var timedPath = new FalloutNifAnimationSampler(PathFixture(2), 0);
+var distancePath = new FalloutNifAnimationSampler(PathFixture(18), 0);
+Near(timedPath.Sample(5).Translation!.Value.X, 1, "Authored path parameter timing");
+Near(distancePath.Sample(5).Translation!.Value.X, 5.5f, "Constant-speed path arc length");
+Near(distancePath.Sample(-1).Translation!.Value.X, 0, "Path first endpoint");
+Near(distancePath.Sample(11).Translation!.Value.X, 11, "Path final endpoint");
+Require(distancePath.Sample(5).Rotation is null && distancePath.Sample(5).Scale is null,
+    "Translation-only path replaced the authored rotation or scale.");
+var rejectedPath = false;
+try { _ = new FalloutNifAnimationSampler(PathFixture(8), 0); }
+catch (NotSupportedException) { rejectedPath = true; }
+Require(rejectedPath, "Unimplemented path banking was silently accepted.");
 var middle = keyed.Sample(0.5f);
 Near(middle.Translation!.Value.X, 5, "Linear keyed translation");
 Require(middle.Scale is null, "Unset keyed scale was replaced.");
@@ -72,6 +152,15 @@ var booleanSource = Wrap(("NiBoolInterpolator", Bytes(writer => { writer.Write((
         writer.Write(2.0f); writer.Write((byte)1);
     })));
 var boolean = new FalloutNifBoolAnimation(booleanSource, 0);
+Require(boolean.ConstantValue is null, "Changing visibility was admitted as a constant.");
+foreach (var constant in new byte[] { 0, 1 })
+{
+    var constantSource = Wrap(("NiBoolInterpolator", Bytes(writer => { writer.Write(constant); writer.Write(-1); })));
+    Require(new FalloutNifBoolAnimation(constantSource, 0).ConstantValue == (constant != 0), "Constant visibility lost its value.");
+    var keyedSource = Wrap(("NiBoolInterpolator", Bytes(writer => { writer.Write((byte)2); writer.Write(1); })),
+        ("NiBoolData", Bytes(writer => { writer.Write(2); writer.Write(5U); writer.Write(-1f); writer.Write(constant); writer.Write(0f); writer.Write(constant); })));
+    Require(new FalloutNifBoolAnimation(keyedSource, 0).ConstantValue == (constant != 0), "Repeated boolean keys were not recognized as constant.");
+}
 Require(!boolean.Sample(-1) && !boolean.Sample(1.99f) && boolean.Sample(2) && boolean.Sample(10),
     "Boolean animation lost step timing or endpoint clamping.");
 ExpectInvalid(() => new FalloutNifBoolAnimation(Wrap(("NiBoolInterpolator", Bytes(writer => { writer.Write((byte)2); writer.Write(-1); }))), 0));
@@ -123,8 +212,8 @@ var cameraPath = new FalloutNifAnimatedNodePath(cameraHierarchy, cameraClip, "Pr
 var cameraPose = cameraPath.Sample(0.5f);
 Require(cameraPath.AnimatedPathNodes == 2 && cameraPose.Count == 2 && cameraPath.UnboundOtherTargets == 0,
     "The camera path dropped an animated ancestor.");
-Near(cameraPose[0].Sample!.Translation!.Value.Z, 11, "Animated camera parent");
-Near(cameraPose[1].Sample!.Translation!.Value.Z, 23, "Animated camera node");
+Near(cameraPose[0].Sample!.Value.Translation!.Value.Z, 11, "Animated camera parent");
+Near(cameraPose[1].Sample!.Value.Translation!.Value.Z, 23, "Animated camera node");
 ExpectInvalid(() => new FalloutNifAnimatedNodePath(cameraHierarchy, cameraClip, "MissingCamera"));
 Console.WriteLine("OPENNV_CAMERA_PATH_CONTRACT_OK ancestorAnimation=true arbitraryNames=true missingTargetFails=true");
 
@@ -361,6 +450,38 @@ static FalloutNifFile Spline(bool compact, uint count, float[] points, short[]? 
         ("NiBSplineBasisData", Bytes(writer => writer.Write(count))));
 }
 
+static FalloutNifFile PointSpline(bool compact, uint handle) => Wrap(
+    (compact ? "NiBSplineCompPoint3Interpolator" : "NiBSplinePoint3Interpolator", Bytes(writer =>
+    {
+        writer.Write(0f); writer.Write(1f); writer.Write(1); writer.Write(2);
+        for (var i = 0; i < 3; i++) writer.Write(float.MinValue);
+        writer.Write(handle);
+        if (compact) { writer.Write(2f); writer.Write(5f); }
+    })),
+    ("NiBSplineData", Bytes(writer =>
+    {
+        float[] points = [0, 2, 0, 1, 2, 0, 2, 2, 0, 3, 2, 0];
+        short[] compressed = [-32767, -1, 0, -10922, -1, 0, 10922, -1, 0, 32767, -1, 0];
+        writer.Write(compact ? 0 : points.Length);
+        if (!compact) foreach (var point in points) writer.Write(point);
+        writer.Write(compact ? compressed.Length : 0);
+        if (compact) foreach (var point in compressed) writer.Write(point);
+    })), ("NiBSplineBasisData", Bytes(writer => writer.Write(4u))));
+
+static FalloutNifFile ScalarSpline(bool compact, uint handle) => Wrap(
+    (compact ? "NiBSplineCompFloatInterpolator" : "NiBSplineFloatInterpolator", Bytes(writer =>
+    {
+        writer.Write(0f); writer.Write(1f); writer.Write(1); writer.Write(2); writer.Write(4.25f); writer.Write(handle);
+        if (compact) { writer.Write(2f); writer.Write(5f); }
+    })),
+    ("NiBSplineData", Bytes(writer =>
+    {
+        writer.Write(compact ? 0 : 4);
+        if (!compact) foreach (var value in new[] { 0f, 1f, 2f, 3f }) writer.Write(value);
+        writer.Write(compact ? 4 : 0);
+        if (compact) foreach (var value in new short[] { -32767, -10922, 10922, 32767 }) writer.Write(value);
+    })), ("NiBSplineBasisData", Bytes(writer => writer.Write(4u))));
+
 static FalloutNifFile Keyed() => Wrap(
     ("NiTransformInterpolator", Bytes(writer =>
     {
@@ -384,6 +505,20 @@ static FalloutNifFile Keyed() => Wrap(
             writer.Write(time); writer.Write(10 * time); writer.Write(0.0f); writer.Write(0.0f);
         }
         writer.Write(0);
+    })));
+
+static FalloutNifFile StepRotation() => Wrap(
+    ("NiTransformInterpolator", Bytes(writer =>
+    {
+        for (var index = 0; index < 8; index++) writer.Write(float.MinValue);
+        writer.Write(1);
+    })),
+    ("NiTransformData", Bytes(writer =>
+    {
+        writer.Write(2); writer.Write(5u);
+        foreach (var time in new[] { 0f, 1f })
+        { writer.Write(time); writer.Write(1 - time); writer.Write(0f); writer.Write(0f); writer.Write(time); }
+        writer.Write(0); writer.Write(0);
     })));
 
 static byte[] Bytes(Action<BinaryWriter> emit)
@@ -411,6 +546,19 @@ static byte[] ConstantTransform(float z) => Bytes(writer =>
 });
 
 static FalloutNifFile Wrap(params (string Type, byte[] Bytes)[] blocks) => WrapNamed([], blocks);
+
+static FalloutNifFile PathFixture(ushort flags) => Wrap(
+    ("NiPathInterpolator", Bytes(w =>
+    {
+        w.Write(flags); w.Write(1); w.Write(0f); w.Write(0f); w.Write((ushort)0); w.Write(1); w.Write(2);
+    })),
+    ("NiPosData", Bytes(w =>
+    {
+        w.Write(3); w.Write(1U);
+        foreach (var (time, x) in new[] { (0f, 0f), (.5f, 1f), (1f, 11f) })
+        { w.Write(time); w.Write(x); w.Write(0f); w.Write(0f); }
+    })),
+    ("NiFloatData", Bytes(w => { w.Write(2); w.Write(1U); w.Write(0f); w.Write(0f); w.Write(10f); w.Write(1f); })));
 
 static FalloutNifFile WrapNamed(string[] strings, params (string Type, byte[] Bytes)[] blocks)
 {

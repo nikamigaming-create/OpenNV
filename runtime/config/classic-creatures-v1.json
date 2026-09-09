@@ -1,0 +1,156 @@
+{
+  "Schema": "opennv-classic-owned-creatures/v1",
+  "Bindings": [
+    {
+      "ArtBase": "masrat",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/nvgiantrat/skeleton.nif",
+      "Model": "meshes/creatures/nvgiantrat/nvgiantrat.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/nvgiantrat/mtidle.kf",
+        "move": "meshes/creatures/nvgiantrat/locomotion/mtforward.kf",
+        "turn": "meshes/creatures/nvgiantrat/mtturnleft.kf",
+        "attack": "meshes/creatures/nvgiantrat/h2hattackleft.kf",
+        "hit": "meshes/creatures/nvgiantrat/idleanims/hitreaction_torso.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move",
+        "14": "hit",
+        "16": "attack"
+      }
+    },
+    {
+      "ArtBase": "maantt",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/giantant/skeleton.nif",
+      "Model": "meshes/creatures/giantant/giantant.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/giantant/mtidle.kf",
+        "move": "meshes/creatures/giantant/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    },
+    {
+      "ArtBase": "maddog",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/dog/skeleton.nif",
+      "Model": "meshes/creatures/dog/dogskin.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/dog/mtidle.kf",
+        "move": "meshes/creatures/dog/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    },
+    {
+      "ArtBase": "mabrom",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/brahmin/skeleton.nif",
+      "Model": "meshes/creatures/brahmin/brahmin.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/brahmin/mtidle.kf",
+        "move": "meshes/creatures/brahmin/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    },
+    {
+      "ArtBase": "mascrp",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/radscorpion/skeleton.nif",
+      "Model": "meshes/creatures/radscorpion/radscorpion.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/radscorpion/mtidle.kf",
+        "move": "meshes/creatures/radscorpion/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    },
+    {
+      "ArtBase": "mascp2",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/radscorpion/skeleton.nif",
+      "Model": "meshes/creatures/radscorpion/radscorpion.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/radscorpion/mtidle.kf",
+        "move": "meshes/creatures/radscorpion/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    },
+    {
+      "ArtBase": "madeth",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/deathclaw/skeleton.nif",
+      "Model": "meshes/creatures/deathclaw/deathclaw.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/deathclaw/mtidle.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle"
+      }
+    },
+    {
+      "ArtBase": "maclaw",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/deathclaw/skeleton.nif",
+      "Model": "meshes/creatures/deathclaw/deathclaw.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/deathclaw/mtidle.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle"
+      }
+    },
+    {
+      "ArtBase": "mamtnt",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/smspinebreaker/skeleton.nif",
+      "Model": "meshes/creatures/smspinebreaker/smspinebreakerlight.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/smspinebreaker/mtidle.kf",
+        "move": "meshes/creatures/smspinebreaker/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    },
+    {
+      "ArtBase": "mamtn2",
+      "SourceGame": "fallout-new-vegas",
+      "Skeleton": "meshes/creatures/smspinebreaker/skeleton.nif",
+      "Model": "meshes/creatures/smspinebreaker/smspinebreakerheavy.nif",
+      "ForwardYawDegrees": 180,
+      "Animations": {
+        "idle": "meshes/creatures/smspinebreaker/mtidle.kf",
+        "move": "meshes/creatures/smspinebreaker/locomotion/mtforward.kf"
+      },
+      "SourceAnimations": {
+        "0": "idle",
+        "1": "move"
+      }
+    }
+  ]
+}

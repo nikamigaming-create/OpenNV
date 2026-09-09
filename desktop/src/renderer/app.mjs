@@ -76,7 +76,7 @@ function escapeHtml(value) {
 }
 
 function campaignStatus(campaign) {
-  if (campaign.ready) return "Ready";
+  if (campaign.ready) return campaign.previewOnly ? "Scene preview" : "Available · incomplete";
   const profile = state.profiles?.[campaign.id === "newvegas" ? "newVegas" : campaign.id];
   if (profile?.manifestDetected && !profile?.validated) return "Profile changed";
   if (profile?.validated && !profile?.runtimeReady) return "Runtime pending";
@@ -177,8 +177,6 @@ function render() {
   const selectedTtwOpening = state.profiles?.ttw?.openings?.[selectedRouteId()];
   selectionDetail.textContent = campaign.id === "ttw" && !selectedTtwOpening?.interactiveReady
     ? selectedTtwOpening?.blocker || campaign.readiness
-    : campaign.ready
-    ? campaign.launcherDetail
     : `${campaign.launcherDetail} · ${campaign.readiness}`;
   jamRow.classList.toggle("hidden", !campaign.jam);
   jamToggle.disabled = !jamAvailable;
@@ -208,7 +206,7 @@ function render() {
     ["openxr", "VR"]
   ];
   presentationPicker.innerHTML = modes.map(([id, label]) => `
-    <button class="mode-button ${selectedPresentation === id && available.has(id) ? "selected" : ""}" type="button" data-presentation="${id}" ${available.has(id) ? "" : "disabled"}>${label}</button>
+    <button class="mode-button ${selectedPresentation === id && available.has(id) ? "selected" : ""}" type="button" data-presentation="${id}" title="${escapeHtml(campaign.presentationStatus?.[id]?.status || "This view is unavailable in the installed runtime.")}" ${available.has(id) ? "" : "disabled"}>${label}</button>
   `).join("");
   presentationPicker.querySelectorAll("[data-presentation]").forEach((element) => {
     element.addEventListener("click", () => {
@@ -242,7 +240,10 @@ function render() {
     state.runtime.canLaunch && campaign.ready && available.has(selectedPresentation) &&
     (campaign.id !== "ttw" || selectedTtwOpening?.interactiveReady));
   launchButton.disabled = !routeLaunchable;
-  launchButton.textContent = routeLaunchable ? `Play ${campaign.title}` : "Not ready";
+  const previewOnly = campaign.presentationStatus?.[selectedPresentation]?.previewOnly;
+  launchButton.textContent = routeLaunchable
+    ? (previewOnly ? `Open ${campaign.title} preview` : `Play ${campaign.title}`)
+    : "Not ready";
   launchButton.title = routeLaunchable ? "Launch this path" : (campaign.readiness || state.runtime.label);
   document.querySelector("#platform-label").textContent = `${state.runtime.platform.toUpperCase()} / ${state.runtime.source.toUpperCase()}`;
   renderCampaigns();

@@ -82,6 +82,7 @@ internal static partial class FalloutExecutableStringTable
             // the argument stack, then pass the name and descriptor to its
             // constructor. Values and identities both belong to the owned PE.
             int valueAt, nameAt, objectAt;
+            var constantAt = -1;
             if (candidate.Length >= 28 && candidate[..6].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x51, 0xd9, 0x05 }) &&
                 candidate.Slice(10, 4).SequenceEqual(new byte[] { 0xd9, 0x1c, 0x24, 0x68 }) &&
                 candidate[18] == 0xb9 && candidate[23] == 0xe8)
@@ -93,18 +94,28 @@ internal static partial class FalloutExecutableStringTable
                 candidate.Slice(6, 5).SequenceEqual(new byte[] { 0x51, 0xd9, 0x1c, 0x24, 0x68 }) &&
                 candidate[15] == 0xb9 && candidate[20] == 0xe8)
                 (valueAt, nameAt, objectAt) = (2, 11, 16);
+            else if (candidate.Length >= 24 && candidate[..5].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x51, 0xd9 }) &&
+                candidate[5] is 0xe8 or 0xee && candidate.Slice(6, 4).SequenceEqual(new byte[] { 0xd9, 0x1c, 0x24, 0x68 }) &&
+                candidate[14] == 0xb9 && candidate[19] == 0xe8)
+            {
+                (valueAt, nameAt, objectAt) = (-1, 10, 15);
+                constantAt = 5;
+            }
             // The x87 unit/zero constant form also schedules the receiver
             // before the name argument. Its literal is encoded by the load,
             // not a guessed fallback for a particular setting.
             else if (candidate[0] == 0xd9 && candidate[1] is 0xe8 or 0xee &&
                 candidate.Slice(2, 5).SequenceEqual(new byte[] { 0x51, 0xd9, 0x1c, 0x24, 0xb9 }) &&
                 candidate[11] == 0x68 && candidate[16] == 0xe8)
+            {
                 (valueAt, nameAt, objectAt) = (-1, 12, 7);
+                constantAt = 1;
+            }
             else continue;
             if (!writableObject(U32(candidate, objectAt))) continue;
             var name = literal(U32(candidate, nameAt));
             if (name is null || !Regex.IsMatch(name, @"^f[A-Z][A-Za-z0-9_]+(?::[A-Za-z0-9_]+)?$", RegexOptions.CultureInvariant)) continue;
-            var value = valueAt < 0 ? (candidate[1] == 0xe8 ? 1.0f : 0.0f) : constant(U32(candidate, valueAt));
+            var value = valueAt < 0 ? (candidate[constantAt] == 0xe8 ? 1.0f : 0.0f) : constant(U32(candidate, valueAt));
             if (!float.IsFinite(value)) throw new InvalidDataException($"Owned float setting is non-finite: {name}.");
             if (!result.TryAdd(name, value)) throw new InvalidDataException($"Multiple source initializers declare {name}.");
         }
@@ -123,13 +134,23 @@ internal static partial class FalloutExecutableStringTable
         for (var at = 0; at <= code.Length - 23; ++at)
         {
             var candidate = code[at..];
-            if (!candidate[..4].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x68 }) ||
-                candidate[8] != 0x68 || candidate[13] != 0xb9 || candidate[18] != 0xe8)
-                continue;
-            if (!writableObject(U32(candidate, 14))) continue;
-            var name = literal(U32(candidate, 9));
+            int nameAt, valueAt;
+            if (candidate[..4].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x68 }) &&
+                candidate[8] == 0x68 && candidate[13] == 0xb9 && candidate[18] == 0xe8 &&
+                writableObject(U32(candidate, 14)))
+                (nameAt, valueAt) = (9, 4);
+            // Allocated setting descriptors use the same literal arguments.
+            // Their constructor is guarded by a null test of the stack-local
+            // receiver. Require that the tested and called receiver agree.
+            else if (candidate.Length >= 24 && candidate[0] == 0x83 && candidate[1] == 0x7d &&
+                candidate[3] == 0 && candidate[4] == 0x74 && candidate[6] == 0x68 &&
+                candidate[11] == 0x68 && candidate[16] == 0x8b && candidate[17] == 0x4d &&
+                candidate[18] == candidate[2] && candidate[19] == 0xe8)
+                (nameAt, valueAt) = (12, 7);
+            else continue;
+            var name = literal(U32(candidate, nameAt));
             if (name is null || !Regex.IsMatch(name, @"^s[A-Z][A-Za-z0-9_]+$", RegexOptions.CultureInvariant)) continue;
-            var value = literal(U32(candidate, 4));
+            var value = literal(U32(candidate, valueAt));
             if (value is null) continue;
             if (!result.TryAdd(name, value)) throw new InvalidDataException($"Multiple source initializers declare {name}.");
         }

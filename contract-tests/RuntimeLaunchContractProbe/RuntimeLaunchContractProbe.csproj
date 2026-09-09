@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\runtime\src\RuntimeLaunchRequest.cs" Link="RuntimeLaunchRequest.cs" />
+    <Compile Include="..\..\runtime\src\RuntimeLaunchValidator.cs" Link="RuntimeLaunchValidator.cs" />
+    <Compile Include="..\..\runtime\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
+  </ItemGroup>
+</Project>

@@ -5,6 +5,41 @@ using System.Security.Cryptography;
 var traceDirectory = Path.Combine(Path.GetTempPath(), "opennv-trace-contract-" + Guid.NewGuid().ToString("N"));
 try
 {
+    Directory.CreateDirectory(traceDirectory);
+    var livePath = Path.Combine(traceDirectory, "live-state.json");
+    LiveHarnessAtomicFile.Write(livePath, "{\"sequence\":0}");
+    using (var oldReader = new StreamReader(new FileStream(livePath, FileMode.Open, FileAccess.Read,
+        FileShare.ReadWrite | FileShare.Delete)))
+    {
+        for (var sequence = 1; sequence <= 64; sequence++)
+        {
+            var expected = $"{{\"sequence\":{sequence}}}";
+            LiveHarnessAtomicFile.Write(livePath, expected);
+            if (File.ReadAllText(livePath) != expected)
+                throw new InvalidOperationException("An open telemetry reader prevented complete snapshot replacement.");
+        }
+        if (oldReader.ReadToEnd() != "{\"sequence\":0}")
+            throw new InvalidOperationException("Telemetry replacement modified a reader's in-flight snapshot.");
+    }
+    using (var exclusiveReader = new FileStream(livePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        if (LiveHarnessAtomicFile.TryRead(livePath, out var blockedText, out var blockedError) ||
+            blockedText.Length != 0 || string.IsNullOrEmpty(blockedError))
+            throw new InvalidOperationException("A locked command lost its visible retry outcome.");
+    if (!LiveHarnessAtomicFile.TryRead(livePath, out var retriedText, out var retryError) ||
+        retriedText != "{\"sequence\":64}" || retryError is not null)
+        throw new InvalidOperationException("A released command did not return its complete original payload.");
+    File.Delete(livePath);
+    var cadence = new FrameIntervalWindow();
+    if (cadence.Capture() is not null) throw new InvalidOperationException("Unobserved cadence reported timing.");
+    double timestamp = 0;
+    cadence.Record(timestamp);
+    for (var index = 0; index < 100; index++) cadence.Record(timestamp += index == 99 ? 100 : 10);
+    if (cadence.Capture() is not { Samples: 100, MedianMilliseconds: 10, P95Milliseconds: 10, MaximumMilliseconds: 100 })
+        throw new InvalidOperationException("Frame cadence concealed a single long hitch.");
+    for (var index = 0; index < 512; index++) cadence.Record(timestamp += 12);
+    if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 12, P99Milliseconds: 12, MaximumMilliseconds: 12 })
+        throw new InvalidOperationException("Frame cadence did not retire its bounded previous window.");
+    Console.WriteLine("OPENNV_LIVE_DIAGNOSTIC_CONTRACT_OK replacementWithReader=64 oldSnapshotIntact=true commandReadRetry=true boundedCadence=512 hitchVisible=true");
     var store = new RenderTraceBlobStore(traceDirectory);
     byte[] payload = [0, 0, 0, 0x80, 7, 3, 255];
     var first = store.Put(payload);
@@ -177,6 +212,33 @@ if (eventOrdinal != 1 || registrySnapshot.EventOrdinal != 1 ||
     throw new InvalidOperationException(
         "Live parity discovery, observation, event, or missing-state accounting differs.");
 
+void CheckCoverage(ParityObservationRegistry observations)
+{
+    var coverage = observations.Coverage();
+    var snapshot = observations.Snapshot();
+    if (coverage.EventOrdinal != snapshot.EventOrdinal || coverage.Discovered != snapshot.Discovered ||
+        coverage.Observed != snapshot.Observed || !coverage.Missing.SequenceEqual(snapshot.Missing))
+        throw new InvalidOperationException("Summary coverage differs from the full canonical observation snapshot.");
+}
+CheckCoverage(registry);
+var canonicalBefore = ParityTelemetryCodec.Encode(retail with { Fields = registrySnapshot.Fields });
+_ = registry.Coverage();
+if (!canonicalBefore.SequenceEqual(ParityTelemetryCodec.Encode(retail with { Fields = registry.Snapshot().Fields })))
+    throw new InvalidOperationException("Reading summary coverage changed canonical observation bytes.");
+registry.Observe("cell:FalloutNV.esm:103df9", "FalloutNV.esm:104c0f", [12, 13]);
+CheckCoverage(registry);
+if (registry.Coverage().Missing.Count != 0)
+    throw new InvalidOperationException("Coverage retained an observed identity as missing.");
+registry.ReplaceScope("cell:FalloutNV.esm:103df9", [("replacement", ParityCategory.World, new byte[] { 14 })]);
+CheckCoverage(registry);
+if (registry.Coverage().Missing.Single() != "cell:FalloutNV.esm:103df9/replacement")
+    throw new InvalidOperationException("Scope replacement retained stale coverage identities.");
+registry.RecordEvent(ParityCategory.Input, "second-event", [15]);
+CheckCoverage(registry);
+if (registry.Coverage().EventOrdinal != 2 || registry.Coverage().Discovered != 3)
+    throw new InvalidOperationException("Summary coverage lost a newly recorded event.");
+Console.WriteLine("OPENNV_PARITY_COVERAGE_CONTRACT_OK observe=true scopeReplacement=true events=true canonicalBytes=unchanged");
+
 var corrupt = encoded.ToArray();
 corrupt[^1] ^= byte.MaxValue;
 try
@@ -302,12 +364,17 @@ try
         catch (InvalidDataException)
         {
         }
+        using var capturedIndex = new StreamReader(new FileStream(Path.Combine(frameRoot, "frames.jsonl"),
+            FileMode.Open, FileAccess.Read, FileShare.ReadWrite));
+        if (!File.ReadAllBytes(Path.Combine(frameRoot, "0000000001.pixels")).AsSpan().SequenceEqual(pixelLeft) ||
+            capturedIndex.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries).Length != 1 ||
+            ParityTelemetryCodec.Decode(File.ReadAllBytes(Path.Combine(frameRoot, "0000000001.before.onvpacket")))
+                .Sequence != 1)
+            throw new InvalidOperationException("Viewport capture changed pixel bytes or lost its state association.");
     }
-    if (!File.ReadAllBytes(Path.Combine(frameRoot, "0000000001.pixels")).AsSpan().SequenceEqual(pixelLeft) ||
-        File.ReadLines(Path.Combine(frameRoot, "frames.jsonl")).Count() != 1 ||
-        ParityTelemetryCodec.Decode(File.ReadAllBytes(Path.Combine(frameRoot, "0000000001.before.onvpacket")))
-            .Sequence != 1)
-        throw new InvalidOperationException("Viewport capture changed pixel bytes or lost its state association.");
+    if (Directory.Exists(frameRoot)) throw new InvalidOperationException("Viewport capture left temporary frames after disposal.");
+    TemporaryCaptureDirectory.DeleteIfOwned(traceRoot);
+    if (!File.Exists(tracePath)) throw new InvalidOperationException("Capture cleanup deleted a directory it did not own.");
 }
 finally
 {

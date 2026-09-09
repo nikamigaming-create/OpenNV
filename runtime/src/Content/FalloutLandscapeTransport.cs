@@ -17,12 +17,23 @@ internal sealed record FalloutLandscapeLayer(
     IReadOnlyList<FalloutLandscapeOpacity> Opacities);
 
 internal sealed record FalloutLandscapeTexture(
-    FalloutFormKey LandscapeTexture,
+    FalloutFormKey? LandscapeTexture,
     string LandscapeTextureEditorId,
-    FalloutFormKey TextureSet,
+    FalloutFormKey? TextureSet,
     string TextureSetEditorId,
     string DiffusePath,
-    string? NormalPath);
+    string? NormalPath,
+    FalloutLandscapePhysics? Physics = null);
+
+internal readonly record struct FalloutLandscapePhysics(byte Material, byte Friction, byte Restitution)
+{
+    internal static FalloutLandscapePhysics Read(ReadOnlySpan<byte> data)
+    {
+        if (data.Length != 3) throw new InvalidDataException("LTEX HNAM must contain material, friction and restitution bytes.");
+        if (data[0] > 31) throw new NotSupportedException($"LTEX Havok material {data[0]} is unbound.");
+        return new(data[0], data[1], data[2]);
+    }
+}
 
 internal sealed record FalloutLandscapeTransport(
     FalloutFormKey PersistentDestinationCell,
@@ -61,7 +72,8 @@ internal static class FalloutLandscapeTransportResolver
 
     internal static FalloutLandscapeTransport Resolve(
         FalloutPluginStack stack,
-        FalloutDoorTransition transition)
+        FalloutDoorTransition transition,
+        FalloutLandscapeTexture? defaultTexture = null)
     {
         var entry = transition.SourceDoor.Teleport ??
             throw new InvalidDataException("Native LAND entry door has no XTEL transform.");
@@ -88,7 +100,17 @@ internal static class FalloutLandscapeTransportResolver
             transition.DestinationScene.Cell.FormKey,
             cell.FormKey,
             coordinates,
-            transition.DestinationWorldspace);
+            transition.DestinationWorldspace, defaultTexture);
+    }
+
+    internal static FalloutLandscapeTransport ResolveCell(FalloutPluginStack stack, FalloutCellDefinition cell, FalloutFormKey persistentCell,
+        FalloutLandscapeTexture? defaultTexture = null)
+    {
+        var records = stack.EffectiveCellChildren(cell.FormKey, new HashSet<string> { "LAND" }).ToArray();
+        if (records.Length != 1) throw new InvalidDataException($"Exterior CELL {cell.FormKey} has {records.Length} LAND records.");
+        return ReadLandscape(stack, records[0], persistentCell, cell.FormKey,
+            cell.Coordinates ?? throw new InvalidDataException("Landscape CELL has no grid coordinates."),
+            cell.Worldspace ?? throw new InvalidDataException("Landscape CELL has no worldspace."), defaultTexture);
     }
 
     private static FalloutLandscapeTransport ReadLandscape(
@@ -97,7 +119,8 @@ internal static class FalloutLandscapeTransportResolver
         FalloutFormKey persistentDestinationCell,
         FalloutFormKey activeCell,
         (int X, int Y) coordinates,
-        FalloutFormKey worldspace)
+        FalloutFormKey worldspace,
+        FalloutLandscapeTexture? defaultTexture)
     {
         var source = record.ReadSubrecords().ToArray();
         var data = RequiredSingle(source, "DATA", record);
@@ -115,16 +138,17 @@ internal static class FalloutLandscapeTransportResolver
         var colors = colorRows.Length == 0
             ? Enumerable.Repeat(byte.MaxValue, ColorBytes).ToArray()
             : ReadColors(colorRows[0].Data, record);
-        var baseLayers = source.Where(value => value.Signature == "BTXT")
+        var authoredBases = source.Where(value => value.Signature == "BTXT")
             .Select(value => ReadLayerHeader(record, value.Data, "BTXT", baseLayer: true))
             .ToArray();
-        var quadrants = baseLayers.Select(value => value.Quadrant).ToArray();
-        if (baseLayers.Length != 4 || quadrants.Distinct().Count() != 4 ||
-            quadrants.Any(value => value > 3))
-            throw new NotSupportedException(
-                $"Native LAND {record.FormKey} must author one BTXT for each quadrant; found " +
-                $"[{string.Join(',', quadrants)}]. No prepared/default texture is substituted.");
-        var baseByQuadrant = baseLayers.ToDictionary(value => value.Quadrant);
+        if (authoredBases.Select(value => value.Quadrant).Distinct().Count() != authoredBases.Length)
+            throw Error(record, "duplicates a BTXT quadrant");
+        var baseByQuadrant = authoredBases.ToDictionary(value => value.Quadrant);
+        // An omitted (or null) BTXT selects the installation's Landscape defaults.
+        // It does not remove the quadrant's geometry or its authored alpha layers.
+        for (byte quadrant = 0; quadrant < 4; quadrant++)
+            baseByQuadrant.TryAdd(quadrant, new(new(record.Plugin.Name, 0), quadrant, 0, 0, true, []));
+        var baseLayers = baseByQuadrant.Values.OrderBy(value => value.Quadrant).ToArray();
         var alphaLayers = new List<FalloutLandscapeLayer>();
         FalloutLandscapeLayer? pending = null;
         foreach (var subrecord in source)
@@ -158,7 +182,10 @@ internal static class FalloutLandscapeTransportResolver
             throw Error(record, "duplicates an ATXT quadrant/layer index");
         var textures = baseLayers.Concat(alphaLayers).Select(value => value.Texture)
             .Distinct()
-            .ToDictionary(key => key, key => ReadTexture(stack, key));
+            .ToDictionary(key => key, key => key.ObjectId == 0
+                ? defaultTexture ?? ReadDefaultTexture(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current ??
+                    throw new InvalidOperationException("Default LAND texture has no owned installation.")))
+                : ReadTexture(stack, key));
         return new FalloutLandscapeTransport(
             persistentDestinationCell,
             activeCell,
@@ -183,8 +210,6 @@ internal static class FalloutLandscapeTransportResolver
         if (data.Length != LayerHeaderBytes)
             throw Error(record, $"{signature} must contain {LayerHeaderBytes} bytes");
         var rawTexture = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        if (baseLayer && rawTexture == 0)
-            throw Error(record, $"{signature} has a null base texture");
         var quadrant = data.Span[sizeof(uint)];
         if (quadrant > 3)
             throw Error(record, $"{signature} has invalid quadrant {quadrant}");
@@ -195,8 +220,22 @@ internal static class FalloutLandscapeTransportResolver
             quadrant,
             BinaryPrimitives.ReadUInt16LittleEndian(data.Span[(sizeof(uint) + 2)..]),
             data.Span[sizeof(uint) + 1],
-            UsesQuadrantDefault: false,
+            UsesQuadrantDefault: baseLayer && rawTexture == 0,
             []);
+    }
+
+    internal static FalloutLandscapeTexture ReadDefaultTexture(FalloutInstallationSettings settings)
+    {
+        static string Path(string value)
+        {
+            var path = value.Replace('/', '\\').TrimStart('\\');
+            if (path.Length == 0) throw new InvalidDataException("Default LAND texture path is empty.");
+            if (path.StartsWith("textures\\", StringComparison.OrdinalIgnoreCase)) return NormalizeTexturePath(path);
+            return NormalizeTexturePath(path.StartsWith("landscape\\", StringComparison.OrdinalIgnoreCase) ? path : "landscape\\" + path);
+        }
+        return new(null, string.Empty, null, string.Empty,
+            Path(settings.Require("Landscape", "SDefaultLandDiffuseTexture")),
+            Path(settings.Require("Landscape", "SDefaultLandNormalTexture")));
     }
 
     private static IReadOnlyList<FalloutLandscapeOpacity> ReadOpacities(
@@ -288,13 +327,15 @@ internal static class FalloutLandscapeTransportResolver
         if (txst.Signature != "TXST")
             throw Error(txst, $"resolved LAND texture set {textureSetKey} is not TXST");
         var txstRows = txst.ReadSubrecords().ToArray();
+        var physics = ltexRows.Where(row => row.Signature == "HNAM").ToArray();
         return new FalloutLandscapeTexture(
             key,
             ReadOptionalText(ltexRows, "EDID", ltex),
             textureSetKey,
             ReadOptionalText(txstRows, "EDID", txst),
             NormalizeTexturePath(ReadRequiredText(txstRows, "TX00", txst)),
-            ReadOptionalPath(txstRows, "TX01", txst));
+            ReadOptionalPath(txstRows, "TX01", txst),
+            physics.Length == 0 ? null : FalloutLandscapePhysics.Read(physics.Single().Data.Span));
     }
 
     private static bool HasWorldspace(FalloutPluginRecord record, FalloutFormKey worldspace)

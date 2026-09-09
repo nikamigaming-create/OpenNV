@@ -2,12 +2,12 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum FalloutHudEventKind { ItemAdded, Message }
+internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted }
 
 // The event retains source identity and command order. Text, icons and timing
 // are resolved from the winning graph when presented, never baked into saves.
 internal sealed record FalloutHudEvent(FalloutHudEventKind Kind, FalloutFormKey Source, int Count,
-    FalloutFormKey? Quest = null, FalloutFormKey? Script = null);
+    FalloutFormKey? Quest = null, FalloutFormKey? Script = null, uint? ObjectiveIndex = null);
 internal sealed record FalloutHudNotice(long Ordinal, FalloutHudEvent Event);
 internal sealed record FalloutHudNotificationsSnapshot(long LastOrdinal, FalloutHudNotice? Current,
     double Elapsed, IReadOnlyList<FalloutHudNotice> Pending);
@@ -23,7 +23,13 @@ internal sealed class FalloutHudNotifications
     internal static void Validate(IReadOnlyList<FalloutHudEvent> events)
     {
         if (events.Any(value => value.Source.ObjectId == 0 || string.IsNullOrWhiteSpace(value.Source.OwnerPlugin) ||
-            (value.Kind switch { FalloutHudEventKind.ItemAdded => value.Count <= 0, FalloutHudEventKind.Message => value.Count != 0, _ => true })))
+            (value.Kind switch
+            {
+                FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved => value.Count <= 0 || value.ObjectiveIndex is not null,
+                FalloutHudEventKind.Message => value.Count != 0 || value.ObjectiveIndex is not null,
+                FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted => value.Count != 0 || value.ObjectiveIndex is null,
+                _ => true,
+            })))
             throw new InvalidDataException("HUD event has invalid source identity, kind or count.");
     }
 

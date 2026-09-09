@@ -3,7 +3,9 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutRegionWeatherSnapshot(FalloutFormKey Region, FalloutFormKey Weather);
-internal sealed record FalloutSkyLightingSnapshot(FalloutFormKey Climate, IReadOnlyList<FalloutRegionWeatherSnapshot> Regions);
+internal sealed record FalloutSkyLightingSnapshot(FalloutFormKey Climate, IReadOnlyList<FalloutRegionWeatherSnapshot> Regions,
+    FalloutFormKey? ForcedWeather = null, FalloutFormKey? ExteriorWeather = null, ulong? RandomState = null,
+    FalloutFormKey? ClimateWeather = null);
 
 /// <summary>Shared sky/climate identity and region weather caches; renderers only sample this state.</summary>
 internal sealed class FalloutSkyLightingState
@@ -14,10 +16,21 @@ internal sealed class FalloutSkyLightingState
     private readonly float _daytimeExtension;
     private FalloutClimateLighting _climate;
     private string? _unbound;
+    private readonly FalloutSoundRandomState _random = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+    internal FalloutFormKey? ExteriorWeather { get; private set; }
+    private FalloutFormKey? _climateWeather;
+    internal FalloutWeatherLighting ActiveWeather => Weather(ForcedWeather ?? ExteriorWeather ?? DefaultWeather);
     internal string? Unbound => _unbound;
     internal FalloutFormKey DefaultWeather { get; }
     internal FalloutClimateLighting Climate => _climate;
     internal float DaytimeExtension => _daytimeExtension;
+    internal FalloutFormKey? ForcedWeather { get; private set; }
+    internal void ForceWeather(FalloutFormKey weather)
+    {
+        _ = Weather(weather);
+        ForcedWeather = weather;
+    }
+    internal void ReleaseWeatherOverride() => ForcedWeather = null;
 
     internal FalloutSkyLightingState(FalloutPluginStack records, float daytimeExtension)
     {
@@ -37,7 +50,7 @@ internal sealed class FalloutSkyLightingState
     {
         RequireBound();
         return new(_climate.Form, _regions.OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
-            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray());
+            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather);
     }
 
     internal void Restore(FalloutSkyLightingSnapshot snapshot)
@@ -52,6 +65,10 @@ internal sealed class FalloutSkyLightingState
             if (!regions.TryAdd(row.Region, row.Weather)) throw new InvalidDataException("Saved sky repeats a region weather cache.");
         }
         _climate = climate;
+        ForcedWeather = snapshot.ForcedWeather;
+        ExteriorWeather = snapshot.ExteriorWeather;
+        _climateWeather = snapshot.ClimateWeather;
+        if (snapshot.RandomState is { } random) _random.Restore(random);
         _regions.Clear();
         foreach (var row in regions) _regions.Add(row.Key, row.Value);
         _unbound = null;
@@ -60,6 +77,13 @@ internal sealed class FalloutSkyLightingState
     internal static void ValidateSnapshot(FalloutPluginStack records, FalloutSkyLightingSnapshot snapshot)
     {
         _ = FalloutClimateLighting.Read(records.GetEffective(snapshot.Climate));
+        if (snapshot.ForcedWeather is { } forced) _ = FalloutWeatherLighting.Read(records.GetEffective(forced));
+        if (snapshot.ClimateWeather is { } climateWeather) _ = FalloutWeatherLighting.Read(records.GetEffective(climateWeather));
+        if (snapshot.ExteriorWeather is { } exterior)
+        {
+            _ = FalloutWeatherLighting.Read(records.GetEffective(exterior));
+            if (snapshot.RandomState is null) throw new InvalidDataException("Saved exterior sky has no random continuation.");
+        }
         if (snapshot.Regions is null) throw new InvalidDataException("Saved sky has no region cache collection.");
         var seen = new HashSet<FalloutFormKey>();
         foreach (var row in snapshot.Regions)
@@ -70,11 +94,24 @@ internal sealed class FalloutSkyLightingState
         }
     }
 
-    internal void EnterCell(FalloutCellDefinition cell)
+    internal void EnterCell(FalloutCellDefinition cell, FalloutGlobalState? globals = null, float[]? position = null)
     {
         if ((cell.Flags & 1) == 0)
         {
-            MarkUnbound("Exterior climate, weather selection and transitions have no runtime owner yet.");
+            var world = cell.Worldspace ?? throw new InvalidDataException("Exterior CELL has no worldspace.");
+            var climate = FalloutExteriorClimate.Resolve(_records, world);
+            var changed = _climate.Form != climate;
+            _climate = FalloutClimateLighting.Read(_records.GetEffective(climate));
+            if (changed || _climateWeather is null)
+                _climateWeather = FalloutExteriorClimate.SelectWeather(_records, climate, globals, _random);
+            ExteriorWeather = _climateWeather;
+            if (position is { Length: 3 } && FalloutExteriorClimate.WeatherRegion(_records, cell, position[0], position[1]) is { } region)
+            {
+                if (!_regions.TryGetValue(region, out var selected))
+                    _regions.Add(region, selected = FalloutExteriorClimate.SelectWeather(_records, region, globals, _random));
+                ExteriorWeather = selected;
+            }
+            _unbound = null;
             return;
         }
         var fields = _records.GetEffective(cell.FormKey).ReadSubrecords().Where(field => field.Signature == "XCCM").ToArray();
@@ -92,7 +129,7 @@ internal sealed class FalloutSkyLightingState
     {
         RequireBound();
         RequireRegion(region);
-        var weather = Weather(_regions.GetValueOrDefault(region, DefaultWeather));
+        var weather = Weather(ForcedWeather ?? _regions.GetValueOrDefault(region, DefaultWeather));
         return weather.Sample(FalloutWeatherTimeWeights.Sample(_climate, gameHour, _daytimeExtension));
     }
 

@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutImageSpace(
     FalloutFormKey Form, ushort FormVersion, string DnamSha256, float[] RawTraits,
-    float? SkinDimmer, Vector4 Cinematic, Vector4 Tint, byte? CinematicFlags)
+    float? SkinDimmer, Vector4 Cinematic, Vector4 Tint, byte[] ReservedData)
 {
     internal float TargetLuminance => RawTraits[4];
     internal float BrightScale => RawTraits[6];
@@ -27,6 +27,35 @@ internal static class FalloutImageSpaceReader
         return key is null ? null : Read(stack.GetEffective(key.Value));
     }
 
+    internal static FalloutImageSpace? ForWorld(FalloutPluginStack stack, FalloutFormKey world)
+    {
+        var seen = new HashSet<FalloutFormKey>();
+        while (seen.Add(world))
+        {
+            var record = stack.GetEffective(world);
+            if (record.Signature != "WRLD") throw new InvalidDataException("Image-space owner is not a WRLD.");
+            var fields = record.ReadSubrecords().ToArray();
+            FalloutFormKey? Link(string signature)
+            {
+                var rows = fields.Where(field => field.Signature == signature).ToArray();
+                if (rows.Length == 0) return null;
+                if (rows.Length != 1 || rows[0].Data.Length != 4)
+                    throw new InvalidDataException($"WRLD {world} has an invalid {signature} link.");
+                return record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(rows[0].Data.Span));
+            }
+            // Unlike the other inheritance flags, an explicit INAM wins even
+            // when Use Image Space Data is set on this world's parent link.
+            if (Link("INAM") is { } image) return Read(stack.GetEffective(image));
+            var flags = fields.Where(field => field.Signature == "PNAM").ToArray();
+            if (flags.Length > 1 || flags.Length == 1 && flags[0].Data.Length != 2)
+                throw new InvalidDataException($"WRLD {world} has invalid parent flags.");
+            if (flags.Length == 0 || (BinaryPrimitives.ReadUInt16LittleEndian(flags[0].Data.Span) & 32) == 0 ||
+                Link("WNAM") is not { } parent) return null;
+            world = parent;
+        }
+        throw new InvalidDataException("World image-space inheritance contains a cycle.");
+    }
+
     internal static FalloutImageSpace Read(FalloutPluginRecord record)
     {
         if (record.Signature != "IMGS") throw new InvalidDataException("XCIM target is not IMGS.");
@@ -35,17 +64,15 @@ internal static class FalloutImageSpaceReader
         return Decode(record.FormKey, record.FormVersion, fields[0].Data.Span);
     }
 
-    // The pre-v10 layout has no Skin Dimmer. Reading it as 33 consecutive
-    // traits shifts every cinematic field and interprets reserved bytes as tint.
+    // The runtime selects the Skin Dimmer layout by DNAM extent, not form
+    // version. In particular, 148-byte v11/v13 records still have 32 traits.
+    // Editor bookkeeping after the traits is not a cinematic enable mask.
     internal static FalloutImageSpace Decode(FalloutFormKey form, ushort version, ReadOnlySpan<byte> data)
     {
-        var hasSkinDimmer = version >= 10;
+        if (data.Length is not (132 or 148 or 152))
+            throw new InvalidDataException($"IMGS {form} v{version} DNAM has unsupported extent {data.Length}.");
+        var hasSkinDimmer = data.Length == 152;
         var traitCount = hasSkinDimmer ? 33 : 32;
-        var reservedBytes = hasSkinDimmer ? 16 : 4;
-        var flagsBytes = version >= 13 ? 4 : 0;
-        var expectedBytes = traitCount * 4 + reservedBytes + flagsBytes;
-        if (data.Length != expectedBytes)
-            throw new InvalidDataException($"IMGS {form} v{version} DNAM has {data.Length} bytes; expected {expectedBytes}.");
         var traits = new float[traitCount];
         for (var index = 0; index < traits.Length; index++)
         {
@@ -55,16 +82,7 @@ internal static class FalloutImageSpaceReader
         var cinematicStart = hasSkinDimmer ? 25 : 24;
         var cinematic = new Vector4(traits[cinematicStart], traits[cinematicStart + 1], traits[cinematicStart + 2], traits[cinematicStart + 3]);
         var tint = new Vector4(traits[cinematicStart + 4], traits[cinematicStart + 5], traits[cinematicStart + 6], traits[cinematicStart + 7]);
-        byte? flags = flagsBytes == 0 ? null : data[traitCount * 4 + reservedBytes];
-        if (flags is { } enabled)
-        {
-            if ((enabled & ~15) != 0) throw new NotSupportedException($"IMGS {form} uses unknown cinematic flags 0x{enabled:x2}.");
-            if ((enabled & 1) == 0) cinematic.X = 1;
-            if ((enabled & 2) == 0) { cinematic.Y = 0; cinematic.Z = 1; }
-            if ((enabled & 4) == 0) tint.W = 0;
-            if ((enabled & 8) == 0) cinematic.W = 1;
-        }
         return new(form, version, Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant(), traits,
-            hasSkinDimmer ? traits[14] : null, cinematic, tint, flags);
+            hasSkinDimmer ? traits[14] : null, cinematic, tint, data[(traitCount * 4)..].ToArray());
     }
 }

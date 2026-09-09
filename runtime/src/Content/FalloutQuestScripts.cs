@@ -5,7 +5,8 @@ using OpenNV.Runtime.World.Cells;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, string Text,
-    bool Modal, IReadOnlyList<string> Buttons, FalloutFormKey? Icon = null, uint? DisplaySeconds = null, bool AutomaticTime = false)
+    bool Modal, IReadOnlyList<string> Buttons, FalloutFormKey? Icon = null, uint? DisplaySeconds = null, bool AutomaticTime = false,
+    FalloutMessageRequest? Request = null)
 {
     internal static FalloutSourceMessage Read(FalloutPluginRecord record)
     {
@@ -38,12 +39,20 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
 internal sealed record FalloutQuestScriptSnapshot(FalloutFormKey Quest, FalloutFormKey Script,
     double Remaining, long Executions, string? Error, FalloutQuestScriptClockSnapshot? Clock = null);
 internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScriptSnapshot> Instances,
-    IReadOnlyList<FalloutFormKey> Messages, FalloutHudNotificationsSnapshot? Notifications = null)
+    IReadOnlyList<FalloutMessageRequest> Messages, FalloutHudNotificationsSnapshot? Notifications = null,
+    FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
+    IReadOnlyList<FalloutFormKey>? SaidInfos = null)
 {
     internal void Validate()
     {
         if (Instances is null || Messages is null)
             throw new InvalidDataException("Saved quest script owners are missing.");
+        if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
+            throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
+        if (Messages.Count != 0 && MessageResults is null ||
+            Messages.Any(message => message is null || message.Sequence == 0 || message.Sequence > MessageResults?.Sequence) ||
+            Messages.Select(message => message.Sequence).Distinct().Count() != Messages.Count)
+            throw new InvalidDataException("Saved messages have no valid result ownership.");
         var quests = new HashSet<FalloutFormKey>();
         var definitions = new Dictionary<FalloutFormKey, FalloutQuestScriptClockSnapshot>();
         foreach (var instance in Instances)
@@ -63,8 +72,30 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
     }
 }
 
+internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements);
+internal sealed class FalloutScriptSession
+{
+    internal bool Hardcore { get; set; }
+    internal bool AutoDisplayObjectives { get; set; }
+    private readonly HashSet<int> _achievements = [];
+    internal void AddAchievement(int id)
+    {
+        if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
+        _achievements.Add(id);
+    }
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray());
+    internal void Restore(FalloutScriptSessionSnapshot state)
+    {
+        if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
+            throw new InvalidDataException("Saved script session state is invalid.");
+        Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
+        _achievements.Clear(); _achievements.UnionWith(state.Achievements);
+    }
+}
+
 internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action> PrepareSetStage,
-    Func<string, double> PlayerActorValue);
+    Func<string, double> PlayerActorValue,
+    Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -91,6 +122,10 @@ internal sealed class FalloutQuestScripts
     private readonly Queue<FalloutSourceMessage> _messages = [];
     private readonly FalloutQuestScriptInitialization _initialization;
     internal FalloutReferenceWorld? References { get; }
+    internal FalloutQuestScriptHost? Host { get; set; }
+    internal FalloutMessageResults MessageResults { get; } = new();
+    internal FalloutScriptSession Session { get; } = new();
+    internal HashSet<FalloutFormKey> SaidInfos { get; } = [];
     internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
     internal void SetVariable(FalloutFormKey owner, uint index, double value)
     {
@@ -104,20 +139,33 @@ internal sealed class FalloutQuestScripts
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
+        messageResults = MessageResults.Capture(),
         notifications = _inventory.Notifications.Capture(),
+        session = Session.Capture(),
         objectives = _quests.ObjectiveState,
         variables = _quests.VariableState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
-        scheduling = "shared SCPT clocks; claimed GameMode uses the active result-script host; exact MenuMode admission and dynamic quest scheduling unbound",
+        scheduling = "shared SCPT clocks; running quest admission and retained stop/restart clocks; exact retail MenuMode scheduling unverified",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
     internal bool TryTakeMessage(out FalloutSourceMessage? message) => _messages.TryDequeue(out message);
 
+    internal void ShowMessage(FalloutFormKey form, FalloutFormKey? script = null, FalloutFormKey? caller = null)
+    {
+        var message = FalloutSourceMessage.Read(_records.GetEffective(form));
+        var owner = caller is { } reference && _records.RuntimeFormId(reference) != 0x14 ? reference :
+            script ?? throw new NotSupportedException("ShowMessage has no executing reference or SCPT owner.");
+        message = message with { Request = MessageResults.Begin(form, owner) };
+        if (message.Modal) _messages.Enqueue(message);
+        else _inventory.Notifications.Publish([new(FalloutHudEventKind.Message, message.Form, 0, Script: script)]);
+    }
+
     internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null) => new(
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
             instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture())).ToArray(),
-        (displayed is null ? Enumerable.Empty<FalloutFormKey>() : [displayed.Form]).Concat(_messages.Select(message => message.Form)).ToArray(),
-        _inventory.Notifications.Capture());
+        (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
+            .Concat(_messages.Select(message => message.Request!)).ToArray(),
+        _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray());
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
@@ -134,9 +182,16 @@ internal sealed class FalloutQuestScripts
             if (state.Script != instance.Script.FormKey)
                 throw new InvalidDataException("Saved quest script scheduling is invalid.");
         }
-        var messages = snapshot.Messages.Select(form => FalloutSourceMessage.Read(_records.GetEffective(form))).ToArray();
+        var messages = snapshot.Messages.Select(request => FalloutSourceMessage.Read(_records.GetEffective(request.Form)) with { Request = request }).ToArray();
         if (messages.Any(message => !message.Modal)) throw new NotSupportedException("Saved message needs a timed HUD owner.");
         if (snapshot.Notifications is { } notifications) _inventory.Notifications.Restore(notifications);
+        if (snapshot.MessageResults is { } results) MessageResults.Restore(results);
+        if (snapshot.Session is { } session) Session.Restore(session);
+        foreach (var info in snapshot.SaidInfos ?? [])
+        {
+            if (_records.GetEffective(info).Signature != "INFO") throw new InvalidDataException("Saved dialogue history contains a non-INFO source.");
+            SaidInfos.Add(info);
+        }
         foreach (var instance in _instances)
         {
             var state = states[instance.Quest.FormKey];
@@ -171,7 +226,7 @@ internal sealed class FalloutQuestScripts
                 var fields = quest.ReadSubrecords().ToArray();
                 var data = fields.Single(field => field.Signature == "DATA").Data;
                 if (data.Length is not (2 or 8)) throw new NotSupportedException("Quest DATA version is unbound.");
-                if ((!claimed && (data.Span[0] & 1) == 0) || !fields.Any(field => field.Signature == "SCRI")) continue;
+                if (!fields.Any(field => field.Signature == "SCRI")) continue;
                 var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(quest, "SCRI"));
                 if (script.Signature != "SCPT") throw new InvalidDataException("Quest script is not SCPT.");
                 var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
@@ -194,10 +249,10 @@ internal sealed class FalloutQuestScripts
         foreach (var instance in _instances)
         {
             if (instance.Claimed || instance.Error is not null) continue;
-            if (!instance.Clock.Advance((float)seconds)) continue;
             try
             {
-                if (gameMode) { Execute(instance, null); ++instance.Executions; }
+                if (!_quests.IsRunning(instance.Quest.FormKey) || !instance.Clock.Advance((float)seconds)) continue;
+                if (gameMode) { Execute(instance, Host); ++instance.Executions; }
                 instance.Clock.CompleteInvocation();
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
@@ -211,6 +266,7 @@ internal sealed class FalloutQuestScripts
         var instance = _instances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) ??
             throw new NotSupportedException($"Claimed quest {quest} has no source program: {_unbound.GetValueOrDefault(quest)}");
         if (instance.Error is not null) throw new NotSupportedException(instance.Error);
+        if (!_quests.IsRunning(quest)) return;
         if (!instance.Clock.Advance((float)seconds)) return;
         try
         {
@@ -237,12 +293,11 @@ internal sealed class FalloutQuestScripts
 
     private void Execute(Instance instance, FalloutQuestScriptHost? host, FalloutGameModeProgram? program = null)
     {
-        var writes = new Dictionary<(FalloutFormKey Owner, uint Index), double>();
-        var globalWrites = new Dictionary<FalloutFormKey, float>();
-        var additions = new Dictionary<FalloutFormKey, FalloutCampaignItem>();
-        var messages = new List<FalloutSourceMessage>();
-        var notifications = new List<FalloutHudEvent>();
-        (FalloutFormKey Quest, short Stage, Action Publish)? stageWrite = null;
+        if (host?.ExecuteProgram is { } execute)
+        {
+            execute(instance.Quest, instance.Script, program ?? instance.Program, instance.Clock.Elapsed);
+            return;
+        }
         FalloutPluginRecord? TryForm(string name) => instance.Bindings.TryForm(name);
         FalloutPluginRecord Form(string name) => instance.Bindings.Form(name);
         (FalloutFormKey Owner, uint Index) Variable(string name) => instance.Bindings.Variable(name);
@@ -258,27 +313,24 @@ internal sealed class FalloutQuestScripts
         }
         double Read(string name)
         {
-            if (Global(name) is { } global)
-                return globalWrites.TryGetValue(global, out var pending) ? pending : _globals!.Get(global);
+            if (Global(name) is { } global) return _globals!.Get(global);
             var key = Variable(name);
-            return writes.TryGetValue(key, out var value) ? value : this.Variable(key.Owner, key.Index);
+            return this.Variable(key.Owner, key.Index);
         }
         void Write(string name, double value)
         {
-            if (stageWrite is not null)
-                throw new NotSupportedException("Script effects after SetStage require synchronous result-script execution.");
             if (Global(name) is { } global)
             {
                 _ = _globals!.Get(global);
                 var stored = (float)value;
                 if (!float.IsFinite(stored)) throw new InvalidDataException("Script global exceeds Float32 storage.");
-                globalWrites[global] = stored;
+                _globals.Set(global, stored);
                 return;
             }
             var key = Variable(name);
             _ = this.Variable(key.Owner, key.Index);
             if (!double.IsFinite(value)) throw new InvalidDataException("Script variable exceeds its runtime representation.");
-            writes[key] = value;
+            SetVariable(key.Owner, key.Index, value);
         }
         FalloutPluginRecord Quest(string name)
         {
@@ -290,9 +342,10 @@ internal sealed class FalloutQuestScripts
             "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments =>
             {
                 var quest = Quest(arguments[0].Identifier!).FormKey;
-                return stageWrite is { } pending && pending.Quest == quest ? Math.Max(_quests.Stage(quest), pending.Stage) : _quests.Stage(quest);
+                return _quests.Stage(quest);
             }),
             "getsecondspassed" => new([], _ => instance.Clock.Elapsed),
+            "getbuttonpressed" => new([], _ => MessageResults.Take(instance.Script.FormKey)),
             "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
             "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
             {
@@ -309,15 +362,14 @@ internal sealed class FalloutQuestScripts
         };
         (program ?? instance.Program).Execute(Read, Write, (command, arguments) =>
         {
-            if (stageWrite is not null)
-                throw new NotSupportedException("Script effects after SetStage require synchronous result-script execution.");
             switch (command.ToLowerInvariant())
             {
                 case "short" or "int" or "long" or "float" when arguments.Count == 1: _ = Variable(arguments[0]); break;
                 case "showmessage" when arguments.Count == 1:
-                    var message = FalloutSourceMessage.Read(Form(arguments[0]));
-                    if (message.Modal) messages.Add(message);
-                    else notifications.Add(new(FalloutHudEventKind.Message, message.Form, 0, instance.Quest.FormKey, instance.Script.FormKey));
+                    ShowMessage(Form(arguments[0]).FormKey, instance.Script.FormKey);
+                    break;
+                case "startquest" or "stopquest" when arguments.Count == 1:
+                    _quests.SetRunning(Quest(arguments[0]).FormKey, command.Equals("startquest", StringComparison.OrdinalIgnoreCase));
                     break;
                 case "player.additem" when arguments.Count is 2 or 3:
                     if (!instance.Bindings.HasPlayerReference)
@@ -327,13 +379,14 @@ internal sealed class FalloutQuestScripts
                     if (numericCount != Math.Truncate(numericCount)) throw new NotSupportedException("Fractional item additions are unbound.");
                     var count = checked((int)numericCount);
                     if (count <= 0) throw new NotSupportedException("Non-positive item additions are unbound.");
-                    var previous = additions.GetValueOrDefault(item.FormKey) ?? _inventory.Item(item.FormKey);
+                    var previous = _inventory.Item(item.FormKey);
                     var request = new FalloutCampaignInventoryRequest(_records.RuntimeFormId(item.FormKey), arguments[0], item.Signature,
                         checked((previous?.Count ?? 0) + count));
-                    additions[item.FormKey] = FalloutCampaignInventoryResolver.Resolve(_records, [request], null).Items.Single();
+                    var addition = FalloutCampaignInventoryResolver.Resolve(_records, [request], null).Items.Single();
                     var silent = arguments.Count == 3 ? FalloutGameModeProgram.Evaluate([arguments[2]], Read) : 0;
                     if (silent is not (0 or 1)) throw new NotSupportedException("AddItem silent argument is not a boolean.");
-                    if (silent == 0) notifications.Add(new(FalloutHudEventKind.ItemAdded, item.FormKey, count, instance.Quest.FormKey, instance.Script.FormKey));
+                    _inventory.Publish([addition]);
+                    if (silent == 0) _inventory.Notifications.Publish([new(FalloutHudEventKind.ItemAdded, item.FormKey, count, instance.Quest.FormKey, instance.Script.FormKey)]);
                     break;
                 case "setstage" when arguments.Count == 2:
                     if (host is null) throw new NotSupportedException("SetStage has no result-script execution owner.");
@@ -341,18 +394,13 @@ internal sealed class FalloutQuestScripts
                     var numericStage = FalloutGameModeProgram.Evaluate([arguments[1]], Read, Function);
                     if (numericStage != Math.Truncate(numericStage)) throw new InvalidDataException("Quest stage is fractional.");
                     var stage = checked((short)numericStage);
-                    stageWrite = (target, stage, host.PrepareSetStage(target, stage));
+                    host.PrepareSetStage(target, stage)();
                     break;
                 default: throw new NotSupportedException($"Reached script command {command} with {arguments.Count} arguments has no owner.");
             }
         }, Function);
-        // Validate the entire reached block before publishing any effects.
-        FalloutHudNotifications.Validate(notifications);
-        foreach (var (key, value) in writes) SetVariable(key.Owner, key.Index, value);
-        foreach (var (form, value) in globalWrites) _globals!.Set(form, value);
-        _inventory.Publish(additions.Values);
-        foreach (var message in messages) _messages.Enqueue(message);
-        _inventory.Notifications.Publish(notifications);
-        stageWrite?.Publish();
+        // Each reached operation publishes in source order. A later failure
+        // retains the executed prefix, including consumptive message results
+        // and nested SetStage scripts. Retrying a failed instance is forbidden.
     }
 }

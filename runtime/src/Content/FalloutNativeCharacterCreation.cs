@@ -58,12 +58,15 @@ internal sealed class FalloutNativeCharacterCreation
     }
 
     internal FalloutActorAppearanceState State(FalloutNativeRaceSexSelection selection)
+        => ActorState(_records, _contract.Player, selection);
+
+    internal static FalloutActorAppearanceState ActorState(FalloutPluginStack records, FalloutFormKey player, FalloutNativeRaceSexSelection selection)
     {
         var face = selection.Face;
-        return new(selection.Female, _records.RuntimeFormKey(selection.RaceRuntimeFormId),
-            _records.RuntimeFormKey(selection.HairRuntimeFormId), _records.RuntimeFormKey(selection.EyesRuntimeFormId),
-            face is null ? null : new(_contract.Player, face.SymmetricGeometry, face.AsymmetricGeometry, face.SymmetricTexture),
-            face?.HairColor, face?.HairLength, face?.HeadParts.Select(_records.RuntimeFormKey).ToArray());
+        return new(selection.Female, records.RuntimeFormKey(selection.RaceRuntimeFormId),
+            records.RuntimeFormKey(selection.HairRuntimeFormId), records.RuntimeFormKey(selection.EyesRuntimeFormId),
+            face is null ? null : new(player, face.SymmetricGeometry, face.AsymmetricGeometry, face.SymmetricTexture),
+            face?.HairColor, face?.HairLength, face?.HeadParts.Select(records.RuntimeFormKey).ToArray());
     }
 
     internal IReadOnlyList<FalloutPluginRecord> Presets()

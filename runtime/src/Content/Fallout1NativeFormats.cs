@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using OpenNV.Runtime.Campaigns.Classic.Native;
 
 namespace OpenNV.Runtime.Content;
 
@@ -13,11 +14,15 @@ internal sealed record Fallout1NativeMap(
     IReadOnlyList<Fallout1NativeMapScriptRecord> LiveScripts,
     int ObjectSectionOffset,
     int TotalObjects,
-    Fallout1NativePlacedObject FirstObject)
+    Fallout1NativePlacedObject? FirstObject)
 {
-    internal int FirstObjectOffset => FirstObject.SourceOffset;
-    internal int FirstObjectPid => FirstObject.Pid;
-    internal uint FirstObjectFid => FirstObject.Fid;
+    internal int MapIndex { get; init; }
+    internal int MapScriptIndex { get; init; }
+    internal int FirstObjectOffset => RequireFirstObject().SourceOffset;
+    internal int FirstObjectPid => RequireFirstObject().Pid;
+    internal uint FirstObjectFid => RequireFirstObject().Fid;
+    private Fallout1NativePlacedObject RequireFirstObject() => FirstObject ??
+        throw new InvalidOperationException("This source map has no placed objects.");
 }
 
 internal sealed record Fallout1NativeMapScriptRecord(
@@ -97,8 +102,8 @@ internal static class Fallout1NativeMapReader
         if (data.Length < HeaderBytes)
             throw new InvalidDataException("Fallout 1 MAP header is truncated.");
         var version = ReadInt32(data, 0);
-        if (version != Fallout1MapVersion)
-            throw new NotSupportedException($"Fallout 1 MAP version {version} is unsupported.");
+        if (version is not (Fallout1MapVersion or 20))
+            throw new NotSupportedException($"Classic MAP version {version} is unsupported.");
         var nameBytes = data.AsSpan(HeaderNameOffset, HeaderNameBytes);
         var terminator = nameBytes.IndexOf((byte)0);
         if (terminator <= 0)
@@ -138,18 +143,26 @@ internal static class Fallout1NativeMapReader
         var objectSectionOffset = offset;
         var totalObjects = ReadInt32(data, offset);
         offset += sizeof(int);
-        if (totalObjects <= 0 || totalObjects > MaximumTopLevelObjects)
+        if (totalObjects < 0 || totalObjects > MaximumTopLevelObjects)
             throw new InvalidDataException($"Fallout 1 MAP object count is unsupported: {totalObjects}");
-        var elevationZeroObjects = ReadInt32(data, offset);
-        offset += sizeof(int);
-        if (elevationZeroObjects <= 0 || elevationZeroObjects > totalObjects)
-            throw new NotSupportedException("The bounded Fallout 1 audit requires a first elevation object.");
-        var firstObject = ReadObject(data, offset);
-        if (firstObject.Elevation != 0)
-            throw new InvalidDataException("The first Fallout 1 MAP object is not in elevation zero.");
+        Fallout1NativePlacedObject? firstObject = null;
+        for (var elevation = 0; elevation <= MaximumElevation; elevation++)
+        {
+            var count = ReadInt32(data, offset); offset += sizeof(int);
+            if (count < 0 || count > totalObjects)
+                throw new InvalidDataException("Classic MAP elevation object count is invalid.");
+            if (count == 0) continue;
+            firstObject = ReadObject(data, offset);
+            if (firstObject.Elevation != elevation)
+                throw new InvalidDataException("Classic MAP first object has the wrong elevation.");
+            break;
+        }
+        if (totalObjects > 0 && firstObject is null)
+            throw new InvalidDataException("Classic MAP total objects differ from its elevations.");
         return new Fallout1NativeMap(
             version, name, enteringTile, enteringElevation, enteringRotation,
-            elevations, scriptSection.LiveScripts, objectSectionOffset, totalObjects, firstObject);
+            elevations, scriptSection.LiveScripts, objectSectionOffset, totalObjects, firstObject)
+        { MapIndex = values[8], MapScriptIndex = values[4] };
     }
 
     private static (int EndOffset, IReadOnlyList<Fallout1NativeMapScriptRecord> LiveScripts)
@@ -286,7 +299,7 @@ internal static class Fallout1NativePrototypeReader
     private static readonly string[] Directories =
         ["items", "critters", "scenery", "walls", "tiles", "misc"];
 
-    internal static Fallout1NativePrototype Resolve(Fallout1OwnedContentSource source, int pid)
+    internal static Fallout1NativePrototype Resolve(IFalloutClassicOwnedSource source, int pid)
     {
         var unsigned = unchecked((uint)pid);
         var type = (int)(unsigned >> ObjectTypeBitShift);
@@ -294,11 +307,11 @@ internal static class Fallout1NativePrototypeReader
         if (type < 0 || type >= Directories.Length || listIndex <= 0)
             throw new NotSupportedException($"Fallout 1 PID 0x{unsigned:x8} is outside the admitted PRO types.");
         var directory = Directories[type];
-        var names = Fallout1NativeLists.Read(source.Read($"proto\\{directory}\\{directory}.lst").Bytes);
+        var names = Fallout1NativeLists.Read(source.Read($"proto\\{directory}\\{directory}.lst", out _));
         if (listIndex > names.Count)
             throw new InvalidDataException($"Fallout 1 PID 0x{unsigned:x8} exceeds its PRO list.");
         var logical = $"proto\\{directory}\\{names[listIndex - 1]}";
-        var bytes = source.Read(logical).Bytes;
+        var bytes = source.Read(logical, out _);
         if (bytes.Length < MinimumPrototypeBytes)
             throw new InvalidDataException($"Fallout 1 PRO is truncated: {logical}");
         var storedPid = BinaryPrimitives.ReadUInt32BigEndian(bytes);
@@ -308,14 +321,14 @@ internal static class Fallout1NativePrototypeReader
         return new Fallout1NativePrototype(pid, fid, logical);
     }
 
-    internal static string ResolveArt(Fallout1OwnedContentSource source, uint fid)
+    internal static string ResolveArt(IFalloutClassicOwnedSource source, uint fid)
     {
         var type = (int)((fid >> ObjectTypeBitShift) & 0x0f);
         var artIndex = (int)(fid & 0x0fff);
         if (type < 0 || type >= Directories.Length)
             throw new NotSupportedException($"Fallout 1 FID 0x{fid:x8} has an unsupported art type.");
         var directory = Directories[type];
-        var names = Fallout1NativeLists.Read(source.Read($"art\\{directory}\\{directory}.lst").Bytes);
+        var names = Fallout1NativeLists.Read(source.Read($"art\\{directory}\\{directory}.lst", out _));
         if (artIndex >= names.Count)
             throw new InvalidDataException($"Fallout 1 FID 0x{fid:x8} exceeds its art list.");
         if (type == 1)
@@ -358,6 +371,9 @@ internal static class Fallout1NativeFrmReader
     private const int DirectionCount = sizeof(long) - sizeof(short);
 
     internal static Fallout1NativeFrmFrame ReadFirstFrame(byte[] data, int rotation = 0)
+        => ReadFrame(data, rotation, 0);
+
+    internal static Fallout1NativeFrmFrame ReadFrame(byte[] data, int rotation, int frameIndex)
     {
         if (data.Length < HeaderBytes || rotation is < 0 or >= DirectionCount)
             throw new InvalidDataException("Fallout 1 FRM header is truncated.");
@@ -366,6 +382,9 @@ internal static class Fallout1NativeFrmReader
         var frames = BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(sizeof(uint) * 2));
         if (version is not (Fallout1FrmVersion or Fallout1AlternateFrmVersion) || frames == 0)
             throw new NotSupportedException($"Fallout 1 FRM {version}/{frames} is unsupported.");
+        if (frameIndex == -1) frameIndex = frames - 1;
+        if (frameIndex < 0 || frameIndex >= frames)
+            throw new InvalidDataException("The selected FRM frame is outside its authored sequence.");
         var directionX = BinaryPrimitives.ReadInt16BigEndian(
             data.AsSpan(DirectionXOffsetsOffset + rotation * sizeof(short)));
         var directionY = BinaryPrimitives.ReadInt16BigEndian(
@@ -375,7 +394,18 @@ internal static class Fallout1NativeFrmReader
         var frameAreaBytes = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(FrameAreaBytesOffset));
         var frameAreaEnd = frameAreaBytes == 0 ? data.Length :
             checked((int)Math.Min(data.Length, HeaderBytes + (long)frameAreaBytes));
-        var cursor = checked(HeaderBytes + (int)relativeOffset);
+        if (relativeOffset > frameAreaEnd - HeaderBytes)
+            throw new InvalidDataException("Fallout 1 FRM direction escapes its frame area.");
+        var cursor = HeaderBytes + (int)relativeOffset;
+        for (var index = 0; index < frameIndex; index++)
+        {
+            if (cursor > frameAreaEnd - FrameHeaderBytes)
+                throw new InvalidDataException("Fallout 1 FRM sequence escapes its frame area.");
+            var bytes = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(cursor + sizeof(uint)));
+            if (bytes > frameAreaEnd - cursor - FrameHeaderBytes)
+                throw new InvalidDataException("Fallout 1 FRM frame payload escapes its frame area.");
+            cursor += FrameHeaderBytes + (int)bytes;
+        }
         if (cursor > frameAreaEnd - FrameHeaderBytes)
             throw new InvalidDataException("Fallout 1 FRM frame header escapes its frame area.");
         var width = BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(cursor));

@@ -16,6 +16,11 @@ internal static class Synthetic
                 Npc(0x108, 0, 0, extraArmor: 0x402), Npc(0x109, 0, 0, armor: 0x701),
                 Npc(0x10a, 0, 0, armor: 0x702), Npc(0x10b, 0, 0, armor: 0x403),
                 Npc(0x10c, 0, 0, head: 0x304),
+                Npc(0x10d, 321, 0x703), Npc(0x10e, 64, 0x705), Npc(0x10f, 64, 0x706),
+                Npc(0x110, 64, 0x707), Npc(0x111, 64, 0x708),
+                ActorList(0x703, 0, 1, (1, 0x704), (1, 0x704)), ActorList(0x704, 0, 0, (1, 0x101)),
+                ActorList(0x705, 0, 0, (1, 0x100), (1, 0x101)), ActorList(0x706, 25, 0, (1, 0x101)),
+                ActorList(0x707, 0, 0, (2, 0x101)), ActorList(0x708, 0, 0, (1, 0x708)),
                 Race(0x200, "raceA"), Race(0x201, "raceB"),
                 Record("HAIR", 0x300, Field("MODL", Z("hairA.nif")), Field("ICON", Z("hairA.dds")), Field("DATA", [0])),
                 Record("HAIR", 0x301, Field("MODL", Z("hairB.nif")), Field("ICON", Z("hairB.dds")), Field("DATA", [8])),
@@ -23,6 +28,9 @@ internal static class Synthetic
                 Head(0x302, 0x303), Head(0x303, 0), Head(0x304, 0x305), Head(0x305, 0x304),
                 Armor(0x400, "base.nif", 4, 0x410), Armor(0x401, "template.nif", 4, 0),
                 Armor(0x402, "conflict.nif", 4, 0),
+                Armor(0x404, "equipped-left-glove.nif", 8, 0), Armor(0x405, "default-body.nif", 4, 0x414),
+                Record("FLST", 0x414, Field("LNAM", U32(0x413))),
+                Record("ARMA", 0x413, Field("BMDT", Combine(U32(16), U32(0))), Field("MOD3", Z("female-default-hand.nif"))),
                 Record("ARMO", 0x403, Field("BMDT", Combine(U32(4), U32(0))), Field("MOD3", Z("female-only.nif"))),
                 Record("FLST", 0x410, Field("LNAM", U32(0x411)), Field("LNAM", U32(0x412))),
                 Record("ARMA", 0x411, Field("BMDT", Combine(U32(8), U32(0))), Field("MODL", Z("glove-left.nif")), Field("MOD3", Z("glove-left-f.nif"))),
@@ -68,6 +76,11 @@ internal static class Synthetic
             Require(FalloutNpcAppearanceResolver.Resolve(stack, Key(0x104)).EquippedArmor.Single() == Key(0x401), "inventory inheritance");
             Throws(() => FalloutNpcAppearanceResolver.Resolve(stack, Key(0x105)), "template cycle");
             Throws(() => FalloutNpcAppearanceResolver.Resolve(stack, Key(0x107)), "leveled actor selection");
+            var invariant = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x10d));
+            Require(invariant.TraitsOwner == Key(0x101) && invariant.ModelOwner == Key(0x101) &&
+                invariant.InventoryOwner == Key(0x101), "Nested invariant lists must agree across template groups.");
+            foreach (var unresolved in new uint[] { 0x10e, 0x10f, 0x110, 0x111 })
+                Throws(() => FalloutNpcAppearanceResolver.Resolve(stack, Key(unresolved)), "Non-invariant or cyclic actor selection must fail closed.");
             Require(!FalloutNpcAppearanceResolver.Resolve(stack, Key(0x108)).CanConstruct, "competing armor remains unresolved");
             Require(!FalloutNpcAppearanceResolver.Resolve(stack, Key(0x109)).CanConstruct, "leveled armor remains unresolved");
             Require(FalloutNpcAppearanceResolver.Resolve(stack, Key(0x10a)).CanConstruct, "non-armor leveled inventory does not change appearance");
@@ -75,10 +88,21 @@ internal static class Synthetic
             Throws(() => FalloutNpcAppearanceResolver.Resolve(stack, Key(0x10c)), "head part cycle");
             var explicitEquipment = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x108), equippedArmor: [Key(0x402)]);
             Require(explicitEquipment.CanConstruct && explicitEquipment.EquippedArmor.Single() == Key(0x402), "authoritative explicit equipment selection");
+            var equippedGlove = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100), equippedArmor: [Key(0x400), Key(0x404)]);
+            Require(equippedGlove.CanConstruct && equippedGlove.Models.Any(part => part.Source == Key(0x404)) &&
+                equippedGlove.Models.All(part => part.Source != Key(0x411)) && equippedGlove.Models.Any(part => part.Source == Key(0x412)),
+                "Equipped left glove must replace only the overlapping default armor addon.");
+            var oppositeSexAddon = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100), equippedArmor: [Key(0x405)]);
+            Require(oppositeSexAddon.CanConstruct && oppositeSexAddon.Models.Any(part => part.Role == "hand-right") &&
+                oppositeSexAddon.Models.All(part => part.Source != Key(0x413)), "Absent opposite-sex default addon must retain the race hand.");
             Console.WriteLine("OPENNV_NPC_APPEARANCE_CONTRACT_OK winningOverrides=true templateGroups=true completeParts=true armorAddons=true slotConflictsVisible=true rawFaceGen=true");
         }
         finally { directory.Delete(recursive: true); }
     }
+
+    private static byte[] ActorList(uint id, byte chance, byte flags, params (ushort Level, uint Form)[] entries) =>
+        Record("LVLN", id, new[] { Field("LVLD", [chance]), Field("LVLF", [flags]) }.Concat(entries.Select(entry =>
+            Field("LVLO", Combine(BitConverter.GetBytes(entry.Level), new byte[2], U32(entry.Form), new byte[] { 1, 0, 0, 0 })))).ToArray());
 
     private static byte[] Npc(uint id, ushort templateFlags, uint template, bool female = false, uint race = 0x200,
         uint armor = 0x400, uint hair = 0x300, uint head = 0x302, uint extraArmor = 0)

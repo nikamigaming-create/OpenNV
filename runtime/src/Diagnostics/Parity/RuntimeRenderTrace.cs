@@ -12,7 +12,7 @@ namespace OpenNV.Runtime.Diagnostics.Parity;
 // A diagnostic observation owner, never a gameplay or render-state authority.
 // It walks the actual scene and bound resources at an explicit draw boundary.
 // Scene submission is distinguished from GPU execution and pixel attribution.
-internal sealed class RuntimeRenderTrace : IDisposable
+internal sealed partial class RuntimeRenderTrace : IDisposable
 {
     private readonly Node _owner;
     private readonly string _directory;
@@ -33,6 +33,9 @@ internal sealed class RuntimeRenderTrace : IDisposable
     private int _lostEvents;
     private string? _error;
     private string? _lastReport;
+    private RuntimeAudioTrace? _audio;
+    private readonly List<TemporaryCaptureDirectory> _captures = [];
+    private TemporaryCaptureDirectory? _activeCapture;
     private string[] _lastMissing = ["native-GPU-draw-execution", "per-pixel-contributor-IDs", "retail-frame-join", "complete-audio-events"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -51,7 +54,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
         lostEvents = _lostEvents,
         report = _lastReport,
         error = _error,
-        coverage = "source-reads,scene-submission,bound-resources,image-space-pass-submission-and-readback,pre-post-draw,pixels",
+        coverage = "source-byte-ranges,scene-submission,particles,bound-resources,audio-voices-and-bus-samples,image-space-pass-submission-and-readback,pre-post-draw,pixels",
         missing = _lastMissing,
     };
 
@@ -62,12 +65,18 @@ internal sealed class RuntimeRenderTrace : IDisposable
         if (RuntimeLiveContentSource.Current is { } source)
             source.ResourceReadObserver = enabled ? ObserveResource : null;
         FalloutPluginRecord.ReadObserver = enabled ? ObserveRecord : null;
+        RuntimeNifControllerPlayer.TextKeyObserver = enabled ? ObserveTextKey : null;
+        NativeOwnedAnimationSoundPlayer.SoundObserver = enabled ? ObserveSound : null;
         if (!enabled)
         {
+            _audio?.Dispose(); _audio = null;
             CancelImageSpaceTraces();
             _request = 0; _before = null; _blobs = null;
             _records.Clear(); _events.Clear(); _queuedEvents = 0;
             _renderResources.Clear(); _sources.Clear(); _missing.Clear();
+            foreach (var capture in _captures) capture.Dispose();
+            _captures.Clear();
+            _lastReport = null;
         }
     }
 
@@ -78,15 +87,18 @@ internal sealed class RuntimeRenderTrace : IDisposable
         _request = request;
     }
 
-    private void Event(string kind, string identity)
+    private void Event(string kind, string identity, object? value = null)
     {
         var ordinal = Interlocked.Increment(ref _eventOrdinal);
         if (Interlocked.Increment(ref _queuedEvents) > 100000)
         {
             Interlocked.Decrement(ref _queuedEvents); Interlocked.Increment(ref _lostEvents); return;
         }
-        _events.Enqueue(new { ordinal, nanoseconds = Nanoseconds(), kind, identity });
+        _events.Enqueue(new { ordinal, nanoseconds = Nanoseconds(), kind, identity, value });
     }
+
+    private void ObserveTextKey(object value) => Event("nif-text-key", "source-controller", value);
+    private void ObserveSound(object value) => Event("animation-sound", "source-sound-owner", value);
 
     private void ObserveResource(string path, string identity, ReadOnlyMemory<byte> bytes) => Event("resource-read", identity);
     private void ObserveRecord(FalloutPluginRecord record, ReadOnlyMemory<byte> bytes)
@@ -100,10 +112,13 @@ internal sealed class RuntimeRenderTrace : IDisposable
         if (!Enabled || !Pending) return;
         try
         {
+            _audio ??= new RuntimeAudioTrace();
+            if (!_audio.HasInterval) return;
             _error = null; _missing.Clear(); _sources.Clear(); _renderResources.Clear();
             _captureDirectory = Path.Combine(_directory, $"trace-{_request:D10}");
             if (Directory.Exists(_captureDirectory)) throw new IOException("Trace capture already exists.");
-            Directory.CreateDirectory(_captureDirectory);
+            _activeCapture = new TemporaryCaptureDirectory(_captureDirectory);
+            _captures.Add(_activeCapture);
             _blobs = new RenderTraceBlobStore(Path.Combine(_captureDirectory, "blobs"));
             var begin = Nanoseconds();
             var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned content is absent.");
@@ -132,6 +147,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
                 endNanoseconds = Nanoseconds(),
                 drawCount = Engine.GetFramesDrawn(),
                 gameplay = _gameplay(),
+                audioBuses = AudioBusState(),
                 nodes,
                 resources = _renderResources,
                 sources = _sources.Values.ToArray(),
@@ -153,6 +169,8 @@ internal sealed class RuntimeRenderTrace : IDisposable
         if (_before is null || _captureDirectory is null || _blobs is null) return;
         try
         {
+            var audio = _audio?.Finish(_blobs, _missing);
+            _audio?.Dispose(); _audio = null;
             var imageSpaces = CaptureImageSpaceTraces();
             var pixels = _blobs.Put(image.GetData());
             var preview = Path.Combine(_captureDirectory, "frame.png");
@@ -187,6 +205,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
                 frame = new { pixels, preview, width = image.GetWidth(), height = image.GetHeight(), format = image.GetFormat().ToString() },
                 viewports,
                 imageSpaces,
+                audio,
                 missing,
                 lostEvents = _lostEvents,
                 parity = "unverified",
@@ -196,6 +215,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
             _lastReport = Path.Combine(_captureDirectory, "trace.json");
             File.WriteAllText(_lastReport, JsonSerializer.Serialize(report, Json));
             File.WriteAllText(Path.Combine(_directory, "trace-latest.json"), JsonSerializer.Serialize(new { report = _lastReport, preview, missing, pixels }, Json));
+            _activeCapture = null;
             _request = 0; _before = null;
         }
         catch (Exception exception) { Fail(exception); }
@@ -203,6 +223,11 @@ internal sealed class RuntimeRenderTrace : IDisposable
 
     private void Fail(Exception exception)
     {
+        _audio?.Dispose(); _audio = null;
+        if (_activeCapture is { } capture)
+        {
+            capture.Dispose(); _captures.Remove(capture); _activeCapture = null;
+        }
         CancelImageSpaceTraces();
         _error = exception.Message; _before = null; _request = 0;
         // Failure remains diagnostic state; tracing must not advance, reset or
@@ -276,6 +301,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
     {
         var path = node.GetPath().ToString();
         var properties = new Dictionary<string, object?>();
+        NativeNodeState(node, properties);
         if (node is Node3D spatial)
         {
             properties["localTransform"] = Value(spatial.Transform);
@@ -328,6 +354,7 @@ internal sealed class RuntimeRenderTrace : IDisposable
             properties["storageProperties"] = Properties(node);
         if (node is CanvasItem canvas)
         {
+            properties["storageProperties"] = Properties(canvas);
             properties["canvasTransform"] = Value(canvas.GetGlobalTransformWithCanvas());
             properties["visible"] = canvas.IsVisibleInTree();
             if (canvas is Control control) properties["rect"] = Value(control.GetGlobalRect());
@@ -370,6 +397,16 @@ internal sealed class RuntimeRenderTrace : IDisposable
                     primitive = mesh is ArrayMesh topology ? topology.SurfaceGetPrimitiveType(index).ToString() : "unobserved",
                     arrays = mesh.SurfaceGetArrays(index).Select((value, slot) => new { slot = ((Mesh.ArrayType)slot).ToString(), data = Value(value) }).ToArray(),
                 }).ToArray();
+            if (resource is MultiMesh multimesh)
+            {
+                state["instanceCount"] = multimesh.InstanceCount;
+                state["visibleInstanceCount"] = multimesh.VisibleInstanceCount;
+                state["transformFormat"] = multimesh.TransformFormat.ToString();
+                state["useColors"] = multimesh.UseColors;
+                state["useCustomData"] = multimesh.UseCustomData;
+                state["instanceBuffer"] = Value(multimesh.Buffer);
+                state["mesh"] = multimesh.Mesh is { } geometry ? ResourceState(geometry) : null;
+            }
             if (resource is Skin skin)
                 state["binds"] = Enumerable.Range(0, skin.GetBindCount()).Select(index => new
                 { index, bone = skin.GetBindBone(index), name = skin.GetBindName(index).ToString(), pose = Value(skin.GetBindPose(index)) }).ToArray();
@@ -467,15 +504,37 @@ internal sealed class RuntimeRenderTrace : IDisposable
         if (!identity.EndsWith(".nif", StringComparison.OrdinalIgnoreCase) && !identity.EndsWith(".kf", StringComparison.OrdinalIgnoreCase)) return null;
         try
         {
-            var source = FalloutNifFile.Read(bytes);
-            return source.Blocks.Select(block => new
+            var reads = new List<FalloutNifReadRange>();
+            var source = FalloutNifFile.Read(bytes, reads.Add);
+            var envelope = _blobs!.Put(JsonSerializer.SerializeToUtf8Bytes(reads, Json));
+            var blocks = source.Blocks.Select(block =>
             {
-                block.Index,
-                block.TypeName,
-                block.Offset,
-                block.Size,
-                bytes = _blobs!.Put(bytes.Span.Slice(block.Offset, block.Size))
+                reads.Clear();
+                string? error = null;
+                try { source.ReadObject(block.Index); }
+                catch (Exception failure) when (failure is InvalidDataException or NotSupportedException or OverflowException)
+                { error = failure.Message; _missing.Add(identity + $":block-{block.Index}:decode:" + error); }
+                var consumed = reads.Sum(read => read.Length);
+                var skipped = reads.Where(read => read.Encoding == "skipped-uninterpreted").Sum(read => read.Length);
+                if (consumed != block.Size || skipped != 0)
+                    _missing.Add(identity + $":block-{block.Index}:uninterpreted-bytes={block.Size - consumed + skipped}");
+                return new
+                {
+                    block.Index,
+                    block.TypeName,
+                    block.Offset,
+                    block.Size,
+                    bytes = _blobs.Put(bytes.Span.Slice(block.Offset, block.Size)),
+                    fieldMap = _blobs.Put(JsonSerializer.SerializeToUtf8Bytes(reads, Json)),
+                    fieldMapEncoding = "utf8-json:NIF-source-absolute-offset-length-and-reader-field",
+                    consumed,
+                    skipped,
+                    unread = block.Size - consumed,
+                    error,
+                    runtimeUse = "format-consumption-only;field-to-render-or-gameplay-use-unverified",
+                };
             }).ToArray();
+            return new { envelope, blocks };
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException)
         { _missing.Add(identity + ":block-map:" + error.Message); return null; }

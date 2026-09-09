@@ -20,10 +20,14 @@ internal static class GamebryoCoordinate
     {
         if (!sourceRadians.IsFinite() || !float.IsFinite(scale) || scale <= 0.0f)
             throw new InvalidOperationException("Gamebryo reference transform must be finite and positive.");
-        var x = new Basis(Vector3.Right, sourceRadians.X);
-        var y = new Basis(Vector3.Up, sourceRadians.Y);
+        var x = new Basis(Vector3.Right, -sourceRadians.X);
+        var y = new Basis(Vector3.Up, -sourceRadians.Y);
         var z = new Basis(Vector3.Back, -sourceRadians.Z);
-        var source = z * y * x;
+        // Placed-reference angles are clockwise XYZ, independent of the NIF
+        // serialization convention. The column-vector transform is Rx * Ry * Rz;
+        // changing only Z's sign works for upright props but tilts road pieces
+        // and other references with mixed rotations away from their source join.
+        var source = x * y * z;
         return ConvertBasis(
             [source.X.X, source.Y.X, source.Z.X,
              source.X.Y, source.Y.Y, source.Z.Y,

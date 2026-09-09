@@ -2,6 +2,18 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
+// Source platform predicates select the PC edition's authored UI and scripts.
+// They describe the game platform, not the host process's pointer width.
+internal static class FalloutPlatformConditions
+{
+    internal static float? Evaluate(FalloutCondition condition) => condition.Function switch
+    {
+        309 or 523 => 0, // IsXBox / IsPS3
+        524 => 1, // IsWin32 (PC edition, including the 64-bit reimplementation)
+        _ => null,
+    };
+}
+
 internal sealed record FalloutCondition(FalloutPluginRecord Owner, byte Flags, float Comparison,
     ushort Function, uint Argument1, uint Argument2, uint RunOn, uint Reference)
 {

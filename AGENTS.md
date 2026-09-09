@@ -37,10 +37,11 @@ The current user-directed implementation plan is `docs/implementation-plan.md`.
 
 ## Development workflow
 
-- `main` is the only working and publication branch. Do not create a PR or a
-  feature branch unless the user explicitly changes this rule.
-- Begin with a clean `main` equal to `origin/main`. Preserve unrelated user work
-  if the tree is not clean.
+- Work on a `codex/` feature branch based on current `origin/main`. Preserve
+  unrelated user work if the tree is not clean.
+- Publish completed work through a checked pull request, merge it into `main`,
+  and verify local `main` equals `origin/main` with no outstanding task PRs.
+  Start the next work block on a fresh feature branch.
 - Select the next telemetry-proven divergence, trace it to source records and
   runtime ownership, implement the general capability, and add synthetic plus
   owned-data proof.
@@ -48,6 +49,12 @@ The current user-directed implementation plan is `docs/implementation-plan.md`.
   changes. Do not leave task history or obsolete priorities in this file.
 - Never claim campaign, cell, actor, rendering, or parity completion from record
   counts, identity, transport, or a visually plausible frame.
+- Keep frame recording off during ordinary development, builds and headless
+  checks. Turn it on only for a specific visual check and turn it off when that
+  check ends. Temporary frames must be deleted in cleanup/finally paths after
+  inspection or export, including failed runs; keep only requested deliverables
+  or selected diagnostics still needed for an active investigation. Do not
+  accumulate recording sessions, proof archives or duplicate generated caches.
 
 ## Retail comparison boundary
 

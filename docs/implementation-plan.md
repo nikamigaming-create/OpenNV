@@ -1,6 +1,63 @@
 # Generic runtime and Goodsprings implementation plan
 
+The latest user priority is physical VR hands, one/two-handed weapon handling,
+real interaction and measured performance, while retaining the ordinary trip
+to the Strip and universal cell repairs. Stay in this task without subagents.
+Follow [the cell parity review](cell-parity-review.md) and current-work.md.
+The separate classic work remains paused and preserved;
+its scope is in [the classic Fallout delivery plan](classic-fallout-plan.md).
+
 ## User objective
+
+The contact-resolved wrist must own visible hands, held models, muzzle and hit
+queries together. Use original source collision and off-hand sockets, retain
+tracking-loss and equipment lifetimes, and keep per-frame work bounded. Current
+swept hand/weapon contact and physical prop pushing are connected; actor contact
+response, deliberate punches/butts, finger/forearm collision, friendly-animal
+touch and interactive controls still need their authoritative owners. Gentle
+contact, resting contact and tracking jumps must not become attacks. The user's
+pool-table and animal examples are product interaction goals, not permission to
+fake outcomes or hand-place special objects. Profile allocations and long frames
+before adding pools or native extensions; keep reusable data with its real owner.
+
+The next New Vegas work compares each loaded retail/OpenNV cell, collects its
+divergences and repairs the shared source/runtime owners before rechecking all
+affected cells. Unreviewed cells remain unverified. Working VR combat and looting
+remain required, including source gun,
+impact, blood and drug effects. The user reported failed physical acceptance and
+requires simulator death/dismemberment/looting before another headset run. Both
+physical and simulator sessions are stopped with saves preserved. Retain one
+tracked hands/weapon/Pip-Boy owner and small cohesive code. The whole device now
+scales and twists around its forearm centerline while grip is held; ordinary SIM
+page controls and release pass. Semi-automatic firing, cold ammunition state,
+source casing ejection, muzzle lighting and material-selected impact presentation
+have bounded simulator evidence. Constant-health creature damage, source ragdoll
+death and persistent corpse loot now have ordinary flat evidence. Continue with
+source limb destruction after the ordinary SIM kill, blood and corpse-loot pass;
+living NPC damage, combat AI and death scripts/XP remain required. Use the checkpoint and remaining
+effects limitations in current-work.md. Measure CPU/GPU time and allocations
+before choosing optimizations. Integrated controls, readability, motion and the
+broader campaign/VR objective remain required; simulator success cannot replace
+physical acceptance.
+
+The full player world body now retains shadows and source bone hit volumes when
+hidden from flat first-person or XR eyes. Tracked head/wrist, visibility and
+source-contact audits pass; ordinary flat and SIM shadow/self-ray checks pass.
+Pip-Boy SPECIAL and skill totals now use the shared source formulas and constant
+trait/apparel effects. Continue with actual damage, death, corpse loot and limb
+destruction, tested through ordinary flat input before the simulator. Hit volumes
+do not establish physical limb response or completed combat.
+
+The cell review includes ordinary exterior traversal,
+responsive sprint/jump and stepping, retained adjacent cells and distant LOD.
+The opening, source door exit/return, HUD interaction prompts and item/container
+transfer now have bounded ordinary evidence. Cell-boundary walking and cold
+Continue outside also pass. The requested default optional open-door destination
+view and physical traversal are still unimplemented; loading transitions remain
+the working path. Finish that shared cell/door presentation owner, native Pip-Boy,
+actor/creature behavior and combat before claiming the requested gameplay loop.
+Current evidence and remaining failures are in current-work.md; the earlier
+handoff below describes the starting baseline, not the current executable.
 
 Deliver a working, data-driven game. Complete the New Vegas opening through
 Doc, original character creation and questionnaire, the Pip-Boy, leaving the
@@ -34,7 +91,8 @@ assumption or weakening a gate to obtain green results.
 
 Keep the user-owned installation read-only, the public tree asset-free, and
 the clean-room/C#/Godot/OpenXR boundaries in AGENTS.md and architecture.md.
-Preserve unrelated user work. Main is the only working/publication branch.
+Preserve unrelated user work. Implement on a `codex/` feature branch, publish
+through a checked and merged PR, then synchronize `main` with `origin/main`.
 One implementation task at a time; no subagents or duplicate game instances.
 
 ## What the handoff establishes, and what it does not
@@ -122,27 +180,83 @@ implementation that bypasses the failing owner provides no product proof.
 
 ## Execution sequence
 
-1. Perform one bounded architecture/capability audit and create a source-derived
-   scope manifest. Identify the smallest complete gameplay chain whose shared
-   correction unlocks progress in multiple places. Do not spend successive
-   work blocks restating findings, rereading large traces or polishing a still.
-2. Build only the lab capabilities needed to reproduce, diagnose and repeatedly
-   verify that chain. Use them immediately. A tool is useful when it eliminates
-   a manual loop or exposes a previously hidden failure, not when it adds a UI.
-3. Complete the chain through shared authoritative state and original
-   presentation. The currently blocked couch/trigger/questionnaire sequence is
-   an acceptance case; it does not dictate the replacement architecture.
-   Include persistence so subsequent iterations can resume there reliably.
-4. Demonstrate the capability on unrelated owned objects/scripts and a second
-   cell, including a negative case and source override when relevant. General
-   means source-selected behavior works without editing code for that object.
-5. Proceed through original remaining menus, Pip-Boy, house exit, ordinary
-   exterior/interior travel, Easy Pete, Sunny/Cheyenne and the full tutorial.
-   Sweep the complete Goodsprings manifest through the lab and ordinary checks.
-6. At matched checkpoints retain differences, fix the responsible general
-   owner and replay the affected section. Keep every open material, lighting,
-   effect, movement, timing, audio and UI requirement visible. Complete the
-   cold-save and integrated flat/OpenXR acceptance requirements.
+The user's current priority is couch -> original choices -> Pip-Boy -> outside
+-> all cells -> combat -> crafting. Dialogue, barter, loot and containers are
+included as shared gameplay systems. Pull their dependencies into the sequence
+where the active source path requires them; component audits do not close any
+ordinary or parity requirement.
+
+Deliver complete shared behaviors in the following initial order. Each batch
+must reach the ordinary runtime before starting the next broad subsystem;
+pull dependencies forward when the actual failing chain requires them. Verify
+flat/OpenXR state sharing and relevant presentation with each batch. Final-eye
+comparison is part of integration, not work postponed until every system exists.
+
+The September 6 corpus command report identifies 8,818 records with result
+scripts, 930 with trigger-enter blocks and 728 with activation blocks. It finds
+SetStage in 1,651 records, AddItem in 975 and EvaluatePackage's EVP alias in 789.
+These are source occurrences in admitted bodies, not executed paths, distinct
+unlocked features or predicted parity percentages. They support prioritizing
+shared event/condition/effect ownership over further opening-specific handlers.
+
+1. **Make the blocked interaction chain executable and resumable.** Connect
+   reference lifetime, model-less trigger volumes, activation/default-action
+   dispatch, actual player/NPC furniture state, script events, dialogue choices
+   and their results. Use the same C# state, query and effect owners from object,
+   quest, stage, dialogue and package scripts. Preserve each context's reference
+   scope, event order, timing and pause rules. Replace the opening-specific
+   progression decisions as this chain becomes authoritative. Generalize saves
+   beyond stage 200 by restoring the actual opening phase, pending interaction,
+   actor state and script clocks; removing the stage check alone is insufficient.
+   The first ordinary result is couch activation through the original
+   questionnaire, with cold continuation and unrelated furniture/script cases.
+2. **Expand script and interface behavior by shared dependency.** Complete the
+   query/condition semantics and effects reached by quests, rewards, inventory,
+   enable/disable, packages, conversations and installed DLC startup. Bind
+   original dialogue and menu definitions to those owners; finish character
+   creation, farewell and Pip-Boy through them. Establish compiled SCDA contracts
+   and feed decoded execution into the same owners. SCTX parsing alone cannot
+   settle source/compiled disagreement, missing source or extension opcodes;
+   retain those failures. Do not delay ordinary integration for a complete
+   bytecode rewrite, or create a second script gameplay implementation.
+3. **Complete actor operations across source families.** Resolve actor/creature
+   templates, outfits, skeletons, animation groups, root motion, blending,
+   equipment and attachments together with package travel, collision and combat.
+   Exercise idle, walk, sit, draw, attack, hit, death and interruption on real
+   runtime instances. Cluster failures by shared assembly/animation/procedure
+   cause and prove each correction on unrelated actors. This supplies the
+   general operations required by Sunny, Cheyenne and the tutorial combat.
+4. **Complete ordinary world travel.** Replace selected-door routing with
+   source-selected XTEL travel and exterior active-cell streaming. Connect LAND,
+   collision, navigation, environment and reference enable state; retain mutable
+   world state while presentation resources unload. Discover the full Goodsprings
+   scope from the winning graph and door/exterior connections. Traverse, return,
+   save, cold-load and continue across its interiors and exteriors, including
+   Easy Pete, the full Sunny route and affected winning plugin content.
+5. **Close rendering and audio differences by shared pipeline.** Decode the
+   resources consumed by these cases and group failures by NIF block, material
+   flags, controller, collision shape, UI operation and audio behavior. Fix
+   geometry/skin/attachment ownership before tuning downstream appearance.
+   Correct common material passes, lights, shadows, fog, image-space effects,
+   particles, voice/LIP and spatial sound against matched moving evidence.
+   Reuse in-process source-bound decode products. A fix should propagate to all
+   consumers of that behavior without changing per-location parameters.
+
+Use the existing development lab to minimize the time from a failed ordinary
+action to a reproduced owner failure. Extend it only where the selected chain
+needs an operation: actual contact/furniture, dialogue execution, actor motion,
+resource decoding or a fresh-process save continuation. Keep full-corpus failures
+visible, but replay affected cases during edits and sweep broadly after a shared
+behavior change. Run the existing full gate before publication.
+
+Choose the next batch by the number of independently failing behaviors that
+share its cause, dependency order and measured implementation/replay cost. Count
+source fan-out only as a prioritization hint. Include expression queries and
+conditions when extending the corpus inventory; command names alone miss them.
+Reduce failures to a small reproducible case, fix the earliest incorrect owner,
+then run unrelated instances, a source override and negative cases. Track the
+remaining failing identities. Batch throughput means fewer actual divergences,
+not more parser passes, instantiated references or captured frames.
 
 Engine behavior, format definitions, command semantics and game-version
 adapters necessarily need code. Quest outcomes, actor/prop placement, dialogue,

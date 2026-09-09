@@ -7,6 +7,7 @@ internal sealed class ParityFrameArchive : IDisposable
 {
     private readonly string _root;
     private readonly StreamWriter _index;
+    private readonly TemporaryCaptureDirectory _temporary;
     private ulong _lastSequence;
 
     internal ParityFrameArchive(string outputDirectory)
@@ -14,10 +15,14 @@ internal sealed class ParityFrameArchive : IDisposable
         _root = Path.GetFullPath(outputDirectory);
         if (Path.Exists(_root))
             throw new IOException($"Refusing to overwrite captured frames: {_root}");
-        Directory.CreateDirectory(_root);
-        _index = new StreamWriter(new FileStream(
-            Path.Combine(_root, "frames.jsonl"), FileMode.CreateNew, FileAccess.Write, FileShare.Read))
-        { AutoFlush = true };
+        _temporary = new TemporaryCaptureDirectory(_root);
+        try
+        {
+            _index = new StreamWriter(new FileStream(
+                Path.Combine(_root, "frames.jsonl"), FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+            { AutoFlush = true };
+        }
+        catch { _temporary.Dispose(); throw; }
     }
 
     internal void Append(
@@ -78,7 +83,11 @@ internal sealed class ParityFrameArchive : IDisposable
         return new ArchivedBytes(name, Convert.ToHexString(SHA256.HashData(bytes)));
     }
 
-    public void Dispose() => _index.Dispose();
+    public void Dispose()
+    {
+        try { _index.Dispose(); }
+        finally { _temporary.Dispose(); }
+    }
 
     private sealed record ArchivedBytes(string File, string Sha256);
 }

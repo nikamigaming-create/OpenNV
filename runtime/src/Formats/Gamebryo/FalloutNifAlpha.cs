@@ -1,6 +1,6 @@
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
-internal enum FalloutNifBlendMode { Opaque, SourceAlpha, Add, Premultiplied, Multiply }
+internal enum FalloutNifBlendMode { Opaque, SourceAlpha, Add, Premultiplied, Multiply, AddOne, Replace }
 
 internal readonly record struct FalloutNifFogBlend(bool Additive, bool DestinationColor)
 {
@@ -50,6 +50,8 @@ internal readonly record struct FalloutNifAlphaState(
         {
             (6, 7) => FalloutNifBlendMode.SourceAlpha,
             (6, 0) => FalloutNifBlendMode.Add,
+            (0, 0) => FalloutNifBlendMode.AddOne,
+            (0, 1) => FalloutNifBlendMode.Replace,
             (0, 7) => FalloutNifBlendMode.Premultiplied,
             (1, 2) or (4, 1) => FalloutNifBlendMode.Multiply,
             _ => throw new NotSupportedException($"NIF source/destination blend factors {source}/{destination} have no renderer owner."),

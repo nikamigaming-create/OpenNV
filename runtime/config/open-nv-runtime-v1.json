@@ -56,6 +56,8 @@
     "capsuleRadiusMeters": 0.32,
     "capsuleHeightMeters": 1.8,
     "moveSpeedMetersPerSecond": 3.6,
+    "sprintSpeedMultiplier": 1.6,
+    "stepHeightMeters": 0.4,
     "mouseSensitivityRadiansPerPixel": 0.0022,
     "verticalLookLimitRadians": 1.45,
     "activationDistanceMeters": 2.5,
@@ -77,6 +79,7 @@
       "moveForward": { "action": "flat_move_forward", "physicalKey": "W" },
       "moveBackward": { "action": "flat_move_backward", "physicalKey": "S" },
       "jump": { "action": "flat_jump", "physicalKey": "Space" },
+      "sprint": { "action": "flat_sprint", "physicalKey": "Shift" },
       "activate": { "action": "flat_activate", "physicalKey": "E" },
       "grab": { "action": "flat_grab", "physicalKey": "Z" },
       "reload": { "action": "flat_reload", "physicalKey": "R" },
@@ -160,7 +163,7 @@
       },
       "actionMapResourcePath": "res://openxr_action_map.tres",
       "expectedActionSetCount": 1,
-      "actionNames": ["activate", "aim", "fire", "grab", "grip", "haptic", "jump", "move", "reload", "save", "turn"],
+      "actionNames": ["activate", "aim", "finger_trigger", "fire", "grab", "grip", "haptic", "jump", "move", "pipboy", "reload", "save", "sprint", "thumb_touch", "turn"],
       "interactionProfilePaths": [
         "/interaction_profiles/khr/generic_controller",
         "/interaction_profiles/oculus/touch_controller"

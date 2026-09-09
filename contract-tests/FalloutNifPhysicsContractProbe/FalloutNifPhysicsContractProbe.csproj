@@ -7,6 +7,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifRagdollConstraint.cs" Link="FalloutNifRagdollConstraint.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Particles.cs" Link="FalloutNifFile.Particles.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifFile.cs" Link="FalloutNifFile.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifMorphAnimation.cs" Link="FalloutNifMorphAnimation.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifSkinContract.cs" Link="FalloutNifSkinContract.cs" />

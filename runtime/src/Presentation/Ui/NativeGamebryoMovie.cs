@@ -19,6 +19,9 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
     private long _startTimestamp;
     private long _lastFrame = -1;
     private long _queuedAudioFrames;
+    private readonly CancellationTokenSource _audioStop = new();
+    private Task? _audioPump;
+    private bool _disable3DBeforeMovie;
     private double _seconds;
     private bool _ready;
     private bool _started;
@@ -50,6 +53,8 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
         _picture.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         background.AddChild(_picture);
         _pausedBeforeMovie = GetTree().Paused;
+        _disable3DBeforeMovie = GetViewport().Disable3D;
+        GetViewport().Disable3D = true;
         foreach (var node in GetTree().Root.FindChildren("*", "", true, false)
             .Where(node => node is AudioStreamPlayer or AudioStreamPlayer3D or AudioStreamPlayer2D))
         {
@@ -79,7 +84,12 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
                 {
                     Name = "MovieSoundtrack",
                     ProcessMode = ProcessModeEnum.Always,
-                    Stream = new AudioStreamGenerator { MixRate = _decoder.Info.AudioRate, BufferLength = 0.25f },
+                    Stream = new AudioStreamGenerator
+                    {
+                        MixRateMode = AudioStreamGenerator.AudioStreamGeneratorMixRate.Custom,
+                        MixRate = _decoder.Info.AudioRate,
+                        BufferLength = 0.5f
+                    },
                 };
                 AddChild(_audio);
             }
@@ -116,7 +126,8 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
             return;
         }
         _nextFrame ??= _decoder.Video.TryRead(out var nextFrame) ? nextFrame : null;
-        _nextAudio ??= _decoder.Audio.TryRead(out var nextAudio) ? nextAudio : null;
+        if (!_started) _nextAudio ??= _decoder.Audio.TryRead(out var nextAudio) ? nextAudio : null;
+        if (_audioPump?.IsFaulted == true) throw _audioPump.Exception!.GetBaseException();
         if (!_started)
         {
             if (_nextFrame is null || (_audio is not null && _nextAudio is null))
@@ -127,25 +138,11 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
                 throw new InvalidOperationException("Movie audio playback could not start.");
             _startTimestamp = Stopwatch.GetTimestamp();
             _started = true;
-        }
-        if (_playback is not null)
-        {
-            while (_nextAudio is not null)
+            if (_playback is not null)
             {
-                var count = _nextAudio.Length / _decoder.Info.AudioChannels;
-                if (!_playback.CanPushBuffer(count))
-                    break;
-                var samples = new Vector2[count];
-                for (var index = 0; index < count; ++index)
-                {
-                    var left = _nextAudio[index * _decoder.Info.AudioChannels];
-                    var right = _decoder.Info.AudioChannels == 1 ? left : _nextAudio[index * 2 + 1];
-                    samples[index] = new Vector2(left, right);
-                }
-                if (!_playback.PushBuffer(samples))
-                    throw new InvalidOperationException("Movie PCM buffer rejected available space.");
-                _queuedAudioFrames = checked(_queuedAudioFrames + count);
-                _nextAudio = _decoder.Audio.TryRead(out nextAudio) ? nextAudio : null;
+                var first = _nextAudio!;
+                _nextAudio = null;
+                _audioPump = Task.Run(() => PumpAudio(first, _audioStop.Token));
             }
         }
         var clockSeconds = _audio is null
@@ -154,9 +151,17 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
         // AudioServer publishes mix positions in blocks; do not move the movie
         // backwards when a newly published block changes the interpolation.
         var seconds = _seconds = Math.Max(_seconds, clockSeconds);
+        OwnedMovieVideoFrame? presented = null;
         while (_nextFrame is not null && _nextFrame.Index * _decoder.Info.FrameSeconds <= seconds)
         {
-            using var frame = Image.CreateFromData(_decoder.Info.Width, _decoder.Info.Height, false, Image.Format.Rgba8, _nextFrame.Rgba);
+            presented = _nextFrame;
+            _nextFrame = _decoder.Video.TryRead(out nextFrame) ? nextFrame : null;
+        }
+        // One texture upload per draw. Intermediate decoded frames retain their
+        // source clock but need no redundant GPU uploads after a delayed draw.
+        if (presented is not null)
+        {
+            using var frame = Image.CreateFromData(_decoder.Info.Width, _decoder.Info.Height, false, Image.Format.Rgba8, presented.Rgba);
             if (_texture is null)
             {
                 _texture = ImageTexture.CreateFromImage(frame);
@@ -164,16 +169,48 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
             }
             else
                 _texture.Update(frame);
-            _lastFrame = _nextFrame.Index;
-            _nextFrame = _decoder.Video.TryRead(out nextFrame) ? nextFrame : null;
+            _lastFrame = presented.Index;
         }
         SetMeta("opennv_movie_frame", _lastFrame);
         SetMeta("opennv_movie_seconds", seconds);
         SetMeta("opennv_movie_audio_underruns", _playback?.GetSkips() ?? 0);
-        var soundtrackSeconds = _decoder.Info.AudioRate == 0 ? 0 : (double)_queuedAudioFrames / _decoder.Info.AudioRate;
-        if (_decoder.DecodingComplete && _decoder.Audio.Completion.IsCompletedSuccessfully && _nextAudio is null &&
+        SetMeta("opennv_movie_audio_frames_queued", Interlocked.Read(ref _queuedAudioFrames));
+        var soundtrackSeconds = _decoder.Info.AudioRate == 0 ? 0 : (double)Interlocked.Read(ref _queuedAudioFrames) / _decoder.Info.AudioRate;
+        if (_decoder.DecodingComplete && (_audioPump is null || _audioPump.IsCompletedSuccessfully) &&
             _lastFrame == _decoder.Info.FrameCount - 1 && seconds >= Math.Max(_decoder.Info.DurationSeconds, soundtrackSeconds))
             Finish(interrupted: false);
+    }
+
+    private async Task PumpAudio(float[] first, CancellationToken cancellation)
+    {
+        var next = first;
+        while (true)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var count = next.Length / _decoder.Info.AudioChannels;
+            var samples = new Vector2[count];
+            for (var index = 0; index < count; index++)
+            {
+                var left = next[index * _decoder.Info.AudioChannels];
+                samples[index] = new(left, _decoder.Info.AudioChannels == 1 ? left : next[index * 2 + 1]);
+            }
+            // The generator ring buffer has a single producer and is designed
+            // for threaded feeding. No scene-tree API is used by this worker.
+            while (!_playback!.CanPushBuffer(count)) await Task.Delay(2, cancellation).ConfigureAwait(false);
+            if (!_playback.PushBuffer(samples)) throw new InvalidOperationException("Movie PCM buffer rejected available space.");
+            Interlocked.Add(ref _queuedAudioFrames, count);
+            if (!await _decoder.Audio.WaitToReadAsync(cancellation).ConfigureAwait(false)) return;
+            if (!_decoder.Audio.TryRead(out next!)) throw new InvalidOperationException("Movie PCM queue lost its single reader.");
+        }
+    }
+
+    private void StopAudioPump()
+    {
+        _audioStop.Cancel();
+        try { _audioPump?.GetAwaiter().GetResult(); }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { GD.PushError($"OPENNV_MOVIE_AUDIO_PUMP_FAILED {error.Message}"); }
+        _audioPump = null;
     }
 
     public override void _Input(InputEvent inputEvent)
@@ -191,6 +228,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
         if (_finished)
             return;
         _finished = true;
+        StopAudioPump();
         _decoder.Dispose();
         _audio?.Stop();
         RestoreWorld();
@@ -204,6 +242,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
         if (_failed || _finished)
             return;
         _failed = true;
+        StopAudioPump();
         _decoder.Dispose();
         _audio?.Stop();
         SetMeta("opennv_movie_error", error.Message);
@@ -219,6 +258,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
             return;
         _pauseOwned = false;
         GetTree().Paused = _pausedBeforeMovie;
+        GetViewport().Disable3D = _disable3DBeforeMovie;
         foreach (var owner in _audioOwners.Where(owner => IsInstanceValid(owner.Node)))
         {
             owner.Node.ProcessMode = owner.Mode;
@@ -229,6 +269,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
     public override void _ExitTree()
     {
         _finished = true;
+        StopAudioPump();
         _decoder.Dispose();
         RestoreWorld();
     }

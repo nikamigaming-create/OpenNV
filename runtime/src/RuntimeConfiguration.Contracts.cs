@@ -70,7 +70,12 @@ internal sealed record PlayerConfiguration(
     float CameraFarMeters,
     uint CollisionLayer,
     uint CollisionMask,
-    DesktopInputConfiguration DesktopInput);
+    DesktopInputConfiguration DesktopInput)
+{
+    // User-requested OpenNV locomotion option, separate from source game stats.
+    public float SprintSpeedMultiplier { get; init; } = 1.6f;
+    public float StepHeightMeters { get; init; } = 0.4f;
+}
 
 internal sealed record DesktopInputConfiguration(
     ConfigurationProvenance Provenance,
@@ -91,6 +96,7 @@ internal sealed record DesktopInputConfiguration(
     DesktopMouseBindingConfiguration PoolPowerDown,
     DesktopInputAcceptanceConfiguration Acceptance)
 {
+    public DesktopKeyBindingConfiguration Sprint { get; init; } = new("flat_sprint", "Shift");
     internal IEnumerable<DesktopKeyBindingConfiguration> KeyBindings
     {
         get
@@ -100,6 +106,7 @@ internal sealed record DesktopInputConfiguration(
             yield return MoveForward;
             yield return MoveBackward;
             yield return Jump;
+            yield return Sprint;
             yield return Activate;
             yield return Grab;
             yield return Reload;

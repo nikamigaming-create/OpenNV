@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
@@ -10,25 +11,28 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
     private readonly FalloutInstallationSettings _settings;
     private readonly FalloutNifFile _source;
     private readonly Node3D _model;
+    private readonly Node3D _pickModel;
+    private readonly RuntimeNativePlayerActor? _player;
     private readonly TextureRect _image;
-    private sealed record PickSurface(MeshInstance3D Mesh, Vector3[] Vertices, int[] Indices, Vector2[] Uvs,
-        BaseMaterial3D.CullModeEnum Cull, bool Occludes);
-    private PickSurface[]? _pickSurfaces;
+    private readonly bool _pipBoy;
+    internal string ScreenName => _pipBoy ? "pipboyscreen:0" : "Screen:0";
     internal SubViewport View { get; }
     internal Camera3D Camera { get; }
     internal Node3D Model => _model;
     internal FalloutNifFile Source => _source;
 
-    internal NativeOwnedRenderedDevice(string modelPath, FalloutInstallationSettings settings)
+    internal NativeOwnedRenderedDevice(string modelPath, FalloutInstallationSettings settings, bool pipBoy = false, RuntimeNativePlayerActor? player = null)
     {
         Name = "OwnedRenderedDevice";
         ProcessMode = ProcessModeEnum.Always;
         _settings = settings;
+        _pipBoy = pipBoy;
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned device content is absent.");
         if (!content.TryRead(modelPath, null, out var bytes, out var identity)) throw new FileNotFoundException(modelPath);
         _source = FalloutNifFile.Read(bytes);
-        var model = RuntimeNativeNifMeshBuilder.Build(_source, 1);
-        model.Root.SetMeta("opennv_source_model", modelPath);
+        _player = player;
+        var model = player is null ? RuntimeNativeNifMeshBuilder.Build(_source, 1) : null;
+        model?.Root.SetMeta("opennv_source_model", modelPath);
         View = new SubViewport
         {
             Name = "DeviceView",
@@ -37,8 +41,11 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
         };
         AddChild(View);
-        View.AddChild(model.Root);
-        _model = model.Root;
+        _model = (Node3D?)player ?? model!.Root;
+        View.AddChild(_model);
+        _pickModel = player is null ? _model : player.Actor.Parts.Single(part => part.Root.FindChildren("*", "", true, false)
+            .OfType<MeshInstance3D>().Any(mesh => mesh.GetMeta("opennv_nif_source_name", "").AsString() == ScreenName)).Root;
+        Surface = new(modelPath, _pickModel, ScreenName);
         Camera = new Camera3D { Name = "DeviceCamera", Current = true };
         // Native NiCamera columns denote direction, up, right. The identity
         // rendered-menu camera therefore looks along native +X with +Y up.
@@ -54,7 +61,7 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         };
         AddChild(_image);
         SetMeta("opennv_device_source", identity);
-        SetMeta("opennv_device_surfaces", model.Surfaces);
+        SetMeta("opennv_device_surfaces", model?.Surfaces ?? player!.Actor.Parts.Sum(part => part.Surfaces));
         SetMeta("opennv_device_unbound", "render-target-composition,screen-effects,shadow-and-specular-selection");
         Resized += Layout;
     }
@@ -66,6 +73,7 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         if (!IsInsideTree() || Size.X <= 0 || Size.Y <= 0) return;
         View.Size = new Vector2I(Math.Max(1, (int)Size.X), Math.Max(1, (int)Size.Y));
         _image.Size = Size;
+        if (_pipBoy) { LayoutPipBoy(); return; }
         var projection = FalloutRenderedMenuProjection.Read(_settings, Size.X / Size.Y, characterCreation: true);
         Camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
         Camera.Fov = 2 * MathF.Atan(projection.VerticalSlope) * 180 / MathF.PI;
@@ -80,72 +88,58 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
         SetMeta("opennv_device_projection", new Vector2(projection.HorizontalSlope, projection.VerticalSlope));
     }
 
-    internal MeshInstance3D Geometry(string sourceName) => _model.FindChildren("*", "", true, false)
-        .OfType<MeshInstance3D>().Single(mesh => mesh.HasMeta("opennv_nif_source_name") &&
-            mesh.GetMeta("opennv_nif_source_name").AsString() == sourceName);
+    internal NativeOwnedDeviceSurface Surface { get; }
+    internal MeshInstance3D Geometry(string sourceName) => Surface.Geometry(sourceName);
+    internal Vector2? PickScreen(Vector2 position) => Surface.PickScreen(Camera.ProjectRayOrigin(position), Camera.ProjectRayNormal(position));
 
-    internal Vector2? PickScreen(Vector2 position)
+    private void LayoutPipBoy()
     {
-        var origin = Camera.ProjectRayOrigin(position); var direction = Camera.ProjectRayNormal(position);
-        var distance = float.PositiveInfinity; Vector2? result = null;
-        _pickSurfaces ??= _model.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
-            .Where(mesh => mesh.Mesh is not null).SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(index =>
-            {
-                var arrays = mesh.Mesh.SurfaceGetArrays(index);
-                var material = mesh.GetActiveMaterial(index);
-                var geometry = _source.ReadGeometry(mesh.GetMeta("opennv_nif_geometry_block").AsInt32());
-                var properties = geometry.Properties.Where(block => block >= 0).Select(_source.ReadObject).ToArray();
-                var alpha = properties.OfType<FalloutNifAlphaProperty>().SingleOrDefault();
-                var depthWrites = properties.Select(property => property switch
-                {
-                    FalloutNifShaderProperty shader => (bool?)((shader.ShaderFlags2 & 1) != 0),
-                    FalloutNifNoLightingProperty shader => (shader.ShaderFlags2 & 1) != 0,
-                    _ => null,
-                }).Where(value => value.HasValue).SingleOrDefault() ?? true;
-                // Blended overlays which do not write depth decorate the screen;
-                // they must not turn its visible controls into an opaque hit wall.
-                var occludes = depthWrites || alpha is null ||
-                    FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold).Blend == FalloutNifBlendMode.Opaque;
-                var cull = material switch
-                {
-                    BaseMaterial3D standard => standard.CullMode,
-                    ShaderMaterial shader when shader.Shader.Code.Contains("cull_disabled", StringComparison.Ordinal) => BaseMaterial3D.CullModeEnum.Disabled,
-                    ShaderMaterial shader when shader.Shader.Code.Contains("cull_front", StringComparison.Ordinal) => BaseMaterial3D.CullModeEnum.Front,
-                    ShaderMaterial shader when shader.Shader.Code.Contains("cull_back", StringComparison.Ordinal) => BaseMaterial3D.CullModeEnum.Back,
-                    _ => throw new NotSupportedException("Rendered-menu surface has no input culling contract."),
-                };
-                return new PickSurface(mesh, arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(),
-                    arrays[(int)Mesh.ArrayType.Index].AsInt32Array(), arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), cull, occludes);
-            })).ToArray();
-        var screen = Geometry("Screen:0");
-        foreach (var surface in _pickSurfaces.Where(surface => surface.Mesh.IsVisibleInTree() && (surface.Mesh == screen || surface.Occludes)))
+        if (_player is not null)
         {
-            var mesh = surface.Mesh;
-            var inverse = mesh.GlobalTransform.AffineInverse();
-            var localOrigin = inverse * origin; var localDirection = inverse.Basis * direction;
-            var vertices = surface.Vertices; var indices = surface.Indices; var uvs = surface.Uvs;
-            for (var triangle = 0; triangle < indices.Length; triangle += 3)
-            {
-                var a = indices[triangle]; var b = indices[triangle + 1]; var c = indices[triangle + 2];
-                var first = vertices[b] - vertices[a]; var second = vertices[c] - vertices[a];
-                var cross = localDirection.Cross(second); var determinant = first.Dot(cross);
-                if (MathF.Abs(determinant) < 1e-8f) continue;
-                // Godot's front-face triangle winding is clockwise.
-                if (surface.Cull == BaseMaterial3D.CullModeEnum.Back && determinant > 0 ||
-                    surface.Cull == BaseMaterial3D.CullModeEnum.Front && determinant < 0) continue;
-                var offset = localOrigin - vertices[a]; var u = offset.Dot(cross) / determinant;
-                if (u is < 0 or > 1) continue;
-                var q = offset.Cross(first); var v = localDirection.Dot(q) / determinant;
-                if (v < 0 || u + v > 1) continue;
-                var hit = second.Dot(q) / determinant;
-                if (hit < 0 || hit >= distance) continue;
-                distance = hit;
-                SetMeta("opennv_pointer_surface", mesh.Name.ToString());
-                result = mesh == screen && uvs.Length == vertices.Length
-                    ? uvs[a] * (1 - u - v) + uvs[b] * u + uvs[c] * v : null;
-            }
+            var projection = FalloutCameraProjection.FromReferenceFov(_settings.Number("Display", "fPipboy1stPersonFOV"),
+                _settings.Number("Display", "fNearDistance"));
+            Camera.Projection = Camera3D.ProjectionType.Perspective; Camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
+            Camera.Fov = projection.VerticalFovDegrees; Camera.Near = projection.NearGameUnits * _player.Skeleton.UnitsToMetres;
+            Camera.Far = 1000 * _player.Skeleton.UnitsToMetres;
+            Camera.Transform = _player.SourceCamera;
+            BindAuthoredLights(_source, _pickModel, Camera);
+            SetMeta("opennv_device_projection", "owned-first-person-skeleton-camera-and-pipboy-FOV; matched-retail-unverified");
+            return;
         }
-        return result;
+        var screen = Geometry(ScreenName);
+        var arrays = screen.Mesh.SurfaceGetArrays(0);
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Select(screen.ToGlobal).ToArray();
+        var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+        var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+        if (vertices.Length == 0 || normals.Length != vertices.Length || uvs.Length != vertices.Length)
+            throw new InvalidDataException("Pip-Boy screen lacks a complete source frame.");
+        var center = vertices.Aggregate(Vector3.Zero, (sum, point) => sum + point) / vertices.Length;
+        var normal = normals.Select(value => (screen.GlobalBasis * value).Normalized())
+            .Aggregate(Vector3.Zero, (sum, point) => sum + point).Normalized();
+        var meanU = uvs.Average(uv => uv.X);
+        var tangent = vertices.Select((point, index) => (point - center) * (uvs[index].X - meanU))
+            .Aggregate(Vector3.Zero, (sum, point) => sum + point);
+        var right = (tangent - normal * tangent.Dot(normal)).Normalized();
+        var up = right.Cross(-normal).Normalized();
+        var height = vertices.Max(point => point.Dot(up)) - vertices.Min(point => point.Dot(up));
+        var width = vertices.Max(point => point.Dot(right)) - vertices.Min(point => point.Dot(right));
+        Camera.Projection = Camera3D.ProjectionType.Orthogonal;
+        Camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
+        Camera.Size = MathF.Max(height * 1.45f, width * 1.45f / (Size.X / Size.Y));
+        Camera.Near = 0.01f; Camera.Far = Camera.Size * 12;
+        Camera.GlobalPosition = center + normal * Camera.Size * 4;
+        Camera.LookAt(center, up);
+        BindAuthoredLights(_source, _model, Camera);
+        SetMeta("opennv_device_projection", "source-screen-UV-frame; retail-arm-animation-and-projection-unbound");
+        foreach (var mesh in _model.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Where(mesh => mesh.Mesh is not null))
+            for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+                if (mesh.GetActiveMaterial(surface) is ShaderMaterial { ResourceName: NativeNifEffectMaterial.ResourceIdentity } material)
+                    material.SetShaderParameter("source_store_encoded", true);
+    }
+
+    internal void PosePipBoy(double seconds, float raised = 1, double? buttonSeconds = null)
+    {
+        _player?.PosePipBoy(seconds, raised, buttonSeconds); LayoutPipBoy();
     }
 
     internal void SelectSection(int section)

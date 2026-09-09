@@ -6,6 +6,18 @@ internal sealed record RuntimeNativeNifCollision(Node3D Body, int Shapes, int Tr
 
 internal static class NativeNifCollisionBuilder
 {
+    // Equipped geometry follows its animation attachment. Its dropped-object
+    // Havok declaration remains inspectable, but cannot publish a world pose.
+    internal static void BindAnimatedAttachment(Node3D root)
+    {
+        foreach (var body in root.FindChildren("*", "", true, false).OfType<CollisionObject3D>())
+        {
+            body.CollisionLayer = body.CollisionMask = 0;
+            if (body is RigidBody3D rigid) rigid.Freeze = true;
+            body.SetMeta("opennv_collision_owner", "animated-equipment;world-simulation-disabled");
+        }
+    }
+
     private const float HavokToGameUnits = 7.0f;
     private const float QuaternionTolerance = 0.0001f;
     private const float MidpointFactor = 0.5f;
@@ -40,10 +52,11 @@ internal static class NativeNifCollisionBuilder
 
         var pinToWorld = attachment.IsBlend || body.Constraints.Length != 0;
         PhysicsBody3D result;
-        if (body.Mass == 0.0f || pinToWorld)
+        if (body.Mass == 0.0f || pinToWorld || body.MotionSystem is 6 or 7)
             result = new StaticBody3D();
         else
-            result = new RigidBody3D { Mass = body.Mass };
+            result = body.MotionSystem is 1 or 2 or 3 or 4 or 5 or 8 ? new RuntimeNifRigidBody { Mass = body.Mass } :
+                throw new NotSupportedException($"NIF dynamic motion system {body.MotionSystem} has no physics owner.");
         result.Name = $"NifCollisionBody{body.Block.Index}";
         result.CollisionLayer = collisionLayer;
         result.CollisionMask = collisionLayer;
@@ -54,10 +67,16 @@ internal static class NativeNifCollisionBuilder
         result.SetMeta("opennv_nif_collision_motion_system", body.MotionSystem);
         result.SetMeta("opennv_nif_collision_constraints", body.Constraints.Length);
         result.SetMeta("opennv_nif_collision_pinned", pinToWorld);
+        if (result is RigidBody3D dynamic)
+        {
+            dynamic.PhysicsMaterialOverride = new PhysicsMaterial { Friction = body.Friction, Bounce = body.Restitution };
+            dynamic.LinearDampMode = RigidBody3D.DampMode.Replace; dynamic.LinearDamp = body.LinearDamping;
+            dynamic.AngularDampMode = RigidBody3D.DampMode.Replace; dynamic.AngularDamp = body.AngularDamping;
+        }
 
         var shapes = new List<CollisionShape3D>();
         var triangles = 0;
-        BuildShape(source, body.Shape, unitsToMetres, pinToWorld ? 0.0f : body.Mass, Transform3D.Identity,
+        BuildShape(source, body.Shape, unitsToMetres, result is StaticBody3D ? 0.0f : body.Mass, Transform3D.Identity,
             shapes, ref triangles, []);
         if (shapes.Count == 0)
             throw new InvalidDataException($"NIF rigid body {body.Block.Index} produced no collision shapes.");
@@ -109,7 +128,10 @@ internal static class NativeNifCollisionBuilder
                         throw new InvalidOperationException(
                             $"Godot could not create packed collision shape {packed.Block.Index}.");
                     concave.BackfaceCollision = true;
-                    Add(output, concave, localTransform, packed.Block.Index);
+                    var materials = (data.SubShapes.Length != 0 ? data.SubShapes : packed.SubShapes).Select(value => value.Material).Distinct().ToArray();
+                    var packedNode = Add(output, concave, localTransform, packed.Block.Index, materials.Length == 1 ? materials[0] : null);
+                    if (materials.Length > 1)
+                        packedNode.SetMeta("opennv_havok_face_materials", PackedMaterials(data, data.SubShapes.Length != 0 ? data.SubShapes : packed.SubShapes));
                     triangles += data.Triangles.Length;
                     break;
                 case FalloutNifConvexVerticesShape convex:
@@ -120,7 +142,7 @@ internal static class NativeNifCollisionBuilder
                     {
                         Points = convex.Vertices.Select(vertex => Convert(vertex, unitsToMetres)).ToArray(),
                         Margin = convex.Radius * HavokToGameUnits * unitsToMetres,
-                    }, localTransform, convex.Block.Index);
+                    }, localTransform, convex.Block.Index, convex.Material);
                     break;
                 case FalloutNifBoxShape box:
                     RequirePositive(box.Dimensions, box.Block.Index, "box dimensions");
@@ -128,14 +150,14 @@ internal static class NativeNifCollisionBuilder
                     {
                         Size = ConvertAbsolute(box.Dimensions) * (2.0f * HavokToGameUnits * unitsToMetres),
                         Margin = box.Radius * HavokToGameUnits * unitsToMetres,
-                    }, localTransform, box.Block.Index);
+                    }, localTransform, box.Block.Index, box.Material);
                     break;
                 case FalloutNifSphereShape sphere:
                     RequirePositive(sphere.Radius, sphere.Block.Index, "sphere radius");
                     Add(output, new SphereShape3D
                     {
                         Radius = sphere.Radius * HavokToGameUnits * unitsToMetres,
-                    }, localTransform, sphere.Block.Index);
+                    }, localTransform, sphere.Block.Index, sphere.Material);
                     break;
                 case FalloutNifCapsuleShape capsule:
                     RequirePositive(capsule.FirstRadius, capsule.Block.Index, "capsule first radius");
@@ -156,7 +178,7 @@ internal static class NativeNifCollisionBuilder
                     {
                         Radius = radius,
                         Height = axis.Length() + 2.0f * radius,
-                    }, localTransform * capsuleTransform, capsule.Block.Index);
+                    }, localTransform * capsuleTransform, capsule.Block.Index, capsule.Material);
                     break;
                 case FalloutNifListShape list:
                     if (list.Children.Length == 0)
@@ -181,15 +203,52 @@ internal static class NativeNifCollisionBuilder
         }
     }
 
-    private static void Add(
-        ICollection<CollisionShape3D> output, Shape3D shape, Transform3D transform, int blockIndex)
+    private static CollisionShape3D Add(
+        ICollection<CollisionShape3D> output, Shape3D shape, Transform3D transform, int blockIndex, uint? material = null)
     {
-        output.Add(new CollisionShape3D
+        var node = new CollisionShape3D
         {
             Name = $"NifCollisionShape{blockIndex}",
             Shape = shape,
             Transform = transform,
-        });
+        };
+        if (material is { } value) node.SetMeta("opennv_havok_material", value);
+        output.Add(node);
+        return node;
+    }
+
+    internal static int[] PackedMaterials(FalloutNifPackedData data, IReadOnlyList<FalloutNifSubShape> parts)
+    {
+        var vertices = new int[data.Vertices.Length];
+        var offset = 0;
+        foreach (var part in parts)
+        {
+            var count = checked((int)part.VertexCount);
+            if (count > vertices.Length - offset) throw new InvalidDataException("Packed material ranges exceed the source vertices.");
+            Array.Fill(vertices, checked((int)part.Material), offset, count);
+            offset += count;
+        }
+        if (offset != vertices.Length) throw new InvalidDataException("Packed material ranges do not cover the source vertices.");
+        // Preserve source triangle order: the physics ray's face index addresses
+        // this same table. A cross-material triangle remains explicitly unknown.
+        return data.Triangles.Select(t => vertices[t.A] == vertices[t.B] && vertices[t.A] == vertices[t.C] ? vertices[t.A] : -1).ToArray();
+    }
+
+    internal static uint HitMaterial(Godot.Collections.Dictionary collision)
+    {
+        if (collision["collider"].AsGodotObject() is not CollisionObject3D body)
+            throw new NotSupportedException("Hit collider has no source material owner.");
+        var shape = body.ShapeOwnerGetOwner(body.ShapeFindOwner(collision["shape"].AsInt32())) as CollisionShape3D;
+        if (shape?.HasMeta("opennv_havok_material") == true)
+            return shape.GetMeta("opennv_havok_material").AsUInt32();
+        if (shape?.HasMeta("opennv_havok_face_materials") == true && collision.TryGetValue("face_index", out var face))
+        {
+            var materials = shape.GetMeta("opennv_havok_face_materials").AsInt32Array();
+            var index = face.AsInt32();
+            if (index >= 0 && index < materials.Length && materials[index] >= 0) return (uint)materials[index];
+            throw new NotSupportedException($"Hit triangle {index} has no unique source Havok material.");
+        }
+        throw new NotSupportedException("Hit shape has no source Havok material binding.");
     }
 
     private static Transform3D BodyTransform(FalloutNifRigidBody body, float unitsToMetres)

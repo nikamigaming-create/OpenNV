@@ -8,10 +8,42 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         new(StringComparer.Ordinal);
     private RuntimeNifControllerSequence? _active;
     private double _elapsedSeconds;
+    private bool _includeStart;
+    private long _generation;
+    private long _textKeyCount;
+    private object? _lastTextKey;
+    private FalloutNifTextKeyTimeline? _textKeys;
+    private readonly SortedSet<string> _unboundTextKeys = new(StringComparer.Ordinal);
+    internal IReadOnlyCollection<string> UnboundTextKeys => _unboundTextKeys;
+    internal static Action<object>? TextKeyObserver { get; set; }
+    internal Func<FalloutNifTextKeyEvent, string>? TextKeyHandler { get; set; }
+    internal bool HasTextKeys => _sequences.Values.Any(sequence => sequence.TextKeys.Count != 0);
+    internal bool CompletedDirectInitialization => _active is { CycleType: 2, DirectClock: not null } &&
+        SourceTimeSeconds >= _active.StopTime && _sequences.Count == 1 && !HasTextKeys;
+    internal long TextKeyCount => _textKeyCount;
 
     internal IReadOnlyCollection<string> SequenceNames => _sequences.Keys;
     internal string? ActiveSequence => _active?.Name;
     internal double SourceTimeSeconds { get; private set; }
+    internal object Observation => new
+    {
+        active = ActiveSequence,
+        sourceTimeSeconds = SourceTimeSeconds,
+        elapsedSeconds = _elapsedSeconds,
+        textKeyCount = _textKeyCount,
+        lastTextKey = _lastTextKey,
+        unboundTextKeys = _unboundTextKeys.ToArray(),
+        sequences = _sequences.Values.Select(sequence => new
+        {
+            sequence.Name,
+            sequence.CycleType,
+            sequence.Frequency,
+            sequence.StartTime,
+            sequence.StopTime,
+            channels = sequence.Channels.Count,
+            textKeys = sequence.TextKeys
+        }).ToArray(),
+    };
 
     public override void _Ready()
     {
@@ -42,8 +74,11 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         if (!_sequences.TryGetValue(name, out var sequence))
             throw new KeyNotFoundException($"NIF source sequence is not registered: {name}");
         _active = sequence;
+        _textKeys = new(sequence.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
         _elapsedSeconds = 0.0;
-        Apply(sequence.StartTime);
+        _includeStart = true;
+        _generation++;
+        Apply(ResolveSourceTime(sequence, 0));
         SetProcess(true);
     }
 
@@ -60,9 +95,11 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
             throw new InvalidOperationException("NIF controller player has no active sequence.");
         if (!double.IsFinite(sourceSeconds))
             throw new ArgumentOutOfRangeException(nameof(sourceSeconds));
-        _elapsedSeconds = Math.Max(
+        _elapsedSeconds = _active.DirectClock is { } clock ? FalloutNifControllerClock.ElapsedAt(clock, sourceSeconds) : Math.Max(
             0.0,
             (sourceSeconds - _active.StartTime) / _active.Frequency);
+        _includeStart = false;
+        _generation++;
         Apply(ResolveSourceTime(_active, _elapsedSeconds));
     }
 
@@ -70,8 +107,28 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     {
         if (_active is null)
             return;
+        if (!double.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));
+        var previous = _elapsedSeconds;
         _elapsedSeconds += delta;
         Apply(ResolveSourceTime(_active, _elapsedSeconds));
+        var sequence = _active;
+        var generation = _generation;
+        var includeStart = _includeStart;
+        _includeStart = false;
+        if (sequence.TextKeys.Count != 0)
+            foreach (var key in _textKeys!.Crossed(previous, _elapsedSeconds, includeStart))
+            {
+                var disposition = TextKeyHandler?.Invoke(key) ?? "unbound-runtime-event";
+                if (disposition.Contains("unbound", StringComparison.Ordinal)) _unboundTextKeys.Add(key.Text);
+                _lastTextKey = new { ordinal = ++_textKeyCount, sequence = sequence.Name, key, disposition };
+                TextKeyObserver?.Invoke(new
+                {
+                    owner = GetParent().GetMeta("opennv_reference_form_key", "unbound").AsString(),
+                    controller = Name.ToString(),
+                    observation = _lastTextKey
+                });
+                if (_generation != generation) return;
+            }
         if (_active.CycleType == 2 && SourceTimeSeconds >= _active.StopTime)
             SetProcess(false);
     }
@@ -87,7 +144,8 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
 
     private static double ResolveSourceTime(RuntimeNifControllerSequence sequence, double elapsed)
     {
-        var duration = sequence.StopTime - sequence.StartTime;
+        if (sequence.DirectClock is { } direct) return FalloutNifControllerClock.Resolve(direct, elapsed);
+        var duration = (double)sequence.StopTime - sequence.StartTime;
         var scaled = elapsed * sequence.Frequency;
         if (sequence.CycleType == 0)
             return sequence.StartTime + scaled % duration;
@@ -104,7 +162,11 @@ internal sealed record RuntimeNifControllerSequence(
     float Frequency,
     float StartTime,
     float StopTime,
-    IReadOnlyList<RuntimeNifControllerChannel> Channels);
+    IReadOnlyList<RuntimeNifControllerChannel> Channels)
+{
+    internal IReadOnlyList<FalloutNifTextKey> TextKeys { get; init; } = [];
+    internal FalloutNifTimeController? DirectClock { get; init; }
+}
 
 internal sealed class RuntimeNifControllerChannel
 {

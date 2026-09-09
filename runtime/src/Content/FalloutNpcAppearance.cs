@@ -101,23 +101,34 @@ internal static class FalloutNpcAppearanceResolver
             foreach (var item in inventory.Where(item => item.Signature == "LVLI" && item.PossibleArmor.Count != 0 && item.Count > 0))
                 blockers.Add($"inventory-leveled-equipment-selection-required:{item.Item}");
         }
+        uint primarySlots = 0;
+        foreach (var key in selected)
+        {
+            var armor = armors.Single(item => Same(item.Source, key));
+            if ((primarySlots & armor.BipedSlots) != 0)
+                blockers.Add($"equipment-slot-conflict:{key}:0x{primarySlots & armor.BipedSlots:x8}");
+            primarySlots |= armor.BipedSlots;
+        }
         uint occupied = 0;
         foreach (var key in selected)
         {
             var armor = armors.Single(item => Same(item.Source, key));
-            var armorParts = new[] { armor.Model }.Concat(armor.Addons).ToArray();
+            // BIPL supplies additional body parts. A separately equipped item
+            // owns its primary slot over those additions; sex-specific addons
+            // with no model do not suppress that sex's race body part.
+            var armorParts = new[] { armor.Model }.Concat(armor.Addons.Where(part => part.ModelPath is not null &&
+                (part.BipedSlots & (primarySlots & ~armor.BipedSlots)) == 0)).ToArray();
             foreach (var armorPart in armorParts.Where(part => part.ModelPath is null && part.BipedSlots != 0))
                 blockers.Add($"sex-specific-equipped-model-absent:{armorPart.Source}");
             var slots = armorParts.Aggregate(0u, (mask, part) => mask | part.BipedSlots);
-            if ((occupied & slots) != 0)
-                blockers.Add($"equipment-slot-conflict:{key}:0x{occupied & slots:x8}");
             occupied |= slots;
             parts.AddRange(armorParts.Where(part => part.ModelPath is not null));
         }
         // Body slots are explicit in both RACE INDX and ARMO/ARMA BMDT.
         // Head-addon hiding needs the runtime's head-part policy; do not guess.
-        if ((occupied & 3) != 0)
+        if ((occupied & 1) != 0)
             blockers.Add("head-equipment-visibility-policy-required");
+        if ((occupied & 2) != 0) parts.RemoveAll(part => part.Role == "hair");
         parts.RemoveAll(part => Same(part.Source, race.FormKey) &&
             part.Role is "body" or "hand-left" or "hand-right" && (part.BipedSlots & occupied) != 0);
         return new FalloutNpcAppearance(npc.FormKey, reference, traits.FormKey, model.FormKey, inventoryOwner.FormKey,
@@ -129,21 +140,8 @@ internal static class FalloutNpcAppearanceResolver
             raceFace, raceParts, parts, inventory, armors, selected, blockers, hair, eye, appearanceState is not null);
     }
 
-    private static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort group)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (true)
-        {
-            if (!seen.Add(record.FormKey.ToString())) throw Error(record, "actor template cycle");
-            var flags = BinaryPrimitives.ReadUInt16LittleEndian(Bytes(record, "ACBS", 24).AsSpan(22));
-            if ((flags & group) == 0) return record;
-            var template = stack.GetEffective(RequiredForm(record, "TPLT"));
-            if (template.Signature == "LVLN")
-                throw new NotSupportedException($"NPC template {template.FormKey} requires authoritative leveled-actor selection.");
-            if (template.Signature != "NPC_") throw Error(template, "NPC template must resolve to NPC_ or LVLN");
-            record = template;
-        }
-    }
+    internal static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort group)
+        => FalloutActorTemplateOwner.Resolve(stack, record, group);
 
     private static IReadOnlyList<FalloutNpcAppearancePart> ReadRaceParts(FalloutPluginStack stack,
         FalloutPluginRecord race, bool female, out FalloutNpcFaceGen face)
@@ -264,7 +262,7 @@ internal static class FalloutNpcAppearanceResolver
         return new FalloutNpcArmor(record.FormKey, mask, data[4], part, addons);
     }
 
-    private static FalloutNpcAppearancePart ReadModel(FalloutPluginStack stack, FalloutPluginRecord record, string role,
+    internal static FalloutNpcAppearancePart ReadModel(FalloutPluginStack stack, FalloutPluginRecord record, string role,
         string modelSignature, string alternateSignature, string flagsSignature, uint mask, string? texture,
         IReadOnlyList<FalloutPluginSubrecord>? fields = null)
     {
@@ -354,7 +352,7 @@ internal static class FalloutNpcAppearanceResolver
         return float.IsFinite(value) ? value : throw Error(owner, "non-finite race dimension");
     }
 
-    private static string? PathField(FalloutPluginRecord record, string signature, string prefix, bool required,
+    internal static string? PathField(FalloutPluginRecord record, string signature, string prefix, bool required,
         IReadOnlyList<FalloutPluginSubrecord>? fields = null)
     {
         var data = Optional(record, signature, fields);

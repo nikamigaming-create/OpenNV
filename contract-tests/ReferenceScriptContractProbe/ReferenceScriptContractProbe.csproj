@@ -9,5 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../runtime/OpenNV.csproj" />
+    <Compile Include="../../tools/OpenNV.DevelopmentLab/CellReview.cs" Link="CellReview.cs" />
   </ItemGroup>
 </Project>

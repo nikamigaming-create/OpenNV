@@ -6,8 +6,12 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed partial class CellNavigationGraph
 {
     internal static CellNavigationGraph LoadOwned(FalloutPluginStack stack, FalloutFormKey cell)
+        => LoadOwned(stack, new HashSet<FalloutFormKey> { cell });
+
+    internal static CellNavigationGraph LoadOwned(FalloutPluginStack stack, IReadOnlySet<FalloutFormKey> cells,
+        Action<FalloutFormKey, Exception>? unavailable = null)
     {
-        var sources = FalloutNavigationMesh.ReadCell(stack, cell);
+        var sources = FalloutNavigationMesh.ReadCells(stack, cells, unavailable);
         var meshes = sources.Select(source => new NavigationMeshRecord(source.Form.ToString(), source.Cell.ToString(), source.Version,
             source.Vertices.Select(value => new Vector3(value.X, value.Y, value.Z)).ToArray(),
             source.Triangles.Select(value => new NavigationTriangle(value.Vertices.Select(index => (int)index).ToArray(),

@@ -73,6 +73,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             _layer.AddChild(new NativeOwnedMessageMenu(message, _records, choice =>
             {
                 GD.Print($"OPENNV_SOURCE_MESSAGE_ACCEPT source={message.Form} choice={choice}");
+                Scripts.MessageResults.Select(message.Request ?? throw new InvalidDataException("Message input has no source request."), choice);
                 _layer?.QueueFree();
                 _layer = null;
                 _current = null;

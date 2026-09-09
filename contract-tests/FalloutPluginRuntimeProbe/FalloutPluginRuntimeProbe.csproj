@@ -2,55 +2,12 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>OpenNV.FalloutPluginRuntimeProbe</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../runtime/src/World/Cells/FalloutReferenceWorld.cs" Link="FalloutReferenceWorld.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActivationProgram.cs" Link="FalloutActivationProgram.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutWeatherLighting.cs" Link="FalloutWeatherLighting.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGameSettingFloats.cs" Link="FalloutGameSettingFloats.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestScriptClock.cs" Link="FalloutQuestScriptClock.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestScriptInitialization.cs" Link="FalloutQuestScriptInitialization.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutStageGlobalProgram.cs" Link="FalloutStageGlobalProgram.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutSkyLightingState.cs" Link="FalloutSkyLightingState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutGlobalState.cs" Link="FalloutGlobalState.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutGameTime.cs" Link="FalloutGameTime.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutPlayerInventory.cs" Link="FalloutPlayerInventory.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestScripts.cs" Link="FalloutQuestScripts.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptBindings.cs" Link="FalloutScriptBindings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutStageQuestVariableProgram.cs" Link="FalloutStageQuestVariableProgram.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />
-    <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
-    <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutCampaignInventory.cs" Link="FalloutCampaignInventory.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutNativeRaceSex.cs" Link="FalloutNativeRaceSex.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutRaceProperties.cs" Link="FalloutRaceProperties.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutNativeVigor.cs" Link="FalloutNativeVigor.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutNativeTagSkills.cs" Link="FalloutNativeTagSkills.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutNativeTraitsFarewell.cs" Link="FalloutNativeTraitsFarewell.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutOpeningPlayerControls.cs" Link="FalloutOpeningPlayerControls.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutOpeningStageTransitions.cs" Link="FalloutOpeningStageTransitions.cs" />
-    <Compile Include="..\..\runtime\src\Gameplay\State\FalloutNativeCampaignSave.cs" Link="FalloutNativeCampaignSave.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutPlacedLight.cs" Link="FalloutPlacedLight.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExternalEmittance.cs" Link="FalloutExternalEmittance.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutNewGamePlayerStart.cs" Link="FalloutNewGamePlayerStart.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutDoorTransition.cs" Link="FalloutDoorTransition.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutLandscapeTransport.cs" Link="FalloutLandscapeTransport.cs" />
+    <ProjectReference Include="../../runtime/OpenNV.csproj" />
   </ItemGroup>
 </Project>

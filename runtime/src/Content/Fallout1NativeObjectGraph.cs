@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.Campaigns.Classic.Native;
 
 namespace OpenNV.Runtime.Content;
 
@@ -30,7 +31,10 @@ internal sealed record Fallout1NativeMapObject(
     IReadOnlyList<int> InstanceValues,
     int Depth,
     Fallout1NativePrototypeDetail Prototype,
-    IReadOnlyList<Fallout1NativeMapObject> Inventory);
+    IReadOnlyList<Fallout1NativeMapObject> Inventory,
+    int Quantity = 1,
+    int LightRadius = 0,
+    int LightIntensity = 0);
 
 internal sealed record Fallout1NativeObjectGraph(
     int TotalTopLevelObjects,
@@ -59,6 +63,8 @@ internal static class Fallout1NativeObjectGraphReader
     private const int PrototypeSubtypeOffset = 0x20;
     private const int PrototypeTypedBytes = 0x24;
     private const int BuiltinPlayerPid = 0x01000000;
+    private const int SourceItemSentinelPid = 0x000000ff;
+    private const int SourceCritterSentinelPid = 0x010001ff;
     private const int FullObjectIdIndex = 0;
     private const int FullTileIndex = 1;
     private const int FullPixelXIndex = 2;
@@ -101,7 +107,7 @@ internal static class Fallout1NativeObjectGraphReader
     internal static Fallout1NativeObjectGraph Read(
         byte[] data,
         Fallout1NativeMap map,
-        Fallout1OwnedContentSource source)
+        IFalloutClassicOwnedSource source)
     {
         var offset = map.ObjectSectionOffset;
         var total = ReadInt32(data, ref offset, "total object count");
@@ -134,7 +140,7 @@ internal static class Fallout1NativeObjectGraphReader
     private static Fallout1NativeMapObject ReadObject(
         byte[] data,
         ref int offset,
-        Fallout1OwnedContentSource source,
+        IFalloutClassicOwnedSource source,
         int mapVersion,
         int containingElevation,
         int depth,
@@ -160,6 +166,8 @@ internal static class Fallout1NativeObjectGraphReader
         int pid;
         int scriptSigned;
         int inventoryLength;
+        int lightRadius;
+        int lightIntensity;
         string layout;
         if (full is not null && Structural(
                 full[FullTileIndex], full[FullRotationIndex], full[FullFidIndex],
@@ -177,6 +185,8 @@ internal static class Fallout1NativeObjectGraphReader
             pid = full[FullPidIndex];
             scriptSigned = full[FullScriptIdIndex];
             inventoryLength = full[FullInventoryLengthIndex];
+            lightRadius = full[13];
+            lightIntensity = full[14];
             layout = "full-21";
             offset += FullObjectWords * sizeof(int);
         }
@@ -201,6 +211,8 @@ internal static class Fallout1NativeObjectGraphReader
             pid = compact[CompactPidIndex];
             scriptSigned = compact[CompactScriptIdIndex];
             inventoryLength = compact[CompactInventoryLengthIndex];
+            lightRadius = compact[9];
+            lightIntensity = compact[10];
             layout = "compact-17";
             offset += CompactObjectWords * sizeof(int);
         }
@@ -228,10 +240,11 @@ internal static class Fallout1NativeObjectGraphReader
         var inventory = new List<Fallout1NativeMapObject>(inventoryLength);
         for (var index = 0; index < inventoryLength; ++index)
         {
-            _ = ReadInt32(data, ref offset, "inventory quantity");
+            var quantity = ReadInt32(data, ref offset, "inventory quantity");
             inventory.Add(ReadObject(
                 data, ref offset, source, mapVersion, containingElevation, depth + 1,
-                ref serial, ref nestedCount));
+                ref serial, ref nestedCount) with
+            { Quantity = quantity });
             nestedCount++;
         }
         serial++;
@@ -239,27 +252,33 @@ internal static class Fallout1NativeObjectGraphReader
             serial, sourceOffset, layout, objectId, tile, pixelX, pixelY, frame, rotation,
             unchecked((uint)fidSigned), unchecked((uint)flagsSigned), elevation, pid,
             unchecked((uint)scriptSigned), inventoryLength, instanceFlags, instanceValues,
-            depth, prototype, inventory);
+            depth, prototype, inventory, LightRadius: lightRadius, LightIntensity: lightIntensity);
     }
 
-    private static Fallout1NativePrototypeDetail ResolvePrototype(
-        Fallout1OwnedContentSource source,
+    internal static Fallout1NativePrototypeDetail ResolvePrototype(
+        IFalloutClassicOwnedSource source,
         int pid)
     {
         var unsigned = unchecked((uint)pid);
         var objectType = (int)(unsigned >> ObjectTypeShift);
         var listIndex = (int)(unsigned & ObjectIndexMask);
         if (pid == BuiltinPlayerPid)
-            return new Fallout1NativePrototypeDetail(pid, CritterObjectType, null, null, null, null);
+            return new Fallout1NativePrototypeDetail(pid, objectType, null, null, null, null);
         var directories = new[] { "items", "critters", "scenery", "walls", "tiles", "misc" };
         if (objectType < 0 || objectType >= directories.Length || listIndex <= 0)
             throw new NotSupportedException($"Fallout 1 PID 0x{unsigned:x8} has an unsupported object type.");
         var directory = directories[objectType];
-        var names = Fallout1NativeLists.Read(source.Read($"proto\\{directory}\\{directory}.lst").Bytes);
+        var names = Fallout1NativeLists.Read(source.Read($"proto\\{directory}\\{directory}.lst", out _));
         if (listIndex > names.Count)
+        {
+            // Unallocated sentinel identities occur in old MAP populations.
+            // A real entry wins: Fallout 2 defines item 255 as an ordinary PRO.
+            if (pid is SourceItemSentinelPid or SourceCritterSentinelPid)
+                return new Fallout1NativePrototypeDetail(pid, objectType, null, null, null, null);
             throw new InvalidDataException($"Fallout 1 PID 0x{unsigned:x8} exceeds its prototype list.");
+        }
         var logicalPath = $"proto\\{directory}\\{names[listIndex - 1]}";
-        var bytes = source.Read(logicalPath).Bytes;
+        var bytes = source.Read(logicalPath, out _);
         if (bytes.Length < PrototypeHeaderBytes || BinaryPrimitives.ReadUInt32BigEndian(bytes) != unsigned)
             throw new InvalidDataException($"Fallout 1 PRO identity differs: {logicalPath}");
         var message = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(sizeof(uint)));
@@ -276,6 +295,7 @@ internal static class Fallout1NativeObjectGraphReader
 
     private static int InstanceExtraWords(int mapVersion, Fallout1NativePrototypeDetail prototype)
     {
+        if (prototype.Pid == SourceItemSentinelPid && prototype.LogicalPath is null) return 1;
         if (prototype.ObjectType == CritterObjectType) return CritterInstanceWords;
         if (prototype.ObjectType == ItemObjectType)
             return prototype.Subtype switch

@@ -12,12 +12,51 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--particle-buffer"])
+            {
+                ExerciseParticleBuffer();
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--sound-events", var soundRoot, var soundModel])
+            {
+                ExerciseSoundEvents(soundRoot, soundModel);
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--text-keys", var eventRoot, var eventModel])
+            {
+                ExerciseTextKeys(eventRoot, eventModel);
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--particles", var particleRoot, var particleModel])
+            {
+                await ExerciseParticles(particleRoot, particleModel);
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--particle-bounds", var boundsRoot, var boundsModel])
+            {
+                await ExerciseParticles(boundsRoot, boundsModel, checkBounds: true);
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--rigid", var rigidRoot, var rigidModel])
+            {
+                await ExerciseRigidBodyPhysics(rigidRoot, rigidModel);
+                GetTree().Quit();
+                return;
+            }
+            ExerciseReferenceAngles();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();
             ExerciseMorphBasis();
             ExerciseDdsImages();
             ExerciseHeadTracking();
+            ExerciseAuthoredDecalSurfaces();
+            ExerciseDormantEnvironmentMask();
             if (OS.GetCmdlineUserArgs() is ["--look", var lookRoot, var lookActor, var lookQuest])
             {
                 ExerciseOwnedHeadTracking(lookRoot, lookActor, lookQuest);
@@ -67,13 +106,37 @@ public partial class NativeNifInstanceAudit : Node
                 GetTree().Quit();
                 return;
             }
-            if (OS.GetCmdlineUserArgs() is ["--build", var buildRoot, var buildModel])
+            if (OS.GetCmdlineUserArgs() is ["--build" or "--build-lod", var buildRoot, var buildModel])
             {
                 RuntimeLiveContentSource.Configure(buildRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
                 using var content = RuntimeLiveContentSource.Current!;
                 if (!content.TryRead(buildModel, null, out var bytes, out var identity)) throw new FileNotFoundException(buildModel);
-                var scene = RuntimeNativeNifMeshBuilder.Build(bytes, 0.0142875f);
+                var nif = FalloutNifFile.Read(bytes);
+                foreach (var block in nif.Blocks.Where(block => block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape"))
+                {
+                    var geometry = nif.ReadGeometry(block.Index);
+                    var data = nif.ReadMeshData(geometry.Data);
+                    GD.Print($"OPENNV_NIF_SOURCE_GEOMETRY block={block.Index} type={block.TypeName} name={geometry.Name} flags={geometry.Flags:x4} properties={string.Join(',', geometry.Properties)} " +
+                        $"vertices={data.Vertices.Length} normals={data.Normals.Length} tangents={data.Tangents.Length} uv={data.TextureCoordinates.Length} additional={data.AdditionalData}");
+                }
+                foreach (var block in nif.Blocks.Where(block => block.TypeName == "BSShaderPPLightingProperty"))
+                {
+                    var shader = (FalloutNifShaderProperty)nif.ReadObject(block.Index);
+                    GD.Print($"OPENNV_NIF_SOURCE_SHADER block={block.Index} type={shader.ShaderType} flags={shader.ShaderFlags:x8}/{shader.ShaderFlags2:x8}");
+                    if (nif.ReadObject(shader.TextureSet) is FalloutNifShaderTextureSet textures)
+                        GD.Print($"OPENNV_NIF_SOURCE_TEXTURES {string.Join('|', textures.Textures)}");
+                }
+                Action<FalloutNifGeometry>? unbound = OS.GetCmdlineUserArgs()[0] == "--build-lod"
+                    ? geometry => GD.Print($"OPENNV_NIF_LOD_UNBOUND_DRAW geometry={geometry.Block.Index} material=world-owner-required") : null;
+                var scene = RuntimeNativeNifMeshBuilder.Build(nif, 0.0142875f, unboundPropertyFreeLod: unbound);
                 AddChild(scene.Root);
+                Aabb? bounds = null;
+                foreach (var mesh in scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Where(mesh => mesh.Mesh is not null))
+                {
+                    var box = mesh.GlobalTransform * mesh.GetAabb();
+                    bounds = bounds?.Merge(box) ?? box;
+                }
+                GD.Print($"OPENNV_NIF_SOURCE_BOUNDS metres={bounds}");
                 GD.Print($"OPENNV_NIF_SOURCE_BUILD_PASS source={identity} nodes={scene.Nodes} surfaces={scene.Surfaces} vertices={scene.Vertices}");
                 GetTree().Quit();
                 return;

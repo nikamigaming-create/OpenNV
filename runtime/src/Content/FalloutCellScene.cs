@@ -380,7 +380,7 @@ internal static class FalloutCellSceneReader
         return null;
     }
 
-    private static FalloutFormKey? ParentWorldspace(FalloutPluginRecord record)
+    internal static FalloutFormKey? ParentWorldspace(FalloutPluginRecord record)
     {
         for (var index = record.Groups.Count - 1; index >= 0; --index)
             if (record.Groups[index].Type == WorldChildrenGroupType)

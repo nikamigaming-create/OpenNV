@@ -1,3 +1,5 @@
+using OpenNV.Runtime.Content;
+
 namespace OpenNV.Runtime;
 
 /// <summary>
@@ -36,5 +38,35 @@ internal static class RuntimeLaunchValidator
         if (missing is not null)
             throw new ArgumentException(
                 $"The live retail-file route requires --{missing}.");
+    }
+
+    internal static void ValidateInstallation(
+        IReadOnlyDictionary<string, string> options,
+        NativeGameInstallation installation)
+    {
+        var expectedCampaign = installation.Game switch
+        {
+            NativeGame.Fallout1 => "fallout-1",
+            NativeGame.Fallout2 => "fallout-2",
+            NativeGame.Fallout3 => "fallout-3",
+            NativeGame.FalloutNewVegas => "fallout-new-vegas",
+            _ => throw new NotSupportedException("The detected game has no campaign launch contract."),
+        };
+        if (!options.TryGetValue("campaign", out var campaign) ||
+            !campaign.Equals(expectedCampaign, StringComparison.Ordinal))
+            throw new ArgumentException(
+                $"The selected installation is {expectedCampaign}; --campaign must match before loading its state.");
+
+        if (installation.Game is not (NativeGame.Fallout1 or NativeGame.Fallout2))
+            return;
+        var presentation = options.GetValueOrDefault("presentation",
+            options.GetValueOrDefault("fo1-start-presentation", "hex-tactical"));
+        if (options.TryGetValue("fo1-start-presentation", out var previousPresentation) &&
+            previousPresentation != presentation)
+            throw new ArgumentException("Conflicting classic presentation selections.");
+        if (presentation != "hex-tactical" || options.ContainsKey("vr"))
+            throw new NotSupportedException(
+                $"{expectedCampaign} {presentation} is unavailable in the current native runtime; " +
+                "the hex scene preview does not implement FPS or VR gameplay.");
     }
 }

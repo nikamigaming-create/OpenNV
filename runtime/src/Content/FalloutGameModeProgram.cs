@@ -17,6 +17,10 @@ internal sealed class FalloutGameModeProgram
     private readonly IReadOnlyList<string[]> _lines;
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines) => _lines = lines;
 
+    internal IEnumerable<string> CommandNames => _lines.Select(tokens => tokens[0].ToLowerInvariant())
+        .Where(command => command is not ("if" or "elseif" or "else" or "endif" or "set" or "return"))
+        .Select(command => command[(command.LastIndexOf('.') + 1)..]);
+
     internal static FalloutGameModeProgram Read(ReadOnlySpan<byte> source, string blockName = "GameMode", uint? argument = null)
     {
         if (source.IndexOfAnyInRange((byte)0x80, byte.MaxValue) >= 0)
@@ -78,6 +82,12 @@ internal sealed class FalloutGameModeProgram
     internal void Execute(Func<string, double> variable, Action<string, double> assign,
         Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null)
     {
+        foreach (var _ in Steps(variable, assign, call, function)) { }
+    }
+
+    internal IEnumerable<bool> Steps(Func<string, double> variable, Action<string, double> assign,
+        Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null)
+    {
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
         var active = true;
         foreach (var tokens in _lines)
@@ -107,11 +117,12 @@ internal sealed class FalloutGameModeProgram
                         throw new NotSupportedException("Script assignment syntax is unbound.");
                     assign(tokens[1], Evaluate(tokens[3..], variable, function));
                     break;
-                case "return" when active: return;
+                case "return" when active: yield break;
                 default:
                     if (active) call(tokens[0], tokens[1..]);
                     break;
             }
+            yield return true;
         }
     }
 
@@ -189,7 +200,7 @@ internal sealed class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+(?:\\.[0-9]*)?(?:[eE][+-]?[0-9]+)?|==|!=|>=|<=|&&|\\|\\||[()+*/!<>-]", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||[()+*/!<>-]", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {

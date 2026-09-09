@@ -26,6 +26,14 @@ internal sealed record NativeOwnedUiArt(Texture2D Texture, Rect2 Region)
         var rows = Encoding.UTF8.GetString(bytes).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => !line.TrimStart().StartsWith('#')).Select(line => Regex.Split(line.Trim(), @"[\s,]+"))
             .Where(row => row[0].Equals(member, StringComparison.OrdinalIgnoreCase)).ToArray();
+        // Some winning XML images name a shared atlas but have no packed entry.
+        // Their original standalone DDS remains the source image; do not select
+        // a similar atlas member or substitute artwork.
+        if (rows.Length == 0)
+        {
+            var texture = NativeOwnedMediaLoader.LoadTexture("textures/" + filename);
+            return new(texture, new Rect2(Vector2.Zero, texture.GetSize()));
+        }
         if (rows.Length != 1 || rows[0].Length != 9 || rows[0][3] != "2D")
             throw new NotSupportedException($"UI atlas {atlas} cannot resolve one 2D region for {filename}.");
         var selected = rows[0];

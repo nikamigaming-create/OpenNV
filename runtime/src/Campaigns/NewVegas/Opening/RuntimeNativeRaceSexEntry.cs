@@ -3,6 +3,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -23,6 +24,50 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     internal event Action<FalloutNativeRaceSexSelection>? Accepted;
     internal event Action<Exception>? Failed;
     internal FalloutNativeCharacterCreation Creation => _creation;
+    internal NativeOwnedActorPreview Portrait => _portrait ?? throw new InvalidOperationException("Character portrait is not ready.");
+    internal ClassicPortraitMode PortraitMode { get; private set; }
+    private Button? _envision;
+
+    internal void EnableEnvision(ClassicPortraitMode initial)
+    {
+        if (_envision is not null) throw new InvalidOperationException("Envision is already configured.");
+        _envision = new Button
+        {
+            Name = "Envision",
+            CustomMinimumSize = new(270, 42),
+            ToggleMode = true,
+            FocusMode = Control.FocusModeEnum.All,
+            TooltipText = "Show the same character as an illustrated Fallout portrait or a live 3D face.",
+        };
+        _envision.AddThemeFontSizeOverride("font_size", 17);
+        _envision.AddThemeColorOverride("font_color", new Color("94f58d"));
+        _envision.Pressed += () => SetPortraitMode(PortraitMode == ClassicPortraitMode.Illustrated
+            ? ClassicPortraitMode.Live3D : ClassicPortraitMode.Illustrated);
+        AddChild(_envision); _screen.RegisterExternalControl(_envision);
+        _envision.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomLeft);
+        _envision.Position = new(20, GetViewport().GetVisibleRect().Size.Y - 58);
+        SetPortraitMode(initial);
+    }
+
+    internal void AddAppearanceBackButton(Action close)
+    {
+        var back = new Button { Name = "AppearanceBack", Text = "Back to world preview", CustomMinimumSize = new(230, 42) };
+        AddChild(back); _screen.RegisterExternalControl(back);
+        back.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomRight);
+        back.Position = GetViewport().GetVisibleRect().Size - new Vector2(250, 58);
+        back.Pressed += close;
+    }
+
+    internal void SetPortraitMode(ClassicPortraitMode mode)
+    {
+        _screen.SetPortraitMode(mode); PortraitMode = mode;
+        _portrait?.SetIllustratedBackdrop(mode == ClassicPortraitMode.Illustrated);
+        if (_envision is not null)
+        {
+            _envision.Text = mode == ClassicPortraitMode.Illustrated ? "ENVISION · ILLUSTRATED" : "ENVISION · LIVE 3D";
+            _envision.SetPressedNoSignal(mode == ClassicPortraitMode.Illustrated);
+        }
+    }
     internal void SelectPage(int page)
     {
         if (page < 0 || page >= _creation.Headers.Count) throw new ArgumentOutOfRangeException(nameof(page));
@@ -155,6 +200,7 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     {
         var appearance = _creation.Appearance();
         var portrait = new NativeOwnedActorPreview(_records, appearance, _settings, (int)_screen.ContentView.Size.X);
+        portrait.SetIllustratedBackdrop(PortraitMode == ClassicPortraitMode.Illustrated);
         AddChild(portrait);
         try
         {

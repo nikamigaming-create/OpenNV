@@ -52,6 +52,9 @@ $harnessOutput = Join-Path $repository "tmp\runtime-gate\live-harness"
 if ($LASTEXITCODE -ne 0) { throw "OpenNV live harness build failed." }
 
 $probes = @(
+    "RuntimeLaunchContractProbe",
+    "ClassicFrameContractProbe",
+    "ClassicCharacterContractProbe",
     "ReferenceScriptContractProbe",
     "ActorAnimationPlaybackProbe",
     "ActorComplexionContractProbe",
@@ -111,6 +114,14 @@ if ($LASTEXITCODE -ne 0 -or $instanceText -match "(?m)^ERROR:" -or
     throw "OpenNV native instance binding failed:`n$instanceText"
 }
 Write-Output "OPENNV_NIF_INSTANCE_AUDIT_PASS controllers=independent targets=instance-owned prototype=unchanged"
+
+$referenceOutput = & $Godot --headless --path $runtime res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn 2>&1
+$referenceText = $referenceOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $referenceText -match "(?m)^ERROR:" -or
+    $referenceText -notmatch "OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS") {
+    throw "OpenNV native reference events failed:`n$referenceText"
+}
+Write-Output "OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true activation=true localState=true"
 
 $traceOutput = & $Godot --headless --path $runtime res://tools/NativeRenderTraceAudit/NativeRenderTraceAudit.tscn 2>&1
 $traceText = $traceOutput | Out-String

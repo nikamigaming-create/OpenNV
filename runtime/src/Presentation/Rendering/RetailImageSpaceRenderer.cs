@@ -112,8 +112,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private const uint TextureUsage =
         (uint)(RenderingDevice.TextureUsageBits.SamplingBit |
             RenderingDevice.TextureUsageBits.StorageBit |
-            RenderingDevice.TextureUsageBits.CanCopyFromBit |
-            RenderingDevice.TextureUsageBits.CpuReadBit);
+            RenderingDevice.TextureUsageBits.CanCopyFromBit);
 
     private static readonly StringName TextureContext = new("opennv_retail_hdr");
 
@@ -321,6 +320,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private RenderingDevice? _renderingDevice;
     private Rid _shader;
     private Rid _pipeline;
+    private readonly Dictionary<(Rid Source, Rid Sampler, Rid Second, Rid SecondSampler, Rid Destination), Rid> _uniformSets = [];
     private Rid _pointSampler;
     private Rid _linearSampler;
     private int _operational;
@@ -453,9 +453,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             if (buffers is null)
                 return;
             var size = buffers.GetInternalSize();
-            if (size != new Vector2I(
-                    _capture.ExpectedWidthPixels,
-                    _capture.ExpectedHeightPixels))
+            if (size.X <= 0 || size.Y <= 0)
             {
                 Volatile.Write(ref _operational, 0);
                 return;
@@ -769,13 +767,19 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         bool initializeAdaptation = false,
         bool horizontalEffect = false)
     {
-        var uniforms = new Godot.Collections.Array<RDUniform>
+        var key = (sourceZero, samplerZero, sourceOne, samplerOne, destination);
+        if (!_uniformSets.TryGetValue(key, out var uniformSet) || !_renderingDevice!.UniformSetIsValid(uniformSet))
         {
-            SampledUniform(0, samplerZero, sourceZero),
-            SampledUniform(1, samplerOne, sourceOne),
-            ImageUniform(2, destination),
-        };
-        var uniformSet = UniformSetCacheRD.GetCache(_shader, 0, uniforms);
+            using var first = SampledUniform(0, samplerZero, sourceZero);
+            using var second = SampledUniform(1, samplerOne, sourceOne);
+            using var output = ImageUniform(2, destination);
+            var uniforms = new Godot.Collections.Array<RDUniform> { first, second, output };
+            uniformSet = UniformSetCacheRD.GetCache(_shader, 0, uniforms);
+            if (_uniformSets.Count > 128)
+                foreach (var obsolete in _uniformSets.Where(pair => !_renderingDevice!.UniformSetIsValid(pair.Value)).Select(pair => pair.Key).ToArray())
+                    _uniformSets.Remove(obsolete);
+            _uniformSets[key] = uniformSet;
+        }
         if (!uniformSet.IsValid)
             throw new InvalidOperationException("Could not bind a retail HDR compositor pass.");
         var constants = PushConstants(pass, destinationSize, sourceSize, initializeAdaptation, horizontalEffect);

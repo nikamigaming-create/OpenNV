@@ -34,6 +34,15 @@ try
         Record("SOUN", 0x10, Sound("WinningSound", "fx\\winner.ogg", Data36(4, 9, 0x0050, -125)))));
 
     using var stack = FalloutPluginStack.Load(fixtureRoot, ["Master.esm", "Patch.esp"]);
+    Require(FalloutSoundRecordReader.Find(stack, "winningsound").FormKey == new FalloutFormKey("Master.esm", 0x10),
+        "The source sound name index ignored the winning override or case-insensitive binding.");
+    using (var independent = FalloutPluginStack.Load(fixtureRoot, ["Master.esm"]))
+        Require(FalloutSoundRecordReader.Find(independent, "BaseSound").FormKey == new FalloutFormKey("Master.esm", 0x10),
+            "A sound name index leaked another load order's winner.");
+    var oldNameFound = false;
+    try { _ = FalloutSoundRecordReader.Find(stack, "BaseSound"); oldNameFound = true; }
+    catch (InvalidDataException) { }
+    Require(!oldNameFound, "The overridden sound name remains bound.");
     var winner = FalloutSoundRecordReader.Read(stack, new FalloutFormKey("Master.esm", 0x10));
     Require(winner.EditorId == "WinningSound" && winner.LogicalPath == "sound\\fx\\winner.ogg",
         "Effective SOUN override/path resolution failed.");

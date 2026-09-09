@@ -2,6 +2,9 @@ name: Validate OpenNV Godot
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -21,7 +24,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "9.0.x"
+          global-json-file: global.json
 
       - name: Download pinned Godot Mono
         id: godot

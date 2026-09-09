@@ -3,7 +3,7 @@ using System.Text;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
-internal sealed class FalloutNifFile
+internal sealed partial class FalloutNifFile
 {
     internal const uint Version = 0x14020007;
     internal const uint UserVersion = 11;
@@ -35,19 +35,26 @@ internal sealed class FalloutNifFile
             AnimationVersion2Alternate, GeometryVersion2Current];
 
     private readonly ReadOnlyMemory<byte> _payload;
+    // Declarations are immutable source data. Each instance/animation owns its
+    // changing state; repeated geometry/controller queries reuse the decode.
+    private readonly FalloutNifObject?[] _decodedObjects;
+    private readonly Action<FalloutNifReadRange>? _observe;
 
     private FalloutNifFile(
         ReadOnlyMemory<byte> payload,
         uint userVersion2,
         IReadOnlyList<string> strings,
         IReadOnlyList<FalloutNifBlock> blocks,
-        IReadOnlyList<int> roots)
+        IReadOnlyList<int> roots,
+        Action<FalloutNifReadRange>? observe)
     {
         _payload = payload;
         UserVersion2 = userVersion2;
         Strings = strings;
         Blocks = blocks;
         Roots = roots;
+        _decodedObjects = new FalloutNifObject?[blocks.Count];
+        _observe = observe;
     }
 
     internal uint UserVersion2 { get; }
@@ -55,9 +62,9 @@ internal sealed class FalloutNifFile
     internal IReadOnlyList<FalloutNifBlock> Blocks { get; }
     internal IReadOnlyList<int> Roots { get; }
 
-    internal static FalloutNifFile Read(ReadOnlyMemory<byte> payload)
+    internal static FalloutNifFile Read(ReadOnlyMemory<byte> payload, Action<FalloutNifReadRange>? observe = null)
     {
-        var cursor = new NifCursor(payload.Span, "NIF");
+        var cursor = new NifCursor(payload.Span, "NIF", observe);
         var header = cursor.ReadLineAscii("header");
         if (!string.Equals(header, "Gamebryo File Format, Version 20.2.0.7", StringComparison.Ordinal))
             throw new InvalidDataException($"Unsupported NIF header: {header}");
@@ -125,20 +132,34 @@ internal sealed class FalloutNifFile
             RequireReference(roots[index], blocks.Length, $"root {index}", allowNull: false);
         }
         cursor.RequireEnd();
-        return new FalloutNifFile(payload, userVersion2, strings, blocks, roots);
+        return new FalloutNifFile(payload, userVersion2, strings, blocks, roots, observe);
     }
 
     internal FalloutNifObject ReadObject(int blockIndex)
     {
         RequireReference(blockIndex, Blocks.Count, "block", allowNull: false);
+        if (Volatile.Read(ref _decodedObjects[blockIndex]) is { } cached) return cached;
+        var decoded = DecodeObject(blockIndex);
+        return Interlocked.CompareExchange(ref _decodedObjects[blockIndex], decoded, null) ?? decoded;
+    }
+
+    private FalloutNifObject DecodeObject(int blockIndex)
+    {
         var block = Blocks[blockIndex];
         var cursor = BlockCursor(block);
         FalloutNifObject result = block.TypeName switch
         {
-            "NiNode" or "NiBone" or "BSFadeNode" => ReadNode(block, ref cursor),
+            "NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode" or "BSRangeNode" or "BSBlastNode" or "BSDamageStage" or "NiBillboardNode" or "BSValueNode" or "BSMasterParticleSystem" => ReadNode(block, ref cursor),
             "NiAmbientLight" => ReadAmbientLight(block, ref cursor),
             "NiPointLight" => ReadPointLight(block, ref cursor),
-            "NiTriShape" or "NiTriStrips" => ReadGeometry(block, ref cursor),
+            "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape" => ReadGeometry(block, ref cursor),
+            "NiParticleSystem" => ReadParticleSystem(block, ref cursor),
+            "NiPSysData" => ReadParticleData(block, ref cursor),
+            "NiPSysAgeDeathModifier" or "NiPSysMeshEmitter" or "NiPSysBoxEmitter" or "NiPSysCylinderEmitter" or "NiPSysSphereEmitter" or
+                "NiPSysSpawnModifier" or "NiPSysGrowFadeModifier" or "BSPSysSimpleColorModifier" or
+                "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
+                "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" => ReadParticleModifier(block, ref cursor),
+            "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
             "NiSkinInstance" or "BSDismemberSkinInstance" => ReadSkinInstance(block, ref cursor),
@@ -148,13 +169,17 @@ internal sealed class FalloutNifFile
             "NiTransformInterpolator" => ReadTransformInterpolator(block, ref cursor),
             "NiBSplineTransformInterpolator" or "NiBSplineCompTransformInterpolator" =>
                 ReadSplineTransformInterpolator(block, ref cursor),
+            "NiBSplinePoint3Interpolator" or "NiBSplineCompPoint3Interpolator" => ReadSplinePoint3Interpolator(block, ref cursor),
+            "NiBSplineFloatInterpolator" or "NiBSplineCompFloatInterpolator" => ReadSplineFloatInterpolator(block, ref cursor),
             "NiBSplineBasisData" => new FalloutNifSplineBasisData(block,
                 cursor.ReadCount32("spline control point count", MaximumTableEntries)),
             "NiBSplineData" => ReadSplineData(block, ref cursor),
             "NiTransformData" => ReadTransformData(block, ref cursor),
             "NiFloatInterpolator" => ReadFloatInterpolator(block, ref cursor),
             "NiFloatData" => ReadFloatData(block, ref cursor),
-            "NiBoolInterpolator" => new FalloutNifBoolInterpolator(block, cursor.ReadByte("bool value"), ReadReference(ref cursor, "bool data")),
+            "NiBoolInterpolator" or "NiBoolTimelineInterpolator" => new FalloutNifBoolInterpolator(block, cursor.ReadByte("bool value"), ReadReference(ref cursor, "bool data")),
+            "NiBlendBoolInterpolator" => ReadBlendBoolInterpolator(block, ref cursor),
+            "NiPathInterpolator" => ReadPathInterpolator(block, ref cursor),
             "NiBoolData" => ReadBoolData(block, ref cursor),
             "NiVisController" => new FalloutNifVisibilityController(block, ReadTimeController(ref cursor, "visibility"), ReadReference(ref cursor, "visibility interpolator")),
             "NiGeomMorpherController" => ReadMorphController(block, ref cursor),
@@ -165,6 +190,7 @@ internal sealed class FalloutNifFile
             "NiBlendPoint3Interpolator" => ReadBlendPoint3Interpolator(block, ref cursor),
             "NiTextureTransformController" => ReadTextureTransformController(block, ref cursor),
             "NiMaterialColorController" => ReadMaterialColorController(block, ref cursor),
+            "NiAlphaController" => new FalloutNifAlphaController(block, ReadTimeController(ref cursor, "alpha controller"), ReadReference(ref cursor, "alpha interpolator")),
             "NiTransformController" => ReadTransformController(block, ref cursor),
             "NiFloatExtraDataController" => new FalloutNifFloatExtraDataController(block,
                 ReadTimeController(ref cursor, "float extra-data controller"),
@@ -199,6 +225,10 @@ internal sealed class FalloutNifFile
             "bhkConvexTransformShape" => ReadConvexTransformShape(block, ref cursor),
             "BSShaderNoLightingProperty" => ReadNoLightingProperty(block, ref cursor),
             "TileShaderProperty" => ReadTileShaderProperty(block, ref cursor),
+            "SkyShaderProperty" => ReadSkyShaderProperty(block, ref cursor),
+            "BSMultiBound" => new FalloutNifMultiBound(block, ReadReference(ref cursor, "multi-bound data")),
+            "BSMultiBoundAABB" => new FalloutNifMultiBoundBox(block, ReadVector(ref cursor, "bound center"), ReadVector(ref cursor, "bound size")),
+            "NiAdditionalGeometryData" => ReadLandscapeMorphData(block, ref cursor),
             "NiAlphaProperty" => ReadAlphaProperty(block, ref cursor),
             "NiStencilProperty" => ReadStencilProperty(block, ref cursor),
             "NiTexturingProperty" => ReadTexturingProperty(block, ref cursor),
@@ -218,7 +248,7 @@ internal sealed class FalloutNifFile
     {
         RequireReference(blockIndex, Blocks.Count, "constraint block", allowNull: false);
         var block = Blocks[blockIndex];
-        if (block.TypeName is not ("bhkRagdollConstraint" or "bhkMalleableConstraint"))
+        if (block.TypeName is not ("bhkRagdollConstraint" or "bhkMalleableConstraint" or "bhkLimitedHingeConstraint"))
             throw new NotSupportedException(
                 $"NIF constraint block {blockIndex} type {block.TypeName} has no identity contract.");
         var cursor = BlockCursor(block);
@@ -237,7 +267,7 @@ internal sealed class FalloutNifFile
         if (priority is not (1U or 3U))
             throw new NotSupportedException(
                 $"NIF constraint block {blockIndex} priority {priority} is unsupported.");
-        var wrappedType = RagdollConstraintType;
+        var wrappedType = block.TypeName == "bhkLimitedHingeConstraint" ? 2U : RagdollConstraintType;
         if (block.TypeName == "bhkMalleableConstraint")
         {
             wrappedType = cursor.ReadUInt32("malleable wrapped constraint type");
@@ -414,8 +444,17 @@ internal sealed class FalloutNifFile
         var av = ReadAvObject(ref cursor, block.TypeName);
         var children = ReadReferences(ref cursor, "children");
         var effects = ReadReferences(ref cursor, "effects");
+        var bound = block.TypeName == "BSMultiBoundNode" ? ReadReference(ref cursor, "multi bound") : -1;
+        var range = block.TypeName is "BSRangeNode" or "BSBlastNode" or "BSDamageStage"
+            ? new FalloutNifNodeRange(cursor.ReadByte("range minimum"), cursor.ReadByte("range maximum"), cursor.ReadByte("range current")) : null;
+        ushort? billboard = block.TypeName == "NiBillboardNode" ? cursor.ReadUInt16("billboard mode") : null;
+        var value = block.TypeName == "BSValueNode"
+            ? new FalloutNifNodeValue(cursor.ReadUInt32("node value"), cursor.ReadByte("value node flags")) : null;
+        var master = block.TypeName == "BSMasterParticleSystem"
+            ? new FalloutNifParticleMaster(cursor.ReadUInt16("master emitter capacity"), ReadReferences(ref cursor, "master particle systems")) : null;
         return new FalloutNifNode(block, av.Name, av.Transform, av.Flags, av.Controller,
-            av.ExtraData, av.Properties, av.CollisionObject, children, effects);
+            av.ExtraData, av.Properties, av.CollisionObject, children, effects)
+        { MultiBound = bound, Range = range, Billboard = billboard, Value = value, ParticleMaster = master };
     }
 
     private FalloutNifAmbientLight ReadAmbientLight(FalloutNifBlock block, ref NifCursor cursor)
@@ -452,9 +491,17 @@ internal sealed class FalloutNifFile
             materialExtraData[index] = cursor.ReadInt32($"material extra data {index}");
         var activeMaterial = cursor.ReadInt32("active material");
         var dirty = cursor.ReadBoolean("dirty flag");
+        var segments = Array.Empty<FalloutNifGeometrySegment>();
+        if (block.TypeName == "BSSegmentedTriShape")
+        {
+            segments = new FalloutNifGeometrySegment[cursor.ReadCount32("segment count", MaximumTableEntries)];
+            for (var index = 0; index < segments.Length; index++)
+                segments[index] = new(cursor.ReadByte("segment flags"), cursor.ReadUInt32("segment first index"), cursor.ReadUInt32("segment triangles"));
+        }
         return new FalloutNifGeometry(block, av.Name, av.Transform, av.Flags, av.Controller,
             av.ExtraData, av.Properties, av.CollisionObject, data, skin, materialNames, materialExtraData,
-            activeMaterial, dirty);
+            activeMaterial, dirty)
+        { Segments = segments };
     }
 
     private FalloutNifMeshData ReadTriShapeData(FalloutNifBlock block, ref NifCursor cursor) =>
@@ -531,7 +578,7 @@ internal sealed class FalloutNifFile
         for (var index = 0; index < colors.Length; ++index)
             colors[index] = new FalloutNifColor(
                 cursor.ReadFiniteSingle($"color {index} r"), cursor.ReadFiniteSingle($"color {index} g"),
-                cursor.ReadFiniteSingle($"color {index} b"), cursor.ReadFiniteSingle($"color {index} a"));
+                cursor.ReadFiniteSingle($"color {index} b"), BitConverter.Int32BitsToSingle(cursor.ReadInt32($"color {index} a")));
         var textureCoordinates = new FalloutNifTexCoord[uvSets][];
         for (var set = 0; set < textureCoordinates.Length; ++set)
         {
@@ -706,12 +753,40 @@ internal sealed class FalloutNifFile
         return new FalloutNifSplineData(block, floats, compact);
     }
 
+    private FalloutNifSplinePoint3Interpolator ReadSplinePoint3Interpolator(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var start = cursor.ReadFiniteSingle("spline vector start");
+        var stop = cursor.ReadFiniteSingle("spline vector stop");
+        var data = ReadReference(ref cursor, "spline vector data");
+        var basis = ReadReference(ref cursor, "spline vector basis");
+        var value = ReadVector(ref cursor, "spline vector constant");
+        var handle = cursor.ReadUInt32("spline vector handle");
+        var compact = block.TypeName == "NiBSplineCompPoint3Interpolator";
+        return new(block, start, stop, data, basis, value, handle, compact,
+            compact ? cursor.ReadFiniteSingle("spline vector offset") : 0,
+            compact ? cursor.ReadFiniteSingle("spline vector half range") : 1);
+    }
+
     private FalloutNifFloatInterpolator ReadFloatInterpolator(
         FalloutNifBlock block,
         ref NifCursor cursor) => new(
         block,
         cursor.ReadFiniteSingle("float interpolator value"),
         ReadReference(ref cursor, "float interpolator data"));
+
+    private FalloutNifSplineFloatInterpolator ReadSplineFloatInterpolator(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var start = cursor.ReadFiniteSingle("spline float start");
+        var stop = cursor.ReadFiniteSingle("spline float stop");
+        var data = ReadReference(ref cursor, "spline float data");
+        var basis = ReadReference(ref cursor, "spline float basis");
+        var value = cursor.ReadFiniteSingle("spline float constant");
+        var handle = cursor.ReadUInt32("spline float handle");
+        var compact = block.TypeName == "NiBSplineCompFloatInterpolator";
+        return new(block, start, stop, data, basis, value, handle, compact,
+            compact ? cursor.ReadFiniteSingle("spline float offset") : 0,
+            compact ? cursor.ReadFiniteSingle("spline float half range") : 1);
+    }
 
     private FalloutNifFloatData ReadFloatData(FalloutNifBlock block, ref NifCursor cursor) =>
         new(block, ReadScalarKeyGroup(ref cursor, "float data"));
@@ -1343,6 +1418,34 @@ internal sealed class FalloutNifFile
             cursor.ReadSizedUtf8("tile texture", checked((uint)cursor.Remaining)));
     }
 
+    private FalloutNifSkyShaderProperty ReadSkyShaderProperty(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var net = ReadObjectNet(ref cursor, block.TypeName);
+        return new(block, net.Name, net.ExtraData, net.Controller,
+            cursor.ReadUInt16("sky smooth flags"), cursor.ReadUInt32("sky shader type"),
+            cursor.ReadUInt32("sky shader flags"), cursor.ReadUInt32("sky shader flags 2"),
+            cursor.ReadFiniteSingle("sky environment scale"), cursor.ReadUInt32("sky texture clamp mode"),
+            cursor.ReadSizedUtf8("sky texture", checked((uint)cursor.Remaining)), cursor.ReadUInt32("sky object type"));
+    }
+
+    private static FalloutNifLandscapeMorphData ReadLandscapeMorphData(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var vertices = cursor.ReadUInt16("additional-data vertices");
+        var bytes = checked((uint)vertices * 4);
+        if (cursor.ReadUInt32("channel count") != 1 || cursor.ReadUInt32("channel type") != 1 ||
+            cursor.ReadUInt32("channel unit size") != 4 || cursor.ReadUInt32("channel total size") != bytes ||
+            cursor.ReadUInt32("channel stride") != 4 || cursor.ReadUInt32("channel block") != 0 ||
+            cursor.ReadUInt32("channel offset") != 0 || cursor.ReadByte("channel flags") != 2 ||
+            cursor.ReadUInt32("data block count") != 1 || !cursor.ReadBoolean("has data block") ||
+            cursor.ReadUInt32("data block size") != bytes || cursor.ReadUInt32("data offset count") != 1 ||
+            cursor.ReadUInt32("data offset") != 0 || cursor.ReadUInt32("data count") != 1 ||
+            cursor.ReadUInt32("data size") != 4)
+            throw new NotSupportedException($"Additional geometry {block.Index} has an unbound stream layout.");
+        var heights = new float[vertices];
+        for (var index = 0; index < heights.Length; index++) heights[index] = cursor.ReadFiniteSingle("LOD morph height");
+        return new(block, heights);
+    }
+
     private FalloutNifAlphaProperty ReadAlphaProperty(
         FalloutNifBlock block,
         ref NifCursor cursor)
@@ -1568,7 +1671,7 @@ internal sealed class FalloutNifFile
     }
 
     private NifCursor BlockCursor(FalloutNifBlock block) =>
-        new(_payload.Span.Slice(block.Offset, block.Size), $"NIF block {block.Index} ({block.TypeName})");
+        new(_payload.Span.Slice(block.Offset, block.Size), $"NIF block {block.Index} ({block.TypeName})", _observe, block.Offset);
 
     private static FalloutNifVector3 ReadVector(ref NifCursor cursor, string label) =>
         new(cursor.ReadFiniteSingle($"{label} x"), cursor.ReadFiniteSingle($"{label} y"),
@@ -1665,7 +1768,23 @@ internal sealed record FalloutNifNode(
     int[] Properties,
     int CollisionObject,
     int[] Children,
-    int[] Effects) : FalloutNifObject(Block);
+    int[] Effects) : FalloutNifObject(Block)
+{
+    internal int MultiBound { get; init; } = -1;
+    internal FalloutNifNodeRange? Range { get; init; }
+    public ushort? Billboard { get; init; }
+    public FalloutNifNodeValue? Value { get; init; }
+    public FalloutNifParticleMaster? ParticleMaster { get; init; }
+}
+
+internal sealed record FalloutNifNodeRange(byte Minimum, byte Maximum, byte Current);
+internal sealed record FalloutNifNodeValue(uint Value, byte Flags);
+internal sealed record FalloutNifParticleMaster(ushort MaximumEmitters, int[] ParticleSystems);
+
+internal sealed record FalloutNifMultiBound(FalloutNifBlock Block, int Data) : FalloutNifObject(Block);
+internal sealed record FalloutNifMultiBoundBox(FalloutNifBlock Block, FalloutNifVector3 Center, FalloutNifVector3 Size) : FalloutNifObject(Block);
+internal sealed record FalloutNifGeometrySegment(byte Flags, uint FirstIndex, uint Triangles);
+internal sealed record FalloutNifLandscapeMorphData(FalloutNifBlock Block, float[] Heights) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifAmbientLight(
     FalloutNifBlock Block,
@@ -1704,7 +1823,10 @@ internal sealed record FalloutNifGeometry(
     string[] MaterialNames,
     int[] MaterialExtraData,
     int ActiveMaterial,
-    bool Dirty) : FalloutNifObject(Block);
+    bool Dirty) : FalloutNifObject(Block)
+{
+    internal IReadOnlyList<FalloutNifGeometrySegment> Segments { get; init; } = [];
+}
 
 internal sealed record FalloutNifMeshData(
     FalloutNifBlock Block,
@@ -1787,6 +1909,12 @@ internal sealed record FalloutNifFloatInterpolator(
     FalloutNifBlock Block,
     float Value,
     int Data) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifSplinePoint3Interpolator(FalloutNifBlock Block, float StartTime, float StopTime,
+    int Data, int BasisData, FalloutNifVector3 Value, uint Handle, bool Compact, float Offset, float HalfRange) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifSplineFloatInterpolator(FalloutNifBlock Block, float StartTime, float StopTime,
+    int Data, int BasisData, float Value, uint Handle, bool Compact, float Offset, float HalfRange) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifFloatData(
     FalloutNifBlock Block,
@@ -2101,6 +2229,11 @@ internal sealed record FalloutNifTileShaderProperty(
     ushort Smooth, uint ShaderType, uint ShaderFlags, uint ShaderFlags2,
     float EnvironmentMapScale, uint TextureClampMode, string FileName) : FalloutNifObject(Block);
 
+internal sealed record FalloutNifSkyShaderProperty(
+    FalloutNifBlock Block, string Name, int[] ExtraData, int Controller,
+    ushort Smooth, uint ShaderType, uint ShaderFlags, uint ShaderFlags2,
+    float EnvironmentMapScale, uint TextureClampMode, string FileName, uint SkyObjectType) : FalloutNifObject(Block);
+
 internal sealed record FalloutNifAlphaProperty(
     FalloutNifBlock Block,
     string Name,
@@ -2182,11 +2315,15 @@ internal ref struct NifCursor
 {
     private readonly ReadOnlySpan<byte> _data;
     private readonly string _owner;
+    private readonly Action<FalloutNifReadRange>? _observe;
+    private readonly int _sourceOffset;
 
-    internal NifCursor(ReadOnlySpan<byte> data, string owner)
+    internal NifCursor(ReadOnlySpan<byte> data, string owner, Action<FalloutNifReadRange>? observe = null, int sourceOffset = 0)
     {
         _data = data;
         _owner = owner;
+        _observe = observe;
+        _sourceOffset = sourceOffset;
         Offset = 0;
     }
 
@@ -2196,7 +2333,9 @@ internal ref struct NifCursor
     internal byte ReadByte(string label)
     {
         Require(1, label);
-        return _data[Offset++];
+        var value = _data[Offset];
+        Advance(1, label, "u8");
+        return value;
     }
 
     internal bool ReadBoolean(string label)
@@ -2217,23 +2356,25 @@ internal ref struct NifCursor
     {
         Require(sizeof(ushort), label);
         var value = BinaryPrimitives.ReadUInt16LittleEndian(_data[Offset..]);
-        Offset += sizeof(ushort);
+        Advance(sizeof(ushort), label, "u16-le");
         return value;
     }
 
-    internal uint ReadUInt32(string label)
+    internal uint ReadUInt32(string label) => ReadWord(label, "u32-le");
+
+    private uint ReadWord(string label, string encoding)
     {
         Require(sizeof(uint), label);
         var value = BinaryPrimitives.ReadUInt32LittleEndian(_data[Offset..]);
-        Offset += sizeof(uint);
+        Advance(sizeof(uint), label, encoding);
         return value;
     }
 
-    internal int ReadInt32(string label) => unchecked((int)ReadUInt32(label));
+    internal int ReadInt32(string label) => unchecked((int)ReadWord(label, "i32-le"));
 
     internal float ReadFiniteSingle(string label)
     {
-        var value = BitConverter.Int32BitsToSingle(ReadInt32(label));
+        var value = BitConverter.Int32BitsToSingle(unchecked((int)ReadWord(label, "ieee754-f32-le")));
         if (!float.IsFinite(value))
             throw new InvalidDataException($"{_owner} {label} is not finite.");
         return value;
@@ -2262,7 +2403,7 @@ internal ref struct NifCursor
         if (newline < 0)
             throw new InvalidDataException($"{_owner} {label} is unterminated.");
         var result = DecodeAscii(tail[..newline], label);
-        Offset += newline + 1;
+        Advance(newline + 1, label, "ascii-line");
         return result;
     }
 
@@ -2294,7 +2435,7 @@ internal ref struct NifCursor
     internal void Skip(int count, string label)
     {
         Require(count, label);
-        Offset += count;
+        Advance(count, label, "skipped-uninterpreted");
     }
 
     internal void RequireEnd()
@@ -2307,8 +2448,14 @@ internal ref struct NifCursor
     {
         Require(count, label);
         var result = _data.Slice(Offset, count);
-        Offset += count;
+        Advance(count, label, "bytes");
         return result;
+    }
+
+    private void Advance(int count, string label, string encoding)
+    {
+        _observe?.Invoke(new(_owner, label, _sourceOffset + Offset, count, encoding));
+        Offset += count;
     }
 
     private void Require(int count, string label)
@@ -2329,3 +2476,5 @@ internal ref struct NifCursor
         return new UTF8Encoding(false, true).GetString(value);
     }
 }
+
+internal sealed record FalloutNifReadRange(string Owner, string Field, int Offset, int Length, string Encoding);

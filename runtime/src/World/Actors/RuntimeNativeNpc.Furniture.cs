@@ -122,7 +122,7 @@ internal partial class RuntimeNativeNpc
             return;
         }
         PlayLocomotion(false);
-        _packageEvents!.Complete();
+        if (_dialoguePackage is null) _packageEvents!.Complete();
     }
 
     private void OccupyFurniture()
@@ -158,6 +158,7 @@ internal partial class RuntimeNativeNpc
         _baseAnimation = null;
         _aiQuestRevision = -1;
         _pendingPackage = null;
+        PlayLocomotion(moving: false);
         AdvanceAi();
     }
 

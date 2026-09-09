@@ -240,6 +240,8 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(Player.CapsuleRadiusMeters, nameof(Player.CapsuleRadiusMeters));
         RequirePositive(Player.CapsuleHeightMeters, nameof(Player.CapsuleHeightMeters));
         RequirePositive(Player.MoveSpeedMetersPerSecond, nameof(Player.MoveSpeedMetersPerSecond));
+        RequirePositive(Player.SprintSpeedMultiplier, nameof(Player.SprintSpeedMultiplier));
+        RequirePositive(Player.StepHeightMeters, nameof(Player.StepHeightMeters));
         RequirePositive(Player.ActivationDistanceMeters, nameof(Player.ActivationDistanceMeters));
         RequirePositive(Player.FireRayDistanceMeters, nameof(Player.FireRayDistanceMeters));
         RequirePositive(Player.CameraNearMeters, nameof(Player.CameraNearMeters));

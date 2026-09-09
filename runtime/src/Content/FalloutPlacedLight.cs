@@ -37,23 +37,9 @@ internal static class FalloutPlacedLightResolver
         if (reference.EnableParent is not null)
             throw new NotSupportedException(
                 $"Native light reference {reference.FormKey} has an unresolved enable parent.");
-        if (source.Duration != StaticDuration || source.Flags != StaticPointFlags ||
-            source.Falloff != StaticFalloff ||
-            source.FieldOfViewDegrees != StaticFieldOfViewDegrees ||
-            source.NearClip != StaticNearClip || source.Period != StaticPeriod ||
-            source.ColorAlpha != StaticColorAlpha)
-            throw new NotSupportedException(
-                $"Native LIGH {baseObject.FormKey} is outside the evidenced static point-light contract: " +
-                $"duration={source.Duration} flags=0x{source.Flags:x8} falloff={source.Falloff:R} " +
-                $"fov={source.FieldOfViewDegrees:R} near={source.NearClip} period={source.Period:R} " +
-                $"alpha={source.ColorAlpha}.");
-        if (!float.IsFinite(source.Intensity) || source.Intensity <= 0.0f)
-            throw new InvalidDataException(
-                $"Native LIGH {baseObject.FormKey} has invalid intensity {source.Intensity:R}.");
+        RequireStaticPoint(source, baseObject.FormKey);
         var adjustment = reference.RadiusAdjustmentGameUnits ?? 0.0f;
-        // In the admitted Doc Mitchell corpus every base radius is 200, while XRDS is
-        // signed (including ten negative values). Treating XRDS as an absolute radius
-        // would be invalid, so this lane admits the evidenced additive override only.
+        // The source reference radius adjustment is additive, including signed values.
         var radius = source.RadiusGameUnits + adjustment;
         if (!float.IsFinite(adjustment) || !float.IsFinite(radius) || radius <= 0.0f)
             throw new InvalidDataException(
@@ -66,6 +52,23 @@ internal static class FalloutPlacedLightResolver
         }
         return new FalloutPlacedLight(reference.FormKey, baseObject.FormKey, radius, source.ColorRgb,
             source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance);
+    }
+
+    internal static void RequireStaticPoint(FalloutLightDefinition source, FalloutFormKey form)
+    {
+        if (source.Duration != StaticDuration || source.Flags != StaticPointFlags ||
+            source.Falloff != StaticFalloff ||
+            source.FieldOfViewDegrees != StaticFieldOfViewDegrees ||
+            source.NearClip != StaticNearClip || source.Period != StaticPeriod ||
+            source.ColorAlpha != StaticColorAlpha)
+            throw new NotSupportedException(
+                $"Native LIGH {form} is outside the evidenced static point-light contract: " +
+                $"duration={source.Duration} flags=0x{source.Flags:x8} falloff={source.Falloff:R} " +
+                $"fov={source.FieldOfViewDegrees:R} near={source.NearClip} period={source.Period:R} " +
+                $"alpha={source.ColorAlpha}.");
+        if (!float.IsFinite(source.Intensity) || source.Intensity <= 0.0f)
+            throw new InvalidDataException(
+                $"Native LIGH {form} has invalid intensity {source.Intensity:R}.");
     }
 
     // REFR.XEMI modulates the base light's encoded RGB. The emittance record's

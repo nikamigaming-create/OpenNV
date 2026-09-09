@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 internal static class QuestObjectiveProbe
 {
@@ -14,7 +15,8 @@ internal static class QuestObjectiveProbe
             File.WriteAllBytes(Path.Combine(directory, "Base.esm"), Header().Concat(Quest("Original", 17, 91)).ToArray());
             File.WriteAllBytes(Path.Combine(directory, "Override.esp"), Header("Base.esm").Concat(Quest("Winning", 17, 91)).ToArray());
             using var stack = FalloutPluginStack.Load(directory, ["Base.esm", "Override.esp"]);
-            var state = new FalloutQuestState(stack);
+            var notices = new FalloutHudNotifications();
+            var state = new FalloutQuestState(stack, notices);
             var events = new List<FalloutQuestObjectiveChange>();
             state.ObjectiveChanged += events.Add;
             var commands = FalloutQuestState.ReadObjectiveCommands(
@@ -26,13 +28,20 @@ internal static class QuestObjectiveProbe
                 events[1].After.Completed && !events[2].After.Displayed && events[2].After.Completed,
                 "Objective source identity, ordering or independent flags differ.");
             var revision = state.Revision;
+            Require(notices.Capture().Pending.Select(notice => notice.Event.Kind).SequenceEqual(
+                    new[] { FalloutHudEventKind.ObjectiveDisplayed, FalloutHudEventKind.ObjectiveCompleted }) &&
+                notices.Capture().Pending.All(notice => notice.Event.ObjectiveIndex == 17 && notice.Event.Source == events[0].Quest),
+                "Quest notices lost source objective identity or notified a hidden objective.");
             state.ApplyObjective(commands[^1]);
             Require(state.Revision == revision && events.Count == 3, "An unchanged objective emitted a second mutation.");
             state.ApplyObjective(new("ProbeQuest", 17, false, false));
             Require(!events[^1].After.Completed, "Objective completion could not be cleared.");
             state.ApplyObjective(new("ProbeQuest", 91, true, true));
             var saved = JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(state.Capture()))!;
-            var restored = new FalloutQuestState(stack);
+            var restoredNotices = new FalloutHudNotifications();
+            var savedNotices = JsonSerializer.Deserialize<FalloutHudNotificationsSnapshot>(JsonSerializer.Serialize(notices.Capture()))!;
+            restoredNotices.Restore(savedNotices);
+            var restored = new FalloutQuestState(stack, restoredNotices);
             restored.Restore(saved);
             Require(JsonSerializer.Serialize(restored.Capture()) == JsonSerializer.Serialize(saved),
                 "Objective flags changed across JSON persistence.");
@@ -40,6 +49,8 @@ internal static class QuestObjectiveProbe
             restored.ObjectiveChanged += restoredEvents.Add;
             restored.ApplyObjective(new("ProbeQuest", 91, true, true));
             Require(restoredEvents.Count == 0, "Restore replayed a previously displayed objective.");
+            Require(JsonSerializer.Serialize(restoredNotices.Capture()) == JsonSerializer.Serialize(savedNotices),
+                "Cold quest restoration duplicated or lost pending reminders.");
             Expect<NotSupportedException>(() => state.ApplyObjective(new("ProbeQuest", 999, true, true)));
             Expect<NotSupportedException>(() => FalloutQuestState.ReadObjectiveCommands("SetObjectiveDisplayed ProbeQuest 17 2"));
             Expect<NotSupportedException>(() => FalloutQuestState.ReadObjectiveCommands("if SomeCondition\nSetObjectiveCompleted ProbeQuest 17 1\nendif"));

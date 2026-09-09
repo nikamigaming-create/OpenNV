@@ -99,6 +99,8 @@ internal sealed class HarnessWindow : Form
         controls.Controls.Add(Button("Enter / OK", () => UserTap("Enter")));
         controls.Controls.Add(Button("Escape", () => UserTap("Escape")));
         controls.Controls.Add(Button("Capture both", () => RunUser(new { op = "capture", target = "both" })));
+        controls.Controls.Add(Button("Record ON", () => RunUser(new { op = "record.start" })));
+        controls.Controls.Add(Button("Record OFF / discard", () => RunUser(new { op = "record.stop" })));
         controls.Controls.Add(Button("Trace ON", () => RunUser(new { op = "trace", target = "opennv", enabled = true })));
         controls.Controls.Add(Button("Trace OFF", () => RunUser(new { op = "trace", target = "opennv", enabled = false })));
         controls.Controls.Add(Button("Inspect trace", () => RunUser(new { op = "trace.inspect" })));
@@ -180,9 +182,12 @@ internal sealed class HarnessWindow : Form
                     _recording.Journal("stream-loss", new { target, revision = _revision, timestamp = DateTimeOffset.UtcNow });
                     _recording.Fail($"{target} native frame stream missing/stale during recording.");
                     Log("system", target, "recording-failure", "Native frame stream missing/stale. This run cannot pass comparison.");
+                    _ = _recording.Stop();
                 }
             _status.Text = (_recordingStreamFailures.Count == 0 ? "RECORDING · " : "CAPTURE FAILED · ") + _status.Text;
         }
+        else if (_recording is { } stoppedRecording)
+            _status.Text = (stoppedRecording.Finished ? "RECORDING STOPPED · " : "RECORDING FINALIZING · ") + _status.Text;
         ObserveRetailLog();
     }
 
@@ -262,14 +267,26 @@ internal sealed class HarnessWindow : Form
             if (_recording is not null && !_recording.Finished) throw new InvalidOperationException("A recording is already active or finalizing.");
             RequireFreshStreams();
             _recordingStreamFailures.Clear();
-            _recording = new HarnessRecording(command.GetProperty("directory").GetString()!, command.GetProperty("ffmpeg").GetString()!, Snapshot());
+            var directory = command.TryGetProperty("directory", out var recordingDirectory) ? recordingDirectory.GetString()! :
+                Path.Combine(_configuration.Directory, "temporary-recording-" + Guid.NewGuid().ToString("N"));
+            var encoder = command.TryGetProperty("ffmpeg", out var recordingEncoder) ? recordingEncoder.GetString()! :
+                (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
+                    .Select(path => Path.Combine(path.Trim('"'), "ffmpeg.exe")).FirstOrDefault(File.Exists)
+                    ?? throw new FileNotFoundException("Set ffmpeg in the recording command or install it on PATH.");
+            _recording = new HarnessRecording(directory, encoder, Snapshot());
             Log(driver, "both", "recording", "Recording native frames and the state/input timeline.");
             return _recording.Status;
         }
         if (operation == "record.stop")
         {
-            if (_recording is null) throw new InvalidOperationException("No recording has been started.");
+            if (_recording is null) return new { active = false };
             _ = _recording.Stop();
+            return _recording.Status;
+        }
+        if (operation == "record.export")
+        {
+            if (_recording is not { Active: true }) throw new InvalidOperationException("Start a recording before exporting.");
+            _ = _recording.Export(command.GetProperty("configuration").GetString()!);
             return _recording.Status;
         }
         if (operation == "issue") return LogIssue(command, driver);

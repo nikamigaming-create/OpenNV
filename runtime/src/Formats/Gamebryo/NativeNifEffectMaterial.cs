@@ -22,16 +22,18 @@ internal static class NativeNifEffectMaterial
         uniform vec4 source_color_multiplier;
         uniform float source_emissive_multiple;
         uniform vec2 source_uv_offset;
+        uniform bool source_particle_atlas;
         uniform vec4 source_falloff;
         uniform bool falloff_enabled;
         uniform bool vertex_alpha_enabled;
+        uniform bool source_store_encoded = false;
         uniform bool alpha_test_enabled;
         uniform int alpha_test_function;
         uniform float alpha_threshold;
         uniform vec2 source_fog_blend;
-        instance uniform vec3 source_fog_color;
-        instance uniform vec3 source_fog_range;
-        instance uniform float source_fog_game_units_per_meter;
+        instance uniform vec3 source_fog_color : instance_index(1);
+        instance uniform vec3 source_fog_range : instance_index(2);
+        instance uniform float source_fog_game_units_per_meter : instance_index(3);
         varying float source_view_opacity;
         varying float source_fog_factor;
         {{RetailVertexFog.ShaderSource}}
@@ -39,8 +41,13 @@ internal static class NativeNifEffectMaterial
         {{FalloutNifAngleFalloff.ShaderSource}}
         {{NativeNifEmittanceMaterial.ShaderSource}}
         {{ColorFallbackShader}}
+        {{NativeNifTextureTransform.ShaderSource}}
+        {{NativeNifBillboard.ShaderSource}}
         void vertex() {
-            UV += source_uv_offset;
+            if (source_billboard_mode >= 0)
+                MODELVIEW_MATRIX = VIEW_MATRIX * owned_billboard(MODEL_MATRIX, INV_VIEW_MATRIX);
+            if (source_particle_atlas) UV = INSTANCE_CUSTOM.xz + UV * INSTANCE_CUSTOM.yw;
+            UV = owned_texture_transform(UV);
             vec4 view_position = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
             source_fog_factor = owned_vertex_fog(view_position,
                 PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
@@ -69,6 +76,11 @@ internal static class NativeNifEffectMaterial
             vec3 material_color = owned_emissive_color(source_color_multiplier.rgb, source_emissive_multiple);
             vec3 color = sampled.rgb * COLOR.rgb * owned_no_light_color(material_color);
             ALBEDO = owned_no_light_fog(color, source_fog_color, source_fog_factor, source_fog_blend);
+            // A rendered-menu target is composed as display-encoded UI. Undo
+            // Godot's output transfer here, as for the device's lit surfaces.
+            if (source_store_encoded)
+                ALBEDO = mix(ALBEDO / 12.92, pow((max(ALBEDO, vec3(0.0)) + 0.055) / 1.055,
+                    vec3(2.4)), step(vec3(0.04045), ALBEDO));
             __ALPHA_WRITE__
         }
         """;
@@ -83,7 +95,7 @@ internal static class NativeNifEffectMaterial
         var falloff = useFalloff ? FalloutNifAngleFalloff.Read(source) : new(1, 0, 1, 1);
         var blend = state.Blend switch
         {
-            FalloutNifBlendMode.Add => "blend_add",
+            FalloutNifBlendMode.Add or FalloutNifBlendMode.AddOne => "blend_add",
             FalloutNifBlendMode.Premultiplied => "blend_premul_alpha",
             FalloutNifBlendMode.Multiply => "blend_mul",
             _ => "blend_mix",
@@ -97,7 +109,8 @@ internal static class NativeNifEffectMaterial
                 .Replace("__BLEND__", blend)
                 .Replace("__DEPTH__", (source.ShaderFlags2 & 1) != 0 ? "depth_draw_always" : "depth_draw_never")
                 .Replace("__CULL__", doubleSided ? "cull_disabled" : "cull_back")
-                .Replace("__ALPHA_WRITE__", state.Blend == FalloutNifBlendMode.Opaque ? "" : "ALPHA = alpha;")
+                .Replace("__ALPHA_WRITE__", state.Blend == FalloutNifBlendMode.Opaque ? "" :
+                    state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= alpha;")
                 .Replace("__REPEAT__", FalloutNifTextureAddressing.RepeatForGodot(source.TextureClampMode) ? "repeat_enable" : "repeat_disable")
             },
         };

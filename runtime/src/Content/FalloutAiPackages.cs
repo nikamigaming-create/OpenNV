@@ -21,18 +21,7 @@ internal static class FalloutAiPackages
     }
 
     internal static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort flag)
-    {
-        var visited = new HashSet<FalloutFormKey>();
-        while (true)
-        {
-            if (record.Signature != "NPC_" || !visited.Add(record.FormKey))
-                throw new NotSupportedException("AI package template is not an acyclic NPC graph.");
-            var data = record.ReadSubrecords().Single(field => field.Signature == "ACBS").Data;
-            if (data.Length != 24) throw new InvalidDataException("NPC template flags have an invalid extent.");
-            if ((BinaryPrimitives.ReadUInt16LittleEndian(data.Span[22..]) & flag) == 0) return record;
-            record = stack.GetEffective(FalloutDialogueTopic.RequiredForm(record, "TPLT"));
-        }
-    }
+        => FalloutActorTemplateOwner.Resolve(stack, record, flag);
 
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
         Func<FalloutCondition, float> evaluate)

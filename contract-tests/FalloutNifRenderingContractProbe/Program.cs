@@ -4,6 +4,8 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 Bc1AlphaContracts.Run();
+ExteriorNifContracts.Run();
+SurfaceInputsContracts.Run();
 
 // A source XY triangle points toward +Z. The handedness-preserving (x,z,-y)
 // mapping puts that normal at +Y. Godot's clockwise front must face +Y too.
@@ -22,6 +24,12 @@ Require(!uncolored.Enabled && uncolored.SourceFlags2 == 0x8021 && uncolored.Effe
 ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Resolve(1, 3, 2));
 ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Resolve(1, 3, 4));
 ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Resolve(1, -1, 0));
+var unusedAlpha = new FalloutNifColor(.2f, .4f, .6f, BitConverter.Int32BitsToSingle(0x7fc00042));
+Require(FalloutNifVertexColorState.Project(unusedAlpha, false) == new FalloutNifColor(.2f, .4f, .6f, 1) &&
+    BitConverter.SingleToInt32Bits(unusedAlpha.A) == 0x7fc00042,
+    "Unused vertex alpha altered the source bytes or leaked into renderer attributes.");
+ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Project(unusedAlpha, true));
+ExpectException<InvalidDataException>(() => FalloutNifVertexColorState.Project(unusedAlpha with { R = float.NaN }, false));
 Console.WriteLine("OPENNV_NIF_VERTEX_COLOR_BINDING_PASS geometryOwned=true sourceFlagsPreserved=true incompleteRejected=true");
 var godotVertices = sourceVertices.Select(value => new Vector3(value.X, value.Z, -value.Y)).ToArray();
 var clockwiseNormal = Vector3.Cross(
@@ -35,11 +43,13 @@ foreach (var mode in new uint[] { 1, 2 })
 ExpectException<InvalidDataException>(() => FalloutNifTextureAddressing.RepeatForGodot(4));
 Console.WriteLine("OPENNV_NIF_RENDERING_CONTRACT_OK sourceFrontFace=true sourceSamplerAddressing=true");
 Require(FalloutNifAlphaState.Read(0x100d, 0).Blend == FalloutNifBlendMode.Add, "Source-alpha/one blend was reduced to ordinary transparency.");
+Require(FalloutNifAlphaState.Read(1, 0).Blend == FalloutNifBlendMode.AddOne, "ONE/ONE blend lost its source factors.");
+Require(FalloutNifAlphaState.Read(0x21, 0).Blend == FalloutNifBlendMode.Replace, "ONE/ZERO blend must replace the destination independent of source opacity.");
 Require(FalloutNifAlphaState.Read(0x0043, 0).Blend == FalloutNifBlendMode.Multiply, "Zero/source-colour blend was reduced to ordinary transparency.");
 var mixed = FalloutNifAlphaState.Read(0x12ed, 73);
 Require(mixed.Blend == FalloutNifBlendMode.SourceAlpha && mixed.TestEnabled && mixed.TestFunction == 4 && mixed.Threshold == 73,
     "Independent alpha blend/test fields were lost.");
-ExpectException<NotSupportedException>(() => FalloutNifAlphaState.Read(0x0001, 0));
+ExpectException<NotSupportedException>(() => FalloutNifAlphaState.Read(0x0005, 0));
 var angle = new FalloutNifAngleFalloff(0.8f, 0.2f, 0.75f, 0.15f);
 Require(Math.Abs(angle.Sample(0.5f) - 0.45f) < 0.00001f && angle.Sample(1) == 0.75f && angle.Sample(0) == 0.15f,
     "Source cosine falloff does not preserve authored endpoints and interpolation.");

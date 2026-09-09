@@ -38,15 +38,18 @@ internal static class FalloutAnimationSound
     }
 
     internal static FalloutAnimationSoundSelection Select(FalloutSoundRecord source,
-        IReadOnlyList<string> variants, FalloutSoundRandomState random)
+        IReadOnlyList<string> variants, FalloutSoundRandomState random, bool ownsLoopStop = false, bool stereoOutput = false)
     {
-        var unsupported = source.Flags & ~SupportedFlags;
+        var supported = SupportedFlags | (ownsLoopStop ? FalloutSoundFlags.Loop | FalloutSoundFlags.EnvelopeFast |
+            FalloutSoundFlags.EnvelopeSlow : 0) | (stereoOutput ? FalloutSoundFlags.Lfe360 : 0);
+        var unsupported = source.Flags & ~supported;
         if (unsupported != 0)
             throw FalloutSoundPlaybackContract.Unsupported(source, $"KF sound flags 0x{(ushort)unsupported:x4}, including any loop stop/envelope owner");
         if (source.StopTime != source.StartTime)
             throw FalloutSoundPlaybackContract.Unsupported(source, "sound scheduling against the authoritative world clock");
-        if (source.LoopStartSample != 0 || source.LoopEndSample != 0)
+        if (!ownsLoopStop && (source.LoopStartSample != 0 || source.LoopEndSample != 0))
             throw FalloutSoundPlaybackContract.Unsupported(source, "KF loop points without a loop stop owner");
+        _ = FalloutSoundLoop.Read(source);
         if (variants.Count == 0) throw new InvalidDataException("A KF sound selection has no source variants.");
         if (!source.IsTwoDimensional)
         {
@@ -54,6 +57,11 @@ internal static class FalloutAnimationSound
             _ = source.AttenuationDbAtDistanceGameUnits(source.MinimumDistanceGameUnits);
         }
         var unbound = new List<string>();
+        // Stereo has no discrete LFE channel. Keep the original full-band
+        // voice; never silence it because a surround-only send is unavailable.
+        // The surround route remains rejected when that output is requested.
+        if (stereoOutput && (source.Flags & FalloutSoundFlags.Lfe360) != 0)
+            unbound.Add("source-lfe-send-not-rendered-on-stereo-output");
         if ((source.Flags & (FalloutSoundFlags.MenuSound | FalloutSoundFlags.EnvironmentIgnored)) == 0 && source.ReverbAttenuation != 100)
             unbound.Add("source-environment-reverb-send");
         if ((source.Flags & FalloutSoundFlags.MuteWhenSubmerged) != 0)

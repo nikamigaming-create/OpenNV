@@ -19,7 +19,9 @@ internal static class FalloutNifHardwareSkin
     {
         null => true,
         <= 13 => true,
-        >= 101 and <= 113 or >= 201 and <= 213 => false,
+        // The owned mantis mesh also declares torso cap 200 (part zero),
+        // alongside 201/203/205/207/210 on the same cap geometry.
+        >= 101 and <= 113 or >= 200 and <= 213 => false,
         >= 1000 and <= 13000 when partition.Value.BodyPart % 1000 == 0 => true,
         _ => throw new NotSupportedException($"Unknown Fallout body partition {partition.Value.BodyPart}."),
     };
@@ -28,7 +30,8 @@ internal static class FalloutNifHardwareSkin
         FalloutNifSkinInstance instance,
         FalloutNifSkinData data,
         FalloutNifSkinPartition partition,
-        int vertexCount)
+        int vertexCount,
+        IReadOnlyList<FalloutNifTriangle>? sourceTriangles = null)
     {
         if (instance.Data != data.Block.Index || instance.SkinPartition != partition.Block.Index ||
             instance.Bones.Length == 0 || instance.Bones.Length != data.Bones.Length || vertexCount <= 0)
@@ -80,8 +83,16 @@ internal static class FalloutNifHardwareSkin
                 bones, weights, influences, source.Triangles,
                 instance.BodyPartitions.Length == 0 ? null : instance.BodyPartitions[index]));
         }
-        if (covered.Any(value => !value))
-            throw new InvalidDataException("NIF hardware skin partitions omit source geometry vertices.");
+        // Exported triangle lists may retain vertices used only by degenerate
+        // strip stitches. The loose leather/combat armor corpus has these.
+        // Every vertex of an actual source triangle must still be represented.
+        if (sourceTriangles?.Any(triangle => triangle.A >= vertexCount || triangle.B >= vertexCount || triangle.C >= vertexCount) == true)
+            throw new InvalidDataException("NIF source triangle escapes the geometry vertex table.");
+        var required = sourceTriangles is null ? Enumerable.Range(0, vertexCount) : sourceTriangles
+            .Where(triangle => triangle.A != triangle.B && triangle.B != triangle.C && triangle.C != triangle.A)
+            .SelectMany(triangle => new int[] { triangle.A, triangle.B, triangle.C });
+        if (required.Any(vertex => vertex < 0 || vertex >= vertexCount || !covered[vertex]))
+            throw new InvalidDataException("NIF hardware skin partitions omit drawable source geometry vertices.");
         return output;
     }
 }

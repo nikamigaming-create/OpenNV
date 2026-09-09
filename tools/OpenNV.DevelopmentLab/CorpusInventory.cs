@@ -26,6 +26,7 @@ internal static class CorpusInventory
         var watch = Stopwatch.StartNew();
         var layouts = new Dictionary<(string Record, string Field), Layout>();
         var events = new Dictionary<string, HashSet<FalloutFormKey>>(StringComparer.OrdinalIgnoreCase);
+        var commands = new Dictionary<string, HashSet<FalloutFormKey>>(StringComparer.OrdinalIgnoreCase);
         var failures = new Dictionary<string, List<object>>(StringComparer.Ordinal);
         var recordCounts = new Dictionary<string, long>();
         var all = records.EffectiveRecords();
@@ -70,6 +71,11 @@ internal static class CorpusInventory
                         {
                             if (!events.TryGetValue(program.Event, out var owners)) events.Add(program.Event, owners = []);
                             owners.Add(record.FormKey);
+                            foreach (var command in program.Program.CommandNames)
+                            {
+                                if (!commands.TryGetValue(command, out var callers)) commands.Add(command, callers = []);
+                                callers.Add(record.FormKey);
+                            }
                         }
                         ++parsedBodies;
                     }
@@ -108,6 +114,7 @@ internal static class CorpusInventory
             plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256, plugin.Bytes }),
             winningRecords = visited, recordTypes = recordCounts, scripts, sourceBodies = bodies, parsedBodies,
             scriptEvents = events.OrderByDescending(pair => pair.Value.Count).Select(pair => new { name = pair.Key, owners = pair.Value.Count }),
+            scriptCommands = commands.OrderByDescending(pair => pair.Value.Count).Select(pair => new { name = pair.Key, owners = pair.Value.Count }),
             archives = archiveReports, archiveMembers = members,
             assetTypes = assetTypes.OrderByDescending(pair => pair.Value.Count).Select(pair => new { extension = pair.Key, layout = pair.Value.Report() }),
             failureGroups = groups.Length, failedInstances = groups.Sum(group => group.affectedRecords),

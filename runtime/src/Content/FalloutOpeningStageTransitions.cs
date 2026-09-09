@@ -56,6 +56,8 @@ internal sealed class FalloutOpeningStageMachine
         FalloutPlayerControlState.AllEnabled;
     internal IReadOnlyCollection<string> PendingBlockers => _pendingBlockers;
 
+    internal void ApplyControls(FalloutPlayerControlCommand command) => ControlState = command.Apply(ControlState);
+
     internal void EnterSourceStage(string questEditorId, short stage)
     {
         if (_pendingBlockers.Count != 0 || TimerSeconds is not null || _blockedTransition is not null ||

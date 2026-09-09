@@ -16,6 +16,23 @@ internal static class Program
     {
         try
         {
+            if (args is ["--record-single", var channel, var processId, var seconds, var encoder, var output])
+            {
+                SingleGameRecording.Run(channel, int.Parse(processId), int.Parse(seconds), encoder, output).GetAwaiter().GetResult();
+                return 0;
+            }
+            if (args is ["--discard-capture", var captureDirectory])
+            {
+                OpenNV.Runtime.Diagnostics.Parity.TemporaryCaptureDirectory.DeleteIfOwned(captureDirectory);
+                return 0;
+            }
+            if (args is ["--audio", var process, var milliseconds, var directory])
+            {
+                var result = Task.Run(() => HarnessProcessAudio.Capture(int.Parse(process), int.Parse(milliseconds), directory))
+                    .GetAwaiter().GetResult();
+                Console.WriteLine(JsonSerializer.Serialize(result, Json));
+                return 0;
+            }
             if (args is ["--export", var exportConfiguration])
             {
                 HarnessSbsExport.Run(exportConfiguration);

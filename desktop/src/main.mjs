@@ -8,6 +8,8 @@ import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validate
 import { installLocalZip, removeLocalInstall } from "./local-mod-installer.mjs";
 import { synchronizeManagedLayers, updateManagedLayer, validateManagedLayers } from "./gate-vortex-layers.mjs";
 import { createLaunchInvocation } from "./native-launch-contract.mjs";
+import { resolveRuntimeCampaign, validateRuntimeManifest } from "./runtime-manifest-contract.mjs";
+import { registeredOwnedDataRoot } from "./owned-install-registration.mjs";
 import {
   appendSourceRoot,
   importMo2Profile,
@@ -172,11 +174,7 @@ function configuredNewVegasDataRoot() {
   try {
     const registration = JSON.parse(
       readFileSync(newVegasDataRegistrationPath(), "utf8"));
-    if (registration?.schema === "opennv-live-install-registration/v1" &&
-        registration?.campaign === "NewVegas" &&
-        typeof registration?.dataRoot === "string") {
-      return path.resolve(registration.dataRoot);
-    }
+    return registeredOwnedDataRoot(registration, "NewVegas");
   } catch {
     // No live Data folder has been selected yet.
   }
@@ -194,11 +192,7 @@ function configuredFallout3DataRoot() {
   try {
     const registration = JSON.parse(
       readFileSync(fallout3DataRegistrationPath(), "utf8"));
-    if (registration?.schema === "opennv-live-install-registration/v1" &&
-        registration?.campaign === "Fallout3" &&
-        typeof registration?.dataRoot === "string") {
-      return path.resolve(registration.dataRoot);
-    }
+    return registeredOwnedDataRoot(registration, "Fallout3");
   } catch {
     // No standalone Fallout 3 Data folder has been selected yet.
   }
@@ -508,10 +502,10 @@ function readFo2Profile(manifestOverride = null) {
     }
     return {
       ready: true,
-      runtimeReady: true,
+      runtimeReady: false,
       validated: true,
       manifestDetected: true,
-      message: "Ready: native owned-data Map 3 presentation; gameplay semantics remain fail-closed.",
+      message: "Fallout 2 installed; Arroyo scene preview available, gameplay awaits restoration.",
       path: manifestPath,
       dataRoot: root,
       sourceProfileId: profile.sourceProfileId,
@@ -660,14 +654,19 @@ function readManagedLayerState(game = "newvegas") {
   }
 }
 
-function configuredRuntimeRoot() {
+function configuredRuntime() {
   try {
     const configured = JSON.parse(readFileSync(runtimeConfigPath(), "utf8"));
-    if (configured?.runtimeRoot && existsSync(configured.runtimeRoot)) return configured.runtimeRoot;
+    if (configured && typeof configured === "object") return configured;
   } catch {
     // The launcher remains usable before a user chooses a runtime.
   }
-  return null;
+  return {};
+}
+
+function configuredRuntimeRoot() {
+  const root = configuredRuntime().runtimeRoot;
+  return typeof root === "string" && existsSync(root) ? root : null;
 }
 
 function runtimeRoot() {
@@ -684,8 +683,8 @@ function runtimeManifest() {
   const manifestPath = path.join(root, "runtime-manifest.json");
   if (!existsSync(manifestPath)) return null;
   try {
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-    return manifest?.schema === "opennv-runtime-manifest/v1" ? { root, manifest } : null;
+    const manifest = validateRuntimeManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+    return { root, manifest };
   } catch {
     return null;
   }
@@ -930,7 +929,8 @@ function isRuntimeRoot(candidate) {
   const manifestPath = path.join(candidate, "runtime-manifest.json");
   if (!existsSync(manifestPath)) return false;
   try {
-    return JSON.parse(readFileSync(manifestPath, "utf8"))?.schema === "opennv-runtime-manifest/v1";
+    validateRuntimeManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+    return true;
   } catch {
     return false;
   }
@@ -946,12 +946,7 @@ async function chooseRuntime() {
   if (!isRuntimeRoot(candidate)) {
     return { ok: false, message: "That folder has no valid OpenNV Godot runtime-manifest.json." };
   }
-  mkdirSync(path.dirname(runtimeConfigPath()), { recursive: true });
-  writeFileSync(
-    runtimeConfigPath(),
-    `${JSON.stringify({ runtimeRoot: candidate }, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
-    "utf8"
-  );
+  writeJsonAtomic(runtimeConfigPath(), { ...configuredRuntime(), runtimeRoot: candidate });
   return { ok: true, message: "OpenNV runtime bridge connected." };
 }
 
@@ -1136,8 +1131,8 @@ function runtimeCommand(installed) {
   if (packagedExecutable && existsSync(packagedExecutable)) {
     return { executable: packagedExecutable, prefixArguments: [] };
   }
-  const developmentGodot = process.env.OPENNV_GODOT;
-  if (developmentGodot && existsSync(developmentGodot) &&
+  const developmentGodot = process.env.OPENNV_GODOT || configuredRuntime().godotExecutable;
+  if (typeof developmentGodot === "string" && path.isAbsolute(developmentGodot) && existsSync(developmentGodot) &&
       existsSync(path.join(installed.root, "project.godot"))) {
     return { executable: developmentGodot, prefixArguments: ["--path", installed.root] };
   }
@@ -1165,21 +1160,19 @@ function launch(request) {
       };
     }
   }
-  const runtimeCampaign = installed.manifest.campaigns?.find((entry) =>
-    String(entry?.id ?? "").toLowerCase() === campaign.engineCampaign.toLowerCase());
-  const runtimeVariant = runtimeCampaign?.variants?.[campaign.runtimeVariant];
-  if (!runtimeVariant?.ready) {
-    return { ok: false, code: "campaign-not-ready", message: runtimeVariant?.message || `${campaign.title} is not ready in this runtime.` };
+  const availability = resolveRuntimeCampaign(installed.manifest, campaign);
+  if (!availability.launchable) {
+    return { ok: false, code: "campaign-not-ready", message: availability.status };
   }
-  if (runtimeVariant.presentations?.[validatedRequest.presentation]?.ready !== true) {
+  if (!availability.presentations[validatedRequest.presentation]?.launchable) {
     return {
       ok: false,
       code: "presentation-not-ready",
-      message: `${campaign.title} ${validatedRequest.presentation} is not ready in this runtime.`
+      message: availability.presentations[validatedRequest.presentation]?.status || availability.status
     };
   }
-  if (enableJam && !runtimeCampaign?.variants?.jam?.ready) {
-    return { ok: false, code: "jam-not-ready", message: runtimeCampaign?.variants?.jam?.message || "JAM is not ready in this runtime." };
+  if (enableJam && !installed.manifest.campaigns.some((entry) => entry.id === "JAM" && entry.launchable)) {
+    return { ok: false, code: "jam-not-ready", message: "JAM is not ready in this runtime." };
   }
   const openXr = installed.manifest.runtime?.presentationModes?.openxr;
   if (enableVr && !openXr?.launchable) {
@@ -1187,7 +1180,7 @@ function launch(request) {
   }
   const command = runtimeCommand(installed);
   if (!command) {
-    return { ok: false, code: "runtime-executable-missing", message: `The runtime has no ${process.platform} executable. Development launches can set OPENNV_GODOT.` };
+    return { ok: false, code: "runtime-executable-missing", message: `The runtime has no ${process.platform} executable. Run scripts/Start-OpenNV.ps1 once to register the development runtime and Godot.` };
   }
 
   const fallout1Profile = readFo1Profile();
@@ -1279,7 +1272,20 @@ function createWindow() {
   window.loadFile(renderer);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const reportIndex = process.argv.indexOf("--state-report");
+  if (reportIndex >= 0) {
+    try {
+      const destination = process.argv[reportIndex + 1];
+      if (!destination || !path.isAbsolute(destination)) throw new Error("Launcher state report requires an absolute output path.");
+      writeJsonAtomic(destination, await launcherState());
+      app.quit();
+    } catch (error) {
+      console.error(`OPENNV_LAUNCHER_STATE_REPORT_FAIL ${error.message}`);
+      app.exit(1);
+    }
+    return;
+  }
   ipcMain.handle("opennv:get-state", launcherState);
   ipcMain.handle("opennv:choose-runtime", chooseRuntime);
   ipcMain.handle("opennv:choose-fo1-profile", chooseFo1Profile);

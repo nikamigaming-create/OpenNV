@@ -19,7 +19,8 @@ internal sealed class RuntimeNativeNifAnimation
         FalloutNifControllerSequence sequence,
         RuntimeNativeNifSkeleton skeleton,
         Func<FalloutNifControllerLink, Action<float>?>? bindOtherChannel = null,
-        Action<FalloutNifAnimationSample>? accumulationRoot = null)
+        Action<FalloutNifAnimationSample>? accumulationRoot = null,
+        IReadOnlySet<string>? externalObjectTargets = null)
     {
         if (sequence.Weight != 1.0f)
             throw new NotSupportedException("Applying a weighted source sequence requires an animation blend owner.");
@@ -36,6 +37,15 @@ internal sealed class RuntimeNativeNifAnimation
         {
             try
             {
+                // Weapon groups contain channels for several alternative
+                // models. The current source model defines the ## palette;
+                // missing members are null slots, not missing player bones.
+                if (externalObjectTargets is not null && link.NodeName.StartsWith("##", StringComparison.Ordinal) &&
+                    !externalObjectTargets.Contains(link.NodeName))
+                {
+                    if (link.Interpolator >= 0) _ = source.ReadObject(link.Interpolator);
+                    _absentTargets.Add(link); continue;
+                }
                 if (link.ControllerType == "NiTransformController" &&
                     link.PropertyType.Length == 0 && link.Variable1.Length == 0 && link.Variable2.Length == 0)
                 {
@@ -136,62 +146,38 @@ internal sealed class RuntimeNativeNifAnimation
     }
 
     internal static void ApplyLayers(params (RuntimeNativeNifAnimation Animation, float Time)[] layers)
+        => ApplyLayers(layers.AsSpan());
+
+    internal static void ApplyLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time)> layers)
     {
         if (layers.Length == 0) return;
         var skeleton = layers[0].Animation._skeleton;
-        var selected = new Dictionary<int, (byte Priority, List<(FalloutNifAnimationSampler Sampler, float Time, float Weight)> Channels)>();
+        var blend = skeleton.AnimationBlend;
+        blend.Clear();
         foreach (var (animation, time) in layers)
         {
             if (animation._skeleton != skeleton || animation.UnboundChannels.Count != 0)
                 throw new NotSupportedException("Animation layers require the same skeleton and complete source channel bindings.");
             if (!float.IsFinite(time) || time < animation.Sequence.StartTime || time > animation.Sequence.StopTime)
                 throw new ArgumentOutOfRangeException(nameof(layers));
+            foreach (var (bone, priority, _) in animation._transforms)
+            {
+                ref var current = ref blend.Bones[bone];
+                if (!current.Active || priority > current.Priority) current.Priority = priority;
+                current.Active = true;
+            }
+        }
+        foreach (var (animation, time) in layers)
             foreach (var (bone, priority, sampler) in animation._transforms)
             {
-                if (selected.TryGetValue(bone, out var current))
-                {
-                    if (priority < current.Priority) continue;
-                    if (priority == current.Priority)
-                    {
-                        current.Channels.Add((sampler, time, animation.Sequence.Weight));
-                        continue;
-                    }
-                }
-                selected[bone] = (priority, [(sampler, time, animation.Sequence.Weight)]);
-            }
-        }
-        foreach (var (bone, channel) in selected)
-        {
-            var position = Vector3.Zero;
-            var positionWeight = 0.0f;
-            var rotationSum = new Vector4();
-            Quaternion? hemisphere = null;
-            var scaleSum = 0.0f;
-            var scaleWeight = 0.0f;
-            foreach (var (sampler, time, weight) in channel.Channels)
-            {
+                ref var current = ref blend.Bones[bone];
+                if (priority != current.Priority) continue;
+                var weight = animation.Sequence.Weight;
                 if (!float.IsFinite(weight) || weight < 0) throw new InvalidDataException("Animation layer has an invalid source weight.");
                 if (weight == 0) continue;
-                var sample = sampler.Sample(time);
-                if (sample.Translation is { } translation)
-                {
-                    position += GamebryoCoordinate.ConvertVector(new(translation.X, translation.Y, translation.Z)) * weight;
-                    positionWeight += weight;
-                }
-                if (sample.Rotation is { } rotation)
-                {
-                    var quaternion = new Quaternion(rotation.X, rotation.Z, -rotation.Y, rotation.W).Normalized();
-                    hemisphere ??= quaternion;
-                    if (hemisphere.Value.Dot(quaternion) < 0) quaternion = -quaternion;
-                    rotationSum += new Vector4(quaternion.X, quaternion.Y, quaternion.Z, quaternion.W) * weight;
-                }
-                if (sample.Scale is { } scale) { scaleSum += scale * weight; scaleWeight += weight; }
+                current.Add(sampler.Sample(time), weight);
             }
-            if (positionWeight > 0) skeleton.Node.SetBonePosePosition(bone, position / positionWeight * skeleton.UnitsToMetres);
-            if (hemisphere is not null)
-                skeleton.Node.SetBonePoseRotation(bone, new Quaternion(rotationSum.X, rotationSum.Y, rotationSum.Z, rotationSum.W).Normalized());
-            if (scaleWeight > 0) skeleton.Node.SetBonePoseScale(bone, Vector3.One * (scaleSum / scaleWeight));
-        }
+        blend.Publish(skeleton);
         foreach (var (animation, time) in layers)
             foreach (var apply in animation._otherChannels) apply(time);
     }

@@ -344,6 +344,8 @@ public partial class RuntimeCoordinator
                 "OpenXR was requested but no initialized runtime is available. " +
                 "Launch with --xr-mode on before --, connect the headset, and verify the active OpenXR runtime.");
         GetViewport().UseXR = true;
+        _nativeXr = new(_configuration);
+        AddChild(_nativeXr);
         Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
         GD.Print(

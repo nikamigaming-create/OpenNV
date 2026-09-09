@@ -44,17 +44,35 @@ internal static class ReferenceReplay
                 restored.LoadCell(scene);
                 if (JsonSerializer.Serialize(restored.Capture()) != expected)
                     throw new InvalidDataException("Fresh world restoration changed exact reference state.");
-                reports.Add(new { cellName, references = instances.Count, scripts = instances.Count(instance => instance.Script is not null),
-                    world.ScriptDefinitionCount, firstLoadMilliseconds = firstLoad, warmMilliseconds,
-                    reassemblies = 30, coldStateRoundtrip = true, stateIsolation = true });
+                reports.Add(new
+                {
+                    cell = cell.FormKey.ToString(),
+                    cellName,
+                    worldspace = scene.Cell.Worldspace?.ToString(),
+                    grid = scene.Cell.Coordinates is { } grid ? new { grid.X, grid.Y } : null,
+                    references = instances.Count,
+                    scripts = instances.Count(instance => instance.Script is not null),
+                    world.ScriptDefinitionCount,
+                    firstLoadMilliseconds = firstLoad,
+                    warmMilliseconds,
+                    reassemblies = 30,
+                    coldStateRoundtrip = true,
+                    stateIsolation = true
+                });
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException)
-            { failures.Add(new { cellName, error = error.Message }); }
+            { failures.Add(new { cell = cell.FormKey.ToString(), cellName, error = error.Message }); }
             if ((reports.Count + failures.Count) % 5000 == 0)
                 Console.Error.WriteLine($"LIFECYCLE cells={reports.Count + failures.Count}/{selected.Count} failures={failures.Count}");
         }
-        Console.WriteLine(JsonSerializer.Serialize(new { schema = "opennv-reference-lifecycle-lab/v1", reports, failures,
-            boundary = "Disposable headless reference/script state; graphics, physics, ordinary input and parity remain unverified." }));
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            schema = "opennv-reference-lifecycle-lab/v2",
+            plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256, plugin.Bytes }),
+            reports,
+            failures,
+            boundary = "Disposable headless reference/script state; graphics, physics, ordinary input and parity remain unverified."
+        }));
         return failures.Count == 0 ? 0 : 1;
     }
 
@@ -98,7 +116,8 @@ internal static class ReferenceReplay
                     case "load": world.LoadCell(FalloutCellSceneReader.Read(records, Target())); break;
                     case "unload": scripts.UnloadCell(Target()); world.UnloadCell(Target()); break;
                     case "furniture": furniture[Target()] = Form(Text("seat")); break;
-                    case "objective": quests.ApplyObjective(new(Text("target"), step.GetProperty("index").GetUInt32(),
+                    case "objective":
+                        quests.ApplyObjective(new(Text("target"), step.GetProperty("index").GetUInt32(),
                         Text("state") == "displayed", step.GetProperty("value").GetBoolean())); break;
                     case "quest-variable": quests.SetVariable(Target(), Slot(Target(), Text("name")), Value()); break;
                     case "reference-variable": world.Get(Target()).Write(Slot(Target(), Text("name")), Value()); break;
@@ -141,9 +160,16 @@ internal static class ReferenceReplay
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException)
         { failure = error.Message; }
         finally { world.Dispose(); }
-        Console.WriteLine(JsonSerializer.Serialize(new { schema = "opennv-reference-event-replay/v1", path,
-            completedSteps = stepIndex, reports, effects, failure,
-            boundary = "Disposable OpenNV state; host furniture and effects are isolated test inputs/outputs. No ordinary gameplay or parity claim." }));
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            schema = "opennv-reference-event-replay/v1",
+            path,
+            completedSteps = stepIndex,
+            reports,
+            effects,
+            failure,
+            boundary = "Disposable OpenNV state; host furniture and effects are isolated test inputs/outputs. No ordinary gameplay or parity claim."
+        }));
         return failure is null ? 0 : 1;
     }
 }

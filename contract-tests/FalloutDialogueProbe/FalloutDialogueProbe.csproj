@@ -4,10 +4,13 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Content/FalloutDialogueVoice.cs" Link="FalloutDialogueVoice.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
     <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
     <Compile Include="../../runtime/src/Content/FalloutAiPackages.cs" Link="FalloutAiPackages.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutActorTemplateOwner.cs" Link="FalloutActorTemplateOwner.cs" />
     <Compile Include="../../runtime/src/Content/FalloutFurnitureIdleTree.cs" Link="FalloutFurnitureIdleTree.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorIdleCommand.cs" Link="FalloutActorIdleCommand.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorPackageCommand.cs" Link="FalloutActorPackageCommand.cs" />

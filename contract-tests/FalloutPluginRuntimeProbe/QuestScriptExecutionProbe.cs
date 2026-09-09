@@ -7,7 +7,8 @@ using OpenNV.Runtime.Gameplay.State;
 internal static class QuestScriptExecutionProbe
 {
     private const string Body = "if active == 1\nif timer > 0\nset timer to timer - GetSecondsPassed\nelse\n" +
-        "set result to Abs (Player.GetActorValue Courage - 4) * 2\nset active to 0\nSetStage ProbeQuest 42\nendif\nendif";
+        "set result to Abs (Player.GetActorValue Courage - 4) * 2\nset active to 0\nSetStage ProbeQuest 42\n" +
+        "if GetStage ProbeQuest == 42\nset result to result + 1\nendif\nendif\nendif";
     internal static void Run()
     {
         var directory = Path.Combine(Path.GetTempPath(), "opennv-script-execution-" + Guid.NewGuid().ToString("N"));
@@ -42,6 +43,10 @@ internal static class QuestScriptExecutionProbe
                 };
             }, name => name == "Courage" ? 8.5 : throw new InvalidDataException("Unexpected actor value argument."));
             var scripts = Scripts(state);
+            var dormant = JsonSerializer.Serialize(scripts.Capture());
+            scripts.AdvanceClaimed(quest.FormKey, 10, Host(state));
+            Require(JsonSerializer.Serialize(scripts.Capture()) == dormant, "Claiming a dormant quest implicitly started its clock.");
+            state.SetRunning(quest.FormKey, true);
             scripts.Advance(10); // The presentation owner, not this scheduler lane, invokes claimed scripts.
             Require(scripts.Capture().Instances.Single().Executions == 0, "Claimed scripts acquired a second executor.");
             scripts.AdvanceClaimed(quest.FormKey, 0.025, Host(state));
@@ -57,7 +62,7 @@ internal static class QuestScriptExecutionProbe
                     JsonSerializer.Serialize(scripts.Capture()) == JsonSerializer.Serialize(restoredScripts.Capture()),
                     "Cold script recurrence, effects or variable storage diverged.");
             }
-            Require(state.Stage(quest.FormKey) == 42 && state.Variable(quest.FormKey, 27) == 9,
+            Require(state.Stage(quest.FormKey) == 42 && state.Variable(quest.FormKey, 27) == 10,
                 "The complete source calculation did not drive progression.");
             File.WriteAllBytes(Path.Combine(directory, "Bad.esm"), Header().Concat(Quest())
                 .Concat(Script("set result to 99\nUnknownReachedCommand", [1, 2, 3])).ToArray());
@@ -66,16 +71,19 @@ internal static class QuestScriptExecutionProbe
             var badState = new FalloutQuestState(bad);
             var badScripts = new FalloutQuestScripts(bad, badState, new HashSet<FalloutFormKey> { badQuest },
                 new FalloutPlayerInventory(), defaultProcessingDelay: 1);
+            badState.SetRunning(badQuest, true);
             Reject(() => badScripts.AdvanceClaimed(badQuest, 0.1, new((_, _) => () => { }, _ => 0)));
-            Require(badState.Variable(badQuest, 3) == 0 && badScripts.Capture().Instances.Single().Error is not null,
-                "An unsupported reached command published partial variable writes or hid its failure.");
+            Require(badState.Variable(badQuest, 3) == 99 && badScripts.Capture().Instances.Single().Error is not null,
+                "An unsupported reached command discarded the executed prefix or hid its failure.");
+            Reject(() => badScripts.AdvanceClaimed(badQuest, 1, new((_, _) => () => { }, _ => 0)));
+            Require(badState.Variable(badQuest, 3) == 99, "A faulted script executed its prefix twice.");
         }
         finally
         {
             foreach (var file in new[] { "Base.esm", "Override.esp", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
             Directory.Delete(directory);
         }
-        Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true calculations=true coldRestore=true failureAtomic=true");
+        Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true");
     }
 
     private static byte[] Quest()

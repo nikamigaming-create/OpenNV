@@ -1,0 +1,224 @@
+{
+  "Schema": "opennv-classic-humanoids/v1",
+  "Bindings": [
+    {
+      "ArtBases": [
+        "hmjmps",
+        "nmvalt"
+      ],
+      "Female": false,
+      "Outfit": "VaultSuit101",
+      "FaceDonor": 1213830,
+      "Palette": [
+        {
+          "TexturePattern": "^textures/armor/vaultsuit/outfit101[fm]\\.dds$",
+          "Color": "183f78",
+          "BlueClothOnly": true,
+          "Brightness": 0.68
+        }
+      ],
+      "Remaining": "vault number, fitted silhouette, individual NPC face"
+    },
+    {
+      "ArtBases": [
+        "hfjmps",
+        "nfvalt"
+      ],
+      "Female": true,
+      "Outfit": "VaultSuit101",
+      "FaceDonor": 678372,
+      "Palette": [
+        {
+          "TexturePattern": "^textures/armor/vaultsuit/outfit101[fm]\\.dds$",
+          "Color": "183f78",
+          "BlueClothOnly": true,
+          "Brightness": 0.68
+        }
+      ],
+      "Remaining": "vault number, fitted silhouette, individual NPC face"
+    },
+    {
+      "ArtBases": [
+        "hmwarr",
+        "nmwarr"
+      ],
+      "Female": false,
+      "Outfit": "NVDLC02DeadHorseStalker",
+      "FaceDonor": 1310331,
+      "HairColor": "070705",
+      "ShoulderWidth": 1.2,
+      "WaistWidth": 0.94,
+      "Remaining": "classic tribal garment, hair, complexion, individual NPC face"
+    },
+    {
+      "ArtBases": [
+        "hfprim",
+        "nfprim"
+      ],
+      "Female": true,
+      "Outfit": "NVDLC02DeadHorseStalker",
+      "FaceDonor": 1042588,
+      "HairColor": "241b14",
+      "Remaining": "classic tribal garment, hair, complexion, individual NPC face"
+    },
+    {
+      "ArtBases": [
+        "hmlthr",
+        "nmlthr"
+      ],
+      "Female": false,
+      "Outfit": "ArmorLeather",
+      "FaceDonor": 1346087,
+      "Remaining": "source armor shape and palette; individual NPC face; held weapon/action bindings"
+    },
+    {
+      "ArtBases": [
+        "hflthr"
+      ],
+      "Female": true,
+      "Outfit": "ArmorLeather",
+      "FaceDonor": 678372,
+      "Remaining": "source armor shape and palette; individual NPC face; held weapon/action bindings"
+    },
+    {
+      "ArtBases": [
+        "hmmetl"
+      ],
+      "Female": false,
+      "Outfit": "ArmorMetal",
+      "FaceDonor": 1346087,
+      "Remaining": "source armor shape and palette; individual NPC face; held weapon/action bindings"
+    },
+    {
+      "ArtBases": [
+        "hfmetl"
+      ],
+      "Female": true,
+      "Outfit": "ArmorMetal",
+      "FaceDonor": 678372,
+      "Remaining": "source armor shape and palette; individual NPC face; held weapon/action bindings"
+    },
+    {
+      "ArtBases": [
+        "hmcmbt"
+      ],
+      "Female": false,
+      "Outfit": "ArmorCombat",
+      "FaceDonor": 1346087,
+      "Remaining": "source armor shape and palette; individual NPC face; held weapon/action bindings"
+    },
+    {
+      "ArtBases": [
+        "hfcmbt"
+      ],
+      "Female": true,
+      "Outfit": "ArmorCombat",
+      "FaceDonor": 678372,
+      "Remaining": "source armor shape and palette; individual NPC face; held weapon/action bindings"
+    }
+  ],
+  "Premades": [
+    {
+      "Campaign": "fallout-1",
+      "Id": "combat",
+      "FaceDonor": 1346087
+    },
+    {
+      "Campaign": "fallout-1",
+      "Id": "stealth",
+      "FaceDonor": 678372
+    },
+    {
+      "Campaign": "fallout-1",
+      "Id": "diplomat",
+      "FaceDonor": 1213830
+    },
+    {
+      "Campaign": "fallout-2",
+      "Id": "combat",
+      "FaceDonor": 1310331
+    },
+    {
+      "Campaign": "fallout-2",
+      "Id": "stealth",
+      "FaceDonor": 1147802
+    },
+    {
+      "Campaign": "fallout-2",
+      "Id": "diplomat",
+      "FaceDonor": 1042588
+    }
+  ],
+  "HeldItems": [
+    {
+      "Pid": 4,
+      "WeaponAnimation": 1,
+      "Model": "meshes/weapons/1handmelee/combatknife.nif",
+      "Pose": "meshes/characters/_male/1hmaim.kf",
+      "Socket": "Weapon",
+      "InactiveObjects": [
+        "##straightrazor",
+        "##RazorBlade",
+        "##BatonHandle",
+        "##BatonShaft",
+        "##Latch",
+        "##l_SwitchBlade",
+        "##l_Blade"
+      ]
+    },
+    {
+      "Pid": 45,
+      "WeaponAnimation": 1,
+      "Model": "meshes/weapons/1handgrenadethrow/throwingknife.nif",
+      "Pose": "meshes/characters/_male/1hmaim.kf",
+      "Socket": "Weapon",
+      "InactiveObjects": [
+        "##straightrazor",
+        "##RazorBlade",
+        "##BatonHandle",
+        "##BatonShaft",
+        "##Latch",
+        "##l_SwitchBlade",
+        "##l_Blade"
+      ]
+    },
+    {
+      "Pid": 8,
+      "WeaponAnimation": 5,
+      "Model": "meshes/weapons/1handpistol/10mmpistol.nif",
+      "Pose": "meshes/characters/_male/1hpaim.kf",
+      "Grip": "meshes/characters/_male/1hphandgrip1.kf",
+      "Socket": "Weapon"
+    },
+    {
+      "Pid": 7,
+      "WeaponAnimation": 4,
+      "Model": "meshes/weapons/1handgrenadethrow/spear.nif",
+      "Pose": "meshes/characters/_male/1gtaim.kf",
+      "Grip": "meshes/characters/_male/1gthandgrip1.kf",
+      "Socket": "Weapon",
+      "InactiveObjects": [
+        "##Lighter",
+        "##Cap",
+        "##LighterSwitch",
+        "##Throwingkinfe"
+      ]
+    },
+    {
+      "Pid": 236,
+      "WeaponAnimation": 1,
+      "Model": "meshes/weapons/1handmelee/combatknife.nif",
+      "Pose": "meshes/characters/_male/1hmaim.kf",
+      "Socket": "Weapon",
+      "InactiveObjects": [
+        "##straightrazor",
+        "##RazorBlade",
+        "##BatonHandle",
+        "##BatonShaft",
+        "##Latch",
+        "##l_SwitchBlade",
+        "##l_Blade"
+      ]
+    }
+  ]
+}

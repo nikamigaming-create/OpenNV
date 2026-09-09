@@ -13,7 +13,8 @@ internal static class NativeNifLightingMaterial
     private static readonly Dictionary<string, Shader> Shaders = new(StringComparer.Ordinal);
 
     internal static ShaderMaterial Build(StandardMaterial3D textures, FalloutNifShaderProperty source,
-        FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha, FalloutNifVertexColorState vertexColors)
+        FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha, FalloutNifVertexColorState vertexColors,
+        Texture2D? height = null)
     {
         var state = alpha is null ? new FalloutNifAlphaState(FalloutNifBlendMode.Opaque, false, 0, 0, true)
             : FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold);
@@ -24,7 +25,7 @@ internal static class NativeNifLightingMaterial
         if ((source.ShaderFlags & (1u << 31)) == 0) modes.Add("depth_test_disabled");
         modes.Add(state.Blend switch
         {
-            FalloutNifBlendMode.Add => "blend_add",
+            FalloutNifBlendMode.Add or FalloutNifBlendMode.AddOne => "blend_add",
             FalloutNifBlendMode.Multiply => "blend_mul",
             FalloutNifBlendMode.Premultiplied => "blend_premul_alpha",
             _ => "blend_mix",
@@ -36,6 +37,8 @@ internal static class NativeNifLightingMaterial
             uniform sampler2D base_map : filter_linear_mipmap_anisotropic, {{repeat}};
             uniform sampler2D normal_map : filter_linear_mipmap_anisotropic, {{repeat}};
             uniform sampler2D emissive_map : filter_linear_mipmap_anisotropic, {{repeat}};
+            uniform sampler2D height_map : filter_linear_mipmap_anisotropic, {{repeat}};
+            uniform bool use_parallax;
             uniform bool use_base_map;
             uniform bool use_normal_map;
             uniform bool use_emissive_map;
@@ -54,22 +57,33 @@ internal static class NativeNifLightingMaterial
             uniform bool use_environment_mask;
             uniform bool environment_light_fade;
             uniform float environment_scale;
-            instance uniform vec3 source_ambient;
-            instance uniform vec3 source_fog_color;
-            instance uniform vec3 source_fog_range;
-            instance uniform float source_fog_game_units_per_meter;
+            instance uniform vec3 source_ambient : instance_index(0);
+            instance uniform vec3 source_fog_color : instance_index(1);
+            instance uniform vec3 source_fog_range : instance_index(2);
+            instance uniform float source_fog_game_units_per_meter : instance_index(3);
             varying float source_fog_factor;
             varying float source_specular_mask;
+            varying vec3 source_tangent_eye;
+            {{FalloutNifSurfaceInputs.ParallaxShaderSource}}
             {{NativeNifPointLighting.ShaderSource}}
             {{FalloutNifHairShading.ShaderSource}}
             {{RetailVertexFog.ShaderSource}}
             {{NativeNifEmittanceMaterial.ShaderSource}}
             void vertex() {
+                if (use_parallax) {
+                    vec3 local_eye = normalize(inverse(MODELVIEW_MATRIX)[3].xyz - VERTEX);
+                    source_tangent_eye = normalize(vec3(dot(TANGENT, local_eye), dot(BINORMAL, local_eye), dot(NORMAL, local_eye)));
+                }
                 source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
                     PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
             }
             void fragment() {
                 vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);
+                vec2 material_uv = UV;
+                if (use_parallax) {
+                    material_uv = owned_parallax_uv(UV, texture(height_map, UV).r, source_tangent_eye);
+                    base.rgb = texture(base_map, material_uv).rgb;
+                }
                 if (use_hair) {
                     vec4 layer = use_emissive_map ? texture(emissive_map, UV) : vec4(0.0);
                     base.rgb = owned_hair_base(base.rgb, layer, hair_tint, use_vertex_color ? COLOR.g : 1.0);
@@ -81,7 +95,7 @@ internal static class NativeNifLightingMaterial
                 {{(state.TestEnabled ? $"if (!({TestExpression(state.TestFunction, state.Threshold)})) discard;" : "")}}
                 source_specular_mask = 1.0;
                 if (use_normal_map) {
-                    vec4 normal_sample = texture(normal_map, UV);
+                    vec4 normal_sample = texture(normal_map, material_uv);
                     vec3 tangent_normal = normalize(normal_sample.rgb * 2.0 - 1.0);
                     NORMAL = normalize(TANGENT * tangent_normal.x + BINORMAL * tangent_normal.y + NORMAL * tangent_normal.z);
                     source_specular_mask = normal_sample.a;
@@ -101,7 +115,7 @@ internal static class NativeNifLightingMaterial
                 if (!environment_light_fade) EMISSION += reflection;
                 EMISSION = owned_output_color(EMISSION);
                 FOG = vec4(source_fog_color, source_fog_factor);
-                {{(state.Blend == FalloutNifBlendMode.Opaque ? "" : "ALPHA = base.a;")}}
+                {{(state.Blend == FalloutNifBlendMode.Opaque ? "" : state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= base.a;")}}
             }
             """);
         RetailLighting.AppendDiffuseLightFunction(code);
@@ -126,6 +140,8 @@ internal static class NativeNifLightingMaterial
         SetTexture(result, "base", textures.AlbedoTexture);
         SetTexture(result, "normal", textures.NormalTexture);
         SetTexture(result, "emissive", textures.EmissionTexture);
+        result.SetShaderParameter("use_parallax", height is not null);
+        if (height is not null) result.SetShaderParameter("height_map", height);
         var color = textures.AlbedoColor;
         var hair = (source.ShaderFlags & FalloutNpcAppearanceHairColor.ShaderFlag) != 0;
         result.SetShaderParameter("use_hair", hair);
@@ -145,6 +161,9 @@ internal static class NativeNifLightingMaterial
         result.SetMeta("opennv_nif_vertex_color_owner", "bound-geometry-colour-buffer");
         result.SetMeta("opennv_nif_alpha_flags", alpha?.Flags ?? 0);
         result.SetMeta("opennv_source_lighting_domain", "encoded");
+        if ((source.ShaderFlags & FalloutNifSurfaceInputs.SinglePassDecalFlags) != 0)
+            result.SetMeta("opennv_decal_owner", "authored-geometry-single-pass-source-alpha-depth");
+        if (height is not null) result.SetMeta("opennv_parallax_owner", "source-height-red-vertex-tangent-eye-offset;coverage-glow-original-uv");
         NativeNifEmittanceMaterial.Configure(result, source.ShaderFlags);
         if (hair)
         {
