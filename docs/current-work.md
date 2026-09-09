@@ -32,6 +32,19 @@ now supply posed shoulders to both skeletons. Excess head/foot reach is explicit
 telemetry. Automatic room-scale stepping, slope-adaptive feet, torso balance,
 physical limb response and headset acceptance remain open.
 
+The free-hand grip frame now uses the palmar normal instead of the dorsal normal.
+The reversed sign had rolled the hands 180 degrees while preserving wrist position.
+Both source skeletons pass independent grip/index-trigger/thumb motion, finger
+release and source closing-direction checks. Submitted-eye SIM inspection shows
+the corrected left glove through wrist turning and live cuff focus/release.
+The private 14-second single-left-eye recording with game audio is
+`local/recordings/vr-hand-20260908/OpenNV-VR-hand-fix.mp4` (245 unique frames in
+419 output frames). The ordinary save is
+`tmp/development-lab/native-left-hand-sim-20260908-run2/save.json`.
+Recording is off and the simulator is stopped. Headset fit and capture cadence remain
+unaccepted; this check also reports about 5.9 cm of unresolved full-body head reach
+at its calibrated standing pose. Wrist/contact errors remain zero in that pose.
+
 The selected owned body audit passes anatomical eye placement, shared shoulder
 frames, crouching foot targets, invariant spine lengths, visibility-independent
 contacts and an unreachable-body negative fixture. Ordinary SIM full-body Run3
@@ -689,6 +702,9 @@ work passes the required full gate (`full-body-full-gate.log`), the selected own
 body audit, the source XR contact/weapon audit and tracked player/wrist UI audit.
 The contact fixture includes source holding/reload checks across all eight saved
 weapons plus unarmed assembly. Those checks do not establish every weapon's combat.
+The palm-axis correction passes the full gate (`left-hand-full-gate.log`), the
+extended owned body/finger audit, and the tracked player/wrist and contact/weapon
+audits. Its playable export and local recording use that checked source.
 Private retail files
 and diagnostics remain outside publication inputs.
 The simulator timing above includes the live harness and is not a physical

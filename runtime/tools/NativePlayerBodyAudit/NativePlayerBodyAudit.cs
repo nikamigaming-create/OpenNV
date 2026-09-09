@@ -45,6 +45,7 @@ public partial class NativePlayerBodyAudit : Node3D
                     throw new InvalidOperationException("Hidden world body lost its shadow or leaked into the eye pass.");
             }
             first.EnableTrackedArms(); body.EnableTrackedArms(first); body.UseTrackedWristShadow(first);
+            CheckTrackedHands(first); CheckTrackedHands(body);
             foreach (var angle in new[] { 0f, .7f, -.8f })
             {
                 var head = new Transform3D(new Basis(Vector3.Up, angle) * new Basis(Vector3.Right, angle / 2) *

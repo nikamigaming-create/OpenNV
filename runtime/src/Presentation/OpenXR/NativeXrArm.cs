@@ -54,7 +54,7 @@ internal sealed class NativeXrArm
         reachErrorMeters = Math.Max(_reachError, _targetReachError),
         wristErrorMeters = WristErrorMeters,
         shoulderShiftMeters = _shoulderShift,
-        calibration = "openxr-grip-knuckle-axis;weapon-source-muzzle-to-tracked-aim-v2",
+        calibration = "openxr-grip-palmar-normal-v3;weapon-source-muzzle-to-tracked-aim-v2",
         lossPolicy = "hold-last-valid-grip; input-disabled"
     };
 
@@ -104,8 +104,11 @@ internal sealed class NativeXrArm
         // metacarpal direction is not grip-forward (nor controller aim).
         var along = (middle - wrist).Normalized();
         var across = (index - little).Normalized();
-        var dorsal = along.Cross(across).Normalized() * (left ? -1 : 1);
-        var x = dorsal * (left ? 1 : -1);
+        // The normal must point out of the palm, not out of the back of the
+        // hand. Reversing it rolls both anatomical hands 180 degrees around
+        // grip Z even though their wrist positions still match perfectly.
+        var palm = along.Cross(across).Normalized() * (left ? 1 : -1);
+        var x = palm * (left ? 1 : -1);
         var z = -across;
         var y = z.Cross(x).Normalized();
         x = y.Cross(z).Normalized();

@@ -71,6 +71,12 @@ spring transfers impulses to real dynamic props at their contact points. Actor
 hit areas still require a response/damage owner. Source two-hand aim poses define
 the support socket; proximity dwell and release rules do not create another
 weapon or inventory. Tracking loss and unavailable collision disable firing.
+The free-hand grip frame uses the palmar normal: OpenXR +X points out of the
+left palm and into the right palm; -Z runs from little to index finger
+([OpenXR pose conventions](https://registry.khronos.org/OpenXR/specs/1.1-khr/pdf/xrspec.pdf#page=110)). The
+source closing animations independently check that sign on both skeletons.
+Wrist-distance agreement alone cannot detect an inverted hand. Grip, index
+trigger and thumb touch retain independent source finger channels.
 The tracked holding frame and source grip palette stay fixed during source flat
 action clips; internal model animation and authoritative timing continue.
 Anatomical reach limits targets before contact publication; a retained contact

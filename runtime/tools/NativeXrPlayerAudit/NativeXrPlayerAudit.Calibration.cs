@@ -10,9 +10,11 @@ public partial class NativeXrPlayerAudit
             var sign = left ? 1 : -1;
             var grip = NativeXrArm.GripFrame(Vector3.Zero, new(0, 0, -.1f),
                 new(sign * .03f, 0, -.08f), new(-sign * .04f, 0, -.08f), left);
-            if (!grip.Basis.Y.IsEqualApprox(Vector3.Forward) ||
+            // These hands lie palm-down, with fingertips along -Z. Left +X
+            // therefore points down out of the palm; right +X points up into it.
+            if (!grip.Basis.Y.IsEqualApprox(Vector3.Back) ||
                 !(-grip.Basis.Z).IsEqualApprox(Vector3.Right * sign) ||
-                !grip.Basis.X.IsEqualApprox(Vector3.Up * sign) ||
+                !grip.Basis.X.IsEqualApprox(Vector3.Down * sign) ||
                 MathF.Abs(grip.Basis.Determinant() - 1) > 1e-5f)
                 throw new InvalidOperationException("OpenXR grip axes do not match the palm and curled-knuckle contract.");
         }
