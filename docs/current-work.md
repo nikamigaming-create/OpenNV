@@ -19,6 +19,30 @@ requires checked publication on main without a new branch or PR.
 owns source failures encountered on the route.
 The separate classic task below remains paused with its work preserved.
 
+## Current New Vegas showcase and next failures
+
+The private requested showcase is
+`local/recordings/vr-showcase-20260908/OpenNV-New-Vegas-VR-showcase.mp4`.
+It contains 68 seconds of one actual submitted left eye with game-process audio:
+Novac exterior, the Strip near Gomorrah, Dino Bite gift shop with live wrist
+focus, then ordinary SIM movement and pistol fire at a source coyote. The user
+explicitly requested diagnostic teleports for this video. Separate copied saves
+changed only the active cell and source marker/reciprocal-door arrival pose;
+these cuts do not establish normal fast travel or traversal to the Strip.
+
+The source coyote died through ordinary trigger input and retained its death
+inventory and ragdoll state in `native-showcase-combat-20260908-run1/save.json`
+under `tmp/development-lab`. Its rendered body disappears after death in this
+capture. Visible corpse, blood and loot presentation are not accepted by this
+run. Novac also reports unsupported source package calendar/schedule evaluation;
+the gift shop NPC fails `default-eye-selection-required` and its reference script
+contains an unbound token. Strip source gate meshes
+obstruct this arrival view, and exterior LOD/resource failures remain visible.
+These are next shared runtime owners to diagnose, not accepted cells. Full NPC
+schedules, source actor residency, corpse presentation and camera/body quality
+remain unfinished. Recording is off; the four ordinary simulator processes are
+stopped and their separate saves are retained. The wider cell-by-cell review and
+normal fast travel remain pending.
 ## Full body and reactive gameplay
 
 XR now draws the complete world outfit and hands. Source head parts use a camera
