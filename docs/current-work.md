@@ -485,8 +485,17 @@ startup now binds that catalog from the already loaded winning records. Impact
 construction measured about 13 ms per warm hit; one completed graph can now be
 reused with reset clocks, modifier state and emission remainders. Active effects
 remain independent and retain their complete particle/audio tails. Owned reset,
-concurrency and bounded-retention checks pass; ordinary performance recheck is
-pending. Casing instantiation remains roughly one millisecond in these samples.
+concurrency and bounded-retention checks pass. Exported flat Run6 and SIM Run4
+cold-continued the preserved living-coyote checkpoint and each completed three
+ordinary shots, source death and a save. First-shot preparation measured
+58.93 ms flat and 73.08 ms SIM, compared with 803.25 ms and 1526.67 ms in the
+earlier respective runs. Initial hit publication still costs 61.03/67.46 ms.
+The subsequent living-target hit reused the completed impact: its total
+publication cost was 6.24 ms flat and 7.61 ms SIM, with 0.82/1.55 ms in the
+impact owner. Blood remains visible in flat and both SIM eyes, with stereo
+brass. These are sampled owner timings, not an overall frame-rate guarantee.
+Both processes are stopped with their saves intact; temporary captures were
+deleted. Casing instantiation remains roughly one millisecond in these samples.
 Living NPC health, full armor/resistance ordering, combat AI and
 retaliation, hit/death script dispatch, XP, limb severing/explosion and damage
 reactions remain required. Automatic, multi-projectile, melee/thrown and
@@ -617,8 +626,10 @@ probes, launcher tests and native Godot loading/instance/reference/trace checks.
 Selected owned shot-effect checks also pass, including completed-effect reset,
 independent overlapping instances and bounded retention. The SDK selection is
 shared by local builds and CI; PRs now run the same validation as main.
-The selected owned audit still reports 14 ObjectDB instances at shutdown;
-retained-resource teardown needs investigation separately from its assertions.
+One selected owned audit reported 14 ObjectDB instances at shutdown. Four
+subsequent verbose runs passed without that warning; its cause remains unresolved.
+The complete source checkpoint is merged through PR #28 at a3a4fc5, with both
+PR and main CI passing. New work continues on a feature branch.
 Publish completed first-party source through a merged PR, synchronize main and
 begin the next work on a fresh branch. Private retail files and diagnostics
 remain outside publication inputs.
