@@ -124,6 +124,10 @@ public partial class RuntimeCoordinator : Node3D
                 var harness = new Diagnostics.Parity.RuntimeLiveHarness();
                 harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
                     () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal));
+                harness.ConfigureBot(ObserveNativeBot, FindNativeBotRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
+                    Enum.Parse<Key>(_configuration.Player.DesktopInput.MoveForward.PhysicalKey),
+                    Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
+                    ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump());
                 AddChild(harness);
             }
             GetWindow().Size = new Vector2I(

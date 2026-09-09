@@ -1,6 +1,8 @@
 # Generic runtime and Goodsprings implementation plan
 
-The latest user priority is physical VR hands, one/two-handed weapon handling,
+The latest user priority is a complete visible VR body with head-only eye
+exclusion, continuous reactive gameplay and a single-eye recording with game
+audio. Preserve physical VR hands, one/two-handed weapon handling,
 real interaction and measured performance, while retaining the ordinary trip
 to the Strip and universal cell repairs. Stay in this task without subagents.
 Follow [the cell parity review](cell-parity-review.md) and current-work.md.
@@ -40,8 +42,11 @@ before choosing optimizations. Integrated controls, readability, motion and the
 broader campaign/VR objective remain required; simulator success cannot replace
 physical acceptance.
 
-The full player world body now retains shadows and source bone hit volumes when
-hidden from flat first-person or XR eyes. Tracked head/wrist, visibility and
+The full player world body now draws in XR with source head parts excluded only
+from the eye cameras; shadows and source bone hit volumes remain. Anatomical
+eye anchoring and source-length spine/leg constraints share posed shoulders with
+the authored weapon/device owner. Finish room-scale stepping, slope-aware feet,
+outfit fitting and integrated physical acceptance. Tracked head/wrist, visibility and
 source-contact audits pass; ordinary flat and SIM shadow/self-ray checks pass.
 Pip-Boy SPECIAL and skill totals now use the shared source formulas and constant
 trait/apparel effects. Continue with actual damage, death, corpse loot and limb

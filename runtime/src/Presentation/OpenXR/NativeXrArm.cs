@@ -37,7 +37,7 @@ internal sealed class NativeXrArm
     private (Transform3D Pose, float Error) ReachLimit(Transform3D hand)
     {
         var local = _skeleton.GlobalTransform.AffineInverse() * hand;
-        var shoulder = _skeleton.GetBoneGlobalRest(_upper).Origin;
+        var shoulder = ShoulderFrame * _skeleton.GetBoneGlobalRest(_upper).Origin;
         var offset = local.Origin - shoulder;
         var distance = offset.Length();
         var reach = Math.Clamp(distance, MathF.Abs(_upperLength - _forearmLength) + .001f, _upperLength + _forearmLength + .15f - .001f);
@@ -129,11 +129,12 @@ internal sealed class NativeXrArm
             attachment = aimFromHand;
         }
         var target = _skeleton.GlobalTransform.AffineInverse() * (contactHand ?? retained * attachment);
-        // The head-relative source rest shoulders own VR arm placement. Flat
-        // idle sway cannot move a tracked wrist device between fixed poses.
-        var shoulderPose = _skeleton.GetBoneGlobalRest(_upper);
-        var elbowPose = _skeleton.GetBoneGlobalRest(_forearm);
-        var wristPose = _skeleton.GetBoneGlobalRest(_hand);
+        // The prepared torso owns the clavicle. Keep every arm rest reference
+        // in that same frame so skin across the shoulder stays connected.
+        var shoulderFrame = ShoulderFrame;
+        var shoulderPose = shoulderFrame * _skeleton.GetBoneGlobalRest(_upper);
+        var elbowPose = shoulderFrame * _skeleton.GetBoneGlobalRest(_forearm);
+        var wristPose = shoulderFrame * _skeleton.GetBoneGlobalRest(_hand);
         var shoulder = shoulderPose.Origin;
         var direction = target.Origin - shoulder;
         var distance = direction.Length();
@@ -147,7 +148,8 @@ internal sealed class NativeXrArm
         var reach = Math.Clamp(distance, MathF.Abs(_upperLength - _forearmLength) + .001f, _upperLength + _forearmLength - .001f);
         _reachError = MathF.Abs(distance - reach);
         var wrist = shoulder + direction * reach;
-        var pole = _restPole - direction * _restPole.Dot(direction);
+        var restPole = shoulderFrame.Basis * _restPole;
+        var pole = restPole - direction * restPole.Dot(direction);
         if (pole.LengthSquared() < .0001f) pole = Vector3.Back - direction * Vector3.Back.Dot(direction);
         pole = pole.Normalized();
         var along = (_upperLength * _upperLength - _forearmLength * _forearmLength + reach * reach) / (2 * reach);
@@ -172,10 +174,10 @@ internal sealed class NativeXrArm
         // Keep pronation off the elbow's main forearm bone; rolling that whole
         // segment collapses vertices shared with the upper arm.
         var shoulderSwing = new Basis(new Quaternion(sourceUpper, solvedUpper));
-        var upperHelper = _skeleton.GetBoneGlobalRest(_upperTwist);
+        var upperHelper = shoulderFrame * _skeleton.GetBoneGlobalRest(_upperTwist);
         SetGlobalPose(_upperTwist, new(shoulderSwing.Slerp(upperRotation, .5f) * upperHelper.Basis,
             shoulder + upperRotation * (upperHelper.Origin - shoulderPose.Origin)));
-        var foreHelper = _skeleton.GetBoneGlobalRest(_foreTwist);
+        var foreHelper = shoulderFrame * _skeleton.GetBoneGlobalRest(_foreTwist);
         SetGlobalPose(_foreTwist, new(wristRotation * foreHelper.Basis,
             elbow + lowerRotation * (foreHelper.Origin - elbowPose.Origin)));
         SetGlobalPose(_hand, new(target.Basis, wrist));
@@ -201,6 +203,15 @@ internal sealed class NativeXrArm
         var normal = upper.Cross(lower).Normalized();
         if (normal.LengthSquared() < .99f) throw new InvalidDataException("Source arm bend plane is degenerate.");
         return new(upper, normal.Cross(upper).Normalized(), normal);
+    }
+
+    private Transform3D ShoulderFrame
+    {
+        get
+        {
+            var parent = _skeleton.GetBoneParent(_upper);
+            return _skeleton.GetBoneGlobalPose(parent) * _skeleton.GetBoneGlobalRest(parent).AffineInverse();
+        }
     }
 
     private void SetGlobalPose(int bone, Transform3D pose)

@@ -9,6 +9,7 @@ internal partial class RuntimeNativePlayer
     private NativeXrPointer? _xrPointer;
     private NativeXrHandContact? _xrLeftContact, _xrRightContact;
     private NativeXrWeaponSupport? _xrSupport;
+    private readonly NativeXrBodyHeading _xrBodyHeading = new();
     private string? _xrContactError;
     private Vector3 _aimHit;
     internal Func<Node, NativeXrTarget?>? ResolveXrTarget { get; set; }
@@ -23,7 +24,7 @@ internal partial class RuntimeNativePlayer
             left = _xrLeftContact?.State,
             right = _xrRightContact?.State,
             support = _xrSupport?.State,
-            error = _xrContactError ?? _firstPerson?.XrContactPoseError
+            error = _xrContactError ?? _firstPerson?.XrContactPoseError ?? _thirdPerson?.XrContactPoseError
         },
         pointerTarget = _xrPointer?.TargetName
     };
@@ -34,7 +35,11 @@ internal partial class RuntimeNativePlayer
         var pointing = _xr.WorldPointer || _xr.PointAtPipBoy is not null || _modalInput;
         _firstPerson.SetXrInteraction(pointing);
         var weaponHeld = _weaponHandling!.Drawn && _firstPerson.Weapon is not null && !pointing;
-        _firstPerson.PrepareTrackedBody(_xr.Camera.GlobalTransform);
+        var heading = _xrBodyHeading.Advance(_xr.Camera.GlobalTransform, new Vector2(Velocity.X, Velocity.Z).LengthSquared() > .01f, delta);
+        _firstPerson.SetTrackedBodyFrame(heading, GlobalPosition);
+        _thirdPerson?.SetTrackedBodyFrame(heading, GlobalPosition);
+        _thirdPerson!.PrepareTrackedBody(_xr.Camera.GlobalTransform);
+        _firstPerson.AdoptTrackedTorso(_thirdPerson);
         var leftPose = left.GlobalTransform; var rightPose = right.GlobalTransform;
         var leftTracked = left.GetHasTrackingData(); var rightTracked = right.GetHasTrackingData();
         Basis? aim = _xr.RightAim.GetHasTrackingData() ? _xr.RightAim.GlobalBasis : null;
@@ -68,14 +73,14 @@ internal partial class RuntimeNativePlayer
         _firstPerson.PoseTrackedArms(delta, _xr.Camera.GlobalTransform, leftPose, rightPose,
             left.GetHasTrackingData(), right.GetHasTrackingData(), left.GetFloat(NativeXrActions.PipBoy), right.GetFloat(NativeXrActions.Activate),
             left.GetFloat(NativeXrActions.FingerTrigger), right.GetFloat(NativeXrActions.Fire), left.IsButtonPressed(NativeXrActions.ThumbTouch),
-            right.IsButtonPressed(NativeXrActions.ThumbTouch), weaponHeld, aim, leftContact, rightContact, _xrSupport is { Engaged: true });
+            right.IsButtonPressed(NativeXrActions.ThumbTouch), weaponHeld, aim, leftContact, rightContact, _xrSupport is { Engaged: true }, bodyPrepared: true);
         if (_thirdPerson is not null)
         {
             _thirdPerson.SetXrInteraction(pointing);
             _thirdPerson.PoseTrackedArms(delta, _xr.Camera.GlobalTransform, leftPose, rightPose,
                 left.GetHasTrackingData(), right.GetHasTrackingData(), left.GetFloat(NativeXrActions.PipBoy), right.GetFloat(NativeXrActions.Activate),
                 left.GetFloat(NativeXrActions.FingerTrigger), right.GetFloat(NativeXrActions.Fire), left.IsButtonPressed(NativeXrActions.ThumbTouch),
-                right.IsButtonPressed(NativeXrActions.ThumbTouch), weaponHeld, aim, leftContact, rightContact, _xrSupport is { Engaged: true });
+                right.IsButtonPressed(NativeXrActions.ThumbTouch), weaponHeld, aim, leftContact, rightContact, _xrSupport is { Engaged: true }, bodyPrepared: true);
         }
     }
     private void BindXrContacts()

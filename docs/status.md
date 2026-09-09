@@ -1,7 +1,8 @@
 # Product status
 
-The current user priority is physical VR hands, weapon handling and measured
-performance, retaining the ordinary trip to the Strip and universal cell repairs;
+The current user priority is the complete visible VR body with head-only eye
+exclusion, reactive gameplay control and a single-eye recording. Preserve physical
+hands, weapon handling, measured performance, the trip to the Strip and universal cell repairs;
 see [current work](current-work.md) and [the cell workflow](cell-parity-review.md).
 Source hand/weapon sweeps, dynamic prop pushing, two-hand support and live wrist
 inventory have bounded native/SIM checks. Reach release and source twist-bone
@@ -163,11 +164,16 @@ Repeated-turn and source-button audits pass; ordinary SIM input operates all thr
 pages with the world live. Physical feedback failed for hand/gun orientation,
 cloud depth, populations, scale and reference rotation. Bounded corrections have
 simulator/source checks, but physical appearance and comfort are not accepted.
-The full world body now stays present for shadows and its source bone hit volumes
-when hidden from flat first-person or XR views. All 18 current source volumes pass
+XR now shows the full world outfit and hands while excluding source head parts
+only from its eye cameras. Anatomical source eyes, a constrained spine, grounded
+leg targets and independent torso heading replace the old head-following rest
+body. First-person weapon/device attachments share the posed shoulder frame.
+All 18 current source volumes pass
 real physics queries through visibility/shadow changes and tracked head/wrist
 poses. Ordinary flat and SIM checks show body shadows, retain contacts and shoot
-past self volumes. This does not establish player damage or full limb dynamics.
+past self volumes. New full-body SIM views show connected sleeves and hands.
+Room-scale stepping, slope adaptation, broad outfit fitting and physical headset
+acceptance remain incomplete. This does not establish player damage or full limb dynamics.
 The Pip-Boy now displays computed SPECIAL and skill totals, including source tags,
 conditional traits and worn apparel effects; ordinary scrolling and SIM pointing
 pass. Other actor-value pools, effects and advancement remain incomplete.

@@ -3,6 +3,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Presentation.OpenXR;
 
 public partial class NativePlayerBodyAudit : Node3D
 {
@@ -77,6 +78,61 @@ public partial class NativePlayerBodyAudit : Node3D
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             if (Hit(body, negative)) throw new InvalidOperationException("Collision negative fixture did not remove the target.");
             negative.CollisionLayer = 2;
+            body.ShowTrackedBody(first);
+            var heading = new NativeXrBodyHeading();
+            var neutral = heading.Advance(new(Basis.Identity, new(0, 1.68f, 0)), false, 1.0 / 90);
+            var turned = heading.Advance(new(new Basis(Vector3.Up, .5f), new(0, 1.68f, 0)), false, 1.0 / 90);
+            if (!turned.IsEqualApprox(neutral)) throw new InvalidOperationException("A small head turn dragged the torso.");
+            var footBones = new[] { "Bip01 L Foot", "Bip01 R Foot" }.Select(body.Skeleton.BoneIndex).ToArray();
+            var headFromEye = NativeXrEyeFrame.InHead(body.Actor);
+            var sourceEye = body.Skeleton.Node.Transform * (body.Skeleton.Node.GetBoneGlobalRest(body.Skeleton.BoneIndex("Bip01 Head")) * headFromEye).Origin;
+            var footFrame = new Transform3D(Basis.Identity, new(-sourceEye.X, 0, -sourceEye.Z));
+            var spineBones = new[] { "Bip01 Spine1", "Bip01 Spine2", "Bip01 Neck", "Bip01 Head" }.Select(body.Skeleton.BoneIndex).ToArray();
+            foreach (var height in new[] { 1.68f, 1.1f, 1.5f, 1.68f })
+            {
+                body.Advance(0, Vector3.Zero, true, false);
+                var feet = footBones.Select(bone => footFrame * body.Skeleton.Node.Transform * body.Skeleton.Node.GetBoneGlobalPose(bone)).ToArray();
+                body.SetTrackedBodyFrame(Basis.Identity, Vector3.Zero);
+                var headBone = new Transform3D(Basis.Identity, new(0, height, 0)) * headFromEye.AffineInverse();
+                headBone.Basis = new Basis(Vector3.Up, .5f) * new Basis(Vector3.Right, -.7f) * headBone.Basis;
+                var head = headBone * headFromEye;
+                body.PrepareTrackedBody(head);
+                first.Advance(0, Vector3.Zero, true, false);
+                first.AdoptTrackedTorso(body);
+                body.PoseTrackedArms(1.0 / 90, head, new(Basis.Identity, new(-.23f, height - .3f, -.3f)),
+                    new(Basis.Identity, new(.23f, height - .3f, -.3f)), true, true, 0, 0, 0, 0, false, false, false, bodyPrepared: true);
+                if (body.TrackedHeadEyeFrame is not { } trackedEye || trackedEye.Origin.DistanceTo(head.Origin) > .003f)
+                    throw new InvalidOperationException($"Spine lost anatomical eyes at height {height:R}: {JsonSerializer.Serialize(body.XrHandState)}");
+                foreach (var bone in spineBones)
+                    if (Math.Abs(body.Skeleton.Node.GetBonePose(bone).Origin.Length() - body.Skeleton.Node.GetBoneRest(bone).Origin.Length()) > .0001f)
+                        throw new InvalidOperationException("Spine length changed to accommodate a tracked target.");
+                foreach (var name in new[] { "Bip01 L Clavicle", "Bip01 R Clavicle" })
+                    if ((body.Skeleton.Node.GlobalTransform * body.Skeleton.Node.GetBoneGlobalPose(body.Skeleton.BoneIndex(name))).Origin.DistanceTo(
+                        (first.Skeleton.Node.GlobalTransform * first.Skeleton.Node.GetBoneGlobalPose(first.Skeleton.BoneIndex(name))).Origin) > .0001f)
+                        throw new InvalidOperationException("First-person attachments have a different shoulder frame.");
+                for (var index = 0; index < footBones.Length; index++)
+                {
+                    var actual = body.Skeleton.Node.GlobalTransform * body.Skeleton.Node.GetBoneGlobalPose(footBones[index]);
+                    if (actual.Origin.DistanceTo(feet[index].Origin) > .003f)
+                        throw new InvalidOperationException($"Head height {height:R}, foot {index}: source foot target displaced by {actual.Origin.DistanceTo(feet[index].Origin):R} metres.");
+                }
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                CheckContacts(body);
+            }
+            body.Advance(0, Vector3.Zero, true, false);
+            body.PrepareTrackedBody(new(Basis.Identity, new(2, 1.68f, 0)));
+            if (body.XrBodyPoseError is null) throw new InvalidOperationException("Unreachable full-body target was silently accepted.");
+            var visibleBody = body.Actor.FindChildren("*", "", true, false).OfType<GeometryInstance3D>()
+                .Where(mesh => mesh.IsVisibleInTree() && (mesh.Layers & ~RuntimeNativePlayerActor.SelfHeadLayer) != 0).ToArray();
+            var hiddenHead = body.Actor.FindChildren("*", "", true, false).OfType<GeometryInstance3D>()
+                .Where(mesh => mesh.IsVisibleInTree() && mesh.Layers == RuntimeNativePlayerActor.SelfHeadLayer).ToArray();
+            if (visibleBody.Length == 0 || hiddenHead.Length == 0 || hiddenHead.All(mesh => mesh.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off))
+                throw new InvalidOperationException("Head-only eye exclusion removed the body or the head shadow.");
+            foreach (var part in first.Actor.Parts)
+                if (first.WristDevice() is not { } device || part.Root != device.Root)
+                    if (part.Root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>().Any(mesh => mesh.Layers != 0))
+                        throw new InvalidOperationException("Duplicate first-person body remains in the eye pass.");
             GD.Print("OPENNV_PLAYER_BODY_AUDIT_PASS " + JsonSerializer.Serialize(new
             {
                 sourceBodies,
@@ -86,6 +142,12 @@ public partial class NativePlayerBodyAudit : Node3D
                 trackedHeadTiltAndRoll = true,
                 singleLiveWristCaster = true,
                 collisionNegative = true,
+                fullBodyWithHeadEyeExclusion = true,
+                crouchRetainsSourceFootTargets = true,
+                headTurnsIndependently = true,
+                anatomicalSourceEyes = true,
+                sharedTorsoForAttachments = true,
+                unreachableBodyTargetReported = true,
                 boundary = "query-shapes-and-render-policy;ordinary-flat-and-SIM-final-pixels-required"
             }));
             GetTree().Quit(0);

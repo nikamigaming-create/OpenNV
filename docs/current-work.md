@@ -2,8 +2,10 @@
 
 ## Authority and next outcome
 
-The immediate work is physical VR hands, held-weapon contact, one/two-handed
-handling and measured runtime performance. Continue in this task without
+The immediate work is a visible complete VR body with only its head excluded
+from the player's eyes, continuous reactive gameplay control and a usable single-eye
+recording with game audio. Preserve physical hands, held-weapon contact,
+one/two-handed handling and measured runtime performance. Continue in this task without
 subagents. D:/code/MGS5VR supplied behavioral reference for source-bound support
 grips; its own wall-contact and physical-melee work remains unfinished. Ordinary
 prop interaction, controls, friendly-animal touch and deliberate melee require
@@ -11,18 +13,72 @@ separate responses on the shared contact/gameplay owners, not speed-only damage.
 Preserve the requested trip to the Strip through the real world/door graph,
 fixing roads, resident collision, neighboring cells and continuous LOD. Do not
 replace travel with position writes or a capture scene. The broader matched
-cell review and NV/FO3/TTW objectives remain open. The user requests frequent
-checked publication through feature branches and merged PRs to origin/main;
-leave no outstanding task PRs after publication. [The cell review workflow](cell-parity-review.md)
+cell review and NV/FO3/TTW objectives remain open. The current AGENTS contract
+requires checked publication on main without a new branch or PR.
+[The cell review workflow](cell-parity-review.md)
 owns source failures encountered on the route.
 The separate classic task below remains paused with its work preserved.
+
+## Full body and reactive gameplay
+
+XR now draws the complete world outfit and hands. Source head parts use a camera
+exclusion layer while retaining their original shadow policy and all 18 bone
+query volumes. The first-person draw retains the authored weapon and live cuff;
+its body geometry has zero eye layers. No geometry or contacts are deleted.
+The actual source FaceGen eyes replace Camera1st as the full body's eye anchor.
+The flat weapon camera was behind the anatomical eyes and exposed the neck hole.
+Grounded pelvis, source-length spine/leg constraints and independent body heading
+now supply posed shoulders to both skeletons. Excess head/foot reach is explicit
+telemetry. Automatic room-scale stepping, slope-adaptive feet, torso balance,
+physical limb response and headset acceptance remain open.
+
+The selected owned body audit passes anatomical eye placement, shared shoulder
+frames, crouching foot targets, invariant spine lengths, visibility-independent
+contacts and an unreachable-body negative fixture. Ordinary SIM full-body Run3
+continued a real exterior save and moved about 3.6 metres through the capsule.
+Both submitted-eye views show connected outfit sleeves, hands, held pistol and
+the live cuff. Dark exterior lighting, body fit across other outfits, long-motion
+quality and physical comfort are not accepted. Its save is
+`tmp/development-lab/native-full-body-sim-20260908-run3/save.json`.
+
+ReactiveReferenceBot and ReactiveSteering are reusable C# input policies without
+Godot dependencies. The native adapter observes resident source identities,
+collision, controls and actual interaction state each frame. Source NAVM supplies
+routes; flat keys or explicitly selected SIM controller input execute them.
+SIM input requires expiring device leases. A moving Doc was reached through
+ordinary flat input, including a 17-waypoint/12-second approach. The fresh opening
+reached stage 200 with Guns/Repair/Speech, no traits and Hardcore off; its actual
+save is `tmp/development-lab/native-reactive-bot-20260908-run1/save.json`.
+Vigor telemetry now includes active source controls and animation phase.
+
+The bot remains bounded reference approach/follow/activation, not a campaign
+decision-maker. A SIM route hit Doc's actual Gurney01 collider and stopped with
+the blocker reported. Capsule-aware local clearance and dynamic avoidance are
+the next navigation owner; never bypass that failure with position writes.
+The operating-table Broken SMG script also retains its compiled-script divergence.
+
+The recorder accepts a bounded duration or stop signal and captures only game
+process audio. The private simulator can publish one actual submitted eye into
+that recorder; unsupported compositor overlays fail explicitly. Repeated frames
+and original timestamps remain visible through stalls. The current deliverable is
+`local/recordings/vr-body-20260908/OpenNV-VR-body-check.mp4`: 17 seconds, one
+1280x1280 submitted left eye and stereo game audio. It shows head/body movement,
+crouching, live cuff enlargement/release and a road shot. It contains 332 unique
+source frames in 512 output frames; capture cadence still needs improvement.
+This is a body/weapon check, not the requested complete gameplay take.
+Full-body SIM Run4 retained the head exclusion in both eyes and fired twice at
+original road collision without hitting self volumes (2 -> 0 loaded). Sampled
+late-motion head/foot errors stayed below 0.1 mm with no contact error. That sample
+does not cover the entire motion or establish skin quality. Its ordinary save is
+`tmp/development-lab/native-full-body-sim-20260908-run4/save.json`.
+Recording is off and ordinary development processes are stopped.
 
 The user requires complete Fallout 1 and Fallout 2 hex campaigns in the shared
 launcher, retaining FNV/FO3 and eventual shared FPS/VR state. The visual goal is
 a cinematic diorama preserving original art, silhouettes, palette, source
 identities and exact MAP/PRO/FRM placement. Hex state owns navigation, blocking,
 exits and eventual combat; appearance never changes those rules. Use the same
-feature-branch publication workflow, without subagents. Preserve the New Vegas work below. All campaign and
+main publication workflow, without subagents. Preserve the New Vegas work below. All campaign and
 parity acceptance remains open.
 
 ## Current classic runtime
@@ -370,7 +426,7 @@ collision. The original third-person body now remains in both flat and XR. Eye
 visibility uses per-surface shadow-only rendering, independently of its 18 source
 Havok contact volumes. Player shot/activation rays exclude these self volumes.
 The full world rig uses its own compatible source animations and tracked wrist
-solvers; the first-person source eye-to-head transform anchors the world body.
+solvers; its anatomical source eye frame anchors the tracked head.
 The live enlarged Pip-Boy casts its own shadow and the world outfit's duplicate
 device is hidden. No additional gameplay actor or inventory is created.
 
@@ -628,11 +684,13 @@ independent overlapping instances and bounded retention. The SDK selection is
 shared by local builds and CI; PRs now run the same validation as main.
 One selected owned audit reported 14 ObjectDB instances at shutdown. Four
 subsequent verbose runs passed without that warning; its cause remains unresolved.
-The complete source checkpoint is merged through PR #28 at a3a4fc5, with both
-PR and main CI passing. New work continues on a feature branch.
-Publish completed first-party source through a merged PR, synchronize main and
-begin the next work on a fresh branch. Private retail files and diagnostics
-remain outside publication inputs.
+The published base includes PR #29 at d06bbe8. Current full-body and reactive-input
+work passes the required full gate (`full-body-full-gate.log`), the selected owned
+body audit, the source XR contact/weapon audit and tracked player/wrist UI audit.
+The contact fixture includes source holding/reload checks across all eight saved
+weapons plus unarmed assembly. Those checks do not establish every weapon's combat.
+Private retail files
+and diagnostics remain outside publication inputs.
 The simulator timing above includes the live harness and is not a physical
 benchmark or streaming acceptance. Cold Continue and cell upload stalls remain.
 Casing prototypes and completed impact graphs have bounded owner-managed reuse.

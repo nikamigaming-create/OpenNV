@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.Bots;
 using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Diagnostics.Parity;
@@ -29,10 +30,32 @@ internal sealed partial class RuntimeLiveHarness : Node
     private ulong _lastStopWrite;
     private LiveHarnessFrameBuffer? _liveFrames;
     private RuntimeRenderTrace? _trace;
+    private ReactiveReferenceBot? _bot;
+    private float _botSensitivity;
+    private Key _botForward, _botActivate;
+    private Action? _pumpBotInput;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly bool JitOptimizationDisabled = typeof(RuntimeLiveHarness).Assembly
         .GetCustomAttributes(typeof(DebuggableAttribute), false).OfType<DebuggableAttribute>()
         .SingleOrDefault()?.IsJITOptimizerDisabled ?? false;
+
+    internal void ConfigureBot(Func<string, BotObservation> observe,
+        Func<System.Numerics.Vector3, System.Numerics.Vector3, IReadOnlyList<System.Numerics.Vector3>> route, float sensitivity, Key forward, Key activate,
+        Func<OpenNV.Runtime.Gameplay.Bots.SteeringIntent, bool, bool>? inputOverride = null, Action? pumpInput = null)
+    {
+        if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
+        _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
+        _pumpBotInput = pumpInput;
+        _bot = new(observe, route, (intent, activation) =>
+        {
+            if (inputOverride?.Invoke(intent, activation) == true) return;
+            SetKey(_botForward, intent.Forward, 200);
+            if (intent.YawRadians != 0 || intent.PitchRadians != 0)
+                Input.ParseInputEvent(new InputEventMouseMotion
+                { Relative = new Vector2(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity) });
+            SetKey(_botActivate, activation, 50);
+        });
+    }
 
     public override void _EnterTree()
     {
@@ -79,7 +102,6 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _Process(double delta)
     {
-        _ = delta;
         var now = Time.GetTicksMsec();
         var stop = Path.Combine(_directory, "stop.request");
         if (File.Exists(stop))
@@ -88,6 +110,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             if (stamp != _lastStopWrite)
             {
                 _lastStopWrite = stamp;
+                _bot?.Stop();
                 ReleaseAll();
                 // Stop cancels commands already queued, including stale key-down events.
                 _nextRequest = checked(Directory.EnumerateFiles(_directory, "*.command")
@@ -115,11 +138,15 @@ internal sealed partial class RuntimeLiveHarness : Node
                 Dispatch(document.RootElement, request);
                 Receipt(request, true, "Delivered to Godot input; resulting gameplay state is observed separately.");
             }
-            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException)
+            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException or NotSupportedException)
             {
                 Receipt(request, false, exception.Message);
             }
         }
+        _bot?.Tick((float)delta);
+        try { _pumpBotInput?.Invoke(); }
+        catch (Exception error) when (error is IOException or InvalidOperationException)
+        { _bot?.Fail("Simulator input transport failed: " + error.Message); }
         if (now - _lastStateMilliseconds >= 250)
         {
             _lastStateMilliseconds = now;
@@ -129,8 +156,17 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private void Dispatch(JsonElement command, ulong request)
     {
+        if (command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text")
+            _bot?.Stop();
         switch (command.GetProperty("op").GetString())
         {
+            case "bot":
+                if (_bot is null) throw new NotSupportedException("Bot observation/input adapter is unavailable.");
+                var mode = command.GetProperty("mode").GetString()!;
+                if (mode == "stop") _bot.Stop();
+                else _bot.Start(command.GetProperty("reference").GetString()!, mode,
+                    command.TryGetProperty("distance", out var distance) ? distance.GetSingle() : 1.5f);
+                break;
             case "key":
                 var name = command.GetProperty("key").GetString()!;
                 var key = name switch
@@ -238,8 +274,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             if (existing)
                 return;
         }
-        else
-            _held.Remove(key);
+        else if (!_held.Remove(key)) return;
         Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = pressed, Echo = false });
     }
 
@@ -310,6 +345,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             nextCommandRequest = _nextRequest,
             commandReadFailure = _commandReadFailure,
             gameplay = _captureSummary(),
+            bot = _bot?.State,
             performance = new
             {
                 jitOptimizationDisabled = JitOptimizationDisabled,
@@ -412,6 +448,7 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _ExitTree()
     {
+        _bot?.Stop();
         try { CompleteStateWrite(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
         GetTree().NodeAdded -= TrackNode;

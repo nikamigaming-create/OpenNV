@@ -155,6 +155,7 @@ public partial class RuntimeCoordinator
             questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Legacy save has no quest script state." : null,
             playerPackage = _nativeOpeningStageDriver?.PlayerPackageState,
             characterCreation = _nativeOpeningStageDriver?.CharacterCreationState,
+            vigor = _nativeOpeningStageDriver?.VigorState,
             imageSpace = cellChildren is null ? null : cellNodes.OfType<RuntimeNativeImageSpace>().Select(presenter => new
             {
                 active = presenter.Frame?.Active.Select(modifier => new

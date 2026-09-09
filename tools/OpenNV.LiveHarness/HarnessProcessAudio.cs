@@ -12,10 +12,10 @@ namespace OpenNV.LiveHarness;
 // It neither opens a microphone nor modifies or injects the target process.
 public static partial class HarnessProcessAudio
 {
-    internal static object Capture(int processId, int milliseconds, string directory)
+    internal static object Capture(int processId, int milliseconds, string directory, CancellationToken cancellationToken = default)
     {
-        if (milliseconds is < 100 or > 60000 || !Path.IsPathFullyQualified(directory))
-            throw new ArgumentException("Audio capture requires 100-60000 milliseconds and a new absolute private directory.");
+        if (milliseconds is < 100 or > 1800000 || !Path.IsPathFullyQualified(directory))
+            throw new ArgumentException("Audio capture requires 100-1800000 milliseconds and a new absolute private directory.");
         using var target = Process.GetProcessById(processId);
         var startTime = target.StartTime.ToUniversalTime();
         var owner = new TemporaryCaptureDirectory(directory);
@@ -95,7 +95,7 @@ public static partial class HarnessProcessAudio
             using (var raw = new FileStream(rawPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
             {
                 Check(client.Start()); started = true;
-                while (Stopwatch.GetElapsedTime(begin).TotalMilliseconds < milliseconds)
+                while (!cancellationToken.IsCancellationRequested && Stopwatch.GetElapsedTime(begin).TotalMilliseconds < milliseconds)
                 {
                     ready.WaitOne(25);
                     Drain();

@@ -11,6 +11,8 @@ internal partial class RuntimeNativeVigorEntry : CanvasLayer
     private IDisposable? _background;
     private SceneTree? _pausedTree;
     private bool _previousPause;
+    private NativeOwnedLoveTesterMenu? _menu;
+    internal object? State => _menu?.State;
 
     internal void Configure(FalloutNativeVigorContract contract, FalloutNativeSpecialState initial, FalloutPluginStack records,
         RuntimeNativeImageSpace? imageSpace = null)
@@ -25,6 +27,7 @@ internal partial class RuntimeNativeVigorEntry : CanvasLayer
             LayoutMode = 1,
             AnchorsPreset = (int)Control.LayoutPreset.FullRect,
         };
+        _menu = menu;
         menu.Accepted += state =>
         {
             ReleaseBackground();

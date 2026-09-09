@@ -38,6 +38,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         seconds = _seconds,
         bones = Skeleton.Node.GetBoneCount(),
         error = Error,
+        trackedBody = _trackedBodyView ? XrHandState : null,
         visibility = BodyVisibilityState,
         movement = _movementPath,
         movementFallback = _movementFallback,

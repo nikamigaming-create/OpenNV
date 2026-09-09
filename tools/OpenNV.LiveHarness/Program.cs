@@ -16,9 +16,15 @@ internal static class Program
     {
         try
         {
-            if (args is ["--record-single", var channel, var processId, var seconds, var encoder, var output])
+            if (args is ["--record-single", var channel, var processId, var seconds, var encoder, var output, .. var recordingOptions])
             {
-                SingleGameRecording.Run(channel, int.Parse(processId), int.Parse(seconds), encoder, output).GetAwaiter().GetResult();
+                var stopSignal = recordingOptions switch
+                {
+                    [] => null,
+                    ["--stop-signal", var path] => path,
+                    _ => throw new ArgumentException("The optional recording argument is --stop-signal <absolute-path>.")
+                };
+                SingleGameRecording.Run(channel, int.Parse(processId), int.Parse(seconds), encoder, output, stopSignal).GetAwaiter().GetResult();
                 return 0;
             }
             if (args is ["--discard-capture", var captureDirectory])

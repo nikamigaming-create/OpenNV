@@ -87,7 +87,7 @@ internal partial class RuntimeNativePlayer
         if (_thirdPerson is not null)
         {
             _thirdPerson.Visible = _presentationError is null && (_xr is not null || _sourceCamera is null && _furniturePhase == 0);
-            _thirdPerson.SetViewPolicy(_xr is null && _thirdPersonMode, true);
+            _thirdPerson.SetViewPolicy(_xr is not null || _thirdPersonMode, true);
         }
         if (_xr is not null && _firstPerson is not null) _firstPerson.Visible = _presentationError is null;
         if (!active && _xr is null) return;
@@ -116,7 +116,13 @@ internal partial class RuntimeNativePlayer
         var movement = GlobalBasis.Inverse() * Velocity;
         _firstPerson?.Advance(simulationDelta, movement, IsOnFloor(), _aiming);
         _thirdPerson?.Advance(simulationDelta, movement, IsOnFloor(), _aiming);
-        PublishXrHands(delta);
+        try { PublishXrHands(delta); }
+        catch (Exception error)
+        {
+            _presentationError = error.Message;
+            GD.PushError("OPENNV_TRACKED_BODY_UNBOUND " + error.Message);
+            return;
+        }
         PublishPendingShot();
         if (_firstPersonCamera is not null && _firstPerson is not null)
         {
@@ -207,7 +213,7 @@ internal partial class RuntimeNativePlayer
             {
                 _firstPerson.EnableTrackedArms();
                 _thirdPerson.EnableTrackedArms(_firstPerson);
-                _thirdPerson.UseTrackedWristShadow(_firstPerson);
+                _thirdPerson.ShowTrackedBody(_firstPerson);
                 BindXrContacts();
             }
             PresentationChanged?.Invoke();

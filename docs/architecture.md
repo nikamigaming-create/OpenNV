@@ -54,9 +54,12 @@ reference-events.md and dialogue-and-furniture.md for the bounded contracts.
 
 The player keeps one complete world skeleton in flat and OpenXR. Camera
 visibility, shadow casting and source bone query volumes are independent;
-first-person visibility never removes anatomical contacts. XR publishes head
-and wrist tracking to that world skeleton as well as the visible first-person
-arms. The actual wrist device casts its enlarged shadow; its duplicate outfit
+first-person visibility never removes anatomical contacts. XR shows the complete
+world outfit and excludes only head geometry from its eye cameras. Source FaceGen
+eyes define the head anchor, independent of the authored flat weapon camera.
+Grounded pelvis/spine/leg constraints preserve source lengths and report excess
+reach. The posed shoulders also anchor first-person weapon/device attachments;
+the duplicate first-person body draw is masked. The actual wrist device casts its enlarged shadow; its duplicate outfit
 device stays hidden. Self rays exclude the player's capsule and bone volumes.
 These contacts provide hit queries, not completed limb rigid-body response.
 
@@ -73,9 +76,17 @@ action clips; internal model animation and authoritative timing continue.
 Anatomical reach limits targets before contact publication; a retained contact
 that the body can no longer reach reports divergence and blocks that gun's shot.
 Source elbow bend planes and authored twist helpers distribute wrist roll while
-the head-relative torso supplies consistent shoulder anchors.
+the prepared full-body torso supplies consistent shoulder anchors.
 Animation layer reduction belongs to each skeleton, with reusable arrays and
 value/stack-based sampling rather than per-frame channel-object graphs.
+
+ReactiveReferenceBot and ReactiveSteering own an extractable, engine-independent
+C# observation-to-input policy. RuntimeCoordinator supplies resident references,
+source navigation and authoritative interaction observations; RuntimeLiveHarness
+feeds ordinary flat inputs or a simulator adapter with bounded controller leases.
+No bot path writes player transforms, inventory, quests or collision results.
+Obstruction stops input and reports its actual collider; campaign decisions and
+capsule-aware dynamic avoidance remain unbound.
 
 Player SPECIAL and skill queries evaluate owned GMST formulas, tags, constant
 abilities, conditional trait effects and equipped apparel effects against live
@@ -144,8 +155,9 @@ unbound. These are presentation owners and cannot establish gameplay damage.
 Exterior lighting registers transient meshes and particle draws within the active
 world, excludes separate viewports and unregisters expired objects.
 
-Native OpenXR uses one source player skeleton for both tracked arms, the weapon
-and the equipped Pip-Boy. The wrist UI borrows the existing device; it never
+Native OpenXR has one visible source world body and an authored first-person
+attachment rig for weapon and Pip-Boy action channels. Both use the same prepared
+shoulders and collision-resolved wrists. The wrist UI borrows the existing device; it never
 creates another player. Flat and XR share source triangle/UV picking and native
 menu/gameplay state. Grip focus keeps the world live. The whole original wrist
 device scales around the anatomical forearm centerline and rolls only about

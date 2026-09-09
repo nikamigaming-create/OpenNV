@@ -69,6 +69,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal object? SpeechState => _speech?.State;
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;
+    internal object? VigorState => _vigorEntry?.State;
 
     internal void Configure(
         FalloutOpeningStageTransitionGraph transitions,

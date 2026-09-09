@@ -65,6 +65,7 @@ internal sealed partial class NativeXrRig : Node3D
         Origin = new XROrigin3D { Name = "TrackingOrigin", WorldScale = configuration.Xr.WorldScale, Current = true };
         AddChild(Origin);
         Camera = new XRCamera3D { Name = "TrackedHead", Current = true, Near = .03f, Far = configuration.Player.CameraFarMeters };
+        Camera.CullMask &= ~OpenNV.Runtime.World.Actors.RuntimeNativePlayerActor.SelfHeadLayer;
         Origin.AddChild(Camera);
         LeftGrip = Controller("LeftGrip", "left_hand", "grip");
         RightGrip = Controller("RightGrip", "right_hand", "grip");

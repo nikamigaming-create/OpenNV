@@ -35,6 +35,16 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
     private int _page, _index;
     private bool _turning, _accepted;
     internal event Action<FalloutNativeSpecialState>? Accepted;
+    internal object State => new
+    {
+        page = _page,
+        attribute = CurrentAttribute,
+        values = _state.Values,
+        remaining = _contract.RequiredTotal - _state.Values.Sum(),
+        turning = _turning,
+        accepted = _accepted,
+        targets = Targets.Select(target => new { target.Geometry, center = new[] { target.Center.X, target.Center.Y }, target.InFront }).ToArray()
+    };
 
     internal NativeOwnedLoveTesterMenu(FalloutNativeVigorContract contract, FalloutNativeSpecialState initial, FalloutPluginStack records)
     {
