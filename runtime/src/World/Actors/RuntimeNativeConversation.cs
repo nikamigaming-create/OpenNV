@@ -16,6 +16,7 @@ internal partial class RuntimeNativeConversation : Node
     private string _speakerName = "";
     private FalloutDialogueConditions? _conditions;
     private Func<FalloutCondition, float> _runtimeConditions = null!;
+    private Func<FalloutFormKey, FalloutCondition, FalloutFormKey?>? _resolveRunOnCell;
     private FalloutQuestState _quests = null!;
     private CanvasLayer? _layer;
     private NativeOwnedDialogueMenu? _menu;
@@ -33,9 +34,12 @@ internal partial class RuntimeNativeConversation : Node
     };
 
     internal void Configure(FalloutPluginStack records, FalloutQuestState quests, RuntimeNativePlayer player, RuntimeNativeSpeech speech,
-        Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, FalloutFormKey, bool> results, HashSet<FalloutFormKey>? saidInfos = null)
+        Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, FalloutFormKey, bool> results,
+        HashSet<FalloutFormKey>? saidInfos = null,
+        Func<FalloutFormKey, FalloutCondition, FalloutFormKey?>? resolveRunOnCell = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
+        _resolveRunOnCell = resolveRunOnCell;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos);
     }
 
@@ -57,7 +61,11 @@ internal partial class RuntimeNativeConversation : Node
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;
             var actor = _records.GetEffective(_speaker);
             var npc = _records.GetEffective(FalloutDialogueTopic.RequiredForm(actor, "NAME"));
-            _conditions = new(_records, _quests, _speaker, FalloutDialogueSpeaker.Read(_records, npc.FormKey), _runtimeConditions);
+            var resolveRunOnCell = _resolveRunOnCell;
+            Func<FalloutCondition, FalloutFormKey?>? currentCell = resolveRunOnCell is null ? null :
+                condition => resolveRunOnCell(_speaker, condition);
+            _conditions = new(_records, _quests, _speaker, FalloutDialogueSpeaker.Read(_records, npc.FormKey),
+                _runtimeConditions, currentCell);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);

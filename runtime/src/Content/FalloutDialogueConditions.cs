@@ -1,7 +1,8 @@
 namespace OpenNV.Runtime.Content;
 
 internal sealed class FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests,
-    FalloutFormKey speaker, FalloutDialogueSpeaker identity, Func<FalloutCondition, float>? runtime = null)
+    FalloutFormKey speaker, FalloutDialogueSpeaker identity, Func<FalloutCondition, float>? runtime = null,
+    Func<FalloutCondition, FalloutFormKey?>? currentCell = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -14,6 +15,22 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
         // These functions query the explicit QUST argument. Selecting the
         // speaker, listener or another reference does not change that owner.
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);
+        if (condition.Function == 67 && (condition.RunOn is 0 or 1 or 2) && currentCell is not null)
+        {
+            var currentCellKey = currentCell(condition);
+            if (currentCellKey is null) return 0;
+            var requested = FalloutCellSceneReader.ReadDefinition(records, condition.FormArgument1);
+            if ((requested.Flags & FalloutCellSceneReader.InteriorCellFlag) == 0) return 0;
+            if (requested.EditorId.Length == 0)
+                throw new InvalidDataException($"GetInCell argument {requested.FormKey} has no CELL EDID.");
+            var actorCell = FalloutCellSceneReader.ReadDefinition(records, currentCellKey.Value);
+            if ((actorCell.Flags & FalloutCellSceneReader.InteriorCellFlag) == 0) return 0;
+            if (actorCell.EditorId.Length == 0)
+                throw new InvalidDataException($"GetInCell actor cell {actorCell.FormKey} has no CELL EDID.");
+            // GECK GetInCell matches a valid interior cell name as a prefix;
+            // multiple room cells can therefore share one authored prefix.
+            return actorCell.EditorId.StartsWith(requested.EditorId, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        }
         if (condition.RunOn == 0)
         {
             return condition.Function switch

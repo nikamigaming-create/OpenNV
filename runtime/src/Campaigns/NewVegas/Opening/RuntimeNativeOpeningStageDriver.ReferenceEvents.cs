@@ -48,7 +48,15 @@ internal partial class RuntimeNativeOpeningStageDriver
             if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
                 return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
             throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
-        }, results.ExecuteResult, _scripts.SaidInfos);
+        }, results.ExecuteResult, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
+        {
+            0 => FalloutCellSceneReader.ParentCell(_pluginStack.GetEffective(speaker)),
+            1 => _activeCell,
+            2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) is { } reference
+                ? FalloutCellSceneReader.ParentCell(_pluginStack.GetEffective(reference))
+                : null,
+            _ => null,
+        });
         AddChild(_conversation);
     }
 
