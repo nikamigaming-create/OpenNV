@@ -7,7 +7,7 @@ internal sealed record NativeXrTarget(Node3D Root, string Name, bool RemotePicku
 /// <summary>Controller ray and source-object highlight; owns no inventory state.</summary>
 internal sealed partial class NativeXrPointer : Node3D
 {
-    private readonly MeshInstance3D _beam, _dot;
+    private readonly MeshInstance3D _beam;
     private readonly StandardMaterial3D _material;
     private readonly StandardMaterial3D _highlight;
     private readonly List<(GeometryInstance3D Mesh, Material? Overlay)> _previous = [];
@@ -30,13 +30,7 @@ internal sealed partial class NativeXrPointer : Node3D
             Rotation = new(Mathf.Pi / 2, 0, 0),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
         };
-        _dot = new MeshInstance3D
-        {
-            Mesh = new SphereMesh { Radius = .006f, Height = .012f, RadialSegments = 8, Rings = 4 },
-            MaterialOverride = _material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
-        };
-        AddChild(_beam); AddChild(_dot); Visible = false;
+        AddChild(_beam); Visible = false;
     }
     internal void Publish(bool active, Transform3D aim, float distance, NativeXrTarget? target)
     {
@@ -52,8 +46,27 @@ internal sealed partial class NativeXrPointer : Node3D
         TargetName = target?.Name;
         if (!active) return;
         GlobalTransform = aim; _beam.Position = new(0, 0, -distance / 2); _beam.Scale = new(1, distance, 1);
-        _dot.Position = new(0, 0, -distance); _dot.Visible = target is not null;
         _material.AlbedoColor = target is null ? Colors.White : new(1, .65f, .1f);
+    }
+
+    internal void PublishSurfaceRay(bool active, Transform3D aim, Vector3? hitPoint, float maximumDistance)
+    {
+        if (!active)
+        {
+            Publish(false, aim, 0, null);
+            return;
+        }
+        if (_target is not null) Clear();
+        var forward = -aim.Basis.Z.Normalized();
+        var hitDistance = hitPoint is { } point ? (point - aim.Origin).Dot(forward) : 0;
+        var hit = hitPoint is not null && hitDistance >= .04f && hitDistance <= maximumDistance;
+        var distance = hit ? hitDistance : maximumDistance;
+        TargetName = hit ? "Pip-Boy" : null;
+        Visible = true;
+        GlobalTransform = aim;
+        _beam.Position = new(0, 0, -distance / 2);
+        _beam.Scale = new(1, distance, 1);
+        _material.AlbedoColor = new(0.15f, 1f, 0.25f);
     }
     private void Clear()
     {
