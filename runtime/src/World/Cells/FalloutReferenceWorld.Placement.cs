@@ -45,6 +45,8 @@ internal sealed partial class FalloutReferenceWorld
         moved.Validate();
         if (records.GetEffective(moved.Cell).Signature != "CELL") throw new InvalidDataException("MoveTo destination has no CELL.");
         instance.Placement = moved;
+        instance.PackageMotion = null;
+        instance.Engagement = null;
         instance.PlacementRevision = ++PlacementRevision;
     }
 

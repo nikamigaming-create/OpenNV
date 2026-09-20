@@ -79,6 +79,13 @@ the duplicate first-person body draw is masked. The actual wrist device casts it
 device stays hidden. Self rays exclude the player's capsule and bone volumes.
 These contacts provide hit queries, not completed limb rigid-body response.
 
+Creature package movement and combat share the source envelope, root motion and
+native collision owner. Follow/Dialogue select their source target without an
+invented start location. Package position, animation identity/clock and talk
+history are reference-owned save state. Presentation eviction cannot reset them.
+Door transfer and the rest of companion recruitment/combat remain separate open
+owners; [creature packages](creature-packages.md) records the bounded evidence.
+
 The first-person XR owner separately binds those source hand shapes and the
 equipped weapon's Havok into persistent motion-query bodies. Collision-resolved
 wrist targets publish to both existing skeletons before muzzle evaluation.

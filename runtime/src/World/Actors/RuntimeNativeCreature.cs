@@ -68,6 +68,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         unbound = _unbound.ToArray(),
         error = Error,
         combat = Combat?.Observation,
+        ai = AiState,
     };
 
     internal static RuntimeNativeCreature Create(FalloutPluginStack stack, RuntimeLiveContentSource content,
@@ -151,6 +152,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         try
         {
             AdvanceConversationFacing((float)delta);
+            if (Combat?.PackageOwnsPose == true) return;
             var from = _clock.ElapsedSeconds;
             var include = _clock.StartPending;
             _clock.Advance(delta);

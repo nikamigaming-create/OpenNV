@@ -9,7 +9,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
     internal bool RunInSequence => (IdleFlags & 1) != 0;
     internal bool DoOnce => (IdleFlags & 4) != 0;
     internal byte Procedure { get; init; }
-    internal int LocationType { get; init; }
+    internal int? LocationType { get; init; }
     internal IReadOnlyDictionary<string, FalloutPackageEvent> EventPrograms { get; init; } =
         new Dictionary<string, FalloutPackageEvent>();
 
@@ -25,9 +25,11 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
             return found[0].Data;
         }
         var data = Required("PKDT", 12).Span;
-        var location = Required("PLDT", 12).Span;
         var procedure = data[4];
-        var locationType = BinaryPrimitives.ReadInt32LittleEndian(location);
+        // Follow and Dialogue may have no start location. Its absence means
+        // use the target procedure immediately, not a missing source field.
+        int? locationType = fields.Any(field => field.Signature == "PLDT")
+            ? BinaryPrimitives.ReadInt32LittleEndian(Required("PLDT", 12).Span) : null;
         var idleFlags = fields.Any(field => field.Signature == "IDLF") ? Required("IDLF", 1).Span[0] : (byte)0;
         if ((idleFlags & ~5) != 0) throw new NotSupportedException($"PACK {record.FormKey} has unbound idle flags {idleFlags:x2}.");
         var idleCount = fields.Any(field => field.Signature == "IDLC") ? Required("IDLC", 1).Span[0] : 0;

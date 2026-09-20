@@ -14,7 +14,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     ulong? SoundRandomState = null, FalloutActorAnimationSnapshot? Animation = null, bool Unconscious = false,
     FalloutMapMarkerState? MapMarker = null, FalloutActorInjury? Injury = null, FalloutActorRagdollState? Ragdoll = null,
     FalloutActorEngagement? Engagement = null, FalloutActorTemplateSnapshot? Templates = null,
-    FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false)
+    FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false,
+    bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -36,6 +37,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
+            snapshot.PackageMotion?.Validate();
             if (snapshot.Ragdoll is { } ragdoll)
             {
                 ragdoll.Validate();
@@ -69,6 +71,8 @@ internal sealed class FalloutReferenceInstance
     internal bool Unconscious { get; set; }
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
+    internal bool TalkedToPlayer { get; set; }
+    internal FalloutActorPackageMotion? PackageMotion { get; set; }
     internal FalloutReferencePlacement? Placement { get; set; }
     internal long PlacementRevision { get; set; }
     internal FalloutReferenceInventory? Inventory { get; set; }
@@ -124,7 +128,8 @@ internal sealed class FalloutReferenceInstance
         new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
         _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
-        CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate);
+        CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
+        TalkedToPlayer, PackageMotion);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -221,8 +226,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
         var selection = new FalloutActorTemplateSelection(level,
             BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))), globals is null ? null : globals.Get);
         selection.ResolveAll(records, instance.Base);
-        if (selection.Capture().Choices.Count != 0 &&
-            new[] { reference, instance.Cell }.Select(records.GetEffective).SelectMany(record => record.ReadSubrecords())
+        var scaled = !selection.Absent && (System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(
+            FalloutActorTemplateOwner.Resolve(records, records.GetEffective(instance.Base), 2, selection)
+                .ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span) & 0x80) != 0;
+        if ((selection.Capture().Choices.Count != 0 || scaled) &&
+            new[] { reference, instance.Placement?.Cell ?? instance.Cell }.Select(records.GetEffective).SelectMany(record => record.ReadSubrecords())
                 .Any(field => field.Signature == "XEZN" &&
                     (field.Data.Length != 4 || System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) != 0)))
             throw new NotSupportedException($"Actor {reference} requires its persistent encounter-zone level owner.");
@@ -294,9 +302,19 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
                 instance.Placement = placement.Copy();
             }
-            if (snapshot.Restrained || snapshot.PlayerTeammate) _ = validated.Actor(snapshot.Reference);
+            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer || snapshot.PackageMotion is not null)
+                _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
+            instance.TalkedToPlayer = snapshot.TalkedToPlayer;
+            if (snapshot.PackageMotion is { } motion)
+            {
+                var package = records.GetEffective(motion.Package);
+                if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
+                    .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Saved package motion differs from the winning package.");
+                instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
+            }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.Animation is { } animation) instance.Animation.Restore(animation);
             if (snapshot.Unconscious) validated.SetUnconscious(snapshot.Reference, true);

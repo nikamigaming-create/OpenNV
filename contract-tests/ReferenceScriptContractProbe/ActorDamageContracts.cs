@@ -17,6 +17,10 @@ internal static class ActorDamageContracts
             var header = new byte[12]; Float(header, 0, 1.34f);
             var stats = new byte[17]; BinaryPrimitives.WriteInt16LittleEndian(stats.AsSpan(4), 50);
             var acbs = new byte[24]; acbs[8] = 1;
+            var scaledAcbs = new byte[24]; UInt(scaledAcbs, 0, 0x80);
+            BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(8), 750);
+            BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(10), 10);
+            BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(12), 40);
             var entry = new byte[12]; entry[0] = 1; UInt(entry, 4, 3); entry[8] = 2;
             var references = Join(Reference(0x91), Reference(0x92));
             var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
@@ -29,6 +33,8 @@ internal static class ActorDamageContracts
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Record("CREA", 1, Field("EDID", Text("SourceCreature")), Field("ACBS", acbs), Field("DATA", stats),
                     Field("PNAM", BitConverter.GetBytes(2u)), Field("INAM", BitConverter.GetBytes(4u)), Field("NAM4", BitConverter.GetBytes(6u))),
+                Record("CREA", 6, Field("ACBS", scaledAcbs), Field("DATA", stats),
+                    Field("PNAM", BitConverter.GetBytes(2u)), Field("NAM4", BitConverter.GetBytes(6u))),
                 Record("BPTD", 2, Part(0, 1, "Root"), Part(1, 2, "Neck")),
                 Record("MISC", 3, Field("EDID", Text("SourceDeathLoot")), Field("DATA", new byte[8])),
                 Record("LVLI", 4, Field("LVLD", [0]), Field("LVLF", [0]), Field("LVLO", entry)),
@@ -66,6 +72,22 @@ internal static class ActorDamageContracts
                 !FalloutActorHealthSource.StartsDead(records, Key(0x10)) &&
                 !FalloutActorHealthSource.StartsDead(records, Key(1)), "Source corpse admission ignored initial health.");
             Reject(() => FalloutActorHealthSource.Read(records, Key(0x13)));
+            Reject(() => FalloutActorHealthSource.Read(records, Key(6)));
+            Check(FalloutActorHealthSource.Read(records, Key(6), new(1, 1)).Health == 500 &&
+                FalloutActorHealthSource.Read(records, Key(6), new(21, 1)).Health == 750 &&
+                FalloutActorHealthSource.Read(records, Key(6), new(100, 1)).Health == 2000,
+                "Scaled creature health lost truncation, min/max clamps or the retained selection level.");
+            Check(FalloutActorLevel.Resolve(scaledAcbs, 15) == 11, "Scaled level rounded instead of truncating.");
+            var fractionalLevel = new byte[24]; UInt(fractionalLevel, 0, 0x80);
+            BinaryPrimitives.WriteUInt16LittleEndian(fractionalLevel.AsSpan(8), 10);
+            Check(FalloutActorLevel.Resolve(fractionalLevel, 200) == 1,
+                "Scaled level rounded the product before truncating the stored Float32 multiplier.");
+            var scaledSnapshot = new FalloutActorTemplateSelection(21, 1).Capture();
+            Check(FalloutActorHealthSource.Read(records, Key(6), new(scaledSnapshot)).Health == 750,
+                "Cold creature scaling used a new player level.");
+            var invulnerable = FalloutActorHealthSource.Read(records, Key(1));
+            Check((invulnerable with { Flags = 0x40000000 }).Invulnerable &&
+                !(invulnerable with { Flags = 0x80000000 }).Invulnerable, "Invulnerability used the wrong source flag.");
             Check(FalloutArmorDefense.Read(records.GetEffective(Key(0x70))) == new FalloutArmorDefense(6, 5) &&
                 FalloutArmorDefense.Read(records.GetEffective(Key(0x71))) == new FalloutArmorDefense(0, 12.5f),
                 "Armor threshold or hundredths resistance changed.");

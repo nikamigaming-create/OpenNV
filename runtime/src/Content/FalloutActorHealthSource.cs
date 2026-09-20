@@ -6,7 +6,7 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
     float Health, uint Flags, FalloutFormKey BodyParts, FalloutFormKey? DeathItem, uint ImpactMaterial)
 {
     internal bool Essential => (Flags & 2) != 0;
-    internal bool Invulnerable => (Flags & 0x80000000) != 0;
+    internal bool Invulnerable => (Flags & 0x40000000) != 0;
 
     internal static bool StartsDead(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
@@ -30,10 +30,17 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
         var model = FalloutActorTemplateOwner.Resolve(records, source, 64, selection);
         var acbs = Field(stats, "ACBS", 24);
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(Field(baseData, "ACBS", 24).Span);
-        if ((BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 0x80) != 0)
-            throw new NotSupportedException("Actor health requires its persistent encounter-level selection.");
+        var level = FalloutActorLevel.Resolve(acbs.Span, selection?.Level);
         float health;
-        if (source.Signature == "CREA") health = BinaryPrimitives.ReadInt16LittleEndian(Field(stats, "DATA", 17).Span[4..]);
+        if (source.Signature == "CREA")
+        {
+            var initial = BinaryPrimitives.ReadInt16LittleEndian(Field(stats, "DATA", 17).Span[4..]);
+            if (initial < 0) throw new InvalidDataException("Creature source health is negative.");
+            var multiplier = (BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 0x80) != 0 ? level : 1;
+            var product = initial * multiplier;
+            if (product > ushort.MaxValue) throw new NotSupportedException("Creature health exceeds the supported source health range.");
+            health = product;
+        }
         else
         {
             var data = Field(stats, "DATA", 11);
@@ -50,7 +57,6 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
                 // floating endurance contribution. See actor-damage.md.
                 if ((BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 0x10) != 0)
                 {
-                    var level = Math.Max(1, (int)BinaryPrimitives.ReadUInt16LittleEndian(acbs.Span[8..]));
                     derived += (level - 1d) * FalloutGameSettingFloats.Read(records, "fAVDNPCHealthLevelMult");
                     derived = Math.Max(0, Math.Truncate(derived));
                 }

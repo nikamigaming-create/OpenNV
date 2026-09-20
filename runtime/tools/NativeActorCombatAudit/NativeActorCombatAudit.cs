@@ -17,6 +17,12 @@ public partial class NativeActorCombatAudit : Node3D
             using var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var globals = FalloutGlobalState.Read(records);
+            if (args.Length is 4 or 5 && args[1] == "--follow")
+            {
+                await ExerciseFollow(records, content, globals, args[2], args[3], args.Length == 5 ? args[4] : null);
+                GetTree().Quit();
+                return;
+            }
             foreach (var hex in args.Skip(1)) await Exercise(records, content, globals, hex);
             GD.Print("OPENNV_NATIVE_ACTOR_COMBAT_AUDIT_PASS sourceContacts=true health=true ragdoll=true deathInventory=true coldRestore=true ordinaryGameplay=separate");
             GetTree().Quit();

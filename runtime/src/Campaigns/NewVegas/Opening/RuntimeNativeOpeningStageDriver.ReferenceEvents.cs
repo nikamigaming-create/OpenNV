@@ -51,10 +51,10 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
         }, results.ExecuteResult, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
         {
-            0 => FalloutCellSceneReader.ParentCell(_pluginStack.GetEffective(speaker)),
+            0 => _scripts.References!.Placement(speaker).Cell,
             1 => _activeCell,
             2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) is { } reference
-                ? FalloutCellSceneReader.ParentCell(_pluginStack.GetEffective(reference))
+                ? _pluginStack.RuntimeFormId(reference) == 0x14 ? _activeCell : _scripts.References!.Placement(reference).Cell
                 : null,
             _ => null,
         }, actor =>
@@ -64,7 +64,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             var health = _scripts.References!.Health(actor);
             var maximum = health.Base + health.Permanent + health.Temporary;
             return maximum <= 0 ? 0 : Math.Clamp(health.Current / maximum, 0, 1);
-        }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates);
+        }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates,
+            actor => _scripts.References!.Get(actor).TalkedToPlayer = true,
+            actor => _scripts.References!.Get(actor).TalkedToPlayer);
         AddChild(_conversation);
     }
 
@@ -160,8 +162,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ApplyLookCommand(new(0, effect.Target!.Value, effect.Argument));
                 break;
             case FalloutReferenceEffectKind.EvaluatePackages:
-                GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
-                    .Single(actor => actor.Appearance.Reference == effect.Target).EvaluatePackages(effect.Enable);
+                EvaluateActorPackages(effect.Target!.Value, effect.Enable);
                 break;
             case FalloutReferenceEffectKind.ScriptPackage:
                 if (_pluginStack.RuntimeFormId(effect.Target!.Value) != 0x14)
