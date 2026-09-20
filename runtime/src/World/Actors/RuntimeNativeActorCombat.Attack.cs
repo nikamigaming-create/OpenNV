@@ -45,7 +45,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_enemyWeapon.Automatic && (!float.IsFinite(_enemyWeapon.AttackShotsPerSecond) || _enemyWeapon.AttackShotsPerSecond <= 0))
                 throw new NotSupportedException("Actor automatic weapon has no valid source attack-shot rate.");
             var supportedAnimation = _enemyWeapon.IsMeleeWeapon
-                ? _enemyWeapon.AnimationGroup is "h2h" or "1hm" or "2hm" or "2hh"
+                ? _enemyWeapon.AnimationGroup is "h2h" or "1hm" or "2hm" or "2hh" or "1lm" or "1md"
                 : _enemyWeapon.AnimationGroup is "1hp" or "2hr" or "2ha" or "2hl" or "1gt";
             if (!supportedAnimation)
                 throw new NotSupportedException("This actor weapon requires its specialized attack owner.");
