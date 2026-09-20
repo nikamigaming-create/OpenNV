@@ -375,6 +375,14 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                     var total = checked((int)Index(Number(arguments[0])));
                     host.Apply(new(FalloutReferenceEffectKind.SpecialMenu, source, Value: total));
                     break;
+                case "showbartermenu" or "sbm" when arguments.Count <= 1:
+                    var discount = arguments.Count == 0 ? 0 : Number(arguments[0]);
+                    if (!double.IsFinite(discount) || discount is < -100 or > 100 || discount != Math.Truncate(discount))
+                        throw new InvalidDataException("ShowBarterMenu discount must be an integer from -100 through 100.");
+                    (host.Command ?? throw new NotSupportedException("ShowBarterMenu has no native menu owner."))(
+                        source, bindings, command,
+                        [((int)discount).ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+                    break;
                 case "activate" when arguments.Count == 0:
                     host.Apply(new(FalloutReferenceEffectKind.DefaultActivate, source, target, actor));
                     break;

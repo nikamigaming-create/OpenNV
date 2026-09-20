@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -14,6 +15,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     private bool _saveRequested;
     private CanvasLayer? _recipeLayer;
     private NativeOwnedRecipeMenu? _recipeMenu;
+    private CanvasLayer? _barterLayer;
+    private NativeOwnedBarterMenu? _barterMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
 
     private void ApplyNativeSourceCommand(FalloutFormKey source, FalloutScriptBindings bindings, string command, IReadOnlyList<string> arguments)
@@ -99,6 +102,12 @@ internal partial class RuntimeNativeOpeningStageDriver
                     throw new InvalidDataException("ShowRecipeMenu argument is not an RCCT category.");
                 OpenRecipeMenu(recipeCategory.FormKey);
                 break;
+            case "showbartermenu" or "sbm" when parts.Length <= 2 && arguments.Count == 1:
+                if (!int.TryParse(arguments[0], System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var discount) || discount is < -100 or > 100)
+                    throw new InvalidDataException("ShowBarterMenu discount must be an integer from -100 through 100.");
+                OpenBarterMenu(target, discount);
+                break;
             case "playbink" when parts.Length == 1:
                 if (_moviePlaying) throw new InvalidOperationException("Movie player is already active.");
                 var movieCommand = FalloutMovieCommand.FromScript(command + " " + string.Join(' ', arguments)).Single();
@@ -157,7 +166,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_moviePlaying || _player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
             _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null ||
-            _traitEntry is not null || _recipeMenu is not null)
+            _traitEntry is not null || _recipeMenu is not null || _barterMenu is not null)
             throw new NotSupportedException("Saving an active movie, furniture, speech or menu requires continuation state.");
         var transform = _player.GlobalTransform;
         var rotation = transform.Basis.GetRotationQuaternion().Normalized();
@@ -219,5 +228,61 @@ internal partial class RuntimeNativeOpeningStageDriver
         _recipeMenu = null;
         _player.SetModalInput(false);
         if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Captured;
+    }
+
+    private void OpenBarterMenu(FalloutFormKey actorReference, int discount)
+    {
+        if (_barterMenu is not null) throw new InvalidOperationException("A barter menu is already active.");
+        if (_moviePlaying || _player.FurnitureActive || _recipeMenu is not null || _nameEntry is not null ||
+            _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null || _traitEntry is not null)
+            throw new InvalidOperationException("Barter cannot open while another player interaction owns input.");
+
+        var actor = _pluginStack.GetEffective(actorReference);
+        if (actor.Signature != "ACHR")
+            throw new InvalidDataException($"ShowBarterMenu target {actorReference} is not an actor reference.");
+        var merchantLinks = actor.ReadSubrecords().Where(field => field.Signature == "XMRC").ToArray();
+        if (merchantLinks.Length != 1 || merchantLinks[0].Data.Length != sizeof(uint))
+            throw new NotSupportedException($"Actor {actorReference} has no supported merchant-container reference.");
+        var merchantContainer = actor.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(merchantLinks[0].Data.Span))
+            ?? throw new InvalidDataException($"Actor {actorReference} has an empty merchant-container reference.");
+        var merchantReference = _pluginStack.GetEffective(merchantContainer);
+        if (merchantReference.Signature != "REFR" ||
+            _pluginStack.GetEffective(FalloutDialogueTopic.RequiredForm(merchantReference, "NAME")).Signature != "CONT")
+            throw new InvalidDataException($"Actor {actorReference} XMRC does not resolve to a container reference.");
+
+        var baseActor = _pluginStack.GetEffective(FalloutDialogueTopic.RequiredForm(actor, "NAME"));
+        if (baseActor.Signature != "NPC_")
+            throw new InvalidDataException($"Merchant actor {baseActor.FormKey} does not use the source NPC_ base type.");
+        var fullName = baseActor.ReadSubrecords().Where(field => field.Signature == "FULL").ToArray();
+        var editorId = baseActor.ReadSubrecords().Where(field => field.Signature == "EDID").ToArray();
+        if (fullName.Length > 1 || editorId.Length != 1)
+            throw new InvalidDataException($"Merchant actor {baseActor.FormKey} has ambiguous display identity.");
+        var merchantName = fullName.Length == 1 ? FalloutDialogueTopic.Text(fullName[0].Data.Span) :
+            FalloutDialogueTopic.Text(editorId[0].Data.Span);
+        var caps = FalloutDialogueTopic.Find(_pluginStack, "MISC", "Caps001").FormKey;
+        var merchantInventory = (_scripts.References ?? throw new InvalidOperationException("Merchant reference inventory owner is absent."))
+            .Inventory(merchantContainer, SourcePlayerLevel, _globals).Contents;
+        var pricing = new FalloutBarterPricing(_pluginStack);
+        var layer = new CanvasLayer { Layer = 96 };
+        var menu = new NativeOwnedBarterMenu(_pluginStack, _inventory, merchantInventory, caps, merchantName, discount,
+            pricing, () => _playerSkills.Value("Barter"), transfers => _inventory.Exchange(merchantInventory, transfers),
+            CloseBarterMenu);
+        _barterLayer = layer; _barterMenu = menu;
+        AddChild(layer); layer.AddChild(menu);
+        _player.SetModalInput(true);
+        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Visible;
+        GD.Print($"OPENNV_NATIVE_BARTER_MENU_OPEN actor={actorReference} merchant={merchantContainer} discount={discount} " +
+            $"items={_inventory.Items.Count}/{merchantInventory.Items.Count} source=ACHR-XMRC-GMST owner=shared-inventory " +
+            "price-modifiers-restock-matched-ui-physical-xr-acceptance=unverified");
+    }
+
+    private void CloseBarterMenu()
+    {
+        if (_barterMenu is null) return;
+        _barterLayer?.QueueFree(); _barterLayer = null; _barterMenu = null;
+        var conversationActive = _conversation?.Active == true;
+        _player.SetModalInput(conversationActive);
+        if (DisplayServer.GetName() != "headless")
+            Input.MouseMode = conversationActive ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
     }
 }

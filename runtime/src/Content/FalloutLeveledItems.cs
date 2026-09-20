@@ -24,7 +24,7 @@ internal static class FalloutLeveledItems
             var record = records.GetEffective(key);
             if (record.Signature != "LVLI")
             {
-                if (record.Signature is not ("ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "KEYM" or "MISC" or "NOTE" or "WEAP"))
+                if (record.Signature is not ("ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "KEYM" or "LIGH" or "MISC" or "NOTE" or "WEAP"))
                     throw new NotSupportedException($"Inventory addition {key} is {record.Signature}.");
                 result.Add(new(key, inherited with { Count = amount }));
                 return;

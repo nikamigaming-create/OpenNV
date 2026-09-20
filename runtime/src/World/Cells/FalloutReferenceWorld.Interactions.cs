@@ -8,7 +8,7 @@ internal sealed record FalloutReferenceLock(int Level, FalloutFormKey? Key, bool
 
 internal sealed partial class FalloutReferenceWorld
 {
-    internal static bool IsInventoryItem(string type) => type is "ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "KEYM" or "MISC" or "NOTE" or "WEAP";
+    internal static bool IsInventoryItem(string type) => type is "ALCH" or "AMMO" or "ARMO" or "BOOK" or "CCRD" or "CHIP" or "CMNY" or "IMOD" or "KEYM" or "LIGH" or "MISC" or "NOTE" or "WEAP";
 
     internal FalloutReferenceLock? Lock(FalloutFormKey reference)
     {

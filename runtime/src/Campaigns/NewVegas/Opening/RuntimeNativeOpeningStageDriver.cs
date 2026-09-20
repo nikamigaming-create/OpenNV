@@ -221,7 +221,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         try
         {
             _stageResults?.Continue();
-            if (_saveRequested && _recipeMenu is null) SaveCurrentState();
+            if (_saveRequested && _recipeMenu is null && _barterMenu is null) SaveCurrentState();
             _playerPackage?.Advance(delta);
             foreach (var expired in _imageSpaceState.Advance(delta))
                 GD.Print($"OPENNV_NATIVE_IMAD_EXPIRED source={expired.Form} duration={expired.Duration:R} owner=gameplay-clock");
@@ -233,7 +233,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return;
         }
         if (!_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null &&
-            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null)
+            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
