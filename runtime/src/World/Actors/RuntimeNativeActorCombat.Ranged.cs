@@ -383,6 +383,7 @@ internal sealed partial class RuntimeNativeActorCombat
         byte? part = null;
         float? healthBefore = null;
         float? healthAfter = null;
+        FalloutActorHit? actorHit = null;
         if (contact.Collider == player || contact.Collider is not null && player.IsAncestorOf(contact.Collider))
         {
             part = contact.Collider == player ? (byte)0 : player.CombatHitPart(contact.Collider!);
@@ -391,12 +392,20 @@ internal sealed partial class RuntimeNativeActorCombat
             healthAfter = _context.Vitals().ExactHitPoints;
             _hits++;
         }
+        else if (contact.Collider is { } collider && RuntimeNativeActorCombat.Find(collider) is { } combat && combat != this)
+        {
+            actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals);
+            part = actorHit.Part;
+            healthBefore = actorHit.HealthBefore;
+            healthAfter = actorHit.HealthAfter;
+            _hits++;
+        }
         string? impactError = null;
         try
         {
             if (contact.Collider is not null && shot.ImpactDataSet is { } set &&
-                FalloutImpact.Resolve(_records, set, part is null ? FalloutImpact.MaterialIndex(
-                    NativeNifCollisionBuilder.HitMaterial(contact.Collision)) : 6) is { } impact)
+                FalloutImpact.Resolve(_records, set, actorHit is { } hit ? checked((int)hit.ImpactMaterial) :
+                    part is null ? FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(contact.Collision)) : 6) is { } impact)
                 _enemyShotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
         }
         catch (Exception error)
@@ -411,9 +420,10 @@ internal sealed partial class RuntimeNativeActorCombat
             projectile = shot.Projectile.Form.ToString(),
             collider = contact.Collider?.GetPath().ToString(),
             part,
+            targetActor = actorHit?.Reference.ToString(),
             point = new[] { contact.Point.X, contact.Point.Y, contact.Point.Z },
-            damage = part is null ? (float?)null : damage.Amount,
-            limbDamage = part is null ? (float?)null : damage.Amount * damage.LimbMultiplier,
+            damage = actorHit?.HealthDamage ?? (part is null ? (float?)null : damage.Amount),
+            limbDamage = actorHit?.LimbDamage ?? (part is null ? (float?)null : damage.Amount * damage.LimbMultiplier),
             impactError,
             healthBefore,
             healthAfter,
