@@ -947,7 +947,7 @@ public partial class RuntimeCoordinator
         _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
         _nativePlayer.SaveGame = SaveNativeInteraction;
         _nativePlayer.Configure(_configuration, ReferenceTransform(marker));
-        _nativePlayer.ConfigureLocomotion(_nativePluginStack!);
+        _nativePlayer.ConfigureLocomotion(_nativePluginStack!, () => _nativeOpeningStageDriver?.Vitals);
         _nativePlayer.ConfigurePresentation(_nativePluginStack!, _nativeInventory,
             () => _nativeOpeningStageDriver!.PlayerAppearance, () => NativeAmbient(_nativeActiveCell!.Cell),
             _nativeContinueOpening ? _nativeOpeningRestore?.State.WeaponHandling : null);

@@ -29,6 +29,7 @@ internal partial class RuntimeNativePlayer
         third = _thirdPerson?.State,
         error = _presentationError,
         weaponHandling = WeaponHandlingState,
+        limbMovement = LimbMovementState,
         xr = XrState
     };
 

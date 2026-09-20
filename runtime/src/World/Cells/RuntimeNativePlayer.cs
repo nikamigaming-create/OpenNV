@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -31,11 +32,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal float CombatRadius => _configuration.Player.CapsuleRadiusMeters;
     internal Vector3 CombatTargetPoint => GlobalPosition + Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
 
-    internal void ConfigureLocomotion(FalloutPluginStack records)
+    internal void ConfigureLocomotion(FalloutPluginStack records, Func<GameplayVitals?> vitals)
     {
         _jumpHeightMeters = checked((float)FalloutGameSettingFloats.Read(records, "fJumpHeightMin")) * UnitsToMeters;
         if (!float.IsFinite(_jumpHeightMeters) || _jumpHeightMeters <= 0)
             throw new InvalidDataException("Source jump height must be finite and positive.");
+        ConfigureLimbLocomotion(records, vitals);
         SetMeta("opennv_jump_height_meters", _jumpHeightMeters);
         SetMeta("opennv_sprint_policy", "OpenNV optional hold-to-sprint");
     }
@@ -266,7 +268,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         right.Y = 0.0f;
         var direction = right.Normalized() * movement.X + forward.Normalized() * movement.Y;
         Sprinting = alive && _movementEnabled && !_modalInput && movement.Y > 0 && (_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
-        var speed = _configuration.Player.MoveSpeedMetersPerSecond * (Sprinting ? _configuration.Player.SprintSpeedMultiplier : 1);
+        var speed = _configuration.Player.MoveSpeedMetersPerSecond * (Sprinting ? _configuration.Player.SprintSpeedMultiplier : 1) *
+            CrippledLegMovementSpeedMultiplier();
         var velocity = direction * speed;
         velocity.Y = IsOnFloor()
             ? MathF.Min(Velocity.Y, 0.0f)
