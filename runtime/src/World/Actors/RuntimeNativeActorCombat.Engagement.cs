@@ -6,7 +6,7 @@ using OpenNV.Runtime.World.Cells;
 namespace OpenNV.Runtime.World.Actors;
 
 internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Player, Func<GameplayVitals> Vitals,
-    Action<float, byte, float> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,
+    Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,
     Func<int> Level, FalloutGlobalState Globals, float StepHeight, float Gravity);
 
 internal sealed partial class RuntimeNativeActorCombat

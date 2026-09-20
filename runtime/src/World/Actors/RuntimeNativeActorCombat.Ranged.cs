@@ -78,7 +78,7 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 part = collider == player ? (byte)0 : player.CombatHitPart(collider!);
                 healthBefore = _context.Vitals().ExactHitPoints;
-                _context.DamagePlayer(resolvedDamage.Amount, part.Value, resolvedDamage.LimbMultiplier);
+                _context.DamagePlayer(resolvedDamage, part.Value);
                 healthAfter = _context.Vitals().ExactHitPoints;
                 totalLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
                 ++hits;
@@ -202,7 +202,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             part = contact.Collider == player ? (byte)0 : player.CombatHitPart(contact.Collider!);
             healthBefore = _context!.Vitals().ExactHitPoints;
-            _context.DamagePlayer(damage.Amount, part.Value, damage.LimbMultiplier);
+            _context.DamagePlayer(damage, part.Value);
             healthAfter = _context.Vitals().ExactHitPoints;
             _hits++;
         }

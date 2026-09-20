@@ -100,7 +100,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         {
             var part = HitPart(collider);
             var defense = _world.Defense(_state.Reference, level, globals);
-            var amount = defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_records, "fMinDamMultiplier"));
+            var amount = defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_records, "fMinDamMultiplier"), damage.AmmoEffects);
             var health = _world.Health(_state.Reference);
             var bodyPart = _world.BodyParts(_state.Reference).Parts.Single(value => value.Type == part);
             if (!Dead && amount * bodyPart.DamageMultiplier >= health.Current) PrepareDeath();

@@ -219,7 +219,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (distance <= allowed && CanSee(player) && player.CombatHitPartFrom(origin, _actor) is { } selectedPart)
         {
             part = selectedPart;
-            _context.DamagePlayer(resolvedDamage.Amount, selectedPart, resolvedDamage.LimbMultiplier);
+            _context.DamagePlayer(resolvedDamage, selectedPart);
             ++_hits;
         }
         if (_enemyWeapon?.Sounds.TryGetValue("empty", out var swing) == true) _enemySounds!.DispatchSound(swing);

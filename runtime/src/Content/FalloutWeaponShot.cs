@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey Ammunition,
     FalloutProjectile Projectile, int Projectiles, int BaseDamage, float MinimumSpread, float Spread,
     FalloutFormKey? RecoveredItem, float RecoveryPercent, FalloutFormKey? ImpactDataSet,
-    IReadOnlyList<FalloutFormKey> AmmoEffects)
+    IReadOnlyList<FalloutAmmoEffect> AmmoEffects)
 {
     internal static FalloutWeaponShot Read(FalloutPluginStack records, FalloutFormKey weapon, FalloutFormKey ammunition)
     {
@@ -47,7 +47,8 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
         var effects = ammo.ReadSubrecords().Where(field => field.Signature == "RCIL").Select(field =>
         {
             if (field.Data.Length != 4) throw new InvalidDataException("AMMO effect FormID has an invalid extent.");
-            return ammo.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+            return FalloutAmmoEffect.Read(records,
+                ammo.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)));
         }).ToArray();
         var result = new FalloutWeaponShot(weapon, ammunition, FalloutProjectile.Read(records, projectile.Value), count,
             BinaryPrimitives.ReadInt16LittleEndian(item[12..]), FalloutProjectile.Number(data, 16), FalloutProjectile.Number(data, 20),
@@ -60,7 +61,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
     {
         if (!Projectile.Hitscan || Projectile.Type is not (1 or 4) || (Projectile.Flags & 2) != 0 || Projectile.Explosion is not null)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight/explosion simulation.");
-        if (AmmoEffects.Count != 0) throw new NotSupportedException("Selected ammunition needs its AMEF modifier owner.");
+        RequireSupportedAmmoEffects();
     }
 
     internal void RequireRuntimeAttackOwner()
@@ -70,9 +71,16 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
             RequireHitscan();
             return;
         }
-        if (AmmoEffects.Count != 0) throw new NotSupportedException("Selected ammunition needs its AMEF modifier owner.");
+        RequireSupportedAmmoEffects();
         if (Projectile.Type is not (1 or 2) || Projectile.Speed <= 0 || Projectile.Model is null || Projectile.Explosion is not null ||
             (Projectile.Flags & 0x0802) != 0 || Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation, explosion or ammo-effect owner.");
+    }
+
+    private void RequireSupportedAmmoEffects()
+    {
+        var unsupported = AmmoEffects.FirstOrDefault(effect => effect.Type > FalloutAmmoEffect.DamageThreshold);
+        if (unsupported is not null)
+            throw new NotSupportedException($"Ammo effect {unsupported.Form} type {unsupported.Type} needs its runtime owner.");
     }
 }

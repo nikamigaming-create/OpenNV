@@ -6,8 +6,19 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal readonly record struct FalloutActorDefense(float Threshold, float Resistance)
 {
-    internal float Absorb(float damage, float minimumFraction) => Math.Max(damage * minimumFraction,
-        damage * (1 - Math.Clamp(Resistance, 0, 85) / 100) - Math.Max(0, Threshold));
+    internal float Absorb(float damage, float minimumFraction, IReadOnlyList<FalloutAmmoEffect>? ammoEffects = null)
+    {
+        var threshold = Threshold;
+        var resistance = Resistance;
+        if (ammoEffects is not null)
+            foreach (var effect in ammoEffects)
+            {
+                if (effect.Type == FalloutAmmoEffect.DamageResistance) resistance = effect.Apply(resistance);
+                else if (effect.Type == FalloutAmmoEffect.DamageThreshold) threshold = effect.Apply(threshold);
+            }
+        return Math.Max(damage * minimumFraction,
+            damage * (1 - Math.Clamp(resistance, 0, 85) / 100) - Math.Max(0, threshold));
+    }
 }
 
 internal sealed partial class FalloutReferenceWorld

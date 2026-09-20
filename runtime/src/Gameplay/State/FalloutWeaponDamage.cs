@@ -3,7 +3,8 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal readonly record struct FalloutWeaponDamage(float Amount, float LimbMultiplier, float Skill, float Condition);
+internal readonly record struct FalloutWeaponDamage(float Amount, float LimbMultiplier, float Skill, float Condition,
+    IReadOnlyList<FalloutAmmoEffect>? AmmoEffects = null);
 
 internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, FalloutPlayerInventory inventory,
     Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks)
@@ -13,9 +14,12 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
     private readonly float _skillScale = FalloutGameSettingFloats.Read(records, "fDamageSkillMult");
 
     internal FalloutWeaponDamage Resolve(FalloutWeaponShot shot)
-        => Resolve(shot.Weapon, shot.BaseDamage);
+        => Resolve(shot.Weapon, shot.BaseDamage, shot.AmmoEffects);
 
     internal FalloutWeaponDamage Resolve(FalloutFormKey form, float baseDamage)
+        => Resolve(form, baseDamage, []);
+
+    private FalloutWeaponDamage Resolve(FalloutFormKey form, float baseDamage, IReadOnlyList<FalloutAmmoEffect> ammoEffects)
     {
         var weapon = records.GetEffective(form);
         var data = weapon.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.Span;
@@ -26,6 +30,8 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
         if (item.Variants is { Count: > 1 }) throw new NotSupportedException("Equipped weapon condition stack selection is unbound.");
         var condition = item.Variants is { Count: 1 } variants ? variants[0].Condition ?? 1 : 1;
         var damage = baseDamage * _weaponScale * (_skillBase + _skillScale * skill / 100) * NewVegasConditionMultiplier(condition);
+        foreach (var effect in ammoEffects.Where(effect => effect.Type == FalloutAmmoEffect.Damage))
+            damage = Math.Max(0, effect.Apply(damage));
         foreach (var perk in perks().Where(perk => perk.Entry == 0))
         {
             if (perk.Conditions.Count != 0) throw new NotSupportedException("Conditional weapon damage perk is unbound.");
@@ -38,7 +44,7 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
             };
         }
         if (!float.IsFinite(damage) || damage < 0 || limb < 0) throw new InvalidDataException("Weapon damage is invalid.");
-        return new(damage, limb, skill, condition);
+        return new(damage, limb, skill, condition, ammoEffects);
     }
 
     // NV's normal-hit and inventory-damage paths share this rule. It is flat
