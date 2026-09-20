@@ -1,12 +1,13 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
 
 internal readonly record struct RuntimeNativeProjectileContact(
     Godot.Collections.Dictionary Collision, Node? Collider, Vector3 Point, Vector3 Normal, Vector3 Direction);
 
-/// <summary>Source-speed missile and lobber flight with continuous ray collision and bounded bounce response.</summary>
+/// <summary>Source-speed missile, lobber and flame flight with continuous ray collision and bounded bounce response.</summary>
 internal sealed partial class RuntimeNativeProjectileFlight : Node3D
 {
     private readonly FalloutProjectile _source;
@@ -41,7 +42,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         detonations = _detonations,
         bounces = _bounces,
         error = Error,
-        boundary = "missile-and-lobber-flight;gravity,source-speed,bounce-and-source-explosion-radius-damage;explosion-distance-attenuation,force,radiation,projectile-beam-visuals,flame,rotation,tracer-and-retail-parity-unmatched"
+        boundary = "missile-lobber-and-flame-flight;gravity,source-speed,bounce,flame-actor-pass-through-and-source-explosion-radius-damage;flame-audio-and-travel-time,explosion-distance-attenuation,force,radiation,projectile-beam-visuals,rotation,tracer-and-retail-parity-unmatched"
     };
 
     internal RuntimeNativeProjectileFlight(FalloutProjectile source, Node3D model, float unitsToMeters,
@@ -51,7 +52,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(exclusions);
-        if (source.Hitscan || source.Type is not (1 or 2) || source.Speed <= 0 || source.Model is null ||
+        if (source.Hitscan || source.Type is not (1 or 2 or 8) || source.Speed <= 0 || source.Model is null ||
             (source.Flags & 0x0800) != 0 || source.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {source.Form} is outside the missile/lobber owner or needs an explosion owner.");
         if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0 ||
@@ -143,6 +144,39 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             _travelledMeters += start.DistanceTo(point);
             var collider = collision.TryGetValue("collider", out value) ? value.AsGodotObject() as Node : null;
             var contact = new RuntimeNativeProjectileContact(collision, collider, point, normal, direction);
+            if (_source.PassesThroughActors && collider is not null && RuntimeNativeActorCombat.Find(collider) is { } actor)
+            {
+                var added = 0;
+                foreach (var body in actor.CollisionRids)
+                {
+                    if (_exclusions.Contains(body)) continue;
+                    _exclusions.Add(body);
+                    added++;
+                }
+                if (added == 0)
+                {
+                    Error = "Actor collision did not add any source collision bodies to the projectile exclusion set.";
+                    GD.PushError($"OPENNV_PROJECTILE_FLAME_UNBOUND projectile={_source.Form} {Error}");
+                    Finish("actor-pass-through-unbound");
+                    return;
+                }
+                var segmentLength = start.DistanceTo(destination);
+                var fraction = segmentLength > .000001f
+                    ? Mathf.Clamp(start.DistanceTo(point) / segmentLength, 0, 1)
+                    : 1;
+                _velocity += _gravity * (seconds * fraction);
+                if (!NotifyContact(contact))
+                {
+                    Finish("contact-error");
+                    return;
+                }
+                const float clearActorMeters = .001f;
+                _travelledMeters += clearActorMeters;
+                GlobalPosition = point + direction * clearActorMeters;
+                OrientToVelocity();
+                if (_travelledMeters >= _rangeMeters - .0001f) Finish("range-ended");
+                return;
+            }
             if (_source.BouncyMultiplier > 0)
             {
                 if (normal.LengthSquared() < .99f)

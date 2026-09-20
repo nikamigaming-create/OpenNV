@@ -39,12 +39,51 @@ internal partial class RuntimeNativePlayer
                 medianSpreadDegrees,
                 _weaponHandling!.NextShotRandomUnit);
             var end = origin + pelletDirection * (shot.Projectile.Range * UnitsToMeters);
-            var collision = CastShotRay(origin, end);
-            var collider = collision.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
-            var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
-            traces.Add(new(pelletDirection, collision, collider, ShotReference(collider), point));
+            if (!shot.Projectile.PassesThroughActors)
+            {
+                AddTrace(origin, end, pelletDirection, SelfQueryBodies);
+                continue;
+            }
+
+            var exclusions = new Godot.Collections.Array<Rid>();
+            foreach (var body in SelfQueryBodies) exclusions.Add(body);
+            var start = origin;
+            var traceCount = traces.Count;
+            while (start.DistanceTo(end) > .001f)
+            {
+                var collision = CastShotRay(start, end, exclusions);
+                if (!collision.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node collider)
+                {
+                    traces.Add(new(pelletDirection, new(), null, null, end));
+                    break;
+                }
+
+                var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
+                traces.Add(new(pelletDirection, collision, collider, ShotReference(collider), point));
+                if (RuntimeNativeActorCombat.Find(collider) is not { } combat) break;
+
+                var added = 0;
+                foreach (var body in combat.CollisionRids)
+                {
+                    if (exclusions.Contains(body)) continue;
+                    exclusions.Add(body);
+                    added++;
+                }
+                if (added == 0)
+                    throw new InvalidDataException($"Flame projectile {shot.Projectile.Form} cannot advance past actor collision {ShotReference(collider) ?? collider.Name}.");
+                start = point + pelletDirection * .001f;
+            }
+            if (traces.Count == traceCount) traces.Add(new(pelletDirection, new(), null, null, end));
         }
         return traces;
+
+        void AddTrace(Vector3 from, Vector3 to, Vector3 pelletDirection, Godot.Collections.Array<Rid> exclusions)
+        {
+            var collision = CastShotRay(from, to, exclusions);
+            var collider = collision.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
+            var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : to;
+            traces.Add(new(pelletDirection, collision, collider, ShotReference(collider), point));
+        }
     }
 
     private List<RuntimeNativeProjectileFlight> PrepareProjectileFlights(

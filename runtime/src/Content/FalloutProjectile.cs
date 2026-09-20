@@ -13,6 +13,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal bool CanBePickedUp => (Flags & 0x0040) != 0;
     internal bool Detonates => (Flags & 0x0400) != 0;
     internal bool IsInstantRayAttack => Hitscan || Type == 4;
+    internal bool PassesThroughActors => Type == 8;
     internal bool HasExplicitRotation { get; private init; }
     internal float BouncyMultiplier { get; private init; }
     internal float ExplosionAltTriggerProximity { get; private init; }

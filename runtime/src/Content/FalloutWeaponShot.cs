@@ -101,7 +101,14 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
     internal void RequireInstantRay()
     {
         if (Projectiles <= 0) throw new InvalidDataException("Instant-ray projectile count is not positive.");
-        if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4) || (Projectile.Flags & ~1) != 0 ||
+        var flameFlagsWithoutExplosion = Projectile.Type == 8 && Projectile.ExplosionSource is null
+            ? (ushort)0x008c
+            : (ushort)0;
+        if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
+            throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
+        if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4 or 8) ||
+            (Projectile.Flags & ~(ushort)(1 | flameFlagsWithoutExplosion)) != 0 ||
+            Projectile.Type == 8 && Projectile.ExplosionSource is not null ||
             Projectile.Explosion is not null || Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight, explosion, alternate-trigger or flag simulation.");
         RequireSupportedAmmoEffects();
@@ -115,12 +122,12 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             return;
         }
         RequireSupportedAmmoEffects();
-        if (Projectile.Type is not (1 or 2) || Projectile.Speed <= 0 || Projectile.Model is null ||
+        if (Projectile.Type is not (1 or 2 or 8) || Projectile.Speed <= 0 || Projectile.Model is null ||
             (Projectile.Flags & 0x0800) != 0 || Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation or ammo-effect owner.");
         if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
-        if ((Projectile.Flags & 4) != 0)
+        if (Projectile.HasAlternateTrigger && !(Projectile.Type == 8 && Projectile.ExplosionSource is null))
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its alternative-trigger owner.");
         Projectile.ExplosionSource?.RequireRuntimeDamageOwner();
     }

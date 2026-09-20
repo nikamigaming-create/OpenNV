@@ -33,6 +33,10 @@ internal static class WeaponFiringContracts
             var beamProjectile = new byte[84]; beamProjectile[2] = 4; Float(beamProjectile, 8, 1500); Float(beamProjectile, 12, 1200);
             var alternateBeamProjectile = (byte[])beamProjectile.Clone(); alternateBeamProjectile[0] = 4;
             var explosiveBeamProjectile = (byte[])beamProjectile.Clone(); explosiveBeamProjectile[0] = 2; UInt(explosiveBeamProjectile, 36, 12);
+            var flameProjectile = new byte[84]; flameProjectile[0] = 0x8d; flameProjectile[2] = 8;
+            Float(flameProjectile, 8, 12000); Float(flameProjectile, 12, 640);
+            var missileFlameProjectile = (byte[])flameProjectile.Clone(); missileFlameProjectile[0] = 0x8c;
+            var flameWeapon = (byte[])weaponData.Clone(); UInt(flameWeapon, 0, 8); flameWeapon[41] = 86; UInt(flameWeapon, 36, 25);
             var thrownWeapon = (byte[])weaponData.Clone(); UInt(thrownWeapon, 0, 13); thrownWeapon[41] = 114; UInt(thrownWeapon, 36, 13);
             var mineWeapon = (byte[])weaponData.Clone(); UInt(mineWeapon, 0, 11); mineWeapon[41] = 102;
             var lunchboxMine = (byte[])weaponData.Clone(); UInt(lunchboxMine, 0, 12); lunchboxMine[41] = 108;
@@ -43,6 +47,7 @@ internal static class WeaponFiringContracts
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
                     Field("INAM", BitConverter.GetBytes(6u))))
                 .Concat(Record("AMMO", 2, Field("EDID", Text("TestAmmo")), Field("DATA", new byte[13]), Field("DAT2", ammo)))
+                .Concat(Record("AMMO", 27, Field("EDID", Text("TestFlameFuel")), Field("DATA", new byte[13])))
                 .Concat(Record("PROJ", 3, Field("DATA", projectile)))
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
                 .Concat(Record("EXPL", 12, Field("DATA", explosionData)))
@@ -54,6 +59,10 @@ internal static class WeaponFiringContracts
                 .Concat(Record("PROJ", 17, Field("MODL", Text("Effects/beam.nif")), Field("DATA", beamProjectile)))
                 .Concat(Record("PROJ", 18, Field("MODL", Text("Effects/alternate-beam.nif")), Field("DATA", alternateBeamProjectile)))
                 .Concat(Record("PROJ", 19, Field("MODL", Text("Effects/explosive-beam.nif")), Field("DATA", explosiveBeamProjectile)))
+                .Concat(Record("PROJ", 25, Field("DATA", flameProjectile)))
+                .Concat(Record("PROJ", 26, Field("MODL", Text("Effects/flame.nif")), Field("DATA", missileFlameProjectile)))
+                .Concat(Record("WEAP", 24, Field("EDID", Text("TestFlamer")), Field("MODL", Text("test-flamer.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(10)), Field("DNAM", flameWeapon)))
                 .Concat(Record("WEAP", 14, Field("EDID", Text("TestThrownExplosive")), Field("MODL", Text("test-thrown.nif")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", thrownWeapon)))
                 .Concat(Record("WEAP", 15, Field("EDID", Text("TestMine")), Field("MODL", Text("test-mine.nif")),
@@ -76,6 +85,15 @@ internal static class WeaponFiringContracts
             Require(!beam.Projectile.Hitscan && beam.Projectile.IsInstantRayAttack,
                 "Beam type did not select the direct-ray path without the Hitscan flag.");
             beam.RequireRuntimeAttackOwner();
+            var flameShot = FalloutWeaponShot.Read(records, Key(24), Key(27));
+            Require(flameShot.Projectile.Type == 8 && flameShot.Projectile.Hitscan && flameShot.Projectile.HasAlternateTrigger &&
+                flameShot.Projectile.PassesThroughActors && flameShot.Projectile.Speed == 12000 && flameShot.Projectile.Range == 640,
+                "Source Flame projectile fields or actor pass-through behavior were not retained.");
+            flameShot.RequireRuntimeAttackOwner();
+            var missileFlame = FalloutProjectile.Read(records, Key(26));
+            Require(!missileFlame.Hitscan && missileFlame.PassesThroughActors && missileFlame.Model == "meshes/Effects/flame.nif",
+                "Non-hitscan Flame projectile did not retain missile-flight presentation.");
+            (flameShot with { Projectile = missileFlame }).RequireRuntimeAttackOwner();
             var explosiveShot = FalloutProjectile.Read(records, Key(13));
             Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
                 "Projectile did not resolve its winning EXPL record and source model.");
@@ -160,9 +178,10 @@ internal static class WeaponFiringContracts
             Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 5 } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(18)) }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(19)) }).RequireRuntimeAttackOwner());
+            Reject(() => (flameShot with { Projectile = flameShot.Projectile with { Flags = (ushort)(flameShot.Projectile.Flags | 0x0100) } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectiles = 0 }).RequireInstantRay());
             Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireInstantRay());
-            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true unsupported=true");
+            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true flameActorPassThrough=true unsupported=true");
         }
         finally { Directory.Delete(directory, true); }
     }

@@ -58,7 +58,7 @@ internal partial class RuntimeNativePlayer
         lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-and-continuous-beam,tracers,beam-damage-timing-and-visuals,explosion-distance-attenuation,force,radiation-and-retail-parity"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-travel-time-audio-and-retail-parity,continuous-beam,tracers,beam-damage-timing-and-visuals,explosion-distance-attenuation,force,radiation-and-retail-parity"
     };
 
     private float ResolvePlayerShotSpread(FalloutWeaponShot shot)
@@ -283,11 +283,11 @@ internal partial class RuntimeNativePlayer
         }
     }
 
-    private Godot.Collections.Dictionary CastShotRay(Vector3 from, Vector3 to)
+    private Godot.Collections.Dictionary CastShotRay(Vector3 from, Vector3 to, Godot.Collections.Array<Rid>? exclusions = null)
     {
         using var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionMask | CollisionLayer);
         query.CollideWithAreas = true;
-        query.Exclude = SelfQueryBodies;
+        query.Exclude = exclusions ?? SelfQueryBodies;
         return GetWorld3D().DirectSpaceState.IntersectRay(query);
     }
 
