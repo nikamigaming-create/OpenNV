@@ -54,11 +54,14 @@ internal partial class RuntimeNativePlayer
         muzzle = _firstPerson?.MuzzleState,
         effects = _shotEffects?.State,
         effectErrors = _shotEffectErrors,
+        pendingHitscanImpacts = PendingProjectileImpactCount,
+        pendingHitscan = PendingProjectileImpactState,
+        lastHitscanImpact = LastHitscanImpact,
         damageError = _damageError,
         lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-travel-time-audio-and-retail-parity,continuous-beam,tracers,beam-damage-timing-and-visuals,explosion-distance-attenuation,force,radiation-and-retail-parity"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
     };
 
     private float ResolvePlayerShotSpread(FalloutWeaponShot shot)
@@ -216,7 +219,7 @@ internal partial class RuntimeNativePlayer
                 else _weaponUnboundEvents.Add("weapon-shoot-sound");
                 actor.FlashMuzzle();
                 var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                var damage = isInstantRay ? ApplyProjectileDamage(traces) : new PlayerProjectileDamageSummary(0, 0, null);
+                var damage = isInstantRay ? ApplyProjectileTraces(traces) : new PlayerProjectileDamageSummary(0, 0, 0, 0, 0, null);
                 var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 if (weapon.ShellModel is not null && !_shotEffectErrors.ContainsKey("casing-prepare"))
                     TryShotEffect("casing", () =>
@@ -226,7 +229,7 @@ internal partial class RuntimeNativePlayer
                         _shotEffects!.EjectCasing(shell, _camera.GlobalPosition);
                     });
                 var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                var impactCount = isInstantRay ? ApplyProjectileImpacts(traces) : 0;
+                var impactCount = damage.ImpactRequests;
                 foreach (var flight in preparedFlights) _shotEffects!.LaunchProjectile(flight);
                 var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces.LastOrDefault();
@@ -241,6 +244,8 @@ internal partial class RuntimeNativePlayer
                     projectiles = _shot.Projectiles,
                     projectileHits = damage.HitCount,
                     projectileActorHits = damage.ActorHitCount,
+                    projectileActorHitsPending = damage.PendingActorHits,
+                    projectileDamageEventsPending = damage.PendingEvents,
                     projectileImpactRequests = impactCount,
                     origin = new[] { from.X, from.Y, from.Z },
                     direction = lastTrace is null
@@ -252,7 +257,7 @@ internal partial class RuntimeNativePlayer
                     reference = lastTrace?.Reference,
                     hit = damage.HitCount != 0,
                     projectileFlights = preparedFlights.Count,
-                    flightState = isInstantRay ? "instant-ray-complete" : "in-flight",
+                    flightState = !isInstantRay ? "in-flight" : damage.PendingEvents != 0 ? "hitscan-impact-pending" : "instant-ray-complete",
                     loaded = _weaponHandling.Loaded(weapon.Form),
                     damage = damage.LastDamage,
                     damageError = _damageError,
@@ -260,7 +265,7 @@ internal partial class RuntimeNativePlayer
                     {
                         collisionMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, collisionDone).TotalMilliseconds,
                         audioMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(collisionDone, audioDone).TotalMilliseconds,
-                        damageMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(audioDone, damageDone).TotalMilliseconds,
+                        damageScheduleMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(audioDone, damageDone).TotalMilliseconds,
                         casingMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(damageDone, casingDone).TotalMilliseconds,
                         impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
                         totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds

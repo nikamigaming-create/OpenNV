@@ -81,6 +81,9 @@ internal static class WeaponFiringContracts
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
             shot.RequireInstantRay();
+            Require(MathF.Abs(shot.Projectile.HitscanImpactDelaySeconds(5, .01f) - 2.5f) < .00001f &&
+                BeamProjectileSpeedDelay(records, Key(17)) == 0,
+                "Hitscan source speed did not determine impact time, or an unflagged beam gained projectile delay.");
             var beam = (shot with { Projectile = FalloutProjectile.Read(records, Key(17)) });
             Require(!beam.Projectile.Hitscan && beam.Projectile.IsInstantRayAttack,
                 "Beam type did not select the direct-ray path without the Hitscan flag.");
@@ -175,18 +178,25 @@ internal static class WeaponFiringContracts
             Reject(() => inventory.ConsumeAmmunition(Key(2), 1, new(Key(5), 5, "invalid", "WEAP", 1, 0, 0)));
             Require(JsonSerializer.Serialize(inventory.Capture()) == beforeFailure, "Invalid return partially consumed ammunition.");
             Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireInstantRay());
+            Reject(() => (shot with { Projectile = shot.Projectile with { Speed = 0 } }).RequireInstantRay());
+            Reject(() => shot.Projectile.HitscanImpactDelaySeconds(-.01f, .01f));
             Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 5 } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(18)) }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(19)) }).RequireRuntimeAttackOwner());
             Reject(() => (flameShot with { Projectile = flameShot.Projectile with { Flags = (ushort)(flameShot.Projectile.Flags | 0x0100) } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectiles = 0 }).RequireInstantRay());
             Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireInstantRay());
-            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true flameActorPassThrough=true unsupported=true");
+            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true flameActorPassThrough=true hitscanDelay=true unsupported=true");
         }
         finally { Directory.Delete(directory, true); }
     }
 
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+    private static float BeamProjectileSpeedDelay(FalloutPluginStack records, FalloutFormKey key)
+    {
+        var beam = FalloutProjectile.Read(records, key);
+        return beam.HitscanImpactDelaySeconds(5, .01f);
+    }
     private static void Reject(Action action)
     {
         try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }

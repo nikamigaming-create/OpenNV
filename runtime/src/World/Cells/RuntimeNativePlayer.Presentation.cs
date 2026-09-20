@@ -82,6 +82,7 @@ internal partial class RuntimeNativePlayer
 
     public override void _Process(double delta)
     {
+        if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;
         if (_firstPersonPixels is not null) _firstPersonPixels.Visible = _presentationError is null && active && !_thirdPersonMode && (_firstPerson?.Weapon is null || _weaponHandling!.Drawn || _weaponAction is not null);

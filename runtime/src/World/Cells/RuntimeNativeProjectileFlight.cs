@@ -42,7 +42,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         detonations = _detonations,
         bounces = _bounces,
         error = Error,
-        boundary = "missile-lobber-and-flame-flight;gravity,source-speed,bounce,flame-actor-pass-through-and-source-explosion-radius-damage;flame-audio-and-travel-time,explosion-distance-attenuation,force,radiation,projectile-beam-visuals,rotation,tracer-and-retail-parity-unmatched"
+        boundary = "missile-lobber-and-flame-flight;gravity,source-speed,bounce,flame-actor-pass-through-and-source-explosion-radius-damage;flame-audio,explosion-distance-attenuation,force,radiation,projectile-beam-visuals,rotation,tracer-and-retail-parity-unmatched"
     };
 
     internal RuntimeNativeProjectileFlight(FalloutProjectile source, Node3D model, float unitsToMeters,

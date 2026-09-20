@@ -20,6 +20,19 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal float ExplosionAltTriggerTimer { get; private init; }
     internal FalloutExplosion? ExplosionSource { get; private init; }
 
+    internal float HitscanImpactDelaySeconds(float distanceMeters, float unitsToMeters)
+    {
+        if (!Hitscan) return 0;
+        if (!float.IsFinite(distanceMeters) || distanceMeters < 0 || !float.IsFinite(unitsToMeters) || unitsToMeters <= 0 ||
+            !float.IsFinite(Speed) || Speed <= 0)
+            throw new InvalidDataException("Hitscan travel distance, unit scale or source speed is invalid.");
+        var speedMetersPerSecond = Speed * unitsToMeters;
+        if (!float.IsFinite(speedMetersPerSecond) || speedMetersPerSecond <= 0)
+            throw new InvalidDataException("Hitscan speed cannot be converted to world units.");
+        var delay = distanceMeters / speedMetersPerSecond;
+        return float.IsFinite(delay) ? delay : throw new InvalidDataException("Hitscan impact delay is invalid.");
+    }
+
     internal static FalloutProjectile Read(FalloutPluginStack records, FalloutFormKey key)
     {
         var record = records.GetEffective(key);

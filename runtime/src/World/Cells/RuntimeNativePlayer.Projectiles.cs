@@ -12,20 +12,61 @@ internal partial class RuntimeNativePlayer
         Godot.Collections.Dictionary collision,
         Node? collider,
         string? reference,
-        Vector3 point)
+        Vector3 point,
+        float damageDelaySeconds)
     {
         internal Vector3 Direction { get; } = direction;
         internal Godot.Collections.Dictionary Collision { get; } = collision;
         internal Node? Collider { get; } = collider;
         internal string? Reference { get; } = reference;
         internal Vector3 Point { get; } = point;
+        internal float DamageDelaySeconds { get; } = damageDelaySeconds;
         internal FalloutActorHit? ActorHit { get; set; }
     }
 
     private readonly record struct PlayerProjectileDamageSummary(
         int HitCount,
         int ActorHitCount,
+        int PendingActorHits,
+        int PendingEvents,
+        int ImpactRequests,
         FalloutActorHit? LastDamage);
+
+    private sealed class PendingProjectileImpact
+    {
+        internal FalloutPluginStack Records { get; }
+        internal FalloutWeaponShot Shot { get; }
+        internal FalloutWeaponDamage? Damage { get; }
+        internal RuntimeNativeActorCombat? Combat { get; }
+        internal FalloutFormKey Attacker { get; }
+        internal int? AttackerLevel { get; }
+        internal FalloutGlobalState? Globals { get; }
+        internal PlayerProjectileTrace Trace { get; }
+        internal float RemainingSeconds { get; set; }
+
+        internal PendingProjectileImpact(FalloutPluginStack records, FalloutWeaponShot shot,
+            FalloutWeaponDamage? damage, RuntimeNativeActorCombat? combat, FalloutFormKey attacker,
+            int? attackerLevel, FalloutGlobalState? globals, PlayerProjectileTrace trace)
+        {
+            Records = records; Shot = shot; Damage = damage; Combat = combat; Attacker = attacker;
+            AttackerLevel = attackerLevel; Globals = globals; Trace = trace;
+            RemainingSeconds = trace.DamageDelaySeconds;
+        }
+    }
+
+    private readonly List<PendingProjectileImpact> _pendingProjectileImpacts = [];
+    private object? _lastHitscanImpact;
+    internal int PendingProjectileImpactCount => _pendingProjectileImpacts.Count;
+    internal object? LastHitscanImpact => _lastHitscanImpact;
+    internal object PendingProjectileImpactState => _pendingProjectileImpacts.Select(pending => new
+    {
+        weapon = pending.Shot.Weapon.ToString(),
+        projectile = pending.Shot.Projectile.Form.ToString(),
+        reference = pending.Trace.Reference,
+        remainingSeconds = pending.RemainingSeconds,
+        actorDamage = pending.Damage is not null && pending.Combat is not null,
+        impact = pending.Shot.ImpactDataSet is not null
+    }).ToArray();
 
     private IReadOnlyList<PlayerProjectileTrace> TraceProjectiles(Vector3 origin, Vector3 direction,
         float medianSpreadDegrees)
@@ -54,12 +95,12 @@ internal partial class RuntimeNativePlayer
                 var collision = CastShotRay(start, end, exclusions);
                 if (!collision.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node collider)
                 {
-                    traces.Add(new(pelletDirection, new(), null, null, end));
+                    traces.Add(MakeTrace(pelletDirection, new(), null, end));
                     break;
                 }
 
                 var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
-                traces.Add(new(pelletDirection, collision, collider, ShotReference(collider), point));
+                traces.Add(MakeTrace(pelletDirection, collision, collider, point));
                 if (RuntimeNativeActorCombat.Find(collider) is not { } combat) break;
 
                 var added = 0;
@@ -73,7 +114,7 @@ internal partial class RuntimeNativePlayer
                     throw new InvalidDataException($"Flame projectile {shot.Projectile.Form} cannot advance past actor collision {ShotReference(collider) ?? collider.Name}.");
                 start = point + pelletDirection * .001f;
             }
-            if (traces.Count == traceCount) traces.Add(new(pelletDirection, new(), null, null, end));
+            if (traces.Count == traceCount) traces.Add(MakeTrace(pelletDirection, new(), null, end));
         }
         return traces;
 
@@ -82,7 +123,14 @@ internal partial class RuntimeNativePlayer
             var collision = CastShotRay(from, to, exclusions);
             var collider = collision.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
             var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : to;
-            traces.Add(new(pelletDirection, collision, collider, ShotReference(collider), point));
+            traces.Add(MakeTrace(pelletDirection, collision, collider, point));
+        }
+
+        PlayerProjectileTrace MakeTrace(Vector3 pelletDirection, Godot.Collections.Dictionary collision,
+            Node? collider, Vector3 point)
+        {
+            var delay = shot.Projectile.HitscanImpactDelaySeconds(origin.DistanceTo(point), UnitsToMeters);
+            return new(pelletDirection, collision, collider, ShotReference(collider), point, delay);
         }
     }
 
@@ -159,27 +207,33 @@ internal partial class RuntimeNativePlayer
         GD.Print($"OPENNV_WEAPON_EXPLOSION weapon={shot.Weapon} explosion={explosion.Form} result={System.Text.Json.JsonSerializer.Serialize(_lastExplosion)}");
     }
 
-    private PlayerProjectileDamageSummary ApplyProjectileDamage(IReadOnlyList<PlayerProjectileTrace> traces)
+    private PlayerProjectileDamageSummary ApplyProjectileTraces(IReadOnlyList<PlayerProjectileTrace> traces)
     {
         _damageError = null;
         var hitCount = 0;
         var actorHitCount = 0;
+        var pendingActorHits = 0;
+        var pendingEvents = 0;
+        var impactRequests = 0;
         var damageResolved = false;
         FalloutWeaponDamage? resolvedDamage = null;
         FalloutActorHit? lastDamage = null;
+        var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
+        var records = _presentationRecords ?? throw new InvalidOperationException("Projectile records are absent.");
+        var attacker = records.RuntimeFormKey(0x14);
+        var impactSet = shot.ImpactDataSet;
         foreach (var trace in traces)
         {
             if (trace.Collider is not { } collider) continue;
             hitCount++;
             var combat = RuntimeNativeActorCombat.Find(collider);
-            if (combat is null || _damageError is not null) continue;
-            if (!damageResolved)
+            if (combat is not null && !damageResolved)
             {
                 damageResolved = true;
                 try
                 {
                     resolvedDamage = (_damage ?? throw new InvalidOperationException("Player damage owner is absent."))
-                        .Resolve(_shot ?? throw new InvalidOperationException("Projectile source is absent."));
+                        .Resolve(shot);
                 }
                 catch (Exception error)
                 {
@@ -187,13 +241,49 @@ internal partial class RuntimeNativePlayer
                     GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={trace.Reference} {error.Message}");
                 }
             }
-            if (resolvedDamage is not { } damage) continue;
+
+            var actorDamage = combat is not null && resolvedDamage is not null;
+            if (impactSet is not null) impactRequests++;
+            if (!actorDamage && impactSet is null) continue;
+            int? level = actorDamage ? _combatLevel!() : null;
+            var globals = actorDamage ? _combatGlobals : null;
+            if (actorDamage && globals is null)
+            {
+                _damageError = "Player global combat state is absent.";
+                GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={trace.Reference} {_damageError}");
+                actorDamage = false;
+            }
+
+            if (trace.DamageDelaySeconds > 0)
+            {
+                _pendingProjectileImpacts.Add(new(records, shot, actorDamage ? resolvedDamage : null,
+                    actorDamage ? combat : null, attacker, level, globals, trace));
+                pendingEvents++;
+                if (actorDamage) pendingActorHits++;
+                continue;
+            }
+
+            var applied = CompleteProjectileImpact(trace, actorDamage ? combat : null,
+                actorDamage ? resolvedDamage : null, impactSet, records, shot, attacker, level, globals);
+            if (applied is { } hit) { lastDamage = hit; actorHitCount++; }
+        }
+        return new(hitCount, actorHitCount, pendingActorHits, pendingEvents, impactRequests, lastDamage);
+    }
+
+    private FalloutActorHit? CompleteProjectileImpact(PlayerProjectileTrace trace, RuntimeNativeActorCombat? combat,
+        FalloutWeaponDamage? damage, FalloutFormKey? impactSet, FalloutPluginStack records, FalloutWeaponShot shot,
+        FalloutFormKey attacker, int? level, FalloutGlobalState? globals)
+    {
+        FalloutActorHit? actorHit = null;
+        if (trace.Collider is { } collider && combat is not null && damage is { } resolvedDamage)
+        {
             try
             {
-                trace.ActorHit = combat.Hit(collider, damage, _presentationRecords!.RuntimeFormKey(0x14),
-                    _combatLevel!(), _combatGlobals!);
-                lastDamage = trace.ActorHit;
-                actorHitCount++;
+                actorHit = combat.Hit(collider, resolvedDamage, attacker,
+                    level ?? throw new InvalidOperationException("Projectile impact has no attacker level."),
+                    globals ?? throw new InvalidOperationException("Projectile impact has no global state."));
+                trace.ActorHit = actorHit;
+                GD.Print($"OPENNV_WEAPON_PROJECTILE_ACTOR_HIT projectile={shot.Projectile.Form} reference={actorHit.Reference} part={actorHit.Part} damage={actorHit.HealthDamage:R} delayed={trace.DamageDelaySeconds:R}");
             }
             catch (Exception error)
             {
@@ -201,27 +291,68 @@ internal partial class RuntimeNativePlayer
                 GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={trace.Reference} {error.Message}");
             }
         }
-        return new(hitCount, actorHitCount, lastDamage);
-    }
 
-    private int ApplyProjectileImpacts(IReadOnlyList<PlayerProjectileTrace> traces)
-    {
-        if (_shot?.ImpactDataSet is not { } impactSet) return 0;
-        var requests = 0;
-        foreach (var trace in traces)
+        if (trace.Collider is { } hitCollider && impactSet is { } set)
         {
-            if (trace.Collider is not { } collider) continue;
-            requests++;
             TryShotEffect("impact", () =>
             {
-                var material = trace.ActorHit is { } hit
+                var material = actorHit is { } hit
                     ? checked((int)hit.ImpactMaterial)
                     : ShotMaterial(trace.Collision);
-                if (FalloutImpact.Resolve(_presentationRecords!, impactSet, material) is { } impact)
+                if (FalloutImpact.Resolve(records, set, material) is { } impact)
                     _shotEffects!.Impact(impact, trace.Point, trace.Collision["normal"].AsVector3(),
-                        trace.Direction, collider as Node3D);
+                        trace.Direction, hitCollider as Node3D);
             });
         }
-        return requests;
+        return actorHit;
+    }
+
+    private void AdvancePendingProjectileImpacts(float delta)
+    {
+        if (!float.IsFinite(delta) || delta <= 0) return;
+        for (var index = _pendingProjectileImpacts.Count - 1; index >= 0; index--)
+        {
+            var pending = _pendingProjectileImpacts[index];
+            pending.RemainingSeconds = Math.Max(0, pending.RemainingSeconds - delta);
+            if (pending.RemainingSeconds > 0) continue;
+            _pendingProjectileImpacts.RemoveAt(index);
+            if (pending.Trace.Collider is not { } collider || !IsInstanceValid(collider) || collider.IsQueuedForDeletion())
+            {
+                _damageError = "Hitscan target left the scene before source impact time.";
+                _lastHitscanImpact = new
+                {
+                    weapon = pending.Shot.Weapon.ToString(),
+                    projectile = pending.Shot.Projectile.Form.ToString(),
+                    reference = pending.Trace.Reference,
+                    state = "target-unbound",
+                    error = _damageError
+                };
+                GD.PushError($"OPENNV_HITSCAN_TARGET_UNBOUND projectile={pending.Shot.Projectile.Form} reference={pending.Trace.Reference} {_damageError}");
+                continue;
+            }
+            var combat = pending.Combat is { } target && IsInstanceValid(target) && !target.IsQueuedForDeletion()
+                ? target
+                : null;
+            if (pending.Damage is not null && combat is null)
+            {
+                _damageError = "Hitscan actor combat owner left the scene before source impact time.";
+                GD.PushError($"OPENNV_HITSCAN_TARGET_UNBOUND projectile={pending.Shot.Projectile.Form} reference={pending.Trace.Reference} {_damageError}");
+            }
+            var hit = CompleteProjectileImpact(pending.Trace, combat, pending.Damage, pending.Shot.ImpactDataSet,
+                pending.Records, pending.Shot, pending.Attacker, pending.AttackerLevel, pending.Globals);
+            _lastHitscanImpact = new
+            {
+                weapon = pending.Shot.Weapon.ToString(),
+                projectile = pending.Shot.Projectile.Form.ToString(),
+                reference = pending.Trace.Reference,
+                delaySeconds = pending.Trace.DamageDelaySeconds,
+                state = hit is not null ? "actor-damaged" : pending.Damage is not null ? "damage-unbound" : "impact-resolved",
+                healthDamage = hit?.HealthDamage,
+                part = hit?.Part,
+                died = hit?.Died,
+                error = _damageError
+            };
+            GD.Print($"OPENNV_HITSCAN_IMPACT projectile={pending.Shot.Projectile.Form} reference={pending.Trace.Reference} delay={pending.Trace.DamageDelaySeconds:R} healthDamage={hit?.HealthDamage}");
+        }
     }
 }

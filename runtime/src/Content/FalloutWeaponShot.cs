@@ -101,6 +101,8 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
     internal void RequireInstantRay()
     {
         if (Projectiles <= 0) throw new InvalidDataException("Instant-ray projectile count is not positive.");
+        if (Projectile.Hitscan && Projectile.Speed <= 0)
+            throw new InvalidDataException($"Hitscan projectile {Projectile.Form} has no positive source speed for impact timing.");
         var flameFlagsWithoutExplosion = Projectile.Type == 8 && Projectile.ExplosionSource is null
             ? (ushort)0x008c
             : (ushort)0;
