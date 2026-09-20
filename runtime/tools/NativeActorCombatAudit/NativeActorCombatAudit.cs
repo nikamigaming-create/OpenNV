@@ -31,6 +31,12 @@ public partial class NativeActorCombatAudit : Node3D
         var placed = cell.References.Single(value => value.FormKey == key);
         using var world = new FalloutReferenceWorld(records);
         world.LoadCell(cell);
+        world.InitializeActorTemplates(key, 1, globals);
+        if (FalloutActorHealthSource.StartsDead(records, placed.Base, world.Get(key).Templates))
+        {
+            await ExerciseAuthoredCorpse(records, content, world, cell, placed);
+            return;
+        }
         var actor = RuntimeNativeCreature.Create(records, content, placed, world.Get(key), .0142875f);
         // This is a component physics fixture at the actual reference position.
         // The ordinary run separately uses resident source LAND and user input.

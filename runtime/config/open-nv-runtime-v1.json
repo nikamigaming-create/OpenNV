@@ -7,7 +7,8 @@
       "source": "Fallout: New Vegas world-unit contract",
       "evidence": "docs/evidence/fnv-esm-cell-contract.md"
     },
-    "gameUnitsToMeters": 0.0142875
+    "gameUnitsToMeters": 0.0142875,
+    "minimumExteriorGridDiameter": 7
   },
   "simulation": {
     "provenance": {

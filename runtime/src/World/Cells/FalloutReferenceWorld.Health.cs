@@ -18,8 +18,8 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutActorHealthSource HealthSource(FalloutFormKey reference)
     {
         var actor = Actor(reference);
-        if (!_healthSources.TryGetValue(actor.Base, out var source))
-            _healthSources.Add(actor.Base, source = FalloutActorHealthSource.Read(records, actor.Base));
+        if (!_healthSources.TryGetValue(actor.Reference, out var source))
+            _healthSources.Add(actor.Reference, source = FalloutActorHealthSource.Read(records, actor.Base, actor.Templates));
         return source;
     }
 
@@ -44,6 +44,13 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     internal bool IsDead(FalloutFormKey reference) => Actor(reference).Injury?.Dead == true;
+
+    internal void InitializeSourceCorpse(FalloutFormKey reference)
+    {
+        var actor = Actor(reference);
+        if (actor.Injury is null && FalloutActorHealthSource.StartsDead(records, actor.Base, actor.Templates))
+            _ = Health(reference);
+    }
 
     // The hit resolver supplies damage after weapon/armor rules. Reference state
     // owns modifier pools and the death transition, never the rendered actor.

@@ -19,6 +19,8 @@ internal sealed partial class NativeOwnedMessageMenu : Control
         Name = "MessageMenu";
         ProcessMode = ProcessModeEnum.Always;
         _failed = failed;
+        if (message.ConditionalButtons && message.ButtonIndices is null)
+            throw new InvalidOperationException("Message buttons require gameplay condition evaluation.");
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/message_menu.xml")).Elements("menu").Single();
         _tiles = new(menu);
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);
@@ -40,7 +42,8 @@ internal sealed partial class NativeOwnedMessageMenu : Control
             var font = _tiles.Font(text);
             var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
             { Name = $"MM_Button_{index}", Text = label, FocusMode = FocusModeEnum.All, DrawText = false };
-            button.Pressed += () => { if (_submitted) return; _submitted = true; selected(index); };
+            var sourceIndex = message.ButtonIndices?[index] ?? index;
+            button.Pressed += () => { if (_submitted) return; _submitted = true; selected(sourceIndex); };
             button.MouseEntered += () => { Select(tile); QueueRedraw(); };
             button.FocusEntered += () => { Select(tile); QueueRedraw(); };
             AddChild(button);
@@ -201,6 +204,8 @@ internal sealed class NativeOwnedMenuTree
         "me()" => tile,
         "parent()" => tile.Parent!,
         "grandparent()" => tile.Parent?.Parent ?? throw new InvalidDataException("Owned tile has no grandparent."),
+        "child()" => tile.Elements().Where(value => value.Attribute("name") is not null).SingleOrDefault()
+            ?? throw new NotSupportedException("Owned child() reference has no unique child tile."),
         "io()" => Root,
         "globals()" => _globals,
         _ when source == (string?)Root.Attribute("name") => Root,
@@ -347,7 +352,7 @@ internal sealed class NativeOwnedMenuTree
         void Validate(XElement tile)
         {
             try { if (Number(tile, "visible") == 0) return; }
-            catch (Exception error) { errors.Add(error.Message); }
+            catch (Exception error) { errors.Add($"{(string?)tile.Attribute("name")}: {error.Message}"); }
             try
             {
                 _ = Position(tile);
@@ -360,7 +365,7 @@ internal sealed class NativeOwnedMenuTree
                 }
                 if (tile.Name == "text") { _ = Font(tile); _ = Lines(tile); _ = Number(tile, "justify"); }
             }
-            catch (Exception error) { errors.Add(error.Message); }
+            catch (Exception error) { errors.Add($"{(string?)tile.Attribute("name")}: {error.Message}"); }
             foreach (var child in tile.Elements().Where(child => child.Attribute("name") is not null && child.Name != "template")) Validate(child);
         }
         Validate(Root);

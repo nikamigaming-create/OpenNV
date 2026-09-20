@@ -16,6 +16,8 @@ public partial class RuntimeCoordinator
     private Node3D? _botBoundsOwner;
     private Aabb _botLocalBounds;
     private RuntimeSimulatorBotInput? _botSimulatorInput;
+    private readonly Dictionary<FalloutFormKey, Vector3> _botAuthoredDestinations = [];
+    private readonly Dictionary<Vector3, ulong> _botBlockedPortals = [];
 
     private bool ApplyNativeBotSimulatorInput(SteeringIntent intent, bool activate)
     {
@@ -42,10 +44,41 @@ public partial class RuntimeCoordinator
         var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(key);
         var resident = node is not null && GodotObject.IsInstanceValid(node) && node.IsInsideTree() && node.IsVisibleInTree();
         var target = resident ? node!.GlobalPosition : Vector3.Zero;
+        var travelReady = false;
+        if (!resident && _nativeActiveCell?.Cell.Worldspace is { } worldspace &&
+            _nativePluginStack!.GetEffective(key).Signature == "REFR" &&
+            FalloutCellSceneReader.ParentWorldspace(_nativePluginStack.GetEffective(referenceState.Cell)) == worldspace)
+        {
+            if (!_botAuthoredDestinations.TryGetValue(key, out target))
+            {
+                var placement = FalloutCellSceneReader.Read(_nativePluginStack, referenceState.Cell).References.Single(value => value.FormKey == key);
+                target = new Vector3(placement.Position[0], placement.Position[2], -placement.Position[1]) * _configuration.World.GameUnitsToMeters;
+                _botAuthoredDestinations.Add(key, target);
+            }
+            travelReady = player.CollisionResident;
+        }
         var aim = target;
         if (resident)
         {
-            if (node is RuntimeNativeNpc actor)
+            if (RuntimeNativeActorCombat.Find(node) is { Dead: true } combat)
+            {
+                var points = combat.CorpseAimPoints.ToArray();
+                if (points.Length == 0) throw new NotSupportedException("Corpse has no live physical pose for aiming.");
+                aim = points[0];
+                using var query = PhysicsRayQueryParameters3D.Create(player.Camera.GlobalPosition, aim, player.CollisionMask | player.CollisionLayer);
+                query.CollideWithAreas = true;
+                query.HitBackFaces = false;
+                query.Exclude = new Godot.Collections.Array<Rid>(player.CombatCollisionRids);
+                foreach (var point in points)
+                {
+                    query.To = point;
+                    var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+                    if (!hit.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node contact ||
+                        _nativeReferenceEvents?.AimedReference(contact)?.FormKey != key) continue;
+                    aim = point; break;
+                }
+            }
+            else if (node is RuntimeNativeNpc actor)
                 aim = actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(actor.Skeleton.BoneIndex("Bip01 Head")).Origin;
             else
             {
@@ -78,23 +111,65 @@ public partial class RuntimeCoordinator
             Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused || player.ModalInput || _nativeDoorLoading,
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
-            player.BlockingShape, interaction);
+            player.BlockingShape, interaction, travelReady);
     }
 
-    private IReadOnlyList<System.Numerics.Vector3> FindNativeBotRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end)
+    private IReadOnlyList<System.Numerics.Vector3> FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end)
+        => FindNativeNavigationRoute(start, end, true);
+
+    private IReadOnlyList<System.Numerics.Vector3> FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, bool refinePlayer)
     {
         var scene = _nativeActiveCell ?? throw new InvalidOperationException("No active navigation scene.");
         var units = _configuration.World.GameUnitsToMeters;
-        var cells = scene.Cell.Worldspace is null ? new HashSet<FalloutFormKey> { scene.Cell.FormKey } :
-            scene.References.Select(reference => reference.Cell).Append(scene.Cell.FormKey).ToHashSet();
-        var identity = string.Join(',', cells.OrderBy(cell => cell.ToString()).Select(cell => cell.ToString()));
+        var identity = (scene.Cell.Worldspace ?? scene.Cell.FormKey).ToString();
         if (_botNavigationIdentity != identity)
         {
-            _botNavigation = CellNavigationGraph.LoadOwned(_nativePluginStack!, cells);
+            var cells = scene.Cell.Worldspace is not { } worldspace ? new HashSet<FalloutFormKey> { scene.Cell.FormKey } :
+                _nativePluginStack!.EffectiveRecords("CELL").Where(record => FalloutCellSceneReader.ParentWorldspace(record) == worldspace)
+                    .Select(record => record.FormKey).ToHashSet();
+            _botNavigation = CellNavigationGraph.LoadOwned(_nativePluginStack!, cells,
+                (mesh, error) => GD.PushError($"OPENNV_BOT_NAVIGATION_UNAVAILABLE mesh={mesh} {error.Message}"));
             _botNavigationIdentity = identity;
+            _botBlockedPortals.Clear();
         }
         Vector3 Source(System.Numerics.Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
-        var path = _botNavigation!.FindPath(Source(start), Source(end));
-        return path.Select(point => new System.Numerics.Vector3(point.X, point.Z, -point.Y) * units).ToArray();
+        Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
+        if (!refinePlayer) return _botNavigation!.FindPath(Source(start), Source(end))
+            .Select(World).Select(point => new System.Numerics.Vector3(point.X, point.Y, point.Z)).ToArray();
+        var origin = new Vector3(start.X, start.Y, start.Z);
+        var now = Time.GetTicksMsec();
+        foreach (var point in _botBlockedPortals.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
+            _botBlockedPortals.Remove(point);
+        using var clearance = new NativeCapsulePlacementQuery(_nativePlayer!);
+        bool Permitted(Vector3 point)
+        {
+            if (_botBlockedPortals.ContainsKey(point)) return false;
+            var world = World(point);
+            // Unloaded NAVM is coarse intent only. The returned segment below
+            // always requires resident collision and full capsule sweeps.
+            return !NativeCollisionResident(world) || clearance.CanStand(world);
+        }
+        for (var attempt = 0; attempt < 8; attempt++)
+        {
+            var path = _botNavigation!.FindPath(Source(start), Source(end), Permitted);
+            var worldPath = path.Select(World).ToArray();
+            if (worldPath.Length == 0) return [];
+            var (target, resume) = NativeCapsuleNavigation.CorridorPrefix(origin, worldPath, 8);
+            try
+            {
+                var local = NativeCapsuleNavigation.Find(_nativePlayer!, origin, target,
+                    _configuration.Player.StepHeightMeters, Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters), NativeCollisionResident);
+                GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={target} sourceWaypoint={resume} " +
+                    $"blockedPortals={_botBlockedPortals.Count} occupiedPortals={clearance.Rejected} ms={Time.GetTicksMsec() - now}");
+                return local.Select(point => new System.Numerics.Vector3(point.X, point.Y, point.Z)).ToArray();
+            }
+            catch (InvalidOperationException error) when (attempt < 7 && path.Count > 1)
+            {
+                var blocked = path[Math.Min(resume, path.Count - 2)];
+                _botBlockedPortals[blocked] = now + 30000;
+                GD.Print($"OPENNV_BOT_BLOCKED_PORTAL source={blocked} reason={error.Message}");
+            }
+        }
+        throw new InvalidOperationException("No capsule-supported source corridor after bounded A* alternatives.");
     }
 }

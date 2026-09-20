@@ -807,7 +807,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         link.Controller == -1 || link.Priority != 0 ||
                         link.ControllerType is not ("NiTransformController" or
                             "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
-                            "NiPSysEmitterCtlr" or "NiPSysModifierActiveCtlr")))
+                            "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr")))
                     throw new NotSupportedException(
                         $"NIF controller manager {manager.Block.Index} has an unsupported sequence chain.");
             }
@@ -1105,7 +1105,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     Name = sequence.Name,
                 };
                 player.Configure([sequence]);
-                if (sequence.DirectClock is not null && player.ActiveSequence is null) player.PlaySourceSequence(sequence.Name);
+                if (sequence.DirectClock is { } clock && (clock.Flags & 8) != 0 && player.ActiveSequence is null) player.PlaySourceSequence(sequence.Name);
                 player.SetMeta("opennv_nif_direct_controller", true);
                 root.AddChild(player);
             }
@@ -1137,7 +1137,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         sequence, link, targetBlock),
                     "NiTextureTransformController" => BuildTextureTransformChannel(
                         sequence, link, targetBlock),
-                    "NiPSysEmitterCtlr" or "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
+                    "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
                     "NiAlphaController" => BuildAlphaChannel(sequence, link, targetBlock),
                     _ => throw new NotSupportedException(
                         $"NIF sequence {sequence.Block.Index} controller {link.ControllerType} is unsupported."),
@@ -1813,6 +1813,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     _materials.Add(reference, values);
                 }
                 values.Add(result);
+                if (values.Count == 1 && _source.ReadObject(reference) is FalloutNifMaterialProperty property &&
+                    property.Controller >= 0)
+                    BindDirectMaterialControllers(property, values);
             }
             return result;
         }
@@ -2010,7 +2013,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 result.SetMeta("opennv_hair_lighting_parity", "unverified");
             }
             ApplyAlpha(result, alpha);
-            ApplyStencil(result, stencil, environment);
+            ApplyStencil(result, stencil);
             var meshData = _source.ReadMeshData(geometry.Data);
             Texture2D? height = null;
             if (parallax)
@@ -2104,7 +2107,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             ApplyAlpha(result, alpha);
             if ((shader.ShaderFlags2 & ShaderFlagZBufferWrite) == 0)
                 result.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
-            ApplyStencil(result, stencil, environmentPass: false);
+            ApplyStencil(result, stencil);
             var effect = NativeNifEffectMaterial.Build(shader, material, alpha,
                 result.AlbedoTexture,
                 result.CullMode == BaseMaterial3D.CullModeEnum.Disabled);
@@ -2163,12 +2166,118 @@ internal static partial class RuntimeNativeNifMeshBuilder
             $"rotation={transform.Rotation:R};method={transform.TransformType};" +
             $"center={transform.Center.U:R},{transform.Center.V:R}";
 
-        private bool IsManagedMaterialController(int reference, int target) => _source.ReadObject(reference) switch
+        private bool IsManagedMaterialController(int reference, int target)
         {
-            FalloutNifMaterialColorController controller => controller.Time.Target == target && controller.TargetColor == MaterialColorSelfIllumination,
-            FalloutNifAlphaController controller => controller.Time.Target == target && (controller.Time.Flags & 0x40) != 0,
-            _ => false,
-        };
+            var seen = new HashSet<int>();
+            while (reference >= 0)
+            {
+                if (!seen.Add(reference)) throw new InvalidDataException("Material controller chain contains a cycle.");
+                var time = _source.ReadObject(reference) switch
+                {
+                    FalloutNifMaterialColorController controller when controller.TargetColor == MaterialColorSelfIllumination ||
+                        controller.TargetColor == 2 && controller.Time.StartTime == controller.Time.StopTime &&
+                        (controller.Time.Flags & 0x20) == 0 => controller.Time,
+                    FalloutNifAlphaController controller => controller.Time,
+                    FalloutNifEmittanceController controller when (controller.Time.Flags & 0x20) == 0 => controller.Time,
+                    _ => null,
+                };
+                if (time is null || time.Target != target || (time.Flags & 0x40) == 0) return false;
+                reference = time.NextController;
+            }
+            return true;
+        }
+
+        private void BindDirectMaterialControllers(FalloutNifMaterialProperty property, IReadOnlyList<Material> materials)
+        {
+            var emissive = new Vector3(property.Emissive.R, property.Emissive.G, property.Emissive.B);
+            var multiple = property.EmissiveMultiple;
+            var alpha = property.Alpha;
+            var cursor = property.Controller;
+            while (cursor >= 0)
+            {
+                var controller = _source.ReadObject(cursor);
+                var clock = controller switch
+                {
+                    FalloutNifEmittanceController value => value.Time,
+                    FalloutNifAlphaController value => value.Time,
+                    FalloutNifMaterialColorController value => value.Time,
+                    _ => throw new NotSupportedException("Material controller has no native channel owner."),
+                };
+                cursor = clock.NextController;
+                if ((clock.Flags & 0x20) != 0) continue;
+                Action<float> sample;
+                switch (controller)
+                {
+                    case FalloutNifEmittanceController emittance:
+                        {
+                            var sampler = new FalloutNifFloatAnimation(_source, emittance.Interpolator);
+                            sample = time => multiple = sampler.Sample(time);
+                            break;
+                        }
+                    case FalloutNifAlphaController opacity:
+                        {
+                            var sampler = new FalloutNifFloatAnimation(_source, opacity.Interpolator);
+                            sample = time => alpha = sampler.Sample(time);
+                            break;
+                        }
+                    case FalloutNifMaterialColorController color:
+                        {
+                            var sampler = new FalloutNifPoint3Animation(_source, color.Interpolator);
+                            sample = time =>
+                            {
+                                var value = sampler.Sample(time);
+                                if (color.TargetColor == MaterialColorSelfIllumination) emissive = new(value.X, value.Y, value.Z);
+                                else if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
+                                    throw new NotSupportedException("Source constant specular channel differs from the material property.");
+                            };
+                            break;
+                        }
+                    default: throw new NotSupportedException("Direct material channel is unsupported.");
+                }
+                void Apply(float time)
+                {
+                    sample(time);
+                    if (!float.IsFinite(multiple) || !float.IsFinite(alpha) ||
+                        !float.IsFinite(emissive.X) || !float.IsFinite(emissive.Y) || !float.IsFinite(emissive.Z))
+                        throw new InvalidDataException("Source animated material value is nonfinite.");
+                    foreach (var material in materials)
+                    {
+                        if (material is ShaderMaterial lighting && lighting.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
+                        {
+                            lighting.SetShaderParameter("emissive_color", emissive);
+                            lighting.SetShaderParameter("emissive_multiple", multiple);
+                            var factor = lighting.GetShaderParameter("base_factor").AsVector4();
+                            factor.W = alpha;
+                            lighting.SetShaderParameter("base_factor", factor);
+                        }
+                        else if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
+                        {
+                            effect.SetMeta("opennv_source_emissive_color", emissive);
+                            effect.SetShaderParameter("source_emissive_multiple", multiple);
+                            effect.SetShaderParameter("source_color_multiplier", new Vector4(
+                                emissive.X * multiple, emissive.Y * multiple, emissive.Z * multiple, alpha));
+                        }
+                        else if (material is not StandardMaterial3D || property.EmissiveMultiple != multiple || property.Alpha != alpha ||
+                            property.Emissive.R != emissive.X || property.Emissive.G != emissive.Y || property.Emissive.B != emissive.Z)
+                            throw new NotSupportedException("Animated material has no shader owner.");
+                    }
+                }
+                if (clock.StartTime == clock.StopTime)
+                {
+                    if (!float.IsFinite(clock.StartTime) || !float.IsFinite(clock.Frequency) || clock.Frequency <= 0 ||
+                        !float.IsFinite(clock.Phase) || (clock.Flags & 0x30) != 0 || ((clock.Flags >> 1) & 3) is not (0 or 2) ||
+                        (clock.Flags & 8) == 0)
+                        throw new NotSupportedException("Constant material channel requires an active forward source clock.");
+                    Apply(clock.StartTime);
+                    continue;
+                }
+                FalloutNifControllerClock.Validate(clock, requireActive: false);
+                _directControllerSequences.Add(new RuntimeNifControllerSequence(
+                    $"DirectMaterial{controller.Block.Index}", (uint)(clock.Flags >> 1) & 3,
+                    clock.Frequency, clock.StartTime, clock.StopTime, [new RuntimeNifControllerChannel(Apply)])
+                { DirectClock = clock });
+            }
+        }
 
         private bool HasConstantAlpha(FalloutNifMaterialProperty material)
         {
@@ -2190,8 +2299,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
         private static void ApplyStencil(
             StandardMaterial3D material,
-            FalloutNifStencilProperty? stencil,
-            bool environmentPass)
+            FalloutNifStencilProperty? stencil)
         {
             if (stencil is null)
                 return;
@@ -2201,9 +2309,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException(
                     $"NIF stencil property {stencil.Block.Index} uses unsupported stencil semantics: " +
                     $"flags=0x{stencil.Flags:x4} reference={stencil.Reference} mask=0x{stencil.Mask:x8}.");
-            if (environmentPass)
-                throw new NotSupportedException(
-                    $"NIF stencil property {stencil.Block.Index} requires a double-sided environment pass.");
+            // The SLS material combines diffuse and environment sampling in
+            // one shader and inherits this cull mode for both contributions.
             material.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
         }
 

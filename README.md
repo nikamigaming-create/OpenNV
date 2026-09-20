@@ -11,7 +11,7 @@ OpenNV is under active development and is not a complete replacement for any
 retail campaign.
 
 - Fallout: New Vegas has the strongest live route: direct ESM/ESP/BSA loading,
-  a bounded Doc Mitchell opening state machine, stage-200 campaign state, live
+  shared source-script/dialogue execution, bounded stage-200 continuation, live
   player inventory, movement, activation, and validated cold Continue state.
 - Fallout 3 has direct source transport and bounded Vault 101 opening work, but
   it is not yet a complete playable campaign.
@@ -79,7 +79,13 @@ R toggles roofs, Q/E orbit, and the mouse wheel zooms. Continue restores the
 campaign's saved player; the map browser itself is a scene viewer. Combat,
 scripts, general door/elevation interactions and complete campaigns remain
 unfinished. The locally rebuilt Windows launcher is
-`desktop/release/win-unpacked/open-nevada-launcher.exe`.
+the Godot runtime itself, started by `scripts/Start-OpenNV.ps1`.
+
+Godot is the product entry point and the game. It starts on the native launcher
+screen, then the selected world is entered by the same `RuntimeCoordinator` in
+the same process. The Electron directory remains only for legacy JavaScript
+contract coverage and migration compatibility; normal product launch never
+starts it.
 
 ## Architecture rule
 
@@ -95,8 +101,8 @@ decoded by the runtime from the selected installation.
 
 ## Build and verify
 
-Requirements are .NET 9, Godot 4.7.2 Mono, Node.js 22 for the desktop launcher,
-and PowerShell 7.
+Requirements are .NET 9, Godot 4.7.2 Mono, and PowerShell 7. Node.js 22 is only
+needed when running the retained JavaScript compatibility tests.
 
 ```powershell
 dotnet build .\runtime\OpenNV.sln -c Release
@@ -104,15 +110,16 @@ npm test --prefix .\desktop
 .\scripts\Test-GodotRuntime.ps1 -Godot 'C:\Path\To\Godot_console.exe'
 ```
 
-Launch through the desktop app or pass a selected installation to Godot through
-the launcher-owned `--data-root`, `--campaign`, and `--save-path` arguments.
+Launch the Godot launcher/game with `scripts/Start-OpenNV.ps1`. For direct
+diagnostic routes, pass a selected installation to Godot through the
+launcher-owned `--data-root`, `--campaign`, and `--save-path` arguments.
 
 For normal Windows play, `scripts/Start-OpenNV.ps1` defaults to a native release
-export and registers it with the same launcher. Install matching Godot 4.7.2
-Mono export templates first. `-ValidateOnly` builds and checks without starting
-or registering the launcher; `-Configuration Debug` retains the project runner
-for debugging. A plain `dotnet build -c Release` does not make Godot's `--path`
-runner load release assemblies. The local export contains OpenNV code and
+export and starts that exported Godot executable directly with `--launcher`.
+Install matching Godot 4.7.2 Mono export templates first. `-ValidateOnly` builds
+and checks without starting the product; `-Configuration Debug` uses the Godot
+project runner for debugging. A plain `dotnet build -c Release` does not make
+Godot's `--path` runner load release assemblies. The local export contains OpenNV code and
 first-party resources; owned game data and saves remain external inputs.
 
 See [current work](docs/current-work.md), [architecture](docs/architecture.md),

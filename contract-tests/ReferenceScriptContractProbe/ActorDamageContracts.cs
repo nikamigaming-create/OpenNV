@@ -21,6 +21,11 @@ internal static class ActorDamageContracts
             var references = Join(Reference(0x91), Reference(0x92));
             var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
             UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x80); UInt(group, 12, 6); references.CopyTo(group, 24);
+            var decal = new byte[36];
+            Float(decal, 0, 12); Float(decal, 4, 20); Float(decal, 8, 8); Float(decal, 12, 30); Float(decal, 16, 50);
+            Float(decal, 20, 100); decal[29] = 2; decal[32] = 170; decal[34] = 4;
+            var impactData = new byte[24]; Float(impactData, 0, .08f);
+            byte[] Dataset(uint id, int extent) { var data = new byte[extent]; UInt(data, 24, 0x77); return Record("IPDS", id, Field("DATA", data)); }
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
                 Record("CREA", 1, Field("EDID", Text("SourceCreature")), Field("ACBS", acbs), Field("DATA", stats),
                     Field("PNAM", BitConverter.GetBytes(2u)), Field("INAM", BitConverter.GetBytes(4u)), Field("NAM4", BitConverter.GetBytes(6u))),
@@ -34,24 +39,59 @@ internal static class ActorDamageContracts
                 Setting(0x61, "fAVDNPCHealthEnduranceOffset", -1), Setting(0x62, "fAVDNPCHealthEnduranceMult", 5.25f),
                 Setting(0x63, "fAVDNPCHealthLevelMult", 5),
                 Armor(0x70, 500, 6, true), Armor(0x71, 1250, 0, false), Armor(0x72, 0, float.NaN, true),
+                Dataset(0x73, 36), Dataset(0x74, 40), Dataset(0x75, 48), Dataset(0x76, 44),
+                Record("IPCT", 0x77, Field("DATA", impactData), Field("DODT", decal), Field("DNAM", BitConverter.GetBytes(0x78u))),
+                Record("TXST", 0x78, Field("TX00", Text("Decals/source.dds")), Field("TX01", Text("Decals/source_n.dds"))),
                 Record("CELL", 0x80, Field("EDID", Text("SourceCell")), Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            foreach (var dataset in new uint[] { 0x73, 0x74, 0x75 })
+                Check(FalloutImpact.Resolve(records, Key(dataset), 6)?.Decal is
+                    { MinimumWidth: 12, MaximumWidth: 20, MinimumHeight: 8, MaximumHeight: 30, Depth: 50,
+                        Red: 170, Blue: 4, Diffuse: "textures/Decals/source.dds", Normal: "textures/Decals/source_n.dds" },
+                    "Impact lost source decal dimensions, color, texture or a valid legacy material extent.");
+            Check(FalloutImpact.Resolve(records, Key(0x73), 11) is null, "An absent late material selected a legacy impact.");
+            Reject(() => FalloutImpact.Resolve(records, Key(0x76), 6));
+            var invalidDecal = (byte[])decal.Clone(); Float(invalidDecal, 16, -1);
+            Reject(() => FalloutImpactDecal.Decode(invalidDecal, "source.dds", null));
+            invalidDecal = (byte[])decal.Clone(); Float(invalidDecal, 4, 1);
+            Reject(() => FalloutImpactDecal.Decode(invalidDecal, "source.dds", null));
             Check(FalloutActorHealthSource.Read(records, Key(0x10)).Health == 40.5f &&
                 FalloutActorHealthSource.Read(records, Key(0x11)).Health == 75 &&
                 FalloutActorHealthSource.Read(records, Key(0x12)).Health == 0 &&
                 FalloutActorHealthSource.Read(records, Key(0x14)).Health == 30 &&
                 FalloutActorHealthSource.Read(records, Key(0x15)).Health == 24.75f,
                 "NPC manual/autocalculated health, independent truncation/clamp or zero-health corpse changed.");
+            Check(FalloutActorHealthSource.StartsDead(records, Key(0x12)) &&
+                !FalloutActorHealthSource.StartsDead(records, Key(0x10)) &&
+                !FalloutActorHealthSource.StartsDead(records, Key(1)), "Source corpse admission ignored initial health.");
             Reject(() => FalloutActorHealthSource.Read(records, Key(0x13)));
             Check(FalloutArmorDefense.Read(records.GetEffective(Key(0x70))) == new FalloutArmorDefense(6, 5) &&
                 FalloutArmorDefense.Read(records.GetEffective(Key(0x71))) == new FalloutArmorDefense(0, 12.5f),
                 "Armor threshold or hundredths resistance changed.");
             Reject(() => FalloutArmorDefense.Read(records.GetEffective(Key(0x72))));
+            var outfit = FalloutActorArmorSelection.Select([
+                new(Key(0x70), 4, 2, 0), new(Key(0x71), 4, 5, 0), new(Key(0x72), 2, 1, 0),
+                new(Key(0x73), 4, 5, 0)]);
+            Check(outfit.SequenceEqual(new[] { Key(0x71), Key(0x72) }),
+                "Competing armor did not choose the stronger retained item with independent headwear and stable ties.");
+            Reject(() => FalloutActorArmorSelection.Select([new(Key(0x70), 4, float.NaN, 0)]));
             var parts = FalloutBodyPartData.Read(records.GetEffective(Key(2)));
             Check(parts.Parts[1] is { Type: 1, DamageMultiplier: 2, ReplacementModel: "meshes/Gore/source-head.nif", GoreBone: "Neck" },
                 "Post-BPND model/attachment fields escaped their source body part.");
             Reject(() => FalloutBodyPartData.Read(records.GetEffective(Key(5))));
+            var limbTable = parts with { Parts = [parts.Parts[1] with { Type = 7, ActorValue = 29, HealthPercent = 25 }] };
+            Check(limbTable.LimbCondition(29, 200, null) == 100 &&
+                limbTable.LimbCondition(29, 200, new Dictionary<byte, float> { [7] = 12.5f }) == 75 &&
+                limbTable.LimbCondition(29, 200, new Dictionary<byte, float> { [7] = 60 }) == 0,
+                "Limb actor values ignored source identity, fractional damage or cripple clamping.");
+            Reject(() => limbTable.LimbCondition(25, 200, null));
+            Reject(() => limbTable.LimbCondition(29, 0, null));
+            var vitals = new GameplayVitals(1, 200, 200, 70, 70, 0, 100, RadiationRads: 12.5f).Damage(.25f);
+            vitals.Validate();
+            var restoredVitals = JsonSerializer.Deserialize<GameplayVitals>(JsonSerializer.Serialize(vitals))!;
+            Check(restoredVitals.ExactHitPoints == 199.75f && restoredVitals.RadiationRads == 12.5f,
+                "Fractional player health or radiation was lost during persistence.");
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(cell);

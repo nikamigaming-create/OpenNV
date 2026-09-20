@@ -11,6 +11,11 @@ internal partial class NativeOwnedDialogueMenu : Control
     private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _choices = [];
     private readonly Button _skip;
     private readonly Action<Exception> _failed;
+    private IReadOnlyList<FalloutConversationChoice> _conversationChoices = [];
+    private Action<FalloutFormKey>? _choose;
+    private int _offset;
+    private int _selectedChoiceIndex;
+    private int _visibleChoiceCount;
     private bool _faulted, _submitted;
 
     internal NativeOwnedDialogueMenu(Action skip, Action<Exception> failed)
@@ -35,28 +40,20 @@ internal partial class NativeOwnedDialogueMenu : Control
 
     internal void Show(string speaker, FalloutConversation conversation, Action<FalloutFormKey> choose)
     {
-        foreach (var (tile, button) in _choices) { _tiles.Forget(tile); tile.Remove(); RemoveChild(button); button.QueueFree(); }
-        _choices.Clear(); _submitted = false;
+        ClearChoices();
+        _conversationChoices = conversation.Choices;
+        _choose = choose;
+        _offset = 0;
+        _selectedChoiceIndex = 0;
+        _visibleChoiceCount = 0;
+        _submitted = false;
         _tiles.Text[_speaker] = speaker;
         var speaking = conversation.Phase == "speaking";
         _tiles.Bind(_tiles.Root, "_ShowingText", speaking ? 1 : 0);
         _tiles.Text[_response] = conversation.Response?.Text ?? "";
         _skip.Visible = speaking;
-        foreach (var (choice, index) in conversation.Choices.Select((choice, index) => (choice, index)))
-        {
-            var tile = new XElement(_template); tile.SetAttributeValue("name", $"Topic_{index}"); _list.Add(tile);
-            _tiles.Bind(tile, "listindex", index); _tiles.Bind(tile, "_line_alpha", 255);
-            var text = tile.Elements("text").Single(); _tiles.Text[text] = choice.Text;
-            var font = _tiles.Font(text);
-            var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
-            { Text = choice.Text, DrawText = false, FocusMode = FocusModeEnum.All };
-            button.Pressed += () => { if (_submitted) return; _submitted = true; choose(choice.Topic); };
-            button.MouseEntered += () => Select(tile); button.FocusEntered += () => Select(tile);
-            AddChild(button); _choices.Add((tile, button));
-        }
         Visible = true;
         Layout();
-        if (_choices.Count > 0) Callable.From(_choices[0].Button.GrabFocus).CallDeferred();
     }
 
     public override void _Ready() { Layout(); }
@@ -79,26 +76,143 @@ internal partial class NativeOwnedDialogueMenu : Control
             _tiles.ResolutionConverter = 1 / scale;
             Scale = Vector2.One * scale;
             Size = _tiles.Screen = GetViewportRect().Size / scale;
-            var height = 0f;
-            foreach (var (tile, _) in _choices)
-            {
-                var rowHeight = _tiles.Number(tile.Elements("text").Single(), "height") + _tiles.Number(tile, "_VerticalSpacing");
-                _tiles.Bind(tile, "height", rowHeight); _tiles.Bind(tile, "_y", height); height += rowHeight;
-            }
-            height = Math.Max(height, _tiles.Number(_tiles.Root, "_MinListHeight"));
-            if (height > Size.Y - _tiles.Number(_speaker, "y")) throw new NotSupportedException("Dialogue choices require scrolling.");
-            _tiles.Bind(_list, "height", height);
-            _tiles.Bind(_list, "_number_of_visible_items", _choices.Count);
-            _tiles.Bind(_scrollbar, "_number_of_items", height / _tiles.Number(_list, "_scroll_delta"));
-            _tiles.Bind(_scrollbar, "_number_of_visible_items", height / _tiles.Number(_list, "_scroll_delta"));
-            foreach (var (tile, button) in _choices)
-            {
-                button.Position = _tiles.Position(tile); button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
-            }
-            if (_choices.Count > 0) Select(_choices[0].Tile);
+            BuildVisibleChoices();
             QueueRedraw();
         }
         catch (Exception error) { Fail(error); }
+    }
+
+    private void BuildVisibleChoices()
+    {
+        ClearChoices();
+        var sourceScrollUnit = _tiles.Number(_list, "_scroll_delta");
+        if (!float.IsFinite(sourceScrollUnit) || sourceScrollUnit <= 0)
+            throw new InvalidDataException("Dialogue list scroll unit is invalid.");
+        var available = Size.Y - _tiles.Number(_speaker, "y");
+        if (!float.IsFinite(available) || available <= 0)
+            throw new InvalidDataException("Dialogue list has no visible area.");
+
+        var y = 0f;
+        foreach (var (choice, index) in _conversationChoices.Skip(_offset).Select((choice, index) => (choice, index + _offset)))
+        {
+            var tile = new XElement(_template);
+            tile.SetAttributeValue("name", $"Topic_{index}");
+            _list.Add(tile);
+            _tiles.Bind(tile, "listindex", index);
+            _tiles.Bind(tile, "_line_alpha", 255);
+            var text = tile.Elements("text").Single();
+            _tiles.Text[text] = choice.Text;
+            var rowHeight = _tiles.Number(text, "height") + _tiles.Number(tile, "_VerticalSpacing");
+            if (!float.IsFinite(rowHeight) || rowHeight <= 0)
+                throw new InvalidDataException("Dialogue choice height is invalid.");
+            if (_choices.Count != 0 && y + rowHeight > available)
+            {
+                _tiles.Forget(tile);
+                tile.Remove();
+                break;
+            }
+            if (_choices.Count == 0 && rowHeight > available)
+            {
+                _tiles.Forget(tile);
+                tile.Remove();
+                throw new NotSupportedException("A dialogue choice is taller than the visible menu area.");
+            }
+            _tiles.Bind(tile, "height", rowHeight);
+            _tiles.Bind(tile, "_y", y);
+            var font = _tiles.Font(text);
+            var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
+            { Text = choice.Text, DrawText = false, FocusMode = FocusModeEnum.All };
+            button.Pressed += () =>
+            {
+                if (_submitted) return;
+                _submitted = true;
+                (_choose ?? throw new InvalidOperationException("Dialogue choice owner is absent."))(choice.Topic);
+            };
+            button.MouseEntered += () => { _selectedChoiceIndex = index; Select(tile); };
+            button.FocusEntered += () => { _selectedChoiceIndex = index; Select(tile); };
+            AddChild(button);
+            _choices.Add((tile, button));
+            y += rowHeight;
+        }
+
+        _visibleChoiceCount = _choices.Count;
+        var minHeight = _tiles.Number(_tiles.Root, "_MinListHeight");
+        _tiles.Bind(_list, "height", Math.Max(y, minHeight));
+        _tiles.Bind(_list, "_number_of_visible_items", _visibleChoiceCount);
+        _tiles.Bind(_list, "_scrollbar_vis", _conversationChoices.Count > _visibleChoiceCount ? 1 : 0);
+        _tiles.Bind(_scrollbar, "_current_value", _offset);
+        _tiles.Bind(_scrollbar, "_number_of_items", _conversationChoices.Count);
+        _tiles.Bind(_scrollbar, "_number_of_visible_items", _visibleChoiceCount);
+        foreach (var (tile, button) in _choices)
+        {
+            button.Position = _tiles.Position(tile);
+            button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
+        }
+        if (_choices.Count > 0)
+        {
+            if (_selectedChoiceIndex < _offset || _selectedChoiceIndex >= _offset + _visibleChoiceCount)
+                _selectedChoiceIndex = _offset;
+            var selected = _choices[_selectedChoiceIndex - _offset];
+            Select(selected.Tile);
+            Callable.From(selected.Button.GrabFocus).CallDeferred();
+        }
+    }
+
+    private void ClearChoices()
+    {
+        foreach (var (tile, button) in _choices)
+        {
+            _tiles.Forget(tile);
+            tile.Remove();
+            RemoveChild(button);
+            button.QueueFree();
+        }
+        _choices.Clear();
+    }
+
+    private void Scroll(int amount)
+    {
+        if (_conversationChoices.Count <= _visibleChoiceCount || _visibleChoiceCount == 0) return;
+        var next = Math.Clamp(_offset + amount, 0, _conversationChoices.Count - 1);
+        if (next == _offset) return;
+        _offset = next;
+        _selectedChoiceIndex = next;
+        Layout();
+    }
+
+    private void MoveSelection(int direction)
+    {
+        if (_conversationChoices.Count == 0 || _visibleChoiceCount == 0) return;
+        var next = Math.Clamp(_selectedChoiceIndex + direction, 0, _conversationChoices.Count - 1);
+        if (next == _selectedChoiceIndex) return;
+        if (next < _offset) _offset = next;
+        else if (next >= _offset + _visibleChoiceCount)
+            _offset = next - _visibleChoiceCount + 1;
+        _selectedChoiceIndex = next;
+        Layout();
+    }
+
+    public override void _Input(InputEvent inputEvent)
+    {
+        if (_submitted) return;
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false } key &&
+            key.PhysicalKeycode is Key.Pageup or Key.Pagedown && _conversationChoices.Count > _visibleChoiceCount)
+        {
+            Scroll(key.PhysicalKeycode == Key.Pageup ? -Math.Max(1, _visibleChoiceCount) : Math.Max(1, _visibleChoiceCount));
+            GetViewport().SetInputAsHandled();
+        }
+        else if (inputEvent is InputEventKey { Pressed: true, Echo: false } navigation &&
+            navigation.Keycode is Key.Up or Key.Down)
+        {
+            MoveSelection(navigation.Keycode == Key.Up ? -1 : 1);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_conversationChoices.Count > _visibleChoiceCount && inputEvent is InputEventMouseButton { Pressed: true } mouse &&
+            mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
+        {
+            Scroll(mouse.ButtonIndex == MouseButton.WheelUp ? -1 : 1);
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     private void Fail(Exception error) { _faulted = true; _submitted = true; _failed(error); }

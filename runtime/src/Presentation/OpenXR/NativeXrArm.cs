@@ -28,6 +28,18 @@ internal sealed class NativeXrArm
     internal Transform3D SourceGrip(bool aiming = false) => GripFromHand(_skeleton.GetBoneGlobalPose(_hand), aiming);
     internal bool CanReach(Transform3D hand)
         => ReachLimit(hand).Error <= .001f;
+
+    internal void ResetTracking()
+    {
+        _lastTrackedGrip = null;
+        _lastTrackedAim = null;
+        _tracked = false;
+        _reachError = 0;
+        _targetReachError = 0;
+        _shoulderShift = 0;
+        WristErrorMeters = 0;
+    }
+
     internal Transform3D ConstrainHandTarget(Transform3D hand)
     {
         var constrained = ReachLimit(hand);

@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedReferenceInteractionProbe
@@ -81,6 +82,103 @@ internal static class OwnedReferenceInteractionProbe
         var primitives = scene.References.Select(reference => FalloutReferencePrimitive.Read(records.GetEffective(reference.FormKey)))
             .Where(primitive => primitive is not null).ToArray();
         Require(primitives.Length > 0 && primitives.All(primitive => primitive!.X > 0), "Owned primitive bounds were lost.");
+        var bench = records.RuntimeFormKey(0x171b9a);
+        var benchCell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(records.GetEffective(bench))!.Value);
+        world.LoadCell(benchCell);
+        FalloutFormKey? recipeCategory = null;
+        var benchScripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effects.Add,
+            Command: (_, bindings, command, arguments) =>
+            {
+                Require(command.Equals("player.showrecipemenu", StringComparison.OrdinalIgnoreCase) && arguments.Count == 1,
+                    "Owned bench dispatched an unexpected command.");
+                var category = bindings.Form(arguments[0]);
+                Require(category.Signature == "RCCT", "Owned crafting category was not compiled into the bench script.");
+                Require(!FalloutRecipeCategory.Read(records, category.FormKey).IsSubcategory,
+                    "Owned bench category treated unrelated DATA bits as subcategory membership.");
+                recipeCategory = category.FormKey;
+            }));
+        var activation = benchScripts.Activate(bench, player);
+        Require(activation.Error is null && recipeCategory is not null &&
+            world.Get(bench).Read(world.Get(bench).Script!.Locals["User"]) == records.RuntimeFormId(player),
+            "Owned reloading bench lost GetActionRef, its reference local, or its recipe menu: " + activation.Error);
+        Console.WriteLine("OPENNV_OWNED_BENCH_ACTIVATION_PASS actionReference=true referenceLocal=true compiledCategory=true ordinaryUi=separate");
+        var brokenRobot = records.RuntimeFormKey(0x1572e6);
+        world.InitializeSourceCorpse(brokenRobot);
+        Require(world.IsDead(brokenRobot) && world.Health(brokenRobot).Current == 0,
+            "An owned zero-health creature started alive before its first damage query.");
+        var authored = FalloutAuthoredRagdoll.Read(records.GetEffective(brokenRobot)) ??
+            throw new InvalidDataException("Owned damaged actor lost its authored ragdoll.");
+        var ragdollAppearance = FalloutCreatureAppearanceResolver.Resolve(records, world.Get(brokenRobot).Base, brokenRobot);
+        Require(content.TryRead(ragdollAppearance.SkeletonPath, null, out var skeletonBytes, out _), "Owned ragdoll skeleton is absent.");
+        var skeleton = FalloutNifFile.Read(skeletonBytes);
+        var pose = FalloutNifAuthoredRagdoll.Bind(skeleton, authored);
+        Require(pose.Count == 10 && authored.BipedRotation is null && pose.GroupBy(row => row.Pose.Part).Any(group => group.Count() > 1) &&
+            MathF.Abs(pose[0].Pose.Position[2]) < .01f,
+            "Owned damaged pose lost repeated physical part ids or acquired a flying offset.");
+        Console.WriteLine("OPENNV_OWNED_AUTHORED_RAGDOLL_PASS orderedPhysicalBindings=true duplicateParts=true localUnits=true nativePose=separate");
+        world.LoadCell(FalloutCellSceneReader.Read(records, world.Get(brokenRobot).Cell));
+        var robotEffects = new List<FalloutReferenceScriptEffect>();
+        var robotScripts = new FalloutReferenceScripts(records, world, quests,
+            new((_, _) => false, robotEffects.Add, GetButtonPressed: _ => -1, IsInCombat: _ => false));
+        var robotActivation = robotScripts.Activate(brokenRobot, player);
+        Require(robotActivation.Error is null && robotEffects.Any(effect => effect.Kind == FalloutReferenceEffectKind.Message),
+            "Owned scripted corpse activation did not reach its repair message: " + robotActivation.Error);
+        var repairedRobot = records.RuntimeFormKey(0x1732d1);
+        var originalRobotCell = world.Get(repairedRobot).Cell;
+        Require(!world.IsEnabled(repairedRobot), "Repair fixture lost the source working actor's initial disabled state.");
+        world.MoveTo(repairedRobot, brokenRobot);
+        var repairScene = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Get(brokenRobot).Cell));
+        world.ReplaceResidentCell(repairScene);
+        Require(world.IsResident(repairedRobot) && !world.IsEnabled(repairedRobot) && world.Get(repairedRobot).Cell == originalRobotCell &&
+            repairScene.References.Single(reference => reference.FormKey == repairedRobot).Position.SequenceEqual(world.Placement(brokenRobot).Position),
+            "Owned MoveTo did not retain the real disabled companion in its destination cell.");
+        using (var repairedRestore = new FalloutReferenceWorld(records))
+        {
+            repairedRestore.Restore(world.Capture());
+            Require(repairedRestore.Placement(repairedRobot).Cell == world.Get(brokenRobot).Cell &&
+                repairedRestore.Get(repairedRobot).Cell == originalRobotCell,
+                "Cold repair placement lost source/destination cell ownership.");
+        }
+        Console.WriteLine("OPENNV_OWNED_REFERENCE_MOVE_PASS sourceIdentity=true disabledPreserved=true destinationResident=true coldState=true ordinaryRepair=separate");
+        var repairMenu = FalloutSourceMessage.Read(records.GetEffective(robotEffects.First(effect =>
+            effect.Kind == FalloutReferenceEffectKind.Message).Target!.Value)).ResolveButtons(records,
+                condition => condition.Function == 53 ? (float)world.Get(condition.FormArgument1).Read(condition.Argument2) :
+                    throw new NotSupportedException("Unexpected initial robot message condition."));
+        Require(repairMenu.ButtonIndices!.SequenceEqual(new[] { 0, 1, 3 }),
+            "Conditional message filtering renumbered its original script button indices.");
+        Require(robotScripts.Dispatch(brokenRobot, "GameMode", elapsedSeconds: .1).Error is null,
+            "Owned repair message waiting state failed before any selection.");
+        Console.WriteLine("OPENNV_OWNED_SCRIPTED_CORPSE_ACTIVATION_PASS zeroHealth=true repairMessage=true repairOutcome=unverified");
+        foreach (var id in new[] { 0x08267fu, 0x0cde03u })
+        {
+            var reference = records.RuntimeFormKey(id);
+            var actor = world.Get(reference);
+            // A supplied level isolates the source template contract from
+            // encounter-zone initialization, which is still rejected in play.
+            var selection = new FalloutActorTemplateSelection(1, 17);
+            selection.ResolveAll(records, actor.Base);
+            Require(!selection.Absent && selection.Capture().Choices.Count != 0, "Owned leveled actor did not retain a source choice.");
+            if (records.GetEffective(actor.Base).Signature == "CREA")
+            {
+                var appearance = FalloutCreatureAppearanceResolver.Resolve(records, actor.Base, reference, selection);
+                Require(appearance.Models.Count > 0 && content.TryResolve(appearance.SkeletonPath, null, out _), "Owned selected creature has no source geometry.");
+            }
+            else
+            {
+                // Equipment arbitration is a separate capability. Exercise
+                // the selected humanoid declaration without claiming that a
+                // competing source inventory has an accepted worn outfit.
+                foreach (ushort group in new ushort[] { 1, 64, 256, 512 })
+                    Require(FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), group, selection).Signature == "NPC_",
+                        "Owned humanoid template group changed actor type.");
+            }
+            var restored = new FalloutActorTemplateSelection(System.Text.Json.JsonSerializer.Deserialize<FalloutActorTemplateSnapshot>(
+                System.Text.Json.JsonSerializer.Serialize(selection.Capture()))!);
+            restored.ResolveAll(records, actor.Base);
+            Require(System.Text.Json.JsonSerializer.Serialize(restored.Capture()) ==
+                System.Text.Json.JsonSerializer.Serialize(selection.Capture()), "Owned actor selection changed on cold restore.");
+        }
+        Console.WriteLine("OPENNV_OWNED_ACTOR_TEMPLATE_PASS creature=true humanoid=true coherentGroups=true coldChoice=true ordinarySpawn=separate");
         Console.WriteLine($"OPENNV_OWNED_REFERENCE_INTERACTION_PASS cells=2 primitives={primitives.Length} stageGuard=true leaveMessages=true localGuard=true objectiveGuard=true orderedEffects=true crossReference=true reentry=true coldLocals=true parity=unverified");
     }
 }

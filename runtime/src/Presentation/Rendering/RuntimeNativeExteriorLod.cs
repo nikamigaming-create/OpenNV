@@ -28,11 +28,14 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private float _updateTime;
     private ulong _generation;
     private long _residentBytes;
-    internal const long CacheBudgetBytes = 256L * 1024 * 1024;
+    private int _detailRadius;
+    private bool _completeCover;
+    internal const long CacheBudgetBytes = 512L * 1024 * 1024;
     internal float ViewDistanceMeters => _catalog.LoadDistance * _units;
-    internal bool IsPrepared => _read is null && _uploads is null && _cache.Count != 0;
+    internal bool IsPrepared => _read is null && _uploads is null && (_catalog.Blocks.Count == 0 || _cache.Count != 0);
     internal object State => new
     {
+        sourceBlocks = _catalog.Blocks.Count,
         residentBlocks = _cache.Count,
         selectedBlocks = _selected.Count,
         residentBytes = _residentBytes,
@@ -63,6 +66,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
 
     internal void SetDetailGrid(FalloutExteriorGridScene grid)
     {
+        _detailRadius = grid.Radius;
         var cells = grid.Cells.Select(cell => cell.Coordinates ?? throw new InvalidDataException("LOD near grid is not spatial.")).ToArray();
         var minX = cells.Min(cell => cell.X); var maxX = cells.Max(cell => cell.X);
         var minY = cells.Min(cell => cell.Y); var maxY = cells.Max(cell => cell.Y);
@@ -81,6 +85,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         if (camera is null) return;
         camera.Far = Math.Max(camera.Far, ViewDistanceMeters);
         var position = camera.GlobalPosition;
+        NativeExteriorDetailBlend.SetRegion(position, 4096 * _units, _detailRadius, _completeCover);
         if (_read is { IsCompleted: true } read)
         {
             _read = null;
@@ -194,6 +199,8 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     {
         ++_generation;
         var cover = _catalog.ResidentCover(_selected, _cache.Keys.ToHashSet()).ToHashSet();
+        _completeCover = _selected.Count != 0 && _selected.All(selected => cover.Any(block => block.Contains(selected)) ||
+            _catalog.ResidentCover([selected], cover).Count != 0);
         foreach (var (block, resident) in _cache)
         {
             resident.Root.Visible = cover.Contains(block);

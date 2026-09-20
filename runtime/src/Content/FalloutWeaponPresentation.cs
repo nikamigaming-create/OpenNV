@@ -6,12 +6,24 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     string AnimationGroup, float AnimationMultiplier, byte Grip)
 {
     internal byte ClipSize { get; init; }
+    internal int ConditionHealth { get; init; }
     internal byte AmmoUse { get; init; }
     internal byte ReloadAnimation { get; init; }
     internal byte AttackAnimation { get; init; }
     internal float AttackMultiplier { get; init; } = 1;
     internal bool Automatic { get; init; }
+    internal float AttackShotsPerSecond { get; init; }
+    internal bool NpcsUseAmmo { get; init; }
+    internal int EquipmentType { get; init; }
+    internal uint WeaponAnimationType { get; init; }
+    internal uint OnHitBehavior { get; init; }
+    internal bool IsMeleeWeapon => EquipmentType is 3 or 4 && WeaponAnimationType is not (11 or 12);
+    internal bool IsMine => EquipmentType == 6 || WeaponAnimationType is 11 or 12;
+    internal float Reach { get; init; }
+    internal float MaximumRange { get; init; }
     internal string? ShellModel { get; init; }
+    // NAM0=None is distinct from a source ammo list whose rounds are absent.
+    internal bool HasAmmunitionSource { get; init; }
     internal string AttackGroup => AttackAnimation switch
     {
         26 => "attackleft",
@@ -43,13 +55,16 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal string ReloadGroup => ReloadAnimation < 23 ? "reload" + "abcdefghijklmnopqrswxyz"[ReloadAnimation] :
         throw new NotSupportedException($"WEAP reload group {ReloadAnimation} is unbound.");
 
+    internal static bool IsSupportedDnamExtent(int length) => length is
+        120 or 124 or 136 or 164 or 172 or 180 or 196 or 200 or 204;
+
     internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true)
     {
         var weapon = records.GetEffective(key);
         if (weapon.Signature != "WEAP") throw new InvalidDataException("Equipped weapon is not WEAP.");
         var fields = weapon.ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DNAM").Data.Span;
-        if (data.Length is not (120 or 124 or 136 or 200 or 204)) throw new NotSupportedException($"WEAP DNAM extent {data.Length} is unbound.");
+        if (!IsSupportedDnamExtent(data.Length)) throw new NotSupportedException($"WEAP DNAM extent {data.Length} is unbound.");
         var type = BinaryPrimitives.ReadUInt32LittleEndian(data);
         var group = type switch
         {
@@ -82,6 +97,10 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         }
         var itemData = fields.Single(field => field.Signature == "DATA").Data.Span;
         if (itemData.Length != 15) throw new NotSupportedException($"WEAP DATA extent {itemData.Length} is unbound.");
+        var equipment = fields.Single(field => field.Signature == "ETYP").Data.Span;
+        if (equipment.Length != sizeof(int)) throw new InvalidDataException("WEAP equipment type extent is invalid.");
+        var equipmentType = BinaryPrimitives.ReadInt32LittleEndian(equipment);
+        if (equipmentType is < -1 or > 13) throw new NotSupportedException($"WEAP equipment type {equipmentType} is unbound.");
         FalloutFormKey? Form(string signature)
         {
             var bytes = fields.SingleOrDefault(field => field.Signature == signature).Data;
@@ -91,11 +110,13 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             return id == 0 ? null : weapon.Plugin.AdjustFormId(id);
         }
         var ammunition = new List<FalloutFormKey>();
-        if (Form("NAM0") is { } ammo)
+        var ammunitionSource = Form("NAM0");
+        if (ammunitionSource is { } ammo)
         {
             var source = records.GetEffective(ammo);
             if (source.Signature == "AMMO") ammunition.Add(ammo);
             else if (source.Signature == "FLST")
+            {
                 foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "LNAM"))
                 {
                     if (field.Data.Length != 4) throw new InvalidDataException("Weapon ammunition list has an invalid FormID extent.");
@@ -103,6 +124,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
                     if (records.GetEffective(entry).Signature != "AMMO") throw new NotSupportedException("Weapon ammunition list contains a non-AMMO entry.");
                     ammunition.Add(entry);
                 }
+                if (ammunition.Count == 0) throw new NotSupportedException("Weapon ammunition list has no source AMMO entries.");
+            }
             else throw new NotSupportedException("WEAP ammunition is neither AMMO nor FLST.");
         }
         var sounds = new Dictionary<string, FalloutFormKey>();
@@ -112,14 +135,34 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
                 if (records.GetEffective(sound).Signature != "SOUN") throw new InvalidDataException("Weapon sound is not SOUN.");
                 sounds.Add(name, sound);
             }
+        if (!firstPerson)
+        {
+            sounds.Remove("shoot");
+            var spatial = fields.FirstOrDefault(field => field.Signature == "SNAM").Data;
+            if (!spatial.IsEmpty)
+            {
+                if (spatial.Length != 4) throw new InvalidDataException("Weapon spatial shot sound extent is invalid.");
+                if (weapon.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(spatial.Span)) is { } sound)
+                    sounds.Add("shoot", sound);
+            }
+        }
         return new(key, FalloutNpcAppearanceResolver.ReadModel(records, owner, "weapon", "MODL", "MODS", "MODD", 0, null), group, multiplier, data[13])
         {
             ClipSize = itemData[14],
+            ConditionHealth = BinaryPrimitives.ReadInt32LittleEndian(itemData[4..]),
             AmmoUse = data[14],
             ReloadAnimation = data[15],
             AttackAnimation = data[41],
             AttackMultiplier = BinaryPrimitives.ReadSingleLittleEndian(data[60..]),
             Automatic = (data[12] & 2) != 0,
+            AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
+            NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
+            EquipmentType = equipmentType,
+            WeaponAnimationType = type,
+            OnHitBehavior = BinaryPrimitives.ReadUInt32LittleEndian(data[52..]),
+            Reach = FalloutProjectile.Number(data, 8),
+            MaximumRange = FalloutProjectile.Number(data, 48),
+            HasAmmunitionSource = ammunitionSource is not null,
             Ammunition = ammunition,
             Sounds = sounds,
             ShellModel = FalloutNpcAppearanceResolver.PathField(weapon, "MOD2", "meshes", false, fields)

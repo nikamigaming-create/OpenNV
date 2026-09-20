@@ -22,9 +22,13 @@ coverage is still incomplete, and their execution hosts need further consolidati
 
 Named XML tile sources resolve within the menu; absent or ambiguous names fail.
 Removed choice subtrees release expression/text/art bindings. Oversized lists
-currently fail because scrolling is unbound. Global topic discovery, random and
-challenge flags, complete camera/pause policy and conversation snapshots remain
-unimplemented. Quest running state and reference enable state are serialized;
+page through the visible source choices; Up/Down navigation crosses pages.
+Default topics are discovered from the winning records. Random/challenge flags,
+complete camera/pause policy and conversation snapshots remain incomplete.
+Health-percentage predicates resolve subject, player target or explicit reference
+to the shared health owner; unsupported run-on contexts fail explicitly. See the
+[CTDA function and run-on definitions](https://tes5edit.github.io/fopdoc/FalloutNV/Records/Subrecords/CTDA.html).
+Quest running state and reference enable state are serialized;
 this is not mid-interaction persistence.
 
 ## Furniture and references
@@ -49,7 +53,9 @@ SwapTexture targets the authored geometry name and replaces only that instance's
 diffuse texture with a winning owned DDS. Changes expire with its presentation,
 matching the transient command contract. Controller-owned materials are rejected
 until their mutation binding is shared. Non-fading enable/disable controls
-visibility, processing and collision queries; source fades remain unsupported.
+visibility, processing and collision queries. The separate reference-fade owner
+retains pending state and has synthetic/native component checks; complete matched
+fade timing and pixels remain open.
 
 ## Evidence
 

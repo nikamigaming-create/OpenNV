@@ -31,7 +31,10 @@ internal static class ReferenceBotContracts
         bot.Start("actor", "interact", 1.5f); bot.Tick(.016f);
         if (activations != 0) throw new Exception("Bot activated the wrong reference.");
         observation = observation with { AimedReference = "actor" };
-        bot.Tick(.016f); bot.Tick(.016f);
+        bot.Tick(.016f);
+        if (input.YawRadians != 0 || input.PitchRadians != 0 || input.Forward || input.AimAt is not null)
+            throw new Exception("Activation changed the ray after observing its correct target.");
+        bot.Tick(.016f);
         if (activations != 1 || Phase(bot) != "awaiting-interaction")
             throw new Exception("Activation repeated or its receipt was mistaken for gameplay success.");
         observation = observation with { Paused = true, InteractionState = "conversation-active" };
@@ -40,10 +43,44 @@ internal static class ReferenceBotContracts
 
         observation = observation with { Paused = false, Position = Vector3.Zero, Camera = Vector3.UnitY, Target = new(0, 0, 6), Aim = new(0, 1, 6) };
         bot.Start("actor", "approach", 1);
-        for (var frame = 0; frame < 90; frame++) bot.Tick(1f / 60);
+        var obstructionReleases = 0;
+        for (var frame = 0; frame < 300; frame++)
+        {
+            bot.Tick(1f / 60);
+            if (Phase(bot) != "replanning-obstruction") continue;
+            obstructionReleases++;
+            if (input.Forward) throw new Exception("Obstruction replan retained movement input.");
+        }
+        if (obstructionReleases is < 1 or > 3) throw new Exception("Obstruction retries were absent or unbounded.");
         if (Phase(bot) != "blocked" || input.Forward) throw new Exception("Blocked capsule kept receiving movement.");
         bot.Stop();
         if (input.Forward) throw new Exception("Explicit stop retained a held input.");
+
+        var segments = 0;
+        var partial = new ReactiveReferenceBot(_ => observation,
+            (from, end) => { segments++; return [Vector3.Lerp(from, end, Math.Min(1, 2 / Vector3.Distance(from, end)))]; },
+            (intent, _) => input = intent);
+        partial.Start("actor", "travel", 1); partial.Tick(.016f);
+        observation = observation with { Position = new(0, 0, 2), Camera = new(0, 1, 2) };
+        partial.Tick(.016f);
+        if (Phase(partial) != "replanning-segment" || input.Forward)
+            throw new Exception("A verified partial route was mistaken for arrival or retained input at its boundary.");
+        partial.Tick(.016f);
+        if (segments != 2 || !input.Forward) throw new Exception("The next segment was not planned from observed movement.");
+        partial.Stop();
+        observation = observation with { Position = Vector3.Zero, Camera = Vector3.UnitY };
+
+        observation = observation with { Resident = false, TravelReady = true };
+        bot.Start("distant-door", "travel", 1); bot.Tick(.016f);
+        if (!input.Forward) throw new Exception("Known exterior destination could not be approached before streaming.");
+        observation = observation with { Position = observation.Target, Camera = observation.Target + Vector3.UnitY };
+        bot.Tick(.016f);
+        if (Phase(bot) != "waiting-for-target-residency" || input.Forward)
+            throw new Exception("Unloaded destination was incorrectly accepted as a live arrival.");
+        observation = observation with { Resident = true };
+        bot.Tick(.016f);
+        if (Phase(bot) != "arrival-observed") throw new Exception("Streamed destination did not complete travel.");
+        observation = observation with { Position = Vector3.Zero, Camera = Vector3.UnitY };
 
         var missing = new ReactiveReferenceBot(_ => throw new KeyNotFoundException("reference unloaded"), (_, _) => [], (_, _) => { });
         missing.Start("missing", "approach", 1); missing.Tick(.016f);

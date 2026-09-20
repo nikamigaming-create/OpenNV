@@ -46,9 +46,9 @@ corrections do not close a cell or a complete requirement.
 | R12 | All supported source race/sex/face/hair/eyes controls change authoritative player identity | Owned executable declarations bind 43 face controls to CTL; source presets, part and RGB editing owners added. Randomization, complete input and saved-state acceptance remain open |
 | R13 | Reflectron face preview updates correctly for each edit, with source geometry, pose and material | Source player and complete MTIdle animate in the direct preview; paired run40 fixes teal hair and the user accepted current hair/age presentation. Bounds, drag/zoom, complete edits and exact material agreement remain open |
 | R14 | Walk to/use the Vigor Tester; original device/UI and SPECIAL allocation/results | Original allocation and ordinary acceptance execute; framing, timing and complete matched acceptance remain open |
-| R15 | Complete psychology dialogue, choices, response effects and source sequencing | Player furniture/trigger state and original conversation-choice execution remain unbound |
+| R15 | Complete psychology dialogue, choices, response effects and source sequencing | Shared furniture/trigger and conversation owners are connected. September 20 source/native checks pass 14 choices and 18 responses; full ordinary audiovisual acceptance remains open |
 | R16 | Original tag skill and trait menus, all source choices, validation and results | Functional substitute entries remain; source UI and route open |
-| R17 | Farewell, inventory grants, control release and quest transitions all execute correctly | Partial native owners exist; complete ordinary farewell unverified |
+| R17 | Farewell, inventory grants, control release and quest transitions all execute correctly | September 20 owned check passes five INFOs, real grants, hardcore answer, door/Pip-Boy state, source timer and subsequent quests; fresh complete ordinary presentation remains open |
 | R18 | Every room reference/setpiece loads at the winning source transform with correct geometry/material/collision | Room draws; full reference-to-runtime-to-pixel reconciliation open |
 | R19 | Tutorial skull and every lootable room item/container support correct interaction, inventory and persistence | Source references exist; complete interaction sweep pending |
 | R20 | Working pool table, balls and cue interactions with authoritative physics and persistence | Ordinary interaction/physics acceptance pending |
@@ -56,20 +56,24 @@ corrections do not close a cell or a complete requirement.
 | R22 | HDR/image-space effects, fade, blur, double vision and depth of field bind to their actual source lifetimes/parameters | Cinematic/fade owner binds; several effect channels explicitly unbound |
 | R23 | Clock, fan and all animated/effect objects remain stable/correct across a continuous frame sequence | Fan now visibly moves on instance-owned clock; reported clock flicker unresolved |
 | R24 | All HUD, prompts, dialogue/menu surfaces and fonts use their owned definitions with correct timing | Several default Godot menus still present; full UI sweep open |
-| R25 | Ordinary doors, exterior/interior streaming, actors and return travel retain world state | Current route/recovery incomplete; one-pair restrictions remain |
+| R25 | Ordinary doors, exterior/interior streaming, actors and return travel retain world state | Source XTEL and moving exterior residency owners exist; earlier exit/return and adjacent-cell saves passed. Complete connected travel, missing resources and interruption/cold-state coverage remain open |
 | R26 | Easy Pete encounter: source actor pose, dialogue choices, voices and resulting state | Direct ordinary encounter pending |
 | R27 | Sunny/Cheyenne meet, dialogue, packages, follow/travel and setpieces execute from owned data | Earlier owners exist; direct route binding open |
-| R28 | Sunny's weapon/target/creature tutorial: aiming, ammo, hits, damage, AI, quest updates and rewards | Direct combat/creature owners not fully connected |
-| R29 | Remaining Sunny tutorial branches, ingredients, crafting, dialogue and completion | Entire source-defined quest traversal pending |
-| R30 | Save, exit, cold Continue during each major phase; quest/actor/item/UI-relevant state restores correctly | Native save does not yet persist the complete recovered graph |
+| R28 | Sunny's weapon/target/creature tutorial: aiming, ammo, hits, damage, AI, quest updates and rewards | Shared firing, damage, bounded NPC AI, corpse inventory and persistence exist. Fresh gecko ragdoll bounds fail; complete Sunny progression/rewards and relevant combat remain open |
+| R29 | Remaining Sunny tutorial branches, ingredients, crafting, dialogue and completion | Source recipes, transactional crafting and native recipe menu are connected; ordinary station use and the entire source-defined tutorial traversal remain pending |
+| R30 | Save, exit, cold Continue during each major phase; quest/actor/item/UI-relevant state restores correctly | Inventory/reference/quest and selected corpse/magazine state have cold-state checks. Active interactions still reject saves; complete phase restoration is open |
 | R31 | Continuous matched retail/OpenNV run with aligned input/events/state/audio/UI/final frames and visible telemetry loss | SBS harness exists; full aligned run and evidence lanes incomplete |
-| R32 | Flat and physical OpenXR share this gameplay/save path and pass their interaction/presentation checks | Physical headset recovery acceptance not run |
+| R32 | Flat and physical OpenXR share this gameplay/save path and pass their interaction/presentation checks | September 20 headless attachment/contact checks pass. Integrated simulator input/pixels and physical headset recovery acceptance remain separate open requirements |
 | R33 | Every installed DLC initializes its source quests, messages, radios, item grants, form/leveled-list changes and affected world/vendor state, with correct timing and persistence | Added explicitly at the user's request on 2026-09-04. Four pack scripts execute; expansion startup scripts still reach unbound expression, form-list, faction or world-state operations. No DLC completion claim |
 | R34 | Every Goodsprings interior and exterior cell in a source-derived scope manifest supports its objects, actors, effects, interactions, connected travel and quest progression, with cold persistence and matched acceptance | Added September 6 at the user's request. Complete scope inventory and cell-by-cell runtime/ordinary/parity evidence are absent; do not assume a name search defines the whole area |
 | R35 | Shared data-driven runtime behavior replaces scene/actor/quest-specific success paths and replacement interfaces; unrelated source instances/cells and winning overrides demonstrate reuse | Added September 6 at the user's request. Existing code and tests are replaceable greenfield; source values inside bespoke orchestration do not prove generality |
 | R36 | A separate development lab loads/tears down cells and actors, stresses animation/physics/interactions/scripts, tests cold state, exposes source-to-runtime-to-pixel failures and reproduces them without repetitive manual play | Added September 6 at the user's request. Some component tools exist; the integrated lab and complete batch scope are not verified. Lab manipulation never substitutes for ordinary-game acceptance |
 
 ## Evidence and updates
+
+Evidence wording was reconciled with current code on September 20. Rows remain
+open at their complete scope even when individual owners/tests pass. Current
+work and status identify the active candidate and current failures.
 
 Current component evidence and limitations are in current-work.md,
 scene-defects.md and the linked technical contracts. Previous reports are

@@ -13,6 +13,43 @@ internal partial class RuntimeNativeNpc
     private NativeHeadTrackingPose? _headPose;
     private string? _headOverrideName;
     private string? _headError;
+    private Func<Vector3>? _conversationTarget;
+    private float _conversationTurnSpeed;
+    private Vector3 _conversationScale;
+    private bool _conversationWasTraveling;
+
+    internal void BeginConversationFacing(Func<Vector3> targetPoint, float turnDegreesPerSecond)
+    {
+        if (!float.IsFinite(turnDegreesPerSecond) || turnDegreesPerSecond <= 0)
+            throw new InvalidDataException("Dialogue turn speed must be positive.");
+        _conversationTarget = targetPoint;
+        _conversationTurnSpeed = Mathf.DegToRad(turnDegreesPerSecond);
+        _conversationScale = GlobalBasis.Scale;
+        _conversationWasTraveling = _travelActive;
+        if (_conversationWasTraveling) PlayLocomotion(false);
+    }
+
+    internal void EndConversationFacing()
+    {
+        _conversationTarget = null;
+        if (_conversationWasTraveling && _travelActive && Combat?.Dead != true) PlayLocomotion(true);
+        _conversationWasTraveling = false;
+    }
+
+    private void AdvanceConversationFacing(float delta)
+    {
+        // Furniture owns the body transform while seated or entering/exiting.
+        // Its speaker still uses the ordinary bounded head pose below.
+        if (_conversationTarget is null || _sitting != 0) return;
+        var direction = _conversationTarget() - GlobalPosition;
+        direction.Y = 0;
+        if (direction.LengthSquared() < .000001f) return;
+        var current = GlobalBasis.Orthonormalized().GetRotationQuaternion();
+        var target = Basis.LookingAt(direction.Normalized(), Vector3.Up).GetRotationQuaternion();
+        var angle = current.AngleTo(target);
+        if (angle < .00001f) return;
+        GlobalBasis = new Basis(current.Slerp(target, Math.Min(1, delta * _conversationTurnSpeed / angle))).Scaled(_conversationScale);
+    }
 
     internal object HeadTrackingState => new
     {
@@ -31,6 +68,7 @@ internal partial class RuntimeNativeNpc
         revision = _headTargets?.Revision,
         targetRevision = _headTargets?.TargetRevision,
         animationOverride = _headOverrideName,
+        conversationFacing = _conversationTarget is not null,
         pose = _headPose?.State,
         error = _headError,
         unbound = new[] { "automatic-default-acquisition", "combat-targets", "eye-aiming", "full-body-look", "target-save-restoration", "matched-native-pose-and-frame" },
@@ -101,7 +139,8 @@ internal partial class RuntimeNativeNpc
         try
         {
             _headTargets.Advance(delta, target => _headTargetPoint!(target) is not null);
-            var point = _headTargets.SelectedTarget is { } target ? _headTargetPoint!(target) : null;
+            var point = _conversationTarget is not null ? _conversationTarget() :
+                _headTargets.SelectedTarget is { } target ? _headTargetPoint!(target) : null;
             var animationOverride = _headOverrideName is null ? 0 :
                 Skeleton.FloatExtraData.Get(_headPart!.TargetNode, _headOverrideName);
             _headPose?.Publish(point, animationOverride);

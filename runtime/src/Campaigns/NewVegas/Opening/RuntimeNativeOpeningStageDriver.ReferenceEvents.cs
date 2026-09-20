@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private RuntimeNativeConversation? _conversation;
+    private FalloutBodyPartData? _dialoguePlayerBodyParts;
     private FalloutReferenceScripts? _resultScripts;
     private FalloutQuestStages? _stageResults;
     private OpenNV.Runtime.Gameplay.State.FalloutPipBoyState? _pipBoy;
@@ -26,7 +27,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                     .Single(npc => npc.Appearance.Reference == actor).CurrentFurniture == furniture, ApplyReferenceEffect,
                 _scripts.MessageResults.Take, actor => _speech!.IsTalking(actor), ActorValue, IsPlayerTagSkill, _globals,
-                ApplyNativeSourceCommand));
+                ApplyNativeSourceCommand, IsInCombat));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -48,8 +49,44 @@ internal partial class RuntimeNativeOpeningStageDriver
             if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
                 return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
             throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
-        }, results.ExecuteResult, _scripts.SaidInfos);
+        }, results.ExecuteResult, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
+        {
+            0 => FalloutCellSceneReader.ParentCell(_pluginStack.GetEffective(speaker)),
+            1 => _activeCell,
+            2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) is { } reference
+                ? FalloutCellSceneReader.ParentCell(_pluginStack.GetEffective(reference))
+                : null,
+            _ => null,
+        }, actor =>
+        {
+            if (_pluginStack.RuntimeFormId(actor) == 0x14)
+                return Vitals.ExactHitPoints / Vitals.MaximumHitPoints;
+            var health = _scripts.References!.Health(actor);
+            var maximum = health.Base + health.Permanent + health.Temporary;
+            return maximum <= 0 ? 0 : Math.Clamp(health.Current / maximum, 0, 1);
+        }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates);
         AddChild(_conversation);
+    }
+
+    private float DialogueActorValue(FalloutFormKey actor, int value)
+    {
+        if (_pluginStack.RuntimeFormId(actor) == 0x14)
+        {
+            if (value == 16) return Vitals.ExactHitPoints;
+            if (value == 12) return Vitals.ActionPoints;
+            if (value == 54) return Vitals.RadiationRads;
+            if (value is >= 25 and <= 30)
+            {
+                _dialoguePlayerBodyParts ??= FalloutBodyPartData.Read(_pluginStack.GetEffective(_pluginStack.RuntimeFormKey(0x1d)));
+                return _dialoguePlayerBodyParts.LimbCondition(value, Vitals.MaximumHitPoints, Vitals.LimbDamage);
+            }
+            return _playerSkills.Value(value);
+        }
+        var world = _scripts.References!;
+        if (value == 16) return world.Health(actor).Current;
+        if (value is >= 25 and <= 30)
+            return world.BodyParts(actor).LimbCondition(value, world.HealthSource(actor).Health, world.Get(actor).Injury?.LimbDamage);
+        throw new NotSupportedException($"Dialogue actor {actor} value {value} has no state owner.");
     }
 
     internal FalloutNpcAppearance PlayerAppearance => FalloutNpcAppearanceResolver.Resolve(_pluginStack, _raceSexContract.Player,
@@ -59,6 +96,9 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal int TakeMessageButton(FalloutFormKey caller) => _scripts.MessageResults.Take(caller);
     internal bool IsTalking(FalloutFormKey actor) => _speech?.IsTalking(actor) ??
         throw new InvalidOperationException("Actor speech owner is absent.");
+    internal bool IsInCombat(FalloutFormKey actor) => _pluginStack.RuntimeFormId(actor) == 0x14
+        ? GetTree().GetNodesInGroup("OpenNVNativeCombatActors").OfType<RuntimeNativeActorCombat>().Any(owner => owner.EngagedWith(actor))
+        : !_scripts.References!.IsDead(actor) && _scripts.References.Get(actor).Engagement is { Action: not "idle" };
     internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed) =>
         (_conversation ?? throw new InvalidOperationException("Conversation owner is absent."))
             .Request(speaker, package.Target, package.Topic, completed);

@@ -114,6 +114,31 @@ public partial class NativeNifInstanceAudit
             pose.RestoreAuthoredPose();
             for (var frame = 0; frame < 40; frame++) actor._Process(1.0 / 60);
             Require(actor.AnimationError is null, "Actor head owner failed without a KF overlay.");
+            var turnRate = FalloutGameSettingFloats.Read(records, "fCharacterDefaultTurningSpeed");
+            var origin = actor.GlobalPosition;
+            var scale = actor.GlobalBasis.Scale;
+            var conversationPoint = origin + new Vector3(2, 1.7f, 1);
+            actor.BeginConversationFacing(() => conversationPoint, turnRate);
+            foreach (var offset in new[] { new Vector3(2, 1.7f, 1), new Vector3(-2, 1.2f, 1), new Vector3(0, 1.7f, -2) })
+            {
+                conversationPoint = origin + offset;
+                for (var frame = 0; frame < 360; frame++)
+                {
+                    var before = actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
+                    actor._Process(1.0 / 60);
+                    Require(before.AngleTo(actor.GlobalBasis.Orthonormalized().GetRotationQuaternion()) <= Mathf.DegToRad(turnRate / 60) + .001f,
+                        "Dialogue facing exceeded the winning actor turn rate.");
+                }
+                var horizontal = new Vector3(offset.X, 0, offset.Z).Normalized();
+                Require((-actor.GlobalBasis.Z).Normalized().Dot(horizontal) > .999f, "Speaker did not face the moving conversation target.");
+                Require(actor.GlobalPosition.IsEqualApprox(origin) && actor.GlobalBasis.Scale.IsEqualApprox(scale), "Dialogue turn moved or resized the actor.");
+            }
+            actor.EndConversationFacing();
+            var released = actor.GlobalBasis;
+            conversationPoint = origin + Vector3.Right * 3;
+            actor._Process(1);
+            Require(actor.GlobalBasis.IsEqualApprox(released), "Ended dialogue retained its body-turn target.");
+            GD.Print("OPENNV_OWNED_DIALOGUE_FACING_PASS movingTarget=true sourceTurnRate=true positionPreserved=true released=true");
             GD.Print("OPENNV_OWNED_HEAD_TRACKING " + JsonSerializer.Serialize(new
             {
                 head = actor.HeadTrackingState,

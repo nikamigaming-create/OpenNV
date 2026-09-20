@@ -1,14 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
+import { createOfflineState, mergeRuntimeState } from "./contract.mjs";
 import { installLocalZip, removeLocalInstall } from "./local-mod-installer.mjs";
 import { synchronizeManagedLayers, updateManagedLayer, validateManagedLayers } from "./gate-vortex-layers.mjs";
-import { createLaunchInvocation } from "./native-launch-contract.mjs";
-import { resolveRuntimeCampaign, validateRuntimeManifest } from "./runtime-manifest-contract.mjs";
+import { validateRuntimeManifest } from "./runtime-manifest-contract.mjs";
 import { registeredOwnedDataRoot } from "./owned-install-registration.mjs";
 import {
   appendSourceRoot,
@@ -1125,128 +1123,12 @@ async function chooseModProfile(kind) {
   return { ok: true, message: profile.message };
 }
 
-function runtimeCommand(installed) {
-  const relativeExecutable = installed.manifest.runtime?.executables?.[process.platform];
-  const packagedExecutable = relativeExecutable ? path.join(installed.root, relativeExecutable) : null;
-  if (packagedExecutable && existsSync(packagedExecutable)) {
-    return { executable: packagedExecutable, prefixArguments: [] };
-  }
-  const developmentGodot = process.env.OPENNV_GODOT || configuredRuntime().godotExecutable;
-  if (typeof developmentGodot === "string" && path.isAbsolute(developmentGodot) && existsSync(developmentGodot) &&
-      existsSync(path.join(installed.root, "project.godot"))) {
-    return { executable: developmentGodot, prefixArguments: ["--path", installed.root] };
-  }
-  return null;
-}
-
 function launch(request) {
-  const validatedRequest = validateLaunchRequest(request);
-  const { campaign, ttwOpening, enableJam, enableVr } = validatedRequest;
-  const installed = runtimeManifest();
-  if (!installed) {
-    return { ok: false, code: "runtime-not-found", message: "Choose an installed OpenNV runtime before launching a world." };
-  }
-  if (!installed.manifest.runtime?.canLaunch) {
-    return { ok: false, code: "runtime-slice-not-playable", message: installed.manifest.runtime?.label || "This runtime slice is not playable yet." };
-  }
-  const selectedTtwProfile = campaign.id === "ttw" ? readTtwProfile() : null;
-  if (campaign.id === "ttw") {
-    const opening = selectedTtwProfile?.openings?.[ttwOpening];
-    if (!opening?.interactiveReady) {
-      return {
-        ok: false,
-        code: "ttw-opening-not-ready",
-        message: opening?.blocker || "The selected TTW opening has no interactive world runtime yet."
-      };
-    }
-  }
-  const availability = resolveRuntimeCampaign(installed.manifest, campaign);
-  if (!availability.launchable) {
-    return { ok: false, code: "campaign-not-ready", message: availability.status };
-  }
-  if (!availability.presentations[validatedRequest.presentation]?.launchable) {
-    return {
-      ok: false,
-      code: "presentation-not-ready",
-      message: availability.presentations[validatedRequest.presentation]?.status || availability.status
-    };
-  }
-  if (enableJam && !installed.manifest.campaigns.some((entry) => entry.id === "JAM" && entry.launchable)) {
-    return { ok: false, code: "jam-not-ready", message: "JAM is not ready in this runtime." };
-  }
-  const openXr = installed.manifest.runtime?.presentationModes?.openxr;
-  if (enableVr && !openXr?.launchable) {
-    return { ok: false, code: "openxr-not-ready", message: "OpenXR is not launchable in this runtime." };
-  }
-  const command = runtimeCommand(installed);
-  if (!command) {
-    return { ok: false, code: "runtime-executable-missing", message: `The runtime has no ${process.platform} executable. Run scripts/Start-OpenNV.ps1 once to register the development runtime and Godot.` };
-  }
-
-  const fallout1Profile = readFo1Profile();
-  const fallout2Profile = readFo2Profile();
-  const fallout3Profile = readFo3Profile();
-  const newVegasProfile = readNewVegasProfile();
-  const modStack = readModStack();
-  const ttwProfile = selectedTtwProfile || readTtwProfile();
-  const jamProfile = readJamProfile();
-  if (campaign.id === "fallout1" && !fallout1Profile.ready) {
-    return { ok: false, code: "fallout1-profile-not-ready", message: fallout1Profile.message };
-  }
-  if (campaign.id === "fallout1") {
-    mkdirSync(path.dirname(fallout1Profile.savePath), { recursive: true });
-  }
-  if (campaign.id === "fallout2") {
-    if (!fallout2Profile.ready) {
-      return { ok: false, code: "fallout2-profile-not-ready", message: fallout2Profile.reason || fallout2Profile.message };
-    }
-    mkdirSync(path.dirname(fallout2Profile.savePath), { recursive: true });
-  }
-  if (campaign.id === "fallout3" && !fallout3Profile.ready) {
-    return { ok: false, code: "fallout3-profile-not-ready", message: fallout3Profile.message };
-  }
-  if (campaign.id === "fallout3") {
-    mkdirSync(path.dirname(fallout3Profile.savePath), { recursive: true });
-  }
-  if (campaign.id === "newvegas") {
-    if (!newVegasProfile.ready) {
-      return { ok: false, code: "newvegas-profile-not-ready", message: newVegasProfile.message };
-    }
-    mkdirSync(path.dirname(newVegasProfile.savePath), { recursive: true });
-  }
-  if (campaign.id === "ttw") {
-    if (!ttwProfile.ready) {
-      return { ok: false, code: "ttw-profile-not-ready", message: ttwProfile.message };
-    }
-    mkdirSync(path.dirname(ttwProfile.savePath), { recursive: true });
-  }
-  if (enableJam && !jamProfile.ready) {
-    return { ok: false, code: "jam-profile-not-ready", message: jamProfile.message };
-  }
-  const runtimeArguments = createRuntimeArguments(
-    validatedRequest,
-    {
-      fallout1Profile,
-      fallout2Profile,
-      fallout3Profile,
-      newVegasProfile,
-      ttwProfile,
-      jamProfile,
-      modStack
-    });
-  const invocation = createLaunchInvocation(command, runtimeArguments);
-  const child = spawn(invocation.executable, invocation.arguments, {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true
-  });
-  child.unref();
-  const presentationLabel = {
-    "first-person": "FPS",
-    "hex-tactical": "Hex",
-    openxr: "VR"
-  }[validatedRequest.presentation] || validatedRequest.presentation;
-  return { ok: true, message: `${campaign.title} ${presentationLabel} launch handed to the local OpenNV runtime.` };
+  return {
+    ok: false,
+    code: "godot-native-entry-point",
+    message: "The product launcher is the Godot game now. Start scripts/Start-OpenNV.ps1; the selected world enters the same process."
+  };
 }
 
 function createWindow() {

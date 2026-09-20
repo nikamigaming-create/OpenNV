@@ -234,6 +234,8 @@ internal sealed record RuntimeConfiguration(
             provenance.Validate();
 
         RequirePositive(World.GameUnitsToMeters, nameof(World.GameUnitsToMeters));
+        if (World.MinimumExteriorGridDiameter < 1 || World.MinimumExteriorGridDiameter % 2 == 0)
+            throw new InvalidDataException("Minimum exterior grid diameter must be positive and odd.");
         RequirePositive(Simulation.PhysicsTicksPerSecond, nameof(Simulation.PhysicsTicksPerSecond));
         RequirePositive(Simulation.GravityMetersPerSecondSquared, nameof(Simulation.GravityMetersPerSecondSquared));
         RequirePositive(Performance.SampleIntervalSeconds, nameof(Performance.SampleIntervalSeconds));

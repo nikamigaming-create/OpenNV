@@ -84,6 +84,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 node.HasMeta("opennv_reference_form_key") && identities.TryGetValue(node.GetMeta("opennv_reference_form_key").AsString(), out var identity)
                     ? identity : (FalloutFormKey?)null;
             if (key is not { } found) continue;
+            if (!retained.Contains(found)) continue; // Inactive warm 3D has no gameplay or contact residency.
             nodes.Add(found, node);
             _nodeReferences.Add(node.GetInstanceId(), found);
         }
@@ -196,7 +197,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             return;
         }
         var type = binding.Signature;
-        if (type is "NPC_" or "CREA" && FalloutDialogueSpeaker.AllowsPlayerDialogue(_records, binding.Reference.Base))
+        if (type is "NPC_" or "CREA" && FalloutDialogueSpeaker.AllowsPlayerDialogue(_records, binding.Reference.Base, binding.Instance.Templates))
         {
             _host.Apply(new(FalloutReferenceEffectKind.Conversation, reference, reference, _records.RuntimeFormKey(0x14)));
             return;

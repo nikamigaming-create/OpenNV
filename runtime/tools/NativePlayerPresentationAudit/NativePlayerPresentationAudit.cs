@@ -72,9 +72,9 @@ public partial class NativePlayerPresentationAudit : Node3D
                                 if (!held.Automatic && held.AnimationGroup is "1hp" or "2hr" or "2ha" && held.Ammunition.Count != 0)
                                 {
                                     var shot = FalloutWeaponShot.Read(records, held.Form, held.Ammunition[0]);
-                                    if (shot.Projectile.Hitscan && shot.Projectiles == 1)
+                                    if (shot.Projectile.IsInstantRayAttack && shot.Projectiles == 1)
                                     {
-                                        shot.RequireHitscan();
+                                        shot.RequireInstantRay();
                                         try { actor.PrepareMuzzle(shot.Projectile); }
                                         catch (NotSupportedException error) { GD.Print($"OPENNV_MUZZLE_PRESENTATION_UNBOUND weapon={held.Form} error={error.Message}"); }
                                         var muzzle = actor.ProjectileTransform();

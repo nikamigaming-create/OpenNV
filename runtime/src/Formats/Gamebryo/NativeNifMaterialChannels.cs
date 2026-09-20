@@ -7,6 +7,8 @@ internal sealed class RuntimeNativeNifMaterialChannels
     private sealed record Target(FalloutNifFile Source, FalloutNifObject Property, IReadOnlyList<Material> Materials);
     private readonly Dictionary<(string Node, string Property), List<Target>> _targets = [];
 
+    internal bool HasSourceTarget(string node) => _targets.Keys.Any(key => key.Node == node);
+
     internal void Add(string node, FalloutNifFile source, FalloutNifObject property, IReadOnlyList<Material> materials)
     {
         var key = (node, property.Block.TypeName);
@@ -39,6 +41,39 @@ internal sealed class RuntimeNativeNifMaterialChannels
             var sampler = new FalloutNifFloatAnimation(source, link.Interpolator);
             var materials = EffectMaterials(target);
             return time => { var value = sampler.Sample(time); foreach (var material in materials) NativeNifTextureTransform.Apply(material, operation, value); };
+        }
+        if (link.ControllerType == "BSMaterialEmittanceMultController" && link.Variable1.Length == 0 &&
+            target.Property is FalloutNifMaterialProperty)
+        {
+            if (controllers.OfType<FalloutNifEmittanceController>().Count() != 1)
+                throw new InvalidDataException("External KF emittance has no unique source controller.");
+            var sampler = new FalloutNifFloatAnimation(source, link.Interpolator);
+            return time =>
+            {
+                var multiple = sampler.Sample(time);
+                if (!float.IsFinite(multiple)) throw new InvalidDataException("External KF emittance is nonfinite.");
+                foreach (var material in target.Materials)
+                {
+                    if (material is ShaderMaterial lighting && lighting.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
+                        lighting.SetShaderParameter("emissive_multiple", multiple);
+                    else if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
+                        NativeNifEffectMaterial.ApplyEmissiveMultiple(effect, multiple);
+                    else throw new NotSupportedException("External KF emittance material is unsupported.");
+                }
+            };
+        }
+        if (link.ControllerType == "NiMaterialColorController" && link.Variable1 == "SPEC" &&
+            target.Property is FalloutNifMaterialProperty property)
+        {
+            if (controllers.OfType<FalloutNifMaterialColorController>().Count(controller => controller.TargetColor == 2) != 1)
+                throw new InvalidDataException("External KF specular channel has no unique source controller.");
+            var sampler = new FalloutNifPoint3Animation(source, link.Interpolator);
+            return time =>
+            {
+                var value = sampler.Sample(time);
+                if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
+                    throw new NotSupportedException("External KF specular differs from its source constant material value.");
+            };
         }
         if (link.ControllerType == "NiMaterialColorController" && link.Variable1 == "SELF_ILLUM" &&
             target.Property is FalloutNifMaterialProperty)
@@ -101,6 +136,7 @@ internal sealed class RuntimeNativeNifMaterialChannels
             var time = controller switch
             {
                 FalloutNifAlphaController alpha => alpha.Time,
+                FalloutNifEmittanceController emittance => emittance.Time,
                 FalloutNifMaterialColorController color => color.Time,
                 FalloutNifTextureTransformController texture => texture.Time,
                 _ => throw new NotSupportedException("Actor material controller has no external KF binding."),

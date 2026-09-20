@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Actors;
 // attachment frames; physics publication replaces the living animation owner.
 internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 {
-    private sealed record Body(int Source, int Bone, Transform3D Attachment, RigidBody3D Node);
+    private sealed record Body(int Source, int Bone, Transform3D Attachment, Vector3 Center, RigidBody3D Node);
     private readonly List<Body> _bodies = [];
     private sealed record Joint(int Source, Body First, Body Second, Rid Handle);
     private readonly List<Joint> _joints = [];
@@ -24,7 +24,9 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private string _sourceHash = "";
     private readonly Dictionary<int, Body> _bySource = [];
     private bool _active;
+    private Vector3 _lastSeparationVelocity;
     internal bool Active => _active;
+    internal IEnumerable<Vector3> AimPoints => _bodies.Select(body => body.Node.GlobalTransform * body.Center);
     internal object Observation => new
     {
         active = _active,
@@ -38,12 +40,13 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             position = new[] { body.Node.GlobalPosition.X, body.Node.GlobalPosition.Y, body.Node.GlobalPosition.Z }
         }).ToArray(),
         source = _sourceHash,
+        separationVelocity = new[] { _lastSeparationVelocity.X, _lastSeparationVelocity.Y, _lastSeparationVelocity.Z },
         boundary = "Godot-6dof-angular-envelope;Havok-cone-friction-inertia-and-malleable-solver-parity-unverified"
     };
 
     internal static RuntimeNativeActorRagdoll Prepare(Node3D actor, RuntimeNativeNifSkeleton skeleton,
         FalloutReferenceInstance state, RuntimeLiveContentSource content, string path, uint layer, uint mask,
-        IReadOnlyList<FalloutBodyPart> parts)
+        IReadOnlyList<FalloutBodyPart> parts, FalloutAuthoredRagdoll? authored = null)
     {
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Ragdoll skeleton is absent: " + path);
         var result = new RuntimeNativeActorRagdoll
@@ -89,8 +92,10 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
                     }
                     rigid.SetMeta("opennv_nif_collision_bone", node.Name);
                     rigid.SetMeta("opennv_nif_collision_body", body.Block.Index);
+                    rigid.SetMeta("opennv_collision_havok_layer", built.Body.GetMeta("opennv_collision_havok_layer"));
                     rigid.SetMeta("opennv_reference_form_key", state.Reference.ToString());
-                    var entry = new Body(body.Block.Index, skeleton.BoneIndex(node.Name), built.Body.Transform, rigid);
+                    var center = GamebryoCoordinate.ConvertVector(new(body.Center.X, body.Center.Y, body.Center.Z)) * (7 * skeleton.UnitsToMetres);
+                    var entry = new Body(body.Block.Index, skeleton.BoneIndex(node.Name), built.Body.Transform, center, rigid);
                     result._bodies.Add(entry); result._bySource.Add(entry.Source, entry);
                 }
                 finally { built.Body.Free(); }
@@ -102,6 +107,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             if (joints.Any(joint => !result._bySource.ContainsKey(joint.Header.EntityA) || !result._bySource.ContainsKey(joint.Header.EntityB)))
                 throw new InvalidDataException("Ragdoll joint leaves the actor's body graph.");
             result._bodies.Sort((left, right) => left.Bone.CompareTo(right.Bone));
+            if (authored is not null) ApplyAuthoredPose(skeleton, authored);
             actor.AddChild(result);
             if (!result.IsInsideTree()) throw new InvalidOperationException("Death rig did not enter the actor's live scene.");
             foreach (var body in result._bodies)
@@ -114,6 +120,21 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             return result;
         }
         catch { result.Free(); throw; }
+    }
+
+    private static void ApplyAuthoredPose(RuntimeNativeNifSkeleton skeleton, FalloutAuthoredRagdoll authored)
+    {
+        if (authored.BipedRotation is not null)
+            throw new NotSupportedException("Authored ragdoll XRGB accumulation-root rotation is not yet bound.");
+        var poses = FalloutNifAuthoredRagdoll.Bind(skeleton.Source, authored);
+        foreach (var (name, pose) in poses)
+        {
+            var bone = skeleton.BoneIndex(name);
+            skeleton.Node.SetBonePose(bone, new(
+                GamebryoCoordinate.ConvertReferenceEuler(new(pose.RotationRadians[0], pose.RotationRadians[1], pose.RotationRadians[2]),
+                    skeleton.Node.GetBoneRest(bone).Basis.Scale.X),
+                GamebryoCoordinate.ConvertVector(new(pose.Position[0], pose.Position[1], pose.Position[2])) * skeleton.UnitsToMetres));
+        }
     }
 
     private void BuildJoint(FalloutNifRagdollConstraint source)
@@ -224,6 +245,18 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         for (var current = bone; current >= 0; current = _skeleton.Node.GetBoneParent(current))
             if (current == parent) return true;
         return false;
+    }
+
+    internal void AddSeparationVelocity(byte type, float gameUnitsPerSecond)
+    {
+        if (!_active || !_severed.Contains(type)) throw new InvalidOperationException("Limb velocity requires an active severed body.");
+        if (!float.IsFinite(gameUnitsPerSecond) || gameUnitsPerSecond < 0) throw new InvalidDataException("Severed limb velocity is invalid.");
+        var root = _skeleton.BoneIndex(_parts.Single(part => part.Type == type).Node);
+        var origin = (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(root)).Origin;
+        var outward = origin - GetParent<Node3D>().GlobalPosition;
+        _lastSeparationVelocity = outward.Normalized() * (gameUnitsPerSecond * _skeleton.UnitsToMetres);
+        foreach (var body in _bodies)
+            if (DescendsFrom(body.Bone, root)) { body.Node.LinearVelocity += _lastSeparationVelocity; body.Node.Sleeping = false; }
     }
 
     public override void _Process(double delta) { if (_active) Publish(); }

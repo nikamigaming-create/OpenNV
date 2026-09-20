@@ -12,7 +12,7 @@ internal sealed record FalloutCreatureAppearance(FalloutFormKey Creature, Fallou
 internal static class FalloutCreatureAppearanceResolver
 {
     internal static FalloutCreatureAppearance Resolve(FalloutPluginStack stack, FalloutFormKey creature,
-        FalloutFormKey? reference = null)
+        FalloutFormKey? reference = null, FalloutActorTemplateSelection? selection = null)
     {
         var record = stack.GetEffective(creature);
         if (record.Signature != "CREA") throw new InvalidDataException($"{creature} is not CREA.");
@@ -22,8 +22,8 @@ internal static class FalloutCreatureAppearanceResolver
             if (placed.Signature != "ACRE" || ReadForm(placed, "NAME") != creature)
                 throw new InvalidDataException($"{reference} is not a reference to CREA {creature}.");
         }
-        var model = TemplateOwner(stack, record, 64);
-        var stats = TemplateOwner(stack, record, 2);
+        var model = FalloutActorTemplateOwner.Resolve(stack, record, 64, selection);
+        var stats = FalloutActorTemplateOwner.Resolve(stack, record, 2, selection);
         var skeleton = ModelPath(ReadString(Field(model, "MODL").Span), "meshes");
         var directory = skeleton[..skeleton.LastIndexOf('/')];
         var models = ReadList(model, "NIFZ").Select(path => ModelPath(path, directory)).ToArray();

@@ -15,6 +15,15 @@ try
         .Concat(Record("SCPT", 0x505, Local(7, "counter", 1), Local(7, "counter", 0)))
         .Concat(Record("SCPT", 0x506, Local(7, "counter"), Local(8, "counter")))
         .Concat(Record("SCPT", 0x503, Field("SCTX", Text("begin OnActivate\nend"))))
+        .Concat(Explosion(0xA00, flags: 9, damage: 28, radius: 256))
+        .Concat(Explosion(0xA01, flags: 0x40, damage: 4, radius: 32))
+        .Concat(Explosion(0xA02, flags: 0, damage: 4, radius: 32, force: 5))
+        .Concat(Record("EXPL", 0xA03, Field("DATA", new byte[48])))
+        .Concat(Explosion(0xA04, flags: 0x02, damage: 4, radius: 32))
+        .Concat(Explosion(0xA05, flags: 0x04, damage: 4, radius: 32))
+        .Concat(Explosion(0xA06, flags: 0x10, damage: 4, radius: 32))
+        .Concat(Explosion(0xA07, flags: 0x20, damage: 4, radius: 32))
+        .Concat(Explosion(0xA08, flags: 0x01, damage: 4, radius: 32))
         .Concat(Record("QUST", 0x600, Field("EDID", Text("TestQuest")), Field("SCRI", BitConverter.GetBytes(0x501u))))
         .Concat(Record("ACTI", 0x700, Field("EDID", Text("ModelLessActivator")), Field("SCRI", BitConverter.GetBytes(0x500u))))
         .Concat(Record("ACTI", 0x701, Field("SCRI", BitConverter.GetBytes(0x503u))))
@@ -26,6 +35,7 @@ try
     File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Header("Base.esm").Concat(Script(2)).ToArray());
     using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
     CellReviewContracts.Run(records);
+    ExplosionContracts.Run(records);
     Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x502))));
     var paddedLocals = FalloutScriptLocals.Read(records.GetEffective(Key(0x504)));
     Require(paddedLocals.Count == 1 && paddedLocals["COUNTER"] == 7, "Unused compiler padding changed local slot identity.");
@@ -225,6 +235,7 @@ finally
 
 ConversationContracts.Run();
 ActorSourceContracts.Run();
+AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 PlayerSkillContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
@@ -316,4 +327,13 @@ static byte[] Record(string signature, uint id, params byte[][] fields)
     var bytes = new byte[24 + data.Length]; Encoding.ASCII.GetBytes(signature).CopyTo(bytes, 0);
     BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), (uint)data.Length);
     BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), id); data.CopyTo(bytes, 24); return bytes;
+}
+static byte[] Explosion(uint id, uint flags, float damage, float radius, float force = 0)
+{
+    var data = new byte[52];
+    BinaryPrimitives.WriteSingleLittleEndian(data, force);
+    BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), damage);
+    BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(8), radius);
+    BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(20), flags);
+    return Record("EXPL", id, Field("EDID", Text("SyntheticExplosion")), Field("MODL", Text("effects/synthetic.nif")), Field("DATA", data));
 }

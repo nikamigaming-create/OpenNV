@@ -6,11 +6,33 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal readonly record struct FalloutActorDefense(float Threshold, float Resistance)
 {
-    internal float Absorb(float damage, float minimumFraction) => Math.Max(damage * minimumFraction,
-        damage * (1 - Math.Clamp(Resistance, 0, 85) / 100) - Math.Max(0, Threshold));
+    internal float Absorb(float damage, float minimumFraction, IReadOnlyList<FalloutAmmoEffect>? ammoEffects = null)
+    {
+        var threshold = Threshold;
+        var resistance = Resistance;
+        if (ammoEffects is not null)
+            foreach (var effect in ammoEffects)
+            {
+                if (effect.Type == FalloutAmmoEffect.DamageResistance) resistance = effect.Apply(resistance);
+                else if (effect.Type == FalloutAmmoEffect.DamageThreshold) threshold = effect.Apply(threshold);
+            }
+        return Math.Max(damage * minimumFraction,
+            damage * (1 - Math.Clamp(resistance, 0, 85) / 100) - Math.Max(0, threshold));
+    }
 }
 
 internal sealed partial class FalloutReferenceWorld
+{
+    private readonly FalloutActorDefenseResolver _actorDefense = new(records);
+    internal FalloutActorDefense Defense(FalloutFormKey reference, int level, FalloutGlobalState globals)
+    {
+        var actor = Actor(reference);
+        var equipped = EquippedArmor(reference, level, globals);
+        return _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped, actor.Templates);
+    }
+}
+
+internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
 {
     private readonly Dictionary<FalloutFormKey, FalloutActorDefense> _defenseSources = [];
     private readonly Dictionary<FalloutFormKey, FalloutArmorDefense> _armorDefense = [];
@@ -18,13 +40,12 @@ internal sealed partial class FalloutReferenceWorld
     private readonly FalloutAbilityModifiers _defenseAbilities = new(records);
     private (float Base, float Maximum)? _armorRating;
 
-    internal FalloutActorDefense Defense(FalloutFormKey reference, int level, FalloutGlobalState globals)
+    internal FalloutActorDefense Read(FalloutFormKey actor, FalloutPlayerInventory inventory, IReadOnlyList<FalloutFormKey> equipped,
+        FalloutActorTemplateSelection? selection = null)
     {
-        var actor = Actor(reference);
-        var equipped = EquippedArmor(reference, level, globals);
-        if (!_defenseSources.TryGetValue(actor.Base, out var source))
+        var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 8, selection);
+        if (!_defenseSources.TryGetValue(effects.FormKey, out var source))
         {
-            var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 8);
             var threshold = 0f; var resistance = 0f;
             foreach (var field in effects.ReadSubrecords().Where(field => field.Signature == "SPLO"))
             {
@@ -38,17 +59,15 @@ internal sealed partial class FalloutReferenceWorld
                     if (effect.ActorValue == 76) threshold += effect.Amount; else resistance += effect.Amount;
                 }
             }
-            source = new(threshold, resistance); _defenseSources.Add(actor.Base, source);
+            source = new(threshold, resistance); _defenseSources.Add(effects.FormKey, source);
         }
         var armorThreshold = 0f; var armorResistance = 0f;
         foreach (var key in equipped)
         {
             if (!_armorDefense.TryGetValue(key, out var armor))
                 _armorDefense.Add(key, armor = FalloutArmorDefense.Read(records.GetEffective(key)));
-            var item = actor.Inventory!.Contents.Item(key)!;
-            var conditions = (item.Variants ?? []).Select(variant => variant.Condition ?? 1).Distinct().ToArray();
-            if (conditions.Length > 1) throw new NotSupportedException("Equipped armor instance selection is unbound.");
-            var condition = conditions.Length == 0 ? 1 : conditions[0];
+            var item = inventory.Item(key)!;
+            var condition = FalloutWeaponCondition.SelectedCondition(item);
             var rating = _armorRating ??= (FalloutGameSettingFloats.Read(records, "fArmorRatingBase"), FalloutGameSettingFloats.Read(records, "fArmorRatingMax"));
             var factor = rating.Base + condition * (rating.Maximum - rating.Base);
             armorThreshold += armor.Threshold * factor;

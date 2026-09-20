@@ -15,6 +15,19 @@ internal sealed record FalloutBodyPart(byte Type, string Name, string Node, stri
 // resources. NAM1/NAM4 follow BPND and belong to that same part.
 internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<FalloutBodyPart> Parts)
 {
+    internal float LimbCondition(int actorValue, float maximumHealth, IReadOnlyDictionary<byte, float>? damage)
+    {
+        var matching = Parts.Where(part => part.ActorValue == actorValue && part.HealthPercent > 0).ToArray();
+        if (matching.Length != 1)
+            throw new NotSupportedException($"Body-part actor value {actorValue} has no unique source health threshold.");
+        var part = matching[0];
+        var threshold = maximumHealth * part.HealthPercent / 100;
+        var injury = damage?.GetValueOrDefault(part.Type) ?? 0;
+        if (!float.IsFinite(threshold) || threshold <= 0 || !float.IsFinite(injury) || injury < 0)
+            throw new InvalidDataException("Limb condition requires finite health and injury.");
+        return Math.Clamp((threshold - injury) / threshold, 0, 1) * 100;
+    }
+
     internal static FalloutBodyPartData Read(FalloutPluginRecord record)
     {
         if (record.Signature != "BPTD") throw new InvalidDataException("Body-part source is not BPTD.");

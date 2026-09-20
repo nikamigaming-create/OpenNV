@@ -24,6 +24,10 @@ public partial class NativePipBoyAudit : Node
             if (args.Length != 2) throw new ArgumentException("Expected owned Data and a native campaign checkpoint.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
+            var childRoot = System.Xml.Linq.XElement.Parse("<menu name='Probe'><image name='divider'><alpha><copy src='child()' trait='alpha'/></alpha><rect name='meter'><alpha>123</alpha></rect></image></menu>");
+            var childTree = new NativeOwnedMenuTree(childRoot);
+            if (childTree.Number(childRoot.Element("image")!, "alpha") != 123)
+                throw new InvalidDataException("Unnamed child reference did not resolve its unique named tile.");
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(args[1]))!;
             using var references = new FalloutReferenceWorld(records);

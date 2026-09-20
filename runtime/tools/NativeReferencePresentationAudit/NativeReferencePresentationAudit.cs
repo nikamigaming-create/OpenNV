@@ -74,7 +74,20 @@ public partial class NativeReferencePresentationAudit : Node3D
             if (first.Visible || first.ProcessMode != ProcessModeEnum.Disabled ||
                 first.FindChildren("*", "", true, false).OfType<CollisionObject3D>().Any(collision => collision.CollisionLayer != 0 || collision.CollisionMask != 0))
                 throw new InvalidOperationException("Disable left rendering, processing or contact queries active.");
-            GD.Print("OPENNV_NATIVE_REFERENCE_PRESENTATION_AUDIT_PASS sharedModel=true instanceTexture=true ownedDds=true enable=true disable=true noRebuild=true fadeOpacity=true reversal=true pixels=unverified");
+            world.SetEnabled(cards[0].FormKey, true);
+            projection.Advance(0);
+            projection.SetResidency([], _ => throw new InvalidOperationException("Inactive cache constructed new 3D."), _ => true);
+            if (projection.Nodes.Count != 0 || projection.WarmNodeCount != 1 || first.Visible ||
+                first.ProcessMode != ProcessModeEnum.Disabled || !projection.HasPrepared(cards[0].FormKey))
+                throw new InvalidOperationException("Warm 3D remained resident or was discarded.");
+            projection.SetResidency(cards, _ => throw new InvalidOperationException("Boundary reversal rebuilt warm 3D."));
+            if (projection.Resolve(cards[0].FormKey) != first || !first.Visible || projection.WarmNodeCount != 0 || materializations != 1 ||
+                Target(first).GetActiveMaterial(0) != replacement)
+                throw new InvalidOperationException("Boundary reversal lost the original instance or its material state.");
+            projection.SetResidency([], _ => null, _ => false);
+            if (projection.WarmNodeCount != 0 || projection.HasPrepared(cards[0].FormKey) || !first.IsQueuedForDeletion())
+                throw new InvalidOperationException("Expired warm 3D was not evicted.");
+            GD.Print("OPENNV_NATIVE_REFERENCE_PRESENTATION_AUDIT_PASS sharedModel=true instanceTexture=true ownedDds=true enable=true disable=true noRebuild=true fadeOpacity=true reversal=true warmBoundary=true boundedEviction=true pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

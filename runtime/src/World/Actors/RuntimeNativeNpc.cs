@@ -5,7 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 namespace OpenNV.Runtime.World.Actors;
 
 /// <summary>One source NPC reference and its directly decoded, shared skeleton.</summary>
-internal partial class RuntimeNativeNpc : Node3D
+internal partial class RuntimeNativeNpc : CharacterBody3D
 {
     internal FalloutNpcAppearance Appearance { get; private set; } = null!;
     internal RuntimeNativeNifSkeleton Skeleton { get; private set; } = null!;
@@ -191,9 +191,10 @@ internal partial class RuntimeNativeNpc : Node3D
 
     public override void _Process(double delta)
     {
-        if (Combat?.Dead == true) return;
+        if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true) return;
         RestoreAuthoredHeadPose();
-        AdvanceAi();
+        if (_conversationTarget is null) AdvanceAi();
+        AdvanceConversationFacing((float)delta);
         if ((_animation is null && _baseAnimation is null && _headTargets is null) || AnimationError is not null) return;
         try
         {
@@ -314,10 +315,11 @@ internal partial class RuntimeNativeNpc : Node3D
         FalloutPlacedReference reference,
         float unitsToMetres,
         Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null,
-        IReadOnlyList<FalloutFormKey>? equippedArmor = null)
+        IReadOnlyList<FalloutFormKey>? equippedArmor = null, FalloutActorTemplateSelection? selection = null)
     {
-        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor), source,
+        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, selection: selection), source,
             unitsToMetres, materialOwner);
+        actor._templates = selection;
         try { actor.ConfigureFaceAnimation(stack); return actor; }
         catch { actor.Free(); throw; }
     }

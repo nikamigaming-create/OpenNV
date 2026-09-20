@@ -66,6 +66,16 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal int PlayerLevel => SourcePlayerLevel;
     internal FalloutNativeSpecialState Special => _special;
     internal GameplayVitals Vitals => _vitals.State;
+    private FalloutActorDefenseResolver? _incomingDefense;
+    internal void DamagePlayer(FalloutWeaponDamage damage, byte part)
+    {
+        _incomingDefense ??= new(_pluginStack);
+        var armor = _inventory.Equipped.Select(_pluginStack.RuntimeFormKey)
+            .Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray();
+        var defense = _incomingDefense.Read(_raceSexContract.Player, _inventory, armor);
+        _vitals.Damage(defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_pluginStack, "fMinDamMultiplier"), damage.AmmoEffects),
+            part, damage.LimbMultiplier);
+    }
     internal object? SpeechState => _speech?.State;
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;
@@ -150,7 +160,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             };
         }, name =>
         {
-            if (name.Equals("Health", StringComparison.OrdinalIgnoreCase)) return Vitals.HitPoints;
+            if (name.Equals("Health", StringComparison.OrdinalIgnoreCase)) return Vitals.ExactHitPoints;
+            if (name.Equals("RadiationRads", StringComparison.OrdinalIgnoreCase)) return Vitals.RadiationRads;
             if (name.Equals("ActionPoints", StringComparison.OrdinalIgnoreCase)) return Vitals.ActionPoints;
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
             return _playerSkills.Value(name);
@@ -211,7 +222,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         try
         {
             _stageResults?.Continue();
-            if (_saveRequested) SaveCurrentState();
+            if (_saveRequested && _recipeMenu is null && _barterMenu is null) SaveCurrentState();
             _playerPackage?.Advance(delta);
             foreach (var expired in _imageSpaceState.Advance(delta))
                 GD.Print($"OPENNV_NATIVE_IMAD_EXPIRED source={expired.Form} duration={expired.Duration:R} owner=gameplay-clock");
@@ -223,7 +234,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return;
         }
         if (!_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null &&
-            _tagSkillEntry is null && _traitEntry is null)
+            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
@@ -257,7 +268,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             }
             if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
-        }, _scripts.SaidInfos);
+        }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

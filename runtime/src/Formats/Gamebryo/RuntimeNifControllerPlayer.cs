@@ -59,7 +59,8 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
             if (!_sequences.TryAdd(sequence.Name, sequence))
                 throw new InvalidDataException(
                     $"NIF controller manager has duplicate sequence name {sequence.Name}.");
-        var looping = _sequences.Values.Where(sequence => sequence.CycleType == 0).ToArray();
+        var looping = _sequences.Values.Where(sequence => sequence.CycleType == 0 &&
+            (sequence.DirectClock is null || (sequence.DirectClock.Flags & 8) != 0)).ToArray();
         if (looping.Length > 1)
             throw new NotSupportedException(
                 "NIF controller manager has multiple automatic looping sequences.");

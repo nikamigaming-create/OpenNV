@@ -28,6 +28,7 @@ internal static class NativeFaceGenMaterial
         FalloutNifShaderProperty? shader = null;
         FalloutNifMaterialProperty? material = null;
         FalloutNifStencilProperty? stencil = null;
+        FalloutNifAlphaProperty? alpha = null;
         foreach (var property in geometry.Properties.Where(index => index >= 0).Select(source.ReadObject))
         {
             switch (property)
@@ -40,6 +41,9 @@ internal static class NativeFaceGenMaterial
                     break;
                 case FalloutNifStencilProperty value when stencil is null:
                     stencil = value;
+                    break;
+                case FalloutNifAlphaProperty value when alpha is null:
+                    alpha = value;
                     break;
                 default:
                     throw new NotSupportedException($"FaceGen geometry {geometry.Block.Index} has an unbound property: {property.Block.TypeName}.");
@@ -55,8 +59,8 @@ internal static class NativeFaceGenMaterial
             throw new NotSupportedException($"Source FaceGen shader {shader.Block.Index} has unbound flags, controllers or refraction.");
         if (material is not null &&
             (material.Controller >= 0 || material.ExtraData.Any(index => index >= 0) || material.Alpha != 1.0f ||
-             material.Specular != new FalloutNifColor3(0, 0, 0) || material.Emissive != new FalloutNifColor3(0, 0, 0)))
-            throw new NotSupportedException("The source FaceGen material requires an opacity, specular or emissive constant owner.");
+             material.Emissive != new FalloutNifColor3(0, 0, 0)))
+            throw new NotSupportedException("The source FaceGen material requires an opacity or emissive constant owner.");
         var doubleSided = false;
         if (stencil is not null)
         {
@@ -73,7 +77,31 @@ internal static class NativeFaceGenMaterial
         };
         if ((shader.ShaderFlags & DepthTestFlag) == 0)
             modes.Add("depth_test_disabled");
-        var code = BuildShader(string.Join(", ", modes), repeats);
+        var alphaTest = "";
+        if (alpha is not null)
+        {
+            var state = FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold);
+            if (alpha.Controller >= 0 || alpha.ExtraData.Any(index => index >= 0) || state.Blend != FalloutNifBlendMode.Opaque)
+                throw new NotSupportedException("FaceGen alpha blending or animation is unbound.");
+            if (state.TestEnabled)
+            {
+                var comparison = state.TestFunction switch
+                {
+                    0 => "false",
+                    1 => "a < t",
+                    2 => "a == t",
+                    3 => "a <= t",
+                    4 => "a > t",
+                    5 => "a != t",
+                    6 => "a >= t",
+                    7 => "true",
+                    _ => throw new InvalidDataException("FaceGen alpha comparison is invalid.")
+                };
+                alphaTest = "float a = texture(base_map, UV).a; float t = " +
+                    (alpha.Threshold / 255f).ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "; if (!(" + comparison + ")) discard;";
+            }
+        }
+        var code = BuildShader(string.Join(", ", modes), repeats, alphaTest);
         if (!Shaders.TryGetValue(code, out var compiled))
             Shaders.Add(code, compiled = new Shader { Code = code });
         var result = new ShaderMaterial { Shader = compiled, ResourceName = ResourceIdentity };
@@ -82,6 +110,9 @@ internal static class NativeFaceGenMaterial
         result.SetShaderParameter("base_mod_map", Load(content, inputs.BaseMod));
         result.SetShaderParameter("detail_mod_map", Load(content, inputs.DetailMod));
         result.SetShaderParameter("use_source_vertex_color", (shader.ShaderFlags2 & VertexColorsFlag) != 0);
+        result.SetShaderParameter("source_specular", material is null || (shader.ShaderFlags & SpecularFlag) == 0 ? Vector3.Zero :
+            new Vector3(material.Specular.R, material.Specular.G, material.Specular.B));
+        result.SetShaderParameter("source_glossiness", material?.Glossiness ?? 1);
         SetSourceAmbient(result, sourceAmbient);
         result.SetMeta("opennv_nif_shader_block", shader.Block.Index);
         result.SetMeta("opennv_nif_shader_type", shader.ShaderType);
@@ -116,7 +147,7 @@ internal static class NativeFaceGenMaterial
         material.SetShaderParameter("source_ambient_rgb", new Vector3(sourceAmbient.R, sourceAmbient.G, sourceAmbient.B));
     }
 
-    private static string BuildShader(string renderModes, bool repeats) => $$"""
+    private static string BuildShader(string renderModes, bool repeats, string alphaTest) => $$"""
         shader_type spatial;
         render_mode {{renderModes}};
 
@@ -126,9 +157,13 @@ internal static class NativeFaceGenMaterial
         uniform sampler2D detail_mod_map : filter_linear_mipmap_anisotropic, {{(repeats ? "repeat_enable" : "repeat_disable")}};
         uniform vec3 source_ambient_rgb;
         uniform bool use_source_vertex_color;
+        uniform vec3 source_specular;
+        uniform float source_glossiness;
+        varying float source_specular_mask;
         {{NativeNifPointLighting.ShaderSource}}
 
         void fragment() {
+            {{alphaTest}}
             vec3 base = texture(base_map, UV).rgb;
             vec3 base_mod = texture(base_mod_map, UV).rgb;
             vec3 detail_mod = texture(detail_mod_map, UV).rgb;
@@ -136,7 +171,9 @@ internal static class NativeFaceGenMaterial
             if (use_source_vertex_color) {
                 face_color *= COLOR.rgb;
             }
-            vec3 tangent_normal = normalize(texture(normal_map, UV).rgb * 2.0 - vec3(1.0));
+            vec4 normal_sample = texture(normal_map, UV);
+            source_specular_mask = normal_sample.a;
+            vec3 tangent_normal = normalize(normal_sample.rgb * 2.0 - vec3(1.0));
             NORMAL = normalize(TANGENT * tangent_normal.x + BINORMAL * tangent_normal.y + NORMAL * tangent_normal.z);
             ALBEDO = face_color;
             EMISSION = face_color * (source_ambient_rgb + owned_point_irradiance(VERTEX, NORMAL, VIEW, true));
@@ -151,6 +188,8 @@ internal static class NativeFaceGenMaterial
             // Godot supplies LIGHT_COLOR multiplied by PI; the source light RGB
             // has no Lambertian 1/PI normalization.
             DIFFUSE_LIGHT += (diffuse + backscatter) * (LIGHT_COLOR / PI) * ATTENUATION;
+            SPECULAR_LIGHT += source_specular * source_specular_mask * (LIGHT_COLOR / PI) * ATTENUATION *
+                pow(max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0), source_glossiness);
         }
         """;
 

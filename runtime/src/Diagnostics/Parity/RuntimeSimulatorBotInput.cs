@@ -60,18 +60,34 @@ internal sealed class RuntimeSimulatorBotInput
         }
         var controllerPath = Path.Combine(_directory, "controller_pose_command.json");
         if (File.Exists(controllerPath)) return;
-        if (_activation) _hand = 1;
-        else if ((_pendingHands & (1 << _hand)) == 0) _hand = 1 - _hand;
-        var releasingPrimary = _primaryUntil != 0 && Stopwatch.GetTimestamp() >= _primaryUntil;
-        if (releasingPrimary) { _hand = 1; _pendingHands |= 2; }
-        if ((_pendingHands & (1 << _hand)) == 0 && !_activation) return;
-        if (_activation)
+        // Preserve the exact tracked ray that passed the bot's target check.
+        // Input edges must not also reposition the controller before the game
+        // consumes Activate. Button release keeps that same pose as well.
+        if (_activation || _primaryUntil != 0)
         {
-            _primaryUntil = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 10;
-            _activation = false;
+            var now = Stopwatch.GetTimestamp();
+            if (_activation)
+            {
+                _primaryUntil = now + Stopwatch.Frequency / 10; _activation = false;
+                LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+                { hand = 1, primary = 1, thumbstickY = 0, leaseMilliseconds = 500 }));
+            }
+            else if (now >= _primaryUntil)
+            {
+                _primaryUntil = 0;
+                LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+                { hand = 1, primary = 0, thumbstickY = 0, leaseMilliseconds = 500 }));
+            }
+            else if ((_pendingHands & 1) != 0)
+            {
+                LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+                { hand = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 500 }));
+                _pendingHands &= ~1;
+            }
+            return;
         }
-        var primary = _primaryUntil != 0 && !releasingPrimary;
-        if (releasingPrimary) _primaryUntil = 0;
+        if ((_pendingHands & (1 << _hand)) == 0) _hand = 1 - _hand;
+        if ((_pendingHands & (1 << _hand)) == 0) return;
         // A simulated standing user's wrists stay below/in front of their eyes
         // as they turn. These are controller poses, never player/body writes.
         var wrist = _headPosition + _headBasis.X * (_hand == 0 ? -.22f : .22f) + forward * .32f + Vector3.Down * .35f;
@@ -100,7 +116,7 @@ internal sealed class RuntimeSimulatorBotInput
             thumbstickX = 0,
             thumbstickY = _hand == 0 && _intent.Forward ? 1 : 0,
             thumbstickClick = 0,
-            primary = _hand == 1 && primary ? 1 : 0,
+            primary = 0,
             grip = 0,
             trigger = 0,
             leaseMilliseconds = 500,

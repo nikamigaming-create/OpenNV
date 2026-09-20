@@ -12,6 +12,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private FalloutNifParticleModifier[] _modifiers = [];
     private readonly Dictionary<string, bool> _active = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _rates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _speeds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
@@ -25,6 +26,16 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private int _visibleCount;
     private readonly ParticleDistanceOrder _distanceOrder = new();
     private float _units;
+    private Transform3D _previousParent, _parent, _parentInverse;
+    private float _parentSeconds;
+    private FalloutNifParticleParentVelocity? _parentVelocity;
+    internal void ResetParentMotion() { _previousParent = GlobalTransform; _parentSeconds = 0; }
+    internal void BeginParentMotion(double seconds)
+    {
+        _parent = GlobalTransform; _parentInverse = _parent.AffineInverse();
+        _parentSeconds = (float)seconds;
+    }
+    internal void EndParentMotion() => _previousParent = _parent;
     internal long BoundsPublications { get; private set; }
     internal int ActiveCount { get; private set; }
     internal long BirthCount { get; private set; }
@@ -35,7 +46,12 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     internal void ResetCompleted()
     {
         if (ActiveCount != 0) throw new InvalidOperationException("Live particles cannot be recycled.");
-        foreach (var modifier in _modifiers) _active[modifier.Name] = modifier.Active;
+        foreach (var modifier in _modifiers)
+        {
+            _active[modifier.Name] = modifier.Active;
+            if (modifier is FalloutNifParticleVolumeEmitter volume) _speeds[modifier.Name] = volume.Emitter.Speed;
+            else if (modifier is FalloutNifParticleMeshEmitter mesh) _speeds[modifier.Name] = mesh.Emitter.Speed;
+        }
         foreach (var name in _rates.Keys) { _rates[name] = 0; _remainders[name] = 0; }
         BirthCount = DeathCount = 0; SimulatedSeconds = 0; EmissionEnabled = false;
         _nextBoundsRefresh = 0; _publishedBounds = default;
@@ -57,6 +73,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             modifier.Order,
             active = _active[modifier.Name],
             rate = _rates.GetValueOrDefault(modifier.Name),
+            speed = _speeds.GetValueOrDefault(modifier.Name),
             remainder = _remainders.GetValueOrDefault(modifier.Name)
         }).ToArray(),
         // Packed fields preserve float32 values, including signed zero; the
@@ -109,6 +126,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             throw new NotSupportedException($"Particle data {_data.Block.Index} has unsupported runtime fields.");
         _modifiers = source.Modifiers.Select(index => file.ReadObject(index) as FalloutNifParticleModifier ??
             throw new InvalidDataException("Particle modifier reference is not a modifier.")).OrderBy(value => value.Order).ToArray();
+        _parentVelocity = _modifiers.OfType<FalloutNifParticleParentVelocity>().SingleOrDefault();
+        if (_parentVelocity?.Damping < 0) throw new InvalidDataException("Parent velocity damping is negative.");
         foreach (var modifier in _modifiers)
         {
             if (modifier.Target != source.Block.Index || !_active.TryAdd(modifier.Name, modifier.Active))
@@ -116,6 +135,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             switch (modifier)
             {
                 case FalloutNifParticleVolumeEmitter volume:
+                    _speeds.Add(modifier.Name, volume.Emitter.Speed);
                     RequireNode(volume.Object); ValidateEmitter(volume.Emitter);
                     if (volume switch
                     {
@@ -126,6 +146,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                     }) throw new InvalidDataException("Particle volume has invalid dimensions.");
                     break;
                 case FalloutNifParticleMeshEmitter mesh:
+                    _speeds.Add(modifier.Name, mesh.Emitter.Speed);
                     ValidateEmitter(mesh.Emitter);
                     if (mesh.Meshes.Length == 0 || mesh.VelocityType > 2 || mesh.EmissionType is not (0 or 3))
                         throw new NotSupportedException("Particle mesh emission mode has no sampler.");
@@ -205,6 +226,11 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     internal RuntimeNifControllerChannel Bind(FalloutNifFile file, FalloutNifControllerLink link)
     {
+        if (link.ControllerType == "NiPSysEmitterSpeedCtlr" && link.Variable2.Length == 0 && _speeds.ContainsKey(link.Variable1))
+        {
+            var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
+            return new(time => _speeds[link.Variable1] = sampler.Sample(time));
+        }
         if (!_active.ContainsKey(link.Variable1)) throw new InvalidDataException("Particle controller targets a missing modifier.");
         if (link.ControllerType == "NiPSysEmitterCtlr" && link.Variable2 == "BirthRate" && _rates.ContainsKey(link.Variable1))
         {
@@ -224,11 +250,12 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     {
         if (_draw is null) throw new InvalidOperationException("Particle instance has no source configuration.");
         if (_source.WorldSpace) { _visual.TopLevel = true; _visual.GlobalTransform = Transform3D.Identity; }
+        ResetParentMotion();
     }
 
     public override void _Process(double delta)
     {
-        Advance((float)delta);
+        BeginParentMotion(delta); Advance((float)delta); EndParentMotion();
         Publish();
     }
 
@@ -357,12 +384,14 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         var particle = new Particle
         {
             Position = transform * point,
-            Velocity = (transform.Basis * direction).Normalized() * (Vary(emitter.Speed, emitter.SpeedVariation) * _units),
+            Velocity = (transform.Basis * direction).Normalized() * (Vary(_speeds[modifier.Name], emitter.SpeedVariation) * _units),
             Life = Math.Max(float.Epsilon, Vary(emitter.Life, emitter.LifeVariation)),
             Radius = Math.Max(0, Vary(emitter.Radius, emitter.RadiusVariation)) * _units * transform.Basis.Scale.Abs().X,
             InitialColor = ToColor(emitter.Color),
             Texture = _data.Subtextures.Length == 0 ? 0 : _random.Next(_data.Subtextures.Length),
         };
+        if (_source.WorldSpace && _parentSeconds > 0 && _parentVelocity is { } inherit && _active[inherit.Name])
+            particle.Velocity += (particle.Position - _previousParent * (_parentInverse * particle.Position)) * (inherit.Damping / _parentSeconds);
         foreach (var rotation in _modifiers.OfType<FalloutNifParticleRotation>().Where(value => _active[value.Name]))
         {
             particle.Angle = rotation.Angle + rotation.AngleVariation * Centered() * 2;

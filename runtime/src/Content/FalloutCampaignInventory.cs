@@ -52,9 +52,15 @@ internal static class FalloutOpeningInventoryGrantResolver
         "ALCH",
         "AMMO",
         "ARMO",
+        "BOOK",
+        "CCRD",
+        "CHIP",
+        "CMNY",
         "IMOD",
         "KEYM",
+        "LIGH",
         "MISC",
+        "NOTE",
         "WEAP",
     ];
 
@@ -275,17 +281,38 @@ internal static class FalloutCampaignInventoryResolver
                 throw Error(record, "DATA/ENIT contains invalid ingestible economics");
             return (ingestibleValue, ingestibleWeight);
         }
+        if (record.Signature == "AMMO")
+        {
+            var ammoData = RequiredSingle(record, subrecords, "DATA", 13).Span;
+            var ammoValue = BinaryPrimitives.ReadInt32LittleEndian(ammoData[8..]);
+            var extra = RequiredSingle(record, subrecords, "DAT2").Span;
+            if (extra.Length is not (12 or 20)) throw Error(record, "DAT2 has an unsupported ammunition extent");
+            var ammoWeight = BinaryPrimitives.ReadSingleLittleEndian(extra[8..]);
+            if (ammoValue < 0 || !float.IsFinite(ammoWeight) || ammoWeight < 0)
+                throw Error(record, "DATA/DAT2 contains invalid ammunition economics");
+            return (ammoValue, ammoWeight);
+        }
+        if (record.Signature is "CCRD" or "CMNY")
+        {
+            var currencyData = RequiredSingle(record, subrecords, "DATA", sizeof(uint)).Span;
+            var currencyValue = BinaryPrimitives.ReadUInt32LittleEndian(currencyData);
+            if (currencyValue > int.MaxValue) throw Error(record, "DATA value exceeds runtime storage");
+            return ((int)currencyValue, null);
+        }
         var layout = record.Signature switch
         {
             "IMOD" or "KEYM" or "MISC" => (Bytes: SimpleItemDataBytes, WeightOffset: SimpleItemWeightOffset),
             "ARMO" => (Bytes: ArmorItemDataBytes, WeightOffset: ArmorWeaponWeightOffset),
             "WEAP" => (Bytes: WeaponDataBytes, WeightOffset: ArmorWeaponWeightOffset),
+            "BOOK" => (Bytes: 10, WeightOffset: 6),
+            "LIGH" => (Bytes: 32, WeightOffset: 28),
             _ => (Bytes: 0, WeightOffset: 0),
         };
         if (layout.Bytes == 0)
             return (null, null);
         var data = RequiredSingle(record, subrecords, "DATA", layout.Bytes).Span;
-        var value = BinaryPrimitives.ReadInt32LittleEndian(data[ItemValueOffset..]);
+        var valueOffset = record.Signature switch { "BOOK" => 2, "LIGH" => 24, _ => ItemValueOffset };
+        var value = BinaryPrimitives.ReadInt32LittleEndian(data[valueOffset..]);
         var weight = BinaryPrimitives.ReadSingleLittleEndian(data[layout.WeightOffset..]);
         if (value < 0 || !float.IsFinite(weight) || weight < 0.0f)
             throw Error(record, "DATA contains invalid item economics");

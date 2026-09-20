@@ -1,5 +1,10 @@
 # Opening scene defects
 
+This is a historical investigation register. Its old observations and gate
+results are not a readiness report for the current executable. Current
+verification, regressions and priorities are in [status.md](status.md) and
+[current-work.md](current-work.md); reproduce an entry before claiming it fixed.
+
 This discrepancy ledger supplements the 36 requirements in recovery-checklist.md.
 A fixed component does not close a scene or establish retail parity. Timing,
 input, audio and pixel comparisons remain independent requirements.

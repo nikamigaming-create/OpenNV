@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -24,15 +25,32 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         var contact = GetSlideCollision(index);
         var normal = contact.GetNormal();
-        return (object)new { body = (contact.GetCollider() as Node)?.GetPath().ToString(), normal = new[] { normal.X, normal.Y, normal.Z } };
+        var body = contact.GetCollider() as Node3D;
+        static float[] Point(Vector3 value) => [value.X, value.Y, value.Z];
+        return (object)new
+        {
+            body = body?.GetPath().ToString(),
+            normal = Point(normal),
+            position = Point(contact.GetPosition()),
+            depth = contact.GetDepth(),
+            colliderPosition = body is null ? null : Point(body.GlobalPosition),
+            colliderScale = body is null ? null : Point(body.GlobalBasis.Scale),
+            colliderType = body?.GetType().Name,
+            colliderShape = (contact.GetColliderShape() as Node)?.Name.ToString(),
+            rigidVelocity = body is RigidBody3D rigid ? Point(rigid.LinearVelocity) : null,
+        };
     }).ToArray();
     internal Func<Vector3, bool>? CanOccupyPosition { get; set; }
+    internal Func<bool>? IsDefeated { get; set; }
+    internal float CombatRadius => _configuration.Player.CapsuleRadiusMeters;
+    internal Vector3 CombatTargetPoint => GlobalPosition + Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
 
-    internal void ConfigureLocomotion(FalloutPluginStack records)
+    internal void ConfigureLocomotion(FalloutPluginStack records, Func<GameplayVitals?> vitals)
     {
         _jumpHeightMeters = checked((float)FalloutGameSettingFloats.Read(records, "fJumpHeightMin")) * UnitsToMeters;
         if (!float.IsFinite(_jumpHeightMeters) || _jumpHeightMeters <= 0)
             throw new InvalidDataException("Source jump height must be finite and positive.");
+        ConfigureLimbLocomotion(records, vitals);
         SetMeta("opennv_jump_height_meters", _jumpHeightMeters);
         SetMeta("opennv_sprint_policy", "OpenNV optional hold-to-sprint");
     }
@@ -80,7 +98,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _modalInput = modal;
         if (modal)
         {
-            _shotPending = false;
+            _weaponTriggerHeld = false;
+            _pendingShotCount = 0;
             Velocity = Vector3.Zero;
             _aiming = false;
             _reloadPressed = false; _holdHandled = false; CancelWeaponAction();
@@ -100,7 +119,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         SetMeta("opennv_source_pipboy_enabled", state.PipBoy);
         SetMeta("opennv_source_fighting_enabled", state.Fighting);
         SetMeta("opennv_source_pointofview_enabled", state.PointOfView);
-        if (!state.Fighting) { _reloadPressed = false; _shotPending = false; CancelWeaponAction(); }
+        if (!state.Fighting) { _reloadPressed = false; _weaponTriggerHeld = false; _pendingShotCount = 0; CancelWeaponAction(); }
         SetMeta("opennv_source_looking_enabled", state.Looking);
     }
 
@@ -156,6 +175,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _pitchRadians = 0.0f;
         if (_xr is null) _camera.Rotation = Vector3.Zero;
         Velocity = Vector3.Zero;
+        _xrBodyAlignmentPending = _xr is not null;
     }
 
     internal void RestoreTransform(
@@ -176,6 +196,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _pitchRadians = viewPitchRadians;
         if (_xr is null) _camera.Rotation = new Vector3(_pitchRadians, 0, 0);
         Velocity = Vector3.Zero;
+        _xrBodyAlignmentPending = _xr is not null;
     }
 
     public override void _Ready()
@@ -248,7 +269,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (_xr is not null && GetTree().Paused) return;
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
-        var movement = _movementEnabled && !_modalInput
+        var alive = IsDefeated?.Invoke() != true;
+        var movement = alive && _movementEnabled && !_modalInput
             ? _xr?.Movement ?? Input.GetVector(
                 input.MoveLeft.Action,
                 input.MoveRight.Action,
@@ -260,14 +282,15 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         forward.Y = 0.0f;
         right.Y = 0.0f;
         var direction = right.Normalized() * movement.X + forward.Normalized() * movement.Y;
-        Sprinting = _movementEnabled && !_modalInput && movement.Y > 0 && (_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
-        var speed = _configuration.Player.MoveSpeedMetersPerSecond * (Sprinting ? _configuration.Player.SprintSpeedMultiplier : 1);
+        Sprinting = alive && _movementEnabled && !_modalInput && movement.Y > 0 && (_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
+        var speed = _configuration.Player.MoveSpeedMetersPerSecond * (Sprinting ? _configuration.Player.SprintSpeedMultiplier : 1) *
+            CrippledLegMovementSpeedMultiplier();
         var velocity = direction * speed;
         velocity.Y = IsOnFloor()
             ? MathF.Min(Velocity.Y, 0.0f)
             : Velocity.Y -
                 _configuration.Simulation.GravityMetersPerSecondSquared * (float)delta;
-        if (_movementEnabled && !_modalInput && IsOnFloor() && _jumpHeightMeters > 0 &&
+        if (alive && _movementEnabled && !_modalInput && IsOnFloor() && _jumpHeightMeters > 0 &&
             (_xr?.ConsumeJump() ?? Input.IsActionJustPressed(input.Jump.Action)))
         {
             velocity.Y = MathF.Sqrt(2 * _configuration.Simulation.GravityMetersPerSecondSquared * _jumpHeightMeters);
@@ -282,6 +305,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             horizontalMotion = Vector3.Zero;
         }
         Velocity = velocity;
+        var positionBeforeMotion = GlobalPosition;
         if (NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters))
         {
             ++StepCount;
@@ -290,8 +314,38 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             Velocity = new(velocity.X, 0, velocity.Z);
         }
         else MoveAndSlide();
+        // At a convex edge the solver can stop downward travel while reporting
+        // a side normal. Keep the constrained velocity instead of accumulating
+        // an unbounded fall that prevents horizontal input from escaping.
+        if (delta > 0 && Velocity.Y < 0 && GetSlideCollisionCount() > 0)
+        {
+            var actualVerticalSpeed = Math.Min(0, (GlobalPosition.Y - positionBeforeMotion.Y) / (float)delta);
+            if (actualVerticalSpeed > Velocity.Y + .01f)
+                Velocity = new(Velocity.X, actualVerticalSpeed, Velocity.Z);
+        }
+        PushContactProps(velocity, (float)delta);
         BlockingShape = IsOnWall() && GetSlideCollisionCount() > 0
             ? (GetSlideCollision(GetSlideCollisionCount() - 1).GetCollider() as Node)?.GetPath().ToString() : null;
+    }
+
+    private void PushContactProps(Vector3 desiredVelocity, float delta)
+    {
+        if (delta <= 0 || delta > .05f) return;
+        var pushed = new HashSet<ulong>();
+        for (var index = 0; index < GetSlideCollisionCount(); index++)
+        {
+            var contact = GetSlideCollision(index);
+            if (contact.GetCollider() is not RuntimeNifRigidBody { Freeze: false } body ||
+                !pushed.Add(body.GetInstanceId())) continue;
+            var normal = contact.GetNormal();
+            if (Math.Abs(normal.Y) > .75f) continue;
+            var closingSpeed = Math.Max(0, (desiredVelocity - body.LinearVelocity).Dot(-normal));
+            // CharacterBody movement resolves the player but supplies no prop
+            // impulse. Both presentation modes use this bounded contact force,
+            // while the source mass, friction and restitution govern the prop.
+            var impulse = Math.Min(body.Mass * closingSpeed, 120 * delta);
+            if (impulse > 0) body.ApplyImpulse(-normal * impulse, contact.GetPosition() - body.GlobalPosition);
+        }
     }
 
     private bool TryActivateLiveObject()

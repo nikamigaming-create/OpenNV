@@ -8,6 +8,8 @@ internal sealed class FalloutPlayerVitals
     private readonly int _baseHealth;
     private readonly double _healthEndurance, _healthLevel, _apBase, _apAgility, _xpBase, _xpBump;
     internal GameplayVitals State { get; private set; }
+    internal void Damage(float amount) => State = State.Damage(amount);
+    internal void Damage(float amount, byte part, float limbMultiplier) => State = State.Damage(amount, part, limbMultiplier);
 
     internal FalloutPlayerVitals(FalloutPluginStack records, FalloutFormKey player, FalloutNativeSpecialState special,
         GameplayVitals? restore = null)
@@ -38,6 +40,9 @@ internal sealed class FalloutPlayerVitals
         State = derived with
         {
             HitPoints = Math.Clamp(derived.MaximumHitPoints - (State.MaximumHitPoints - State.HitPoints), 0, derived.MaximumHitPoints),
+            HitPointFraction = State.HitPointFraction,
+            LimbDamage = State.LimbDamage is null ? null : new Dictionary<byte, float>(State.LimbDamage),
+            RadiationRads = State.RadiationRads,
             ActionPoints = Math.Clamp(derived.MaximumActionPoints - (State.MaximumActionPoints - State.ActionPoints), 0, derived.MaximumActionPoints),
         };
     }

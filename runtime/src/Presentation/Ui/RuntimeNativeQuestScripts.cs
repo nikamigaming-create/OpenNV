@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private readonly FalloutPlayerInventory _inventory;
     private NativeOwnedHudMessages? _hud;
     private bool _worldActive;
+    internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal object State => new { scripts = Scripts.State, worldActive = _worldActive, message = _current, hud = _hud?.State, error = _error };
 
     internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
@@ -70,6 +71,9 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         AddChild(_layer);
         try
         {
+            message = message.ResolveButtons(_records, condition => (EvaluateMessageCondition ??
+                throw new NotSupportedException("Message condition has no gameplay owner."))(condition));
+            _current = message;
             _layer.AddChild(new NativeOwnedMessageMenu(message, _records, choice =>
             {
                 GD.Print($"OPENNV_SOURCE_MESSAGE_ACCEPT source={message.Form} choice={choice}");

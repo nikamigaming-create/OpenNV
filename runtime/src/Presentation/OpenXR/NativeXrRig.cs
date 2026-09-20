@@ -28,7 +28,7 @@ internal sealed partial class NativeXrRig : Node3D
     internal int SnapTurns { get; private set; }
     internal float MaximumSnapPivotError { get; private set; }
     internal Func<bool>? Modal { get; set; }
-    internal Func<Transform3D, bool, bool, bool>? PointAtPipBoy { get; set; }
+    internal Func<Transform3D, bool, bool, Vector3?>? PointAtPipBoy { get; set; }
     internal Action<Transform3D>? PoseWristDevice { get; set; }
     internal Action<bool>? SetPipBoyHeld { get; set; }
     internal bool WorldPointer { get; private set; }
@@ -135,11 +135,11 @@ internal sealed partial class NativeXrRig : Node3D
         var fire = right && _rightInputReady && RightGrip.GetFloat(NativeXrActions.Fire) >= _configuration.Xr.ActionThreshold;
         _pointerPressed = fire;
         var fireEdge = Edge("fire", fire);
+        _player?.XrFire(fire && !modal && PointAtPipBoy is null && !WorldPointer);
         if (PointAtPipBoy is null && modal) _canvas.Point(RightAim, right && RightAim.GetHasTrackingData(), fire);
         else if (PointAtPipBoy is null && fireEdge)
         {
             if (WorldPointer) _player?.XrActivate();
-            else _player?.XrFire();
         }
         if (Edge("activate", right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Grab)) && !modal && PointAtPipBoy is null) _player?.XrActivate();
         var reload = right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Reload);
@@ -166,7 +166,12 @@ internal sealed partial class NativeXrRig : Node3D
     internal void PublishWristInput()
     {
         PoseWristDevice?.Invoke(Camera.GlobalTransform);
-        PointAtPipBoy?.Invoke(RightAim.GlobalTransform,
-            RightGrip.GetHasTrackingData() && RightAim.GetHasTrackingData(), _pointerPressed);
+        var aim = RightAim.GlobalTransform;
+        var tracked = RightGrip.GetHasTrackingData() && RightAim.GetHasTrackingData();
+        if (PointAtPipBoy is { } pointAtPipBoy)
+        {
+            var hit = pointAtPipBoy(aim, tracked, _pointerPressed);
+            _player?.PublishXrWristRay(tracked, aim, hit);
+        }
     }
 }

@@ -17,7 +17,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<FalloutReferenceScriptEffect> Apply, Func<FalloutFormKey, int>? GetButtonPressed = null,
     Func<FalloutFormKey, bool>? IsTalking = null, Func<FalloutFormKey, string, double>? ActorValue = null,
     Func<string, bool>? IsPlayerTagSkill = null, FalloutGlobalState? Globals = null,
-    Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>>? Command = null);
+    Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>>? Command = null,
+    Func<FalloutFormKey, bool>? IsInCombat = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
     IReadOnlySet<FalloutFormKey>? TriggerReferences = null);
@@ -168,6 +169,9 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
     {
         double Read(string name)
         {
+            if (name.Equals("this", StringComparison.OrdinalIgnoreCase)) return records.RuntimeFormId(source);
+            if (name.Equals("player", StringComparison.OrdinalIgnoreCase)) return records.RuntimeFormId(bindings.Reference(name));
+            if (bindings.TryForm(name) is { Signature: "REFR" or "ACHR" or "ACRE" } reference) return records.RuntimeFormId(reference.FormKey);
             if (bindings.TryForm(name) is { Signature: "GLOB" } global)
                 return (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Get(global.FormKey);
             var key = bindings.Variable(name);
@@ -207,10 +211,15 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                 return new([], _ => world.IsEnabled(parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 0 : 1);
             if (parts.Length <= 2 && parts[^1].Equals("GetUnconscious", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsUnconscious(parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
+            if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
+                return new([], _ => world.Get(parts.Length == 1 ? source : bindings.Reference(parts[0])).PlayerTeammate ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDead", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsDead(parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetMapMarkerVisible", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.MapMarkerVisibility(parts.Length == 1 ? source : bindings.Reference(parts[0])));
+            if (parts.Length <= 2 && parts[^1].Equals("IsInCombat", StringComparison.OrdinalIgnoreCase))
+                return new([], _ => (host.IsInCombat ?? throw new NotSupportedException("IsInCombat has no gameplay owner."))
+                    (parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("IsTalking", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => (host.IsTalking ?? throw new NotSupportedException("IsTalking has no speech owner."))
                     (parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
@@ -231,11 +240,13 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                     (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!) ? 1 : 0),
                 "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.Stage(Quest(arguments[0].Identifier!))),
                 "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsRunning(Quest(arguments[0].Identifier!)) ? 1 : 0),
+                "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsCompleted(Quest(arguments[0].Identifier!)) ? 1 : 0),
                 "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
                     quests.StageDone(Quest(arguments[0].Identifier!), checked((short)Index(arguments[1].Number))) ? 1 : 0),
                 "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments => Objective(arguments, false)),
                 "getobjectivecompleted" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments => Objective(arguments, true)),
                 "isactionref" => new([FalloutScriptArgumentKind.Identifier], arguments => actor == bindings.Reference(arguments[0].Identifier!) ? 1 : 0),
+                "getactionref" => new([], _ => actor is { } activator ? records.RuntimeFormId(activator) : 0),
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
                 _ => null,
             };
@@ -257,6 +268,16 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
             {
                 case "setunconscious" when arguments.Count == 1:
                     world.SetUnconscious(target, Boolean(arguments[0]));
+                    break;
+                case "setrestrained" when arguments.Count == 1:
+                    world.SetRestrained(target, Boolean(arguments[0]));
+                    break;
+                case "setplayerteammate" when arguments.Count == 1:
+                    world.SetPlayerTeammate(target, Boolean(arguments[0]));
+                    break;
+                case "moveto" when arguments.Count is 1 or 4 && records.RuntimeFormId(target) != 0x14:
+                    world.MoveTo(target, bindings.Reference(arguments[0]), arguments.Count == 4 ? (float)Number(arguments[1]) : 0,
+                        arguments.Count == 4 ? (float)Number(arguments[2]) : 0, arguments.Count == 4 ? (float)Number(arguments[3]) : 0);
                     break;
                 case "short" or "int" or "long" or "float" or "ref" when parts.Length == 1 && arguments.Count == 1:
                     _ = bindings.Variable(arguments[0]);
@@ -374,6 +395,14 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                 case "showlovetestermenuparams" when parts.Length == 1 && arguments.Count == 1:
                     var total = checked((int)Index(Number(arguments[0])));
                     host.Apply(new(FalloutReferenceEffectKind.SpecialMenu, source, Value: total));
+                    break;
+                case "showbartermenu" or "sbm" when arguments.Count <= 1:
+                    var discount = arguments.Count == 0 ? 0 : Number(arguments[0]);
+                    if (!double.IsFinite(discount) || discount is < -100 or > 100 || discount != Math.Truncate(discount))
+                        throw new InvalidDataException("ShowBarterMenu discount must be an integer from -100 through 100.");
+                    (host.Command ?? throw new NotSupportedException("ShowBarterMenu has no native menu owner."))(
+                        source, bindings, command,
+                        [((int)discount).ToString(System.Globalization.CultureInfo.InvariantCulture)]);
                     break;
                 case "activate" when arguments.Count == 0:
                     host.Apply(new(FalloutReferenceEffectKind.DefaultActivate, source, target, actor));

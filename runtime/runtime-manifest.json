@@ -63,9 +63,9 @@
           "status": "Original opening and direct owned-data runtime; gameplay is incomplete"
         },
         "openxr": {
-          "launchable": false,
+          "launchable": true,
           "previewOnly": false,
-          "status": "Physical headset acceptance remains incomplete"
+          "status": "Experimental shared gameplay; simulator dialogue and barter exercised, physical headset playtest pending"
         }
       }
     },

@@ -54,13 +54,25 @@ internal sealed partial class FalloutPlayerInventory
         if (removed == previous.Count) { _items.Remove(form); _equipped.Remove(previous.RuntimeFormId); ++Revision; }
         else
         {
-            // Distinct extra-data stacks require an explicit selection owner.
-            if (previous.Variants is { Count: > 1 }) throw new NotSupportedException("RemoveItem selection across distinct condition/ownership stacks is unbound.");
-            var remaining = previous.Count - removed;
-            Publish([previous with { Count = remaining, Variants = previous.Variants is { Count: 1 } variants ?
-                [variants[0] with { Count = remaining }] : null }]);
+            var remainingCount = previous.Count - removed;
+            Publish([previous with { Count = remainingCount, Variants = AfterRemovalVariants(previous, removed) }]);
         }
         if (!silent) Notifications.Publish([new(FalloutHudEventKind.ItemRemoved, form, removed)]);
+    }
+
+    private static IReadOnlyList<FalloutItemVariant>? AfterRemovalVariants(FalloutCampaignItem item, int removed)
+    {
+        if (item.Variants is not { } variants) return null;
+        var stacks = variants.ToList();
+        var toRemove = removed;
+        for (var index = 0; index < stacks.Count && toRemove > 0; index++)
+        {
+            var take = Math.Min(toRemove, stacks[index].Count);
+            stacks[index] = stacks[index] with { Count = stacks[index].Count - take };
+            toRemove -= take;
+        }
+        if (toRemove != 0) throw new InvalidDataException("Item extra-data stacks do not contain the saved count.");
+        return stacks.Where(stack => stack.Count != 0).ToArray();
     }
     internal void Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
         FalloutGlobalState? globals = null, FalloutItemVariant? extra = null)

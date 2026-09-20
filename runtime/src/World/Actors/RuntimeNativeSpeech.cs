@@ -11,6 +11,7 @@ internal partial class RuntimeNativeSpeech : Node
     private FaceGenLipConfiguration _lipConfiguration = null!;
     private Func<FalloutFormKey, float> _questStage = null!;
     private Func<FalloutCondition, float>? _conditionContext;
+    private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private AudioStreamPlayer _voice = null!;
     private FalloutSayToCommand? _command;
     private FalloutDialogueInfo? _info;
@@ -80,12 +81,14 @@ internal partial class RuntimeNativeSpeech : Node
 
     internal void Configure(FalloutPluginStack stack, FaceGenLipConfiguration lipConfiguration,
         Func<FalloutFormKey, float> questStage,
-        Func<FalloutCondition, float>? conditionContext = null, HashSet<FalloutFormKey>? saidInfos = null)
+        Func<FalloutCondition, float>? conditionContext = null, HashSet<FalloutFormKey>? saidInfos = null,
+        Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _questStage = questStage;
         _conditionContext = conditionContext;
+        _templates = templates;
         _said = saidInfos ?? [];
         _voices = new((RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.")).ResourcePathsUnder("sound/voice"));
         Name = "SourceSpeech";
@@ -152,7 +155,7 @@ internal partial class RuntimeNativeSpeech : Node
         _speaker = actors[0] as RuntimeNativeNpc;
         _creatureSpeaker = actors[0] as RuntimeNativeCreature;
         _speakerReference = speaker.FormKey;
-        _identity = FalloutDialogueSpeaker.Read(_stack, FalloutDialogueTopic.RequiredForm(speaker, "NAME"));
+        _identity = FalloutDialogueSpeaker.Read(_stack, FalloutDialogueTopic.RequiredForm(speaker, "NAME"), _templates?.Invoke(speaker.FormKey));
     }
 
     private void PlayResponse()

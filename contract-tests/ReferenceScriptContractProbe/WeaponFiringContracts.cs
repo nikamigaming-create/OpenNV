@@ -16,31 +16,162 @@ internal static class WeaponFiringContracts
             var weaponData = new byte[204]; UInt(weaponData, 0, 3); Float(weaponData, 4, 1); weaponData[14] = 2;
             UInt(weaponData, 104, 41); Float(weaponData, 116, 1.5f); Float(weaponData, 124, .4f);
             weaponData[41] = 32; weaponData[42] = 1; UInt(weaponData, 36, 3); Float(weaponData, 60, 1.25f);
-            var economics = new byte[15]; economics[12] = 16; economics[14] = 5;
+            var economics = new byte[15]; BinaryPrimitives.WriteInt32LittleEndian(economics.AsSpan(4), 100); economics[12] = 16; economics[14] = 5;
             var projectile = new byte[84]; projectile[0] = 1; projectile[2] = 1; Float(projectile, 8, 200); Float(projectile, 12, 1000);
             var overrideProjectile = (byte[])projectile.Clone(); Float(overrideProjectile, 12, 2400);
             var ammo = new byte[20]; UInt(ammo, 4, 4); UInt(ammo, 12, 5); Float(ammo, 16, 100);
+            var explosionData = new byte[52]; Float(explosionData, 4, 14); Float(explosionData, 8, 160);
+            var explosiveProjectile = new byte[84]; explosiveProjectile[0] = 2; explosiveProjectile[2] = 1;
+            Float(explosiveProjectile, 8, 200); Float(explosiveProjectile, 12, 1000); UInt(explosiveProjectile, 36, 12);
+            var mineProjectile = new byte[84]; mineProjectile[0] = 0x66; mineProjectile[2] = 2;
+            Float(mineProjectile, 8, 400); Float(mineProjectile, 12, 10000); Float(mineProjectile, 28, 100);
+            Float(mineProjectile, 32, 3); UInt(mineProjectile, 36, 12);
+            var invalidMineProjectile = (byte[])mineProjectile.Clone(); Float(invalidMineProjectile, 28, -1);
+            var detonatesProjectile = (byte[])mineProjectile.Clone(); detonatesProjectile[0] = 0x62; detonatesProjectile[1] = 4;
+            var timedMineProjectile = (byte[])mineProjectile.Clone(); timedMineProjectile[0] = 0x06; timedMineProjectile[1] = 0x08;
+            Float(timedMineProjectile, 28, 0); Float(timedMineProjectile, 32, 15);
+            var beamProjectile = new byte[84]; beamProjectile[2] = 4; Float(beamProjectile, 8, 1500); Float(beamProjectile, 12, 1200);
+            var alternateBeamProjectile = (byte[])beamProjectile.Clone(); alternateBeamProjectile[0] = 4;
+            var timedBeamProjectile = (byte[])alternateBeamProjectile.Clone(); Float(timedBeamProjectile, 28, 1);
+            var alternateFlightProjectile = new byte[84]; alternateFlightProjectile[0] = 0x8c; alternateFlightProjectile[1] = 0x02; alternateFlightProjectile[2] = 1;
+            Float(alternateFlightProjectile, 8, 200); Float(alternateFlightProjectile, 12, 1000);
+            var explosiveBeamProjectile = (byte[])beamProjectile.Clone(); explosiveBeamProjectile[0] = 2; UInt(explosiveBeamProjectile, 36, 12);
+            var flameProjectile = new byte[84]; flameProjectile[0] = 0x8d; flameProjectile[2] = 8;
+            Float(flameProjectile, 8, 12000); Float(flameProjectile, 12, 640);
+            var missileFlameProjectile = (byte[])flameProjectile.Clone(); missileFlameProjectile[0] = 0x8c;
+            var flameWeapon = (byte[])weaponData.Clone(); UInt(flameWeapon, 0, 8); flameWeapon[41] = 86; UInt(flameWeapon, 36, 25);
+            var thrownWeapon = (byte[])weaponData.Clone(); UInt(thrownWeapon, 0, 13); thrownWeapon[41] = 114; UInt(thrownWeapon, 36, 13);
+            var mineWeapon = (byte[])weaponData.Clone(); UInt(mineWeapon, 0, 11); mineWeapon[41] = 102;
+            var lunchboxMine = (byte[])weaponData.Clone(); UInt(lunchboxMine, 0, 12); lunchboxMine[41] = 108;
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
+            var shortDnamWeaponRecords = new[] { 164, 172, 180, 196 }.Select((extent, index) =>
+            {
+                var dnam = weaponData[..extent];
+                if (extent >= 172) UInt(dnam, 168, 7);
+                return Record("WEAP", checked((uint)(30 + index)), Field("EDID", Text("TestWeaponDnam" + extent)),
+                    Field("MODL", Text("test-layout-weapon.nif")), Field("DATA", economics),
+                    Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", dnam), Field("NAM0", BitConverter.GetBytes(2u)));
+            }).ToArray();
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
                 .Concat(Record("WEAP", 1, Field("EDID", Text("TestGun")), Field("MODL", Text("test.nif")),
-                    Field("DATA", economics), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
                     Field("INAM", BitConverter.GetBytes(6u))))
                 .Concat(Record("AMMO", 2, Field("EDID", Text("TestAmmo")), Field("DATA", new byte[13]), Field("DAT2", ammo)))
+                .Concat(Record("AMMO", 27, Field("EDID", Text("TestFlameFuel")), Field("DATA", new byte[13])))
                 .Concat(Record("PROJ", 3, Field("DATA", projectile)))
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
+                .Concat(Record("EXPL", 12, Field("DATA", explosionData)))
+                .Concat(Record("PROJ", 13, Field("MODL", Text("Effects/rocket.nif")), Field("DATA", explosiveProjectile)))
+                .Concat(Record("PROJ", 20, Field("DATA", mineProjectile)))
+                .Concat(Record("PROJ", 21, Field("DATA", invalidMineProjectile)))
+                .Concat(Record("PROJ", 22, Field("DATA", detonatesProjectile)))
+                .Concat(Record("PROJ", 23, Field("DATA", timedMineProjectile)))
+                .Concat(Record("PROJ", 17, Field("MODL", Text("Effects/beam.nif")), Field("DATA", beamProjectile)))
+                .Concat(Record("PROJ", 18, Field("MODL", Text("Effects/alternate-beam.nif")), Field("DATA", alternateBeamProjectile)))
+                .Concat(Record("PROJ", 19, Field("MODL", Text("Effects/explosive-beam.nif")), Field("DATA", explosiveBeamProjectile)))
+                .Concat(Record("PROJ", 28, Field("MODL", Text("Effects/timed-beam.nif")), Field("DATA", timedBeamProjectile)))
+                .Concat(Record("PROJ", 29, Field("MODL", Text("Effects/alternate-flight.nif")), Field("DATA", alternateFlightProjectile)))
+                .Concat(Record("PROJ", 25, Field("DATA", flameProjectile)))
+                .Concat(Record("PROJ", 26, Field("MODL", Text("Effects/flame.nif")), Field("DATA", missileFlameProjectile)))
+                .Concat(Record("WEAP", 24, Field("EDID", Text("TestFlamer")), Field("MODL", Text("test-flamer.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(10)), Field("DNAM", flameWeapon)))
+                .Concat(Record("WEAP", 14, Field("EDID", Text("TestThrownExplosive")), Field("MODL", Text("test-thrown.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", thrownWeapon)))
+                .Concat(Record("WEAP", 15, Field("EDID", Text("TestMine")), Field("MODL", Text("test-mine.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(3)), Field("DNAM", mineWeapon)))
+                .Concat(Record("WEAP", 16, Field("EDID", Text("TestLunchboxMine")), Field("MODL", Text("test-lunchbox-mine.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(6)), Field("DNAM", lunchboxMine)))
                 .Concat(Record("MISC", 5, Field("EDID", Text("TestCasing")), Field("DATA", new byte[8])))
                 .Concat(Record("IPDS", 6, Field("DATA", impacts)))
                 .Concat(Record("IPCT", 7, Field("DATA", impactData), Field("MODL", Text("Effects/test-metal.nif"))))
                 .Concat(Record("IPDS", 8, Field("DATA", impacts[..^4])))
                 .Concat(Record("GMST", 9, Field("EDID", Text("fDamageWeaponMult")), Field("DATA", BitConverter.GetBytes(2f))))
                 .Concat(Record("GMST", 10, Field("EDID", Text("fDamageSkillBase")), Field("DATA", BitConverter.GetBytes(.25f))))
-                .Concat(Record("GMST", 11, Field("EDID", Text("fDamageSkillMult")), Field("DATA", BitConverter.GetBytes(.75f)))).ToArray());
+                .Concat(Record("GMST", 11, Field("EDID", Text("fDamageSkillMult")), Field("DATA", BitConverter.GetBytes(.75f))))
+                .Concat(shortDnamWeaponRecords.SelectMany(record => record)).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
-            shot.RequireHitscan();
+            shot.RequireInstantRay();
+            foreach (var (extent, index) in new[] { 164, 172, 180, 196 }.Select((extent, index) => (extent, index)))
+            {
+                var key = Key(checked((uint)(30 + index)));
+                var sourceWeapon = FalloutWeaponPresentation.Read(records, key, firstPerson: false);
+                var sourceShot = FalloutWeaponShot.Read(records, key, Key(2));
+                sourceShot.RequireRuntimeAttackOwner();
+                var inventoryForCondition = new FalloutPlayerInventory();
+                inventoryForCondition.Add(records, key, 1, 1, true);
+                var wornWeapon = FalloutWeaponCondition.AfterShot(records, sourceWeapon, sourceShot,
+                    inventoryForCondition.Item(key)!);
+                Require(sourceShot.StrengthRequirement == (extent >= 172 ? 7 : 0) && sourceShot.SkillRequirement == 0 &&
+                    MathF.Abs((wornWeapon.Variants?.Single().Condition ?? 0) - .998f) < .0001f,
+                    $"WEAP DNAM extent {extent} lost an available field or bypassed its condition owner.");
+            }
+            Require(MathF.Abs(shot.Projectile.HitscanImpactDelaySeconds(5, .01f) - 2.5f) < .00001f &&
+                BeamProjectileSpeedDelay(records, Key(17)) == 0,
+                "Hitscan source speed did not determine impact time, or an unflagged beam gained projectile delay.");
+            var ordinaryBullet = shot with { Projectile = shot.Projectile with { Flags = 0x0089 } };
+            ordinaryBullet.RequireRuntimeAttackOwner();
+            var alternateTriggerBullet = shot with { Projectile = shot.Projectile with { Flags = 0x008d } };
+            alternateTriggerBullet.RequireRuntimeAttackOwner();
+            var transparentPassThroughBullet = shot with { Projectile = shot.Projectile with { Flags = 0x028d } };
+            transparentPassThroughBullet.RequireRuntimeAttackOwner();
+            Require(ordinaryBullet.Projectile.HasMuzzleFlash && ordinaryBullet.Projectile.HasSupersonicAudio &&
+                transparentPassThroughBullet.Projectile.PassesThroughSmallTransparent,
+                "Supported source Hitscan appearance and collision flags were not decoded.");
+            var beam = (shot with { Projectile = FalloutProjectile.Read(records, Key(17)) });
+            Require(!beam.Projectile.Hitscan && beam.Projectile.IsInstantRayAttack,
+                "Beam type did not select the direct-ray path without the Hitscan flag.");
+            beam.RequireRuntimeAttackOwner();
+            var alternateBeam = shot with { Projectile = FalloutProjectile.Read(records, Key(18)) };
+            Require(alternateBeam.Projectile.HasAlternateTrigger && !alternateBeam.Projectile.HasAlternateTriggerParameters,
+                "Zero-data beam alternate-trigger flag was lost.");
+            alternateBeam.RequireRuntimeAttackOwner();
+            var alternateFlight = shot with { Projectile = FalloutProjectile.Read(records, Key(29)) };
+            Require(!alternateFlight.Projectile.IsInstantRayAttack && alternateFlight.Projectile.HasAlternateTrigger &&
+                alternateFlight.Projectile.PassesThroughSmallTransparent,
+                "Source alternate-trigger projectile flags were not retained for in-flight shots.");
+            alternateFlight.RequireRuntimeAttackOwner();
+            var flameShot = FalloutWeaponShot.Read(records, Key(24), Key(27));
+            Require(flameShot.Projectile.Type == 8 && flameShot.Projectile.Hitscan && flameShot.Projectile.HasAlternateTrigger &&
+                flameShot.Projectile.PassesThroughActors && flameShot.Projectile.Speed == 12000 && flameShot.Projectile.Range == 640,
+                "Source Flame projectile fields or actor pass-through behavior were not retained.");
+            flameShot.RequireRuntimeAttackOwner();
+            var missileFlame = FalloutProjectile.Read(records, Key(26));
+            Require(!missileFlame.Hitscan && missileFlame.PassesThroughActors && missileFlame.Model == "meshes/Effects/flame.nif",
+                "Non-hitscan Flame projectile did not retain missile-flight presentation.");
+            (flameShot with { Projectile = missileFlame }).RequireRuntimeAttackOwner();
+            var explosiveShot = FalloutProjectile.Read(records, Key(13));
+            Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
+                "Projectile did not resolve its winning EXPL record and source model.");
+            (shot with { Projectile = explosiveShot }).RequireRuntimeAttackOwner();
+            var mineProjectileSource = FalloutProjectile.Read(records, Key(20));
+            Require(mineProjectileSource.Type == 2 && mineProjectileSource.HasAlternateTrigger && mineProjectileSource.CanBeDisabled &&
+                mineProjectileSource.CanBePickedUp && mineProjectileSource.ExplosionAltTriggerProximity == 100 &&
+                mineProjectileSource.ExplosionAltTriggerTimer == 3 && mineProjectileSource.ExplosionSource?.Form == Key(12),
+                "Mine alternate-trigger flags, proximity, timer or explosion link were not decoded from PROJ DATA.");
+            var detonatesProjectileSource = FalloutProjectile.Read(records, Key(22));
+            Require(!detonatesProjectileSource.HasAlternateTrigger && detonatesProjectileSource.CanBeDisabled &&
+                detonatesProjectileSource.CanBePickedUp && detonatesProjectileSource.Detonates,
+                "Detonating projectile flags were confused with proximity triggering.");
+            var timedMineProjectileSource = FalloutProjectile.Read(records, Key(23));
+            Require(timedMineProjectileSource.HasAlternateTrigger && timedMineProjectileSource.HasExplicitRotation &&
+                timedMineProjectileSource.ExplosionAltTriggerProximity == 0 && timedMineProjectileSource.ExplosionAltTriggerTimer == 15,
+                "Timed, rotated mine fields were not decoded from the winning projectile declaration.");
+            Reject(() => FalloutProjectile.Read(records, Key(21)));
+            var thrownWeaponPresentation = FalloutWeaponPresentation.Read(records, Key(14));
+            var thrownShot = FalloutWeaponShot.Read(records, Key(14), null, thrownWeaponPresentation.HasAmmunitionSource);
+            Require(thrownWeaponPresentation.AnimationGroup == "1gt" && thrownWeaponPresentation.AttackGroup == "attackthrow" &&
+                !thrownWeaponPresentation.IsMine && thrownShot.Projectile.ExplosionSource?.Form == Key(12),
+                "Thrown explosive lost its authored animation or EXPL source.");
+            thrownShot.RequireRuntimeAttackOwner();
+            var mine = FalloutWeaponPresentation.Read(records, Key(15));
+            var lunchbox = FalloutWeaponPresentation.Read(records, Key(16));
+            Require(mine.IsMine && !mine.IsMeleeWeapon && mine.WeaponAnimationType == 11 && mine.AttackGroup == "placemine" &&
+                lunchbox.IsMine && !lunchbox.IsMeleeWeapon && lunchbox.WeaponAnimationType == 12 && lunchbox.AttackGroup == "placemine2",
+                "Mine animation types were admitted as melee attacks or lost their placement groups.");
             var impact = FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, 4);
             Require(impact is { Duration: .25f, Orientation: 2, Model: "meshes/Effects/test-metal.nif" } && impact.Form == Key(7) &&
                 FalloutImpact.Resolve(records, Key(6), 0) is null, "Impact material selected the wrong source record or replaced a null slot.");
@@ -68,7 +199,8 @@ internal static class WeaponFiringContracts
             Reject(() => FalloutWeaponDamageResolver.NewVegasConditionMultiplier(-.01f));
             Reject(() => FalloutWeaponDamageResolver.NewVegasConditionMultiplier(1.01f));
             wornInventory.Add(records, Key(1), 1, 1, true, extra: new(1, .9f));
-            Reject(() => worn.Resolve(shot));
+            var mixedCondition = worn.Resolve(shot).Condition;
+            Require(mixedCondition is .25f or .9f, "Mixed condition variants did not select one usable weapon instance.");
             var handling = new FalloutWeaponHandling(inventory);
             Require(!handling.ConsumeShot(weapon, shot, records), "Empty magazine consumed ammunition.");
             handling.CompleteReload(weapon);
@@ -91,15 +223,26 @@ internal static class WeaponFiringContracts
             var beforeFailure = JsonSerializer.Serialize(inventory.Capture());
             Reject(() => inventory.ConsumeAmmunition(Key(2), 1, new(Key(5), 5, "invalid", "WEAP", 1, 0, 0)));
             Require(JsonSerializer.Serialize(inventory.Capture()) == beforeFailure, "Invalid return partially consumed ammunition.");
-            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireHitscan());
-            Reject(() => (shot with { Projectiles = 8 }).RequireHitscan());
-            Reject(() => (shot with { AmmoEffects = [Key(5)] }).RequireHitscan());
-            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true unsupported=true");
+            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireInstantRay());
+            Reject(() => (shot with { Projectile = shot.Projectile with { Speed = 0 } }).RequireInstantRay());
+            Reject(() => shot.Projectile.HitscanImpactDelaySeconds(-.01f, .01f));
+            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0x0101 } }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(28)) }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(19)) }).RequireRuntimeAttackOwner());
+            Reject(() => (flameShot with { Projectile = flameShot.Projectile with { Flags = (ushort)(flameShot.Projectile.Flags | 0x0100) } }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectiles = 0 }).RequireInstantRay());
+            Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireInstantRay());
+            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true flameActorPassThrough=true hitscanDelay=true unsupported=true");
         }
         finally { Directory.Delete(directory, true); }
     }
 
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+    private static float BeamProjectileSpeedDelay(FalloutPluginStack records, FalloutFormKey key)
+    {
+        var beam = FalloutProjectile.Read(records, key);
+        return beam.HitscanImpactDelaySeconds(5, .01f);
+    }
     private static void Reject(Action action)
     {
         try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }

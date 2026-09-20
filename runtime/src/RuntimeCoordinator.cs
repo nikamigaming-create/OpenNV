@@ -124,7 +124,7 @@ public partial class RuntimeCoordinator : Node3D
                 var harness = new Diagnostics.Parity.RuntimeLiveHarness();
                 harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
                     () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal));
-                harness.ConfigureBot(ObserveNativeBot, FindNativeBotRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
+                harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.MoveForward.PhysicalKey),
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
                     ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump());
@@ -152,6 +152,11 @@ public partial class RuntimeCoordinator : Node3D
             RuntimeLaunchValidator.ValidatePreflight(_options);
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
+            if (_options.ContainsKey("launcher"))
+            {
+                LoadGodotLauncher();
+                return;
+            }
             if (_options.ContainsKey("xr-rig-proof"))
             {
                 CompleteXrRigProof(_options);

@@ -69,7 +69,9 @@ internal static class NativeNifLightingMaterial
             {{FalloutNifHairShading.ShaderSource}}
             {{RetailVertexFog.ShaderSource}}
             {{NativeNifEmittanceMaterial.ShaderSource}}
+            {{NativeExteriorDetailBlend.NearDeclarations}}
             void vertex() {
+                {{NativeExteriorDetailBlend.NearVertex}}
                 if (use_parallax) {
                     vec3 local_eye = normalize(inverse(MODELVIEW_MATRIX)[3].xyz - VERTEX);
                     source_tangent_eye = normalize(vec3(dot(TANGENT, local_eye), dot(BINORMAL, local_eye), dot(NORMAL, local_eye)));
@@ -78,6 +80,7 @@ internal static class NativeNifLightingMaterial
                     PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
             }
             void fragment() {
+                {{NativeExteriorDetailBlend.NearFragment}}
                 vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);
                 vec2 material_uv = UV;
                 if (use_parallax) {

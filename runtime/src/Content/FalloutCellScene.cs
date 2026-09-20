@@ -72,6 +72,7 @@ internal static class FalloutCellSceneReader
 {
     private const int CellChildrenGroupType = 6;
     private const int WorldChildrenGroupType = 1;
+    internal const byte InteriorCellFlag = 0x01;
     private const int ReferenceTransformBytes = sizeof(float) * 6;
     private const int TeleportDestinationBytes = sizeof(uint) * 2 + sizeof(float) * 6;
     private const int EnableParentBytes = sizeof(uint) * 2;
@@ -112,10 +113,7 @@ internal static class FalloutCellSceneReader
         if (cellRecord.Signature != "CELL")
             throw new InvalidDataException($"Requested native scene {cellKey} is {cellRecord.Signature}, not CELL.");
         var cellValues = Values(cellRecord);
-        var data = OptionalSingle(cellValues, "DATA", cellRecord);
-        var coordinates = OptionalSingle(cellValues, "XCLC", cellRecord);
-        if (coordinates is not null && coordinates.Length < sizeof(int) * 2)
-            throw Error(cellRecord, "XCLC is shorter than two coordinates");
+        var cellDefinition = ReadDefinition(cellKey, cellRecord, cellValues);
         var authoredLighting = OptionalSingle(cellValues, "XCLL", cellRecord);
         var templateId = OptionalSingle(cellValues, "LTMP", cellRecord);
         var inheritance = OptionalSingle(cellValues, "LNAM", cellRecord);
@@ -144,15 +142,7 @@ internal static class FalloutCellSceneReader
                     cellRecord);
             }
         }
-        var cell = new FalloutCellDefinition(
-            cellKey,
-            Text(OptionalSingle(cellValues, "EDID", cellRecord)),
-            data is { Length: > 0 } ? data[0] : (byte)0,
-            coordinates is null ? null : (
-                BinaryPrimitives.ReadInt32LittleEndian(coordinates),
-                BinaryPrimitives.ReadInt32LittleEndian(coordinates.AsSpan(sizeof(int)))),
-            ParentWorldspace(cellRecord),
-            lighting);
+        var cell = cellDefinition with { Lighting = lighting };
 
         var references = new List<FalloutPlacedReference>();
         foreach (var record in stack.EffectiveCellChildren(cellKey, ReferenceTypes))
@@ -287,6 +277,35 @@ internal static class FalloutCellSceneReader
                 light));
         }
         return new FalloutCellScene(cell, references, bases);
+    }
+
+    internal static FalloutCellDefinition ReadDefinition(FalloutPluginStack stack, FalloutFormKey cellKey)
+    {
+        ArgumentNullException.ThrowIfNull(stack);
+        var record = stack.GetEffective(cellKey);
+        if (record.Signature != "CELL")
+            throw new InvalidDataException($"Requested cell {cellKey} is {record.Signature}, not CELL.");
+        return ReadDefinition(cellKey, record, Values(record));
+    }
+
+    private static FalloutCellDefinition ReadDefinition(
+        FalloutFormKey cellKey,
+        FalloutPluginRecord record,
+        IReadOnlyDictionary<string, List<byte[]>> values)
+    {
+        var data = OptionalSingle(values, "DATA", record);
+        var coordinates = OptionalSingle(values, "XCLC", record);
+        if (coordinates is not null && coordinates.Length < sizeof(int) * 2)
+            throw Error(record, "XCLC is shorter than two coordinates");
+        return new FalloutCellDefinition(
+            cellKey,
+            Text(OptionalSingle(values, "EDID", record)),
+            data is { Length: > 0 } ? data[0] : (byte)0,
+            coordinates is null ? null : (
+                BinaryPrimitives.ReadInt32LittleEndian(coordinates),
+                BinaryPrimitives.ReadInt32LittleEndian(coordinates.AsSpan(sizeof(int)))),
+            ParentWorldspace(record),
+            null);
     }
 
     internal static bool IsInitiallyDisabled(FalloutPlacedReference reference) =>

@@ -107,24 +107,9 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             if (weapon is { } form)
             {
                 Weapon = FalloutWeaponPresentation.Read(records, form, firstPerson);
-                var source = FalloutNifFile.Read(Read(Weapon.Model.ModelPath ?? throw new InvalidDataException("Player weapon has no model.")));
-                var targets = source.Blocks.Where(block => block.TypeName is "NiNode" or "NiTriShape" or "NiTriStrips")
-                    .Select(block => source.ReadObject(block.Index) is FalloutNifNode node ? node.Name : source.ReadGeometry(block.Index).Name).ToHashSet(StringComparer.Ordinal);
-                var scene = RuntimeNativeNifMeshBuilder.Build(source, units, externalTransformTargets: targets);
-                NativeNifCollisionBuilder.BindAnimatedAttachment(scene.Root);
-                var attachment = new BoneAttachment3D { Name = "EquippedWeapon", BoneName = "Weapon" };
-                Skeleton.Node.AddChild(attachment); attachment.AddChild(scene.Root);
-                _weaponAttachment = attachment; _weaponRoot = scene.Root; _weaponRest = scene.Root.Transform;
-                _weaponNodes.AddRange(scene.Root.FindChildren("*", "", true, false).OfType<Node3D>());
-                foreach (var mesh in _weaponNodes.OfType<MeshInstance3D>())
-                {
-                    if (!mesh.HasMeta("opennv_nif_geometry_block")) continue;
-                    var geometry = source.ReadGeometry(mesh.GetMeta("opennv_nif_geometry_block").AsInt32());
-                    mesh.MaterialOverride = NativeNifMeshBuilder.BuildMaterial(source, geometry,
-                        texturePaths: NativeNpcMaterial.Alternate(Weapon.Model, source, geometry));
-                    foreach (var property in geometry.Properties.Where(index => index >= 0).Select(source.ReadObject))
-                        Skeleton.MaterialChannels.Add(geometry.Name, source, property, [mesh.MaterialOverride]);
-                }
+                _equippedObject = new(Weapon, Skeleton, _content);
+                _weaponAttachment = _equippedObject.Attachment; _weaponRoot = _equippedObject.Root; _weaponRest = _weaponRoot.Transform;
+                _weaponNodes.AddRange(_equippedObject.Nodes);
             }
             SetAmbient(ambient);
             _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
@@ -161,31 +146,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             throw new NotSupportedException($"Player source {path} has no unique group among: " + string.Join(", ", sequences.Select(value => value.Name)));
         Action<float>? Other(FalloutNifControllerLink link)
         {
-            var nodes = _weaponNodes.Where(node => node.GetMeta("opennv_nif_source_name", "").AsString() == link.NodeName).ToArray();
-            if (nodes.Length > 1)
-            {
-                var rendered = nodes.Where(node => node is MeshInstance3D || node.FindChildren("*", "MeshInstance3D", true, false).Count != 0).ToArray();
-                if (rendered.Length == 1)
-                {
-                    SetMeta("opennv_weapon_empty_alias", link.NodeName);
-                    nodes = rendered;
-                }
-            }
-            if (nodes.Length != 1) return null;
-            if (link.ControllerType == "NiVisController")
-            {
-                var visibility = new FalloutNifBoolAnimation(source, link.Interpolator);
-                return time => nodes[0].Visible = visibility.Sample(time);
-            }
-            if (link.ControllerType != "NiTransformController") return null;
-            var sampler = new FalloutNifAnimationSampler(source, link.Interpolator);
-            return time =>
-            {
-                var sample = sampler.Sample(time);
-                if (sample.Translation is { } position) nodes[0].Position = GamebryoCoordinate.ConvertVector(new(position.X, position.Y, position.Z)) * Skeleton.UnitsToMetres;
-                if (sample.Rotation is { } rotation) nodes[0].Quaternion = new Quaternion(rotation.X, rotation.Z, -rotation.Y, rotation.W).Normalized();
-                if (sample.Scale is { } scale) nodes[0].Scale = Vector3.One * scale;
-            };
+            return _equippedObject?.Bind(source, link);
         }
         // Movement remains with the player's collision controller. The KF's
         // accumulation channel is retained separately from local bone poses.

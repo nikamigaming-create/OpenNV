@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, string Text,
     bool Modal, IReadOnlyList<string> Buttons, FalloutFormKey? Icon = null, uint? DisplaySeconds = null, bool AutomaticTime = false,
-    FalloutMessageRequest? Request = null)
+    FalloutMessageRequest? Request = null, bool ConditionalButtons = false, IReadOnlyList<int>? ButtonIndices = null)
 {
     internal static FalloutSourceMessage Read(FalloutPluginRecord record)
     {
@@ -21,8 +21,8 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
         var flags = fields.Single(field => field.Signature == "DNAM").Data;
         if (flags.Length != 4) throw new InvalidDataException("MESG flag extent is invalid.");
         var bits = BinaryPrimitives.ReadUInt32LittleEndian(flags.Span);
-        if ((bits & ~3u) != 0 || fields.Any(field => field.Signature == "CTDA"))
-            throw new NotSupportedException($"MESG {record.FormKey} flags or conditional buttons need an owner.");
+        if ((bits & ~3u) != 0)
+            throw new NotSupportedException($"MESG {record.FormKey} flags need an owner.");
         var icon = fields.SingleOrDefault(field => field.Signature == "INAM").Data;
         if (icon.Length != 4) throw new InvalidDataException("MESG icon extent is invalid.");
         var iconId = BinaryPrimitives.ReadUInt32LittleEndian(icon.Span);
@@ -32,7 +32,26 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
         if ((bits & 3) == 0 && seconds is null or 0) throw new NotSupportedException("Timed MESG has no positive display time.");
         return new(record.FormKey, Text("FULL"), Text("DESC", true), (bits & 1) != 0,
             fields.Where(field => field.Signature == "ITXT").Select(field => FalloutDialogueTopic.Text(field.Data.Span)).ToArray(),
-            iconId == 0 ? null : record.Plugin.AdjustFormId(iconId), seconds, (bits & 2) != 0);
+            iconId == 0 ? null : record.Plugin.AdjustFormId(iconId), seconds, (bits & 2) != 0,
+            ConditionalButtons: fields.Any(field => field.Signature == "CTDA"));
+    }
+
+    internal FalloutSourceMessage ResolveButtons(FalloutPluginStack records, Func<FalloutCondition, float> evaluate)
+    {
+        if (!ConditionalButtons) return this;
+        var record = records.GetEffective(Form);
+        var groups = new List<List<FalloutCondition>>();
+        foreach (var field in record.ReadSubrecords())
+        {
+            if (field.Signature == "ITXT") groups.Add([]);
+            if (field.Signature != "CTDA") continue;
+            if (groups.Count == 0) throw new InvalidDataException("Message condition precedes its source button.");
+            groups[^1].Add(FalloutCondition.Read(record, field.Data.Span));
+        }
+        if (groups.Count != Buttons.Count) throw new InvalidDataException("Message button/source count differs.");
+        var visible = Enumerable.Range(0, groups.Count).Where(index => FalloutCondition.AllPass(groups[index], evaluate)).ToArray();
+        if (visible.Length == 0) throw new InvalidOperationException("Message has no eligible source buttons.");
+        return this with { Buttons = visible.Select(index => Buttons[index]).ToArray(), ButtonIndices = visible };
     }
 }
 

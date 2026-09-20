@@ -54,7 +54,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         (controller.MaximumEmitters is null or 0 || controller.Master < 0 ||
                             _source.ReadNode(controller.Master).ParticleMaster is not { } master || !master.ParticleSystems.Contains(source.Block.Index)))
                         throw new InvalidDataException("Multi-target emitter has no matching source master/capacity.");
-                    if (controller.Block.TypeName is "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" && (controller.Time.Flags & 0x20) == 0 &&
+                    if (controller.Block.TypeName is "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" && (controller.Time.Flags & 0x20) == 0 &&
                         _source.ReadObject(controller.Interpolator) is FalloutNifFloatInterpolator)
                         directEmitters.Add(controller);
                     cursor = controller.Time.NextController;
@@ -63,13 +63,17 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 runtime.Configure(_source, source, _nodes, BuildMaterial(source.Geometry), _unitsToMetres);
                 foreach (var controller in directEmitters)
                 {
-                    FalloutNifControllerClock.Validate(controller.Time);
+                    // Effects can author dormant clocks. They are bound here,
+                    // and their impact/sever event explicitly starts playback.
+                    FalloutNifControllerClock.Validate(controller.Time, requireActive: false);
+                    var speed = controller.Block.TypeName == "NiPSysEmitterSpeedCtlr";
                     RuntimeNifControllerChannel Channel(string variable, int interpolator) => runtime.Bind(_source,
-                        new FalloutNifControllerLink(source.Geometry.Name, "", "NiPSysEmitterCtlr", controller.Modifier,
+                        new FalloutNifControllerLink(source.Geometry.Name, "", speed ? "NiPSysEmitterSpeedCtlr" : "NiPSysEmitterCtlr", controller.Modifier,
                             variable, interpolator, controller.Block.Index, 0));
                     _directControllerSequences.Add(new RuntimeNifControllerSequence($"DirectEmitter{controller.Block.Index}",
                         (uint)(controller.Time.Flags >> 1) & 3, controller.Time.Frequency, controller.Time.StartTime, controller.Time.StopTime,
-                        [Channel("BirthRate", controller.Interpolator), Channel("EmitterActive", controller.ActiveInterpolator)])
+                        speed ? [Channel("", controller.Interpolator)] :
+                            [Channel("BirthRate", controller.Interpolator), Channel("EmitterActive", controller.ActiveInterpolator)])
                     { DirectClock = controller.Time });
                 }
                 SurfaceCount++;

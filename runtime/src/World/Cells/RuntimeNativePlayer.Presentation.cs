@@ -29,6 +29,7 @@ internal partial class RuntimeNativePlayer
         third = _thirdPerson?.State,
         error = _presentationError,
         weaponHandling = WeaponHandlingState,
+        limbMovement = LimbMovementState,
         xr = XrState
     };
 
@@ -81,6 +82,7 @@ internal partial class RuntimeNativePlayer
 
     public override void _Process(double delta)
     {
+        if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;
         if (_firstPersonPixels is not null) _firstPersonPixels.Visible = _presentationError is null && active && !_thirdPersonMode && (_firstPerson?.Weapon is null || _weaponHandling!.Drawn || _weaponAction is not null);
@@ -97,7 +99,7 @@ internal partial class RuntimeNativePlayer
         if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment))
         {
             var changing = _presentationEquipment is not null;
-            _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _shotPending = false; _shot = null;
+            _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _pendingShotCount = 0; _shot = null;
             try { RebuildPresentation(equipment); }
             catch (Exception error)
             {
