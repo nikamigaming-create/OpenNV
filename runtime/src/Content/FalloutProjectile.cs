@@ -8,9 +8,15 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     FalloutFormKey? MuzzleLight, FalloutFormKey? Explosion)
 {
     internal bool Hitscan => (Flags & 1) != 0;
+    internal bool HasAlternateTrigger => (Flags & 0x0004) != 0;
+    internal bool CanBeDisabled => (Flags & 0x0020) != 0;
+    internal bool CanBePickedUp => (Flags & 0x0040) != 0;
+    internal bool Detonates => (Flags & 0x0400) != 0;
     internal bool IsInstantRayAttack => Hitscan || Type == 4;
     internal bool HasExplicitRotation { get; private init; }
     internal float BouncyMultiplier { get; private init; }
+    internal float ExplosionAltTriggerProximity { get; private init; }
+    internal float ExplosionAltTriggerTimer { get; private init; }
     internal FalloutExplosion? ExplosionSource { get; private init; }
 
     internal static FalloutProjectile Read(FalloutPluginStack records, FalloutFormKey key)
@@ -33,10 +39,13 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
         {
             HasExplicitRotation = explicitRotation,
             BouncyMultiplier = bouncy,
+            ExplosionAltTriggerProximity = Number(data, 28),
+            ExplosionAltTriggerTimer = Number(data, 32),
             ExplosionSource = explosion is { } form ? FalloutExplosion.Read(records, form) : null,
         };
         if (result.Range <= 0 || result.Speed < 0 || result.Gravity < 0 || result.TracerChance is < 0 or > 1 ||
-            result.MuzzleSeconds < 0 || result.BouncyMultiplier < 0)
+            result.MuzzleSeconds < 0 || result.BouncyMultiplier < 0 || result.ExplosionAltTriggerProximity < 0 ||
+            result.ExplosionAltTriggerTimer < 0)
             throw new InvalidDataException("Projectile motion/appearance values are invalid.");
         return result;
 

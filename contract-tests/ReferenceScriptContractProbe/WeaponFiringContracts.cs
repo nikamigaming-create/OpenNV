@@ -23,6 +23,13 @@ internal static class WeaponFiringContracts
             var explosionData = new byte[52]; Float(explosionData, 4, 14); Float(explosionData, 8, 160);
             var explosiveProjectile = new byte[84]; explosiveProjectile[0] = 2; explosiveProjectile[2] = 1;
             Float(explosiveProjectile, 8, 200); Float(explosiveProjectile, 12, 1000); UInt(explosiveProjectile, 36, 12);
+            var mineProjectile = new byte[84]; mineProjectile[0] = 0x66; mineProjectile[2] = 2;
+            Float(mineProjectile, 8, 400); Float(mineProjectile, 12, 10000); Float(mineProjectile, 28, 100);
+            Float(mineProjectile, 32, 3); UInt(mineProjectile, 36, 12);
+            var invalidMineProjectile = (byte[])mineProjectile.Clone(); Float(invalidMineProjectile, 28, -1);
+            var detonatesProjectile = (byte[])mineProjectile.Clone(); detonatesProjectile[0] = 0x62; detonatesProjectile[1] = 4;
+            var timedMineProjectile = (byte[])mineProjectile.Clone(); timedMineProjectile[0] = 0x06; timedMineProjectile[1] = 0x08;
+            Float(timedMineProjectile, 28, 0); Float(timedMineProjectile, 32, 15);
             var beamProjectile = new byte[84]; beamProjectile[2] = 4; Float(beamProjectile, 8, 1500); Float(beamProjectile, 12, 1200);
             var alternateBeamProjectile = (byte[])beamProjectile.Clone(); alternateBeamProjectile[0] = 4;
             var explosiveBeamProjectile = (byte[])beamProjectile.Clone(); explosiveBeamProjectile[0] = 2; UInt(explosiveBeamProjectile, 36, 12);
@@ -40,6 +47,10 @@ internal static class WeaponFiringContracts
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
                 .Concat(Record("EXPL", 12, Field("DATA", explosionData)))
                 .Concat(Record("PROJ", 13, Field("MODL", Text("Effects/rocket.nif")), Field("DATA", explosiveProjectile)))
+                .Concat(Record("PROJ", 20, Field("DATA", mineProjectile)))
+                .Concat(Record("PROJ", 21, Field("DATA", invalidMineProjectile)))
+                .Concat(Record("PROJ", 22, Field("DATA", detonatesProjectile)))
+                .Concat(Record("PROJ", 23, Field("DATA", timedMineProjectile)))
                 .Concat(Record("PROJ", 17, Field("MODL", Text("Effects/beam.nif")), Field("DATA", beamProjectile)))
                 .Concat(Record("PROJ", 18, Field("MODL", Text("Effects/alternate-beam.nif")), Field("DATA", alternateBeamProjectile)))
                 .Concat(Record("PROJ", 19, Field("MODL", Text("Effects/explosive-beam.nif")), Field("DATA", explosiveBeamProjectile)))
@@ -69,6 +80,20 @@ internal static class WeaponFiringContracts
             Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
                 "Projectile did not resolve its winning EXPL record and source model.");
             (shot with { Projectile = explosiveShot }).RequireRuntimeAttackOwner();
+            var mineProjectileSource = FalloutProjectile.Read(records, Key(20));
+            Require(mineProjectileSource.Type == 2 && mineProjectileSource.HasAlternateTrigger && mineProjectileSource.CanBeDisabled &&
+                mineProjectileSource.CanBePickedUp && mineProjectileSource.ExplosionAltTriggerProximity == 100 &&
+                mineProjectileSource.ExplosionAltTriggerTimer == 3 && mineProjectileSource.ExplosionSource?.Form == Key(12),
+                "Mine alternate-trigger flags, proximity, timer or explosion link were not decoded from PROJ DATA.");
+            var detonatesProjectileSource = FalloutProjectile.Read(records, Key(22));
+            Require(!detonatesProjectileSource.HasAlternateTrigger && detonatesProjectileSource.CanBeDisabled &&
+                detonatesProjectileSource.CanBePickedUp && detonatesProjectileSource.Detonates,
+                "Detonating projectile flags were confused with proximity triggering.");
+            var timedMineProjectileSource = FalloutProjectile.Read(records, Key(23));
+            Require(timedMineProjectileSource.HasAlternateTrigger && timedMineProjectileSource.HasExplicitRotation &&
+                timedMineProjectileSource.ExplosionAltTriggerProximity == 0 && timedMineProjectileSource.ExplosionAltTriggerTimer == 15,
+                "Timed, rotated mine fields were not decoded from the winning projectile declaration.");
+            Reject(() => FalloutProjectile.Read(records, Key(21)));
             var thrownWeaponPresentation = FalloutWeaponPresentation.Read(records, Key(14));
             var thrownShot = FalloutWeaponShot.Read(records, Key(14), null, thrownWeaponPresentation.HasAmmunitionSource);
             Require(thrownWeaponPresentation.AnimationGroup == "1gt" && thrownWeaponPresentation.AttackGroup == "attackthrow" &&
