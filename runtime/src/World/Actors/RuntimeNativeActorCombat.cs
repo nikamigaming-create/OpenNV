@@ -30,6 +30,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         lastSeverEffect = _lastSeverEffect,
         goreError = _goreError,
         error = Error,
+        muzzlePresentationError = _muzzlePresentationError,
+        casingPresentationError = _casingPresentationError,
         engagement = EngagementObservation,
         unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI-tactics,confidence-threat-ratios,hit-and-death-script-events,death-XP,weapon-limb-selection,exploded-limbs"
     };

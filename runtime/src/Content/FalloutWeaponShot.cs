@@ -71,8 +71,8 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
             return;
         }
         if (AmmoEffects.Count != 0) throw new NotSupportedException("Selected ammunition needs its AMEF modifier owner.");
-        if (Projectile.Type != 1 || Projectile.Speed <= 0 || Projectile.Model is null || Projectile.Explosion is not null ||
-            (Projectile.Flags & 0x0802) != 0 || Projectile.HasExplicitRotation || Projectile.BouncyMultiplier != 0)
-            throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation, bounce or explosion owner.");
+        if (Projectile.Type is not (1 or 2) || Projectile.Speed <= 0 || Projectile.Model is null || Projectile.Explosion is not null ||
+            (Projectile.Flags & 0x0802) != 0 || Projectile.HasExplicitRotation)
+            throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation, explosion or ammo-effect owner.");
     }
 }

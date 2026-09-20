@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.World.Cells;
 internal readonly record struct RuntimeNativeProjectileContact(
     Godot.Collections.Dictionary Collision, Node? Collider, Vector3 Point, Vector3 Normal, Vector3 Direction);
 
-/// <summary>Source-speed missile flight with continuous ray collision between physics frames.</summary>
+/// <summary>Source-speed missile and lobber flight with continuous ray collision and bounded bounce response.</summary>
 internal sealed partial class RuntimeNativeProjectileFlight : Node3D
 {
     private readonly FalloutProjectile _source;
@@ -18,6 +18,8 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     private readonly Godot.Collections.Array<Rid> _exclusions = [];
     private Vector3 _velocity;
     private float _travelledMeters;
+    private int _contacts;
+    private int _bounces;
     private bool _active;
     private string _status = "prepared";
 
@@ -25,6 +27,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     internal Action<RuntimeNativeProjectileFlight>? OnFinished { get; set; }
     internal string? Error { get; private set; }
     internal string Status => _status;
+    internal int Contacts => _contacts;
     internal bool IsFinished => _status is not ("prepared" or "in-flight");
     internal object Observation => new
     {
@@ -34,8 +37,10 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         velocity = Vector3Array(_velocity),
         travelledMeters = _travelledMeters,
         rangeMeters = _rangeMeters,
+        contacts = _contacts,
+        bounces = _bounces,
         error = Error,
-        boundary = "missile-flight;gravity-and-source-speed;lobber-bounce,rotation,tracer,ammo-effects-and-explosions-unmatched"
+        boundary = "missile-and-lobber-flight;gravity,source-speed-and-bounce;beam,flame,rotation,tracer,ammo-effects-and-explosions-unmatched"
     };
 
     internal RuntimeNativeProjectileFlight(FalloutProjectile source, Node3D model, float unitsToMeters,
@@ -45,9 +50,9 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(exclusions);
-        if (source.Hitscan || source.Type != 1 || source.Speed <= 0 || source.Model is null ||
-            source.Explosion is not null || (source.Flags & 0x0802) != 0 || source.HasExplicitRotation || source.BouncyMultiplier != 0)
-            throw new NotSupportedException($"Projectile {source.Form} is outside the linear or ballistic missile owner.");
+        if (source.Hitscan || source.Type is not (1 or 2) || source.Speed <= 0 || source.Model is null ||
+            source.Explosion is not null || (source.Flags & 0x0802) != 0 || source.HasExplicitRotation)
+            throw new NotSupportedException($"Projectile {source.Form} is outside the missile/lobber owner or needs an explosion owner.");
         if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0 ||
             !float.IsFinite(gravityMetersPerSecondSquared) || gravityMetersPerSecondSquared <= 0 ||
             !origin.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f ||
@@ -131,10 +136,41 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
                 return;
             }
             _travelledMeters += start.DistanceTo(point);
-            GlobalPosition = point;
-            OrientTo(direction);
             var collider = collision.TryGetValue("collider", out value) ? value.AsGodotObject() as Node : null;
-            Finish("hit", new(collision, collider, point, normal, direction));
+            var contact = new RuntimeNativeProjectileContact(collision, collider, point, normal, direction);
+            if (_source.BouncyMultiplier > 0)
+            {
+                if (normal.LengthSquared() < .99f)
+                {
+                    Finish("invalid-contact-normal");
+                    return;
+                }
+                var segmentLength = start.DistanceTo(destination);
+                var fraction = segmentLength > .000001f
+                    ? Mathf.Clamp(start.DistanceTo(point) / segmentLength, 0, 1)
+                    : 1;
+                _velocity = (_velocity + _gravity * (seconds * fraction)).Bounce(normal.Normalized()) * _source.BouncyMultiplier;
+                if (!_velocity.IsFinite())
+                {
+                    Finish("invalid-bounce");
+                    return;
+                }
+                _bounces++;
+                GlobalPosition = point + normal.Normalized() * .005f;
+                OrientToVelocity();
+                if (!NotifyContact(contact))
+                {
+                    Finish("contact-error");
+                    return;
+                }
+                if (_velocity.LengthSquared() < .0004f) Finish("stopped");
+            }
+            else
+            {
+                GlobalPosition = point;
+                OrientTo(direction);
+                Finish("hit", contact);
+            }
             return;
         }
 
@@ -150,16 +186,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         if (IsFinished) return;
         _active = false;
         _status = status;
-        if (contact is { } hit)
-        {
-            try { OnContact?.Invoke(hit); }
-            catch (Exception error)
-            {
-                Error = error.Message;
-                _status = "contact-error";
-                GD.PushError($"OPENNV_PROJECTILE_CONTACT_UNBOUND projectile={_source.Form} {Error}");
-            }
-        }
+        if (contact is { } hit && !NotifyContact(hit)) _status = "contact-error";
         try { OnFinished?.Invoke(this); }
         catch (Exception error)
         {
@@ -167,6 +194,22 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             GD.PushError($"OPENNV_PROJECTILE_FINISH_UNBOUND projectile={_source.Form} {Error}");
         }
         QueueFree();
+    }
+
+    private bool NotifyContact(RuntimeNativeProjectileContact contact)
+    {
+        _contacts++;
+        try
+        {
+            OnContact?.Invoke(contact);
+            return true;
+        }
+        catch (Exception error)
+        {
+            Error = error.Message;
+            GD.PushError($"OPENNV_PROJECTILE_CONTACT_UNBOUND projectile={_source.Form} {Error}");
+            return false;
+        }
     }
 
     private void OrientToVelocity()

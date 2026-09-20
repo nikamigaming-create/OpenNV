@@ -12,6 +12,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private RuntimeNativeShotEffects? _enemyShotEffects;
     private NativeActorMuzzle? _enemyMuzzle;
     private Godot.Collections.Array<Rid>? _enemyRayExclusions;
+    private string? _muzzlePresentationError;
+    private string? _casingPresentationError;
 
     private void ShootPlayer(RuntimeNativePlayer player)
     {
@@ -24,11 +26,21 @@ internal sealed partial class RuntimeNativeActorCombat
             _enemyShot.RequireRuntimeAttackOwner();
             var socket = _enemyObject!.Nodes.Single(node => node.GetMeta("opennv_nif_source_name", "").AsString() == "ProjectileNode");
             _enemyMuzzle ??= new(_records, _content, socket, _skeleton.UnitsToMetres);
-            _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false);
+            try { _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false); _muzzlePresentationError = null; }
+            catch (Exception error)
+            {
+                _muzzlePresentationError = error.Message;
+                GD.PushError($"OPENNV_MUZZLE_PRESENTATION_UNBOUND reference={_state.Reference} {error.Message}");
+            }
         }
         _enemyShotEffects ??= new(_records, _content, _skeleton.UnitsToMetres, _mover, _mask);
         if (!_enemyShotEffects.IsInsideTree()) _actor.AddChild(_enemyShotEffects);
-        _enemyShotEffects.PrepareShell(weapon);
+        try { _enemyShotEffects.PrepareShell(weapon); _casingPresentationError = null; }
+        catch (Exception error)
+        {
+            _casingPresentationError = error.Message;
+            GD.PushError($"OPENNV_CASING_PRESENTATION_UNBOUND reference={_state.Reference} {error.Message}");
+        }
         _enemyRayExclusions ??= new(_actor.FindChildren("*", "", true, false).OfType<CollisionObject3D>()
             .Select(body => body.GetRid()).Append(_mover!.GetRid()));
         var socketPose = _enemyObject!.Socket(_skeleton, "ProjectileNode");
@@ -95,7 +107,15 @@ internal sealed partial class RuntimeNativeActorCombat
             if (collider is not null) lastCollider = collider;
             if (part is not null) lastPart = part;
         }
-        _enemyShotEffects.EjectCasing(_enemyObject.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition);
+        if (_casingPresentationError is null)
+        {
+            try { _enemyShotEffects.EjectCasing(_enemyObject.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
+            catch (Exception error)
+            {
+                _casingPresentationError = error.Message;
+                GD.PushError($"OPENNV_CASING_PRESENTATION_UNBOUND reference={_state.Reference} {error.Message}");
+            }
+        }
         var after = _context.Vitals().ExactHitPoints;
         _lastAttack = new
         {
@@ -138,10 +158,18 @@ internal sealed partial class RuntimeNativeActorCombat
                 foreach (var flight in flights) flight.Free();
                 return;
             }
+            foreach (var flight in flights) effects.LaunchProjectile(flight);
             (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
             if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
-            _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition);
-            foreach (var flight in flights) effects.LaunchProjectile(flight);
+            if (_casingPresentationError is null)
+            {
+                try { _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
+                catch (Exception error)
+                {
+                    _casingPresentationError = error.Message;
+                    GD.PushError($"OPENNV_CASING_PRESENTATION_UNBOUND reference={_state.Reference} {error.Message}");
+                }
+            }
             _lastAttack = new
             {
                 kind = "source-projectile-flight",
@@ -152,7 +180,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 projectileFlights = flights.Count,
                 direction = new[] { direction.X, direction.Y, direction.Z },
                 origin = new[] { origin.X, origin.Y, origin.Z },
-                boundary = "missile-flight;gravity-and-source-speed;ammo-effects,tracer,rotation,bounce,explosions-and-retail-cadence-unmatched"
+                boundary = "missile-lobber-flight;source-speed,gravity-and-bounce;ammo-effects,tracer,rotation,explosions-and-retail-cadence-unmatched"
             };
             GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=projectile-flight projectiles={flights.Count}");
         }
@@ -178,10 +206,19 @@ internal sealed partial class RuntimeNativeActorCombat
             healthAfter = _context.Vitals().ExactHitPoints;
             _hits++;
         }
-        if (contact.Collider is not null && shot.ImpactDataSet is { } set &&
-            FalloutImpact.Resolve(_records, set, part is null ? FalloutImpact.MaterialIndex(
-                NativeNifCollisionBuilder.HitMaterial(contact.Collision)) : 6) is { } impact)
-            _enemyShotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
+        string? impactError = null;
+        try
+        {
+            if (contact.Collider is not null && shot.ImpactDataSet is { } set &&
+                FalloutImpact.Resolve(_records, set, part is null ? FalloutImpact.MaterialIndex(
+                    NativeNifCollisionBuilder.HitMaterial(contact.Collision)) : 6) is { } impact)
+                _enemyShotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
+        }
+        catch (Exception error)
+        {
+            impactError = error.Message;
+            GD.PushError($"OPENNV_PROJECTILE_IMPACT_UNBOUND reference={_state.Reference} {error.Message}");
+        }
         _lastAttack = new
         {
             kind = "source-projectile-flight-contact",
@@ -192,6 +229,7 @@ internal sealed partial class RuntimeNativeActorCombat
             point = new[] { contact.Point.X, contact.Point.Y, contact.Point.Z },
             damage = part is null ? (float?)null : damage.Amount,
             limbDamage = part is null ? (float?)null : damage.Amount * damage.LimbMultiplier,
+            impactError,
             healthBefore,
             healthAfter,
             direction = new[] { contact.Direction.X, contact.Direction.Y, contact.Direction.Z }

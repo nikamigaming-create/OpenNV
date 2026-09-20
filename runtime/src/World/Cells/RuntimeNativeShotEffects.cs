@@ -242,9 +242,10 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private void ProjectileFinished(RuntimeNativeProjectileFlight projectile)
     {
         _projectiles.Remove(projectile);
-        if (projectile.Status == "hit") _projectileHits++;
-        else if (projectile.Status == "range-ended") _projectileMisses++;
-        else _projectileErrors++;
+        if (projectile.Error is not null || projectile.Status is not ("hit" or "range-ended" or "stopped"))
+            _projectileErrors++;
+        else if (projectile.Contacts != 0) _projectileHits++;
+        else _projectileMisses++;
     }
 
     private FalloutNifFile ReadModel(string path) => FalloutNifFile.Read(ReadBytes(path));

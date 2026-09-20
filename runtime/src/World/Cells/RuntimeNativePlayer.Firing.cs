@@ -44,7 +44,7 @@ internal partial class RuntimeNativePlayer
         damageError = _damageError,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,tracers,flight,explosions"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,other-projectile-types,tracers,explosions"
     };
 
     private void RequestWeaponFire()
@@ -92,7 +92,7 @@ internal partial class RuntimeNativePlayer
             {
                 _muzzleOwner = _firstPerson.GetInstanceId(); _muzzleProjectile = _shot.Projectile.Form; _muzzleError = null;
                 try { _firstPerson.PrepareMuzzle(_shot.Projectile); _thirdPerson?.PrepareMuzzle(_shot.Projectile); }
-                catch (NotSupportedException error)
+                catch (Exception error)
                 {
                     // Presentation failure does not turn a valid source shot
                     // into an empty magazine or silently accept the missing FX.
