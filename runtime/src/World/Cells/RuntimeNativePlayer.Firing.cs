@@ -10,7 +10,6 @@ internal partial class RuntimeNativePlayer
 {
     private FalloutWeaponShot? _shot;
     private int _pendingShotCount;
-    private bool _shotEmitted;
     private long _shotsFired, _emptyTriggers;
     private object? _lastShot;
     private string? _firePreparationError;
@@ -33,6 +32,7 @@ internal partial class RuntimeNativePlayer
     internal object FiringState => new
     {
         shots = _shotsFired,
+        meleeAttacks = _meleeAttacks,
         emptyTriggers = _emptyTriggers,
         prepared = _shot,
         last = _lastShot,
@@ -44,7 +44,7 @@ internal partial class RuntimeNativePlayer
         damageError = _damageError,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,weapon-limb-selection,impact-decal,tracers,flight,explosions"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,impact-decal,tracers,flight,explosions"
     };
 
     private void RequestWeaponFire()
@@ -53,6 +53,11 @@ internal partial class RuntimeNativePlayer
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
+            if (IsMeleeWeapon(weapon))
+            {
+                RequestMeleeWeaponFire(weapon);
+                return;
+            }
             if (weapon.Ammunition.Count == 0 || weapon.ClipSize == 0 || weapon.AmmoUse == 0)
                 throw new NotSupportedException("This weapon needs its melee, thrown or ammo-free attack owner.");
             if (weapon.Automatic && (!float.IsFinite(weapon.AttackShotsPerSecond) || weapon.AttackShotsPerSecond <= 0))
@@ -79,7 +84,7 @@ internal partial class RuntimeNativePlayer
             var hitEvents = clip.TextKeys
                 .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
                 .Count(text => text.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase));
-            if (hitEvents == 0 || !weapon.Automatic && hitEvents != 1)
+            if (hitEvents == 0)
                 throw new NotSupportedException("Weapon attack needs its source Hit event count.");
             var clipDone = System.Diagnostics.Stopwatch.GetTimestamp();
             if (_muzzleOwner != _firstPerson.GetInstanceId() || _muzzleProjectile != _shot.Projectile.Form)
@@ -95,7 +100,7 @@ internal partial class RuntimeNativePlayer
                 }
             }
             var muzzleDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            _shotEmitted = false; _firePreparationError = null;
+            _firePreparationError = null;
             RequestWeaponAction(weapon.AttackGroup);
             var actionDone = System.Diagnostics.Stopwatch.GetTimestamp();
             _firePreparationTiming = new
@@ -122,9 +127,15 @@ internal partial class RuntimeNativePlayer
         var pending = _pendingShotCount;
         _pendingShotCount = 0;
         if (pending == 0) return;
-        if (_shot is null || _firstPerson?.Weapon is not { } weapon || _modalInput ||
+        if (_firstPerson?.Weapon is not { } weapon || _modalInput ||
             _xr is { } xr && (!xr.RightGrip.GetHasTrackingData() || !xr.RightAim.GetHasTrackingData() || xr.PointAtPipBoy is not null ||
                 xr.WorldPointer || _xrRightContact?.Valid != true || !_firstPerson.XrRightContactReached)) return;
+        if (_shot is null || _shot.Weapon != weapon.Form)
+        {
+            if (!IsMeleeWeapon(weapon)) return;
+            for (var strike = 0; strike < pending; strike++) PublishPendingMeleeStrike(weapon);
+            return;
+        }
         for (var pendingIndex = 0; pendingIndex < pending; pendingIndex++)
         {
             if (weapon.Automatic && _automaticFireStopped) return;

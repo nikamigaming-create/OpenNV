@@ -13,16 +13,19 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
     private readonly float _skillScale = FalloutGameSettingFloats.Read(records, "fDamageSkillMult");
 
     internal FalloutWeaponDamage Resolve(FalloutWeaponShot shot)
+        => Resolve(shot.Weapon, shot.BaseDamage);
+
+    internal FalloutWeaponDamage Resolve(FalloutFormKey form, float baseDamage)
     {
-        var weapon = records.GetEffective(shot.Weapon);
+        var weapon = records.GetEffective(form);
         var data = weapon.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.Span;
         if (data.Length < 120) throw new NotSupportedException("Weapon limb/skill layout is unbound.");
         var skill = actorValue(BinaryPrimitives.ReadInt32LittleEndian(data[104..]));
         var limb = FalloutProjectile.Number(data, 116);
-        var item = inventory.Item(shot.Weapon) ?? throw new InvalidOperationException("Fired weapon is absent from inventory.");
+        var item = inventory.Item(form) ?? throw new InvalidOperationException("Used weapon is absent from inventory.");
         if (item.Variants is { Count: > 1 }) throw new NotSupportedException("Equipped weapon condition stack selection is unbound.");
         var condition = item.Variants is { Count: 1 } variants ? variants[0].Condition ?? 1 : 1;
-        var damage = shot.BaseDamage * _weaponScale * (_skillBase + _skillScale * skill / 100) * NewVegasConditionMultiplier(condition);
+        var damage = baseDamage * _weaponScale * (_skillBase + _skillScale * skill / 100) * NewVegasConditionMultiplier(condition);
         foreach (var perk in perks().Where(perk => perk.Entry == 0))
         {
             if (perk.Conditions.Count != 0) throw new NotSupportedException("Conditional weapon damage perk is unbound.");

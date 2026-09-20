@@ -93,8 +93,8 @@ internal partial class RuntimeNativePlayer
             _weaponActionHitCount = attack ? clip.TextKeys
                 .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
                 .Count(text => text.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase)) : 0;
-            if (attack && weapon.Automatic && _weaponActionHitCount == 0)
-                throw new NotSupportedException("Automatic attack animation has no source Hit event.");
+            if (attack && _weaponActionHitCount == 0)
+                throw new NotSupportedException("Attack animation has no source Hit event.");
             if (sequence.CycleType != 2 && !(attack && weapon.Automatic && sequence.CycleType == 0))
                 throw new NotSupportedException("A weapon action needs a clamped sequence or an automatic attack loop.");
             _weaponActionKeys = new(clip.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
@@ -138,8 +138,8 @@ internal partial class RuntimeNativePlayer
                 foreach (var text in key.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
                 {
                     if (text.Equals("Hit", StringComparison.OrdinalIgnoreCase) && attack &&
-                        (weapon.Automatic ? _weaponTriggerHeld && !_automaticFireStopped : !_shotEmitted))
-                    { _shotEmitted = true; _pendingShotCount++; }
+                        (!weapon.Automatic || _weaponTriggerHeld && !_automaticFireStopped))
+                        _pendingShotCount++;
                     else if (text.StartsWith("Sound:", StringComparison.OrdinalIgnoreCase)) _weaponSounds!.Dispatch(key with { Text = text });
                     else if (text.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
                         weapon.Sounds.TryGetValue(text[5..].Trim().ToLowerInvariant(), out var sound)) _weaponSounds!.DispatchSound(sound);
@@ -165,7 +165,7 @@ internal partial class RuntimeNativePlayer
                     _thirdPerson?.SetDrawn(false); _firstPerson.SetDrawn(false); _weaponHandling!.SetDrawn(false);
                 }
                 var continueAutomaticFire = weapon.Automatic && _weaponTriggerHeld && !_automaticFireStopped &&
-                    _weaponHandling!.CanFire(weapon) && _weaponAction != "unequip";
+                    CanContinueAutomaticFire(weapon) && _weaponAction != "unequip";
                 GD.Print($"OPENNV_WEAPON_ACTION_END weapon={weapon.Form} group={_weaponAction}");
                 CancelWeaponAction(); SaveGame?.Invoke();
                 if (continueAutomaticFire) RequestWeaponFire();
