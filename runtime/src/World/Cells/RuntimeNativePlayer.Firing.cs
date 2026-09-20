@@ -203,6 +203,8 @@ internal partial class RuntimeNativePlayer
                 {
                     ordinal = _shotsFired,
                     weapon = weapon.Form.ToString(),
+                    weaponAnimationType = _shot.WeaponAnimationType,
+                    attackAnimation = _shot.AttackAnimation,
                     ammunition = _shot.Ammunition.ToString(),
                     projectile = _shot.Projectile.Form.ToString(),
                     projectiles = _shot.Projectiles,

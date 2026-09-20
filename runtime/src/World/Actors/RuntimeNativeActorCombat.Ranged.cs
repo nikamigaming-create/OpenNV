@@ -174,6 +174,8 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 kind = "source-projectile-flight",
                 weapon = weapon.Form.ToString(),
+                weaponAnimationType = shot.WeaponAnimationType,
+                attackAnimation = shot.AttackAnimation,
                 projectile = shot.Projectile.Form.ToString(),
                 loaded = handling.Loaded(weapon.Form),
                 projectiles = shot.Projectiles,

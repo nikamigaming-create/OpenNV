@@ -8,6 +8,9 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
     FalloutFormKey? RecoveredItem, float RecoveryPercent, FalloutFormKey? ImpactDataSet,
     IReadOnlyList<FalloutAmmoEffect> AmmoEffects)
 {
+    internal uint WeaponAnimationType { get; init; }
+    internal byte AttackAnimation { get; init; }
+
     internal float ResolvedMinimumSpread
     {
         get
@@ -32,7 +35,11 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
         if (data.Length is not (120 or 124 or 136 or 200 or 204) || item.Length != 15)
             throw new NotSupportedException("Weapon shot record extent is unbound.");
         var type = BinaryPrimitives.ReadUInt32LittleEndian(data);
-        if (type is < 3 or > 9) throw new NotSupportedException($"Weapon type {type} needs its melee/thrown attack owner.");
+        if (type is not (3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 13))
+            throw new NotSupportedException($"Weapon type {type} needs its melee, mine or ammo-free attack owner.");
+        var attackAnimation = data[41];
+        if (type is 10 or 13 && attackAnimation is not (114 or 120 or 126 or 132 or 138 or 150 or 156))
+            throw new NotSupportedException($"Thrown weapon {weapon} has no source AttackThrow animation.");
         var projectile = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[36..]));
         var count = (int)data[42];
         var extra = ammo.ReadSubrecords().SingleOrDefault(field => field.Signature == "DAT2").Data.Span;
@@ -65,7 +72,13 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
         }).ToArray();
         var result = new FalloutWeaponShot(weapon, ammunition, FalloutProjectile.Read(records, projectile.Value), count,
             BinaryPrimitives.ReadInt16LittleEndian(item[12..]), FalloutProjectile.Number(data, 16), FalloutProjectile.Number(data, 20),
-            recovered, recovery, impact.IsEmpty ? null : source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(impact.Span)), effects);
+            recovered, recovery, impact.IsEmpty ? null : source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(impact.Span)), effects)
+        {
+            WeaponAnimationType = type,
+            AttackAnimation = attackAnimation,
+        };
+        if (type is 10 or 13 && result.Projectile.Hitscan)
+            throw new NotSupportedException($"Thrown weapon {weapon} needs a source projectile flight.");
         if (result.BaseDamage < 0 || result.MinimumSpread < 0 || result.Spread < 0) throw new InvalidDataException("Shot damage/spread is invalid.");
         return result;
     }
