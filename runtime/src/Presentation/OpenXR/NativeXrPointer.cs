@@ -25,7 +25,7 @@ internal sealed partial class NativeXrPointer : Node3D
         };
         _beam = new MeshInstance3D
         {
-            Mesh = new CylinderMesh { TopRadius = .001f, BottomRadius = .001f, Height = 1, RadialSegments = 6 },
+            Mesh = CreateOpenBeamMesh(),
             MaterialOverride = _material,
             Rotation = new(Mathf.Pi / 2, 0, 0),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
@@ -73,5 +73,40 @@ internal sealed partial class NativeXrPointer : Node3D
         foreach (var (mesh, overlay) in _previous) if (IsInstanceValid(mesh)) mesh.MaterialOverlay = overlay;
         _previous.Clear(); _target = null;
     }
+
+    private static ArrayMesh CreateOpenBeamMesh()
+    {
+        const int radialSegments = 8;
+        const float radius = .001f;
+        var mesh = new SurfaceTool();
+        mesh.Begin(Mesh.PrimitiveType.Triangles);
+        for (var index = 0; index < radialSegments; index++)
+        {
+            var angle0 = 2 * Mathf.Pi * index / radialSegments;
+            var angle1 = 2 * Mathf.Pi * (index + 1) / radialSegments;
+            var normal0 = new Vector3(Mathf.Cos(angle0), 0, Mathf.Sin(angle0));
+            var normal1 = new Vector3(Mathf.Cos(angle1), 0, Mathf.Sin(angle1));
+            var normal = (normal0 + normal1).Normalized();
+            var bottom0 = new Vector3(normal0.X * radius, -.5f, normal0.Z * radius);
+            var bottom1 = new Vector3(normal1.X * radius, -.5f, normal1.Z * radius);
+            var top0 = new Vector3(normal0.X * radius, .5f, normal0.Z * radius);
+            var top1 = new Vector3(normal1.X * radius, .5f, normal1.Z * radius);
+
+            Add(normal, bottom0);
+            Add(normal, top0);
+            Add(normal, top1);
+            Add(normal, bottom0);
+            Add(normal, top1);
+            Add(normal, bottom1);
+        }
+        return mesh.Commit();
+
+        void Add(Vector3 normal, Vector3 vertex)
+        {
+            mesh.SetNormal(normal);
+            mesh.AddVertex(vertex);
+        }
+    }
+
     public override void _ExitTree() => Clear();
 }
