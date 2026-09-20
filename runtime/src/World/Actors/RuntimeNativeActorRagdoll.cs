@@ -24,6 +24,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private string _sourceHash = "";
     private readonly Dictionary<int, Body> _bySource = [];
     private bool _active;
+    private Vector3 _lastSeparationVelocity;
     internal bool Active => _active;
     internal object Observation => new
     {
@@ -38,6 +39,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             position = new[] { body.Node.GlobalPosition.X, body.Node.GlobalPosition.Y, body.Node.GlobalPosition.Z }
         }).ToArray(),
         source = _sourceHash,
+        separationVelocity = new[] { _lastSeparationVelocity.X, _lastSeparationVelocity.Y, _lastSeparationVelocity.Z },
         boundary = "Godot-6dof-angular-envelope;Havok-cone-friction-inertia-and-malleable-solver-parity-unverified"
     };
 
@@ -224,6 +226,18 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         for (var current = bone; current >= 0; current = _skeleton.Node.GetBoneParent(current))
             if (current == parent) return true;
         return false;
+    }
+
+    internal void AddSeparationVelocity(byte type, float gameUnitsPerSecond)
+    {
+        if (!_active || !_severed.Contains(type)) throw new InvalidOperationException("Limb velocity requires an active severed body.");
+        if (!float.IsFinite(gameUnitsPerSecond) || gameUnitsPerSecond < 0) throw new InvalidDataException("Severed limb velocity is invalid.");
+        var root = _skeleton.BoneIndex(_parts.Single(part => part.Type == type).Node);
+        var origin = (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(root)).Origin;
+        var outward = origin - GetParent<Node3D>().GlobalPosition;
+        _lastSeparationVelocity = outward.Normalized() * (gameUnitsPerSecond * _skeleton.UnitsToMetres);
+        foreach (var body in _bodies)
+            if (DescendsFrom(body.Bone, root)) { body.Node.LinearVelocity += _lastSeparationVelocity; body.Node.Sleeping = false; }
     }
 
     public override void _Process(double delta) { if (_active) Publish(); }

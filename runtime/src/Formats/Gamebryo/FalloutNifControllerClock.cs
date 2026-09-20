@@ -2,11 +2,11 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class FalloutNifControllerClock
 {
-    internal static void Validate(FalloutNifTimeController source)
+    internal static void Validate(FalloutNifTimeController source, bool requireActive = true)
     {
         if (!float.IsFinite(source.StartTime) || !float.IsFinite(source.StopTime) || source.StopTime <= source.StartTime ||
             !float.IsFinite(source.Frequency) || source.Frequency <= 0 || !float.IsFinite(source.Phase) ||
-            (source.Flags & 0x38) != 0x08 || ((source.Flags >> 1) & 3) is not (0 or 2))
+            (source.Flags & 0x30) != 0 || requireActive && (source.Flags & 8) == 0 || ((source.Flags >> 1) & 3) is not (0 or 2))
             throw new NotSupportedException("Direct NIF clock requires an active forward controller with no manager.");
     }
 
@@ -22,7 +22,7 @@ internal static class FalloutNifControllerClock
 
     internal static double ElapsedAt(FalloutNifTimeController source, double sourceSeconds)
     {
-        Validate(source);
+        Validate(source, requireActive: false);
         if (!double.IsFinite(sourceSeconds)) throw new ArgumentOutOfRangeException(nameof(sourceSeconds));
         var target = Math.Clamp(sourceSeconds, source.StartTime, source.StopTime);
         if (((source.Flags >> 1) & 3) == 0)

@@ -6,6 +6,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativePlayerActor
 {
     private BoneAttachment3D? _weaponAttachment;
+    private NativeActorWeaponAttachment? _equippedObject;
     private Node3D? _weaponRoot;
     private Transform3D _weaponRest;
     private RuntimeNativeNifAnimation? _actionClip;

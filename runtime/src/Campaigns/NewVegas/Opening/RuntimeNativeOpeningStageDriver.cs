@@ -66,6 +66,15 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal int PlayerLevel => SourcePlayerLevel;
     internal FalloutNativeSpecialState Special => _special;
     internal GameplayVitals Vitals => _vitals.State;
+    private FalloutActorDefenseResolver? _incomingDefense;
+    internal void DamagePlayer(float amount, byte part, float limbMultiplier)
+    {
+        _incomingDefense ??= new(_pluginStack);
+        var armor = _inventory.Equipped.Select(_pluginStack.RuntimeFormKey)
+            .Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray();
+        var defense = _incomingDefense.Read(_raceSexContract.Player, _inventory, armor);
+        _vitals.Damage(defense.Absorb(amount, FalloutGameSettingFloats.Read(_pluginStack, "fMinDamMultiplier")), part, limbMultiplier);
+    }
     internal object? SpeechState => _speech?.State;
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;

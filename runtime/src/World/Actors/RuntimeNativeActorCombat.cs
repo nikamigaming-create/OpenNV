@@ -26,13 +26,17 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         health = _state.ActorValues.GetValueOrDefault("health")?.Current,
         injury = _state.Injury,
         ragdoll = _ragdoll?.Observation,
+        gore = _goreEffects?.State,
+        lastSeverEffect = _lastSeverEffect,
+        goreError = _goreError,
         error = Error,
-        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI,hit-and-death-script-events,death-XP,weapon-limb-selection,exploded-limbs"
+        engagement = EngagementObservation,
+        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI-tactics,confidence-threat-ratios,hit-and-death-script-events,death-XP,weapon-limb-selection,exploded-limbs"
     };
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
         FalloutReferenceWorld world, FalloutReferenceInstance state, FalloutPluginStack records, RuntimeLiveContentSource content,
-        uint layer, uint mask)
+        uint layer, uint mask, NativeActorCombatContext? context = null)
     {
         var owner = new RuntimeNativeActorCombat
         {
@@ -46,6 +50,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _content = content,
             _layer = layer,
             _mask = mask
+            , _context = context
         };
         actor.AddChild(owner);
         return owner;
@@ -53,6 +58,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     public override void _Ready()
     {
+        RestoreEngagementPose();
         // A cold cell enters the tree with this owner already attached. Its
         // parent is still visiting children during Ready, so adding the death
         // rig there would be rejected by Godot.
@@ -97,6 +103,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             if (!Dead && amount * bodyPart.DamageMultiplier >= health.Current) PrepareDeath();
             var hit = _world.DamageActor(_state.Reference, attacker, part, amount, damage.LimbMultiplier, level, globals);
             if (hit.Died) BeginDeath();
+            else if (hit.HealthDamage > 0) Provoke(attacker);
             Error = null;
             GD.Print($"OPENNV_ACTOR_HIT reference={hit.Reference} part={hit.Part} health={hit.HealthBefore:R}->{hit.HealthAfter:R} died={hit.Died}");
             return hit;
@@ -110,10 +117,13 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     internal void SeverLimb(byte type)
     {
         if (!Dead) throw new InvalidOperationException("Source limb separation requires a dead actor.");
+        if (_state.Injury!.SeveredParts?.Contains(type) == true) return;
         PrepareDeath();
         _ragdoll!.RequireSeverable(type);
         _ragdoll.Sever(type);
         _world.SeverLimb(_state.Reference, type);
+        _ragdoll.AddSeparationVelocity(type, FalloutGameSettingFloats.Read(_records, "fCombatDismemberedLimbVelocity"));
+        EmitSeverEffect(_world.BodyParts(_state.Reference).Parts.Single(part => part.Type == type));
     }
 
     private void BeginDeath()

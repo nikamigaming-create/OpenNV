@@ -660,7 +660,7 @@ public partial class RuntimeCoordinator
                 root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
-                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer);
+                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
                 AddNativeReferenceEmittance(actor, reference);
                 _nativeActorDivergences[reference.FormKey.ToString()] =
                     "animation-selection-blending, face-pose, gameplay, material-lighting-output parity unbound";
@@ -693,7 +693,7 @@ public partial class RuntimeCoordinator
                 root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences.Get(reference.FormKey), _nativePluginStack!, source,
-                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer);
+                    _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
                 AddNativeReferenceEmittance(actor, reference);
                 _nativeActorDivergences[reference.FormKey.ToString()] = string.Join("; ", actor.Unbound);
                 Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "skinned-creature-presentation"));
@@ -955,6 +955,7 @@ public partial class RuntimeCoordinator
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
             () => _nativeOpeningStageDriver!.PlayerPerkEntries);
         _nativePlayer.CanOccupyPosition = NativeCollisionResident;
+        _nativePlayer.IsDefeated = () => _nativeOpeningStageDriver?.Vitals.HitPoints == 0;
         var restore = _nativeContinueOpening
             ? _nativeOpeningRestore ?? throw new InvalidOperationException(
                 "Native Continue was selected without a valid cold save.")

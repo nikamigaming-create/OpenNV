@@ -7,12 +7,13 @@ using OpenNV.Runtime.World.Cells;
 namespace OpenNV.Runtime.World.Actors;
 
 /// <summary>Original CREA parts share their original skeleton and a reference-owned KF clock.</summary>
-internal sealed partial class RuntimeNativeCreature : Node3D
+internal sealed partial class RuntimeNativeCreature : CharacterBody3D
 {
     internal FalloutCreatureAppearance Appearance { get; private set; } = null!;
     internal RuntimeNativeNifSkeleton Skeleton { get; private set; } = null!;
     internal IReadOnlyList<RuntimeNativeNifScene> Parts { get; private set; } = [];
     internal RuntimeNativeActorCombat? Combat { get; set; }
+    internal FalloutActorActivityState Activity { get; } = new();
     private FalloutActorAnimationState _clock = null!;
     private RuntimeNativeNifAnimation _animation = null!;
     private FalloutNifTextKeyTimeline _textKeys = null!;
@@ -92,7 +93,12 @@ internal sealed partial class RuntimeNativeCreature : Node3D
             if ((appearance.ModelFlags & (1u << 19)) != 0)
                 foreach (var mesh in actor.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
                     mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            actor._animation = new(animation, sequence, actor.Skeleton, link => actor.BindAttachment(animation, link));
+            var sourceTargets = actor.FindChildren("*", "", true, false).OfType<Node3D>()
+                .Select(node => node.GetMeta("opennv_nif_source_name", "").AsString()).ToHashSet(StringComparer.Ordinal);
+            sourceTargets.UnionWith(sequence.ControlledBlocks.Select(link => link.NodeName).Where(name =>
+                actor.Skeleton.HasSourceTarget(name) || actor.Skeleton.MaterialChannels.HasSourceTarget(name)));
+            actor._animation = new(animation, sequence, actor.Skeleton, link => actor.BindAttachment(animation, link),
+                externalObjectTargets: sourceTargets);
             actor._textKeys = new(actor._animation.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
             actor._clock.Bind(idle, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
             actor.Skeleton.Node.SetBonePose(actor.Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
@@ -113,7 +119,7 @@ internal sealed partial class RuntimeNativeCreature : Node3D
 
     public override void _Process(double delta)
     {
-        if (Combat?.Dead == true) return;
+        if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;
         try
         {

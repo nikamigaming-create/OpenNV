@@ -2,11 +2,11 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal sealed record FalloutMagazineSnapshot(FalloutFormKey Weapon, FalloutFormKey Ammunition, int Loaded);
+internal sealed record FalloutMagazineSnapshot(FalloutFormKey Weapon, FalloutFormKey Ammunition, int Loaded, bool UsesInventoryAmmo = true);
 internal sealed record FalloutWeaponHandlingSnapshot(bool Drawn, IReadOnlyList<FalloutMagazineSnapshot> Magazines, ulong? ShotRandomState = null);
 
 /// <summary>Inventory-backed magazine and draw state, shared by both player views.</summary>
-internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
+internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bool nativeNpc = false)
 {
     private readonly Dictionary<FalloutFormKey, FalloutMagazineSnapshot> _magazines = [];
     private readonly FalloutSoundRandomState _shotRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
@@ -14,17 +14,17 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
     internal void SetDrawn(bool drawn) => Drawn = drawn;
 
     internal int Loaded(FalloutFormKey weapon) => _magazines.TryGetValue(weapon, out var entry)
-        ? Math.Min(entry.Loaded, inventory.Item(entry.Ammunition)?.Count ?? 0) : 0;
+        ? entry.UsesInventoryAmmo ? Math.Min(entry.Loaded, inventory.Item(entry.Ammunition)?.Count ?? 0) : entry.Loaded : 0;
 
     internal bool CanReload(FalloutWeaponPresentation weapon)
     {
         var ammo = Ammunition(weapon);
-        return ammo is not null && Loaded(weapon.Form) < Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count);
+        return ammo is not null && Loaded(weapon.Form) < (nativeNpc && !weapon.NpcsUseAmmo ? weapon.ClipSize : Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count));
     }
 
     internal FalloutFormKey? Ammunition(FalloutWeaponPresentation weapon)
     {
-        if (_magazines.TryGetValue(weapon.Form, out var previous) && inventory.Item(previous.Ammunition) is { Count: > 0 })
+        if (_magazines.TryGetValue(weapon.Form, out var previous) && (!previous.UsesInventoryAmmo || inventory.Item(previous.Ammunition) is { Count: > 0 }))
             return previous.Ammunition;
         return weapon.Ammunition.Where(ammo => inventory.Item(ammo) is { Count: > 0 }).Select(ammo => (FalloutFormKey?)ammo).FirstOrDefault();
     }
@@ -37,7 +37,8 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
         if (ammo is null) return;
         // Carried totals include loaded rounds. Reload assigns the magazine;
         // only an accepted shot may remove ammunition from the inventory.
-        _magazines[weapon.Form] = new(weapon.Form, ammo.Value, Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count));
+        var consumes = !nativeNpc || weapon.NpcsUseAmmo;
+        _magazines[weapon.Form] = new(weapon.Form, ammo.Value, consumes ? Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count) : weapon.ClipSize, consumes);
     }
 
     internal bool CanFire(FalloutWeaponPresentation weapon) => Drawn && weapon.AmmoUse > 0 &&
@@ -51,6 +52,12 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
         var previous = _magazines[weapon.Form];
         if (previous.Ammunition != shot.Ammunition) throw new InvalidOperationException("Ammunition changed before its shot event.");
         var loaded = Loaded(weapon.Form);
+        if (!previous.UsesInventoryAmmo)
+        {
+            if (!nativeNpc || weapon.NpcsUseAmmo) throw new InvalidDataException("Actor ammunition policy changed before its shot.");
+            _magazines[weapon.Form] = previous with { Loaded = loaded - weapon.AmmoUse };
+            return true;
+        }
         var random = new FalloutSoundRandomState(_shotRandom.State);
         var recovered = 0;
         if (shot.RecoveredItem is not null)
@@ -72,7 +79,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
 
     internal FalloutWeaponHandlingSnapshot Capture() => new(Drawn,
         _magazines.Values.Where(value => inventory.Item(value.Weapon) is not null).Select(value => value with
-        { Loaded = Math.Min(value.Loaded, inventory.Item(value.Ammunition)?.Count ?? 0) }).OrderBy(value => value.Weapon.ToString()).ToArray(), _shotRandom.State);
+        { Loaded = value.UsesInventoryAmmo ? Math.Min(value.Loaded, inventory.Item(value.Ammunition)?.Count ?? 0) : value.Loaded }).OrderBy(value => value.Weapon.ToString()).ToArray(), _shotRandom.State);
 
     internal void Restore(FalloutWeaponHandlingSnapshot snapshot, Func<FalloutFormKey, FalloutWeaponPresentation> resolve)
     {
@@ -83,7 +90,8 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
         {
             var weapon = resolve(entry.Weapon);
             if (inventory.Item(entry.Weapon) is null || !weapon.Ammunition.Contains(entry.Ammunition) ||
-                entry.Loaded > weapon.ClipSize || entry.Loaded > (inventory.Item(entry.Ammunition)?.Count ?? 0))
+                entry.Loaded > weapon.ClipSize || entry.UsesInventoryAmmo != (!nativeNpc || weapon.NpcsUseAmmo) ||
+                entry.UsesInventoryAmmo && entry.Loaded > (inventory.Item(entry.Ammunition)?.Count ?? 0))
                 throw new InvalidDataException("Saved magazine differs from its owned weapon or carried ammunition.");
             restored.Add(entry.Weapon, entry);
         }

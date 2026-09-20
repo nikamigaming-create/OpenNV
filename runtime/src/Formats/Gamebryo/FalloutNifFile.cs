@@ -158,8 +158,8 @@ internal sealed partial class FalloutNifFile
             "NiPSysAgeDeathModifier" or "NiPSysMeshEmitter" or "NiPSysBoxEmitter" or "NiPSysCylinderEmitter" or "NiPSysSphereEmitter" or
                 "NiPSysSpawnModifier" or "NiPSysGrowFadeModifier" or "BSPSysSimpleColorModifier" or
                 "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
-                "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" => ReadParticleModifier(block, ref cursor),
-            "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
+                "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" => ReadParticleModifier(block, ref cursor),
+            "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
             "NiSkinInstance" or "BSDismemberSkinInstance" => ReadSkinInstance(block, ref cursor),
@@ -191,6 +191,8 @@ internal sealed partial class FalloutNifFile
             "NiTextureTransformController" => ReadTextureTransformController(block, ref cursor),
             "NiMaterialColorController" => ReadMaterialColorController(block, ref cursor),
             "NiAlphaController" => new FalloutNifAlphaController(block, ReadTimeController(ref cursor, "alpha controller"), ReadReference(ref cursor, "alpha interpolator")),
+            "BSMaterialEmittanceMultController" => new FalloutNifEmittanceController(block,
+                ReadTimeController(ref cursor, "emittance controller"), ReadReference(ref cursor, "emittance interpolator")),
             "NiTransformController" => ReadTransformController(block, ref cursor),
             "NiFloatExtraDataController" => new FalloutNifFloatExtraDataController(block,
                 ReadTimeController(ref cursor, "float extra-data controller"),

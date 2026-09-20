@@ -12,6 +12,9 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal float AttackMultiplier { get; init; } = 1;
     internal bool Automatic { get; init; }
     internal float AttackShotsPerSecond { get; init; }
+    internal bool NpcsUseAmmo { get; init; }
+    internal float Reach { get; init; }
+    internal float MaximumRange { get; init; }
     internal string? ShellModel { get; init; }
     internal string AttackGroup => AttackAnimation switch
     {
@@ -113,6 +116,17 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
                 if (records.GetEffective(sound).Signature != "SOUN") throw new InvalidDataException("Weapon sound is not SOUN.");
                 sounds.Add(name, sound);
             }
+        if (!firstPerson)
+        {
+            sounds.Remove("shoot");
+            var spatial = fields.FirstOrDefault(field => field.Signature == "SNAM").Data;
+            if (!spatial.IsEmpty)
+            {
+                if (spatial.Length != 4) throw new InvalidDataException("Weapon spatial shot sound extent is invalid.");
+                if (weapon.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(spatial.Span)) is { } sound)
+                    sounds.Add("shoot", sound);
+            }
+        }
         return new(key, FalloutNpcAppearanceResolver.ReadModel(records, owner, "weapon", "MODL", "MODS", "MODD", 0, null), group, multiplier, data[13])
         {
             ClipSize = itemData[14],
@@ -120,8 +134,11 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             ReloadAnimation = data[15],
             AttackAnimation = data[41],
             AttackMultiplier = BinaryPrimitives.ReadSingleLittleEndian(data[60..]),
-            AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
             Automatic = (data[12] & 2) != 0,
+            AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
+            NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
+            Reach = FalloutProjectile.Number(data, 8),
+            MaximumRange = FalloutProjectile.Number(data, 48),
             Ammunition = ammunition,
             Sounds = sounds,
             ShellModel = FalloutNpcAppearanceResolver.PathField(weapon, "MOD2", "meshes", false, fields)

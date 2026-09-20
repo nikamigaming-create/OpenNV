@@ -5,7 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 namespace OpenNV.Runtime.World.Actors;
 
 /// <summary>One source NPC reference and its directly decoded, shared skeleton.</summary>
-internal partial class RuntimeNativeNpc : Node3D
+internal partial class RuntimeNativeNpc : CharacterBody3D
 {
     internal FalloutNpcAppearance Appearance { get; private set; } = null!;
     internal RuntimeNativeNifSkeleton Skeleton { get; private set; } = null!;
@@ -191,7 +191,7 @@ internal partial class RuntimeNativeNpc : Node3D
 
     public override void _Process(double delta)
     {
-        if (Combat?.Dead == true) return;
+        if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
         RestoreAuthoredHeadPose();
         AdvanceAi();
         if ((_animation is null && _baseAnimation is null && _headTargets is null) || AnimationError is not null) return;

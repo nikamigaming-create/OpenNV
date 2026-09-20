@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -11,7 +12,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     IReadOnlyDictionary<string, FalloutActorValue>? ActorValues = null, bool Destroyed = false, bool DeletePending = false, bool Deleted = false,
     FalloutReferenceInventorySnapshot? Inventory = null, bool Taken = false, bool DoorOpen = false, bool Unlocked = false,
     ulong? SoundRandomState = null, FalloutActorAnimationSnapshot? Animation = null, bool Unconscious = false,
-    FalloutMapMarkerState? MapMarker = null, FalloutActorInjury? Injury = null, FalloutActorRagdollState? Ragdoll = null)
+    FalloutMapMarkerState? MapMarker = null, FalloutActorInjury? Injury = null, FalloutActorRagdollState? Ragdoll = null,
+    FalloutActorEngagement? Engagement = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -31,6 +33,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 if ((name != "health" && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
+            snapshot.Engagement?.Validate();
             if (snapshot.Ragdoll is { } ragdoll)
             {
                 ragdoll.Validate();
@@ -72,6 +75,8 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorInjury? Injury { get; set; }
     internal FalloutActorRagdollState? Ragdoll { get; set; }
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
+    internal FalloutActorEngagement? Engagement { get; set; }
+    internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
 
     internal FalloutReferenceInstance(FalloutPluginRecord reference, FalloutReferenceScriptDefinition? script)
     {
@@ -102,7 +107,8 @@ internal sealed class FalloutReferenceInstance
         Script?.Sha256, new Dictionary<uint, double>(Variables), ScriptError, Enabled, EnableRequest, Opacity, NoFade,
         new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
         _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
-        Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll);
+        Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
+        CaptureEngagement?.Invoke() ?? Engagement);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -254,6 +260,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
             if (snapshot.Injury is { } injury) validated.RestoreInjury(instance, injury);
             else if (instance.ActorValues.ContainsKey("health")) throw new InvalidDataException("Saved health has no actor injury state.");
             instance.Ragdoll = snapshot.Ragdoll;
+            instance.Engagement = snapshot.Engagement;
             if (instance.EnableRequest is not null && instance.EnableParent is not null)
                 throw new InvalidDataException("Saved child reference has an independent enable request.");
         }
@@ -269,7 +276,6 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
         _definitions.Clear();
         _healthSources.Clear();
         _bodyParts.Clear();
-        _defenseSources.Clear();
         _disposed = true;
     }
 }

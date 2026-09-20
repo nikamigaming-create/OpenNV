@@ -7,8 +7,27 @@ internal sealed record GameplayVitals(
     int ActionPoints,
     int MaximumActionPoints,
     int ExperiencePoints,
-    int NextLevelExperiencePoints)
+    int NextLevelExperiencePoints, float HitPointFraction = 0,
+    IReadOnlyDictionary<byte, float>? LimbDamage = null)
 {
+    internal float ExactHitPoints => HitPoints - HitPointFraction;
+    internal GameplayVitals Damage(float amount)
+    {
+        if (!float.IsFinite(amount) || amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+        var remaining = Math.Max(0, ExactHitPoints - amount);
+        var displayed = (int)MathF.Ceiling(remaining);
+        return this with { HitPoints = displayed, HitPointFraction = displayed - remaining };
+    }
+    internal GameplayVitals Damage(float amount, byte part, float limbMultiplier)
+    {
+        if (part > 14 || !float.IsFinite(limbMultiplier) || limbMultiplier < 0)
+            throw new ArgumentOutOfRangeException(nameof(part));
+        var state = Damage(amount);
+        var limbs = new Dictionary<byte, float>(LimbDamage ?? new Dictionary<byte, float>());
+        limbs[part] = limbs.GetValueOrDefault(part) + amount * limbMultiplier;
+        if (!float.IsFinite(limbs[part])) throw new InvalidDataException("Player limb damage exceeds finite storage.");
+        return state with { LimbDamage = limbs };
+    }
     internal static GameplayVitals Derive(int baseHealth, int level, int endurance, int agility,
         double healthEndurance, double healthLevel, double apBase, double apAgility,
         int experience, double xpBase, double xpBump)
@@ -32,7 +51,9 @@ internal sealed record GameplayVitals(
         if (Level <= 0 || MaximumHitPoints <= 0 || HitPoints < 0 ||
             HitPoints > MaximumHitPoints || MaximumActionPoints <= 0 ||
             ActionPoints < 0 || ActionPoints > MaximumActionPoints ||
-            ExperiencePoints < 0 || NextLevelExperiencePoints <= ExperiencePoints)
+            ExperiencePoints < 0 || NextLevelExperiencePoints <= ExperiencePoints ||
+            !float.IsFinite(HitPointFraction) || HitPointFraction is < 0 or >= 1 || ExactHitPoints < 0 ||
+            LimbDamage is { } limbs && limbs.Any(pair => pair.Key > 14 || !float.IsFinite(pair.Value) || pair.Value < 0))
             throw new InvalidOperationException("Saved gameplay vitals are invalid.");
     }
 }

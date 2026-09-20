@@ -1212,6 +1212,13 @@ internal partial class GameplaySession : Node
 
     private static GameplayVitals ParseVitals(JsonElement source)
     {
+        var hitPointFraction = source.TryGetProperty(nameof(GameplayVitals.HitPointFraction), out var fraction)
+            ? fraction.GetSingle() : 0;
+        IReadOnlyDictionary<byte, float>? limbDamage = null;
+        if (source.TryGetProperty(nameof(GameplayVitals.LimbDamage), out var limbs) && limbs.ValueKind == JsonValueKind.Object)
+            limbDamage = limbs.EnumerateObject().ToDictionary(
+                entry => byte.Parse(entry.Name, System.Globalization.CultureInfo.InvariantCulture),
+                entry => entry.Value.GetSingle());
         var result = new GameplayVitals(
             source.GetProperty(nameof(GameplayVitals.Level)).GetInt32(),
             source.GetProperty(nameof(GameplayVitals.HitPoints)).GetInt32(),
@@ -1219,7 +1226,7 @@ internal partial class GameplaySession : Node
             source.GetProperty(nameof(GameplayVitals.ActionPoints)).GetInt32(),
             source.GetProperty(nameof(GameplayVitals.MaximumActionPoints)).GetInt32(),
             source.GetProperty(nameof(GameplayVitals.ExperiencePoints)).GetInt32(),
-            source.GetProperty(nameof(GameplayVitals.NextLevelExperiencePoints)).GetInt32());
+            source.GetProperty(nameof(GameplayVitals.NextLevelExperiencePoints)).GetInt32(), hitPointFraction, limbDamage);
         result.Validate();
         return result;
     }

@@ -48,7 +48,7 @@ internal sealed class NativeNifEffectPlayback
             controller.SetProcess(false);
         }
         foreach (var (node, visible) in _surfaces) node.Visible = visible;
-        foreach (var particle in Particles) particle.EmissionEnabled = _duration > 0;
+        foreach (var particle in Particles) { particle.EmissionEnabled = _duration > 0; particle.ResetParentMotion(); }
         _elapsed = 0; Active = true; _root.Visible = true;
     }
 
@@ -63,6 +63,7 @@ internal sealed class NativeNifEffectPlayback
     {
         if (!double.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));
         if (!Active) return;
+        foreach (var particle in Particles) particle.BeginParentMotion(delta);
         var remaining = delta;
         while (remaining > 1e-9)
         {
@@ -74,7 +75,7 @@ internal sealed class NativeNifEffectPlayback
             foreach (var controller in _controllers) controller._Process(step * .5);
             _elapsed += step; remaining -= step;
         }
-        foreach (var particle in Particles) { particle.EmissionEnabled = _elapsed < _duration; particle.Publish(); }
+        foreach (var particle in Particles) { particle.EmissionEnabled = _elapsed < _duration; particle.EndParentMotion(); particle.Publish(); }
         if (_elapsed < _duration) return;
         foreach (var (node, _) in _surfaces) node.Visible = false;
         if (Particles.Any(particle => particle.ActiveCount != 0)) return;

@@ -3,7 +3,8 @@ using System.Buffers.Binary;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutImpact(FalloutFormKey Form, string? Model, float Duration, uint Orientation,
-    float AngleThreshold, float PlacementRadius, uint Flags, FalloutFormKey? TextureSet, FalloutFormKey[] Sounds)
+    float AngleThreshold, float PlacementRadius, uint Flags, FalloutFormKey? TextureSet, FalloutFormKey[] Sounds,
+    FalloutImpactDecal? Decal = null)
 {
     internal static FalloutImpact? Resolve(FalloutPluginStack records, FalloutFormKey set, int material)
     {
@@ -11,7 +12,10 @@ internal sealed record FalloutImpact(FalloutFormKey Form, string? Model, float D
         var source = records.GetEffective(set);
         if (source.Signature != "IPDS") throw new InvalidDataException("Weapon impact dataset is not IPDS.");
         var data = source.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
-        if (data.Length != 48) throw new NotSupportedException("Impact dataset does not contain the twelve source materials.");
+        // Earlier records end after Water. The later material slots are absent,
+        // not a reason to reject the authored Organic blood-spout entry.
+        if (data.Length is not (36 or 40 or 48)) throw new NotSupportedException("Impact dataset material extent is unbound.");
+        if (material * 4 >= data.Length) return null;
         var id = BinaryPrimitives.ReadUInt32LittleEndian(data.Span[(material * 4)..]);
         if (id == 0) return null;
         return Read(records, source.Plugin.AdjustFormId(id));
@@ -37,7 +41,8 @@ internal sealed record FalloutImpact(FalloutFormKey Form, string? Model, float D
             Form("DNAM"), new[] { Form("SNAM"), Form("NAM1") }.Where(value => value.HasValue).Select(value => value!.Value).ToArray());
         if (result.Duration < 0 || result.Orientation > 2 || result.PlacementRadius < 0 || (result.Flags & ~1u) != 0)
             throw new NotSupportedException("Impact orientation, duration, placement or flags are unbound.");
-        return result;
+        return result with { Decal = (result.Flags & 1) != 0 || result.TextureSet is null ? null :
+            FalloutImpactDecal.Read(source, records.GetEffective(result.TextureSet.Value)) };
     }
 
     internal static int MaterialIndex(uint havok)

@@ -49,6 +49,7 @@ internal partial class RuntimeNativePlayer
 
     private void RequestWeaponFire()
     {
+        if (IsDefeated?.Invoke() == true) return;
         if (_weaponAction is not null || _firstPerson?.Weapon is not { } weapon) return;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try

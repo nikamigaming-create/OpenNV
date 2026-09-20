@@ -12,19 +12,28 @@ internal readonly record struct FalloutActorDefense(float Threshold, float Resis
 
 internal sealed partial class FalloutReferenceWorld
 {
+    private readonly FalloutActorDefenseResolver _actorDefense = new(records);
+    internal FalloutActorDefense Defense(FalloutFormKey reference, int level, FalloutGlobalState globals)
+    {
+        var actor = Actor(reference);
+        var equipped = EquippedArmor(reference, level, globals);
+        return _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped);
+    }
+}
+
+internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
+{
     private readonly Dictionary<FalloutFormKey, FalloutActorDefense> _defenseSources = [];
     private readonly Dictionary<FalloutFormKey, FalloutArmorDefense> _armorDefense = [];
     private readonly Dictionary<FalloutFormKey, FalloutActorDefense> _armorEffects = [];
     private readonly FalloutAbilityModifiers _defenseAbilities = new(records);
     private (float Base, float Maximum)? _armorRating;
 
-    internal FalloutActorDefense Defense(FalloutFormKey reference, int level, FalloutGlobalState globals)
+    internal FalloutActorDefense Read(FalloutFormKey actor, FalloutPlayerInventory inventory, IReadOnlyList<FalloutFormKey> equipped)
     {
-        var actor = Actor(reference);
-        var equipped = EquippedArmor(reference, level, globals);
-        if (!_defenseSources.TryGetValue(actor.Base, out var source))
+        if (!_defenseSources.TryGetValue(actor, out var source))
         {
-            var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 8);
+            var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 8);
             var threshold = 0f; var resistance = 0f;
             foreach (var field in effects.ReadSubrecords().Where(field => field.Signature == "SPLO"))
             {
@@ -38,14 +47,14 @@ internal sealed partial class FalloutReferenceWorld
                     if (effect.ActorValue == 76) threshold += effect.Amount; else resistance += effect.Amount;
                 }
             }
-            source = new(threshold, resistance); _defenseSources.Add(actor.Base, source);
+            source = new(threshold, resistance); _defenseSources.Add(actor, source);
         }
         var armorThreshold = 0f; var armorResistance = 0f;
         foreach (var key in equipped)
         {
             if (!_armorDefense.TryGetValue(key, out var armor))
                 _armorDefense.Add(key, armor = FalloutArmorDefense.Read(records.GetEffective(key)));
-            var item = actor.Inventory!.Contents.Item(key)!;
+            var item = inventory.Item(key)!;
             var conditions = (item.Variants ?? []).Select(variant => variant.Condition ?? 1).Distinct().ToArray();
             if (conditions.Length > 1) throw new NotSupportedException("Equipped armor instance selection is unbound.");
             var condition = conditions.Length == 0 ? 1 : conditions[0];

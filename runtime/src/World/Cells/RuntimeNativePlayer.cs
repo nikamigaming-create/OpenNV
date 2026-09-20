@@ -27,6 +27,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         return (object)new { body = (contact.GetCollider() as Node)?.GetPath().ToString(), normal = new[] { normal.X, normal.Y, normal.Z } };
     }).ToArray();
     internal Func<Vector3, bool>? CanOccupyPosition { get; set; }
+    internal Func<bool>? IsDefeated { get; set; }
+    internal float CombatRadius => _configuration.Player.CapsuleRadiusMeters;
+    internal Vector3 CombatTargetPoint => GlobalPosition + Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
 
     internal void ConfigureLocomotion(FalloutPluginStack records)
     {
@@ -249,7 +252,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (_xr is not null && GetTree().Paused) return;
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
-        var movement = _movementEnabled && !_modalInput
+        var alive = IsDefeated?.Invoke() != true;
+        var movement = alive && _movementEnabled && !_modalInput
             ? _xr?.Movement ?? Input.GetVector(
                 input.MoveLeft.Action,
                 input.MoveRight.Action,
@@ -261,14 +265,14 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         forward.Y = 0.0f;
         right.Y = 0.0f;
         var direction = right.Normalized() * movement.X + forward.Normalized() * movement.Y;
-        Sprinting = _movementEnabled && !_modalInput && movement.Y > 0 && (_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
+        Sprinting = alive && _movementEnabled && !_modalInput && movement.Y > 0 && (_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
         var speed = _configuration.Player.MoveSpeedMetersPerSecond * (Sprinting ? _configuration.Player.SprintSpeedMultiplier : 1);
         var velocity = direction * speed;
         velocity.Y = IsOnFloor()
             ? MathF.Min(Velocity.Y, 0.0f)
             : Velocity.Y -
                 _configuration.Simulation.GravityMetersPerSecondSquared * (float)delta;
-        if (_movementEnabled && !_modalInput && IsOnFloor() && _jumpHeightMeters > 0 &&
+        if (alive && _movementEnabled && !_modalInput && IsOnFloor() && _jumpHeightMeters > 0 &&
             (_xr?.ConsumeJump() ?? Input.IsActionJustPressed(input.Jump.Action)))
         {
             velocity.Y = MathF.Sqrt(2 * _configuration.Simulation.GravityMetersPerSecondSquared * _jumpHeightMeters);
