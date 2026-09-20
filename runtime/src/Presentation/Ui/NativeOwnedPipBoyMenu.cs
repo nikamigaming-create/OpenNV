@@ -359,7 +359,11 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             var fields = _records.GetEffective(selected.FormKey).ReadSubrecords().ToArray();
             var icon = fields.SingleOrDefault(field => field.Signature == "ICON").Data;
             if (!icon.IsEmpty) { _tiles.SetFilename(Tile("IM_ItemIcon"), FalloutDialogueTopic.Text(icon.Span)); Bind("IM_ItemIcon", "visible", 1); }
-            AddText($"{NameOf(selected.FormKey)}\nWG {selected.Weight:0.0}   VAL {selected.Value}", new(470, 440), new(400, 140));
+            var condition = selected.RecordType is "ARMO" or "WEAP"
+                ? $"\nCND {ConditionSummary(selected)}"
+                : "";
+            AddText($"{NameOf(selected.FormKey)}\nWG {selected.Weight:0.0}   VAL {selected.Value}{condition}",
+                new(470, 440), new(400, 160));
             var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId);
             _tiles.Text[equip] = Setting(equipped ? "sInventoryUnequip" : "sInventoryEquip");
             Target(equip, equipped ? "Unequip" : "Equip", () =>
@@ -369,6 +373,31 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             });
         }
     }
+
+    private static string ConditionSummary(FalloutCampaignItem item)
+    {
+        var variants = item.Variants ?? [new FalloutItemVariant(item.Count)];
+        if (variants.Any(variant => variant.Count <= 0) || variants.Sum(variant => variant.Count) != item.Count)
+            throw new InvalidDataException("Inventory item condition stacks differ from its count.");
+        var groups = variants
+            .GroupBy(variant => variant.Condition ?? 1)
+            .OrderBy(group => group.Key)
+            .ToArray();
+        if (groups.Length == 0 || groups.Any(group => !float.IsFinite(group.Key) || group.Key is < 0 or > 1))
+            throw new InvalidDataException("Inventory item condition is outside 0..1.");
+
+        static string Percent(float condition) =>
+            (condition * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
+
+        if (groups.Length == 1)
+            return groups[0].Key == 0 ? "0%  BROKEN" : Percent(groups[0].Key);
+        var summary = groups.Length > 3
+            ? $"{Percent(groups[0].Key)}–{Percent(groups[^1].Key)} across {groups.Length} stacks"
+            : string.Join(" / ", groups.Select(group =>
+                $"{Percent(group.Key)}{(group.Key == 0 ? " BROKEN" : "")} ×{group.Sum(variant => variant.Count)}"));
+        return groups[0].Key == 0 && groups.Length > 3 ? summary + " (includes broken)" : summary;
+    }
+
     private void ToggleEquipment(FalloutCampaignItem item)
     {
         if (_inventory.Equipped.Contains(item.RuntimeFormId)) _inventory.Unequip(_records, item.FormKey);
