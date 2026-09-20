@@ -105,7 +105,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
 
     private void RequireSupportedAmmoEffects()
     {
-        var unsupported = AmmoEffects.FirstOrDefault(effect => effect.Type > FalloutAmmoEffect.Spread);
+        var unsupported = AmmoEffects.FirstOrDefault(effect => effect.Type > FalloutAmmoEffect.WeaponCondition);
         if (unsupported is not null)
             throw new NotSupportedException($"Ammo effect {unsupported.Form} type {unsupported.Type} needs its runtime owner.");
     }

@@ -6,6 +6,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     string AnimationGroup, float AnimationMultiplier, byte Grip)
 {
     internal byte ClipSize { get; init; }
+    internal int ConditionHealth { get; init; }
     internal byte AmmoUse { get; init; }
     internal byte ReloadAnimation { get; init; }
     internal byte AttackAnimation { get; init; }
@@ -137,6 +138,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         return new(key, FalloutNpcAppearanceResolver.ReadModel(records, owner, "weapon", "MODL", "MODS", "MODD", 0, null), group, multiplier, data[13])
         {
             ClipSize = itemData[14],
+            ConditionHealth = BinaryPrimitives.ReadInt32LittleEndian(itemData[4..]),
             AmmoUse = data[14],
             ReloadAnimation = data[15],
             AttackAnimation = data[41],

@@ -18,6 +18,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
 
     internal bool CanReload(FalloutWeaponPresentation weapon)
     {
+        if (!CanUse(weapon)) return false;
         var ammo = Ammunition(weapon);
         return ammo is not null && Loaded(weapon.Form) < (nativeNpc && !weapon.NpcsUseAmmo ? weapon.ClipSize : Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count));
     }
@@ -31,7 +32,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
 
     internal void CompleteReload(FalloutWeaponPresentation weapon)
     {
-        if (inventory.Item(weapon.Form) is not { Count: 1 } || !inventory.Equipped.Contains(inventory.Item(weapon.Form)!.RuntimeFormId))
+        if (!CanUse(weapon))
             throw new NotSupportedException("Reload requires one selected, equipped weapon instance.");
         var ammo = Ammunition(weapon);
         if (ammo is null) return;
@@ -41,8 +42,11 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
         _magazines[weapon.Form] = new(weapon.Form, ammo.Value, consumes ? Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count) : weapon.ClipSize, consumes);
     }
 
+    internal bool CanUse(FalloutWeaponPresentation weapon) => inventory.Item(weapon.Form) is { Count: 1 } item &&
+        inventory.Equipped.Contains(item.RuntimeFormId) && FalloutWeaponCondition.CanUse(weapon, item);
+
     internal bool CanFire(FalloutWeaponPresentation weapon) => Drawn && weapon.AmmoUse > 0 &&
-        Loaded(weapon.Form) >= weapon.AmmoUse && inventory.Item(weapon.Form) is { Count: 1 } item && inventory.Equipped.Contains(item.RuntimeFormId);
+        Loaded(weapon.Form) >= weapon.AmmoUse && CanUse(weapon);
 
     internal bool ConsumeShot(FalloutWeaponPresentation weapon, FalloutWeaponShot shot, FalloutPluginStack records)
     {
@@ -71,7 +75,8 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
             addition = FalloutCampaignInventoryResolver.Resolve(records,
                 [new(records.RuntimeFormId(key), FalloutDialogueTopic.Text(source.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span), source.Signature, recovered)], null).Items.Single();
         }
-        inventory.ConsumeAmmunition(shot.Ammunition, weapon.AmmoUse, addition);
+        var wornWeapon = FalloutWeaponCondition.AfterShot(records, weapon, shot, inventory.Item(weapon.Form)!);
+        inventory.ConsumeAmmunition(shot.Ammunition, weapon.AmmoUse, addition, wornWeapon);
         _magazines[weapon.Form] = previous with { Loaded = loaded - weapon.AmmoUse };
         _shotRandom.Restore(random.State);
         return true;

@@ -15,9 +15,7 @@ internal partial class RuntimeNativePlayer
 
     private void RequestMeleeWeaponFire(FalloutWeaponPresentation weapon)
     {
-        var inventory = _presentationInventory ?? throw new InvalidOperationException("Player inventory is absent.");
-        if (!_weaponHandling!.Drawn || inventory.Item(weapon.Form) is not { Count: 1 } item ||
-            !inventory.Equipped.Contains(item.RuntimeFormId)) return;
+        if (!_weaponHandling!.Drawn || !_weaponHandling.CanUse(weapon)) return;
         if (weapon.Automatic && (!float.IsFinite(weapon.AttackShotsPerSecond) || weapon.AttackShotsPerSecond <= 0))
             throw new NotSupportedException("Automatic melee weapon has no valid source attack-shot rate.");
         if (!float.IsFinite(weapon.AttackMultiplier) || weapon.AttackMultiplier <= 0)
@@ -41,7 +39,7 @@ internal partial class RuntimeNativePlayer
     }
 
     private bool CanContinueAutomaticFire(FalloutWeaponPresentation weapon)
-        => IsMeleeWeapon(weapon) ? _weaponHandling?.Drawn == true : _weaponHandling?.CanFire(weapon) == true;
+        => IsMeleeWeapon(weapon) ? _weaponHandling?.Drawn == true && _weaponHandling.CanUse(weapon) : _weaponHandling?.CanFire(weapon) == true;
 
     private void PublishPendingMeleeStrike(FalloutWeaponPresentation weapon)
     {
