@@ -11,22 +11,25 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
 
 internal sealed partial class RuntimeNativeActorCombat
 {
+    private const string CombatActorsGroup = "OpenNVNativeCombatActors";
     private NativeActorCombatContext? _context;
     private FalloutActorThreat? _threat;
     private uint? _relation;
     private float _detectRange;
     private double _detectionClock;
     private string? _engagementError;
+    private string? _assistanceError;
     private bool _engagementPrepared;
-    private long _attacks, _hits;
+    private long _attacks, _hits, _assistsReceived;
     private object? _lastAttack;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
     internal bool OwnsPose => _context is not null && _state.Engagement is not null;
     private object EngagementObservation => new
     {
         state = _state.Engagement, threat = _threat, relation = _relation, attacks = _attacks, hits = _hits,
-        lastAttack = _lastAttack, error = _engagementError, motion = MotionObservation,
-        boundary = "source-aggression-and-provoked-combat;confidence-threat-ratios-stealth-avoidance-cover-assistance-and-retail-tactics-unmatched"
+        assistsReceived = _assistsReceived, lastAttack = _lastAttack, error = _engagementError,
+        assistanceError = _assistanceError, motion = MotionObservation,
+        boundary = "source-aggression-confidence-0-flee-and-faction-assistance;confidence-threat-ratios-stealth-avoidance-cover-and-retail-tactics-unmatched"
     };
 
     private void RestoreEngagementPose()
@@ -49,7 +52,49 @@ internal sealed partial class RuntimeNativeActorCombat
         if (Dead || _state.Unconscious) return;
         _state.Engagement ??= new(attacker);
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
+        NotifyAssistance(attacker);
     }
+
+    private void NotifyAssistance(FalloutFormKey attacker)
+    {
+        if (attacker != _records.RuntimeFormKey(0x14) || _context?.Player() is not { } player) return;
+        var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base);
+        if (threat.Aggression == 3) return;
+        foreach (var candidate in _actor.GetTree().GetNodesInGroup(CombatActorsGroup).OfType<RuntimeNativeActorCombat>())
+        {
+            if (candidate == this || !ReferenceEquals(candidate._world, _world) ||
+                !ReferenceEquals(candidate._context, _context)) continue;
+            try
+            {
+                candidate.TryAssist(_state.Base, _actor.GlobalPosition, attacker, player);
+            }
+            catch (Exception error)
+            {
+                candidate._assistanceError = error.Message;
+                GD.PushError($"OPENNV_COMBAT_ASSISTANCE_UNBOUND reference={candidate._state.Reference} {error.Message}");
+            }
+        }
+    }
+
+    private bool TryAssist(FalloutFormKey victim, Vector3 origin, FalloutFormKey attacker, RuntimeNativePlayer player)
+    {
+        if (Dead || !_state.Enabled || _state.Unconscious || _state.Engagement is not null ||
+            _engagementError is not null || !player.CollisionResident || !_context!.Resident(_actor.GlobalPosition)) return false;
+        var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base);
+        if (threat.Aggression == 3 || threat.Assistance == 0) return false;
+        var relation = FalloutActorThreat.Relation(_records, _state.Base, victim);
+        if (relation != 2 && !(threat.Assistance == 2 && relation == 3)) return false;
+        var radius = ThreatRadius(threat);
+        if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius || !CanSee(player)) return false;
+        _state.Engagement = new(attacker);
+        _assistsReceived++;
+        Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
+        _assistanceError = null;
+        return true;
+    }
+
+    private float ThreatRadius(FalloutActorThreat threat) =>
+        (threat.RadiusBehavior ? threat.Radius : FalloutGameSettingFloats.Read(_records, "fSneakMaxDistance")) * _skeleton.UnitsToMetres;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -68,14 +113,14 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (_threat.Aggression == 0 || _threat.Confidence == 0 || _context.Vitals().HitPoints == 0) return;
                 _relation ??= FalloutActorThreat.Relation(_records, _state.Base, _records.RuntimeFormKey(7));
                 if (!_threat.Initiates(_relation.Value)) return;
-                _detectRange = (_threat.RadiusBehavior ? _threat.Radius : FalloutGameSettingFloats.Read(_records, "fSneakMaxDistance")) * _skeleton.UnitsToMetres;
+                _detectRange = ThreatRadius(_threat);
                 if (_actor.GlobalPosition.DistanceTo(player.GlobalPosition) > _detectRange || !CanSee(player)) return;
                 _state.Engagement = new(_records.RuntimeFormKey(0x14));
             }
             if (_state.Engagement.Target != _records.RuntimeFormKey(0x14))
                 throw new NotSupportedException("This engagement requires a resident non-player target adapter.");
             _threat ??= FalloutActorThreat.Read(_records, _state.Base);
-            _detectRange = (_threat.RadiusBehavior ? _threat.Radius : FalloutGameSettingFloats.Read(_records, "fSneakMaxDistance")) * _skeleton.UnitsToMetres;
+            _detectRange = ThreatRadius(_threat);
             if (!float.IsFinite(_detectRange) || _detectRange <= 0) throw new InvalidDataException("Actor threat radius is invalid.");
             if (_threat.Confidence == 0)
             {

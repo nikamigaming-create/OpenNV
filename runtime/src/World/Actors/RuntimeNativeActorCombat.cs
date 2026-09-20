@@ -58,6 +58,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     public override void _Ready()
     {
+        AddToGroup(CombatActorsGroup);
         RestoreEngagementPose();
         // A cold cell enters the tree with this owner already attached. Its
         // parent is still visiting children during Ready, so adding the death
