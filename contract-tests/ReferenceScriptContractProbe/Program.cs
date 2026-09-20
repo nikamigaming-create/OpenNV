@@ -237,12 +237,14 @@ finally
 
 ConversationContracts.Run();
 ActorSourceContracts.Run();
+FollowPackageContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 PlayerSkillContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);
+else if (args is [var companionRoot, "--companion-packages"]) OwnedCompanionPackageProbe.Run(companionRoot);
 StageAndInventoryContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();

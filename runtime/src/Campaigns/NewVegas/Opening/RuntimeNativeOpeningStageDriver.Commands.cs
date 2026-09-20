@@ -76,7 +76,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 Actor().PlayIdle(_pluginStack, arguments[0].Trim('"'));
                 break;
             case "resetai" when arguments.Count == 0:
-                Actor().EvaluatePackages(true);
+                EvaluateActorPackages(target, true);
                 break;
             case "getplayername" when parts.Length == 1 && arguments.Count == 0:
                 SynchronizeNameEntry();

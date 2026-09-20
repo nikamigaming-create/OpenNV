@@ -17,8 +17,17 @@ its floating endurance contribution. A zero authored base remains a corpse.
 The bounded formula was reduced from private owned executable observation to
 this neutral contract; runtime retail matching remains open. The editor's
 [NPC stats description](https://geckwiki.com/index.php/Stats_Tab_-_NPC)
-also distinguishes authored and derived health. Encounter-scaled health still
-requires persistent level selection and fails explicitly.
+also distinguishes authored and derived health.
+
+ACBS PC Level Mult now uses the retained reference selection level. The stored
+multiplier is divided by 1000, multiplied by that level and truncated before the
+optional minimum/maximum gates. CREA health multiplies its authored health by
+the resulting level; NPC autocalculation uses it in the existing level term.
+This bounded contract comes from private static observation of the owned
+executable, including the creature health dispatch. No executable addresses or
+instruction listings are product inputs. Missing selection state, unsupported
+encounter zones and out-of-range arithmetic fail explicitly. Recalculating an
+already admitted actor after player level advancement remains unbound.
 
 Equipped armor contributes the source DNAM threshold and resistance; resistance
 is stored in hundredths. The four-byte layout has no threshold. Retained item

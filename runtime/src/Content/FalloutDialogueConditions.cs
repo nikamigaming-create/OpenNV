@@ -4,7 +4,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     FalloutFormKey speaker, FalloutDialogueSpeaker identity, Func<FalloutCondition, float>? runtime = null,
     Func<FalloutCondition, FalloutFormKey?>? currentCell = null,
     Func<FalloutFormKey, float>? healthPercentage = null,
-    Func<FalloutFormKey, int, float>? actorValue = null)
+    Func<FalloutFormKey, int, float>? actorValue = null,
+    Func<FalloutFormKey, bool>? talkedToPlayer = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -50,6 +51,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
         {
             return condition.Function switch
             {
+                50 when talkedToPlayer is not null => talkedToPlayer(speaker) ? 1 : 0,
                 69 => identity.Race == condition.FormArgument1 ? 1 : 0,
                 70 when condition.Argument1 <= 1 => identity.Female == (condition.Argument1 == 1) ? 1 : 0,
                 71 => _factions.TryGetValue(condition.FormArgument1, out var rank) && rank >= 0 ? 1 : 0,

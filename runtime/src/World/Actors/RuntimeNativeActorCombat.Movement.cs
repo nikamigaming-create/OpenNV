@@ -33,7 +33,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void PrepareMovement()
     {
-        _mover = (CharacterBody3D)_actor;
+        if (_mover is not null) return;
+        var mover = (CharacterBody3D)_actor;
         var source = _skeleton.Source;
         var bound = source.Roots.Select(source.ReadNode).SelectMany(node => node.ExtraData).Where(index => index >= 0)
             .Select(source.ReadObject).OfType<FalloutNifBound>().SingleOrDefault(value => value.Name == "BBX") ??
@@ -43,14 +44,6 @@ internal sealed partial class RuntimeNativeActorCombat
         var height = bound.Dimensions.Z * scale * 2;
         if (radius <= 0 || height < radius * 2) throw new NotSupportedException("Source BBX cannot define an upright movement capsule.");
         _radius = radius * _actor.Scale.X;
-        _mover.CollisionLayer = 0; _mover.CollisionMask = _mask;
-        _mover.FloorSnapLength = radius;
-        _mover.AddChild(new CollisionShape3D
-        {
-            Name = "SourceActorMovementEnvelope",
-            Position = Vector3.Up * height / 2,
-            Shape = new CapsuleShape3D { Radius = radius, Height = height }
-        });
         var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var acbs = stats.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span;
         if (acbs.Length != 24) throw new InvalidDataException("Actor speed configuration extent is invalid.");
@@ -64,6 +57,15 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.Read(_records, "fCharacterDefaultTurningSpeed"));
         if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
+        mover.CollisionLayer = 0; mover.CollisionMask = _mask;
+        mover.FloorSnapLength = radius;
+        mover.AddChild(new CollisionShape3D
+        {
+            Name = "SourceActorMovementEnvelope",
+            Position = Vector3.Up * height / 2,
+            Shape = new CapsuleShape3D { Radius = radius, Height = height }
+        });
+        _mover = mover;
     }
 
     private void TurnToward(Vector3 point, double delta)

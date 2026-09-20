@@ -21,6 +21,8 @@ internal partial class RuntimeNativeConversation : Node
     private Func<FalloutFormKey, float>? _healthPercentage;
     private Func<FalloutFormKey, int, float>? _actorValue;
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
+    private Action<FalloutFormKey>? _recordTalkedToPlayer;
+    private Func<FalloutFormKey, bool>? _talkedToPlayer;
     private FalloutQuestState _quests = null!;
     private CanvasLayer? _layer;
     private NativeOwnedDialogueMenu? _menu;
@@ -43,13 +45,17 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutCondition, FalloutFormKey?>? resolveRunOnCell = null,
         Func<FalloutFormKey, float>? healthPercentage = null,
         Func<FalloutFormKey, int, float>? actorValue = null,
-        Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null)
+        Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null,
+        Action<FalloutFormKey>? recordTalkedToPlayer = null,
+        Func<FalloutFormKey, bool>? talkedToPlayer = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         _resolveRunOnCell = resolveRunOnCell;
         _healthPercentage = healthPercentage;
         _actorValue = actorValue;
         _templates = templates;
+        _recordTalkedToPlayer = recordTalkedToPlayer;
+        _talkedToPlayer = talkedToPlayer;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos);
     }
 
@@ -75,12 +81,13 @@ internal partial class RuntimeNativeConversation : Node
             Func<FalloutCondition, FalloutFormKey?>? currentCell = resolveRunOnCell is null ? null :
                 condition => resolveRunOnCell(_speaker, condition);
             _conditions = new(_records, _quests, _speaker, FalloutDialogueSpeaker.Read(_records, npc.FormKey, _templates?.Invoke(_speaker)),
-                _runtimeConditions, currentCell, _healthPercentage, _actorValue);
+                _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);
             _player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
             _conversation.Start(npc.FormKey, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
+            _recordTalkedToPlayer?.Invoke(_speaker);
             _facingSpeaker = GetTree().Root.FindChildren("*", "", true, false).OfType<Node3D>()
                 .Single(value => value is RuntimeNativeNpc humanoid && humanoid.Appearance.Reference == _speaker ||
                     value is RuntimeNativeCreature creature && creature.Appearance.Reference == _speaker);
