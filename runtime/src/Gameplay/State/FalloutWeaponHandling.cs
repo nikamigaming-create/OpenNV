@@ -47,7 +47,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
         _magazines[weapon.Form] = new(weapon.Form, ammo.Value, consumes ? Math.Min(weapon.ClipSize, inventory.Item(ammo.Value)!.Count) : weapon.ClipSize, consumes);
     }
 
-    internal bool CanUse(FalloutWeaponPresentation weapon) => inventory.Item(weapon.Form) is { Count: 1 } item &&
+    internal bool CanUse(FalloutWeaponPresentation weapon) => inventory.Item(weapon.Form) is { Count: > 0 } item &&
         inventory.Equipped.Contains(item.RuntimeFormId) && FalloutWeaponCondition.CanUse(weapon, item);
 
     internal bool CanFire(FalloutWeaponPresentation weapon)

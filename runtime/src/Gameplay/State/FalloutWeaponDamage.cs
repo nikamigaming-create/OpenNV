@@ -28,8 +28,7 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
         var skill = actorValue(BinaryPrimitives.ReadInt32LittleEndian(data[104..]));
         var limb = FalloutProjectile.Number(data, 116);
         var item = inventory.Item(form) ?? throw new InvalidOperationException("Used weapon is absent from inventory.");
-        if (item.Variants is { Count: > 1 }) throw new NotSupportedException("Equipped weapon condition stack selection is unbound.");
-        var condition = item.Variants is { Count: 1 } variants ? variants[0].Condition ?? 1 : 1;
+        var condition = FalloutWeaponCondition.SelectedCondition(item);
         var damage = baseDamage * _weaponScale * (_skillBase + _skillScale * skill / 100) * NewVegasConditionMultiplier(condition);
         foreach (var effect in ammoEffects.Where(effect => effect.Type == FalloutAmmoEffect.Damage))
             damage = Math.Max(0, effect.Apply(damage));
