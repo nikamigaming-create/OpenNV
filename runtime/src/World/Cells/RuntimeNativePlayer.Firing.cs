@@ -138,8 +138,7 @@ internal partial class RuntimeNativePlayer
                 throw new InvalidDataException("Source projectile transform is invalid.");
             // Collision resolution is independent of later damage/effect lanes.
             // Unsupported impact behavior remains identified in the observation.
-            var end = from + direction * (_shot.Projectile.Range * UnitsToMeters);
-            var collision = CastShotRay(from, end);
+            var traces = TraceProjectiles(from, direction);
             if (!_weaponHandling!.ConsumeShot(weapon, _shot, _presentationRecords!)) return;
             _shotsFired++;
             var collisionDone = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -148,25 +147,7 @@ internal partial class RuntimeNativePlayer
             else _weaponUnboundEvents.Add("weapon-shoot-sound");
             actor.FlashMuzzle();
             var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            var collider = collision.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
-            var reference = ShotReference(collider);
-            var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
-            var combat = RuntimeNativeActorCombat.Find(collider);
-            FalloutActorHit? actorHit = null;
-            _damageError = null;
-            if (combat is not null)
-            {
-                try
-                {
-                    var damage = (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(_shot);
-                    actorHit = combat.Hit(collider!, damage, _presentationRecords!.RuntimeFormKey(0x14), _combatLevel!(), _combatGlobals!);
-                }
-                catch (Exception error)
-                {
-                    _damageError = error.Message;
-                    GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={reference} {error.Message}");
-                }
-            }
+            var damage = ApplyProjectileDamage(traces);
             var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
             if (weapon.ShellModel is not null && !_shotEffectErrors.ContainsKey("casing-prepare"))
                 TryShotEffect("casing", () =>
@@ -176,14 +157,9 @@ internal partial class RuntimeNativePlayer
                     _shotEffects!.EjectCasing(shell, _camera.GlobalPosition);
                 });
             var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (collider is not null && _shot.ImpactDataSet is { } impactSet)
-                TryShotEffect("impact", () =>
-                {
-                    var material = actorHit is { } hit ? checked((int)hit.ImpactMaterial) : ShotMaterial(collision);
-                    if (FalloutImpact.Resolve(_presentationRecords!, impactSet, material) is { } impact)
-                        _shotEffects!.Impact(impact, point, collision["normal"].AsVector3(), direction);
-                });
+            var impactCount = ApplyProjectileImpacts(traces);
             var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
+            var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces[^1];
             _lastShot = new
             {
                 ordinal = _shotsFired,
@@ -191,15 +167,18 @@ internal partial class RuntimeNativePlayer
                 ammunition = _shot.Ammunition.ToString(),
                 projectile = _shot.Projectile.Form.ToString(),
                 projectiles = _shot.Projectiles,
+                projectileHits = damage.HitCount,
+                projectileActorHits = damage.ActorHitCount,
+                projectileImpactRequests = impactCount,
                 origin = new[] { from.X, from.Y, from.Z },
-                direction = new[] { direction.X, direction.Y, direction.Z },
-                point = new[] { point.X, point.Y, point.Z },
-                distanceMeters = from.DistanceTo(point),
-                collider = collider?.GetPath().ToString(),
-                reference,
-                hit = collider is not null,
+                direction = new[] { lastTrace.Direction.X, lastTrace.Direction.Y, lastTrace.Direction.Z },
+                point = new[] { lastTrace.Point.X, lastTrace.Point.Y, lastTrace.Point.Z },
+                distanceMeters = from.DistanceTo(lastTrace.Point),
+                collider = lastTrace.Collider?.GetPath().ToString(),
+                reference = lastTrace.Reference,
+                hit = damage.HitCount != 0,
                 loaded = _weaponHandling.Loaded(weapon.Form),
-                damage = actorHit,
+                damage = damage.LastDamage,
                 damageError = _damageError,
                 timing = new
                 {
@@ -210,10 +189,10 @@ internal partial class RuntimeNativePlayer
                     impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
                     totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds
                 },
-                spread = "source-axis-only;actor-spread-owner-unbound",
+                spread = "source-minimum-spread;skill-condition-perk-ammo-modifiers-unbound",
                 tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
             };
-            GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={reference} loaded={_weaponHandling.Loaded(weapon.Form)} damage={actorHit?.HealthDamage} damageError={_damageError}");
+            GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
         }
         catch (Exception error)
         {

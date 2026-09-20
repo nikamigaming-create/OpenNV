@@ -61,6 +61,5 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
         if (!Projectile.Hitscan || Projectile.Type is not (1 or 4) || (Projectile.Flags & 2) != 0 || Projectile.Explosion is not null)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight/explosion simulation.");
         if (AmmoEffects.Count != 0) throw new NotSupportedException("Selected ammunition needs its AMEF modifier owner.");
-        if (Projectiles != 1) throw new NotSupportedException("Multiple projectiles need their per-projectile spread owner.");
     }
 }

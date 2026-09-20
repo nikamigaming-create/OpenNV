@@ -99,4 +99,6 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory)
             snapshot.Magazines.Select(value => value.Weapon).Distinct().Count() != snapshot.Magazines.Count)
             throw new InvalidDataException("Saved weapon handling state is invalid.");
     }
+
+    internal float NextShotRandomUnit() => _shotRandom.NextUnitFloat();
 }
