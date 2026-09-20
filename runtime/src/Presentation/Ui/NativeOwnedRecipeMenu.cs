@@ -37,9 +37,11 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(new ColorRect
         {
-            Name = "Backdrop", Color = new(0.015f, 0.02f, 0.03f, 0.88f),
+            Name = "Backdrop",
+            Color = new(0.015f, 0.02f, 0.03f, 0.88f),
             MouseFilter = MouseFilterEnum.Stop,
-            AnchorRight = 1, AnchorBottom = 1
+            AnchorRight = 1,
+            AnchorBottom = 1
         });
         var center = new CenterContainer { Name = "Center" };
         center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -49,8 +51,14 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
         {
             BgColor = new(0.035f, 0.045f, 0.055f, 0.98f),
             BorderColor = new(0.64f, 0.74f, 0.54f),
-            BorderWidthLeft = 2, BorderWidthTop = 2, BorderWidthRight = 2, BorderWidthBottom = 2,
-            ContentMarginLeft = 24, ContentMarginTop = 20, ContentMarginRight = 24, ContentMarginBottom = 20
+            BorderWidthLeft = 2,
+            BorderWidthTop = 2,
+            BorderWidthRight = 2,
+            BorderWidthBottom = 2,
+            ContentMarginLeft = 24,
+            ContentMarginTop = 20,
+            ContentMarginRight = 24,
+            ContentMarginBottom = 20
         });
         center.AddChild(panel);
         var column = new VBoxContainer { Name = "RecipeColumn", SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -58,7 +66,8 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
         panel.AddChild(column);
         var title = new Label
         {
-            Name = "RecipeTitle", Text = category.Name,
+            Name = "RecipeTitle",
+            Text = category.Name,
             HorizontalAlignment = HorizontalAlignment.Center
         };
         title.AddThemeFontSizeOverride("font_size", 28);
@@ -208,9 +217,20 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
 
     private static string SkillName(int skill) => skill switch
     {
-        32 => "Barter", 33 => "Big Guns", 34 => "Energy Weapons", 35 => "Explosives", 36 => "Lockpick",
-        37 => "Medicine", 38 => "Melee Weapons", 39 => "Repair", 40 => "Science", 41 => "Guns",
-        42 => "Sneak", 43 => "Speech", 44 => "Survival", 45 => "Unarmed",
+        32 => "Barter",
+        33 => "Big Guns",
+        34 => "Energy Weapons",
+        35 => "Explosives",
+        36 => "Lockpick",
+        37 => "Medicine",
+        38 => "Melee Weapons",
+        39 => "Repair",
+        40 => "Science",
+        41 => "Guns",
+        42 => "Sneak",
+        43 => "Speech",
+        44 => "Survival",
+        45 => "Unarmed",
         _ => $"Actor value {skill}"
     };
 

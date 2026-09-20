@@ -40,9 +40,16 @@ internal sealed partial class NativeOwnedBarterMenu : Control
         var panel = new PanelContainer { Name = "BarterPanel", CustomMinimumSize = new(1120, 760) };
         panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new(0.035f, 0.045f, 0.055f, 0.98f), BorderColor = new(0.64f, 0.74f, 0.54f),
-            BorderWidthLeft = 2, BorderWidthTop = 2, BorderWidthRight = 2, BorderWidthBottom = 2,
-            ContentMarginLeft = 22, ContentMarginTop = 18, ContentMarginRight = 22, ContentMarginBottom = 18
+            BgColor = new(0.035f, 0.045f, 0.055f, 0.98f),
+            BorderColor = new(0.64f, 0.74f, 0.54f),
+            BorderWidthLeft = 2,
+            BorderWidthTop = 2,
+            BorderWidthRight = 2,
+            BorderWidthBottom = 2,
+            ContentMarginLeft = 22,
+            ContentMarginTop = 18,
+            ContentMarginRight = 22,
+            ContentMarginBottom = 18
         });
         center.AddChild(panel);
         var column = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -127,9 +134,12 @@ internal sealed partial class NativeOwnedBarterMenu : Control
             if (!available) text += "   [" + reason + "]";
             var button = new Button
             {
-                Name = $"BarterItem_{side}_{item.FormKey.ObjectId:x6}", Text = text,
-                Alignment = HorizontalAlignment.Left, FocusMode = FocusModeEnum.All,
-                SizeFlagsHorizontal = SizeFlags.ExpandFill, Disabled = !available
+                Name = $"BarterItem_{side}_{item.FormKey.ObjectId:x6}",
+                Text = text,
+                Alignment = HorizontalAlignment.Left,
+                FocusMode = FocusModeEnum.All,
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                Disabled = !available
             };
             button.Pressed += () => Select(side, item);
             _rows[side].AddChild(button);

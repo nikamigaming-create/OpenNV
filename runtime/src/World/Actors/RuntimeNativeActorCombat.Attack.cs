@@ -228,9 +228,18 @@ internal sealed partial class RuntimeNativeActorCombat
             ++_hits;
         }
         if (_enemyWeapon?.Sounds.TryGetValue("empty", out var swing) == true) _enemySounds!.DispatchSound(swing);
-        _lastAttack = new { kind = "source-melee-Hit", source = _state.Base.ToString(), range = allowed, distance,
-            part, healthBefore = before, healthAfter = _context.Vitals().ExactHitPoints, damage = resolvedDamage.Amount,
-            limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier };
+        _lastAttack = new
+        {
+            kind = "source-melee-Hit",
+            source = _state.Base.ToString(),
+            range = allowed,
+            distance,
+            part,
+            healthBefore = before,
+            healthAfter = _context.Vitals().ExactHitPoints,
+            damage = resolvedDamage.Amount,
+            limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier
+        };
         GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=melee part={part} health={before:R}->{_context.Vitals().ExactHitPoints:R}");
     }
 }
