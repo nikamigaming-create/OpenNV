@@ -24,6 +24,8 @@ internal static class WeaponFiringContracts
             var explosiveProjectile = new byte[84]; explosiveProjectile[0] = 2; explosiveProjectile[2] = 1;
             Float(explosiveProjectile, 8, 200); Float(explosiveProjectile, 12, 1000); UInt(explosiveProjectile, 36, 12);
             var thrownWeapon = (byte[])weaponData.Clone(); UInt(thrownWeapon, 0, 13); thrownWeapon[41] = 114; UInt(thrownWeapon, 36, 13);
+            var mineWeapon = (byte[])weaponData.Clone(); UInt(mineWeapon, 0, 11); mineWeapon[41] = 102;
+            var lunchboxMine = (byte[])weaponData.Clone(); UInt(lunchboxMine, 0, 12); lunchboxMine[41] = 108;
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
@@ -37,6 +39,10 @@ internal static class WeaponFiringContracts
                 .Concat(Record("PROJ", 13, Field("MODL", Text("Effects/rocket.nif")), Field("DATA", explosiveProjectile)))
                 .Concat(Record("WEAP", 14, Field("EDID", Text("TestThrownExplosive")), Field("MODL", Text("test-thrown.nif")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", thrownWeapon)))
+                .Concat(Record("WEAP", 15, Field("EDID", Text("TestMine")), Field("MODL", Text("test-mine.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(3)), Field("DNAM", mineWeapon)))
+                .Concat(Record("WEAP", 16, Field("EDID", Text("TestLunchboxMine")), Field("MODL", Text("test-lunchbox-mine.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(6)), Field("DNAM", lunchboxMine)))
                 .Concat(Record("MISC", 5, Field("EDID", Text("TestCasing")), Field("DATA", new byte[8])))
                 .Concat(Record("IPDS", 6, Field("DATA", impacts)))
                 .Concat(Record("IPCT", 7, Field("DATA", impactData), Field("MODL", Text("Effects/test-metal.nif"))))
@@ -59,6 +65,11 @@ internal static class WeaponFiringContracts
                 !thrownWeaponPresentation.IsMine && thrownShot.Projectile.ExplosionSource?.Form == Key(12),
                 "Thrown explosive lost its authored animation or EXPL source.");
             thrownShot.RequireRuntimeAttackOwner();
+            var mine = FalloutWeaponPresentation.Read(records, Key(15));
+            var lunchbox = FalloutWeaponPresentation.Read(records, Key(16));
+            Require(mine.IsMine && !mine.IsMeleeWeapon && mine.WeaponAnimationType == 11 && mine.AttackGroup == "placemine" &&
+                lunchbox.IsMine && !lunchbox.IsMeleeWeapon && lunchbox.WeaponAnimationType == 12 && lunchbox.AttackGroup == "placemine2",
+                "Mine animation types were admitted as melee attacks or lost their placement groups.");
             var impact = FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, 4);
             Require(impact is { Duration: .25f, Orientation: 2, Model: "meshes/Effects/test-metal.nif" } && impact.Form == Key(7) &&
                 FalloutImpact.Resolve(records, Key(6), 0) is null, "Impact material selected the wrong source record or replaced a null slot.");
