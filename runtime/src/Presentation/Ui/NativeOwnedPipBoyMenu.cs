@@ -18,6 +18,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly Func<GameplayVitals> _vitals;
     private readonly Func<FalloutNativeSpecialState> _special;
     private readonly Func<string, float>? _actorValue;
+    private readonly Action<FalloutFormKey>? _useAid;
     private readonly string _playerName;
     private readonly IReadOnlyList<FalloutNativeSkillIdentity> _skills, _tags;
     private readonly IReadOnlyList<FalloutNativeTraitIdentity> _traits;
@@ -33,6 +34,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private int _selectedAttribute;
     private FalloutFormKey? _selectedDetail;
     private FalloutBodyPartData? _playerBodyParts;
+    private (int Current, int Maximum) _displayedHealth;
     internal string? Error { get; private set; }
     internal event Action? PageChanged;
     internal void RefreshWorld(FalloutFormKey? world, Vector3 player, float heading)
@@ -50,22 +52,33 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         tags = _tags.Select(tag => tag.RuntimeFormId).ToArray(),
         map = _map?.State,
         error = Error,
-        unbound = "limb-movement-and-effect-rules,radiation,timed-skill-effects,skill-advancement,perks,local-map,radio,fast-travel,aid-effects,item-drop-and-repair"
+        unbound = "limb-movement-and-effect-rules,radiation,timed-skill-effects,skill-advancement,perks,local-map,radio,fast-travel,scripted-and-addictive-aid-effects,item-drop-and-repair"
     };
 
     internal NativeOwnedPipBoyMenu(FalloutPluginStack records, FalloutPipBoyState state, FalloutPlayerInventory inventory,
         FalloutQuestState quests, FalloutReferenceWorld references, Func<GameplayVitals> vitals,
         Func<FalloutNativeSpecialState> special, string playerName, IReadOnlyList<FalloutNativeSkillIdentity> skills,
         IReadOnlyList<FalloutNativeSkillIdentity> tags, IReadOnlyList<FalloutNativeTraitIdentity> traits,
-        FalloutFormKey? world, Vector3 sourcePlayer, float heading, Func<string, float>? actorValue = null)
+        FalloutFormKey? world, Vector3 sourcePlayer, float heading, Func<string, float>? actorValue = null,
+        Action<FalloutFormKey>? useAid = null)
     {
         Name = "OwnedPipBoyMenu"; ProcessMode = ProcessModeEnum.Always; Size = new(1280, 960);
         _records = records; _state = state; _inventory = inventory; _quests = quests; _references = references;
         _vitals = vitals; _special = special; _playerName = playerName; _world = world; _player = sourcePlayer; _heading = heading;
         _skills = skills; _tags = tags; _traits = traits;
         _actorValue = actorValue;
+        _useAid = useAid;
     }
     public override void _Ready() => Refresh();
+    public override void _Process(double delta)
+    {
+        if (_tiles is null || Error is not null || _state.Page != FalloutPipBoyPage.Items) return;
+        var vitals = _vitals();
+        if (_displayedHealth == (vitals.HitPoints, vitals.MaximumHitPoints)) return;
+        _displayedHealth = (vitals.HitPoints, vitals.MaximumHitPoints);
+        _tiles.BindText(Tile("IM_Headline_PlayerHPInfo"), "_Value", $"{vitals.HitPoints}/{vitals.MaximumHitPoints}");
+        QueueRedraw();
+    }
     private XElement Tile(string name) => _tiles.Root.DescendantsAndSelf().SingleOrDefault(tile => (string?)tile.Attribute("name") == name)
         ?? throw new InvalidDataException($"Pip-Boy source tile is absent: {name}.");
     private string Setting(string name) => FalloutGameSettingStrings.Read(_records, name);
@@ -326,6 +339,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Hide("IM_HotKeyWheel", "IM_ItemInfoRect", "IM_EquipItemMarker", "IM_RepairButton", "IM_HotkeyButton", "IM_ModButton", "IM_DropButton", "IM_CancelButton");
         var vitals = _vitals();
         _tiles.BindText(Tile("IM_Headline_PlayerHPInfo"), "_Value", $"{vitals.HitPoints}/{vitals.MaximumHitPoints}");
+        _displayedHealth = (vitals.HitPoints, vitals.MaximumHitPoints);
         _tiles.BindText(Tile("IM_Headline_PlayerWGInfo"), "_Value", $"{_state.Items.Sum(item => (item.Weight ?? 0) * item.Count):0.0}");
         Text("IM_Headline_PlayerDRInfo", ""); Text("IM_Headline_PlayerDTInfo", "");
         var caps = _state.Items.Where(item => item.EditorId.Equals("Caps001", StringComparison.OrdinalIgnoreCase)).Sum(item => item.Count);
@@ -350,7 +364,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             }),
                 _inventory.Equipped.Contains(item.RuntimeFormId))).ToArray());
         var equip = Tile("IM_EquipButton");
-        _tiles.Bind(equip, "visible", _selectedItem?.RecordType is "ARMO" or "WEAP" ? 1 : 0);
+        _tiles.Bind(equip, "visible", _selectedItem?.RecordType is "ARMO" or "WEAP" or "ALCH" ? 1 : 0);
         if (_selectedItem is { } selected)
         {
             var fields = _records.GetEffective(selected.FormKey).ReadSubrecords().ToArray();
@@ -362,10 +376,12 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             AddText($"{NameOf(selected.FormKey)}\nWG {selected.Weight:0.0}   VAL {selected.Value}{condition}",
                 new(470, 440), new(400, 160));
             var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId);
-            _tiles.Text[equip] = Setting(equipped ? "sInventoryUnequip" : "sInventoryEquip");
-            Target(equip, equipped ? "Unequip" : "Equip", () =>
+            var aid = selected.RecordType == "ALCH";
+            _tiles.Text[equip] = Setting(aid ? "sInventoryUse" : equipped ? "sInventoryUnequip" : "sInventoryEquip");
+            Target(equip, aid ? "Use" : equipped ? "Unequip" : "Equip", () =>
             {
-                ToggleEquipment(selected);
+                if (aid) (_useAid ?? throw new NotSupportedException("Aid use has no gameplay owner."))(selected.FormKey);
+                else ToggleEquipment(selected);
                 Refresh();
             });
         }

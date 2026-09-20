@@ -87,6 +87,16 @@ internal sealed class FalloutPlayerSkills
     internal IReadOnlyList<FalloutPerkEntry> PerkEntries => _traits().SelectMany(trait =>
         _abilities.Perk(_records.RuntimeFormKey(trait.RuntimeFormId)).Entries).ToArray();
 
+    internal bool HasPerk(FalloutFormKey form)
+    {
+        if (_records.GetEffective(form).Signature != "PERK") throw new InvalidDataException("HasPerk target is not PERK.");
+        if (_records.GetEffective(_actor).ReadSubrecords().Any(field => field.Signature == "PRKR"))
+            throw new NotSupportedException("Source actor perk ranks require their progression owner.");
+        // These are the player's currently admitted perks. AddPerk and earned
+        // progression still fail at their command boundary, not as lost state.
+        return _traits().Any(trait => _records.RuntimeFormKey(trait.RuntimeFormId) == form);
+    }
+
     private IEnumerable<FalloutFormKey> ConstantEffects() =>
         Links(_actor, "SPLO").Concat(Links(_race(), "SPLO"))
             .Concat(_traits().SelectMany(trait => _abilities.Perk(_records.RuntimeFormKey(trait.RuntimeFormId)).Spells)).Distinct()

@@ -27,6 +27,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutNativeSpecialState _special = null!;
     private FalloutPlayerVitals _vitals = null!;
     private FalloutPlayerSkills _playerSkills = null!;
+    private FalloutPlayerIngestibles _ingestibles = null!;
     private IReadOnlyList<FalloutNativeSkillIdentity> _tagSkills = [];
     private IReadOnlyList<FalloutNativeTraitIdentity> _traits = [];
     private RuntimeNativePlayerNameEntry? _nameEntry;
@@ -171,6 +172,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _globals = globals;
         _playerSkills = new(pluginStack, () => _special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId), () => _scripts.Session.Hardcore);
+        _ingestibles = new(pluginStack, inventory, _vitals,
+            FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
+            _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
+        if (restore?.State.Ingestibles is { } ingestibles) _ingestibles.Restore(ingestibles);
         _gameTime = gameTime;
         _skyLighting = skyLighting;
         _restoringEnteredStage = restore is not null;
@@ -221,6 +226,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (ExecutionError is not null) return;
         try
         {
+            _ingestibles.Advance(delta);
             _stageResults?.Continue();
             if (_saveRequested && _recipeMenu is null && _barterMenu is null) SaveCurrentState();
             _playerPackage?.Advance(delta);

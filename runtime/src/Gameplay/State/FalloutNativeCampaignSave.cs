@@ -34,7 +34,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutSkyLightingSnapshot? SkyLighting = null,
     IReadOnlyList<FalloutReferenceSnapshot>? References = null,
     ulong? InventoryRandomState = null, bool CharacterCreationComplete = true, GameplayVitals? Vitals = null,
-    FalloutWeaponHandlingSnapshot? WeaponHandling = null, float? PlayerViewPitchRadians = null);
+    FalloutWeaponHandlingSnapshot? WeaponHandling = null, float? PlayerViewPitchRadians = null,
+    FalloutIngestiblesSnapshot? Ingestibles = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -42,7 +43,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v13";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v14";
+    internal const string ViewPitchSchema = "opennv-native-fnv-campaign-save/v13";
     internal const string ReferenceStateSchema = "opennv-native-fnv-campaign-save/v12";
     internal const string QuestClockSchema = "opennv-native-fnv-campaign-save/v11";
     internal const string SkyLightingSchema = "opennv-native-fnv-campaign-save/v10";
@@ -280,14 +282,16 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         state.Vitals?.Validate();
+        if (state.Ingestibles is { } ingestibles) FalloutPlayerIngestibles.Validate(ingestibles);
         if (state.WeaponHandling is { } handling) FalloutWeaponHandling.Validate(handling);
-        if ((state.Schema != ExpectedSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
+        if ((state.Schema != ExpectedSchema && state.Schema != ViewPitchSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
             (state.Scripts is null) != (state.Quests is null) ||
             (state.Globals is null) != (state.GameTime is null) ||
-            (state.Schema is ExpectedSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
-            (state.Schema is ExpectedSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema && state.SkyLighting is null) ||
-            (state.Schema is ExpectedSchema or ReferenceStateSchema && state.References is null) ||
-            (state.Schema == ExpectedSchema && state.PlayerViewPitchRadians is null) ||
+            (state.Schema is ExpectedSchema or ViewPitchSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
+            (state.Schema is ExpectedSchema or ViewPitchSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema && state.SkyLighting is null) ||
+            (state.Schema is ExpectedSchema or ViewPitchSchema or ReferenceStateSchema && state.References is null) ||
+            (state.Schema is ExpectedSchema or ViewPitchSchema && state.PlayerViewPitchRadians is null) ||
+            (state.Ingestibles is not null && (state.Schema != ExpectedSchema || state.Vitals is null)) ||
             (state.PlayerViewPitchRadians is { } pitch && (!float.IsFinite(pitch) || MathF.Abs(pitch) > MathF.PI / 2)) ||
             (state.SkyLighting is not null && state.Globals is null) ||
             (state.GameTime is { } time && (!float.IsFinite(time.PreviousHour) || string.IsNullOrWhiteSpace(time.CalendarSha256))) ||

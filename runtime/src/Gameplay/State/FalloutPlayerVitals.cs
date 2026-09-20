@@ -10,6 +10,7 @@ internal sealed class FalloutPlayerVitals
     internal GameplayVitals State { get; private set; }
     internal void Damage(float amount) => State = State.Damage(amount);
     internal void Damage(float amount, byte part, float limbMultiplier) => State = State.Damage(amount, part, limbMultiplier);
+    internal void Publish(GameplayVitals state) { state.Validate(); State = state; }
 
     internal FalloutPlayerVitals(FalloutPluginStack records, FalloutFormKey player, FalloutNativeSpecialState special,
         GameplayVitals? restore = null)

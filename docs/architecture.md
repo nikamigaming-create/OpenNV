@@ -118,8 +118,12 @@ abilities, conditional trait effects and equipped apparel effects against live
 inventory/global state. They are also used by the Pip-Boy rows. Inventory weight
 is reused until inventory revision or hardcore mode changes. Ingestible DATA
 supplies weight and ENIT supplies value; ammunition weight applies in hardcore
-mode. Timed effects, unsupported effect archetypes and conditions remain explicit
-failures. Full damage, actor-value modifier pools and advancement are incomplete.
+mode. FalloutPlayerIngestibles preflights selected ALCH effects and consumption
+audio before committing shared inventory/vitals changes. Supported health and
+limb effects use winning skill settings; timed healing advances on gameplay time
+and preserves its remaining duration and source hashes in campaign saves.
+Other actor values, scripts, addiction and unbound conditions fail explicitly.
+Full damage, actor-value modifier pools and advancement are incomplete.
 
 Quest stages, INFO results, reference events and quest GameMode share the same
 statement interpreter. Compiled bindings are cached per owner/script. A stage

@@ -80,7 +80,7 @@ public partial class RuntimeCoordinator
         return new(_nativePluginStack!, driver.PipBoy, _nativeInventory, driver.Quests, _nativeReferences!,
             () => driver.Vitals, () => driver.Special, driver.PlayerName, driver.Skills, driver.Tags, driver.Traits,
             _nativeActiveCell!.Cell.Worldspace, source,
-            MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X), driver.PlayerSkillValue);
+            MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X), driver.PlayerSkillValue, driver.UseAid);
     }
     private static Vector3 NativePipBoyMapPosition(RuntimeNativePlayer player) =>
         new Vector3(player.GlobalPosition.X, -player.GlobalPosition.Z, player.GlobalPosition.Y) / player.UnitsToMeters;

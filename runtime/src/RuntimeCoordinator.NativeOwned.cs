@@ -148,6 +148,7 @@ public partial class RuntimeCoordinator
             skyLighting = _nativeSkyLighting?.Unbound is null ? _nativeSkyLighting?.Capture() : null,
             skyLightingUnbound = _nativeSkyLighting?.Unbound,
             playerInventory = _nativeInventory.Items,
+            ingestibles = _nativeOpeningStageDriver?.IngestibleState,
             gameplayHud = _nativeGameplayHud?.State,
             hudMessages = _nativeHudMessages?.State,
             pipBoy = _nativePipBoy?.State,
