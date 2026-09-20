@@ -12,6 +12,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutFormKey? _music;
     internal FalloutFormKey? SourceMusic => _music;
     private bool _saveRequested;
+    private CanvasLayer? _recipeLayer;
+    private NativeOwnedRecipeMenu? _recipeMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
 
     private void ApplyNativeSourceCommand(FalloutFormKey source, FalloutScriptBindings bindings, string command, IReadOnlyList<string> arguments)
@@ -91,6 +93,12 @@ internal partial class RuntimeNativeOpeningStageDriver
                 SynchronizeTraitEntry();
                 if (_traitEntry is null) throw new NotSupportedException("Trait input has no active menu owner.");
                 break;
+            case "showrecipemenu" when parts.Length == 1 && arguments.Count == 1:
+                var recipeCategory = bindings.Form(arguments[0]);
+                if (recipeCategory.Signature != "RCCT")
+                    throw new InvalidDataException("ShowRecipeMenu argument is not an RCCT category.");
+                OpenRecipeMenu(recipeCategory.FormKey);
+                break;
             case "playbink" when parts.Length == 1:
                 if (_moviePlaying) throw new InvalidOperationException("Movie player is already active.");
                 var movieCommand = FalloutMovieCommand.FromScript(command + " " + string.Join(' ', arguments)).Single();
@@ -148,7 +156,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
         if (_moviePlaying || _player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
-            _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null || _traitEntry is not null)
+            _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null ||
+            _traitEntry is not null || _recipeMenu is not null)
             throw new NotSupportedException("Saving an active movie, furniture, speech or menu requires continuation state.");
         var transform = _player.GlobalTransform;
         var rotation = transform.Basis.GetRotationQuaternion().Normalized();
@@ -159,5 +168,56 @@ internal partial class RuntimeNativeOpeningStageDriver
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians);
         return state with { Vitals = Vitals, WeaponHandling = _player.CaptureWeaponHandling() };
+    }
+
+    private void OpenRecipeMenu(FalloutFormKey categoryForm)
+    {
+        if (_recipeMenu is not null) throw new InvalidOperationException("A recipe menu is already active.");
+        if (_player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
+            _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null ||
+            _tagSkillEntry is not null || _traitEntry is not null)
+            throw new InvalidOperationException("Crafting cannot open while another player interaction owns input.");
+
+        var category = FalloutRecipeCategory.Read(_pluginStack, categoryForm);
+        var recipes = FalloutRecipe.ReadCategory(_pluginStack, categoryForm);
+        var layer = new CanvasLayer { Layer = 94 };
+        var menu = new NativeOwnedRecipeMenu(_pluginStack, _inventory, category, recipes, EvaluateRecipeCondition,
+            value => _playerSkills.Value(value), recipe => _inventory.Craft(_pluginStack, recipe, SourcePlayerLevel, _globals),
+            CloseRecipeMenu);
+        _recipeLayer = layer;
+        _recipeMenu = menu;
+        AddChild(layer);
+        layer.AddChild(menu);
+        _player.SetModalInput(true);
+        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Visible;
+        GD.Print($"OPENNV_NATIVE_RECIPE_MENU_OPEN category={category.Form} recipes={recipes.Count} source=RCCT-RCPE owner=shared-inventory parity=unverified");
+    }
+
+    private float EvaluateRecipeCondition(FalloutCondition condition)
+    {
+        if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
+        if (condition.RunOn != 0)
+            throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} selects run-on actor {condition.RunOn}.");
+        return condition.Function switch
+        {
+            14 => _playerSkills.Value(checked((int)condition.Argument1)),
+            47 => _inventory.Item(condition.FormArgument1)?.Count ?? 0,
+            56 or 58 or 59 or 79 or 420 or 421 or 546 => _quests.Evaluate(condition),
+            69 => condition.FormArgument1 == _pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId) ? 1 : 0,
+            70 when condition.Argument1 <= 1 => _character.Female == (condition.Argument1 == 1) ? 1 : 0,
+            72 => condition.FormArgument1 == _raceSexContract.Player ? 1 : 0,
+            74 => (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1),
+            _ => throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} is unbound."),
+        };
+    }
+
+    private void CloseRecipeMenu()
+    {
+        if (_recipeMenu is null) return;
+        _recipeLayer?.QueueFree();
+        _recipeLayer = null;
+        _recipeMenu = null;
+        _player.SetModalInput(false);
+        if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Captured;
     }
 }
