@@ -19,7 +19,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeActorCombatAnimation? _combatIdle, _combatAim, _combatGrip;
     private string _movementPath = "", _attackPath = "";
     private int _attackHitCount;
-    private bool Ranged => _enemyWeapon is not null && _enemyWeapon.AnimationGroup is not ("h2h" or "1hm" or "2hm");
+    private bool Ranged => _enemyWeapon is not null && !_enemyWeapon.IsMeleeWeapon;
     private readonly (RuntimeNativeNifAnimation Animation, float SourceSeconds)[] _combatLayers = new (RuntimeNativeNifAnimation, float)[4];
 
     private void PrepareEngagement()
@@ -38,9 +38,14 @@ internal sealed partial class RuntimeNativeActorCombat
             var item = selected.Length == 1 ? selected[0] : equipped.Length == 1 ? equipped[0] :
                 throw new NotSupportedException("Actor requires unarmed damage or competing-weapon selection.");
             _enemyWeapon = FalloutWeaponPresentation.Read(_records, item.FormKey, firstPerson: false);
+            if (_enemyWeapon.IsMine)
+                throw new NotSupportedException("NPC mine placement and proximity detonation are unbound.");
             if (_enemyWeapon.Automatic && (!float.IsFinite(_enemyWeapon.AttackShotsPerSecond) || _enemyWeapon.AttackShotsPerSecond <= 0))
                 throw new NotSupportedException("Actor automatic weapon has no valid source attack-shot rate.");
-            if (_enemyWeapon.AnimationGroup is not ("1hm" or "2hm" or "1hp" or "2hr" or "2ha" or "2hl" or "1gt"))
+            var supportedAnimation = _enemyWeapon.IsMeleeWeapon
+                ? _enemyWeapon.AnimationGroup is "h2h" or "1hm" or "2hm" or "2hh"
+                : _enemyWeapon.AnimationGroup is "1hp" or "2hr" or "2ha" or "2hl" or "1gt";
+            if (!supportedAnimation)
                 throw new NotSupportedException("This actor weapon requires its specialized attack owner.");
             owned.Contents.Equip(_records, item.FormKey);
             _enemyObject = new(_enemyWeapon, _skeleton, _content);

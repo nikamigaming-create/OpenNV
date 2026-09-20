@@ -11,7 +11,7 @@ internal partial class RuntimeNativePlayer
     private long _meleeAttacks;
 
     private static bool IsMeleeWeapon(FalloutWeaponPresentation weapon)
-        => weapon.AnimationGroup is "h2h" or "1hm" or "2hm";
+        => weapon.IsMeleeWeapon;
 
     private void RequestMeleeWeaponFire(FalloutWeaponPresentation weapon)
     {

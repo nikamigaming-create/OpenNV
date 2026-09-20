@@ -13,6 +13,9 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal bool Automatic { get; init; }
     internal float AttackShotsPerSecond { get; init; }
     internal bool NpcsUseAmmo { get; init; }
+    internal int EquipmentType { get; init; }
+    internal bool IsMeleeWeapon => EquipmentType is 3 or 4;
+    internal bool IsMine => EquipmentType == 6;
     internal float Reach { get; init; }
     internal float MaximumRange { get; init; }
     internal string? ShellModel { get; init; }
@@ -86,6 +89,10 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         }
         var itemData = fields.Single(field => field.Signature == "DATA").Data.Span;
         if (itemData.Length != 15) throw new NotSupportedException($"WEAP DATA extent {itemData.Length} is unbound.");
+        var equipment = fields.Single(field => field.Signature == "ETYP").Data.Span;
+        if (equipment.Length != sizeof(int)) throw new InvalidDataException("WEAP equipment type extent is invalid.");
+        var equipmentType = BinaryPrimitives.ReadInt32LittleEndian(equipment);
+        if (equipmentType is < -1 or > 13) throw new NotSupportedException($"WEAP equipment type {equipmentType} is unbound.");
         FalloutFormKey? Form(string signature)
         {
             var bytes = fields.SingleOrDefault(field => field.Signature == signature).Data;
@@ -137,6 +144,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             Automatic = (data[12] & 2) != 0,
             AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
             NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
+            EquipmentType = equipmentType,
             Reach = FalloutProjectile.Number(data, 8),
             MaximumRange = FalloutProjectile.Number(data, 48),
             Ammunition = ammunition,

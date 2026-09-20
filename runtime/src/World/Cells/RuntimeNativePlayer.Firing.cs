@@ -54,6 +54,8 @@ internal partial class RuntimeNativePlayer
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
+            if (weapon.IsMine)
+                throw new NotSupportedException("Mine placement and proximity detonation are unbound.");
             if (IsMeleeWeapon(weapon))
             {
                 RequestMeleeWeaponFire(weapon);
