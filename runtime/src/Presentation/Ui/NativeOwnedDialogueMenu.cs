@@ -14,6 +14,7 @@ internal partial class NativeOwnedDialogueMenu : Control
     private IReadOnlyList<FalloutConversationChoice> _conversationChoices = [];
     private Action<FalloutFormKey>? _choose;
     private int _offset;
+    private int _selectedChoiceIndex;
     private int _visibleChoiceCount;
     private bool _faulted, _submitted;
 
@@ -43,6 +44,7 @@ internal partial class NativeOwnedDialogueMenu : Control
         _conversationChoices = conversation.Choices;
         _choose = choose;
         _offset = 0;
+        _selectedChoiceIndex = 0;
         _visibleChoiceCount = 0;
         _submitted = false;
         _tiles.Text[_speaker] = speaker;
@@ -126,8 +128,8 @@ internal partial class NativeOwnedDialogueMenu : Control
                 _submitted = true;
                 (_choose ?? throw new InvalidOperationException("Dialogue choice owner is absent."))(choice.Topic);
             };
-            button.MouseEntered += () => Select(tile);
-            button.FocusEntered += () => Select(tile);
+            button.MouseEntered += () => { _selectedChoiceIndex = index; Select(tile); };
+            button.FocusEntered += () => { _selectedChoiceIndex = index; Select(tile); };
             AddChild(button);
             _choices.Add((tile, button));
             y += rowHeight;
@@ -148,8 +150,11 @@ internal partial class NativeOwnedDialogueMenu : Control
         }
         if (_choices.Count > 0)
         {
-            Select(_choices[0].Tile);
-            Callable.From(_choices[0].Button.GrabFocus).CallDeferred();
+            if (_selectedChoiceIndex < _offset || _selectedChoiceIndex >= _offset + _visibleChoiceCount)
+                _selectedChoiceIndex = _offset;
+            var selected = _choices[_selectedChoiceIndex - _offset];
+            Select(selected.Tile);
+            Callable.From(selected.Button.GrabFocus).CallDeferred();
         }
     }
 
@@ -171,19 +176,38 @@ internal partial class NativeOwnedDialogueMenu : Control
         var next = Math.Clamp(_offset + amount, 0, _conversationChoices.Count - 1);
         if (next == _offset) return;
         _offset = next;
+        _selectedChoiceIndex = next;
+        Layout();
+    }
+
+    private void MoveSelection(int direction)
+    {
+        if (_conversationChoices.Count == 0 || _visibleChoiceCount == 0) return;
+        var next = Math.Clamp(_selectedChoiceIndex + direction, 0, _conversationChoices.Count - 1);
+        if (next == _selectedChoiceIndex) return;
+        if (next < _offset) _offset = next;
+        else if (next >= _offset + _visibleChoiceCount)
+            _offset = next - _visibleChoiceCount + 1;
+        _selectedChoiceIndex = next;
         Layout();
     }
 
     public override void _Input(InputEvent inputEvent)
     {
-        if (_submitted || _conversationChoices.Count <= _visibleChoiceCount) return;
+        if (_submitted) return;
         if (inputEvent is InputEventKey { Pressed: true, Echo: false } key &&
-            key.PhysicalKeycode is Key.Pageup or Key.Pagedown)
+            key.PhysicalKeycode is Key.Pageup or Key.Pagedown && _conversationChoices.Count > _visibleChoiceCount)
         {
             Scroll(key.PhysicalKeycode == Key.Pageup ? -Math.Max(1, _visibleChoiceCount) : Math.Max(1, _visibleChoiceCount));
             GetViewport().SetInputAsHandled();
         }
-        else if (inputEvent is InputEventMouseButton { Pressed: true } mouse &&
+        else if (inputEvent is InputEventKey { Pressed: true, Echo: false } navigation &&
+            navigation.Keycode is Key.Up or Key.Down)
+        {
+            MoveSelection(navigation.Keycode == Key.Up ? -1 : 1);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_conversationChoices.Count > _visibleChoiceCount && inputEvent is InputEventMouseButton { Pressed: true } mouse &&
             mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
         {
             Scroll(mouse.ButtonIndex == MouseButton.WheelUp ? -1 : 1);
