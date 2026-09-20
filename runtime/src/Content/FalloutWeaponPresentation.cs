@@ -20,6 +20,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal float Reach { get; init; }
     internal float MaximumRange { get; init; }
     internal string? ShellModel { get; init; }
+    // NAM0=None is distinct from a source ammo list whose rounds are absent.
+    internal bool HasAmmunitionSource { get; init; }
     internal string AttackGroup => AttackAnimation switch
     {
         26 => "attackleft",
@@ -103,11 +105,13 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             return id == 0 ? null : weapon.Plugin.AdjustFormId(id);
         }
         var ammunition = new List<FalloutFormKey>();
-        if (Form("NAM0") is { } ammo)
+        var ammunitionSource = Form("NAM0");
+        if (ammunitionSource is { } ammo)
         {
             var source = records.GetEffective(ammo);
             if (source.Signature == "AMMO") ammunition.Add(ammo);
             else if (source.Signature == "FLST")
+            {
                 foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "LNAM"))
                 {
                     if (field.Data.Length != 4) throw new InvalidDataException("Weapon ammunition list has an invalid FormID extent.");
@@ -115,6 +119,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
                     if (records.GetEffective(entry).Signature != "AMMO") throw new NotSupportedException("Weapon ammunition list contains a non-AMMO entry.");
                     ammunition.Add(entry);
                 }
+                if (ammunition.Count == 0) throw new NotSupportedException("Weapon ammunition list has no source AMMO entries.");
+            }
             else throw new NotSupportedException("WEAP ammunition is neither AMMO nor FLST.");
         }
         var sounds = new Dictionary<string, FalloutFormKey>();
@@ -149,6 +155,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             EquipmentType = equipmentType,
             Reach = FalloutProjectile.Number(data, 8),
             MaximumRange = FalloutProjectile.Number(data, 48),
+            HasAmmunitionSource = ammunitionSource is not null,
             Ammunition = ammunition,
             Sounds = sounds,
             ShellModel = FalloutNpcAppearanceResolver.PathField(weapon, "MOD2", "meshes", false, fields)

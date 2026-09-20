@@ -19,10 +19,10 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var weapon = _enemyWeapon!;
         var handling = _enemyWeaponHandling ?? throw new InvalidOperationException("Actor weapon handling is absent.");
-        var ammo = _enemyWeaponHandling!.Ammunition(weapon) ?? throw new InvalidOperationException("Actor has no source ammunition.");
-        if (_enemyShot?.Ammunition != ammo)
+        var ammo = _enemyWeaponHandling!.Ammunition(weapon);
+        if (_enemyShot is null || _enemyShot.Ammunition != ammo)
         {
-            _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo);
+            _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo, weapon.HasAmmunitionSource);
             _enemyShot.RequireRuntimeAttackOwner();
             var socket = _enemyObject!.Nodes.Single(node => node.GetMeta("opennv_nif_source_name", "").AsString() == "ProjectileNode");
             _enemyMuzzle ??= new(_records, _content, socket, _skeleton.UnitsToMetres);

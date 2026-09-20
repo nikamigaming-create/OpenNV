@@ -23,7 +23,8 @@ internal partial class RuntimeNativePlayer
     {
         get
         {
-            if (_weaponHandling is not { Drawn: true } || _firstPerson?.Weapon is not { ClipSize: > 0 } weapon) return null;
+            if (_weaponHandling is not { Drawn: true } || _firstPerson?.Weapon is not { ClipSize: > 0, AmmoUse: > 0 } weapon ||
+                !weapon.HasAmmunitionSource) return null;
             var ammo = _weaponHandling.Ammunition(weapon);
             var loaded = _weaponHandling.Loaded(weapon.Form);
             return new(loaded, Math.Max(0, (ammo is { } form ? _presentationInventory!.Item(form)?.Count ?? 0 : 0) - loaded));

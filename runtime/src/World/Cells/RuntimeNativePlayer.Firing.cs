@@ -64,8 +64,8 @@ internal partial class RuntimeNativePlayer
                 RequestMeleeWeaponFire(weapon);
                 return;
             }
-            if (weapon.Ammunition.Count == 0 || weapon.ClipSize == 0 || weapon.AmmoUse == 0)
-                throw new NotSupportedException("This weapon needs its melee, thrown or ammo-free attack owner.");
+            if (weapon.HasAmmunitionSource && weapon.AmmoUse > 0 && weapon.ClipSize == 0)
+                throw new NotSupportedException("This consuming weapon has no source magazine capacity.");
             if (weapon.Automatic && (!float.IsFinite(weapon.AttackShotsPerSecond) || weapon.AttackShotsPerSecond <= 0))
                 throw new NotSupportedException("Automatic weapon has no valid source attack-shot rate.");
             if (!_weaponHandling!.CanFire(weapon))
@@ -75,9 +75,9 @@ internal partial class RuntimeNativePlayer
                 if (weapon.Sounds.TryGetValue("empty", out var sound)) _weaponSounds!.DispatchSound(sound);
                 return;
             }
-            var ammunition = _weaponHandling.Ammunition(weapon)!.Value;
+            var ammunition = _weaponHandling.Ammunition(weapon);
             if (_shot?.Weapon != weapon.Form || _shot.Ammunition != ammunition)
-                _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition);
+                _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition, weapon.HasAmmunitionSource);
             _shot.RequireRuntimeAttackOwner();
             var definitionDone = System.Diagnostics.Stopwatch.GetTimestamp();
             _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask);
@@ -210,7 +210,7 @@ internal partial class RuntimeNativePlayer
                     weapon = weapon.Form.ToString(),
                     weaponAnimationType = _shot.WeaponAnimationType,
                     attackAnimation = _shot.AttackAnimation,
-                    ammunition = _shot.Ammunition.ToString(),
+                    ammunition = _shot.Ammunition?.ToString(),
                     projectile = _shot.Projectile.Form.ToString(),
                     projectiles = _shot.Projectiles,
                     projectileHits = damage.HitCount,
