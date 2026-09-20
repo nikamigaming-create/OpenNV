@@ -4,16 +4,36 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutAbilityModifier(FalloutFormKey Spell, FalloutFormKey Effect, int ActorValue,
     float Amount, IReadOnlyList<FalloutCondition> Conditions);
-internal sealed record FalloutPerkEntry(byte Entry, byte Function, float Value, IReadOnlyList<FalloutCondition> Conditions);
+internal sealed record FalloutAbilityScript(FalloutFormKey Spell, FalloutFormKey Effect, FalloutFormKey Script,
+    IReadOnlyList<FalloutCondition> Conditions);
+internal sealed record FalloutPerkEntry(byte Entry, byte Function, float Value, IReadOnlyList<FalloutCondition> Conditions,
+    IReadOnlyDictionary<byte, IReadOnlyList<FalloutCondition>>? ConditionGroups = null)
+{
+    internal void RequireActorConditionScope()
+    {
+        if (ConditionGroups?.Any(group => group.Key != 0 && group.Value.Count != 0) == true)
+            throw new NotSupportedException($"Perk entry {Entry} requires weapon/target condition evaluation.");
+    }
+}
 
 // Constant source abilities are evaluated against live state. Conditional
 // modifiers are not baked into SPECIAL or saved a second time as base values.
 internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
 {
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutAbilityModifier>> _spells = [];
+    private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutAbilityScript>> _scripts = [];
     private readonly Dictionary<FalloutFormKey, (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries)> _perks = [];
 
     internal IReadOnlyList<FalloutAbilityModifier> Spell(FalloutFormKey form)
+    {
+        var result = ConstantModifiers(form);
+        if (_scripts[form].Count != 0) throw new NotSupportedException($"Ability {form} requires its script lifecycle owner.");
+        return result;
+    }
+
+    internal IReadOnlyList<FalloutAbilityScript> Scripts(FalloutFormKey form) { _ = ConstantModifiers(form); return _scripts[form]; }
+
+    internal IReadOnlyList<FalloutAbilityModifier> ConstantModifiers(FalloutFormKey form)
     {
         if (_spells.TryGetValue(form, out var cached)) return cached;
         var source = records.GetEffective(form);
@@ -23,6 +43,7 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
         if (declaration.Length != 16 || BinaryPrimitives.ReadUInt32LittleEndian(declaration) != (source.Signature == "SPEL" ? 4 : 3))
             throw new NotSupportedException($"Actor effect {form} requires a timed/scripted effect owner.");
         var result = new List<FalloutAbilityModifier>();
+        var scripts = new List<FalloutAbilityScript>();
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "EFID") continue;
@@ -38,6 +59,17 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
             if (definition.Length != 72) throw new NotSupportedException($"MGEF {effect.FormKey} extent is unbound.");
             var flags = BinaryPrimitives.ReadUInt32LittleEndian(definition);
             var archetype = BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]);
+            if (archetype == 1 && group.All(field => field.Signature is "EFIT" or "CTDA") &&
+                BinaryPrimitives.ReadUInt32LittleEndian(data[4..]) == 0 && BinaryPrimitives.ReadUInt32LittleEndian(data[8..]) == 0 &&
+                BinaryPrimitives.ReadUInt32LittleEndian(data[12..]) == 0)
+            {
+                var script = effect.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]));
+                if (records.GetEffective(script).Signature != "SCPT") throw new InvalidDataException("Script ability has no SCPT owner.");
+                scripts.Add(new(form, effect.FormKey, script, group.Where(field => field.Signature == "CTDA")
+                    .Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+                index = end - 1;
+                continue;
+            }
             if (archetype != 0 || (flags & 2) == 0 || group.Any(field => field.Signature is not ("EFIT" or "CTDA")) ||
                 BinaryPrimitives.ReadUInt32LittleEndian(data[4..]) != 0 || BinaryPrimitives.ReadUInt32LittleEndian(data[8..]) != 0 ||
                 BinaryPrimitives.ReadUInt32LittleEndian(data[12..]) != 0)
@@ -48,7 +80,8 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                 group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
             index = end - 1;
         }
-        if (result.Count == 0) throw new InvalidDataException($"Ability {form} has no effects.");
+        if (result.Count == 0 && scripts.Count == 0) throw new InvalidDataException($"Ability {form} has no effects.");
+        _scripts.Add(form, scripts);
         _spells.Add(form, result);
         return result;
     }
@@ -76,13 +109,30 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
             {
                 var type = group.Single(field => field.Signature == "EPFT").Data.Span;
                 var parameter = group.Single(field => field.Signature == "EPFD").Data.Span;
-                if (type.Length != 1 || type[0] != 1 || parameter.Length != 4 || data[2] != 1 ||
-                    group.Any(field => field.Signature is not ("DATA" or "EPFT" or "EPFD" or "CTDA")))
+                if (type.Length != 1 || type[0] != 1 || parameter.Length != 4 || data[2] == 0 ||
+                    group.Any(field => field.Signature is not ("DATA" or "EPFT" or "EPFD" or "CTDA" or "PRKC")))
                     throw new NotSupportedException($"Perk {form} entry {data[0]} requires its condition/parameter owner.");
                 var value = BinaryPrimitives.ReadSingleLittleEndian(parameter);
                 if (!float.IsFinite(value)) throw new InvalidDataException("Perk value is not finite.");
-                entries.Add(new(data[0], data[1], value,
-                    group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+                var conditions = new Dictionary<byte, List<FalloutCondition>>();
+                byte tab = 0;
+                foreach (var field in group)
+                {
+                    if (field.Signature == "PRKC")
+                    {
+                        if (field.Data.Length != 1 || field.Data.Span[0] >= data[2])
+                            throw new InvalidDataException("Perk condition tab is outside its declared extent.");
+                        tab = field.Data.Span[0];
+                        if (!conditions.TryAdd(tab, [])) throw new InvalidDataException("Perk condition tab repeats.");
+                    }
+                    else if (field.Signature == "CTDA")
+                    {
+                        if (!conditions.TryGetValue(tab, out var list)) conditions.Add(tab, list = []);
+                        list.Add(FalloutCondition.Read(source, field.Data.Span));
+                    }
+                }
+                entries.Add(new(data[0], data[1], value, conditions.GetValueOrDefault((byte)0) ?? [],
+                    conditions.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<FalloutCondition>)pair.Value.ToArray())));
             }
             else throw new NotSupportedException($"Perk {form} entry type {header[0]} is unbound.");
             index = end;

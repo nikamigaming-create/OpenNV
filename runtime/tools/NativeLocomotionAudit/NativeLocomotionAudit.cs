@@ -52,6 +52,24 @@ public partial class NativeLocomotionAudit : Node3D
             using var placement = new NativeCapsulePlacementQuery(body);
             if (!placement.CanStand(body.GlobalPosition) || !lowCeiling && placement.CanStand(new(0, 0, -2)))
                 throw new InvalidOperationException("Source waypoint clearance lost the floor or accepted the wall's occupied capsule.");
+            if (!lowCeiling)
+            {
+                scene.ProcessMode = ProcessModeEnum.Disabled;
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                using (var removed = new NativeCapsulePlacementQuery(body))
+                    if (removed.CanStand(body.GlobalPosition)) throw new InvalidOperationException("Disabled destination retained default collision unexpectedly.");
+                var bodies = scene.FindChildren("*", "", true, false).OfType<CollisionObject3D>().ToArray();
+                foreach (var collider in bodies) collider.DisableMode = CollisionObject3D.DisableModeEnum.KeepActive;
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                using (var staged = new NativeCapsulePlacementQuery(body))
+                    if (!staged.CanStand(body.GlobalPosition) || staged.CanStand(new(0, 0, -2)))
+                        throw new InvalidOperationException("Staged destination lost its floor or wall while gameplay was disabled.");
+                scene.ProcessMode = ProcessModeEnum.Inherit;
+                foreach (var collider in bodies) collider.DisableMode = CollisionObject3D.DisableModeEnum.Remove;
+                GD.Print("OPENNV_STAGED_COLLISION_PASS gameplayDisabled=true floor=true wallRefused=true");
+            }
             var path = NativeCapsuleNavigation.Find(body, body.GlobalPosition, new(0, 0, -5), .4f, .64f, _ => true);
             if (body.GlobalTransform != initial || !lowCeiling && !path.Any(point => Math.Abs(point.X) > 2.3f))
                 throw new InvalidOperationException("Navigation moved the query body or cut through the capsule obstruction.");

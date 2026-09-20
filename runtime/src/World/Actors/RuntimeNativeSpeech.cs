@@ -13,6 +13,9 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutCondition, float>? _conditionContext;
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private AudioStreamPlayer _voice = null!;
+    private NativeOwnedAnimationSoundPlayer? _responseSound;
+    private Func<FalloutFormKey, FalloutSoundRandomState>? _soundRandom;
+    private float _unitsToMetres;
     private FalloutSayToCommand? _command;
     private FalloutDialogueInfo? _info;
     private int _responseIndex;
@@ -41,6 +44,7 @@ internal partial class RuntimeNativeSpeech : Node
     {
         if (_info is null || Error is not null) return;
         _voice.Stop();
+        ClearResponseSound();
         _advance = true;
     }
 
@@ -61,6 +65,7 @@ internal partial class RuntimeNativeSpeech : Node
         speaker = _command?.SpeakerEditorId,
         speakerReference = _speakerReference?.ToString(),
         voiceBinding = _binding,
+        responseSound = _responseSound?.LastEvent,
         audioSha256 = _voice?.Stream?.GetMeta("opennv_owned_media_sha256", "").AsString(),
         lipSha256 = _lipSha256,
         unbound = _unbound.ToArray(),
@@ -82,13 +87,15 @@ internal partial class RuntimeNativeSpeech : Node
     internal void Configure(FalloutPluginStack stack, FaceGenLipConfiguration lipConfiguration,
         Func<FalloutFormKey, float> questStage,
         Func<FalloutCondition, float>? conditionContext = null, HashSet<FalloutFormKey>? saidInfos = null,
-        Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null)
+        Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null,
+        Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _questStage = questStage;
         _conditionContext = conditionContext;
         _templates = templates;
+        _soundRandom = soundRandom; _unitsToMetres = unitsToMetres;
         _said = saidInfos ?? [];
         _voices = new((RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.")).ResourcePathsUnder("sound/voice"));
         Name = "SourceSpeech";
@@ -163,6 +170,28 @@ internal partial class RuntimeNativeSpeech : Node
         var info = _info ?? throw new InvalidOperationException("Source INFO was lost.");
         var response = info.Responses[_responseIndex];
         _binding = null; _lipSha256 = null; _advance = false;
+        _lip = null; _lipWeights = [];
+        ClearResponseSound();
+        if (response.ListenerAnimation is not null)
+            throw new NotSupportedException($"Response listener IDLE {response.ListenerAnimation} requires its target animation owner.");
+        if (_creatureSpeaker is not null && response.SpeakerAnimation is not null)
+            throw new NotSupportedException($"Creature response IDLE {response.SpeakerAnimation} requires its animation blend owner.");
+        _speaker?.BeginResponseAnimation(_stack, response.SpeakerAnimation);
+        if (response.Sound is { } sound)
+        {
+            if (info.Speaker is { } specified && specified != _identity!.Actor)
+                throw new InvalidDataException("Explicit dialogue sound belongs to a different actor.");
+            var actor = (Node3D?)_speaker ?? _creatureSpeaker ?? throw new InvalidOperationException("Sound response lost its speaker.");
+            _responseSound = new(_stack, RuntimeLiveContentSource.Current!, actor, _unitsToMetres,
+                (_soundRandom ?? throw new NotSupportedException("Response SOUN has no retained random owner."))(_speakerReference!.Value));
+            AddChild(_responseSound);
+            var disposition = _responseSound.DispatchSound(sound, actor, () => _advance = true);
+            if (disposition == "unbound-source-sound")
+                throw new NotSupportedException(string.Join("; ", _responseSound.Unbound));
+            foreach (var lane in _responseSound.Unbound) _unbound.Add(lane);
+            GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} sound={sound} owner=source-SOUN disposition={disposition}");
+            return;
+        }
         _binding = _voices.Resolve(_identity ?? throw new InvalidOperationException("Source voice type was lost."), info, _responseIndex);
         var lipPath = _binding.LipPath;
         _lip = null; _lipWeights = [];
@@ -176,11 +205,6 @@ internal partial class RuntimeNativeSpeech : Node
         else _unbound.Add("missing-source-lip:" + lipPath);
         if (_creatureSpeaker is not null) _unbound.Add("creature-speech-face:" + _speakerReference);
         _voice.Stream = NativeOwnedMediaLoader.LoadAudio(_binding.AudioPath);
-        if (response.ListenerAnimation is not null)
-            throw new NotSupportedException($"Response listener IDLE {response.ListenerAnimation} requires its target animation owner.");
-        if (_creatureSpeaker is not null && response.SpeakerAnimation is not null)
-            throw new NotSupportedException($"Creature response IDLE {response.SpeakerAnimation} requires its animation blend owner.");
-        _speaker?.BeginResponseAnimation(_stack, response.SpeakerAnimation);
         _voice.Play();
         GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} " +
             $"speaker={_command!.SpeakerEditorId} voice={_binding.AudioPath} lip={lipPath} voiceType={_binding.VoiceType} " +
@@ -199,6 +223,7 @@ internal partial class RuntimeNativeSpeech : Node
             }
             if (!_advance) return;
             _advance = false;
+            ClearResponseSound();
             _speaker?.EndResponseAnimation();
             if (_responseCompleted is { } completion)
             {
@@ -228,6 +253,7 @@ internal partial class RuntimeNativeSpeech : Node
     {
         Error = error.Message;
         _voice.Stop();
+        ClearResponseSound();
         _speaker?.ClearSpeechFace();
         _speaker?.EndResponseAnimation();
         _advance = false;
@@ -238,5 +264,11 @@ internal partial class RuntimeNativeSpeech : Node
     {
         if (!FalloutDialogueTopic.CodeLines(begin ? info.BeginScript : info.EndScript).Any()) return;
         (ExecuteResults ?? throw new NotSupportedException($"INFO {info.Record.FormKey} has no result-script owner."))(info, speaker, begin);
+    }
+
+    private void ClearResponseSound()
+    {
+        if (_responseSound is null) return;
+        _responseSound.Free(); _responseSound = null;
     }
 }

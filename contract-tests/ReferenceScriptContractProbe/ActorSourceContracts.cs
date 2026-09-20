@@ -24,6 +24,11 @@ internal static class ActorSourceContracts
                 ActorList(0x820, 0, (1, 0x800), (1, 0x804), (10, 0x804)),
                 ActorList(0x821, 100, (1, 0x800)),
                 Record("MISC", 0x840, Field("EDID", Text("CreatureLoot")), Field("DATA", new byte[8])),
+                Record("FACT", 0x8e0), Record("FACT", 0x8e1),
+                Record("PERK", 0x8e2, Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 2]),
+                    Field("PRKC", [1]), Field("CTDA", Condition(35, 0)), Field("EPFT", [1]),
+                    Field("EPFD", BitConverter.GetBytes(2f)), Field("PRKF", [])),
+                Record("CSTY", 0x8e3, Field("CSSD", new byte[64])),
                 Cell(0x881, Record("REFR", 0x908, Field("NAME", BitConverter.GetBytes(0x844u)),
                     Field("DATA", new float[] { 10, 20, 30, 0, 0, 1 }.SelectMany(BitConverter.GetBytes).ToArray()))),
                 Record("STAT", 0x844), Record("ACTI", 0x845, Field("SCRI", BitConverter.GetBytes(0x891u))),
@@ -45,6 +50,8 @@ internal static class ActorSourceContracts
                         BitConverter.GetBytes((short)40), BitConverter.GetBytes((short)-10)))),
                 Record("WRLD", 0x8f2, Field("WNAM", BitConverter.GetBytes(0x8f0u)), Field("PNAM", BitConverter.GetBytes((ushort)4)),
                     Field("ONAM", new float[] { 2, -20, 30 }.SelectMany(BitConverter.GetBytes).ToArray())),
+                Group(1, 0x8f0, Record("CELL", 0x882, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+                Group(1, 0x8f2, Record("CELL", 0x883, Field("DATA", [0]), Field("XCLC", new byte[8]))),
                 Record("REGN", 0x8f1, Field("WNAM", BitConverter.GetBytes(0x8f0u)),
                     Field("RPLD", new float[] { 0, 0, 10, 0, 0, 10 }.SelectMany(BitConverter.GetBytes).ToArray())),
                 Record("INFO", 0x860, Field("DATA", [0, 0, 0, 0]), Field("QSTI", BitConverter.GetBytes(0x870u)),
@@ -81,6 +88,19 @@ internal static class ActorSourceContracts
                 ["meshes/creatures/test/mtidle.kf", "meshes/creatures/test/locomotion/mtidle.kf"]));
             var speaker = FalloutDialogueSpeaker.Read(records, Key(0x801));
             using var world = new FalloutReferenceWorld(records);
+            using (var spatial = new FalloutReferenceWorld(records))
+            {
+                var player = new FalloutReferencePlacement(Key(0x880), [0, 0, 0], [0, 0, 0]);
+                Check(spatial.InSameCell(Key(0x900), Key(0x14), player, .01f) &&
+                    !spatial.InSameCell(Key(0x908), Key(0x14), player, .01f), "Interior spatial membership ignored the live cell.");
+                spatial.SetPlacement(Key(0x900), new(Key(0x882), [-1, 0, 0], [0, 0, 0]));
+                player = new(Key(0x882), [-4096, 0, 0], [0, 0, 0]);
+                Check(spatial.InSameCell(Key(0x900), Key(0x14), player, .01f), "Negative exterior coordinates used truncation.");
+                Check(!spatial.InSameCell(Key(0x900), Key(0x14), player with { Position = [0, 0, 0] }, .01f),
+                    "Adjacent exterior grids were treated as one cell.");
+                Check(!spatial.InSameCell(Key(0x900), Key(0x14), player with { Cell = Key(0x883) }, .01f),
+                    "Different worldspaces shared spatial membership.");
+            }
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
             var choices = new HashSet<FalloutFormKey>();
             for (ulong seed = 0; seed < 32; seed++)
@@ -116,6 +136,32 @@ internal static class ActorSourceContracts
             Check(firstInventory.Item(Key(0x840))?.Count == 3 && peerInventory.Item(Key(0x840))?.Count == 3 &&
                 world.Inventory(Key(0x900), 1).Contents.Items.Count == 0, "CREA inventory ignored its independent template flag.");
             firstInventory.Remove(Key(0x840), 1, silent: true);
+            world.ChangeFaction(Key(0x901), Key(0x8e0), 1, changeBase: false);
+            Check(world.ActorFactions(Key(0x901))[Key(0x8e0)] == 1 && !world.ActorFactions(Key(0x902)).ContainsKey(Key(0x8e0)),
+                "Reference faction membership leaked to another actor of the same base.");
+            world.ChangeFaction(Key(0x901), Key(0x8e1), 2, changeBase: true);
+            world.ChangeFaction(Key(0x901), Key(0x8e1), -1, changeBase: false);
+            Check(world.ActorFactions(Key(0x901))[Key(0x8e1)] == -1 && world.ActorFactions(Key(0x902))[Key(0x8e1)] == 2,
+                "Base faction rank or reference removal lost its independent scope.");
+            world.ChangePerk(Key(0x901), Key(0x8e2), true);
+            world.SetActorFlag(Key(0x901), true, friendlyHits: true);
+            world.SetCombatStyle(Key(0x901), Key(0x8e3));
+            Check(world.AcquiredPerks(Key(0x901)).Contains(Key(0x8e2)) && !world.AcquiredPerks(Key(0x902)).Contains(Key(0x8e2)),
+                "Acquired perks leaked between references.");
+            Reject(() => world.PerkEntries(Key(0x901)).Single().RequireActorConditionScope());
+            var savedOverrides = JsonSerializer.Deserialize<OpenNV.Runtime.Gameplay.State.FalloutActorOverrides[]>(
+                JsonSerializer.Serialize(world.CaptureActorOverrides()))!;
+            using (var coldOverrides = new FalloutReferenceWorld(records))
+            {
+                coldOverrides.Restore(world.Capture()); coldOverrides.RestoreActorOverrides(savedOverrides);
+                Check(coldOverrides.IgnoresFriendlyHits(Key(0x901)) && coldOverrides.ActorFactions(Key(0x902))[Key(0x8e1)] == 2 &&
+                    coldOverrides.AcquiredPerks(Key(0x901)).Contains(Key(0x8e2)) && coldOverrides.CombatStyle(Key(0x901))?.Form == Key(0x8e3),
+                    "Cold restoration lost companion effects or base faction scope.");
+                Reject(() => coldOverrides.RestoreActorOverrides([savedOverrides[0] with { SourceSha256 = new string('0', 64) }]));
+                Check(coldOverrides.IgnoresFriendlyHits(Key(0x901)), "Rejected actor restoration partially replaced authoritative state.");
+            }
+            world.ChangePerk(Key(0x901), Key(0x8e2), false);
+            Check(!world.AcquiredPerks(Key(0x901)).Contains(Key(0x8e2)), "Perk removal did not reach reference state.");
             var sourceScene = FalloutCellSceneReader.Read(records, Key(0x880));
             var destinationScene = FalloutCellSceneReader.Read(records, Key(0x881));
             world.MoveTo(Key(0x901), Key(0x908), 2, 3, 4);
@@ -245,6 +291,13 @@ internal static class ActorSourceContracts
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), id);
         BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6); reference.CopyTo(group, 24);
         return Join(Record("CELL", id, Field("EDID", Text("ActorCell")), Field("DATA", [1])), group);
+    }
+    private static byte[] Group(int type, uint label, byte[] data)
+    {
+        var bytes = new byte[24 + data.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(bytes, 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), (uint)bytes.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8), label);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(12), type); data.CopyTo(bytes, 24); return bytes;
     }
     private static byte[] Marker(uint id, string name) => Record("REFR", id, Field("EDID", Text(name)),
         Field("NAME", BitConverter.GetBytes(0x844u)), Field("DATA", new byte[24]), Field("XMRK", []),

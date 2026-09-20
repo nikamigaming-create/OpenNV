@@ -19,7 +19,8 @@ internal sealed class NativeActorWeaponAttachment
         RuntimeLiveContentSource content)
     {
         _units = skeleton.UnitsToMetres;
-        var path = weapon.Model.ModelPath ?? throw new InvalidDataException("Equipped weapon has no source model.");
+        var model = weapon.Model ?? throw new NotSupportedException("This weapon is embedded in its source actor skeleton and cannot attach as an inventory model.");
+        var path = model.ModelPath ?? throw new InvalidDataException("Equipped weapon has no source model.");
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
         var source = FalloutNifFile.Read(bytes);
         var targets = source.Blocks.Where(block => block.TypeName is "NiNode" or "NiTriShape" or "NiTriStrips")
@@ -37,7 +38,7 @@ internal sealed class NativeActorWeaponAttachment
                 if (!mesh.HasMeta("opennv_nif_geometry_block")) continue;
                 var geometry = source.ReadGeometry(mesh.GetMeta("opennv_nif_geometry_block").AsInt32());
                 mesh.MaterialOverride = NativeNifMeshBuilder.BuildMaterial(source, geometry,
-                    texturePaths: NativeNpcMaterial.Alternate(weapon.Model, source, geometry));
+                    texturePaths: NativeNpcMaterial.Alternate(model, source, geometry));
                 foreach (var property in geometry.Properties.Where(index => index >= 0).Select(source.ReadObject))
                     skeleton.MaterialChannels.Add(geometry.Name, source, property, [mesh.MaterialOverride]);
             }

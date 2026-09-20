@@ -171,7 +171,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _captureScripts = captureScripts;
         _globals = globals;
         _playerSkills = new(pluginStack, () => _special, IsPlayerTagSkill, () => _traits, globals, inventory,
-            raceSexContract.Player, () => pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId), () => _scripts.Session.Hardcore);
+            raceSexContract.Player, () => pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId), () => _scripts.Session.Hardcore,
+            () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)));
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -274,7 +275,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             }
             if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
-        }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates);
+        }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
+            actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

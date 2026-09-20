@@ -68,6 +68,8 @@ internal sealed partial class RuntimeNativeActorCombat
         _mover = mover;
     }
 
+    internal float PreparePortalArrival() { PrepareMovement(); return _radius; }
+
     private void TurnToward(Vector3 point, double delta)
     {
         var direction = point - _actor.GlobalPosition; direction.Y = 0;

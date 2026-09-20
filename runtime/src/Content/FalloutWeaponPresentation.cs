@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpcAppearancePart Model,
+internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpcAppearancePart? Model,
     string AnimationGroup, float AnimationMultiplier, byte Grip)
 {
     internal byte ClipSize { get; init; }
@@ -146,7 +146,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
                     sounds.Add("shoot", sound);
             }
         }
-        return new(key, FalloutNpcAppearanceResolver.ReadModel(records, owner, "weapon", "MODL", "MODS", "MODD", 0, null), group, multiplier, data[13])
+        return new(key, owner.ReadSubrecords().Any(field => field.Signature == "MODL")
+            ? FalloutNpcAppearanceResolver.ReadModel(records, owner, "weapon", "MODL", "MODS", "MODD", 0, null) : null, group, multiplier, data[13])
         {
             ClipSize = itemData[14],
             ConditionHealth = BinaryPrimitives.ReadInt32LittleEndian(itemData[4..]),

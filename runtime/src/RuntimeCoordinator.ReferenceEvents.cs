@@ -23,7 +23,9 @@ public partial class RuntimeCoordinator
             var updated = world.ComposeResidency(scene, cells.Length == 0 ? null : cells);
             world.ReplaceResidentCell(updated);
             _nativeActiveCell = updated;
+            DiscoverNativeCellReferences(updated);
             _nativeReferencePresentation!.SetResidency(updated.References, reference => MaterializeNativeReference(root, updated, reference));
+            _nativeReferenceEvents!.SetResidency(updated, root);
             foreach (var instance in moved.Where(instance => world.IsResident(instance.Reference)))
             {
                 var reference = updated.References.Single(value => value.FormKey == instance.Reference);
@@ -34,7 +36,7 @@ public partial class RuntimeCoordinator
                     if (node is CharacterBody3D body) body.Velocity = Vector3.Zero;
                 }
             }
-            _nativeReferenceEvents!.SetResidency(updated, root);
+            ObserveNativeResidentReferences(updated);
             foreach (var actor in _nativeReferencePresentation.Actors) actor.UpdateResidentScene(updated);
             _nativePlacementRevision = world.PlacementRevision;
         }
@@ -72,7 +74,8 @@ public partial class RuntimeCoordinator
             }, caller => _nativeOpeningStageDriver!.TakeMessageButton(caller), actor => _nativeOpeningStageDriver!.IsTalking(actor),
                 (actor, name) => _nativeOpeningStageDriver!.ActorValue(actor, name), name => _nativeOpeningStageDriver!.IsPlayerTagSkill(name), _nativeGlobals,
                 (source, bindings, command, arguments) => _nativeOpeningStageDriver!.ApplyNativeSourceCommand(source, bindings, command, arguments),
-                actor => _nativeOpeningStageDriver!.IsInCombat(actor)),
+                actor => _nativeOpeningStageDriver!.IsInCombat(actor),
+                (caller, target) => _nativeOpeningStageDriver!.IsInSameCell(caller, target)),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;
@@ -80,5 +83,24 @@ public partial class RuntimeCoordinator
             _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
                 NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source-primitive-contact-owner"));
         GD.Print($"OPENNV_NATIVE_REFERENCE_EVENTS_READY cell={cell.Cell.FormKey} source=winning-reference-scripts");
+    }
+
+    private void DiscoverNativeCellReferences(FalloutCellScene cell) =>
+        _parityObservations.ReplaceScope("world/active-cell", cell.References.Select(reference =>
+            ($"{cell.Cell.FormKey}/{reference.FormKey}", ParityCategoryFor(cell.BaseObjects[reference.Base].Signature),
+                NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source"))));
+
+    private void ObserveNativeResidentReferences(FalloutCellScene cell)
+    {
+        foreach (var reference in cell.References)
+        {
+            var enabled = _nativeReferences!.IsEnabled(reference.FormKey);
+            if (!enabled || _nativeReferencePresentation!.Nodes.ContainsKey(reference.FormKey))
+                _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
+                    NativeReferenceState(reference, cell.BaseObjects[reference.Base], enabled ? "resident-presentation" : "disabled"));
+        }
+        foreach (var reference in _nativeReferenceEvents!.BoundTriggers)
+            _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
+                NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source-primitive-contact-owner"));
     }
 }

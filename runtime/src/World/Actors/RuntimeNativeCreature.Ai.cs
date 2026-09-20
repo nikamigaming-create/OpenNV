@@ -19,6 +19,8 @@ internal sealed partial class RuntimeNativeCreature
     private double _packageClock;
     private string? _aiError;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
+    internal bool FollowingPlayer => _aiState?.PlayerTeammate == true && _aiError is null &&
+        _followPackage?.Target == _aiRecords?.RuntimeFormKey(0x14) && Combat?.Dead == false && !_aiState.Restrained;
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
@@ -55,7 +57,9 @@ internal sealed partial class RuntimeNativeCreature
     private float PackageCondition(FalloutCondition condition) => condition.Function switch
     {
         58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
-        35 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
+        32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
+        35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
+        36 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
         50 => _aiState!.TalkedToPlayer ? 1 : 0,
         53 => (float)_aiWorld!.ReadVariable(_aiQuests!, condition.FormArgument1, condition.Argument2),
         63 => Activity.Attacked ? 1 : 0,
@@ -68,6 +72,15 @@ internal sealed partial class RuntimeNativeCreature
         289 => Activity.InCombat ? 1 : 0,
         _ => throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
     };
+
+    private bool InSameCell(FalloutFormKey target)
+    {
+        var player = Combat!.PackagePlayer ?? throw new NotSupportedException("Creature cell query has no player.");
+        var position = player.GlobalPosition / Skeleton.UnitsToMetres;
+        return _aiWorld!.InSameCell(Appearance.Reference!.Value, target,
+            new(Combat.PackagePlayerCell ?? throw new NotSupportedException("Creature cell query has no active cell."),
+                [position.X, -position.Z, position.Y], [0, 0, 0]), Skeleton.UnitsToMetres);
+    }
 
     private void SelectPackage()
     {

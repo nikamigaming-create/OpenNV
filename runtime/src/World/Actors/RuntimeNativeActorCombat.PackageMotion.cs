@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _context.Resident(_actor.GlobalPosition) && _world.IsEnabled(_state.Reference) &&
         !Dead && !_state.Unconscious && !_state.Restrained;
     internal RuntimeNativePlayer? PackagePlayer => _context?.Player();
+    internal FalloutFormKey? PackagePlayerCell => _context?.PlayerCell?.Invoke();
 
     internal void StopPackageMotion()
     {

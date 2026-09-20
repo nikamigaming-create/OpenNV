@@ -52,18 +52,23 @@ internal sealed partial class CellNavigationGraph
     internal IReadOnlyList<Vector3> FindPath(
         Vector3 startGameUnits,
         Vector3 destinationGameUnits,
-        Func<Vector3, bool>? permittedPortal = null)
+        Func<Vector3, bool>? permittedPortal = null,
+        float destinationRadiusGameUnits = 0)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor travel.");
         var start = NearestNode(startGameUnits);
         var destination = NearestNode(destinationGameUnits);
-        var trianglePath = FindTrianglePath(start.Node, destination.Node, permittedPortal);
+        if (!float.IsFinite(destinationRadiusGameUnits) || destinationRadiusGameUnits < 0)
+            throw new ArgumentOutOfRangeException(nameof(destinationRadiusGameUnits));
+        var trianglePath = FindTrianglePath(start.Node, destination.Node, permittedPortal,
+            destinationGameUnits, destinationRadiusGameUnits);
         var result = new List<Vector3>();
         foreach (var pair in trianglePath.Zip(trianglePath.Skip(1)))
             result.Add(Portal(pair.First, pair.Second));
-        result.Add(destination.Point);
+        var last = trianglePath[^1];
+        result.Add(last.NavMesh.ClosestPoint(last.TriangleIndex, destinationGameUnits));
         return result;
     }
 
@@ -76,57 +81,25 @@ internal sealed partial class CellNavigationGraph
         NavigationNode source,
         NavigationNode target)
     {
-        var targetTriangle = target.NavMesh.Triangles[target.TriangleIndex];
-        var reciprocal = Enumerable.Range(0, TriangleEdgeCount)
-            .Where(edge => (targetTriangle.Flags & (1u << edge)) != 0)
-            .Select(edge => targetTriangle.AdjacentTriangles[edge])
-            .Where(adjacent => adjacent >= 0 &&
-                adjacent < target.NavMesh.ExternalConnections.Count)
-            .Select(adjacent => target.NavMesh.ExternalConnections[adjacent])
-            .Any(connection => connection.NavMeshFormId.Equals(
-                    source.NavMesh.FormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                connection.TriangleIndex == source.TriangleIndex);
-        if (!reciprocal)
-            throw new InvalidOperationException(
-                "Owned NAVM external edge is not reciprocal: " +
-                $"{source.NavMesh.FormId}:{source.TriangleIndex} -> " +
-                $"{target.NavMesh.FormId}:{target.TriangleIndex}.");
-        var sourceVertices = source.NavMesh.TriangleVertices(source.TriangleIndex);
-        var targetVertices = target.NavMesh.TriangleVertices(target.TriangleIndex);
-        var candidates = (
-            from sourceIndex in Enumerable.Range(0, sourceVertices.Count)
-            from targetIndex in Enumerable.Range(0, targetVertices.Count)
-            select new
-            {
-                SourceIndex = sourceIndex,
-                TargetIndex = targetIndex,
-                DistanceSquared = sourceVertices[sourceIndex]
-                    .DistanceSquaredTo(targetVertices[targetIndex]),
-            }).ToArray();
-        var matched = (
-            from first in candidates
-            from second in candidates
-            where first.SourceIndex != second.SourceIndex &&
-                  first.TargetIndex != second.TargetIndex
-            let maximumDistanceSquared = MathF.Max(
-                first.DistanceSquared,
-                second.DistanceSquared)
-            orderby maximumDistanceSquared,
-                first.DistanceSquared + second.DistanceSquared,
-                first.SourceIndex,
-                first.TargetIndex,
-                second.SourceIndex,
-                second.TargetIndex
-            select new { First = first, Second = second, maximumDistanceSquared })
-            .First();
-        return (
-            sourceVertices[matched.First.SourceIndex] +
-            targetVertices[matched.First.TargetIndex] +
-            sourceVertices[matched.Second.SourceIndex] +
-            targetVertices[matched.Second.TargetIndex]) / 4.0f;
+        // An authored external connection is directed. Plugins can change the
+        // destination without publishing an inverse connection on that triangle.
+        // Its source triangle edge, rather than guessed nearest vertex pairs,
+        // owns the crossing point. Native clearance still gates traversal.
+        var triangle = source.NavMesh.Triangles[source.TriangleIndex];
+        var edges = Enumerable.Range(0, TriangleEdgeCount).Where(edge =>
+        {
+            if ((triangle.Flags & (1u << edge)) == 0) return false;
+            var index = triangle.AdjacentTriangles[edge];
+            if (index < 0 || index >= source.NavMesh.ExternalConnections.Count) return false;
+            var link = source.NavMesh.ExternalConnections[index];
+            return link.NavMeshFormId.Equals(target.NavMesh.FormId, StringComparison.OrdinalIgnoreCase) &&
+                link.TriangleIndex == target.TriangleIndex;
+        }).ToArray();
+        if (edges.Length != 1) throw new InvalidDataException("External navigation transition has no unique authored source edge.");
+        var edge = edges[0];
+        return (source.NavMesh.Vertices[triangle.VertexIndices[edge]] +
+            source.NavMesh.Vertices[triangle.VertexIndices[(edge + 1) % TriangleEdgeCount]]) / 2;
     }
-
     internal Vector3 FindNearestPoint(Vector3 pointGameUnits)
     {
         if (_navmeshes.Count == 0)
@@ -176,7 +149,7 @@ internal sealed partial class CellNavigationGraph
     private IReadOnlyList<NavigationNode> FindTrianglePath(
         NavigationNode start,
         NavigationNode destination,
-        Func<Vector3, bool>? permittedPortal)
+        Func<Vector3, bool>? permittedPortal, Vector3 approachTarget, float approachRadius)
     {
         if (start == destination)
             return new[] { start };
@@ -192,6 +165,12 @@ internal sealed partial class CellNavigationGraph
             if (!closed.Add(current)) continue;
             if (current == destination)
                 break;
+            if (approachRadius > 0 && current.NavMesh.ClosestPoint(current.TriangleIndex, approachTarget)
+                    .DistanceSquaredTo(approachTarget) <= approachRadius * approachRadius)
+            {
+                destination = current;
+                break;
+            }
             foreach (var adjacent in Neighbors(current).Where(value =>
                          !internalOnly || value.NavMesh == start.NavMesh))
             {
@@ -207,6 +186,7 @@ internal sealed partial class CellNavigationGraph
                     cost + adjacent.Centroid.DistanceTo(destination.Centroid));
             }
         }
+        if (destination == start) return [start];
         if (!previous.ContainsKey(destination))
             throw new InvalidOperationException(
                 $"Owned NAVM active set has no route between {start.NavMesh.FormId} " +
@@ -428,7 +408,7 @@ internal sealed partial class CellNavigationGraph
                 TriangleCentroidDivisor;
         }
 
-        private Vector3 ClosestPoint(int triangleIndex, Vector3 point)
+        internal Vector3 ClosestPoint(int triangleIndex, Vector3 point)
         {
             // World queries can be kilometres from a small source triangle.
             // Float dot-product determinants lose their differences there.

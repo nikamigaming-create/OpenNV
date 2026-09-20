@@ -18,7 +18,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, bool>? IsTalking = null, Func<FalloutFormKey, string, double>? ActorValue = null,
     Func<string, bool>? IsPlayerTagSkill = null, FalloutGlobalState? Globals = null,
     Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>>? Command = null,
-    Func<FalloutFormKey, bool>? IsInCombat = null);
+    Func<FalloutFormKey, bool>? IsInCombat = null,
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
     IReadOnlySet<FalloutFormKey>? TriggerReferences = null);
@@ -204,6 +205,37 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
         FalloutScriptFunction? Function(string name)
         {
             var parts = name.Split('.');
+            FalloutFormKey Target() => parts.Length == 1 ? source : bindings.Reference(parts[0]);
+            if (parts.Length <= 2 && parts[^1].Equals("GetInSameCell", StringComparison.OrdinalIgnoreCase))
+                return new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    FalloutFormKey Reference(string token)
+                    {
+                        if (token.Equals("player", StringComparison.OrdinalIgnoreCase) || bindings.TryForm(token) is not null)
+                            return bindings.Reference(token);
+                        var value = Read(token);
+                        if (value <= 0 || value > uint.MaxValue || value != Math.Truncate(value))
+                            throw new InvalidDataException("Script reference variable has no valid form identity.");
+                        var key = records.RuntimeFormKey((uint)value);
+                        if (records.GetEffective(key).Signature is not ("REFR" or "ACHR" or "ACRE"))
+                            throw new InvalidDataException("Script reference variable is not a placed reference.");
+                        return key;
+                    }
+                    return (host.IsInSameCell ?? throw new NotSupportedException("GetInSameCell has no spatial owner."))
+                        (parts.Length == 1 ? source : Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0;
+                });
+            if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreCrime", StringComparison.OrdinalIgnoreCase))
+                return new([], _ => world.IgnoresCrime(Target()) ? 1 : 0);
+            if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreFriendlyHits", StringComparison.OrdinalIgnoreCase))
+                return new([], _ => world.IgnoresFriendlyHits(Target()) ? 1 : 0);
+            if (parts.Length <= 2 && parts[^1].Equals("HasPerk", StringComparison.OrdinalIgnoreCase))
+                return new([FalloutScriptArgumentKind.Identifier], args => world.AcquiredPerks(Target()).Contains(bindings.Form(args[0].Identifier!).FormKey) ? 1 : 0);
+            if (parts.Length <= 2 && parts[^1].ToLowerInvariant() is "getinfaction" or "getfactionrank")
+                return new([FalloutScriptArgumentKind.Identifier], args =>
+                {
+                    var rank = world.ActorFactions(Target()).GetValueOrDefault(bindings.Form(args[0].Identifier!).FormKey, (sbyte)-1);
+                    return parts[^1].Equals("GetInFaction", StringComparison.OrdinalIgnoreCase) ? rank >= 0 ? 1 : 0 : rank;
+                });
             if (parts.Length == 2 && parts[1].Equals("IsCurrentFurnitureRef", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     host.IsCurrentFurniture(bindings.Reference(parts[0]), bindings.Reference(arguments[0].Identifier!)) ? 1 : 0);
@@ -266,6 +298,32 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                 throw new NotSupportedException("Script command target path is unbound.");
             switch (operation)
             {
+                case "resethealth" when arguments.Count == 0:
+                    world.ResetHealth(target);
+                    break;
+                case "restoreav" or "restoreactorvalue" when arguments.Count == 2:
+                    world.RestoreActorValue(target, arguments[0], (float)Number(arguments[1]));
+                    break;
+                case "ignorecrime" when arguments.Count == 1:
+                    world.SetActorFlag(target, Boolean(arguments[0]), false);
+                    break;
+                case "sifh" or "setignorefriendlyhits" when arguments.Count == 1:
+                    world.SetActorFlag(target, Boolean(arguments[0]), true);
+                    break;
+                case "addperk" or "removeperk" when arguments.Count == 1:
+                    world.ChangePerk(target, bindings.Form(arguments[0]).FormKey, operation == "addperk");
+                    break;
+                case "setcs" or "setcombatstyle" when arguments.Count == 1:
+                    world.SetCombatStyle(target, bindings.Form(arguments[0]).FormKey);
+                    break;
+                case "addtofaction" or "addfac" or "setfactionrank" when arguments.Count == 2:
+                    var rank = Number(arguments[1]);
+                    if (rank != Math.Truncate(rank) || rank is < -1 or > 127) throw new InvalidDataException("Faction rank is invalid.");
+                    world.ChangeFaction(target, bindings.Form(arguments[0]).FormKey, (int)rank, operation == "setfactionrank");
+                    break;
+                case "removefromfaction" when arguments.Count == 1:
+                    world.ChangeFaction(target, bindings.Form(arguments[0]).FormKey, -1, false);
+                    break;
                 case "setunconscious" when arguments.Count == 1:
                     world.SetUnconscious(target, Boolean(arguments[0]));
                     break;
@@ -343,10 +401,18 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                 case "evp" or "evaluatepackage" when arguments.Count <= 1:
                     host.Apply(new(FalloutReferenceEffectKind.EvaluatePackages, source, target, Enable: arguments.Count == 1 && Boolean(arguments[0])));
                     break;
+                case "resetai" when arguments.Count == 0:
+                    host.Apply(new(FalloutReferenceEffectKind.EvaluatePackages, source, target, Enable: true));
+                    break;
                 case "addscriptpackage" when arguments.Count == 1:
                     var package = bindings.Form(arguments[0]);
                     if (package.Signature != "PACK") throw new InvalidDataException("Script package is not PACK.");
                     host.Apply(new(FalloutReferenceEffectKind.ScriptPackage, source, target, package.FormKey));
+                    break;
+                case "removescriptpackage" when arguments.Count <= 1:
+                    // The retail compiler accepts a redundant package argument;
+                    // removal concerns the caller's script override, not its base list.
+                    host.Apply(new(FalloutReferenceEffectKind.ScriptPackage, source, target));
                     break;
                 case "applyimagespacemodifier" or "imod" or "removeimagespacemodifier" or "rimod" when
                     parts.Length == 1 && (arguments.Count == 1 || arguments.Count == 2 && arguments[1] == "*"):

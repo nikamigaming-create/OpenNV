@@ -396,6 +396,7 @@ public partial class RuntimeCoordinator
             _nativeReferences = new(stack);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
+            _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
         }
         if (!fallout3)
         {
@@ -526,18 +527,7 @@ public partial class RuntimeCoordinator
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
         const string parityScope = "world/active-cell";
-        string ParityIdentity(FalloutPlacedReference reference) =>
-            $"{cell.Cell.FormKey}/{reference.FormKey}";
-        _parityObservations.ReplaceScope(
-            parityScope,
-            cell.References.Select(reference =>
-            {
-                var baseObject = cell.BaseObjects[reference.Base];
-                return (
-                    ParityIdentity(reference),
-                    ParityCategoryFor(baseObject.Signature),
-                    NativeReferenceState(reference, baseObject, "source"));
-            }));
+        DiscoverNativeCellReferences(cell);
         _nativeActorDivergences.Clear();
         _nativeReferenceDivergences.Clear();
         foreach (var reference in cell.References)
@@ -668,7 +658,8 @@ public partial class RuntimeCoordinator
                     return root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                         .SingleOrDefault(value => value.Appearance.Reference == target)?.HeadTargetPoint;
                 });
-                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform);
+                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
+                    () => _nativeReferences!.ActorFactions(reference.FormKey));
                 root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
@@ -846,9 +837,9 @@ public partial class RuntimeCoordinator
         _nativePlayer!.SetModalInput(true);
         // Activation queues streaming. A presentation failure must not become a
         // permanent source-script fault or consume the reciprocal door's state.
-        Callable.From(() =>
+        Callable.From(async () =>
         {
-            try { StreamNativeDoorTransition(reference); }
+            try { await StreamNativeDoorTransition(reference); }
             catch (Exception error)
             {
                 SetMeta("opennv_door_stream_error", error.Message);
@@ -858,7 +849,7 @@ public partial class RuntimeCoordinator
         }).CallDeferred();
     }
 
-    private void StreamNativeDoorTransition(
+    private async System.Threading.Tasks.Task StreamNativeDoorTransition(
         FalloutPlacedReference reference)
     {
         var current = _nativeCurrentCellRoot ??
@@ -876,26 +867,51 @@ public partial class RuntimeCoordinator
         var previousSky = sky.Capture();
         var grid = transition.DestinationScene.Cell.Worldspace is { } world ? ResolveExterior(world, entry.Position) : null;
         var targetScene = grid?.Scene ?? transition.DestinationScene;
-        targetScene = _nativeReferences!.ComposeResidency(targetScene, grid?.Cells);
-        if (grid is not null) grid = grid with { Scene = targetScene };
+        var followers = BeginFollowerDoorTransfer(current, targetScene.Cell.FormKey, entry);
         Node3D? targetRoot = null;
+        (CollisionObject3D Body, CollisionObject3D.DisableModeEnum Mode)[] arrivalCollision = [];
         try
         {
+            targetScene = _nativeReferences!.ComposeResidency(targetScene, grid?.Cells);
+            if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
             targetRoot = BuildNativeCellRoot(targetScene, null, sourceSide: false);
+            targetRoot.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(targetRoot, grid);
             AddChild(targetRoot);
             if (targetScene.Cell.Lighting is not null) AddNativeCellEnvironment(targetRoot, targetScene);
             else AddExteriorEnvironment(targetRoot, targetScene.Cell);
+            if (followers.Count != 0)
+            {
+                current.ProcessMode = ProcessModeEnum.Disabled;
+                foreach (var actor in targetRoot.FindChildren("*", "", true, false).OfType<RuntimeNativeCreature>()
+                    .Where(actor => followers.Any(follower => follower.Reference == actor.Appearance.Reference)))
+                    actor.Combat!.PreparePortalArrival();
+                // Gameplay remains stopped while arrival is checked. Godot's
+                // default DisableMode removes bodies from physics as well, so
+                // explicitly retain destination collision during this query.
+                arrivalCollision = targetRoot.FindChildren("*", "", true, false).OfType<CollisionObject3D>()
+                    .Select(body => (body, body.DisableMode)).ToArray();
+                foreach (var (body, _) in arrivalCollision) body.DisableMode = CollisionObject3D.DisableModeEnum.KeepActive;
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                PlaceDoorFollowers(targetRoot, targetScene, grid?.Cells, entry, followers);
+            }
         }
         catch
         {
             targetRoot?.Free();
             sky.Restore(previousSky);
+            RollbackFollowerDoorTransfer(followers);
+            current.ProcessMode = ProcessModeEnum.Inherit;
+            DiscoverNativeCellReferences(active);
+            ObserveNativeResidentReferences(active);
             throw;
         }
         player.Teleport(TeleportTransform(entry));
         SetNativeActiveCell(targetRoot, targetScene);
+        targetRoot.ProcessMode = ProcessModeEnum.Inherit;
+        foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
         current.ProcessMode = ProcessModeEnum.Disabled;
         current.QueueFree();
         _nativeOpeningStageDriver!.PersistWorldState(targetScene.Cell.FormKey);

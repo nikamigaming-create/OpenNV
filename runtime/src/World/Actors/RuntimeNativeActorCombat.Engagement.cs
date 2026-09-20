@@ -7,7 +7,8 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Player, Func<GameplayVitals> Vitals,
     Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,
-    Func<int> Level, FalloutGlobalState Globals, float StepHeight, float Gravity);
+    Func<int> Level, FalloutGlobalState Globals, float StepHeight, float Gravity,
+    Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {
@@ -18,6 +19,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private float _detectRange;
     private double _detectionClock;
     private string? _engagementError;
+    internal string? EngagementError => _engagementError;
     private string? _assistanceError;
     private bool _engagementPrepared;
     private long _attacks, _hits, _assistsReceived;
@@ -39,6 +41,7 @@ internal sealed partial class RuntimeNativeActorCombat
         pendingHitscanImpacts = _pendingHitscanImpacts,
         lastAttack = _lastAttack,
         lastHitscanImpact = _lastHitscanImpact,
+        impactMaterialError = _impactMaterialError,
         lastExplosion = _lastExplosion,
         error = _engagementError,
         assistanceError = _assistanceError,
@@ -68,6 +71,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private void Provoke(FalloutFormKey attacker)
     {
         if (Dead || _state.Unconscious) return;
+        if (_world.IgnoresFriendlyHits(_state.Reference) &&
+            (attacker == _records.RuntimeFormKey(0x14) && _state.PlayerTeammate || _world.ActorRelation(_state.Reference, attacker) >= 2)) return;
         _state.Engagement ??= new(attacker);
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
         NotifyAssistance(attacker);
@@ -100,7 +105,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _engagementError is not null || !player.CollisionResident || !_context!.Resident(_actor.GlobalPosition)) return false;
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
         if (threat.Aggression == 3 || threat.Assistance == 0) return false;
-        var relation = FalloutActorThreat.Relation(_records, _state.Base, victim.Base, _state.Templates, victim.Templates);
+        var relation = _world.ActorRelation(_state.Reference, victim.Reference);
         if (relation != 2 && !(threat.Assistance == 2 && relation == 3)) return false;
         var radius = ThreatRadius(threat);
         if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius || !CanSee(player)) return false;
@@ -122,21 +127,23 @@ internal sealed partial class RuntimeNativeActorCombat
         if (player is null || !player.CollisionResident || !_context.Resident(_actor.GlobalPosition)) return;
         try
         {
-            if (_state.Engagement is null)
+            if (_state.Engagement is null && !TryCompanionCombat(player))
             {
                 _detectionClock -= delta;
                 if (_detectionClock > 0) return;
                 _detectionClock = .2; // broad-phase scheduling; source rules own eligibility
                 _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-                if (_threat.Aggression == 0 || _threat.Confidence == 0 || _context.Vitals().HitPoints == 0) return;
-                _relation ??= FalloutActorThreat.Relation(_records, _state.Base, _records.RuntimeFormKey(7), _state.Templates);
+                var aggression = _world.ActorValue(_state.Reference, "aggression");
+                if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3) throw new InvalidDataException("Actor aggression is invalid.");
+                _threat = _threat with { Aggression = (byte)aggression };
+                if (_state.PlayerTeammate || _threat.Aggression == 0 || _threat.Confidence == 0 || _context.Vitals().HitPoints == 0) return;
+                _relation = _world.ActorRelation(_state.Reference, _records.RuntimeFormKey(0x14));
                 if (!_threat.Initiates(_relation.Value)) return;
                 _detectRange = ThreatRadius(_threat);
                 if (_actor.GlobalPosition.DistanceTo(player.GlobalPosition) > _detectRange || !CanSee(player)) return;
                 _state.Engagement = new(_records.RuntimeFormKey(0x14));
             }
-            if (_state.Engagement.Target != _records.RuntimeFormKey(0x14))
-                throw new NotSupportedException("This engagement requires a resident non-player target adapter.");
+            if (!ResolveTarget(player)) return;
             _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
             _detectRange = ThreatRadius(_threat);
             if (!float.IsFinite(_detectRange) || _detectRange <= 0) throw new InvalidDataException("Actor threat radius is invalid.");
@@ -163,7 +170,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             _engagementError = error.Message;
             if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
-            GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error.Message}");
+            GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error}");
         }
     }
 
@@ -183,15 +190,12 @@ internal sealed partial class RuntimeNativeActorCombat
     private void AdvanceFlee(RuntimeNativePlayer player, double delta)
     {
         var state = _state.Engagement!;
-        var offset = _actor.GlobalPosition - player.GlobalPosition;
+        var offset = _actor.GlobalPosition - TargetPosition(player);
         offset.Y = 0;
         var distance = offset.Length();
         if (distance >= _detectRange)
         {
-            state = state.Transition("idle");
-            Activity.SetMovement(running: false, sneaking: false);
-            Activity.SetCombat(false);
-            _state.Engagement = state;
+            EndEngagement();
             return;
         }
         if (offset.IsZeroApprox()) offset = _actor.GlobalBasis.Z;
@@ -215,8 +219,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private bool CanSee(RuntimeNativePlayer player)
     {
-        var head = _skeleton.BoneIndex(_actor is RuntimeNativeNpc ? "Bip01 Head" :
-            _world.BodyParts(_state.Reference).Parts.Single(part => part.Type == 1).Node);
+        var head = SightBone();
         if (head < 0) throw new NotSupportedException("Actor sight requires its source head bone.");
         var eye = (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(head)).Origin;
         using var query = PhysicsRayQueryParameters3D.Create(eye, player.Camera.GlobalPosition, player.CollisionMask);
@@ -225,6 +228,12 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
-        CaptureEngagement(); _state.CaptureEngagement = null;
+        // A door can materialize the same reference in its destination before
+        // the previous presentation leaves the tree. Only the current binding
+        // may capture a pose or release the shared save callback.
+        if (_state.CaptureEngagement == CaptureEngagement)
+        {
+            CaptureEngagement(); _state.CaptureEngagement = null;
+        }
     }
 }

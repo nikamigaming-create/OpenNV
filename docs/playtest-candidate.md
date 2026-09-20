@@ -41,11 +41,13 @@ ordinary combat is not accepted as complete. Environmental wind forces are not y
 so physical props can settle and sleep. These limits must not be described as
 completed functionality in promotional material.
 
-The ordinary flat bot reached Primm and entered Nash Residence. Damaged ED-E's
-authored pose now places him on the counter and his inspection menu opens in
-flat and simulator modes. The initial message repeats; repair, recruitment,
-source following and companion door transfer remain incomplete. The full paired
-showcase still requires ranged/melee combat, consumables and the recruited return.
+The ordinary flat bot reached Primm and entered Nash Residence. Fresh flat and
+simulator runs repaired ED-E with collected parts, recruited him, exited together,
+let him kill an outdoor hostile, and looted that corpse. Follow resumes after
+combat. Repaired flying actors can initially sit too high above a raised repair
+target. Enhanced Sensors acquisition is saved, but its detection effect and
+the NPC radio remain unbound. Muzzle-light flicker and some impact particles are
+missing. Player melee and post-damage healing still need paired gameplay proof.
 
 The user's flat and physical headset playtests are required before considering
 a golden release. Record the mode, location, action, visible result, and build

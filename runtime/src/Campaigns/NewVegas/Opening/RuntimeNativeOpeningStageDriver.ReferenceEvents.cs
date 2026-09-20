@@ -19,6 +19,13 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal IReadOnlyList<FalloutNativeSkillIdentity> Tags => _tagSkills;
     internal IReadOnlyList<FalloutNativeTraitIdentity> Traits => _traits;
 
+    internal bool IsInSameCell(FalloutFormKey caller, FalloutFormKey target)
+    {
+        var position = _player.GlobalPosition / _player.UnitsToMeters;
+        return _scripts.References!.InSameCell(caller, target,
+            new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), _player.UnitsToMeters);
+    }
+
     private void ConfigureConversation()
     {
         _pipBoy = new(_pluginStack, _inventory);
@@ -27,7 +34,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                     .Single(npc => npc.Appearance.Reference == actor).CurrentFurniture == furniture, ApplyReferenceEffect,
                 _scripts.MessageResults.Take, actor => _speech!.IsTalking(actor), ActorValue, IsPlayerTagSkill, _globals,
-                ApplyNativeSourceCommand, IsInCombat));
+                ApplyNativeSourceCommand, IsInCombat, IsInSameCell));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -66,7 +73,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             return maximum <= 0 ? 0 : Math.Clamp(health.Current / maximum, 0, 1);
         }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).TalkedToPlayer = true,
-            actor => _scripts.References!.Get(actor).TalkedToPlayer);
+            actor => _scripts.References!.Get(actor).TalkedToPlayer,
+            actor => _scripts.References!.ActorFactions(actor));
         AddChild(_conversation);
     }
 
@@ -166,9 +174,14 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case FalloutReferenceEffectKind.ScriptPackage:
                 if (_pluginStack.RuntimeFormId(effect.Target!.Value) != 0x14)
-                    throw new NotSupportedException("NPC script package simulation is unbound.");
-                _playerPackage!.Apply(FalloutDialogueTopic.Text(_pluginStack.GetEffective(effect.Argument!.Value)
-                    .ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span));
+                {
+                    if (effect.Argument is not null) throw new NotSupportedException("NPC script package simulation is unbound.");
+                    // NPC AddScriptPackage is rejected, so no script override can
+                    // be resident. Reevaluate without deleting any base package.
+                    EvaluateActorPackages(effect.Target.Value, false);
+                }
+                else _playerPackage!.Apply(effect.Argument is { } package ? FalloutDialogueTopic.Text(_pluginStack.GetEffective(package)
+                    .ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span) : null);
                 break;
             case FalloutReferenceEffectKind.ImageSpace:
                 if (effect.Enable) _imageSpaceState.Apply(FalloutImageSpaceModifierReader.Read(_pluginStack.GetEffective(effect.Target!.Value)));

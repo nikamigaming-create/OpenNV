@@ -28,7 +28,13 @@ internal sealed partial class FalloutReferenceWorld
     {
         var actor = Actor(reference);
         var equipped = EquippedArmor(reference, level, globals);
-        return _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped, actor.Templates);
+        var result = _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped, actor.Templates);
+        foreach (var effect in PerkModifiers(reference).Where(effect => effect.ActorValue is 12 or 76))
+        {
+            if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional acquired resistance requires its condition owner.");
+            result = effect.ActorValue == 76 ? result with { Threshold = result.Threshold + effect.Amount } : result with { Resistance = result.Resistance + effect.Amount };
+        }
+        return result;
     }
 }
 
@@ -52,7 +58,7 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                 if (field.Data.Length != 4) throw new InvalidDataException("Actor ability identity extent is invalid.");
                 var spell = effects.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
                 if (spell is null) continue;
-                foreach (var effect in _defenseAbilities.Spell(spell.Value))
+                foreach (var effect in _defenseAbilities.ConstantModifiers(spell.Value))
                 {
                     if (effect.ActorValue is not (12 or 76)) continue;
                     if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional actor resistance requires its condition owner.");

@@ -65,6 +65,7 @@ internal static class OwnedOpeningProgramProbe
                     _ = FalloutHeadTrackingPrograms.RequiresProcess(records.GetEffective(effect.Target!.Value), cell.Cell.FormKey,
                         cell.References.Any(reference => reference.FormKey == effect.Target)); break;
                 case FalloutReferenceEffectKind.ScriptPackage:
+                    if (effect.Argument is null) break;
                     var package = FalloutScriptPackage.Read(records.GetEffective(effect.Argument!.Value));
                     if (package.Procedure != 6 || package.LocationType != 3) throw new NotSupportedException("Opening fixture player package procedure.");
                     break;
