@@ -38,6 +38,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
             if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
+            if (condition.Function == 14 && condition.RunOn == 1)
+                return _playerSkills.Value(checked((int)condition.Argument1));
             if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global state owner.")).Get(condition.FormArgument1);
             if (condition.Function == 53) return (float)_scripts.References!.Get(condition.FormArgument1).Read(condition.Argument2);
             if (condition.Function == 492 && condition.RunOn == 2)
