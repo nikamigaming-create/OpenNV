@@ -25,6 +25,7 @@ internal partial class RuntimeNativeNpc
     private FalloutIdleCollectionPlayback? _packageIdles;
     private FalloutIdleConditions? _idleConditions;
     private IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = new Dictionary<FalloutFormKey, sbyte>();
+    private Func<IReadOnlyDictionary<FalloutFormKey, sbyte>>? _liveFactions;
     private string? _packageIdleError;
     private readonly FalloutSoundRandomState _aiRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     private FalloutPluginRecord? _pendingPackage;
@@ -119,11 +120,13 @@ internal partial class RuntimeNativeNpc
     };
 
     internal void ConfigureAi(FalloutPluginStack stack, FalloutQuestState quests, FalloutCellScene cell,
-        Func<FalloutPlacedReference, Transform3D> referenceTransform)
+        Func<FalloutPlacedReference, Transform3D> referenceTransform,
+        Func<IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null)
     {
         _aiStack = stack;
         _idleConditions = new(stack);
         _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc, _templates);
+        _liveFactions = factions;
         _questState = quests;
         _aiCell = cell;
         _referenceTransform = referenceTransform;
@@ -263,7 +266,8 @@ internal partial class RuntimeNativeNpc
         63 => Activity.Attacked ? 1 : 0,
         69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,
         70 => (Appearance.Female ? 1u : 0u) == condition.Argument1 ? 1 : 0,
-        71 => _factions.TryGetValue(condition.FormArgument1, out var rank) && rank >= 0 ? 1 : 0,
+        71 => (_liveFactions?.Invoke() ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
+        73 => (_liveFactions?.Invoke() ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
         72 => Appearance.Npc == condition.FormArgument1 ? 1 : 0,
         77 => _aiRandom.NextBounded(100),
         91 => Activity.Alerted ? 1 : 0,

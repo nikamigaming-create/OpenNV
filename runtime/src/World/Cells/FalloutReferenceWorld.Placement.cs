@@ -42,9 +42,16 @@ internal sealed partial class FalloutReferenceWorld
         var target = Placement(destination);
         var moved = new FalloutReferencePlacement(target.Cell,
             [target.Position[0] + x, target.Position[1] + y, target.Position[2] + z], previous.RotationRadians);
-        moved.Validate();
-        if (records.GetEffective(moved.Cell).Signature != "CELL") throw new InvalidDataException("MoveTo destination has no CELL.");
-        instance.Placement = moved;
+        SetPlacement(reference, moved);
+    }
+
+    internal void SetPlacement(FalloutFormKey reference, FalloutReferencePlacement placement)
+    {
+        var instance = Get(reference);
+        placement.Validate();
+        if (instance.Deleted || instance.DeletePending || records.GetEffective(placement.Cell).Signature != "CELL")
+            throw new InvalidDataException("Reference placement target is unavailable.");
+        instance.Placement = placement.Copy();
         instance.PackageMotion = null;
         instance.Engagement = null;
         instance.PlacementRevision = ++PlacementRevision;

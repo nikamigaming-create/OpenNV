@@ -21,6 +21,7 @@ internal sealed class FalloutPlayerSkills
     private readonly FalloutFormKey _actor;
     private readonly Func<FalloutFormKey> _race;
     private readonly Func<bool> _hardcore;
+    private readonly Func<IReadOnlyList<FalloutFormKey>> _acquiredPerks;
     private readonly Dictionary<(FalloutFormKey Form, string Field), FalloutFormKey[]> _links = [];
     private readonly Dictionary<string, float> _settings = new(StringComparer.Ordinal);
     private readonly HashSet<int> _evaluating = [];
@@ -37,10 +38,11 @@ internal sealed class FalloutPlayerSkills
 
     internal FalloutPlayerSkills(FalloutPluginStack records, Func<FalloutNativeSpecialState> special, Func<string, bool> tagged,
         Func<IReadOnlyList<FalloutNativeTraitIdentity>> traits, FalloutGlobalState? globals, FalloutPlayerInventory inventory,
-        FalloutFormKey actor, Func<FalloutFormKey> race, Func<bool> hardcore)
+        FalloutFormKey actor, Func<FalloutFormKey> race, Func<bool> hardcore, Func<IReadOnlyList<FalloutFormKey>>? acquiredPerks = null)
     {
         _records = records; _special = special; _tagged = tagged; _traits = traits; _globals = globals;
         _inventory = inventory; _abilities = new(records); _actor = actor; _race = race; _hardcore = hardcore;
+        _acquiredPerks = acquiredPerks ?? (() => []);
     }
 
     internal float Value(string name)
@@ -84,22 +86,18 @@ internal sealed class FalloutPlayerSkills
         finally { _evaluating.Remove(value); }
     }
 
-    internal IReadOnlyList<FalloutPerkEntry> PerkEntries => _traits().SelectMany(trait =>
-        _abilities.Perk(_records.RuntimeFormKey(trait.RuntimeFormId)).Entries).ToArray();
+    private IEnumerable<FalloutFormKey> Perks => _traits().Select(trait => _records.RuntimeFormKey(trait.RuntimeFormId)).Concat(_acquiredPerks()).Distinct();
+    internal IReadOnlyList<FalloutPerkEntry> PerkEntries => Perks.SelectMany(perk => _abilities.Perk(perk).Entries).ToArray();
 
     internal bool HasPerk(FalloutFormKey form)
     {
         if (_records.GetEffective(form).Signature != "PERK") throw new InvalidDataException("HasPerk target is not PERK.");
-        if (_records.GetEffective(_actor).ReadSubrecords().Any(field => field.Signature == "PRKR"))
-            throw new NotSupportedException("Source actor perk ranks require their progression owner.");
-        // These are the player's currently admitted perks. AddPerk and earned
-        // progression still fail at their command boundary, not as lost state.
-        return _traits().Any(trait => _records.RuntimeFormKey(trait.RuntimeFormId) == form);
+        return Perks.Contains(form);
     }
 
     private IEnumerable<FalloutFormKey> ConstantEffects() =>
         Links(_actor, "SPLO").Concat(Links(_race(), "SPLO"))
-            .Concat(_traits().SelectMany(trait => _abilities.Perk(_records.RuntimeFormKey(trait.RuntimeFormId)).Spells)).Distinct()
+            .Concat(Perks.SelectMany(perk => _abilities.Perk(perk).Spells)).Distinct()
             .Concat(_inventory.Equipped.Select(_records.RuntimeFormKey).Where(form => _records.GetEffective(form).Signature == "ARMO")
                 .SelectMany(form => Links(form, "EITM")));
 

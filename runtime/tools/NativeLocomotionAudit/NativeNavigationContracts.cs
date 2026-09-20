@@ -48,6 +48,32 @@ internal static class NativeNavigationContracts
             throw new InvalidOperationException("An external-link table index aliasing an internal triangle changed the source corridor.");
         if (graph.FindPath(new(15, 1, 0), new(1, 1, 0)).Count != 3)
             throw new InvalidOperationException("A reciprocal source edge lost reverse traversal.");
+        using var directed = JsonDocument.Parse("""
+            {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
+              {"formId":"a","cellFormId":"cell","version":11,
+               "verticesGameUnits":[[0,0,0],[10,0,0],[0,10,0]],
+               "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,0,-1],"flags":2}],
+               "externalConnections":[{"navmeshFormId":"b","triangleIndex":0}]},
+              {"formId":"b","cellFormId":"cell","version":11,
+               "verticesGameUnits":[[10,0,0],[10,10,0],[0,10,0]],
+               "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,-1,-1],"flags":0}],
+               "externalConnections":[]}]}
+            """);
+        var directedGraph = CellNavigationGraph.Load(directed.RootElement, new HashSet<string> { "cell" });
+        var directedPath = directedGraph.FindPath(new(1, 1, 0), new(9, 9, 0));
+        if (directedPath.Count != 2 || directedPath[0] != new Vector3(5, 5, 0))
+            throw new InvalidOperationException("A directed external link lost its authored source edge.");
+        var reverseRefused = false;
+        try { _ = directedGraph.FindPath(new(9, 9, 0), new(1, 1, 0)); }
+        catch (InvalidOperationException) { reverseRefused = true; }
+        if (!reverseRefused) throw new InvalidOperationException("A directed external link fabricated reverse traversal.");
+        var approach = directedGraph.FindPath(new(9, 9, 0), new(4, 4, 0), destinationRadiusGameUnits: 2);
+        if (approach.Count != 1 || approach[0] != new Vector3(5, 5, 0))
+            throw new InvalidOperationException("Reference approach did not stay on its reachable authored floor.");
+        var distantFloorRefused = false;
+        try { _ = directedGraph.FindPath(new(9, 9, 0), new(1, 1, 0), destinationRadiusGameUnits: 2); }
+        catch (InvalidOperationException) { distantFloorRefused = true; }
+        if (!distantFloorRefused) throw new InvalidOperationException("Reference approach exceeded its bounded source floor distance.");
         using var selfLinked = JsonDocument.Parse("""
             {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
               {"formId":"self","cellFormId":"cell","version":11,

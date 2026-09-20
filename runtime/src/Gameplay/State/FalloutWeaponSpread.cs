@@ -63,6 +63,7 @@ internal sealed class FalloutWeaponSpread
 
         foreach (var perk in perks.Where(perk => perk.Entry == 34))
         {
+            perk.RequireActorConditionScope();
             if (perk.Conditions.Count != 0 && !FalloutCondition.AllPass(perk.Conditions, evaluateCondition)) continue;
             playerSpread = perk.Function switch
             {

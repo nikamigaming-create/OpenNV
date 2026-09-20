@@ -245,6 +245,7 @@ IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);
 else if (args is [var companionRoot, "--companion-packages"]) OwnedCompanionPackageProbe.Run(companionRoot);
+else if (args is [var companionGameplayRoot, "--companion-gameplay"]) OwnedCompanionGameplayProbe.Run(companionGameplayRoot);
 StageAndInventoryContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();

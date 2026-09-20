@@ -37,6 +37,7 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
             damage = Math.Max(0, effect.Apply(damage));
         foreach (var perk in perks().Where(perk => perk.Entry == 0))
         {
+            perk.RequireActorConditionScope();
             if (perk.Conditions.Count != 0)
             {
                 if (evaluateCondition is null)

@@ -176,7 +176,13 @@ internal partial class RuntimeNativeOpeningStageDriver
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians);
-        return state with { Vitals = Vitals, WeaponHandling = _player.CaptureWeaponHandling(), Ingestibles = _ingestibles.Capture() };
+        return state with
+        {
+            Vitals = Vitals,
+            WeaponHandling = _player.CaptureWeaponHandling(),
+            Ingestibles = _ingestibles.Capture(),
+            ActorOverrides = _scripts.References!.CaptureActorOverrides()
+        };
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

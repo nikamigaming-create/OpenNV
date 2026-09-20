@@ -33,6 +33,9 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private Func<FalloutPlacedReference, Transform3D> _transform = null!;
     private float _unitsToMeters;
     private uint _collisionMask;
+    private readonly Dictionary<FalloutFormKey, string> _abilityErrors = [];
+    private readonly HashSet<FalloutFormKey> _abilityActors = [];
+    private FalloutAbilityModifiers? _abilities;
     internal IReadOnlyList<FalloutPlacedReference> BoundTriggers => _bindings.Values
         .Where(binding => binding.Trigger is { } trigger && GodotObject.IsInstanceValid(trigger) && trigger.IsInsideTree())
         .Select(binding => binding.Reference).ToArray();
@@ -44,6 +47,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
         errors = _bindings.Values.Where(value => value.Instance.ScriptError is not null)
             .Select(value => new { reference = value.Reference.FormKey.ToString(), error = value.Instance.ScriptError }).ToArray(),
+        abilityErrors = _abilityErrors.Select(value => new { reference = value.Key.ToString(), error = value.Value }).ToArray(),
         boundary = "source-events-from-native-contacts; full-collision-filter-order-and-retail-timing-unverified",
     };
 
@@ -242,14 +246,23 @@ internal partial class RuntimeNativeReferenceEvents : Node
         return null;
     }
 
+    internal bool DispatchActorEvent(FalloutFormKey actor, string name)
+    {
+        if (!_bindings.TryGetValue(actor, out var binding)) return false;
+        Report(binding, [_scripts.Dispatch(actor, name)]);
+        return true;
+    }
+
     public override void _Process(double delta)
     {
         ++_frames;
         var tree = GetTree();
         foreach (var binding in _bindings.Values)
         {
-            if (binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
+            if (binding.Signature is "NPC_" or "CREA" && binding.Node is not null && _world.IsEnabled(binding.Reference.FormKey) &&
+                _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
+            if (binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             var enabled = _world.IsEnabled(binding.Reference.FormKey);
             binding.ActorScriptStarted |= enabled;
             if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) continue;
@@ -287,5 +300,33 @@ internal partial class RuntimeNativeReferenceEvents : Node
         if (error is null || binding.ReportedError) return;
         binding.ReportedError = binding.Instance.ScriptError is not null;
         ReportDivergence($"OPENNV_NATIVE_REFERENCE_EVENT_DIVERGENCE reference={binding.Reference.FormKey}: {error}");
+    }
+
+    private void StartAbilityScripts(Binding binding)
+    {
+        try
+        {
+            _abilities ??= new(_records);
+            var source = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(binding.Reference.Base), 8, binding.Instance.Templates);
+            foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "SPLO"))
+            {
+                if (field.Data.Length != 4) throw new InvalidDataException("Actor ability identity extent is invalid.");
+                if (source.Plugin.AdjustOptionalFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) is not { } form) continue;
+                foreach (var effect in _abilities.Scripts(form))
+                {
+                    if (effect.Conditions.Count != 0) throw new NotSupportedException("Script ability conditions require their lifecycle owner.");
+                    var script = _records.GetEffective(effect.Script);
+                    if (FalloutScriptLocals.Read(script).Count != 0) throw new NotSupportedException("Ability script local persistence is unbound.");
+                    var text = FalloutDialogueTopic.ScriptText(script.ReadSubrecords().Single(row => row.Signature == "SCTX").Data.Span);
+                    foreach (var block in FalloutGameModeProgram.ReadEvents(text).Where(block => block.Event.Equals("ScriptEffectStart", StringComparison.OrdinalIgnoreCase)))
+                        _scripts.ExecuteProgram(_records.GetEffective(binding.Reference.FormKey), script, block.Program, 0);
+                }
+            }
+        }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or KeyNotFoundException)
+        {
+            _abilityErrors[binding.Reference.FormKey] = error.Message;
+            ReportDivergence($"OPENNV_NATIVE_ABILITY_UNBOUND reference={binding.Reference.FormKey}: {error.Message}");
+        }
     }
 }

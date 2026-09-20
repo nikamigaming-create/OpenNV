@@ -30,8 +30,14 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
     internal static uint Relation(FalloutPluginStack records, FalloutFormKey actor, FalloutFormKey target,
         FalloutActorTemplateSelection? selection = null, FalloutActorTemplateSelection? targetSelection = null)
     {
-        var from = FalloutAiPackages.ReadFactions(records, actor, selection).Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToArray();
-        var to = FalloutAiPackages.ReadFactions(records, target, targetSelection).Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToHashSet();
+        return Relation(records, FalloutAiPackages.ReadFactions(records, actor, selection), FalloutAiPackages.ReadFactions(records, target, targetSelection));
+    }
+
+    internal static uint Relation(FalloutPluginStack records, IReadOnlyDictionary<FalloutFormKey, sbyte> actor,
+        IReadOnlyDictionary<FalloutFormKey, sbyte> target)
+    {
+        var from = actor.Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToArray();
+        var to = target.Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToHashSet();
         var reactions = new HashSet<uint>();
         if (from.Any(to.Contains)) reactions.Add(2);
         foreach (var faction in from)

@@ -39,9 +39,10 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
 
     internal string Dispatch(string textKey) => Dispatch(textKey, this, ownsLoopStop: false);
 
-    internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null) => Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: false, form);
+    internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
+        Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: false, form, completed);
 
-    private string Dispatch(string textKey, Node3D emitter, bool ownsLoopStop, FalloutFormKey? form = null)
+    private string Dispatch(string textKey, Node3D emitter, bool ownsLoopStop, FalloutFormKey? form = null, Action? completed = null)
     {
         LastEvent = null;
         try
@@ -73,7 +74,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                 {
                     var voice = new AudioStreamPlayer { Stream = stream, PitchScale = selected.PitchScale, VolumeDb = selected.GainDb };
                     AddChild(voice); TrackVoice(voice, emitter, loop);
-                    voice.Finished += () => FinishVoice(voice); voice.Play();
+                    voice.Finished += () => { FinishVoice(voice); completed?.Invoke(); }; voice.Play();
                 }
                 else
                 {
@@ -86,7 +87,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                         AreaMask = 0
                     };
                     emitter.AddChild(voice); _spatial.Add(voice, selected); TrackVoice(voice, emitter, loop);
-                    voice.Finished += () => { _spatial.Remove(voice); FinishVoice(voice); };
+                    voice.Finished += () => { _spatial.Remove(voice); FinishVoice(voice); completed?.Invoke(); };
                     ApplyListener(voice, selected); voice.Play();
                 }
             }
@@ -102,6 +103,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                 randomOwner = "authoritative-source-owner-stream-retail-sequence-unmatched"
             };
             ObserveEvent();
+            if (!selected.Play) completed?.Invoke();
             return disposition;
         }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)

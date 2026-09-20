@@ -214,6 +214,7 @@ public partial class RuntimeCoordinator
         _nativeActiveCell = grid.Scene;
         _nativeSkyLighting.Restore(sky.Capture());
         var center = grid.Scene.Cell.Coordinates!.Value;
+        DiscoverNativeCellReferences(grid.Scene);
         _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference),
             reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
                 Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
@@ -234,19 +235,7 @@ public partial class RuntimeCoordinator
             _nativeLandLastUse.Remove(land.Source.ActiveCell); land.QueueFree();
         }
         _nativeReferenceEvents!.SetResidency(grid.Scene, root);
-        _parityObservations.ReplaceScope("world/active-cell", grid.Scene.References.Select(reference =>
-            ($"{grid.Scene.Cell.FormKey}/{reference.FormKey}", ParityCategoryFor(grid.Scene.BaseObjects[reference.Base].Signature),
-                NativeReferenceState(reference, grid.Scene.BaseObjects[reference.Base], "source"))));
-        foreach (var reference in grid.Scene.References)
-        {
-            var enabled = _nativeReferences.IsEnabled(reference.FormKey);
-            if (!enabled || _nativeReferencePresentation.Nodes.ContainsKey(reference.FormKey))
-                _parityObservations.Observe("world/active-cell", $"{grid.Scene.Cell.FormKey}/{reference.FormKey}",
-                    NativeReferenceState(reference, grid.Scene.BaseObjects[reference.Base], enabled ? "resident-presentation" : "disabled"));
-        }
-        foreach (var reference in _nativeReferenceEvents.BoundTriggers)
-            _parityObservations.Observe("world/active-cell", $"{grid.Scene.Cell.FormKey}/{reference.FormKey}",
-                NativeReferenceState(reference, grid.Scene.BaseObjects[reference.Base], "source-primitive-contact-owner"));
+        ObserveNativeResidentReferences(grid.Scene);
         var environment = root.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().Single();
         foreach (var node in _nativeGridStaged) environment.Register(node);
         root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single().SetDetailGrid(grid);

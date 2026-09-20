@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private Godot.Collections.Array<Rid>? _enemyRayExclusions;
     private string? _muzzlePresentationError;
     private string? _casingPresentationError;
+    private string? _impactMaterialError;
 
     private void ShootPlayer(RuntimeNativePlayer player)
     {
@@ -25,9 +26,9 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo, weapon.HasAmmunitionSource);
             _enemyShot.RequireRuntimeAttackOwner();
-            var socket = _enemyObject!.Nodes.Single(node => node.GetMeta("opennv_nif_source_name", "").AsString() == "ProjectileNode");
+            var socket = MuzzleNode();
             _enemyMuzzle ??= new(_records, _content, socket, _skeleton.UnitsToMetres);
-            try { _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false); _muzzlePresentationError = null; }
+            try { _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false); _muzzlePresentationError = _enemyMuzzle.LightError; }
             catch (Exception error)
             {
                 _muzzlePresentationError = error.Message;
@@ -44,11 +45,30 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         _enemyRayExclusions ??= new(_actor.FindChildren("*", "", true, false).OfType<CollisionObject3D>()
             .Select(body => body.GetRid()).Append(_mover!.GetRid()));
-        var socketPose = _enemyObject!.Socket(_skeleton, "ProjectileNode");
+        var socketPose = MuzzlePose();
         var from = socketPose.Origin;
-        var direction = (player.CombatTargetPoint - from).Normalized();
+        var direction = (TargetPoint(player) - from).Normalized();
+        using (var line = RuntimeNativeProjectileCollision.CastThroughSmallTransparent(_actor.GetWorld3D(),
+            _enemyShot.Projectile, from, TargetPoint(player), _mask, _enemyRayExclusions,
+            out _, out _, out _))
+        {
+            var obstruction = line.Count == 0 ? null : line["collider"].AsGodotObject() as Node;
+            var isTarget = obstruction is not null && (_opponent is null
+                ? obstruction == player || player.IsAncestorOf(obstruction)
+                : Find(obstruction) == _opponent);
+            if (obstruction is not null && !isTarget)
+            {
+                _lastAttack = new { kind = "held-muzzle-line", target = _state.Engagement!.Target.ToString(), blocker = obstruction.GetPath().ToString() };
+                return;
+            }
+        }
         var resolvedDamage = _enemyDamage!.Resolve(_enemyShot);
         var spreadDegrees = ResolveNpcShotSpread(_enemyShot);
+        if (FriendlyInsideSpread(player, from, TargetPoint(player), spreadDegrees))
+        {
+            _lastAttack = new { kind = "held-friendly-spread", target = _state.Engagement!.Target.ToString() };
+            return;
+        }
         if (!_enemyShot.Projectile.IsInstantRayAttack)
         {
             ShootProjectilePlayer(player, weapon, handling, from, direction, resolvedDamage, spreadDegrees);
@@ -57,7 +77,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (!handling.ConsumeShot(weapon, _enemyShot, _records)) return;
         (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
         if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
-        var before = _context!.Vitals().ExactHitPoints;
+        var before = TargetHealth(player);
         Node? lastCollider = null;
         byte? lastPart = null;
         var totalLimbDamage = 0.0f;
@@ -124,15 +144,23 @@ internal sealed partial class RuntimeNativeActorCombat
 
                 var delay = _enemyShot.Projectile.HitscanImpactDelaySeconds(from.DistanceTo(point), _skeleton.UnitsToMetres);
                 var hasImpact = _enemyShot.ImpactDataSet is not null;
-                int? impactMaterial = hasImpact
-                    ? part is not null ? 6 : FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(collision))
-                    : null;
+                int? impactMaterial = null;
+                if (hasImpact)
+                {
+                    try { impactMaterial = playerHit || actorTarget ? 6 : FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(collision)); }
+                    catch (Exception error) when (error is NotSupportedException or InvalidDataException)
+                    {
+                        if (_impactMaterialError != error.Message)
+                            GD.PushError($"OPENNV_ACTOR_IMPACT_MATERIAL_UNBOUND reference={_state.Reference} collider={collider.GetPath()} {error.Message}");
+                        _impactMaterialError = error.Message;
+                    }
+                }
                 FalloutActorHit? actorHit = null;
                 var contactHasOwner = playerHit || actorTarget || hasImpact;
                 var impactPending = delay > 0 && contactHasOwner;
                 if (impactPending)
                 {
-                    healthBefore = playerHit ? _context.Vitals().ExactHitPoints : null;
+                    healthBefore = playerHit ? _context!.Vitals().ExactHitPoints : null;
                     ScheduleHitscanContact(player, _enemyShot, resolvedDamage, collider, part, impactMaterial,
                         point, normal, pelletDirection, delay);
                     pendingImpacts++;
@@ -205,19 +233,20 @@ internal sealed partial class RuntimeNativeActorCombat
             }
             pellets.Add(new { index = pellet, contacts, direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z } });
         }
-        if (_casingPresentationError is null)
+        if (_casingPresentationError is null && weapon.ShellModel is not null)
         {
-            try { _enemyShotEffects.EjectCasing(_enemyObject.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
+            try { _enemyShotEffects.EjectCasing((_enemyObject ?? throw new NotSupportedException("Embedded weapon casing socket is unbound.")).Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
             catch (Exception error)
             {
                 _casingPresentationError = error.Message;
                 GD.PushError($"OPENNV_CASING_PRESENTATION_UNBOUND reference={_state.Reference} {error.Message}");
             }
         }
-        var after = _context.Vitals().ExactHitPoints;
+        var after = TargetHealth(player);
         _lastAttack = new
         {
             kind = "source-weapon-Hit",
+            target = _state.Engagement!.Target.ToString(),
             weapon = weapon.Form.ToString(),
             loaded = _enemyWeaponHandling.Loaded(weapon.Form),
             collider = lastCollider?.GetPath().ToString(),
@@ -241,7 +270,7 @@ internal sealed partial class RuntimeNativeActorCombat
             pellets,
             boundary = "NPC skill,movement,arm injury,wobble and Hitscan source-speed timing applied;NPC perk conditions,cover,weapon-mod spread and retail cadence unmatched"
         };
-        GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=ranged projectiles={_enemyShot.Projectiles} hits={hits} health={before:R}->{after:R}");
+        GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} target={_state.Engagement!.Target} kind=ranged projectiles={_enemyShot.Projectiles} playerHits={hits} actorHits={actorHits} targetHealth={before:R}->{after:R}");
     }
 
     private void ScheduleHitscanContact(RuntimeNativePlayer player, FalloutWeaponShot shot,
@@ -416,7 +445,7 @@ internal sealed partial class RuntimeNativeActorCombat
             foreach (var flight in flights) effects.LaunchProjectile(flight);
             (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
             if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
-            if (_casingPresentationError is null)
+            if (weapon.ShellModel is not null && _casingPresentationError is null)
             {
                 try { _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
                 catch (Exception error)
@@ -466,7 +495,7 @@ internal sealed partial class RuntimeNativeActorCombat
         });
         var leftArms = parts.Where(part => part.Type is 3 or 4).ToArray();
         var rightArms = parts.Where(part => part.Type is 5 or 6).ToArray();
-        if (leftArms.Length == 0 || rightArms.Length == 0)
+        if (_actor is RuntimeNativeNpc && (leftArms.Length == 0 || rightArms.Length == 0))
             throw new NotSupportedException("NPC weapon spread requires source left and right arm parts.");
 
         var running = Activity.Running;

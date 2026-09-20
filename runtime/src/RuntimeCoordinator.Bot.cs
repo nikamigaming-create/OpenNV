@@ -140,18 +140,18 @@ public partial class RuntimeCoordinator
         var now = Time.GetTicksMsec();
         foreach (var point in _botBlockedPortals.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
             _botBlockedPortals.Remove(point);
-        using var clearance = new NativeCapsulePlacementQuery(_nativePlayer!);
-        bool Permitted(Vector3 point)
-        {
-            if (_botBlockedPortals.ContainsKey(point)) return false;
-            var world = World(point);
-            // Unloaded NAVM is coarse intent only. The returned segment below
-            // always requires resident collision and full capsule sweeps.
-            return !NativeCollisionResident(world) || clearance.CanStand(world);
-        }
+        // A portal midpoint is not the complete portal's traversable width.
+        // Rejecting a distant midpoint can disconnect an otherwise walkable
+        // route. Coarse A* excludes only segments that native refinement has
+        // actually rejected; every returned movement segment is still swept
+        // against resident collision with the player's complete capsule below.
+        bool Permitted(Vector3 point) => !_botBlockedPortals.ContainsKey(point);
         for (var attempt = 0; attempt < 8; attempt++)
         {
-            var path = _botNavigation!.FindPath(Source(start), Source(end), Permitted);
+            // A reference may rest on an isolated counter/prop navmesh. Reach a
+            // nearby authored floor, then let the ordinary interaction ray and
+            // distance checks decide whether the target can actually be used.
+            var path = _botNavigation!.FindPath(Source(start), Source(end), Permitted, 2 / units);
             var worldPath = path.Select(World).ToArray();
             if (worldPath.Length == 0) return [];
             var (target, resume) = NativeCapsuleNavigation.CorridorPrefix(origin, worldPath, 8);
@@ -160,7 +160,7 @@ public partial class RuntimeCoordinator
                 var local = NativeCapsuleNavigation.Find(_nativePlayer!, origin, target,
                     _configuration.Player.StepHeightMeters, Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters), NativeCollisionResident);
                 GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={target} sourceWaypoint={resume} " +
-                    $"blockedPortals={_botBlockedPortals.Count} occupiedPortals={clearance.Rejected} ms={Time.GetTicksMsec() - now}");
+                    $"blockedPortals={_botBlockedPortals.Count} ms={Time.GetTicksMsec() - now}");
                 return local.Select(point => new System.Numerics.Vector3(point.X, point.Y, point.Z)).ToArray();
             }
             catch (InvalidOperationException error) when (attempt < 7 && path.Count > 1)

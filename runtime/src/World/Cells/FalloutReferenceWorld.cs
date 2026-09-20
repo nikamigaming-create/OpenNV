@@ -32,7 +32,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
-                if ((name != "health" && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
+                if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
             snapshot.Placement?.Validate();

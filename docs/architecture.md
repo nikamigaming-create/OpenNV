@@ -83,8 +83,12 @@ Creature package movement and combat share the source envelope, root motion and
 native collision owner. Follow/Dialogue select their source target without an
 invented start location. Package position, animation identity/clock and talk
 history are reference-owned save state. Presentation eviction cannot reset them.
-Door transfer and the rest of companion recruitment/combat remain separate open
-owners; [creature packages](creature-packages.md) records the bounded evidence.
+Recruitment effects retain reference/base faction scope, perks, flags and combat
+style in the shared world. Creature weapons and teammate target selection reuse
+ordinary source contacts and damage. Door transfer composes destination residency
+and requires an authored NAVM arrival with native capsule clearance. These paths
+have separate acceptance levels; [companion gameplay](companion-gameplay.md)
+and [creature packages](creature-packages.md) record the bounded evidence.
 
 The first-person XR owner separately binds those source hand shapes and the
 equipped weapon's Havok into persistent motion-query bodies. Collision-resolved
@@ -114,8 +118,9 @@ C# observation-to-input policy. RuntimeCoordinator supplies resident references,
 source navigation and authoritative interaction observations; RuntimeLiveHarness
 feeds ordinary flat inputs or a simulator adapter with bounded controller leases.
 No bot path writes player transforms, inventory, quests or collision results.
-Source-portal A* filters resident waypoints with actual player-capsule clearance;
-native swept queries refine bounded route segments. Failed corridors expire and
+Source-portal A* supplies coarse intent; native swept queries refine bounded
+route segments with the actual player capsule. A distant portal's midpoint alone
+cannot reject its entire width. Failed corridors expire and
 trigger alternate-route searches. Segment execution observes actual movement
 before replanning. Dead-actor aiming uses current physical body centers and
 checks the first collider. Campaign decisions and combat tactics remain unbound.

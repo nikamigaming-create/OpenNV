@@ -5,7 +5,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutCondition, FalloutFormKey?>? currentCell = null,
     Func<FalloutFormKey, float>? healthPercentage = null,
     Func<FalloutFormKey, int, float>? actorValue = null,
-    Func<FalloutFormKey, bool>? talkedToPlayer = null)
+    Func<FalloutFormKey, bool>? talkedToPlayer = null,
+    Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -54,7 +55,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
                 50 when talkedToPlayer is not null => talkedToPlayer(speaker) ? 1 : 0,
                 69 => identity.Race == condition.FormArgument1 ? 1 : 0,
                 70 when condition.Argument1 <= 1 => identity.Female == (condition.Argument1 == 1) ? 1 : 0,
-                71 => _factions.TryGetValue(condition.FormArgument1, out var rank) && rank >= 0 ? 1 : 0,
+                71 => (factions?.Invoke(speaker) ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
+                73 => (factions?.Invoke(speaker) ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
                 72 => identity.Actor == condition.FormArgument1 ? 1 : 0,
                 365 => identity.Race is { } race && FalloutRaceProperties.IsChild(records.GetEffective(race)) ? 1 : 0,
                 427 => identity.VoiceType == condition.FormArgument1 ? 1 : 0,
