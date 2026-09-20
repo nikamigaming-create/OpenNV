@@ -21,6 +21,31 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     private readonly SortedSet<string> _unbound = new(StringComparer.Ordinal);
     private long _eventCount;
     private object? _lastEvent;
+    private Func<Vector3>? _conversationTarget;
+    private float _conversationTurnSpeed;
+    private Vector3 _conversationScale;
+
+    internal void BeginConversationFacing(Func<Vector3> target, float turnDegreesPerSecond)
+    {
+        if (!float.IsFinite(turnDegreesPerSecond) || turnDegreesPerSecond <= 0)
+            throw new InvalidDataException("Creature dialogue turn speed must be positive.");
+        _conversationTarget = target; _conversationTurnSpeed = Mathf.DegToRad(turnDegreesPerSecond);
+        _conversationScale = GlobalBasis.Scale;
+    }
+
+    internal void EndConversationFacing() => _conversationTarget = null;
+
+    private void AdvanceConversationFacing(float delta)
+    {
+        if (_conversationTarget is null) return;
+        var direction = _conversationTarget() - GlobalPosition; direction.Y = 0;
+        if (direction.LengthSquared() < .000001f) return;
+        var current = GlobalBasis.Orthonormalized().GetRotationQuaternion();
+        var target = Basis.LookingAt(direction.Normalized(), Vector3.Up).GetRotationQuaternion();
+        var angle = current.AngleTo(target);
+        if (angle > .00001f)
+            GlobalBasis = new Basis(current.Slerp(target, Math.Min(1, delta * _conversationTurnSpeed / angle))).Scaled(_conversationScale);
+    }
     internal string? Error { get; private set; }
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal float SourceSeconds => ResolveTime(_clock.ElapsedSeconds);
@@ -50,7 +75,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     {
         if (state.Reference != reference.FormKey || state.Base != reference.Base)
             throw new InvalidDataException("Creature presentation is bound to a different reference state.");
-        var appearance = FalloutCreatureAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey);
+        var appearance = FalloutCreatureAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, state.Templates);
         var actor = new RuntimeNativeCreature { Name = $"Reference_{reference.FormKey}", Appearance = appearance, _clock = state.Animation };
         try
         {
@@ -101,6 +126,8 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
                 externalObjectTargets: sourceTargets);
             actor._textKeys = new(actor._animation.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
             actor._clock.Bind(idle, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+            if (sequence.CycleType == 0)
+                actor._clock.StartAmbientLoop(reference.FormKey, (sequence.StopTime - sequence.StartTime) / sequence.Frequency);
             actor.Skeleton.Node.SetBonePose(actor.Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
             actor._animation.ApplySourceTime(actor.SourceSeconds);
             actor._sounds = new(stack, content, actor, unitsToMetres, state.SoundRandom);
@@ -123,6 +150,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         if (Error is not null) return;
         try
         {
+            AdvanceConversationFacing((float)delta);
             var from = _clock.ElapsedSeconds;
             var include = _clock.StartPending;
             _clock.Advance(delta);

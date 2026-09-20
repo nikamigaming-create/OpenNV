@@ -51,18 +51,18 @@ internal sealed partial class RuntimeNativeActorCombat
             Position = Vector3.Up * height / 2,
             Shape = new CapsuleShape3D { Radius = radius, Height = height }
         });
-        var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2);
+        var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var acbs = stats.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span;
         if (acbs.Length != 24) throw new InvalidDataException("Actor speed configuration extent is invalid.");
         _motionScale = scale * _actor.Scale.X * BinaryPrimitives.ReadUInt16LittleEndian(acbs[14..]) / 100;
         if (_actor is RuntimeNativeCreature)
         {
-            var model = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 64);
+            var model = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 64, _state.Templates);
             var turning = model.ReadSubrecords().Single(field => field.Signature == "TNAM").Data.Span;
             if (turning.Length != 4) throw new InvalidDataException("Creature turn speed extent is invalid.");
             _turnSpeed = Mathf.DegToRad(FalloutProjectile.Number(turning, 0));
         }
-        else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.Read(_records, "fActorTurnDegree"));
+        else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.Read(_records, "fCharacterDefaultTurningSpeed"));
         if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
     }
 

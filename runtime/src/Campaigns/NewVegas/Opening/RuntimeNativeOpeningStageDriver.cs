@@ -160,7 +160,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             };
         }, name =>
         {
-            if (name.Equals("Health", StringComparison.OrdinalIgnoreCase)) return Vitals.HitPoints;
+            if (name.Equals("Health", StringComparison.OrdinalIgnoreCase)) return Vitals.ExactHitPoints;
+            if (name.Equals("RadiationRads", StringComparison.OrdinalIgnoreCase)) return Vitals.RadiationRads;
             if (name.Equals("ActionPoints", StringComparison.OrdinalIgnoreCase)) return Vitals.ActionPoints;
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
             return _playerSkills.Value(name);
@@ -267,7 +268,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             }
             if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
-        }, _scripts.SaidInfos);
+        }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

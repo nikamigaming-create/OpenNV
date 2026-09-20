@@ -17,6 +17,8 @@ internal sealed class NativeOwnedDeviceSurface
     internal string ScreenName { get; }
     internal Node3D Root => _pickModel;
     internal MeshInstance3D? PickedGeometry { get; private set; }
+    internal Vector3? PickedWorldPosition { get; private set; }
+    internal float PickedDistance { get; private set; }
     internal NativeOwnedDeviceSurface(string path, Node3D model, string screenName)
     {
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned device content is absent.");
@@ -64,12 +66,15 @@ internal sealed class NativeOwnedDeviceSurface
                 return new PickSurface(mesh, arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(),
                     arrays[(int)Mesh.ArrayType.Index].AsInt32Array(), arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array(), cull, occludes);
             })).ToArray();
-    internal Vector2? PickScreen(Vector3 origin, Vector3 direction)
+    internal Vector2? PickScreen(Vector3 origin, Vector3 direction, IReadOnlySet<MeshInstance3D>? interactive = null)
     {
-        PickedGeometry = null;
+        PickedGeometry = null; PickedWorldPosition = null; PickedDistance = 0;
+        direction = direction.Normalized();
+        if (direction.LengthSquared() < .99f) return null;
         var distance = float.PositiveInfinity; Vector2? result = null;
         var screen = _screen;
-        foreach (var surface in PickSurfaces.Where(surface => surface.Mesh.IsVisibleInTree() && (surface.Mesh == screen || surface.Occludes)))
+        foreach (var surface in PickSurfaces.Where(surface => surface.Mesh.IsVisibleInTree() &&
+                     (surface.Mesh == screen || surface.Occludes || interactive?.Contains(surface.Mesh) == true)))
         {
             var mesh = surface.Mesh;
             var inverse = mesh.GlobalTransform.AffineInverse();
@@ -92,6 +97,8 @@ internal sealed class NativeOwnedDeviceSurface
                 if (hit < 0 || hit >= distance) continue;
                 distance = hit;
                 PickedGeometry = mesh;
+                PickedWorldPosition = origin + direction * hit;
+                PickedDistance = hit;
                 _pickModel.SetMeta("opennv_pointer_surface", mesh.Name.ToString());
                 result = mesh == screen && uvs.Length == vertices.Length
                     ? uvs[a] * (1 - u - v) + uvs[b] * u + uvs[c] * v : null;

@@ -2,7 +2,7 @@
   "name": "@open-nevada/launcher",
   "version": "0.1.0",
   "private": true,
-  "description": "Open Nevada's first-party cross-platform desktop launcher.",
+  "description": "Open Nevada legacy JavaScript contract and migration compatibility package; product launch is Godot.",
   "author": "Open Nevada contributors",
   "desktopName": "open-nevada-launcher",
   "homepage": "https://opennevada.com",

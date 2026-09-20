@@ -9,6 +9,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
     IReadOnlyList<FalloutAmmoEffect> AmmoEffects)
 {
     internal uint WeaponAnimationType { get; init; }
+    internal uint OnHitBehavior { get; init; }
     internal byte AttackAnimation { get; init; }
     internal int SkillActorValue { get; init; }
     internal int StrengthRequirement { get; init; }
@@ -87,6 +88,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             recovered, recovery, impact.IsEmpty ? null : source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(impact.Span)), effects)
         {
             WeaponAnimationType = type,
+            OnHitBehavior = BinaryPrimitives.ReadUInt32LittleEndian(data[52..]),
             AttackAnimation = attackAnimation,
             SkillActorValue = BinaryPrimitives.ReadInt32LittleEndian(data[104..]),
             StrengthRequirement = data.Length >= 172 ? checked((int)BinaryPrimitives.ReadUInt32LittleEndian(data[168..])) : 0,

@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal partial class RuntimeNativeNpc
 {
     private FalloutPluginStack? _aiStack;
+    private FalloutActorTemplateSelection? _templates;
     private FalloutQuestState? _questState;
     private FalloutCellScene? _aiCell;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
@@ -122,7 +123,7 @@ internal partial class RuntimeNativeNpc
     {
         _aiStack = stack;
         _idleConditions = new(stack);
-        _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc);
+        _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc, _templates);
         _questState = quests;
         _aiCell = cell;
         _referenceTransform = referenceTransform;
@@ -197,7 +198,7 @@ internal partial class RuntimeNativeNpc
         _aiActivityRevision = Activity.Revision;
         try
         {
-            var selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition);
+            var selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates);
             if (_aiPackage?.FormKey == selected?.FormKey) return;
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
             if (_aiPackage is not null)

@@ -15,6 +15,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
     private IReadOnlyList<FalloutPlacedReference> _references;
     private Func<FalloutPlacedReference, Node3D?> _materialize;
     private readonly Dictionary<FalloutFormKey, Node3D> _nodes = [];
+    private readonly Dictionary<FalloutFormKey, (FalloutPlacedReference Source, Node3D Node)> _warmNodes = [];
     private readonly Dictionary<FalloutFormKey, bool> _enabled;
     private readonly Dictionary<FalloutFormKey, GeometryInstance3D[]> _fadeGeometry = [];
     private readonly Dictionary<FalloutFormKey, float> _publishedOpacity = [];
@@ -24,18 +25,36 @@ internal partial class RuntimeNativeReferencePresentation : Node
     internal string? Error { get; private set; }
     internal IEnumerable<OpenNV.Runtime.World.Actors.RuntimeNativeNpc> Actors => _nodes.Values.OfType<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>();
     internal IReadOnlyDictionary<FalloutFormKey, Node3D> Nodes => _nodes;
+    internal int WarmNodeCount => _warmNodes.Count;
+    internal bool HasPrepared(FalloutFormKey key) => _nodes.ContainsKey(key) || _warmNodes.ContainsKey(key);
 
-    internal void SetResidency(IReadOnlyList<FalloutPlacedReference> references, Func<FalloutPlacedReference, Node3D?> materialize)
+    internal void SetResidency(IReadOnlyList<FalloutPlacedReference> references, Func<FalloutPlacedReference, Node3D?> materialize,
+        Func<FalloutPlacedReference, bool>? retainWarm = null)
     {
         var retained = references.Select(reference => reference.FormKey).ToHashSet();
+        var previous = _references.ToDictionary(reference => reference.FormKey);
         foreach (var key in _enabled.Keys.Where(key => !retained.Contains(key)).ToArray())
         {
             if (_nodes.Remove(key, out var node))
             {
                 GamebryoReferenceEnableRuntime.Apply(node, false);
-                node.QueueFree();
+                if (retainWarm?.Invoke(previous[key]) == true) _warmNodes.Add(key, (previous[key], node));
+                else node.QueueFree();
             }
             _enabled.Remove(key); _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
+        }
+        foreach (var (key, warm) in _warmNodes.ToArray())
+        {
+            if (retained.Contains(key))
+            {
+                _warmNodes.Remove(key);
+                Register(key, warm.Node);
+            }
+            else if (retainWarm?.Invoke(warm.Source) != true)
+            {
+                _warmNodes.Remove(key);
+                warm.Node.QueueFree();
+            }
         }
         foreach (var reference in references) _enabled.TryAdd(reference.FormKey, _world.IsEnabled(reference.FormKey));
         _references = references; _materialize = materialize;

@@ -191,9 +191,10 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
 
     public override void _Process(double delta)
     {
-        if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
+        if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true) return;
         RestoreAuthoredHeadPose();
-        AdvanceAi();
+        if (_conversationTarget is null) AdvanceAi();
+        AdvanceConversationFacing((float)delta);
         if ((_animation is null && _baseAnimation is null && _headTargets is null) || AnimationError is not null) return;
         try
         {
@@ -314,10 +315,11 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         FalloutPlacedReference reference,
         float unitsToMetres,
         Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null,
-        IReadOnlyList<FalloutFormKey>? equippedArmor = null)
+        IReadOnlyList<FalloutFormKey>? equippedArmor = null, FalloutActorTemplateSelection? selection = null)
     {
-        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor), source,
+        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, selection: selection), source,
             unitsToMetres, materialOwner);
+        actor._templates = selection;
         try { actor.ConfigureFaceAnimation(stack); return actor; }
         catch { actor.Free(); throw; }
     }

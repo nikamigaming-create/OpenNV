@@ -8,14 +8,26 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
     internal bool Essential => (Flags & 2) != 0;
     internal bool Invulnerable => (Flags & 0x80000000) != 0;
 
-    internal static FalloutActorHealthSource Read(FalloutPluginStack records, FalloutFormKey actor)
+    internal static bool StartsDead(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
+    {
+        var source = records.GetEffective(actor);
+        var stats = FalloutActorTemplateOwner.Resolve(records, source, 2, selection);
+        return source.Signature switch
+        {
+            "CREA" => BinaryPrimitives.ReadInt16LittleEndian(Field(stats, "DATA", 17).Span[4..]) == 0,
+            "NPC_" => BinaryPrimitives.ReadInt32LittleEndian(Field(stats, "DATA", 11).Span) == 0,
+            _ => throw new InvalidDataException("Initial health source is not an actor."),
+        };
+    }
+
+    internal static FalloutActorHealthSource Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
         var source = records.GetEffective(actor);
         if (source.Signature is not ("NPC_" or "CREA")) throw new InvalidDataException("Health source is not an actor.");
-        var stats = FalloutActorTemplateOwner.Resolve(records, source, 2);
-        var baseData = FalloutActorTemplateOwner.Resolve(records, source, 128);
-        var inventory = FalloutActorTemplateOwner.Resolve(records, source, 256);
-        var model = FalloutActorTemplateOwner.Resolve(records, source, 64);
+        var stats = FalloutActorTemplateOwner.Resolve(records, source, 2, selection);
+        var baseData = FalloutActorTemplateOwner.Resolve(records, source, 128, selection);
+        var inventory = FalloutActorTemplateOwner.Resolve(records, source, 256, selection);
+        var model = FalloutActorTemplateOwner.Resolve(records, source, 64, selection);
         var acbs = Field(stats, "ACBS", 24);
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(Field(baseData, "ACBS", 24).Span);
         if ((BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 0x80) != 0)

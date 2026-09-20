@@ -8,10 +8,36 @@ namespace OpenNV.Runtime;
 public partial class RuntimeCoordinator
 {
     private RuntimeNativeReferencePresentation? _nativeReferencePresentation;
+    private long _nativePlacementRevision;
 
     public override void _Process(double delta)
     {
         AdvanceNativeExteriorStreaming(delta);
+        if (_nativeReferences is { } world && world.PlacementRevision != _nativePlacementRevision &&
+            _nativeCurrentCellRoot is { } root && _nativeActiveCell is { } scene && !_nativeDoorLoading)
+        {
+            var moved = world.MovedSince(_nativePlacementRevision);
+            var cells = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>()
+                .Where(land => _nativeWalkableGrid.Contains(land.Source.ActiveCoordinates))
+                .Select(land => FalloutCellSceneReader.ReadDefinition(_nativePluginStack!, land.Source.ActiveCell)).ToArray();
+            var updated = world.ComposeResidency(scene, cells.Length == 0 ? null : cells);
+            world.ReplaceResidentCell(updated);
+            _nativeActiveCell = updated;
+            _nativeReferencePresentation!.SetResidency(updated.References, reference => MaterializeNativeReference(root, updated, reference));
+            foreach (var instance in moved.Where(instance => world.IsResident(instance.Reference)))
+            {
+                var reference = updated.References.Single(value => value.FormKey == instance.Reference);
+                if (_nativeReferencePresentation.Nodes.GetValueOrDefault(instance.Reference) is { } node ||
+                    world.IsEnabled(instance.Reference) && (node = _nativeReferencePresentation.Resolve(instance.Reference)) is not null)
+                {
+                    node.Transform = ReferenceTransform(reference);
+                    if (node is CharacterBody3D body) body.Velocity = Vector3.Zero;
+                }
+            }
+            _nativeReferenceEvents!.SetResidency(updated, root);
+            foreach (var actor in _nativeReferencePresentation.Actors) actor.UpdateResidentScene(updated);
+            _nativePlacementRevision = world.PlacementRevision;
+        }
         if (_nativeReferencePresentation is not { } presentation || presentation.Error is not null ||
             _nativeReferenceEvents?.IsProcessing() != true || GetTree().Paused) return;
         try { presentation.Advance(delta); }
@@ -44,7 +70,9 @@ public partial class RuntimeCoordinator
                 else (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Native event effects have no gameplay host."))
                     .ApplyReferenceEffect(effect);
             }, caller => _nativeOpeningStageDriver!.TakeMessageButton(caller), actor => _nativeOpeningStageDriver!.IsTalking(actor),
-                (actor, name) => _nativeOpeningStageDriver!.ActorValue(actor, name), name => _nativeOpeningStageDriver!.IsPlayerTagSkill(name), _nativeGlobals),
+                (actor, name) => _nativeOpeningStageDriver!.ActorValue(actor, name), name => _nativeOpeningStageDriver!.IsPlayerTagSkill(name), _nativeGlobals,
+                (source, bindings, command, arguments) => _nativeOpeningStageDriver!.ApplyNativeSourceCommand(source, bindings, command, arguments),
+                actor => _nativeOpeningStageDriver!.IsInCombat(actor)),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

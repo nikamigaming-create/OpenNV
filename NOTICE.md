@@ -10,7 +10,8 @@ The current source tree does not build, package, or publish that runtime.
 
 The replacement runtime is implemented in Godot from owned retail data,
 published format facts, synthetic fixtures, and targeted retail observations.
-Its first development slice is not yet a playable release.
+Experimental test releases have incomplete campaign and headset coverage;
+their included status and release notes define the verified behavior.
 
 Open Nevada releases do not include commercial game files, conversion output,
 or third-party mod archives. Users must supply assets they lawfully own and

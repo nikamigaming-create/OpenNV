@@ -2,16 +2,31 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed class FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests,
     FalloutFormKey speaker, FalloutDialogueSpeaker identity, Func<FalloutCondition, float>? runtime = null,
-    Func<FalloutCondition, FalloutFormKey?>? currentCell = null)
+    Func<FalloutCondition, FalloutFormKey?>? currentCell = null,
+    Func<FalloutFormKey, float>? healthPercentage = null,
+    Func<FalloutFormKey, int, float>? actorValue = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
         : this(records, quests, speaker, FalloutDialogueSpeaker.Read(records, appearance.Npc), runtime) { }
 
-    private readonly IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = FalloutAiPackages.ReadFactions(records, identity.Actor);
+    private readonly IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = FalloutAiPackages.ReadFactions(records, identity.Actor, identity.Templates);
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if ((condition.Function == 431 && healthPercentage is not null) ||
+            (condition.Function == 14 && actorValue is not null))
+        {
+            var actor = condition.RunOn switch
+            {
+                0 => speaker,
+                1 => records.RuntimeFormKey(0x14),
+                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                    ?? throw new InvalidDataException("Dialogue actor query has no explicit reference."),
+                _ => throw new NotSupportedException($"Dialogue actor query run-on {condition.RunOn} is unbound."),
+            };
+            return condition.Function == 431 ? healthPercentage!(actor) : actorValue!(actor, checked((int)condition.Argument1));
+        }
         // These functions query the explicit QUST argument. Selecting the
         // speaker, listener or another reference does not change that owner.
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);

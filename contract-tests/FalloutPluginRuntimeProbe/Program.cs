@@ -153,7 +153,10 @@ try
             Subrecord("DATA", weaponData),
             Subrecord("NAM0", UInt32(0x00000062)),
             Subrecord("DNAM", weaponDnam))),
-        Record("AMMO", 0x00000062, 0, Subrecord("EDID", ZString("SyntheticAmmo"))),
+        Record("AMMO", 0x00000062, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticAmmo")),
+            Subrecord("DATA", new byte[13]),
+            Subrecord("DAT2", new byte[20]))),
         Record("WTHR", 0x00000050, 0, BinarySubrecord(
             [5, (byte)'I', (byte)'A', (byte)'D'], [1]))));
 

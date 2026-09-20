@@ -4,12 +4,15 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed class FalloutInstallationSettings
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RuntimeLiveContentSource, FalloutInstallationSettings> Instances = new();
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
     private Lazy<IReadOnlyDictionary<string, float>> _floatDefaults = null!;
     private Lazy<FalloutRendererConfiguration> _renderer = null!;
     internal FalloutRendererConfiguration Renderer => _renderer.Value;
 
-    internal static FalloutInstallationSettings Read(RuntimeLiveContentSource source)
+    internal static FalloutInstallationSettings Read(RuntimeLiveContentSource source) => Instances.GetValue(source, ReadInstallation);
+
+    private static FalloutInstallationSettings ReadInstallation(RuntimeLiveContentSource source)
     {
         var settings = new FalloutInstallationSettings();
         settings._floatDefaults = new(() => FalloutExecutableStringTable.ReadFloatDefaults(

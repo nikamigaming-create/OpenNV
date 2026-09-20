@@ -15,8 +15,13 @@ internal sealed partial class RuntimeNativeImpactDecals : Node
     private double _seconds;
     private long _created;
     internal int Count => _entries.Count;
-    internal object Observation => new { created = _created, active = Count, lifetime = _lifetime,
-        boundary = "projected-Godot-decal;source-parallax-specular-and-skinned-clipping-unmatched" };
+    internal object Observation => new
+    {
+        created = _created,
+        active = Count,
+        lifetime = _lifetime,
+        boundary = "projected-Godot-decal;source-parallax-specular-and-skinned-clipping-unmatched"
+    };
 
     internal RuntimeNativeImpactDecals(FalloutPluginStack records, float units)
     {
@@ -36,10 +41,16 @@ internal sealed partial class RuntimeNativeImpactDecals : Node
         var pose = new Transform3D(new Basis(x, y, x.Cross(y)), point);
         var decal = new Decal
         {
-            Name = "ImpactDecal_" + ++_created, TopLevel = true, Size = new(width, source.Depth * _units, height),
-            TextureAlbedo = Texture(source.Diffuse), TextureNormal = source.Normal is null ? null : Texture(source.Normal),
+            Name = "ImpactDecal_" + ++_created,
+            TopLevel = true,
+            Size = new(width, source.Depth * _units, height),
+            TextureAlbedo = Texture(source.Diffuse),
+            TextureNormal = source.Normal is null ? null : Texture(source.Normal),
             Modulate = new(source.Red / 255f, source.Green / 255f, source.Blue / 255f, 1),
-            AlbedoMix = 1, NormalFade = .5f, UpperFade = 0, LowerFade = 0,
+            AlbedoMix = 1,
+            NormalFade = .5f,
+            UpperFade = 0,
+            LowerFade = 0,
         };
         AddChild(decal); decal.GlobalTransform = pose;
         _entries.Add(new(decal, target, target is null ? pose : target.GlobalTransform.AffineInverse() * pose, _seconds));

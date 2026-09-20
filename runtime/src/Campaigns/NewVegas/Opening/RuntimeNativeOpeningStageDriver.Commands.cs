@@ -19,7 +19,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private NativeOwnedBarterMenu? _barterMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
 
-    private void ApplyNativeSourceCommand(FalloutFormKey source, FalloutScriptBindings bindings, string command, IReadOnlyList<string> arguments)
+    internal void ApplyNativeSourceCommand(FalloutFormKey source, FalloutScriptBindings bindings, string command, IReadOnlyList<string> arguments)
     {
         var parts = command.Split('.');
         var operation = parts[^1].ToLowerInvariant();
@@ -96,7 +96,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 SynchronizeTraitEntry();
                 if (_traitEntry is null) throw new NotSupportedException("Trait input has no active menu owner.");
                 break;
-            case "showrecipemenu" when parts.Length == 1 && arguments.Count == 1:
+            case "showrecipemenu" when arguments.Count == 1 && (parts.Length == 1 || _pluginStack.RuntimeFormId(target) == 0x14):
                 var recipeCategory = bindings.Form(arguments[0]);
                 if (recipeCategory.Signature != "RCCT")
                     throw new InvalidDataException("ShowRecipeMenu argument is not an RCCT category.");
@@ -219,6 +219,10 @@ internal partial class RuntimeNativeOpeningStageDriver
             _ => throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} is unbound."),
         };
     }
+
+    internal float EvaluateMessageCondition(FalloutCondition condition) => condition.Function == 53 && condition.RunOn == 0
+        ? (float)_scripts.References!.Get(condition.FormArgument1).Read(condition.Argument2)
+        : EvaluateRecipeCondition(condition);
 
     private void CloseRecipeMenu()
     {

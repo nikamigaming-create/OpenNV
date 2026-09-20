@@ -145,6 +145,7 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
             {
                 Name = "Recipe_" + recipe.Record.FormKey,
                 Text = recipe.Name + status,
+                TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
                 Alignment = HorizontalAlignment.Left,
                 FocusMode = FocusModeEnum.All,
                 SizeFlagsHorizontal = SizeFlags.ExpandFill

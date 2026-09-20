@@ -204,7 +204,6 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 _tiles.SetFilename(Tile("stats_player_" + part), $"interface/stats/{art}.dds");
                 Bind("stats_player_" + part, "target", 0);
                 if (part == "face") continue;
-                Hide("stats_player_" + part + "_pct", "stats_player_" + part + "_crippled");
                 var sourceParts = PlayerBodyParts.Parts
                     .Where(candidate => PlayerBodyRegion(candidate) == part && candidate.HealthPercent > 0)
                     .ToArray();
@@ -214,8 +213,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 if (!float.IsFinite(crippleThreshold) || crippleThreshold <= 0) continue;
                 var damage = vitals.LimbDamage?.GetValueOrDefault(bodyPart.Type) ?? 0;
                 var remaining = Math.Clamp((crippleThreshold - damage) / crippleThreshold, 0, 1);
-                Text("stats_player_" + part + "_pct", remaining.ToString("P0", CultureInfo.InvariantCulture));
-                Bind("stats_player_" + part + "_pct", "visible", 1);
+                Bind("stats_player_" + part + "_pct_meter", "_Value", remaining);
                 Bind("stats_player_" + part + "_crippled", "visible", damage >= crippleThreshold ? 1 : 0);
             }
             Hide("stats_stimpak_button", "stats_healing_mode", "stats_drbag_button", "stats_H20_button", "stats_FOD_button", "stats_SLP_button");
@@ -225,7 +223,6 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                     if (button == "CND") return;
                     throw new NotSupportedException($"Player {label} state is not connected yet.");
                 });
-            AddText("Limb condition uses the winning body-part thresholds.", new(75, 560), new(740, 40));
         }
         else if (_state.Selection is 2 or 3)
         {

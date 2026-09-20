@@ -105,6 +105,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         geometry.SetMeta("opennv_land_impact_unbound_triangles", faceMaterials.Count(material => material < 0));
         collision.AddChild(collisionShape);
         root.AddChild(collision);
+        NativeExteriorDetailBlend.Bind(root);
         return root;
     }
 
@@ -127,7 +128,9 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             varying float source_fog_factor;
             """);
         shader.AppendLine(RetailVertexFog.ShaderSource);
+        shader.AppendLine(NativeExteriorDetailBlend.NearDeclarations);
         var vertex = new StringBuilder("void vertex() {\nsource_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);\n");
+        vertex.AppendLine(NativeExteriorDetailBlend.NearVertex);
         for (var pack = 0; pack * 4 < weights.Length; pack++)
         {
             shader.AppendLine($"uniform sampler2D weights_{pack} : filter_nearest, repeat_disable;\nvarying vec4 layer_weights_{pack};");
@@ -136,6 +139,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         }
         static string Weight(int layer) => $"layer_weights_{layer / 4}.{"xyzw"[layer % 4]}";
         var fragment = new StringBuilder($"void fragment() {{\nvec2 tiled_uv = UV * tiling;\nvec3 albedo = texture(base_texture, tiled_uv).rgb * {Weight(0)};\nvec3 normal_sample = vec3(0.0,0.0,1.0) * {Weight(0)};\n");
+        fragment.AppendLine(NativeExteriorDetailBlend.NearFragment);
         var basis = source.BaseLayers.Single(layer => layer.Quadrant == quadrant);
         parameters.Add("base_texture", textures[basis.Texture].Diffuse);
         parameters.Add("tiling", tiling);

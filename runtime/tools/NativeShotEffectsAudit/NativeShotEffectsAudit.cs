@@ -48,6 +48,28 @@ public partial class NativeShotEffectsAudit : Node3D
             if (!regular.SequenceEqual(hitch)) throw new InvalidOperationException("Host hitch changed the source emission count.");
             GD.Print($"OPENNV_MUZZLE_CLOCK_PASS weapon={form} particles={string.Join(',', regular)} hitchSeconds=.25 expired=true");
             var blood = FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, 6)!;
+            var spoutSet = records.EffectiveRecords("IPDS").Single(record => record.ReadSubrecords().Any(field =>
+                field.Signature == "EDID" && FalloutDialogueTopic.Text(field.Data.Span) == "BloodSpoutRedDataSet"));
+            var spout = FalloutImpact.Resolve(records, spoutSet.FormKey, 6)!;
+            if (!content.TryRead(spout.Model!, null, out var spoutBytes, out _)) throw new FileNotFoundException("Sever spray is absent.");
+            var spoutRoot = NativeNifMeshBuilder.Build(spoutBytes, units).Root; AddChild(spoutRoot);
+            try
+            {
+                var clock = new NativeNifEffectPlayback(spoutRoot, spout.Duration, false);
+                clock.Start(); clock.Advance(.2);
+                if (clock.Particles.Length != 2 || clock.Particles.Any(p => p.BirthCount == 0))
+                    throw new InvalidDataException("The reached sever event did not activate its dormant source emitters.");
+                var initial = clock.Particles.Single(p => JsonSerializer.SerializeToElement(p.Observation).GetProperty("worldSpace").GetBoolean());
+                var sample = JsonSerializer.SerializeToElement(initial.Observation).GetProperty("modifiers").EnumerateArray()
+                    .Single(row => row.GetProperty("Name").GetString()!.Contains("Emitter", StringComparison.Ordinal));
+                if (sample.GetProperty("speed").GetSingle() >= 189.58f)
+                    throw new InvalidDataException("Source sever emission speed did not follow its declining curve.");
+                spoutRoot.Position += Vector3.Right * .1f; clock.Advance(.1);
+                clock.Advance(10);
+                if (clock.Active || clock.Particles.Any(p => p.ActiveCount != 0)) throw new InvalidDataException("Sever spray failed to drain.");
+                GD.Print("OPENNV_SEVER_SPRAY_PASS dormantClocks=event-activated speedCurve=true parentMotion=true emitted=true expired=true pixels=separate");
+            }
+            finally { spoutRoot.Free(); }
             if (!content.TryRead(blood.Model!, null, out var bloodBytes, out _)) throw new FileNotFoundException("Blood impact model missing.");
             var bloodRoot = NativeNifMeshBuilder.Build(bloodBytes, units).Root;
             bloodRoot.Position = new(0, 0, -2); AddChild(bloodRoot);
@@ -107,7 +129,13 @@ public partial class NativeShotEffectsAudit : Node3D
                     // ordinary gameplay pass checks the original impact voices.
                     var silentBlood = blood with { Sounds = [] };
                     pool.Impact(silentBlood, Vector3.Zero, Vector3.Up, Vector3.Down);
-                    pool.Impact(silentBlood, new(8, 0, 0), Vector3.Up, Vector3.Down);
+                    pool.Impact(silentBlood, new(8, 0, 0), Vector3.Up, Vector3.Down, shooter);
+                    var decals = pool.GetChildren().OfType<RuntimeNativeImpactDecals>().Single();
+                    if (decals.Count != 2 || blood.Decal is null) throw new InvalidDataException("Shot impacts lost their source decal owner.");
+                    var attached = decals.GetChildren().OfType<Decal>().Last();
+                    shooter.Position += Vector3.Right; decals._Process(.1);
+                    if (attached.GlobalPosition.DistanceTo(new(9, 0, 0)) > .0001f)
+                        throw new InvalidDataException("Impact decal stayed in world space while the struck body moved.");
                     Node3D[] Instances() => pool.GetChildren().OfType<Node3D>().Where(node => node is not NativeOwnedAnimationSoundPlayer).ToArray();
                     var simultaneous = Instances();
                     if (simultaneous.Length != 2 || simultaneous[0] == simultaneous[1])
@@ -124,6 +152,9 @@ public partial class NativeShotEffectsAudit : Node3D
                     pool._Process(10);
                     if (Instances().Length != 1 || retained.Visible)
                         throw new InvalidDataException("The completed impact pool is unbounded or still visible.");
+                    decals._Process(FalloutGameSettingFloats.Read(records, "fDecalLifetime:Display") + 1);
+                    if (decals.Count != 0) throw new InvalidDataException("Source decal lifetime leaked a projected surface.");
+                    GD.Print("OPENNV_IMPACT_DECAL_PASS sourceDimensions=true movingAttachment=true independentLifetime=true expired=true pixels=separate");
                     GD.Print("OPENNV_IMPACT_REUSE_PASS concurrent=independent retained=one clocks=reset source=blood-model audio=separate");
                 }
                 finally { pool.Free(); }

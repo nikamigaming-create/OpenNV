@@ -13,7 +13,8 @@ internal static class RuntimeNativeExplosionCombat
     internal static object Detonate(Node3D owner, Node3D shooter, FalloutPluginStack records,
         FalloutExplosion explosion, FalloutWeaponDamage damage, Vector3 point, uint collisionMask,
         float unitsToMeters, FalloutFormKey attacker, int level, FalloutGlobalState globals,
-        RuntimeNativePlayer? player, Action<FalloutWeaponDamage, byte>? damagePlayer)
+        RuntimeNativePlayer? player, Action<FalloutWeaponDamage, byte>? damagePlayer,
+        uint? weaponOnHitBehavior = null, Func<float>? nextWeaponRandomUnit = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(shooter);
@@ -85,7 +86,8 @@ internal static class RuntimeNativeExplosionCombat
             var collider = target.Value.Collider;
             if (!explosion.IgnoresLineOfSight && !ClearLineOfSight(space, point,
                 ((Node3D)collider).GlobalPosition, collisionMask, shooter, combat)) continue;
-            var hit = combat.Hit(collider, damage, attacker, level, globals);
+            var hit = combat.Hit(collider, damage, attacker, level, globals,
+                weaponOnHitBehavior, nextWeaponRandomUnit);
             actorHits.Add(new
             {
                 reference = hit.Reference,

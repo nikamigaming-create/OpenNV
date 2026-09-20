@@ -8,7 +8,8 @@ installation in place and publish authoritative state to Godot.
 - Retail files are read-only. OpenNV never edits the selected installation.
 - No Bethesda asset, executable, save, or converted derivative is committed,
   packaged, uploaded, or distributed.
-- Runtime launch accepts a live installation root and a campaign identity.
+- The Godot product entry accepts `--launcher`; direct diagnostic launch accepts
+  a live installation root and a campaign identity.
 - Loose files override archives through a case-insensitive source namespace.
 - Active ESM and ESP records are resolved in load order with master-aware
   FormIDs. BSA members are resolved in memory.
@@ -17,6 +18,9 @@ installation in place and publish authoritative state to Godot.
 - Gameplay and save state are authoritative and shared by flat and OpenXR
   presentation adapters.
 - Unknown binary layouts and unsupported behaviors fail closed.
+- Godot's bundled Jolt backend owns native contact solving in both modes.
+  Source NIF/Havok shapes, masses and constraints remain the inputs; no route
+  bypass or replacement collision geometry is used to escape a contact.
 
 ## Main owners
 
@@ -32,9 +36,15 @@ installation in place and publish authoritative state to Godot.
   adapters.
 - `contract-tests`: C# synthetic contracts and explicitly selected owned-data
   audits.
-- `desktop`: launcher registration and invocation.
+- `desktop`: retained JavaScript contract and migration compatibility coverage;
+  it is not part of the normal product launch path.
 - `tools/OpenNV.DevelopmentLab`: separate headless corpus, reference-lifecycle
   and event-replay operations that call these runtime owners directly.
+
+The Godot launcher is a `Control` owned by `RuntimeCoordinator`. It raises a
+typed route request, and the coordinator validates the selected owned install
+before calling the existing campaign dispatch owner. The launcher is hidden and
+released after dispatch; it never starts another executable or engine process.
 
 Placed-reference script locals belong to `FalloutReferenceWorld`, including
 references with no model and initially disabled objects. Resident cell membership
@@ -46,6 +56,12 @@ and source primitive contacts now dispatch through FalloutReferenceScripts.
 Reference enable state and source enable-parent relationships share that world
 lifetime. Native models may be built on demand without creating a second source
 path. Per-instance texture changes remain transient with presentation lifetime.
+Leveled actor templates retain a reference-owned random choice, source hash and
+selection level in the same snapshot. Appearance, inventory, script attachment,
+voice, factions and combat consume that selection. Reentry cannot reroll a
+creature or outfit. Encounter-zone level initialization remains unbound and
+rejects that admission; an appearance-only audit at a supplied level does not
+prove spawning or zone behavior.
 FalloutConversation owns INFO selection, results and choices; native source menu
 and voice adapters report input/completion. Actual player furniture and posed
 actor query contacts now connect to reference events. Complete event/physics,
@@ -91,8 +107,11 @@ C# observation-to-input policy. RuntimeCoordinator supplies resident references,
 source navigation and authoritative interaction observations; RuntimeLiveHarness
 feeds ordinary flat inputs or a simulator adapter with bounded controller leases.
 No bot path writes player transforms, inventory, quests or collision results.
-Obstruction stops input and reports its actual collider; campaign decisions and
-capsule-aware dynamic avoidance remain unbound.
+Source-portal A* filters resident waypoints with actual player-capsule clearance;
+native swept queries refine bounded route segments. Failed corridors expire and
+trigger alternate-route searches. Segment execution observes actual movement
+before replanning. Dead-actor aiming uses current physical body centers and
+checks the first collider. Campaign decisions and combat tactics remain unbound.
 
 Player SPECIAL and skill queries evaluate owned GMST formulas, tags, constant
 abilities, conditional trait effects and equipped apparel effects against live
@@ -136,12 +155,18 @@ weapon/inventory owner atomically consumes rounds and retains recovery random
 state. XR and flat input enter this same path. Actual source bone contacts now
 resolve BPTD regions and damage constant-health creatures through the shared
 reference owner. Winning skill settings, NV weapon condition and unconditional
-abilities supply the bounded damage calculation. Living NPC health, full armor,
-critical/sneak modifiers, reactions, combat AI, hit/death scripts and XP remain
-unbound. Death switches that actor from its idle clock to its source skeleton's
+abilities supply the bounded damage calculation. NPC health, selected armor
+condition, aggression/assistance and bounded ranged/melee attacks now use the
+shared world and damage owners. Critical/sneak modifiers, complete resistance
+ordering, reactions, AI tactics, hit/death scripts and XP remain unbound.
+Death switches that actor from its idle clock to its source skeleton's
 rigid bodies and joints; corpse activation uses the existing container owner.
 Saved injury, death inventory and physical bone poses share reference persistence.
 Cold death construction waits until cell attachment completes. The current
+authored-corpse path decodes ordered XRGD local bone transforms in game units.
+Duplicate Havok part numbers retain skeleton traversal order. A saved physical
+pose takes precedence over initial source placement. XRGB accumulation-root
+rotation remains explicitly unbound. The current
 Godot angular envelopes do not reproduce every Havok solver parameter, and limb
 severing/explosion presentation remains incomplete.
 Muzzle presentation resolves source addon indices through winning ADDN records,

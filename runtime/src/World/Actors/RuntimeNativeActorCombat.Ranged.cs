@@ -93,8 +93,13 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (collision.Count == 0)
                 {
                     if (contacts.Count == 0)
-                        contacts.Add(new { contact = contactIndex, state = "miss", transparentLayerPassThroughs = passedThrough,
-                            transparentLayerUnresolvedContacts = unresolvedLayers });
+                        contacts.Add(new
+                        {
+                            contact = contactIndex,
+                            state = "miss",
+                            transparentLayerPassThroughs = passedThrough,
+                            transparentLayerUnresolvedContacts = unresolvedLayers
+                        });
                     break;
                 }
 
@@ -305,7 +310,8 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             try
             {
-                actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals);
+                actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals,
+                    shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit);
                 healthBefore = actorHit.HealthBefore;
                 healthAfter = actorHit.HealthAfter;
                 _hits++;
@@ -487,7 +493,8 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         else if (contact.Collider is { } collider && RuntimeNativeActorCombat.Find(collider) is { } combat && combat != this)
         {
-            actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals);
+            actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals,
+                shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit);
             part = actorHit.Part;
             healthBefore = actorHit.HealthBefore;
             healthAfter = actorHit.HealthAfter;
@@ -530,7 +537,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (shot.Projectile.ExplosionSource is not { } explosion) return;
         _lastExplosion = RuntimeNativeExplosionCombat.Detonate(_actor, _actor, _records, explosion, blastDamage,
             point, _mask, _skeleton.UnitsToMetres, _state.Reference, _context!.Level(), _context.Globals,
-            player, _context.DamagePlayer);
+            player, _context.DamagePlayer, shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit);
         GD.Print($"OPENNV_ACTOR_WEAPON_EXPLOSION reference={_state.Reference} weapon={shot.Weapon} explosion={explosion.Form} result={System.Text.Json.JsonSerializer.Serialize(_lastExplosion)}");
     }
 }

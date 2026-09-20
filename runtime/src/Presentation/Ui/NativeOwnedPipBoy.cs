@@ -22,6 +22,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
     private readonly string _toggleAction;
     private readonly List<(MeshInstance3D Mesh, NativeBitmapMenuButton Button)> _buttons = [];
     private readonly Dictionary<MeshInstance3D, NativeBitmapMenuButton> _buttonParts = [];
+    private readonly HashSet<MeshInstance3D> _buttonHitParts = [];
     private static readonly string[] Glows = ["StatsGlow:0", "ItemsGlow:0", "DataGlow:0"];
     private Vector2? _lastPointer;
     private readonly RuntimeNativePlayerActor _player;
@@ -30,6 +31,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
     private bool _closing;
     private bool _xrAwaitTriggerRelease;
     private bool _xrPressed;
+    private bool _xrButtonPressed;
     private bool _xrFocused;
     private ColorRect? _xrCursor;
     private NativeXrWristPresentation? _xrDevice;
@@ -142,8 +144,11 @@ internal sealed partial class NativeOwnedPipBoy : Control
                 var page = (FalloutPipBoyPage)index;
                 button.Pressed += () => menu.Select(page, page == FalloutPipBoyPage.Data ? 1 : 0);
                 AddChild(button); _buttons.Add((_surface.Geometry($"PipBoyButton0{index + 1}:0"), button));
-                foreach (var geometry in _surface.GeometryParts($"PipBoyButton0{index + 1}")) _buttonParts.Add(geometry, button);
-                _buttonParts.Add(_surface.Geometry(Glows[index]), button);
+                var buttonMesh = _surface.Geometry($"PipBoyButton0{index + 1}:0");
+                _buttonParts[buttonMesh] = button; _buttonHitParts.Add(buttonMesh);
+                foreach (var geometry in _surface.GeometryParts($"PipBoyButton0{index + 1}"))
+                { _buttonParts[geometry] = button; _buttonHitParts.Add(geometry); }
+                _buttonParts[_surface.Geometry(Glows[index])] = button;
             }
             menu.PageChanged += UpdateGlows;
             SetMeta("opennv_pipboy_source", "owned-NIF/XML/DDS;authoritative-inventory-quests-map-markers");
@@ -153,8 +158,8 @@ internal sealed partial class NativeOwnedPipBoy : Control
                 _xrDevice = new(_surface);
                 _xrCursor = new ColorRect
                 {
-                    Size = new(10, 10),
-                    Color = Colors.White,
+                    Size = new(18, 18),
+                    Color = new(1f, .82f, .08f),
                     MouseFilter = MouseFilterEnum.Ignore,
                     Visible = false
                 };
@@ -242,16 +247,17 @@ internal sealed partial class NativeOwnedPipBoy : Control
         _xrDevice?.Dispose(); _xrDevice = null;
     }
     internal void PoseXrDevice(Transform3D head) => _xrDevice?.Publish(head);
-    internal bool PointFromXr(Transform3D aim, bool tracked, bool pressed)
+    internal Vector3? PointFromXr(Transform3D aim, bool tracked, bool pressed)
     {
-        if (_closing || !_xrFocused) return false;
-        if (!tracked) { ReleaseXrPointer(); _xrAwaitTriggerRelease = true; return false; }
+        if (_closing || !_xrFocused) { ReleaseXrPointer(); return null; }
+        if (!tracked) { ReleaseXrPointer(); _xrAwaitTriggerRelease = true; return null; }
         if (_xrAwaitTriggerRelease)
         {
             if (!pressed) _xrAwaitTriggerRelease = false;
             pressed = false;
         }
-        var uv = _surface.PickScreen(aim.Origin, -aim.Basis.Z);
+        var uv = _surface.PickScreen(aim.Origin, -aim.Basis.Z, _buttonHitParts);
+        var surfaceHit = _surface.PickedWorldPosition;
         var point = uv is { } value ? value * new Vector2(1280, 960) : new Vector2(-1, -1);
         if (uv is not null || !_xrPressed)
         {
@@ -267,22 +273,27 @@ internal sealed partial class NativeOwnedPipBoy : Control
         if (_xrCursor is not null) { _xrCursor.Visible = uv is not null; _xrCursor.Position = point - _xrCursor.Size / 2; }
         if (_xrPressed != pressed)
         {
-            if (pressed && _surface.PickedGeometry is { } part && _buttonParts.TryGetValue(part, out var button))
-                button.EmitSignal(BaseButton.SignalName.Pressed);
+            if (pressed)
+            {
+                if (_surface.PickedGeometry is { } part && _buttonParts.TryGetValue(part, out var button))
+                {
+                    button.EmitSignal(BaseButton.SignalName.Pressed);
+                    _xrButtonPressed = true;
+                }
+                else
+                {
+                    PushXrClick(true, point);
+                    _xrButtonPressed = false;
+                }
+            }
             else
             {
-                using var click = new InputEventMouseButton
-                {
-                    Position = _lastPointer ?? point,
-                    GlobalPosition = _lastPointer ?? point,
-                    ButtonIndex = MouseButton.Left,
-                    Pressed = pressed
-                };
-                _canvas.PushInput(click, true);
+                if (!_xrButtonPressed) PushXrClick(false, point);
+                _xrButtonPressed = false;
             }
             _xrPressed = pressed;
         }
-        return uv is not null || _surface.PickedGeometry is not null;
+        return surfaceHit;
     }
     internal void SetXrFocus(bool focused)
     {
@@ -292,19 +303,20 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     private void ReleaseXrPointer()
     {
-        if (_xrPressed)
-        {
-            using var release = new InputEventMouseButton
-            {
-                ButtonIndex = MouseButton.Left,
-                Pressed = false,
-                Position = _lastPointer ?? Vector2.Zero,
-                GlobalPosition = _lastPointer ?? Vector2.Zero
-            };
-            _canvas.PushInput(release, true);
-        }
+        if (_xrPressed && !_xrButtonPressed) PushXrClick(false, _lastPointer ?? Vector2.Zero);
         if (_xrCursor is not null) _xrCursor.Visible = false;
-        _xrPressed = false;
+        _xrPressed = false; _xrButtonPressed = false;
+    }
+    private void PushXrClick(bool pressed, Vector2 point)
+    {
+        using var click = new InputEventMouseButton
+        {
+            Position = _lastPointer ?? point,
+            GlobalPosition = _lastPointer ?? point,
+            ButtonIndex = MouseButton.Left,
+            Pressed = pressed
+        };
+        _canvas.PushInput(click, true);
     }
     internal void RefreshWorld(FalloutFormKey? world, Vector3 player, float heading) => _menu.RefreshWorld(world, player, heading);
 }

@@ -1226,7 +1226,8 @@ internal partial class GameplaySession : Node
             source.GetProperty(nameof(GameplayVitals.ActionPoints)).GetInt32(),
             source.GetProperty(nameof(GameplayVitals.MaximumActionPoints)).GetInt32(),
             source.GetProperty(nameof(GameplayVitals.ExperiencePoints)).GetInt32(),
-            source.GetProperty(nameof(GameplayVitals.NextLevelExperiencePoints)).GetInt32(), hitPointFraction, limbDamage);
+            source.GetProperty(nameof(GameplayVitals.NextLevelExperiencePoints)).GetInt32(), hitPointFraction, limbDamage,
+            source.TryGetProperty(nameof(GameplayVitals.RadiationRads), out var rads) ? rads.GetSingle() : 0);
         result.Validate();
         return result;
     }

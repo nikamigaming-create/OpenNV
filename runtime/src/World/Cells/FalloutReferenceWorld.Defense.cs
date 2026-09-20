@@ -28,7 +28,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         var actor = Actor(reference);
         var equipped = EquippedArmor(reference, level, globals);
-        return _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped);
+        return _actorDefense.Read(actor.Base, actor.Inventory!.Contents, equipped, actor.Templates);
     }
 }
 
@@ -40,11 +40,12 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
     private readonly FalloutAbilityModifiers _defenseAbilities = new(records);
     private (float Base, float Maximum)? _armorRating;
 
-    internal FalloutActorDefense Read(FalloutFormKey actor, FalloutPlayerInventory inventory, IReadOnlyList<FalloutFormKey> equipped)
+    internal FalloutActorDefense Read(FalloutFormKey actor, FalloutPlayerInventory inventory, IReadOnlyList<FalloutFormKey> equipped,
+        FalloutActorTemplateSelection? selection = null)
     {
-        if (!_defenseSources.TryGetValue(actor, out var source))
+        var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 8, selection);
+        if (!_defenseSources.TryGetValue(effects.FormKey, out var source))
         {
-            var effects = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 8);
             var threshold = 0f; var resistance = 0f;
             foreach (var field in effects.ReadSubrecords().Where(field => field.Signature == "SPLO"))
             {
@@ -58,7 +59,7 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                     if (effect.ActorValue == 76) threshold += effect.Amount; else resistance += effect.Amount;
                 }
             }
-            source = new(threshold, resistance); _defenseSources.Add(actor, source);
+            source = new(threshold, resistance); _defenseSources.Add(effects.FormKey, source);
         }
         var armorThreshold = 0f; var armorResistance = 0f;
         foreach (var key in equipped)

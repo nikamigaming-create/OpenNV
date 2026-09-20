@@ -10,6 +10,8 @@ internal partial class RuntimeNativePlayer
     private NativeXrHandContact? _xrLeftContact, _xrRightContact;
     private NativeXrWeaponSupport? _xrSupport;
     private readonly NativeXrBodyHeading _xrBodyHeading = new();
+    private bool _xrBodyAlignmentPending;
+    private int _xrBodyAlignmentRebases;
     private string? _xrContactError;
     private Vector3 _aimHit;
     internal Func<Node, NativeXrTarget?>? ResolveXrTarget { get; set; }
@@ -26,11 +28,24 @@ internal partial class RuntimeNativePlayer
             support = _xrSupport?.State,
             error = _xrContactError ?? _firstPerson?.XrContactPoseError ?? _thirdPerson?.XrContactPoseError
         },
-        pointerTarget = _xrPointer?.TargetName
+        pointerTarget = _xrPointer?.TargetName,
+        bodyAlignment = new { pending = _xrBodyAlignmentPending, rebases = _xrBodyAlignmentRebases }
     };
     internal void PublishXrHands(double delta)
     {
         if (_xr is null || _firstPerson is null) return;
+        if (_xrBodyAlignmentPending)
+        {
+            var head = _xr.Camera.GlobalTransform;
+            _xrBodyHeading.Reset(head);
+            _firstPerson.XrLeftArm.ResetTracking(); _firstPerson.XrRightArm.ResetTracking();
+            _thirdPerson?.XrLeftArm.ResetTracking(); _thirdPerson?.XrRightArm.ResetTracking();
+            _xrLeftContact?.ResetTracking(); _xrRightContact?.ResetTracking();
+            _xrSupport?.Release();
+            _xrBodyAlignmentPending = false;
+            _xrBodyAlignmentRebases++;
+            GD.Print($"OPENNV_XR_BODY_ALIGNMENT_REBASED count={_xrBodyAlignmentRebases} reason=player-transform");
+        }
         var right = _xr.RightGrip; var left = _xr.LeftGrip;
         var pointing = _xr.WorldPointer || _xr.PointAtPipBoy is not null || _modalInput;
         _firstPerson.SetXrInteraction(pointing);
@@ -141,6 +156,10 @@ internal partial class RuntimeNativePlayer
     private void PublishXrPointer()
     {
         if (_xr is null) return;
+        // The late Pip-Boy projection publishes its mesh hit in the same pose
+        // update as the wrist device. Keep the physics-frame world pointer from
+        // overwriting that controller ray while the wrist menu owns input.
+        if (_xr.PointAtPipBoy is not null) return;
         var collider = _xr.WorldPointer ? AimedObject() : null;
         var target = collider is null ? null : ResolveXrTarget?.Invoke(collider);
         if (target?.RemotePickup != true && _xr.RightAim.GlobalPosition.DistanceTo(_aimHit) > _configuration.Player.ActivationDistanceMeters)
@@ -148,4 +167,7 @@ internal partial class RuntimeNativePlayer
         _xrPointer!.Publish(_xr.WorldPointer, _xr.RightAim.GlobalTransform,
             _xr.WorldPointer ? _xr.RightAim.GlobalPosition.DistanceTo(_aimHit) : 0, target);
     }
+
+    internal void PublishXrWristRay(bool active, Transform3D aim, Vector3? hitPoint)
+        => _xrPointer?.PublishSurfaceRay(active, aim, hitPoint, 1.5f);
 }

@@ -14,7 +14,9 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
     private FalloutFormKey? _lightForm;
     internal object State => new
     {
-        path = _path, visible = _root?.Visible ?? false, seconds = _playback?.Remaining,
+        path = _path,
+        visible = _root?.Visible ?? false,
+        seconds = _playback?.Remaining,
         particles = _playback?.Particles.Select(value => new { value.ActiveCount, value.BirthCount, value.EmissionEnabled }).ToArray(),
         light = _light is null ? null : new { form = _lightForm?.ToString(), _light.Visible, _light.OmniRange },
         unbound = "addon-audio,shared-master-emitter-pooling,muzzle-light-shadow-selection,flat-world-muzzle-light,retail-billboard-motion-match"
@@ -41,9 +43,11 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
                 var rgb = FalloutPlacedLightResolver.NormalizeLightColor(source.ColorRgb);
                 _light = new()
                 {
-                    Name = "SourceMuzzleLight", Visible = false,
+                    Name = "SourceMuzzleLight",
+                    Visible = false,
                     LightColor = RetailLighting.GodotLightColor(new(rgb[0], rgb[1], rgb[2])),
-                    LightEnergy = source.Intensity, OmniRange = source.RadiusGameUnits * units,
+                    LightEnergy = source.Intensity,
+                    OmniRange = source.RadiusGameUnits * units,
                     OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
                 };
                 socket.AddChild(_light); _lightForm = form;

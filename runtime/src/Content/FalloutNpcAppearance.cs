@@ -48,7 +48,7 @@ internal static class FalloutNpcAppearanceResolver
 
     internal static FalloutNpcAppearance Resolve(FalloutPluginStack stack, FalloutFormKey npcKey,
         FalloutFormKey? reference = null, IReadOnlyList<FalloutFormKey>? equippedArmor = null,
-        FalloutActorAppearanceState? appearanceState = null)
+        FalloutActorAppearanceState? appearanceState = null, FalloutActorTemplateSelection? selection = null)
     {
         var npc = Require(stack, npcKey, "NPC_");
         if (reference is { } referenceKey)
@@ -57,9 +57,9 @@ internal static class FalloutNpcAppearanceResolver
             if (!Same(RequiredForm(placed, "NAME"), npc.FormKey))
                 throw Error(placed, "NAME does not match the requested NPC");
         }
-        var traits = TemplateOwner(stack, npc, 1);
-        var model = TemplateOwner(stack, npc, 64);
-        var inventoryOwner = TemplateOwner(stack, npc, 256);
+        var traits = FalloutActorTemplateOwner.Resolve(stack, npc, 1, selection);
+        var model = FalloutActorTemplateOwner.Resolve(stack, npc, 64, selection);
+        var inventoryOwner = FalloutActorTemplateOwner.Resolve(stack, npc, 256, selection);
         var female = appearanceState?.Female ?? ((BinaryPrimitives.ReadUInt32LittleEndian(Bytes(traits, "ACBS", 24)) & 1) != 0);
         var race = Require(stack, appearanceState?.Race ?? RequiredForm(traits, "RNAM"), "RACE");
         var raceData = Bytes(race, "DATA", 36);

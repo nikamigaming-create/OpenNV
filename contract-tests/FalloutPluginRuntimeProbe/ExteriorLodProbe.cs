@@ -21,6 +21,11 @@ internal static class ExteriorLodProbe
         static string Path(int level, int x, int y, bool objects = false) =>
             $"meshes/landscape/lod/{world}/{(objects ? "blocks/" : "")}{world}.level{level}.x{x}.y{y}.nif";
         string[] paths = [Path(8, -2, -1), Path(4, -2, -1), Path(4, 2, -1), Path(4, -2, 3), Path(4, 2, 3), Path(4, -2, -1, true)];
+        var empty = new FalloutExteriorLod(world, [], 125000, .75f, .7f);
+        if (empty.Blocks.Count != 0 || empty.Select(0, 0).Count != 0 ||
+            empty.PreparationOrder([], new HashSet<FalloutLodBlock>(), 0, 0).Count != 0 ||
+            empty.ResidentCover([], new HashSet<FalloutLodBlock>()).Count != 0)
+            throw new InvalidOperationException("A source world without distant terrain created substitute LOD coverage.");
         var lod = new FalloutExteriorLod(world, paths, 125000, .75f, .7f);
         var near = lod.Select(0, 0);
         if (near.Count != 4 || near.Any(block => block.Level != 4) || near.Single(block => block.Objects is not null).X != -2)

@@ -16,6 +16,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal bool NpcsUseAmmo { get; init; }
     internal int EquipmentType { get; init; }
     internal uint WeaponAnimationType { get; init; }
+    internal uint OnHitBehavior { get; init; }
     internal bool IsMeleeWeapon => EquipmentType is 3 or 4 && WeaponAnimationType is not (11 or 12);
     internal bool IsMine => EquipmentType == 6 || WeaponAnimationType is 11 or 12;
     internal float Reach { get; init; }
@@ -158,6 +159,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
             EquipmentType = equipmentType,
             WeaponAnimationType = type,
+            OnHitBehavior = BinaryPrimitives.ReadUInt32LittleEndian(data[52..]),
             Reach = FalloutProjectile.Number(data, 8),
             MaximumRange = FalloutProjectile.Number(data, 48),
             HasAmmunitionSource = ammunitionSource is not null,

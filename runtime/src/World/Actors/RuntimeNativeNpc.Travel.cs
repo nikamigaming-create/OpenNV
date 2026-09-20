@@ -112,7 +112,7 @@ internal partial class RuntimeNativeNpc
 
     private void AdvanceTravel(float distance)
     {
-        if (!_travelActive) return;
+        if (!_travelActive || _conversationTarget is not null) return;
         if (!float.IsFinite(distance) || distance < -0.00001f) throw new InvalidDataException("Locomotion accumulation moved backwards.");
         distance = Math.Max(0, distance);
         while (_travelCursor < _travelPath.Length)

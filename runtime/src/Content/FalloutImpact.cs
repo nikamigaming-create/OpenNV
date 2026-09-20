@@ -41,8 +41,11 @@ internal sealed record FalloutImpact(FalloutFormKey Form, string? Model, float D
             Form("DNAM"), new[] { Form("SNAM"), Form("NAM1") }.Where(value => value.HasValue).Select(value => value!.Value).ToArray());
         if (result.Duration < 0 || result.Orientation > 2 || result.PlacementRadius < 0 || (result.Flags & ~1u) != 0)
             throw new NotSupportedException("Impact orientation, duration, placement or flags are unbound.");
-        return result with { Decal = (result.Flags & 1) != 0 || result.TextureSet is null ? null :
-            FalloutImpactDecal.Read(source, records.GetEffective(result.TextureSet.Value)) };
+        return result with
+        {
+            Decal = (result.Flags & 1) != 0 || result.TextureSet is null ? null :
+            FalloutImpactDecal.Read(source, records.GetEffective(result.TextureSet.Value))
+        };
     }
 
     internal static int MaterialIndex(uint havok)

@@ -29,7 +29,7 @@ internal sealed partial class RuntimeNativeActorCombat
         PrepareMovement();
         _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom); _actor.AddChild(_enemySounds);
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
-        var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2);
+        var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var statsData = stats.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
         var group = "h2h";
         if (_actor is RuntimeNativeNpc npc)
@@ -83,7 +83,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             if (statsData.Length != 17) throw new NotSupportedException("Creature attack data extent is unbound.");
             _naturalDamage = BinaryPrimitives.ReadInt16LittleEndian(statsData.Span[8..]);
-            var model = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 64);
+            var model = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 64, _state.Templates);
             var reach = model.ReadSubrecords().Single(field => field.Signature == "RNAM").Data.Span;
             if (reach.Length != 1) throw new InvalidDataException("Creature reach extent is invalid.");
             _attackRange = reach[0] * _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;

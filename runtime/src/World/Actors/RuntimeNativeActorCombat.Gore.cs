@@ -31,9 +31,15 @@ internal sealed partial class RuntimeNativeActorCombat
                 _actor.AddChild(_goreEffects);
             }
             _goreEffects.Impact(impact, pose.Origin, pose.Basis.Y.Normalized(), -pose.Basis.Y.Normalized(), decal: false, follow: Frame);
-            _lastSeverEffect = new { part = part.Type, impact = impact.Form.ToString(), impact.Model,
-                bone = part.GoreBone, sourceDecals = part.Sever.Decals,
-                boundary = "source-BPTD-impact;environment-spray-decals-and-debris-unbound" };
+            _lastSeverEffect = new
+            {
+                part = part.Type,
+                impact = impact.Form.ToString(),
+                impact.Model,
+                bone = part.GoreBone,
+                sourceDecals = part.Sever.Decals,
+                boundary = "source-BPTD-impact;environment-spray-decals-and-debris-unbound"
+            };
             _goreError = null;
         }
         catch (Exception error)

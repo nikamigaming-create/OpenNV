@@ -7,6 +7,18 @@ namespace OpenNV.Runtime.Presentation.OpenXR;
 internal sealed class NativeXrBodyHeading
 {
     private float? _yaw;
+
+    internal void Reset(Transform3D head)
+    {
+        var forward = -head.Basis.Z;
+        if (new Vector2(forward.X, forward.Z).LengthSquared() < .0001f)
+        {
+            _yaw = null;
+            return;
+        }
+        _yaw = MathF.Atan2(-forward.X, -forward.Z);
+    }
+
     internal Basis Advance(Transform3D head, bool moving, double seconds)
     {
         var forward = -head.Basis.Z;

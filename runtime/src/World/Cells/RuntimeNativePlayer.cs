@@ -25,7 +25,20 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         var contact = GetSlideCollision(index);
         var normal = contact.GetNormal();
-        return (object)new { body = (contact.GetCollider() as Node)?.GetPath().ToString(), normal = new[] { normal.X, normal.Y, normal.Z } };
+        var body = contact.GetCollider() as Node3D;
+        static float[] Point(Vector3 value) => [value.X, value.Y, value.Z];
+        return (object)new
+        {
+            body = body?.GetPath().ToString(),
+            normal = Point(normal),
+            position = Point(contact.GetPosition()),
+            depth = contact.GetDepth(),
+            colliderPosition = body is null ? null : Point(body.GlobalPosition),
+            colliderScale = body is null ? null : Point(body.GlobalBasis.Scale),
+            colliderType = body?.GetType().Name,
+            colliderShape = (contact.GetColliderShape() as Node)?.Name.ToString(),
+            rigidVelocity = body is RigidBody3D rigid ? Point(rigid.LinearVelocity) : null,
+        };
     }).ToArray();
     internal Func<Vector3, bool>? CanOccupyPosition { get; set; }
     internal Func<bool>? IsDefeated { get; set; }
@@ -162,6 +175,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _pitchRadians = 0.0f;
         if (_xr is null) _camera.Rotation = Vector3.Zero;
         Velocity = Vector3.Zero;
+        _xrBodyAlignmentPending = _xr is not null;
     }
 
     internal void RestoreTransform(
@@ -182,6 +196,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _pitchRadians = viewPitchRadians;
         if (_xr is null) _camera.Rotation = new Vector3(_pitchRadians, 0, 0);
         Velocity = Vector3.Zero;
+        _xrBodyAlignmentPending = _xr is not null;
     }
 
     public override void _Ready()
@@ -290,6 +305,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             horizontalMotion = Vector3.Zero;
         }
         Velocity = velocity;
+        var positionBeforeMotion = GlobalPosition;
         if (NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters))
         {
             ++StepCount;
@@ -298,8 +314,38 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             Velocity = new(velocity.X, 0, velocity.Z);
         }
         else MoveAndSlide();
+        // At a convex edge the solver can stop downward travel while reporting
+        // a side normal. Keep the constrained velocity instead of accumulating
+        // an unbounded fall that prevents horizontal input from escaping.
+        if (delta > 0 && Velocity.Y < 0 && GetSlideCollisionCount() > 0)
+        {
+            var actualVerticalSpeed = Math.Min(0, (GlobalPosition.Y - positionBeforeMotion.Y) / (float)delta);
+            if (actualVerticalSpeed > Velocity.Y + .01f)
+                Velocity = new(Velocity.X, actualVerticalSpeed, Velocity.Z);
+        }
+        PushContactProps(velocity, (float)delta);
         BlockingShape = IsOnWall() && GetSlideCollisionCount() > 0
             ? (GetSlideCollision(GetSlideCollisionCount() - 1).GetCollider() as Node)?.GetPath().ToString() : null;
+    }
+
+    private void PushContactProps(Vector3 desiredVelocity, float delta)
+    {
+        if (delta <= 0 || delta > .05f) return;
+        var pushed = new HashSet<ulong>();
+        for (var index = 0; index < GetSlideCollisionCount(); index++)
+        {
+            var contact = GetSlideCollision(index);
+            if (contact.GetCollider() is not RuntimeNifRigidBody { Freeze: false } body ||
+                !pushed.Add(body.GetInstanceId())) continue;
+            var normal = contact.GetNormal();
+            if (Math.Abs(normal.Y) > .75f) continue;
+            var closingSpeed = Math.Max(0, (desiredVelocity - body.LinearVelocity).Dot(-normal));
+            // CharacterBody movement resolves the player but supplies no prop
+            // impulse. Both presentation modes use this bounded contact force,
+            // while the source mass, friction and restitution govern the prop.
+            var impulse = Math.Min(body.Mass * closingSpeed, 120 * delta);
+            if (impulse > 0) body.ApplyImpulse(-normal * impulse, contact.GetPosition() - body.GlobalPosition);
+        }
     }
 
     private bool TryActivateLiveObject()

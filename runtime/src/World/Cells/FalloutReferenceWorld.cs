@@ -13,7 +13,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferenceInventorySnapshot? Inventory = null, bool Taken = false, bool DoorOpen = false, bool Unlocked = false,
     ulong? SoundRandomState = null, FalloutActorAnimationSnapshot? Animation = null, bool Unconscious = false,
     FalloutMapMarkerState? MapMarker = null, FalloutActorInjury? Injury = null, FalloutActorRagdollState? Ragdoll = null,
-    FalloutActorEngagement? Engagement = null)
+    FalloutActorEngagement? Engagement = null, FalloutActorTemplateSnapshot? Templates = null,
+    FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -33,6 +34,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 if ((name != "health" && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
+            snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             if (snapshot.Ragdoll is { } ragdoll)
             {
@@ -50,7 +52,8 @@ internal sealed class FalloutReferenceInstance
     internal FalloutFormKey Reference { get; }
     internal FalloutFormKey Cell { get; }
     internal FalloutFormKey Base { get; }
-    internal FalloutReferenceScriptDefinition? Script { get; }
+    internal FalloutReferenceScriptDefinition? Script { get; private set; }
+    internal FalloutActorTemplateSelection? Templates { get; set; }
     internal Dictionary<uint, double> Variables { get; }
     internal string? ScriptError { get; set; }
     internal bool Enabled { get; set; }
@@ -64,6 +67,10 @@ internal sealed class FalloutReferenceInstance
     internal bool DoorOpen { get; set; }
     internal bool Unlocked { get; set; }
     internal bool Unconscious { get; set; }
+    internal bool Restrained { get; set; }
+    internal bool PlayerTeammate { get; set; }
+    internal FalloutReferencePlacement? Placement { get; set; }
+    internal long PlacementRevision { get; set; }
     internal FalloutReferenceInventory? Inventory { get; set; }
     internal Dictionary<string, FalloutActorValue> ActorValues { get; } = [];
     internal FalloutReferenceEnableParent? EnableParent { get; }
@@ -103,12 +110,21 @@ internal sealed class FalloutReferenceInstance
         Variables[index] = value;
     }
 
+    internal void BindTemplateScript(FalloutReferenceScriptDefinition? script)
+    {
+        if (Script?.Record.FormKey == script?.Record.FormKey) return;
+        if (Variables.Values.Any(value => value != 0) || ScriptError is not null)
+            throw new InvalidDataException("Cannot replace an actor script after its execution has started.");
+        Script = script; Variables.Clear();
+        foreach (var index in script?.Locals.Values ?? []) Variables.Add(index, 0);
+    }
+
     internal FalloutReferenceSnapshot Capture() => new(Reference, Cell, Base, Script?.Record.FormKey,
         Script?.Sha256, new Dictionary<uint, double>(Variables), ScriptError, Enabled, EnableRequest, Opacity, NoFade,
         new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
         _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
-        CaptureEngagement?.Invoke() ?? Engagement);
+        CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -134,7 +150,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
     internal int ScriptDefinitionCount => _definitions.Count;
     internal IEnumerable<FalloutReferenceInstance> ResidentInstances => _residentReferences.Keys.Select(key => _instances[key]);
     internal bool IsResident(FalloutFormKey reference) => _residentReferences.ContainsKey(reference);
-    internal bool CanActivate(FalloutFormKey reference) => IsEnabled(reference) &&
+    internal bool CanActivate(FalloutFormKey reference) => IsEnabled(reference) && Get(reference).Templates?.Absent != true &&
         Get(reference) is { Destroyed: false, DeletePending: false, Deleted: false };
 
     internal double ReadVariable(FalloutQuestState quests, FalloutFormKey owner, uint index) =>
@@ -197,6 +213,35 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
         return instance;
     }
 
+    internal FalloutActorTemplateSelection InitializeActorTemplates(FalloutFormKey reference, int level,
+        FalloutGlobalState? globals = null)
+    {
+        var instance = Actor(reference);
+        if (instance.Templates is { } retained) return retained;
+        var selection = new FalloutActorTemplateSelection(level,
+            BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))), globals is null ? null : globals.Get);
+        selection.ResolveAll(records, instance.Base);
+        if (selection.Capture().Choices.Count != 0 &&
+            new[] { reference, instance.Cell }.Select(records.GetEffective).SelectMany(record => record.ReadSubrecords())
+                .Any(field => field.Signature == "XEZN" &&
+                    (field.Data.Length != 4 || System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) != 0)))
+            throw new NotSupportedException($"Actor {reference} requires its persistent encounter-zone level owner.");
+        instance.Templates = selection;
+        BindTemplateScript(instance);
+        return selection;
+    }
+
+    private void BindTemplateScript(FalloutReferenceInstance instance)
+    {
+        if (instance.Templates is null || instance.Templates.Absent) return;
+        var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(instance.Base), 512, instance.Templates);
+        var script = FalloutScriptLocals.AttachedScript(records, owner);
+        FalloutReferenceScriptDefinition? definition = null;
+        if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
+            _definitions.Add(script.FormKey, definition = new(script));
+        instance.BindTemplateScript(definition);
+    }
+
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -215,6 +260,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
             if (snapshot is null || validated._instances.ContainsKey(snapshot.Reference))
                 throw new InvalidDataException("Saved reference is absent or duplicated.");
             var instance = validated.Get(snapshot.Reference);
+            if (snapshot.Templates is { } templates)
+            {
+                instance.Templates = new(templates);
+                instance.Templates.ResolveAll(records, instance.Base);
+                validated.BindTemplateScript(instance);
+            }
             if (snapshot.Cell != instance.Cell || snapshot.Base != instance.Base || snapshot.Script != instance.Script?.Record.FormKey ||
                 snapshot.ScriptSha256 != instance.Script?.Sha256 || snapshot.Variables is null ||
                 !snapshot.Variables.Keys.Order().SequenceEqual(instance.Variables.Keys.Order()))
@@ -238,6 +289,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
             instance.Unlocked = snapshot.Unlocked;
+            if (snapshot.Placement is { } placement)
+            {
+                if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
+                instance.Placement = placement.Copy();
+            }
+            if (snapshot.Restrained || snapshot.PlayerTeammate) _ = validated.Actor(snapshot.Reference);
+            instance.Restrained = snapshot.Restrained;
+            instance.PlayerTeammate = snapshot.PlayerTeammate;
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.Animation is { } animation) instance.Animation.Restore(animation);
             if (snapshot.Unconscious) validated.SetUnconscious(snapshot.Reference, true);

@@ -13,6 +13,8 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     private readonly Dictionary<string, ImageTexture> _textures = new(StringComparer.OrdinalIgnoreCase);
     private FalloutFormKey? _weather;
     private FalloutPluginSubrecord[] _weatherFields = [];
+    private readonly double[] _cloudOffsets = new double[4];
+    private byte[] _cloudSpeeds = new byte[4];
 
     internal void Build(FalloutPluginStack records, FalloutSkyLightingState sky, float units)
     {
@@ -80,6 +82,10 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     public override void _Process(double delta)
     {
         if (GetViewport().GetCamera3D() is { } camera) GlobalPosition = camera.GlobalPosition;
+        for (var layer = 0; layer < _cloudOffsets.Length; layer++)
+            _cloudOffsets[layer] = (_cloudOffsets[layer] + delta * _cloudSpeeds[layer] / 2550.0) % 1.0;
+        foreach (var (_, material, layer) in _clouds)
+            material.SetShaderParameter("uv_offset_y", (float)_cloudOffsets[layer]);
     }
 
     internal void Sample(FalloutPluginStack records, FalloutWeatherLighting weather, FalloutWeatherTimeWeights weights, float multiplier)
@@ -88,6 +94,9 @@ internal partial class RuntimeNativeSkyLayers : Node3D
         {
             _weather = weather.Form;
             _weatherFields = records.GetEffective(weather.Form).ReadSubrecords().ToArray();
+            var speeds = _weatherFields.Single(field => field.Signature == "ONAM").Data;
+            if (speeds.Length != 4) throw new InvalidDataException("Weather cloud speeds require four source bytes.");
+            _cloudSpeeds = speeds.ToArray();
         }
         Vector3 Color(int kind) { var rgb = weather.Sample(weights, kind); return new(rgb[0], rgb[1], rgb[2]); }
         var upper = Color(0); var lower = Color(7); var horizon = Color(8); var stars = Color(6);

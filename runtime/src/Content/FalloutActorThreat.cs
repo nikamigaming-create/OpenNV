@@ -5,9 +5,9 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression, byte Confidence,
     byte Assistance, bool RadiusBehavior, int Radius)
 {
-    internal static FalloutActorThreat Read(FalloutPluginStack records, FalloutFormKey actor)
+    internal static FalloutActorThreat Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
-        var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 16);
+        var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor), 16, selection);
         var data = owner.ReadSubrecords().Single(field => field.Signature == "AIDT").Data;
         return Decode(owner.FormKey, data.Span);
     }
@@ -27,10 +27,11 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
     internal bool Initiates(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
         Confidence != 0 && (Aggression == 3 || Aggression == 2 && relation < 2 || Aggression == 1 && relation == 1);
 
-    internal static uint Relation(FalloutPluginStack records, FalloutFormKey actor, FalloutFormKey target)
+    internal static uint Relation(FalloutPluginStack records, FalloutFormKey actor, FalloutFormKey target,
+        FalloutActorTemplateSelection? selection = null, FalloutActorTemplateSelection? targetSelection = null)
     {
-        var from = FalloutAiPackages.ReadFactions(records, actor).Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToArray();
-        var to = FalloutAiPackages.ReadFactions(records, target).Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToHashSet();
+        var from = FalloutAiPackages.ReadFactions(records, actor, selection).Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToArray();
+        var to = FalloutAiPackages.ReadFactions(records, target, targetSelection).Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToHashSet();
         var reactions = new HashSet<uint>();
         if (from.Any(to.Contains)) reactions.Add(2);
         foreach (var faction in from)

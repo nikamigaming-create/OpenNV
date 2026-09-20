@@ -35,6 +35,18 @@ internal sealed class FalloutActorAnimationState
         ElapsedSeconds += delta; StartPending = false;
     }
 
+    internal void StartAmbientLoop(FalloutFormKey reference, double duration)
+    {
+        if (!double.IsFinite(duration) || duration <= 0) throw new InvalidDataException("Actor loop has invalid duration.");
+        if (!StartPending || ElapsedSeconds != 0) return;
+        // Independent source references enter an already-running ambient loop.
+        // Store the resulting clock normally so residency and cold Continue
+        // cannot reset the phase or replay events preceding the entry point.
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(reference.ToString()));
+        var fraction = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes) / 4294967296.0;
+        Advance(duration * fraction);
+    }
+
     internal FalloutActorAnimationSnapshot? Capture() => Resource.Length == 0 ? null : new(Resource, Sha256, ElapsedSeconds, StartPending);
     internal void Restore(FalloutActorAnimationSnapshot snapshot)
     {

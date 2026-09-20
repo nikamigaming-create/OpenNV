@@ -8,7 +8,7 @@ internal sealed record GameplayVitals(
     int MaximumActionPoints,
     int ExperiencePoints,
     int NextLevelExperiencePoints, float HitPointFraction = 0,
-    IReadOnlyDictionary<byte, float>? LimbDamage = null)
+    IReadOnlyDictionary<byte, float>? LimbDamage = null, float RadiationRads = 0)
 {
     internal float ExactHitPoints => HitPoints - HitPointFraction;
     internal GameplayVitals Damage(float amount)
@@ -53,6 +53,7 @@ internal sealed record GameplayVitals(
             ActionPoints < 0 || ActionPoints > MaximumActionPoints ||
             ExperiencePoints < 0 || NextLevelExperiencePoints <= ExperiencePoints ||
             !float.IsFinite(HitPointFraction) || HitPointFraction is < 0 or >= 1 || ExactHitPoints < 0 ||
+            !float.IsFinite(RadiationRads) || RadiationRads < 0 ||
             LimbDamage is { } limbs && limbs.Any(pair => pair.Key > 14 || !float.IsFinite(pair.Value) || pair.Value < 0))
             throw new InvalidOperationException("Saved gameplay vitals are invalid.");
     }

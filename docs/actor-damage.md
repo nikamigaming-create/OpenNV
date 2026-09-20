@@ -25,8 +25,10 @@ is stored in hundredths. The four-byte layout has no threshold. Retained item
 condition applies `fArmorRatingBase + condition * (fArmorRatingMax - base)`.
 Constant relevant enchantments and actor abilities contribute separately.
 Definitions and modifiers are cached by their winning identities on the world
-owner; condition remains live. Mixed condition variants and relevant conditional
-effects remain explicit failures. See the [ARMO definition](https://tes5edit.github.io/fopdoc/FalloutNV/Records/ARMO.html).
+owner; condition remains live. Mixed stacks use the same first usable condition
+variant as equipment use/wear; retail selected-instance correspondence remains
+unverified. Unsupported relevant conditional effects still fail explicitly.
+See the [ARMO definition](https://tes5edit.github.io/fopdoc/FalloutNV/Records/ARMO.html).
 Armor wear, critical/sneak modifiers and complete resistance ordering still
 need independent retail acceptance.
 
@@ -52,11 +54,32 @@ transforms. Injury and cut identities must agree.
 The explicit development command `physics.sever` operates on a resident dead
 source actor. It records `ordinaryInput: false` in telemetry. It exercises the
 shared detachment owner; it does not select a limb through weapon critical or
-random dismemberment rules. Automatic selection, exploded parts, gore replacement
-models and sever-triggered blood/decal effects remain unbound. The current
-Godot joint envelope is also not Havok solver parity.
+random dismemberment rules. The current candidate also routes lethal weapon
+On Hit behavior through source severability and the saved weapon random owner.
+This automatic selection has no ordinary gameplay acceptance yet. Exploded parts
+remain unbound. Source blood/decal owners have separate presentation checks.
+The Godot joint envelope is not Havok solver parity.
 
 ## Selected verification
+
+After selecting Godot's Jolt backend, the September 20 gecko combat/floor and
+severed-body checks pass. These bounded fixtures do not establish general
+stability or complete combat.
+
+Authored dead actors can carry XRGD: ordered 28-byte entries containing a byte
+part id, three unused bytes, a local position and local Euler angles. The
+[xEdit format declaration](https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.6/Core/wbDefinitionsCommon.pas)
+defines the field layout. Owned skeletons establish traversal order and repeated
+part ids; the [NIF filter declaration](https://github.com/niftools/nifxml/blob/develop/nif.xml)
+defines the five-bit Havok part field. Positions are NiNode game units, not
+Havok metres or body-world transforms. Source binding checks require complete
+ordered agreement before applying a pose. Persistent physical transforms take
+precedence on reload. XRGB root rotation remains unbound.
+
+The owned damaged-robot fixture checks initial pose, native falling/contact and
+cold persistence. Actual flat and Elliott Tate simulator views now show ED-E
+on Nash's counter and the repair menu opens through ordinary input. This is
+inspection/activation evidence, not completed repair, recruitment or following.
 
 Synthetic contracts cover NPC manual/autocalculated health, fractional
 contributions, zero-health corpses, armor layouts, per-reference damage,

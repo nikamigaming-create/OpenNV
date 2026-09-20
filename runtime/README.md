@@ -16,5 +16,8 @@ Run the full source gate:
 .\scripts\Test-GodotRuntime.ps1 -Godot 'C:\Path\To\Godot_console.exe'
 ```
 
-Ordinary runtime launch is owned by the desktop launcher and requires a live
-installation root, campaign identity, and save path.
+The Godot runtime is the product launcher and the game. Ordinary startup uses
+`--launcher` with no selected world; choosing a profile then transitions into
+the selected route through the same `RuntimeCoordinator` and process. Direct
+diagnostic launch requires a live installation root, campaign identity, and
+save path.

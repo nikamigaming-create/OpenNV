@@ -235,6 +235,7 @@ finally
 
 ConversationContracts.Run();
 ActorSourceContracts.Run();
+AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 PlayerSkillContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);

@@ -2013,7 +2013,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 result.SetMeta("opennv_hair_lighting_parity", "unverified");
             }
             ApplyAlpha(result, alpha);
-            ApplyStencil(result, stencil, environment);
+            ApplyStencil(result, stencil);
             var meshData = _source.ReadMeshData(geometry.Data);
             Texture2D? height = null;
             if (parallax)
@@ -2107,7 +2107,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             ApplyAlpha(result, alpha);
             if ((shader.ShaderFlags2 & ShaderFlagZBufferWrite) == 0)
                 result.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
-            ApplyStencil(result, stencil, environmentPass: false);
+            ApplyStencil(result, stencil);
             var effect = NativeNifEffectMaterial.Build(shader, material, alpha,
                 result.AlbedoTexture,
                 result.CullMode == BaseMaterial3D.CullModeEnum.Disabled);
@@ -2209,29 +2209,29 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 switch (controller)
                 {
                     case FalloutNifEmittanceController emittance:
-                    {
-                        var sampler = new FalloutNifFloatAnimation(_source, emittance.Interpolator);
-                        sample = time => multiple = sampler.Sample(time);
-                        break;
-                    }
-                    case FalloutNifAlphaController opacity:
-                    {
-                        var sampler = new FalloutNifFloatAnimation(_source, opacity.Interpolator);
-                        sample = time => alpha = sampler.Sample(time);
-                        break;
-                    }
-                    case FalloutNifMaterialColorController color:
-                    {
-                        var sampler = new FalloutNifPoint3Animation(_source, color.Interpolator);
-                        sample = time =>
                         {
-                            var value = sampler.Sample(time);
-                            if (color.TargetColor == MaterialColorSelfIllumination) emissive = new(value.X, value.Y, value.Z);
-                            else if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
-                                throw new NotSupportedException("Source constant specular channel differs from the material property.");
-                        };
-                        break;
-                    }
+                            var sampler = new FalloutNifFloatAnimation(_source, emittance.Interpolator);
+                            sample = time => multiple = sampler.Sample(time);
+                            break;
+                        }
+                    case FalloutNifAlphaController opacity:
+                        {
+                            var sampler = new FalloutNifFloatAnimation(_source, opacity.Interpolator);
+                            sample = time => alpha = sampler.Sample(time);
+                            break;
+                        }
+                    case FalloutNifMaterialColorController color:
+                        {
+                            var sampler = new FalloutNifPoint3Animation(_source, color.Interpolator);
+                            sample = time =>
+                            {
+                                var value = sampler.Sample(time);
+                                if (color.TargetColor == MaterialColorSelfIllumination) emissive = new(value.X, value.Y, value.Z);
+                                else if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
+                                    throw new NotSupportedException("Source constant specular channel differs from the material property.");
+                            };
+                            break;
+                        }
                     default: throw new NotSupportedException("Direct material channel is unsupported.");
                 }
                 void Apply(float time)
@@ -2274,7 +2274,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 FalloutNifControllerClock.Validate(clock, requireActive: false);
                 _directControllerSequences.Add(new RuntimeNifControllerSequence(
                     $"DirectMaterial{controller.Block.Index}", (uint)(clock.Flags >> 1) & 3,
-                    clock.Frequency, clock.StartTime, clock.StopTime, [new RuntimeNifControllerChannel(Apply)]) { DirectClock = clock });
+                    clock.Frequency, clock.StartTime, clock.StopTime, [new RuntimeNifControllerChannel(Apply)])
+                { DirectClock = clock });
             }
         }
 
@@ -2298,8 +2299,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
         private static void ApplyStencil(
             StandardMaterial3D material,
-            FalloutNifStencilProperty? stencil,
-            bool environmentPass)
+            FalloutNifStencilProperty? stencil)
         {
             if (stencil is null)
                 return;
@@ -2309,9 +2309,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException(
                     $"NIF stencil property {stencil.Block.Index} uses unsupported stencil semantics: " +
                     $"flags=0x{stencil.Flags:x4} reference={stencil.Reference} mask=0x{stencil.Mask:x8}.");
-            if (environmentPass)
-                throw new NotSupportedException(
-                    $"NIF stencil property {stencil.Block.Index} requires a double-sided environment pass.");
+            // The SLS material combines diffuse and environment sampling in
+            // one shader and inherits this cull mode for both contributions.
             material.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
         }
 

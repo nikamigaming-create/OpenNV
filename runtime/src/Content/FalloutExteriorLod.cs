@@ -48,7 +48,6 @@ internal sealed class FalloutExteriorLod
         }
         Blocks = terrain.Select(pair => new FalloutLodBlock(pair.Key.Level, pair.Key.X, pair.Key.Y, pair.Value,
             objects.GetValueOrDefault(pair.Key))).OrderByDescending(block => block.Level).ThenBy(block => block.X).ThenBy(block => block.Y).ToArray();
-        if (Blocks.Count == 0) throw new NotSupportedException($"World {worldName} has no owned terrain LOD blocks.");
         _roots = Blocks.Where(block => !Blocks.Any(parent => parent.Level > block.Level && parent.Contains(block))).ToArray();
         foreach (var parent in Blocks)
         {

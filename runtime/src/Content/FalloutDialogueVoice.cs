@@ -4,12 +4,12 @@ using System.Globalization;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutDialogueSpeaker(FalloutFormKey Actor, FalloutFormKey TraitsOwner,
-    FalloutFormKey VoiceType, string VoiceName, FalloutFormKey? Race, bool Female)
+    FalloutFormKey VoiceType, string VoiceName, FalloutFormKey? Race, bool Female, FalloutActorTemplateSelection? Templates = null)
 {
-    internal static FalloutDialogueSpeaker Read(FalloutPluginStack records, FalloutFormKey actor)
+    internal static FalloutDialogueSpeaker Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
         var record = records.GetEffective(actor);
-        var traits = FalloutAiPackages.TemplateOwner(records, record, 1);
+        var traits = FalloutActorTemplateOwner.Resolve(records, record, 1, selection);
         var voice = records.GetEffective(FalloutDialogueTopic.RequiredForm(traits, "VTCK"));
         if (voice.Signature != "VTYP") throw new InvalidDataException($"Actor {actor} voice is not VTYP.");
         var name = FalloutDialogueTopic.Text(voice.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span);
@@ -18,15 +18,16 @@ internal sealed record FalloutDialogueSpeaker(FalloutFormKey Actor, FalloutFormK
         var acbs = traits.ReadSubrecords().Single(field => field.Signature == "ACBS").Data;
         return new(actor, traits.FormKey, voice.FormKey, name,
             record.Signature == "NPC_" ? FalloutDialogueTopic.RequiredForm(traits, "RNAM") : null,
-            record.Signature == "NPC_" && (BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 1) != 0);
+            record.Signature == "NPC_" && (BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 1) != 0, selection);
     }
 
-    internal static bool AllowsPlayerDialogue(FalloutPluginStack records, FalloutFormKey actor)
+    internal static bool AllowsPlayerDialogue(FalloutPluginStack records, FalloutFormKey actor,
+        FalloutActorTemplateSelection? selection = null)
     {
         var record = records.GetEffective(actor);
         if (record.Signature == "NPC_") return true;
         if (record.Signature != "CREA") return false;
-        var owner = FalloutAiPackages.TemplateOwner(records, record, 128);
+        var owner = FalloutActorTemplateOwner.Resolve(records, record, 128, selection);
         var data = owner.ReadSubrecords().Single(field => field.Signature == "ACBS").Data;
         return (BinaryPrimitives.ReadUInt32LittleEndian(data.Span) & (1u << 21)) != 0;
     }

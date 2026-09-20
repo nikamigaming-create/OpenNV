@@ -80,6 +80,7 @@ internal static class NativeNifLodMaterial
             varying float source_fog_factor;
             {{NativeNifPointLighting.ShaderSource}}
             {{RetailVertexFog.ShaderSource}}
+            {{NativeExteriorDetailBlend.ShaderSource}}
             void vertex() {
                 vec4 world = MODEL_MATRIX * vec4(VERTEX, 1.0);
                 if (landscape) {
@@ -94,8 +95,13 @@ internal static class NativeNifLodMaterial
             void fragment() {
                 vec2 detail_uv = (source_world_xz - detail_bounds.xy) / max(detail_bounds.zw - detail_bounds.xy, vec2(0.001));
                 if (detail_mask_enabled && all(greaterThanEqual(detail_uv, vec2(0.0))) && all(lessThan(detail_uv, vec2(1.0))) &&
-                    texture(detail_mask, detail_uv).r > 0.5) discard;
-                vec3 base = texture(base_map, UV).rgb * COLOR.rgb;
+                    texture(detail_mask, detail_uv).r > 0.5 &&
+                    opennv_detail_coverage(source_world_xz) > opennv_detail_threshold(FRAGCOORD.xy)) discard;
+                vec4 atlas = texture(base_map, UV);
+                // The LOD building pass uses the atlas's transparent holes
+                // even without a NiAlphaProperty (for example tree cards).
+                if (!landscape && atlas.a < (1.0 / 255.0)) discard;
+                vec3 base = atlas.rgb * COLOR.rgb;
                 if (use_normal_map) {
                     vec3 decoded = normalize(texture(normal_map, UV).rgb * 2.0 - 1.0);
                     {{(landscapePass ? "NORMAL = normalize((VIEW_MATRIX * vec4(decoded.x, decoded.z, -decoded.y, 0.0)).xyz);" :

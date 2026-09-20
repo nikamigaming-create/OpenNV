@@ -4,9 +4,10 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
-    internal static IReadOnlyDictionary<FalloutFormKey, sbyte> ReadFactions(FalloutPluginStack stack, FalloutFormKey npc)
+    internal static IReadOnlyDictionary<FalloutFormKey, sbyte> ReadFactions(FalloutPluginStack stack, FalloutFormKey npc,
+        FalloutActorTemplateSelection? selection = null)
     {
-        var owner = TemplateOwner(stack, stack.GetEffective(npc), 4);
+        var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(npc), 4, selection);
         var result = new Dictionary<FalloutFormKey, sbyte>();
         foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "SNAM"))
         {
@@ -24,9 +25,9 @@ internal static class FalloutAiPackages
         => FalloutActorTemplateOwner.Resolve(stack, record, flag);
 
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
-        Func<FalloutCondition, float> evaluate)
+        Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null)
     {
-        var owner = TemplateOwner(stack, stack.GetEffective(npc), 32);
+        var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(npc), 32, selection);
         foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
         {
             if (field.Data.Length != 4) throw new InvalidDataException("NPC package identity has an invalid extent.");

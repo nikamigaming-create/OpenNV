@@ -70,6 +70,24 @@ internal sealed class NativeXrHandContact : IDisposable
         _weaponEnabled = enabled;
     }
 
+    internal void ResetTracking()
+    {
+        _pose = null;
+        _target = Transform3D.Identity;
+        _previousTarget = null;
+        _pushBody = null;
+        _pushPoint = Vector3.Zero;
+        _pushNormal = Vector3.Zero;
+        _pushVelocity = Vector3.Zero;
+        Valid = false;
+        Blocked = false;
+        Collider = 0;
+        Normal = Vector3.Zero;
+        ErrorMeters = 0;
+        Queries = 0;
+        PushImpulse = 0;
+    }
+
     internal Transform3D Resolve(Transform3D target, bool tracked, bool resident, double delta = 0)
     {
         Blocked = false; Collider = 0; Normal = Vector3.Zero; Queries = 0;

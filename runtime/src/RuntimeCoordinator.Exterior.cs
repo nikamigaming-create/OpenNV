@@ -29,6 +29,9 @@ public partial class RuntimeCoordinator
     private (int X, int Y)? _nativeGridTarget;
     private string? _nativeGridError;
     private readonly HashSet<(int X, int Y)> _nativeWalkableGrid = [];
+    private readonly Dictionary<FalloutFormKey, ulong> _nativeLandLastUse = [];
+    private readonly Queue<HashSet<string>> _nativeRecentModelSets = [];
+    private ulong _nativeGridGeneration;
     private bool NativeCollisionResident(Vector3 position)
     {
         if (_nativeActiveCell?.Cell.Worldspace is null) return true;
@@ -44,6 +47,8 @@ public partial class RuntimeCoordinator
         reading = _nativeGridRead is not null,
         uploadsRemaining = _nativeGridUploads?.Count ?? 0,
         residentCells = _nativeWalkableGrid.Count,
+        warmReferences = _nativeReferencePresentation?.WarmNodeCount ?? 0,
+        terrainCacheCells = _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Count() ?? 0,
         target = _nativeGridTarget is { } target ? new[] { target.X, target.Y } : null,
         preparedAhead = _nativeGridUploads?.Count == 0 && _nativeGridPending is not null,
         lastUploadMilliseconds = _nativeGridUploadMilliseconds,
@@ -60,6 +65,7 @@ public partial class RuntimeCoordinator
             foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
             _nativeGridStaged.Clear(); _nativeGridModels.Clear(); _nativeGridUploads = null; _nativeGridPending = null;
             _nativeGridRead = null; _nativeStreamRoot = null; _nativeGridFailed = null; _nativeGridTarget = null;
+            _nativeLandLastUse.Clear(); _nativeRecentModelSets.Clear();
         }
         if (_nativePlayer is not { } player || _nativeActiveCell?.Cell.Worldspace is not { } world ||
             _nativeDoorLoading || GetTree().Paused) return;
@@ -151,7 +157,7 @@ public partial class RuntimeCoordinator
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
     {
-        var grid = prepared.Grid;
+        var grid = prepared.Grid with { Scene = _nativeReferences!.ComposeResidency(prepared.Grid.Scene, prepared.Grid.Cells) };
         var root = _nativeCurrentCellRoot!;
         _nativeGridPending = grid; _nativeGridUploads = new();
         var oldLand = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Select(land => land.Source.ActiveCell).ToHashSet();
@@ -164,7 +170,8 @@ public partial class RuntimeCoordinator
             }
             ));
         var previous = _nativeActiveCell!.References.Select(reference => reference.FormKey).ToHashSet();
-        foreach (var reference in grid.Scene.References.Where(reference => !previous.Contains(reference.FormKey)))
+        foreach (var reference in grid.Scene.References.Where(reference => !previous.Contains(reference.FormKey) &&
+            _nativeReferencePresentation?.HasPrepared(reference.FormKey) != true))
             _nativeGridUploads.Enqueue((reference.FormKey.ToString(), () =>
             {
                 var before = root.GetChildCount();
@@ -197,6 +204,7 @@ public partial class RuntimeCoordinator
         var root = _nativeCurrentCellRoot!; var grid = _nativeGridPending!;
         var previous = _nativeActiveCell!.Cell.FormKey;
         var retained = grid.Cells.Select(cell => cell.FormKey).ToHashSet();
+        ++_nativeGridGeneration;
         var sky = new FalloutSkyLightingState(_nativePluginStack!, _nativeSkyLighting!.DaytimeExtension);
         sky.Restore(_nativeSkyLighting.Capture());
         var position = _nativePlayer!.GlobalPosition / _configuration.World.GameUnitsToMeters;
@@ -205,12 +213,25 @@ public partial class RuntimeCoordinator
         _nativeReferences.UnloadCell(previous);
         _nativeActiveCell = grid.Scene;
         _nativeSkyLighting.Restore(sky.Capture());
-        _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference));
+        var center = grid.Scene.Cell.Coordinates!.Value;
+        _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference),
+            reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
+                Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
         foreach (var (key, model) in _nativeGridModels) _nativeReferencePresentation.Register(key, model);
         foreach (var land in root.GetChildren().OfType<RuntimeNativeLandscapeTransport>())
         {
-            if (retained.Contains(land.Source.ActiveCell)) GamebryoReferenceEnableRuntime.Apply(land, true);
-            else { GamebryoReferenceEnableRuntime.Apply(land, false); land.QueueFree(); }
+            var active = retained.Contains(land.Source.ActiveCell);
+            GamebryoReferenceEnableRuntime.Apply(land, active);
+            if (active) _nativeLandLastUse[land.Source.ActiveCell] = _nativeGridGeneration;
+        }
+        // Keep a bounded inactive terrain fringe for boundary reversals. It has
+        // no collision or gameplay residency until the normal commit enables it.
+        var terrain = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().ToArray();
+        foreach (var land in terrain.Where(land => !retained.Contains(land.Source.ActiveCell))
+            .OrderBy(land => _nativeLandLastUse.GetValueOrDefault(land.Source.ActiveCell))
+            .Take(Math.Max(0, terrain.Length - Math.Max(96, retained.Count * 2))))
+        {
+            _nativeLandLastUse.Remove(land.Source.ActiveCell); land.QueueFree();
         }
         _nativeReferenceEvents!.SetResidency(grid.Scene, root);
         _parityObservations.ReplaceScope("world/active-cell", grid.Scene.References.Select(reference =>
@@ -237,7 +258,10 @@ public partial class RuntimeCoordinator
         _nativeGridFailed = null; _nativeGridTarget = null;
         var models = grid.Scene.References.Select(reference => grid.Scene.BaseObjects[reference.Base])
             .Where(value => value.ModelPath is not null).Select(value => value.ModelPath!).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in _nativeNifPrototypes.Keys.Where(path => !models.Contains(path)).ToArray())
+        _nativeRecentModelSets.Enqueue(models);
+        while (_nativeRecentModelSets.Count > 3) _nativeRecentModelSets.Dequeue();
+        var warmModels = _nativeRecentModelSets.SelectMany(set => set).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in _nativeNifPrototypes.Keys.Where(path => !warmModels.Contains(path)).ToArray())
         {
             _nativeNifPrototypes[path].Scene.Root.Free(); _nativeNifPrototypes.Remove(path);
         }
@@ -264,6 +288,7 @@ public partial class RuntimeCoordinator
         _nativeExteriorGrid ??= new(_nativePluginStack!);
         var settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!);
         var diameter = checked((int)settings.Unsigned("General", "uGridsToLoad"));
+        diameter = Math.Max(diameter, _configuration.World.MinimumExteriorGridDiameter);
         return _nativeExteriorGrid.Resolve(world, _nativeExteriorGrid.PersistentCell(world),
             position[0], position[1], diameter);
     }

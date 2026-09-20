@@ -46,6 +46,8 @@ public partial class NativeActorSeverAudit : Node3D
                 var hit = actor.Combat.Hit(contact, new(health * 20 + 1000, 1, 100, 1), records.RuntimeFormKey(0x14), 1, globals);
                 if (!hit.Dead) throw new InvalidDataException("Controlled source hit failed to kill its target.");
                 actor.Combat.SeverLimb(part.Type);
+                if (JsonSerializer.SerializeToElement(actor.Combat.Observation).GetProperty("goreError").ValueKind != JsonValueKind.Null)
+                    throw new InvalidDataException("Severed limb lost its source blood effect: " + JsonSerializer.Serialize(actor.Combat.Observation));
                 CheckSkin(actor.Root, part);
                 await Frames(180);
                 var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot>(JsonSerializer.Serialize(instance.Get(key).Capture()))!;

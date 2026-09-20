@@ -447,6 +447,8 @@ public partial class RuntimeCoordinator
                 activeScene = grid.Scene;
             }
         }
+        activeScene = _nativeReferences!.ComposeResidency(activeScene, grid?.Cells);
+        if (grid is not null) grid = grid with { Scene = activeScene };
         _nativeSkyLighting?.EnterCell(activeScene.Cell, _nativeGlobals, position);
         var root = sourceSide && _nativePrewarmedInitialCellRoot is not null
             ? _nativePrewarmedInitialCellRoot
@@ -487,6 +489,8 @@ public partial class RuntimeCoordinator
     {
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
         var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals, _nativeReferences);
+        scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
+            throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
         if (restore is not null) scripts.Scripts.Restore(restore);
         if (_nativeQuestScripts is not null)
         {
@@ -636,12 +640,19 @@ public partial class RuntimeCoordinator
         {
             try
             {
+                var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
+                    _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
+                if (selection.Absent)
+                {
+                    Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "source-leveled-none"));
+                    return;
+                }
                 var equippedArmor = _nativeReferences!.EquippedArmor(reference.FormKey,
                     _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
                 var actor = RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
                     _configuration.World.GameUnitsToMeters, (appearance, part, nif, geometry) =>
                         NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
-                            NativeAmbient(cell.Cell)), equippedArmor);
+                            NativeAmbient(cell.Cell)), equippedArmor, selection);
                 actor.Transform = ReferenceTransform(reference);
                 try { actor.ConfigureContactShapes(_configuration.Player.CollisionLayer); }
                 catch (Exception error) when (error is InvalidDataException or NotSupportedException)
@@ -681,6 +692,13 @@ public partial class RuntimeCoordinator
         {
             try
             {
+                var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
+                    _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
+                if (selection.Absent)
+                {
+                    Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "source-leveled-none"));
+                    return;
+                }
                 var actor = RuntimeNativeCreature.Create(_nativePluginStack!, source, reference,
                     _nativeReferences!.Get(reference.FormKey), _configuration.World.GameUnitsToMeters);
                 actor.Transform = ReferenceTransform(reference);
@@ -734,6 +752,8 @@ public partial class RuntimeCoordinator
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);
         instance.SetMeta("opennv_source_form", baseObject.FormKey.ToString());
         root.AddChild(instance);
+        if (cell.Cell.Worldspace is not null && baseObject.Signature is "STAT" or "SCOL" or "TREE")
+            NativeExteriorDetailBlend.Bind(instance);
         AddNativeReferenceEmittance(instance, reference);
         var controllers = instance.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
         if (controllers.Any(controller => controller.HasTextKeys))
@@ -851,6 +871,8 @@ public partial class RuntimeCoordinator
         var previousSky = sky.Capture();
         var grid = transition.DestinationScene.Cell.Worldspace is { } world ? ResolveExterior(world, entry.Position) : null;
         var targetScene = grid?.Scene ?? transition.DestinationScene;
+        targetScene = _nativeReferences!.ComposeResidency(targetScene, grid?.Cells);
+        if (grid is not null) grid = grid with { Scene = targetScene };
         Node3D? targetRoot = null;
         try
         {

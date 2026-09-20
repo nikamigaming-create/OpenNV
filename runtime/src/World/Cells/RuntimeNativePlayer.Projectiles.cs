@@ -193,7 +193,7 @@ internal partial class RuntimeNativePlayer
             try
             {
                 actorHit = combat.Hit(collider, damage, _presentationRecords!.RuntimeFormKey(0x14),
-                    _combatLevel!(), _combatGlobals!);
+                    _combatLevel!(), _combatGlobals!, shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
                 GD.Print($"OPENNV_WEAPON_PROJECTILE_ACTOR_HIT projectile={shot.Projectile.Form} reference={actorHit.Reference} part={actorHit.Part} damage={actorHit.HealthDamage:R}");
             }
             catch (Exception error)
@@ -220,7 +220,8 @@ internal partial class RuntimeNativePlayer
         _lastExplosion = RuntimeNativeExplosionCombat.Detonate(this, this, _presentationRecords!, explosion,
             blastDamage, point, CollisionMask | CollisionLayer, _configuration.World.GameUnitsToMeters,
             _presentationRecords!.RuntimeFormKey(0x14), _combatLevel!(), _combatGlobals!, this,
-            _damageSelf ?? throw new InvalidOperationException("Player self-damage owner is absent."));
+            _damageSelf ?? throw new InvalidOperationException("Player self-damage owner is absent."),
+            shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
         GD.Print($"OPENNV_WEAPON_EXPLOSION weapon={shot.Weapon} explosion={explosion.Form} result={System.Text.Json.JsonSerializer.Serialize(_lastExplosion)}");
     }
 
@@ -298,7 +299,8 @@ internal partial class RuntimeNativePlayer
             {
                 actorHit = combat.Hit(collider, resolvedDamage, attacker,
                     level ?? throw new InvalidOperationException("Projectile impact has no attacker level."),
-                    globals ?? throw new InvalidOperationException("Projectile impact has no global state."));
+                    globals ?? throw new InvalidOperationException("Projectile impact has no global state."),
+                    shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
                 trace.ActorHit = actorHit;
                 GD.Print($"OPENNV_WEAPON_PROJECTILE_ACTOR_HIT projectile={shot.Projectile.Form} reference={actorHit.Reference} part={actorHit.Part} damage={actorHit.HealthDamage:R} delayed={trace.DamageDelaySeconds:R}");
             }

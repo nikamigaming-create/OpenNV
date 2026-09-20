@@ -77,7 +77,8 @@ internal partial class RuntimeNativePlayer
                 var baseDamage = BinaryPrimitives.ReadInt16LittleEndian(itemData[12..]);
                 var damage = (_damage ?? throw new InvalidOperationException("Player damage owner is absent."))
                     .Resolve(weapon.Form, baseDamage);
-                hit = combat.Hit(collider, damage, _presentationRecords.RuntimeFormKey(0x14), _combatLevel!(), _combatGlobals!);
+                hit = combat.Hit(collider, damage, _presentationRecords.RuntimeFormKey(0x14),
+                    _combatLevel!(), _combatGlobals!, weapon.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
             }
         }
         catch (Exception error)

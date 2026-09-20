@@ -303,12 +303,20 @@ internal sealed partial class RuntimeLiveHarness : Node
     private void PublishState()
     {
         try { WriteState(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or JsonException)
         {
             // A diagnostic reader can deny Windows delete-sharing during the
             // atomic replacement. Keep ordinary input/lease expiry running and
             // report every failed publication in the next successful snapshot.
             ReportPublicationFailure(error);
+            // Publish a separate failure marker even when the gameplay object
+            // itself cannot be serialized. A stale last-good frame is not proof.
+            try
+            {
+                AtomicWrite(Path.Combine(_directory, "state-error.json"), JsonSerializer.Serialize(new
+                { drawCount = Engine.GetFramesDrawn(), error = error.Message, failures = _statePublicationFailures }, Json));
+            }
+            catch (IOException) { }
         }
     }
 
@@ -391,6 +399,8 @@ internal sealed partial class RuntimeLiveHarness : Node
         var phase = Stopwatch.GetTimestamp();
         var json = JsonSerializer.Serialize(snapshot, Json);
         _lastSerializeMilliseconds = Stopwatch.GetElapsedTime(phase).TotalMilliseconds;
+        var errorPath = Path.Combine(_directory, "state-error.json");
+        if (File.Exists(errorPath)) File.Delete(errorPath);
         var path = Path.Combine(_directory, "live-state.json");
         // Freeze all engine/gameplay reads and serialization on their owner
         // thread. Only immutable text and file IO cross to this single writer.

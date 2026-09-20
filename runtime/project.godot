@@ -18,12 +18,22 @@ config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 project/assembly_name="OpenNV"
 
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
 [rendering]
 
 limits/global_shader_variables/buffer_size=1048576
 
+[shader_globals]
+
+opennv_detail_region={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+
 [xr]
 
 openxr/startup_alert=false
-openxr/default_action_map="res://openxr_action_map.tres"
 shaders/enabled=true

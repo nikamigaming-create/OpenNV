@@ -12,13 +12,15 @@ internal sealed record FalloutRecipeCategory(FalloutFormKey Form, string EditorI
         var editor = fields.Single(field => field.Signature == "EDID").Data;
         var name = fields.SingleOrDefault(field => field.Signature == "FULL").Data;
         var data = fields.Single(field => field.Signature == "DATA").Data;
-        if (data.Length != 1 || data.Span[0] > 1)
+        if (data.Length != 1)
             throw new InvalidDataException($"Recipe category {form} has an invalid subcategory flag.");
         var editorId = FalloutDialogueTopic.Text(editor.Span);
         var displayName = name.IsEmpty ? editorId : FalloutDialogueTopic.Text(name.Span);
         if (string.IsNullOrWhiteSpace(editorId) || string.IsNullOrWhiteSpace(displayName))
             throw new InvalidDataException($"Recipe category {form} has no name.");
-        return new(form, editorId, displayName, data.Span[0] != 0);
+        // DATA is a bit field. Winning retail RCCTs retain other bits; only
+        // bit zero selects subcategory membership (e.g. 0xfe is a category).
+        return new(form, editorId, displayName, (data.Span[0] & 1) != 0);
     }
 }
 

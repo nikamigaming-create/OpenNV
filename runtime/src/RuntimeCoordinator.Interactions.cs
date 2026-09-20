@@ -98,7 +98,7 @@ public partial class RuntimeCoordinator
             "CONT" => "sSearch",
             "FURN" => "sTargetTypeSit",
             "NPC_" or "CREA" when _nativeReferences!.IsDead(reference.FormKey) => "sSearch",
-            "NPC_" or "CREA" when FalloutDialogueSpeaker.AllowsPlayerDialogue(_nativePluginStack, reference.Base) => "sTargetTypeTalk",
+            "NPC_" or "CREA" when FalloutDialogueSpeaker.AllowsPlayerDialogue(_nativePluginStack, reference.Base, _nativeReferences!.Get(reference.FormKey).Templates) => "sTargetTypeTalk",
             _ when FalloutReferenceWorld.IsInventoryItem(source.Signature) => "sTargetTypeTake",
             _ => "sTargetTypeActivate",
         };

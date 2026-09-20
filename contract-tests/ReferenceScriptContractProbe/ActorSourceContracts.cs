@@ -19,16 +19,25 @@ internal static class ActorSourceContracts
                 Creature(0x802, 66, 0x802, "creatures/test/skeleton.nif", "body.nif", 1),
                 Creature(0x803, 0, 0, "creatures/test/skeleton.nif", "../escape.nif", 1),
                 Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1),
+                Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
+                Creature(0x806, 66, 0x821, "creatures/local/skeleton.nif", "local.nif", 1),
+                ActorList(0x820, 0, (1, 0x800), (1, 0x804), (10, 0x804)),
+                ActorList(0x821, 100, (1, 0x800)),
                 Record("MISC", 0x840, Field("EDID", Text("CreatureLoot")), Field("DATA", new byte[8])),
+                Cell(0x881, Record("REFR", 0x908, Field("NAME", BitConverter.GetBytes(0x844u)),
+                    Field("DATA", new float[] { 10, 20, 30, 0, 0, 1 }.SelectMany(BitConverter.GetBytes).ToArray()))),
                 Record("STAT", 0x844), Record("ACTI", 0x845, Field("SCRI", BitConverter.GetBytes(0x891u))),
                 Cell(0x880, Join(Record("ACRE", 0x900, Field("NAME", BitConverter.GetBytes(0x801u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x901, Field("NAME", BitConverter.GetBytes(0x804u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x902, Field("NAME", BitConverter.GetBytes(0x804u)), Field("DATA", new byte[24])),
+                    Record("ACRE", 0x906, Field("NAME", BitConverter.GetBytes(0x805u)), Field("DATA", new byte[24])),
+                    Record("ACRE", 0x907, Field("NAME", BitConverter.GetBytes(0x806u)), Field("DATA", new byte[24])),
                     Marker(0x903, "SourceMapMarker"), Marker(0x905, "OtherMapMarker"),
                     Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x845u)), Field("DATA", new byte[24])))),
                 Record("SCPT", 0x890, Field("SCTX", Text("begin OnActivate\nif GetUnconscious\nSetUnconscious 0\nelse\nSetUnconscious 1\nendif\nend"))),
                 Record("SCPT", 0x891, Field("SCRO", BitConverter.GetBytes(0x903u)),
-                    Field("SCTX", Text("begin OnActivate\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nend"))),
+                    Field("SCRO", BitConverter.GetBytes(0x14u)),
+                    Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
                 Record("VTYP", 0x850, Field("EDID", Text("TestVoice"))),
                 Record("WRLD", 0x8f0, Field("ICON", Text("interface/worldmap/owned.dds")),
                     Field("MNAM", Join(BitConverter.GetBytes(2048), BitConverter.GetBytes(1024),
@@ -73,20 +82,87 @@ internal static class ActorSourceContracts
             var speaker = FalloutDialogueSpeaker.Read(records, Key(0x801));
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+            var choices = new HashSet<FalloutFormKey>();
+            for (ulong seed = 0; seed < 32; seed++)
+            {
+                var selection = new FalloutActorTemplateSelection(1, seed);
+                selection.ResolveAll(records, Key(0x805));
+                var selected = FalloutCreatureAppearanceResolver.Resolve(records, Key(0x805), selection: selection);
+                Check(selected.ModelOwner == selected.StatsOwner, "Template groups rerolled the same leveled actor.");
+                choices.Add(selected.ModelOwner);
+                var savedSelection = new FalloutActorTemplateSelection(JsonSerializer.Deserialize<FalloutActorTemplateSnapshot>(JsonSerializer.Serialize(selection.Capture()))!);
+                savedSelection.ResolveAll(records, Key(0x805));
+                Check(FalloutCreatureAppearanceResolver.Resolve(records, Key(0x805), selection: savedSelection).ModelOwner == selected.ModelOwner,
+                    "Cold template selection changed a source actor.");
+            }
+            Check(choices.SetEquals([Key(0x800), Key(0x804)]), "Reference-owned random selection did not admit every eligible candidate.");
+            var highLevel = new FalloutActorTemplateSelection(10, 0);
+            highLevel.ResolveAll(records, Key(0x805));
+            Check(FalloutCreatureAppearanceResolver.Resolve(records, Key(0x805), selection: highLevel).ModelOwner == Key(0x804),
+                "Highest eligible actor level did not exclude lower entries.");
+            var retainedSelection = world.InitializeActorTemplates(Key(0x906), 1);
+            Check(ReferenceEquals(retainedSelection, world.InitializeActorTemplates(Key(0x906), 10)), "Revisiting a reference rerolled its encounter.");
+            Check(world.InitializeActorTemplates(Key(0x907), 1).Absent && !world.CanActivate(Key(0x907)),
+                "A source chance-none result admitted an actor.");
+            using (var selectionRestore = new FalloutReferenceWorld(records))
+            {
+                selectionRestore.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+                Check(selectionRestore.Get(Key(0x907)).Templates!.Absent &&
+                    JsonSerializer.Serialize(selectionRestore.Get(Key(0x906)).Templates!.Capture()) == JsonSerializer.Serialize(retainedSelection.Capture()),
+                    "World save did not preserve actor and chance-none choices.");
+            }
             var firstInventory = world.Inventory(Key(0x901), 1).Contents;
             var peerInventory = world.Inventory(Key(0x902), 1).Contents;
             Check(firstInventory.Item(Key(0x840))?.Count == 3 && peerInventory.Item(Key(0x840))?.Count == 3 &&
                 world.Inventory(Key(0x900), 1).Contents.Items.Count == 0, "CREA inventory ignored its independent template flag.");
             firstInventory.Remove(Key(0x840), 1, silent: true);
+            var sourceScene = FalloutCellSceneReader.Read(records, Key(0x880));
+            var destinationScene = FalloutCellSceneReader.Read(records, Key(0x881));
+            world.MoveTo(Key(0x901), Key(0x908), 2, 3, 4);
+            world.SetRestrained(Key(0x901), true);
+            world.SetPlayerTeammate(Key(0x901), true);
+            var sourceAfterMove = world.ComposeResidency(sourceScene);
+            var destinationAfterMove = world.ComposeResidency(destinationScene);
+            world.ReplaceResidentCell(sourceAfterMove);
+            world.LoadCell(destinationAfterMove);
+            Check(world.Get(Key(0x901)).Cell == Key(0x880) && world.Placement(Key(0x901)).Cell == Key(0x881) &&
+                world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 34 }) &&
+                !sourceAfterMove.References.Any(reference => reference.FormKey == Key(0x901)) &&
+                destinationAfterMove.References.Count(reference => reference.FormKey == Key(0x901)) == 1 &&
+                world.IsResident(Key(0x901)), "MoveTo lost source identity, offsets or destination residency.");
             using (var inventoryRestore = new FalloutReferenceWorld(records))
             {
                 inventoryRestore.Restore(world.Capture());
                 Check(inventoryRestore.Inventory(Key(0x901), 1).Contents.Item(Key(0x840))?.Count == 2 &&
                     inventoryRestore.Inventory(Key(0x902), 1).Contents.Item(Key(0x840))?.Count == 3,
                     "Creature inventory changes leaked to a peer or were lost in the save.");
+                Check(inventoryRestore.Get(Key(0x901)) is { Restrained: true, PlayerTeammate: true } &&
+                    inventoryRestore.ComposeResidency(destinationScene).References.Single(reference => reference.FormKey == Key(0x901))
+                        .Position.SequenceEqual(new float[] { 12, 23, 34 }), "Cold save lost moved actor placement or companion flags.");
             }
+            Reject(() => world.MoveTo(Key(0x901), Key(0x908), float.NaN));
+            Check(world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 34 }), "Rejected movement mutated placement.");
             var quests = new FalloutQuestState(records);
+            FalloutFormKey? queriedHealth = null;
+            var healthConditions = new FalloutDialogueConditions(records, quests, Key(0x900), speaker,
+                healthPercentage: actor => { queriedHealth = actor; return .25f; });
+            var healthCondition = new FalloutCondition(records.GetEffective(Key(0x860)), 0, .5f, 431, 0, 0, 0, 0);
+            foreach (var (runOn, reference, expected) in new[]
+            {
+                (0u, 0u, Key(0x900)), (1u, 0u, Key(0x14)), (2u, 0x901u, Key(0x901))
+            })
+                Check(healthConditions.Evaluate(healthCondition with { RunOn = runOn, Reference = reference }) == .25f &&
+                    queriedHealth == expected, "Dialogue health query selected the wrong actor context.");
+            Reject(() => healthConditions.Evaluate(healthCondition with { RunOn = 2 }));
+            Reject(() => healthConditions.Evaluate(healthCondition with { RunOn = 3 }));
+            var actorConditions = new FalloutDialogueConditions(records, quests, Key(0x900), speaker,
+                actorValue: (actor, value) => actor == Key(0x901) && value == 27 ? 62.5f : throw new InvalidDataException("Wrong actor/value."));
+            Check(actorConditions.Evaluate(healthCondition with { Function = 14, RunOn = 2, Reference = 0x901, Argument1 = 27 }) == 62.5f,
+                "Explicit-reference actor value did not reach its authoritative owner.");
+            Reject(() => actorConditions.Evaluate(healthCondition with { Function = 14, RunOn = 2, Argument1 = 27 }));
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => { }));
+            Check(scripts.Activate(Key(0x904), Key(0x900)).Error is null && world.MapMarkerVisibility(Key(0x903)) == 0,
+                "GetActionRef confused a non-player activator with the compiled Player reference.");
             Check(world.MapMarkerVisibility(Key(0x903)) == 0 && scripts.Activate(Key(0x904), Key(0x14)).Error is null &&
                 world.MapMarkerVisibility(Key(0x903)) == 2 && world.MapMarkerVisibility(Key(0x905)) == 0,
                 "ShowMap/query did not preserve ordered visibility, travel admission and marker isolation.");
@@ -135,6 +211,14 @@ internal static class ActorSourceContracts
             Reject(() => restored.Bind(snapshot.Resource, new string('b', 64)));
             Reject(() => restored.Restore(snapshot with { ElapsedSeconds = double.NaN }));
             Reject(() => restored.Restore(snapshot with { StartPending = true }));
+            var firstIdle = new FalloutActorAnimationState(); firstIdle.Bind(snapshot.Resource, hash);
+            var secondIdle = new FalloutActorAnimationState(); secondIdle.Bind(snapshot.Resource, hash);
+            firstIdle.StartAmbientLoop(Key(0x900), 2.5); secondIdle.StartAmbientLoop(Key(0x901), 2.5);
+            Check(firstIdle.ElapsedSeconds != secondIdle.ElapsedSeconds && firstIdle.ElapsedSeconds is >= 0 and < 2.5,
+                "Independent creature idles entered in lockstep or outside their source loop.");
+            var idleSave = firstIdle.Capture()!; var coldIdle = new FalloutActorAnimationState(); coldIdle.Restore(idleSave);
+            coldIdle.StartAmbientLoop(Key(0x900), 2.5);
+            Check(coldIdle.Capture() == idleSave, "Cold idle restarted or changed its persisted phase.");
             Console.WriteLine("OPENNV_ACTOR_SOURCE_PASS templates=independent voice=speaker-info-response override=original-identity ambiguous=rejected clock=cold-exact");
         }
         finally { Directory.Delete(directory, true); }
@@ -147,6 +231,13 @@ internal static class ActorSourceContracts
             Field("NIFZ", Text(part)), Field("BNAM", BitConverter.GetBytes(scale)), Field("VTCK", BitConverter.GetBytes(0x850u)),
             Field("SCRI", BitConverter.GetBytes(0x890u)), Join(extra));
     }
+    private static byte[] ActorList(uint id, byte chance, params (ushort Level, uint Actor)[] entries) =>
+        Record("LVLC", id, Field("LVLD", [chance]), Field("LVLF", [0]), Join(entries.Select(entry =>
+        {
+            var data = new byte[12]; BinaryPrimitives.WriteUInt16LittleEndian(data, entry.Level);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), entry.Actor);
+            BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(8), 1); return Field("LVLO", data);
+        }).ToArray()));
     private static byte[] Cell(uint id, byte[] reference)
     {
         var group = new byte[24 + reference.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);

@@ -58,11 +58,13 @@ public partial class RuntimeCoordinator
                 try
                 {
                     var record = _nativePluginStack!.GetEffective(requested[index]);
-                    if (record.Signature != "ACHR" || record.IsDeleted)
-                        throw new InvalidDataException("Subject is not a winning, undeleted ACHR.");
+                    if (record.Signature is not ("ACHR" or "ACRE" or "REFR") || record.IsDeleted)
+                        throw new InvalidDataException("Subject is not a winning, undeleted placed reference.");
                     var npc = _nativePluginStack.GetEffective(FalloutDialogueTopic.RequiredForm(record, "NAME"));
                     row["name"] = GalleryRecordText(npc, "FULL");
-                    row["npc"] = npc.FormKey.ToString();
+                    row["base"] = npc.FormKey.ToString();
+                    row["baseSignature"] = npc.Signature;
+                    if (npc.Signature == "NPC_") row["npc"] = npc.FormKey.ToString();
                     row["referenceSha256"] = Convert.ToHexString(SHA256.HashData(record.ReadData()));
                     var cellKey = FalloutCellSceneReader.ParentCell(record) ?? throw new InvalidDataException("Actor has no source CELL.");
                     row["cell"] = cellKey.ToString();
@@ -73,36 +75,57 @@ public partial class RuntimeCoordinator
                     row["sourcePosition"] = reference.Position;
                     row["sourceRotationRadians"] = reference.RotationRadians;
                     row["initiallyDisabled"] = FalloutCellSceneReader.IsInitiallyDisabled(reference);
-                    try
-                    {
-                        var appearance = FalloutNpcAppearanceResolver.Resolve(_nativePluginStack, npc.FormKey, reference.FormKey);
-                        row["appearanceBlockers"] = appearance.Blockers;
-                        row["sourceInventory"] = appearance.Inventory.Select(item => new
+                    if (npc.Signature == "NPC_")
+                        try
                         {
-                            form = item.Item.ToString(),
-                            item.Signature,
-                            item.Count,
-                            name = GalleryRecordText(_nativePluginStack.GetEffective(item.Item), "FULL"),
-                        }).ToArray();
-                    }
-                    catch (Exception error) when (error is IOException or NotSupportedException or InvalidOperationException)
+                            var appearance = FalloutNpcAppearanceResolver.Resolve(_nativePluginStack, npc.FormKey, reference.FormKey);
+                            row["appearanceBlockers"] = appearance.Blockers;
+                            row["sourceInventory"] = appearance.Inventory.Select(item => new
+                            {
+                                form = item.Item.ToString(),
+                                item.Signature,
+                                item.Count,
+                                name = GalleryRecordText(_nativePluginStack.GetEffective(item.Item), "FULL"),
+                            }).ToArray();
+                        }
+                        catch (Exception error) when (error is IOException or NotSupportedException or InvalidOperationException)
+                        {
+                            row["appearanceError"] = error.Message;
+                        }
+                    FalloutExteriorGridScene? exterior = null;
+                    if ((cell.Cell.Flags & 1) == 0)
                     {
-                        row["appearanceError"] = error.Message;
+                        var world = cell.Cell.Worldspace ?? throw new InvalidDataException("Exterior subject has no source worldspace.");
+                        exterior = ResolveExterior(world, reference.Position);
+                        cell = exterior.Scene;
+                        row["activeCell"] = cell.Cell.FormKey.ToString();
+                        row["residentCells"] = exterior.Cells.Count;
                     }
-                    if ((cell.Cell.Flags & 1) == 0 || cell.Cell.Lighting is null)
-                        throw new NotSupportedException("Current shared exterior streaming/lighting cannot assemble this source placement. No substitute environment was used.");
+                    else if (cell.Cell.Lighting is null)
+                        throw new NotSupportedException("Interior subject has no source lighting declaration.");
+                    _nativeSkyLighting?.EnterCell(cell.Cell, _nativeGlobals, reference.Position);
                     root = BuildNativeCellRoot(cell, null, sourceSide: true);
+                    if (exterior is not null) AddExteriorLandscape(root, exterior);
                     AddChild(root);
-                    AddNativeCellEnvironment(root, cell);
+                    if (exterior is null) AddNativeCellEnvironment(root, cell);
+                    else AddExteriorEnvironment(root, cell.Cell);
                     SetNativeActiveCell(root, cell);
                     await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                    var actor = root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
-                        .SingleOrDefault(value => value.Appearance.Reference == reference.FormKey);
-                    row["actorPresent"] = actor is not null;
+                    var subjectNode = root.GetChildren().OfType<Node3D>().SingleOrDefault(node =>
+                        node is RuntimeNativeNpc candidate ? candidate.Appearance.Reference == reference.FormKey :
+                            node.GetMeta("opennv_reference_form_key", "").AsString() == reference.FormKey.ToString());
+                    var actor = subjectNode as RuntimeNativeNpc;
+                    var creature = subjectNode as RuntimeNativeCreature;
+                    row["actorPresent"] = actor is not null || creature is not null;
+                    row["subjectPresent"] = subjectNode is not null;
                     row["actorDivergences"] = _nativeActorDivergences.ToArray();
                     row["referenceDivergences"] = _nativeReferenceDivergences.ToArray();
                     row["missingRuntimeReferences"] = _parityObservations.Snapshot().Missing.ToArray();
+                    if (subjectNode is null || !subjectNode.IsVisibleInTree())
+                        throw new NotSupportedException("Source subject is not visible: " +
+                            (_nativeActorDivergences.GetValueOrDefault(reference.FormKey.ToString()) ??
+                                _nativeReferenceDivergences.GetValueOrDefault(reference.FormKey.ToString()) ?? "disabled or absent"));
                     var camera = new Camera3D { Name = "DevelopmentGalleryCamera", Fov = 55, Near = 0.04f, Far = 300, Current = true };
                     root.AddChild(camera);
                     var placement = ReferenceTransform(reference);
@@ -113,6 +136,16 @@ public partial class RuntimeCoordinator
                         var bounds = actor.CurrentWorldBound(source);
                         target = new Vector3(bounds.Center.X, bounds.Center.Y, bounds.Center.Z);
                         radius = bounds.Radius;
+                    }
+                    else
+                    {
+                        var meshes = subjectNode.FindChildren("*", nameof(MeshInstance3D), true, false)
+                            .OfType<MeshInstance3D>().Where(mesh => mesh.IsVisibleInTree()).ToArray();
+                        if (meshes.Length == 0) throw new NotSupportedException("Source subject has no visible geometry for framing.");
+                        var bounds = meshes.Select(mesh => mesh.GlobalTransform * mesh.GetAabb())
+                            .Aggregate((combined, next) => combined.Merge(next));
+                        target = bounds.GetCenter();
+                        radius = bounds.Size.Length() * 0.5f;
                     }
                     var distance = radius / Mathf.Sin(Mathf.DegToRad(camera.Fov / 2)) * 1.4f;
                     var forward = actor?.HeadFacingDirection ?? -placement.Basis.Z;
@@ -146,9 +179,9 @@ public partial class RuntimeCoordinator
                         camera.Fov,
                         blockedRays = bestBlocked,
                         selectedAngle,
-                        owner = actor is null ? "source-reference-empty-location" : "current-posed-actor-bounds"
+                        owner = actor is null ? "source-subject-mesh-bounds" : "current-posed-actor-bounds"
                     };
-                    row["animationBefore"] = actor?.AnimationState;
+                    row["animationBefore"] = actor?.AnimationState ?? creature?.Observation;
                     // Shader warmup is outside recording. Each viewport sample
                     // goes directly into one encoder; no raw frame archive.
                     for (var warm = 0; warm < 30; warm++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -160,10 +193,10 @@ public partial class RuntimeCoordinator
                         row["image"] = Path.GetFileName(imagePath);
                     }
                     var moviePath = Path.Combine(output, stem + ".mp4");
-                    row["capture"] = await EncodeNativeGalleryClip(encoder, moviePath);
+                    row["capture"] = await EncodeNativeGalleryClip(encoder, moviePath, camera, target);
                     row["movie"] = Path.GetFileName(moviePath);
-                    row["animationAfter"] = actor?.AnimationState;
-                    row["status"] = actor is null ? "cell-rendered-actor-absent" : "rendered-with-unverified-presentation";
+                    row["animationAfter"] = actor?.AnimationState ?? creature?.Observation;
+                    row["status"] = "rendered-with-unverified-presentation";
                 }
                 catch (Exception error)
                 {
@@ -209,7 +242,7 @@ public partial class RuntimeCoordinator
         finally { Engine.MaxFps = originalMaxFps; }
     }
 
-    private async Task<object> EncodeNativeGalleryClip(string encoder, string path)
+    private async Task<object> EncodeNativeGalleryClip(string encoder, string path, Camera3D camera, Vector3 target)
     {
         var info = new ProcessStartInfo(encoder)
         {
@@ -228,8 +261,19 @@ public partial class RuntimeCoordinator
         var watch = Stopwatch.StartNew();
         try
         {
-            for (var frame = 0; frame < 120; frame++)
+            var initialOffset = camera.GlobalPosition - target;
+            for (var frame = 0; frame < 180; frame++)
             {
+                var fraction = frame / 179f;
+                var angle = Mathf.DegToRad(8) * (1 - Mathf.Cos(fraction * Mathf.Pi)) * 0.5f;
+                var position = target + initialOffset.Rotated(Vector3.Up, angle);
+                if (position.DistanceSquaredTo(camera.GlobalPosition) > 0.000001f)
+                {
+                    var motion = PhysicsRayQueryParameters3D.Create(camera.GlobalPosition, position);
+                    if (camera.GetWorld3D().DirectSpaceState.IntersectRay(motion).Count == 0)
+                        camera.GlobalPosition = position;
+                }
+                camera.LookAt(target, Vector3.Up);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var image = GetViewport().GetTexture().GetImage();
                 if (image.GetWidth() != 1920 || image.GetHeight() != 1080) throw new InvalidDataException("Gallery viewport changed dimensions.");
@@ -243,9 +287,9 @@ public partial class RuntimeCoordinator
             complete = true;
             return new
             {
-                frames = 120,
+                frames = 180,
                 frameRate = 30,
-                encodedSeconds = 4,
+                encodedSeconds = 6,
                 sampleWallSeconds = watch.Elapsed.TotalSeconds,
                 sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),
                 limitation = "Consecutive rendered frames; simulation-to-encoded-clock equality is unverified; silent."

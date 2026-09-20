@@ -51,27 +51,26 @@ internal sealed partial class CellNavigationGraph
 
     internal IReadOnlyList<Vector3> FindPath(
         Vector3 startGameUnits,
-        Vector3 destinationGameUnits)
+        Vector3 destinationGameUnits,
+        Func<Vector3, bool>? permittedPortal = null)
     {
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor travel.");
         var start = NearestNode(startGameUnits);
         var destination = NearestNode(destinationGameUnits);
-        var trianglePath = FindTrianglePath(start.Node, destination.Node);
+        var trianglePath = FindTrianglePath(start.Node, destination.Node, permittedPortal);
         var result = new List<Vector3>();
         foreach (var pair in trianglePath.Zip(trianglePath.Skip(1)))
-        {
-            if (pair.First.NavMesh == pair.Second.NavMesh)
-                result.Add(pair.First.NavMesh.SharedEdgeMidpoint(
-                    pair.First.TriangleIndex,
-                    pair.Second.TriangleIndex));
-            else
-                result.Add(ExternalSharedEdgeMidpoint(pair.First, pair.Second));
-        }
+            result.Add(Portal(pair.First, pair.Second));
         result.Add(destination.Point);
         return result;
     }
+
+    private Vector3 Portal(NavigationNode from, NavigationNode to) =>
+        from.NavMesh == to.NavMesh && from.NavMesh.IsInternalNeighbor(from.TriangleIndex, to.TriangleIndex)
+            ? from.NavMesh.SharedEdgeMidpoint(from.TriangleIndex, to.TriangleIndex)
+            : ExternalSharedEdgeMidpoint(from, to);
 
     private Vector3 ExternalSharedEdgeMidpoint(
         NavigationNode source,
@@ -176,23 +175,28 @@ internal sealed partial class CellNavigationGraph
 
     private IReadOnlyList<NavigationNode> FindTrianglePath(
         NavigationNode start,
-        NavigationNode destination)
+        NavigationNode destination,
+        Func<Vector3, bool>? permittedPortal)
     {
         if (start == destination)
             return new[] { start };
-        var internalOnly = start.NavMesh == destination.NavMesh &&
+        var internalOnly = permittedPortal is null && start.NavMesh == destination.NavMesh &&
             start.NavMesh.CanReach(start.TriangleIndex, destination.TriangleIndex);
         var frontier = new PriorityQueue<NavigationNode, float>();
         var previous = new Dictionary<NavigationNode, NavigationNode>();
         var costs = new Dictionary<NavigationNode, float> { [start] = 0.0f };
+        var closed = new HashSet<NavigationNode>();
         frontier.Enqueue(start, 0.0f);
         while (frontier.TryDequeue(out var current, out _))
         {
+            if (!closed.Add(current)) continue;
             if (current == destination)
                 break;
             foreach (var adjacent in Neighbors(current).Where(value =>
                          !internalOnly || value.NavMesh == start.NavMesh))
             {
+                if (closed.Contains(adjacent)) continue;
+                if (permittedPortal?.Invoke(Portal(current, adjacent)) == false) continue;
                 var cost = costs[current] + current.Centroid.DistanceTo(adjacent.Centroid);
                 if (costs.TryGetValue(adjacent, out var known) && cost >= known)
                     continue;

@@ -42,6 +42,7 @@ internal sealed class FalloutPlayerVitals
             HitPoints = Math.Clamp(derived.MaximumHitPoints - (State.MaximumHitPoints - State.HitPoints), 0, derived.MaximumHitPoints),
             HitPointFraction = State.HitPointFraction,
             LimbDamage = State.LimbDamage is null ? null : new Dictionary<byte, float>(State.LimbDamage),
+            RadiationRads = State.RadiationRads,
             ActionPoints = Math.Clamp(derived.MaximumActionPoints - (State.MaximumActionPoints - State.ActionPoints), 0, derived.MaximumActionPoints),
         };
     }

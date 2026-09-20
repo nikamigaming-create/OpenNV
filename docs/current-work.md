@@ -1,111 +1,101 @@
 # Current work
 
-## User priority
+## Required outcome
 
-The immediate deliverable is a flat New Vegas ragdoll/dismemberment showcase
-using geckos and raiders. The user explicitly corrected the creature selection
-to gecko, not coyote, and set VR aside for this test. Continue in this task
-without subagents. Work and publication stay on main under AGENTS.md.
+Reach Primm by ordinary movement, activate and repair broken ED-E, recruit him,
+leave Nash Residence together, and exercise following, combat and loot in flat
+and Elliott Tate's OpenXR Simulator. Deliver a labelled single-eye showcase and
+an asset-free experimental build. The user's flat/headset playtests are required
+before any golden release. This outcome is not yet achieved. No subagents.
 
-The wider objectives remain complete shared combat/looting, universal cell
-repairs, continuous travel through Novac to the Strip, and physical VR with
-source hands, body, weapons and live Pip-Boy. The separate classic Fallout work
-is paused and preserved; see status.md and classic-fallout-plan.md. No campaign,
-cell, headset or retail parity completion is claimed.
+## Verified candidate
 
-## Current executable result
+The verified candidate includes the `codex/flat-vr-release-audit` work. Private evidence
+is under `local/status-audit-20260920/`; no retail files, saves or captures belong
+in Git or the release.
 
-The requested private video is
-`local/recordings/flat-ragdoll-20260908/OpenNV-gecko-and-raider-ragdolls.mp4`:
-74 seconds, 1280x720 flat gameplay, H.264 and stereo game-process AAC audio.
-It shows a source gecko dying after three ordinary pistol inputs and an armored
-Jackal raider after four. Their original physics bodies fall against actual
-world collision. A labeled development command then detaches both legs, both
-arms and the head through the shared source limb owner. The commands and
-source-based travel cuts are explicitly identified in the video. Automatic
-weapon dismemberment and combat AI are not demonstrated or complete.
+Ordinary flat and simulator dialogue/barter takes exist. The private first-look
+side-by-side and the illustrated playtest document are under
+`local/recordings/playtest-20260920/`. Actual flat Pip-Boy Stats/Items illustrations,
+dialogue facing and a reloading-bench 9mm breakdown were viewed. They do not
+establish complete inventory/crafting or physical-headset acceptance.
 
-The first gecko check exposed skin weights stretching across separated limbs.
-Crossing bindings now follow an anchor on the correct side of the authored cut,
-with vertex position preserved at detachment. Source wound caps and connecting
-sections follow dismember partition state. Cut poses, order, injury, rigid-body
-state and source hash survive saves. The ordinary raider cold load retains all
-five separated parts without the stretched connections. The physics envelope
-is still an approximation of the source Havok solver.
+Jolt fixes the reproduced source barrel/rubble contact lock. The actual save
+escaped and continued south. Native gecko death/sever/contact fixtures pass.
+Persistent leveled-template selections now feed appearance, inventory, scripts,
+voice, factions and combat. A source appearance audit admitted 6,861/7,681
+references; this is not eligible-spawn or final-pixel coverage. The Primm-area
+run has 24 creature presentations. Competing NPC armor now selects compatible
+slots and retains spare armor as loot; exact retail tie ordering is unverified.
 
-NPC health now distinguishes manual and autocalculated source stats. Equipped
-armor condition and constant relevant effects contribute defense; decoded
-sources and modifiers are reused. Missing inferred facial normal-map companions
-retain their explicit NIF normal instead of rejecting the actor. This restores
-the selected source raider mouth. See actor-damage.md for the bounded contracts.
+Exterior presentation retains a bounded inactive fringe of LAND and reference
+nodes. A native boundary-reversal fixture confirms same-node/material reuse,
+disabled inactive collision/process and bounded eviction. Source LAND/static
+shaders and LOD use complementary coverage through a moving transition band.
+Shader loading passes; the moving transition still requires final visual review.
+The live route still has measured individual uploads around 77-90 ms and grid
+commits around 50-60 ms. Hitching is not resolved. Clouds and water-tower cutouts
+were viewed; broader alpha, vegetation and prop-wind behavior remain open.
 
-The recording has repeated frames: gecko 1,039 unique samples in 1,197 output
-frames; raider 699 in 1,198. Capture/streaming cadence is not accepted. Post-shot
-lighting also differs from cold restoration even though muzzle telemetry has
-expired; its cause remains unresolved. Do not call this complete gore, smooth
-combat, matched lighting or a finished gameplay video.
+## Ordinary route and current blocker
 
-## Verification and private continuation
+The flat bot completed the Primm approach in 132.85 seconds, observed arrival at
+Nash's real door, activated it and entered Nash Residence. The genuine ordinary
+entry save is `tmp/development-lab/release-flat-20260920-q/save.json`. Its ED-E
+state is dead with no persisted physical pose. The private 90-second
+`local/recordings/playtest-20260920/flat-primm-route.mp4` records the exterior
+walk. This is one completed flat route, not XR route or campaign acceptance.
 
-The required full gate passes in `tmp/development-lab/ragdoll-full-gate.log`:
-Release/Debug, formatting/analyzers, contract probes, launcher tests and native
-Godot project checks. The selected owned audit `ragdoll-skin-owned.log` covers
-all five severable parts of both actors, source collision bodies, cut-side skin
-bindings, floor retention and fresh-instance restoration. Synthetic damage
-contracts cover fractional NPC stats, zero-health corpses, armor layouts,
-severed injury persistence, invalid cuts and once-only death inventory.
+The bot now uses A* over source NAVM portals, tests resident portal clearance
+against the actual capsule/floor, and refines only the next eight metres with
+native swept queries. Failed local corridors are excluded temporarily while A*
+searches alternatives. Segment completion triggers a replan from observed player
+position. Source-polyline distance replaces straight-line lookahead. Synthetic
+checks pass alternate-route selection, rejection when every portal is blocked,
+low-headroom traversal, wall avoidance, separate floors and unloaded refusal.
+Only ordinary flat/simulator input may move the player. The q process was stopped
+for export; inspect the newest session before issuing input.
 
-The actual ordinary saves are under `tmp/development-lab`:
+## ED-E and remaining owners
 
-- `native-gecko-ragdoll-20260908-run2/save.json`: killed and fully separated gecko.
-- `native-raider-ragdoll-20260908-run1/save.json`: killed and fully separated raider.
-- `native-raider-ragdoll-20260908-cold/save.json`: fresh-process continuation of that corpse.
-- `native-cell-shop-flat-20260908-run3/save.json`: restored Cliff, blocked conversation below.
+Ordinary activation opened damaged ED-E's authored repair menu. His presentation
+was wrong: flying idle added about 1.9 metres while ignored XRGD specifies a
+near-zero local offset. XRGD decoding now preserves ordered source bone transforms
+and duplicate Havok part numbers. Native initial-pose and cold-restore checks pass
+for all ten ED-E bodies. Actual flat and both simulator eyes now show ED-E on
+the counter; both modes opened his real repair menu through bot input. XRGB biped rotation
+remains an explicit unsupported branch; source binding does not prove its runtime
+pose. Bot corpse aiming now uses live physical centers instead of rest-mesh bounds.
+The next acceptance is ordinary repair with legitimate skills/components,
+recruitment, then source following and door transfer. Current flat/XR sessions
+are `release-flat-20260920-r` / `release-xr-20260920-ede-a`; recording is off.
+The source has two OnActivate blocks that enqueue the same initial message.
+The first displayed choice belongs to an already superseded result slot, so the
+menu repeats and drops that choice. Resolve message presentation/result ownership
+before treating repair-menu opening as successful menu navigation. The private
+21-second `OpenNV-ED-E-flat-vr-inspection.mp4` labels recruitment/following pending.
 
-All ordinary game processes are stopped. Frame recording and trace are off.
-Requested video and selected stills are private; temporary frames and rejected
-capture intermediates are removed after inspection/export. Revalidate process
-identity before resuming any saved run.
+Zero-health source actors initialize as corpses. The owned repair-message test
+passes. Non-player MoveTo retains source identity, disabled
+state, destination residency and cold state; its owned fixture moves the real
+working ED-E from its source parent to Nash's cell. This is a component fixture,
+not an ordinary repair. Restraint and player-teammate flags persist.
 
-## Next shared owners
+Live repair/recruitment remains blocked by missing gameplay owners: source
+recruitment perk/faction/combat-style effects, creature follow packages and door
+transfer, scaled actor health and creature weapon combat. Repair must respect
+actual skills/components. Do not replace these with named success paths. Actor
+encounter-zone policy, some abilities/assets and broader scripts still fail
+closed; all-people/all-creature/combat coverage cannot be claimed.
 
-Weapon-driven limb selection, critical/sneak rules, exploded limbs, source gore
-replacement/debris and sever-triggered blood/decal effects remain unbound.
-Combat AI, damage reactions, hit/death scripts, XP, armor wear and encounter-level
-selection remain open. Continue from the visible failure through the source
-owner rather than adding location-specific actors or success paths.
+## Verification and publication
 
-The cell review is paused behind this requested showcase. Optional NPC ENAM
-now retains authored race eye materials. Source expression commas are accepted,
-and parser-versioned quest restoration admits newly parsed legacy comma-bearing
-programs without resetting existing clocks/progress. Reference parse failures
-retry on cold restoration; reached execution errors remain visible. Cliff now
-renders and can be reached through ordinary flat input, but conversation fails
-at INFO 08d09f condition 67 (GetInCell). Its prefix-EDID semantics and subject/run-on
-context still need the shared condition owner. Do not claim dialogue completion.
+`runtime-gate-primm-pose.log` contains `OPENNV_CSHARP_GODOT_GATE_PASS` and
+`owned-primm-pose.log` passes the selected owned-data audit. `global-route-native.log`,
+`global-route-bot.log`, `authored-ragdoll-contract.log` and
+`authored-ragdoll-native.log` pass their focused changes. Packaging/notices are
+prepared; no public experimental build has been published. Keep recording off except selected checks;
+remove temporary raw frames after review/export.
 
-Other open cell failures include package travel/calendar ownership, persistent
-leveled actor choices, TREE/SpeedTree, property-free LOD materials, exterior
-residency/streaming and incomplete populations. Follow cell-parity-review.md.
-The earlier 68-second single-left-eye simulator video is retained at
-`local/recordings/vr-showcase-20260908/OpenNV-New-Vegas-VR-showcase.mp4`.
-It uses diagnostic travel cuts and does not establish walking/fast travel to the
-Strip or physical headset acceptance.
-
-## Preserved VR and classic work
-
-XR draws the world outfit and hands with source head geometry excluded only
-from eye cameras, retaining shadows and bone contacts. Anatomical eye anchoring,
-source-length body constraints and the corrected palmar grip frame are present.
-Ordinary SIM input, live wrist focus and single-eye recording have bounded checks.
-Room-scale stepping, slope-aware feet, outfit fitting, physical comfort,
-complete hand/weapon collision response and campaign controls remain open.
-The reactive bot uses observed resident references, NAVM and ordinary expiring
-input for approach/follow/activation; campaign decisions and combat tactics are
-not implemented. Preserve the actual stage-200 opening save at
-`tmp/development-lab/native-reactive-bot-20260908-run1/save.json`.
-
-FO1/FO2 retain their shared owned map/hex runtime, item/equipment state, original
-HUDs, source-bound 3D presentation and independent saves. Their campaigns,
-world/script coverage, likeness and remaining scenery are incomplete. The
-classic delivery plan and product status retain the broader implementation scope.
+See [status](status.md) and [implementation plan](implementation-plan.md) for the
+preserved full scope and evidence levels.

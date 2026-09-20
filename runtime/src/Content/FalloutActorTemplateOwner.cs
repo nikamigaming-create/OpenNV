@@ -8,7 +8,8 @@ namespace OpenNV.Runtime.Content;
 // require the reference's persistent encounter-selection owner.
 internal static class FalloutActorTemplateOwner
 {
-    internal static FalloutPluginRecord Resolve(FalloutPluginStack stack, FalloutPluginRecord actor, ushort group)
+    internal static FalloutPluginRecord Resolve(FalloutPluginStack stack, FalloutPluginRecord actor, ushort group,
+        FalloutActorTemplateSelection? selection = null)
     {
         var signature = actor.Signature;
         if (signature is not ("NPC_" or "CREA")) throw new InvalidDataException("Template owner is not an actor.");
@@ -23,7 +24,7 @@ internal static class FalloutActorTemplateOwner
             while (actor.Signature == (signature == "NPC_" ? "LVLN" : "LVLC"))
             {
                 if (!visited.Add(actor.FormKey)) throw new InvalidDataException("Leveled actor template contains a cycle.");
-                actor = stack.GetEffective(InvariantChoice(actor));
+                actor = stack.GetEffective(selection?.Choose(actor) ?? InvariantChoice(actor));
             }
         }
     }

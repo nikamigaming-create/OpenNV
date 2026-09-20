@@ -3,7 +3,8 @@ param(
     [string]$Godot = "",
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [switch]$Vr
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,7 +12,6 @@ Set-StrictMode -Version Latest
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
-$desktopRoot = Join-Path $repoRoot "desktop"
 
 function Resolve-GodotExecutable {
     param([string]$ExplicitPath)
@@ -82,27 +82,17 @@ if ($null -eq $dotnet) {
 }
 foreach ($requiredFile in @(
     (Join-Path $runtimeRoot "project.godot"),
-    (Join-Path $runtimeRoot "runtime-manifest.json"),
-    (Join-Path $desktopRoot "package.json")
+    (Join-Path $runtimeRoot "runtime-manifest.json")
 )) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw "OpenNV developer launch input is missing: $requiredFile"
     }
 }
 
-$npm = Get-Command npm.cmd -CommandType Application -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-if ($null -eq $npm) {
-    $npm = Get-Command npm -ErrorAction SilentlyContinue | Select-Object -First 1
-}
-if ($null -eq $npm) {
-    throw "npm was not found. Install a current Node.js LTS release first."
-}
-
 if ($Configuration -eq "Release") {
     # The editor's --path runner always loads Debug OpenNV and GodotSharp.
-    # ExportRelease compiles both against the optimized runtime and uses the
-    # launcher's existing packaged-executable route, with the same campaigns.
+    # ExportRelease compiles both against the optimized runtime and produces
+    # the single Godot product executable with the same campaigns.
     $exportRoot = Join-Path $repoRoot "tmp\development-runtime\windows"
     [IO.Directory]::CreateDirectory($exportRoot) | Out-Null
     $exportExecutable = Join-Path $exportRoot "OpenNV.exe"
@@ -128,40 +118,13 @@ if ($ValidateOnly) {
     return
 }
 
-# Keep normal packaged-launcher starts on this same build after the shell
-# exits. Environment variables alone disappear with the development launcher.
-if ($env:OS -eq "Windows_NT") {
-    $runtimeRegistration = Join-Path ([Environment]::GetFolderPath("ApplicationData")) "@open-nevada\launcher\runtime.json"
-    $registration = if (Test-Path -LiteralPath $runtimeRegistration -PathType Leaf) {
-        Get-Content -LiteralPath $runtimeRegistration -Raw | ConvertFrom-Json
-    } else { [PSCustomObject]@{} }
-    $registration | Add-Member -NotePropertyName runtimeRoot -NotePropertyValue $runtimeRoot -Force
-    $registration | Add-Member -NotePropertyName godotExecutable -NotePropertyValue $godotPath -Force
-    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($runtimeRegistration)) | Out-Null
-    [IO.File]::WriteAllText($runtimeRegistration, ($registration | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+if ($Configuration -eq "Release") {
+    # The exported Godot runtime is now the product launcher and game. The
+    # selected world is entered in this same process.
+    & $exportExecutable --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher
+} else {
+    & $godotPath --path $runtimeRoot --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher
 }
-
-if ($env:OS -eq "Windows_NT") {
-    $electronExecutable = [IO.Path]::GetFullPath(
-        (Join-Path $desktopRoot "node_modules\electron\dist\electron.exe"))
-    Get-Process -Name "electron" -ErrorAction SilentlyContinue |
-        Where-Object {
-            -not [string]::IsNullOrWhiteSpace($_.Path) -and
-            [string]::Equals(
-                [IO.Path]::GetFullPath($_.Path),
-                $electronExecutable,
-                [StringComparison]::OrdinalIgnoreCase)
-        } |
-        Stop-Process -Force
-}
-
-Push-Location $desktopRoot
-try {
-    & $npm.Source run dev
-    if ($LASTEXITCODE -ne 0) {
-        throw "OpenNV launcher exited with code $LASTEXITCODE."
-    }
-}
-finally {
-    Pop-Location
+if ($LASTEXITCODE -ne 0) {
+    throw "OpenNV Godot launcher exited with code $LASTEXITCODE."
 }
