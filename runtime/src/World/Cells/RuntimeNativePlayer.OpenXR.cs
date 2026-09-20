@@ -132,10 +132,10 @@ internal partial class RuntimeNativePlayer
         using var input = new InputEventKey { PhysicalKeycode = Key.R, Pressed = pressed };
         WeaponInput(input);
     }
-    internal void XrFire()
+    internal void XrFire(bool pressed)
     {
-        if (_modalInput || _furniturePhase != 0) return;
-        using var input = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true };
+        if (pressed == _weaponTriggerHeld || pressed && (_modalInput || _furniturePhase != 0)) return;
+        using var input = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = pressed };
         WeaponInput(input);
     }
     private void PublishXrPointer()

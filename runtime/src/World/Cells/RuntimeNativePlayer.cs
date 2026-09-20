@@ -80,7 +80,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         _modalInput = modal;
         if (modal)
         {
-            _shotPending = false;
+            _weaponTriggerHeld = false;
+            _pendingShotCount = 0;
             Velocity = Vector3.Zero;
             _aiming = false;
             _reloadPressed = false; _holdHandled = false; CancelWeaponAction();
@@ -100,7 +101,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         SetMeta("opennv_source_pipboy_enabled", state.PipBoy);
         SetMeta("opennv_source_fighting_enabled", state.Fighting);
         SetMeta("opennv_source_pointofview_enabled", state.PointOfView);
-        if (!state.Fighting) { _reloadPressed = false; _shotPending = false; CancelWeaponAction(); }
+        if (!state.Fighting) { _reloadPressed = false; _weaponTriggerHeld = false; _pendingShotCount = 0; CancelWeaponAction(); }
         SetMeta("opennv_source_looking_enabled", state.Looking);
     }
 

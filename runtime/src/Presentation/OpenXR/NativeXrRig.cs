@@ -135,11 +135,11 @@ internal sealed partial class NativeXrRig : Node3D
         var fire = right && _rightInputReady && RightGrip.GetFloat(NativeXrActions.Fire) >= _configuration.Xr.ActionThreshold;
         _pointerPressed = fire;
         var fireEdge = Edge("fire", fire);
+        _player?.XrFire(fire && !modal && PointAtPipBoy is null && !WorldPointer);
         if (PointAtPipBoy is null && modal) _canvas.Point(RightAim, right && RightAim.GetHasTrackingData(), fire);
         else if (PointAtPipBoy is null && fireEdge)
         {
             if (WorldPointer) _player?.XrActivate();
-            else _player?.XrFire();
         }
         if (Edge("activate", right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Grab)) && !modal && PointAtPipBoy is null) _player?.XrActivate();
         var reload = right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Reload);

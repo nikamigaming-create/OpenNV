@@ -14,7 +14,9 @@ internal partial class RuntimeNativePlayer
     private RuntimeNativeNifAnimation? _weaponActionClip;
     private FalloutNifTextKeyTimeline? _weaponActionKeys;
     private double _weaponActionSeconds, _reloadHeld;
+    private int _weaponActionHitCount;
     private bool _reloadPressed, _holdHandled;
+    private bool _weaponTriggerHeld, _automaticFireStopped;
     private readonly SortedSet<string> _weaponUnboundEvents = new(StringComparer.Ordinal);
     internal FalloutWeaponHandlingSnapshot? CaptureWeaponHandling() => _weaponHandling?.Capture();
     internal NativeHudAmmo? AmmunitionHud
@@ -58,10 +60,16 @@ internal partial class RuntimeNativePlayer
             }
             return true;
         }
-        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
+        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left } fire)
         {
-            if (!_weaponHandling.Drawn) RequestWeaponAction("equip");
-            else RequestWeaponFire();
+            if (fire.Pressed == _weaponTriggerHeld) return true;
+            _weaponTriggerHeld = fire.Pressed;
+            _automaticFireStopped = false;
+            if (fire.Pressed)
+            {
+                if (!_weaponHandling.Drawn) RequestWeaponAction("equip");
+                else RequestWeaponFire();
+            }
             return true;
         }
         return false;
@@ -81,7 +89,14 @@ internal partial class RuntimeNativePlayer
             var clip = _firstPerson.PrepareAction(group);
             _thirdPerson?.PrepareAction(group);
             var sequence = clip.Sequence;
-            if (sequence.CycleType != 2) throw new NotSupportedException("A weapon handling action needs a clamped source sequence.");
+            var attack = group.StartsWith("attack", StringComparison.Ordinal);
+            _weaponActionHitCount = attack ? clip.TextKeys
+                .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+                .Count(text => text.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase)) : 0;
+            if (attack && weapon.Automatic && _weaponActionHitCount == 0)
+                throw new NotSupportedException("Automatic attack animation has no source Hit event.");
+            if (sequence.CycleType != 2 && !(attack && weapon.Automatic && sequence.CycleType == 0))
+                throw new NotSupportedException("A weapon action needs a clamped sequence or an automatic attack loop.");
             _weaponActionKeys = new(clip.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
             _weaponAction = group; _weaponActionClip = clip; _weaponActionSeconds = 0;
             _aiming = false;
@@ -107,12 +122,24 @@ internal partial class RuntimeNativePlayer
             EnsureWeaponSounds();
             var previous = _weaponActionSeconds;
             var weapon = _firstPerson!.Weapon!;
-            _weaponActionSeconds += delta * weapon.AnimationMultiplier * (_weaponAction.StartsWith("attack", StringComparison.Ordinal) ? weapon.AttackMultiplier : 1);
+            var attack = _weaponAction.StartsWith("attack", StringComparison.Ordinal);
+            if (attack && weapon.Automatic)
+            {
+                var sequence = _weaponActionClip.Sequence;
+                var duration = sequence.StopTime - sequence.StartTime;
+                if (!float.IsFinite(weapon.AttackShotsPerSecond) || weapon.AttackShotsPerSecond <= 0 ||
+                    !float.IsFinite(sequence.Frequency) || sequence.Frequency <= 0 || duration <= 0 || _weaponActionHitCount <= 0)
+                    throw new InvalidDataException("Automatic weapon cadence is invalid.");
+                _weaponActionSeconds += delta * duration * weapon.AttackShotsPerSecond /
+                    (sequence.Frequency * _weaponActionHitCount);
+            }
+            else _weaponActionSeconds += delta * weapon.AnimationMultiplier * (attack ? weapon.AttackMultiplier : 1);
             foreach (var key in _weaponActionKeys!.Crossed(previous, _weaponActionSeconds, previous == 0))
                 foreach (var text in key.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
                 {
-                    if (text.Equals("Hit", StringComparison.OrdinalIgnoreCase) && _weaponAction.StartsWith("attack", StringComparison.Ordinal) && !_shotEmitted)
-                    { _shotEmitted = true; _shotPending = true; }
+                    if (text.Equals("Hit", StringComparison.OrdinalIgnoreCase) && attack &&
+                        (weapon.Automatic ? _weaponTriggerHeld && !_automaticFireStopped : !_shotEmitted))
+                    { _shotEmitted = true; _pendingShotCount++; }
                     else if (text.StartsWith("Sound:", StringComparison.OrdinalIgnoreCase)) _weaponSounds!.Dispatch(key with { Text = text });
                     else if (text.StartsWith("Enum:", StringComparison.OrdinalIgnoreCase) &&
                         weapon.Sounds.TryGetValue(text[5..].Trim().ToLowerInvariant(), out var sound)) _weaponSounds!.DispatchSound(sound);
@@ -122,15 +149,26 @@ internal partial class RuntimeNativePlayer
                         _weaponUnboundEvents.Add(text);
                 }
             var sequence = _weaponActionClip.Sequence;
-            if (_weaponActionSeconds * sequence.Frequency >= sequence.StopTime - sequence.StartTime)
+            var sourceClock = _weaponActionSeconds * sequence.Frequency;
+            var sourceDuration = sequence.StopTime - sequence.StartTime;
+            var reachedEnd = sequence.CycleType == 2 && sourceClock >= sourceDuration;
+            if (sequence.CycleType == 0 && attack && weapon.Automatic && (!_weaponTriggerHeld || _automaticFireStopped))
+            {
+                var previousClock = previous * sequence.Frequency;
+                reachedEnd = sourceClock >= (Math.Floor(previousClock / sourceDuration) + 1) * sourceDuration;
+            }
+            if (reachedEnd)
             {
                 if (_weaponAction.StartsWith("reload", StringComparison.Ordinal)) _weaponHandling!.CompleteReload(weapon);
                 else if (_weaponAction == "unequip")
                 {
                     _thirdPerson?.SetDrawn(false); _firstPerson.SetDrawn(false); _weaponHandling!.SetDrawn(false);
                 }
+                var continueAutomaticFire = weapon.Automatic && _weaponTriggerHeld && !_automaticFireStopped &&
+                    _weaponHandling!.CanFire(weapon) && _weaponAction != "unequip";
                 GD.Print($"OPENNV_WEAPON_ACTION_END weapon={weapon.Form} group={_weaponAction}");
                 CancelWeaponAction(); SaveGame?.Invoke();
+                if (continueAutomaticFire) RequestWeaponFire();
             }
             else
             {
@@ -147,7 +185,7 @@ internal partial class RuntimeNativePlayer
 
     private void CancelWeaponAction()
     {
-        _weaponAction = null; _weaponActionClip = null; _weaponActionKeys = null; _weaponActionSeconds = 0;
+        _weaponAction = null; _weaponActionClip = null; _weaponActionKeys = null; _weaponActionSeconds = 0; _weaponActionHitCount = 0;
         _firstPerson?.SetAction(null, 0); _thirdPerson?.SetAction(null, 0);
     }
 

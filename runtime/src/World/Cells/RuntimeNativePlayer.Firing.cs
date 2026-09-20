@@ -9,7 +9,8 @@ namespace OpenNV.Runtime.World.Cells;
 internal partial class RuntimeNativePlayer
 {
     private FalloutWeaponShot? _shot;
-    private bool _shotPending, _shotEmitted;
+    private int _pendingShotCount;
+    private bool _shotEmitted;
     private long _shotsFired, _emptyTriggers;
     private object? _lastShot;
     private string? _firePreparationError;
@@ -43,7 +44,7 @@ internal partial class RuntimeNativePlayer
         damageError = _damageError,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,weapon-limb-selection,impact-decal,tracers,flight,explosions,automatic-fire"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,weapon-limb-selection,impact-decal,tracers,flight,explosions"
     };
 
     private void RequestWeaponFire()
@@ -54,6 +55,8 @@ internal partial class RuntimeNativePlayer
         {
             if (weapon.Ammunition.Count == 0 || weapon.ClipSize == 0 || weapon.AmmoUse == 0)
                 throw new NotSupportedException("This weapon needs its melee, thrown or ammo-free attack owner.");
+            if (weapon.Automatic && (!float.IsFinite(weapon.AttackShotsPerSecond) || weapon.AttackShotsPerSecond <= 0))
+                throw new NotSupportedException("Automatic weapon has no valid source attack-shot rate.");
             if (!_weaponHandling!.CanFire(weapon))
             {
                 _emptyTriggers++;
@@ -61,7 +64,6 @@ internal partial class RuntimeNativePlayer
                 if (weapon.Sounds.TryGetValue("empty", out var sound)) _weaponSounds!.DispatchSound(sound);
                 return;
             }
-            if (weapon.Automatic) throw new NotSupportedException("Automatic fire needs its held-trigger cadence owner.");
             var ammunition = _weaponHandling.Ammunition(weapon)!.Value;
             if (_shot?.Weapon != weapon.Form || _shot.Ammunition != ammunition)
                 _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition);
@@ -74,8 +76,11 @@ internal partial class RuntimeNativePlayer
             if (!float.IsFinite(weapon.AttackMultiplier) || weapon.AttackMultiplier <= 0)
                 throw new InvalidDataException("WEAP attack multiplier is invalid.");
             var clip = _firstPerson.PrepareAction(weapon.AttackGroup);
-            if (clip.TextKeys.Count(key => key.Value.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase)) != 1)
-                throw new NotSupportedException("Semi-automatic attack needs one source Hit event.");
+            var hitEvents = clip.TextKeys
+                .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+                .Count(text => text.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase));
+            if (hitEvents == 0 || !weapon.Automatic && hitEvents != 1)
+                throw new NotSupportedException("Weapon attack needs its source Hit event count.");
             var clipDone = System.Diagnostics.Stopwatch.GetTimestamp();
             if (_muzzleOwner != _firstPerson.GetInstanceId() || _muzzleProjectile != _shot.Projectile.Form)
             {
@@ -114,90 +119,107 @@ internal partial class RuntimeNativePlayer
     // samples a previous BoneAttachment transform or a screen-centre VR ray.
     private void PublishPendingShot()
     {
-        if (!_shotPending) return;
-        _shotPending = false;
+        var pending = _pendingShotCount;
+        _pendingShotCount = 0;
+        if (pending == 0) return;
         if (_shot is null || _firstPerson?.Weapon is not { } weapon || _modalInput ||
             _xr is { } xr && (!xr.RightGrip.GetHasTrackingData() || !xr.RightAim.GetHasTrackingData() || xr.PointAtPipBoy is not null ||
                 xr.WorldPointer || _xrRightContact?.Valid != true || !_firstPerson.XrRightContactReached)) return;
-        try
+        for (var pendingIndex = 0; pendingIndex < pending; pendingIndex++)
         {
-            var started = System.Diagnostics.Stopwatch.GetTimestamp();
-            var actor = _xr is null && _thirdPersonMode ? _thirdPerson! : _firstPerson;
-            var muzzle = actor.ProjectileTransform();
-            if (_xr is null && !_thirdPersonMode)
-                muzzle = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * muzzle;
-            var from = muzzle.Origin;
-            var direction = -muzzle.Basis.Z.Normalized();
-            if (_xr is null)
+            if (weapon.Automatic && _automaticFireStopped) return;
+            try
             {
-                var aim = CastShotRay(_camera.GlobalPosition, _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters));
-                var target = aim.TryGetValue("position", out var hit) ? hit.AsVector3() : _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters);
-                direction = (target - from).Normalized();
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                var actor = _xr is null && _thirdPersonMode ? _thirdPerson! : _firstPerson;
+                var muzzle = actor.ProjectileTransform();
+                if (_xr is null && !_thirdPersonMode)
+                    muzzle = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * muzzle;
+                var from = muzzle.Origin;
+                var direction = -muzzle.Basis.Z.Normalized();
+                if (_xr is null)
+                {
+                    var aim = CastShotRay(_camera.GlobalPosition, _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters));
+                    var target = aim.TryGetValue("position", out var hit) ? hit.AsVector3() : _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters);
+                    direction = (target - from).Normalized();
+                }
+                if (!from.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f)
+                    throw new InvalidDataException("Source projectile transform is invalid.");
+                // Collision resolution is independent of later damage/effect lanes.
+                // Unsupported impact behavior remains identified in the observation.
+                var traces = TraceProjectiles(from, direction);
+                if (!_weaponHandling!.ConsumeShot(weapon, _shot, _presentationRecords!))
+                {
+                    if (weapon.Automatic)
+                    {
+                        _automaticFireStopped = true;
+                        _pendingShotCount = 0;
+                        EnsureWeaponSounds();
+                        if (weapon.Sounds.TryGetValue("empty", out var empty)) _weaponSounds!.DispatchSound(empty);
+                    }
+                    return;
+                }
+                if (weapon.Automatic && !_weaponHandling.CanFire(weapon)) _automaticFireStopped = true;
+                _shotsFired++;
+                var collisionDone = System.Diagnostics.Stopwatch.GetTimestamp();
+                EnsureWeaponSounds();
+                if (weapon.Sounds.TryGetValue("shoot", out var sound)) _weaponSounds!.DispatchSound(sound);
+                else _weaponUnboundEvents.Add("weapon-shoot-sound");
+                actor.FlashMuzzle();
+                var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
+                var damage = ApplyProjectileDamage(traces);
+                var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
+                if (weapon.ShellModel is not null && !_shotEffectErrors.ContainsKey("casing-prepare"))
+                    TryShotEffect("casing", () =>
+                    {
+                        var shell = actor.ShellTransform();
+                        if (_xr is null && !_thirdPersonMode) shell = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * shell;
+                        _shotEffects!.EjectCasing(shell, _camera.GlobalPosition);
+                    });
+                var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
+                var impactCount = ApplyProjectileImpacts(traces);
+                var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
+                var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces[^1];
+                _lastShot = new
+                {
+                    ordinal = _shotsFired,
+                    weapon = weapon.Form.ToString(),
+                    ammunition = _shot.Ammunition.ToString(),
+                    projectile = _shot.Projectile.Form.ToString(),
+                    projectiles = _shot.Projectiles,
+                    projectileHits = damage.HitCount,
+                    projectileActorHits = damage.ActorHitCount,
+                    projectileImpactRequests = impactCount,
+                    origin = new[] { from.X, from.Y, from.Z },
+                    direction = new[] { lastTrace.Direction.X, lastTrace.Direction.Y, lastTrace.Direction.Z },
+                    point = new[] { lastTrace.Point.X, lastTrace.Point.Y, lastTrace.Point.Z },
+                    distanceMeters = from.DistanceTo(lastTrace.Point),
+                    collider = lastTrace.Collider?.GetPath().ToString(),
+                    reference = lastTrace.Reference,
+                    hit = damage.HitCount != 0,
+                    loaded = _weaponHandling.Loaded(weapon.Form),
+                    damage = damage.LastDamage,
+                    damageError = _damageError,
+                    timing = new
+                    {
+                        collisionMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, collisionDone).TotalMilliseconds,
+                        audioMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(collisionDone, audioDone).TotalMilliseconds,
+                        damageMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(audioDone, damageDone).TotalMilliseconds,
+                        casingMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(damageDone, casingDone).TotalMilliseconds,
+                        impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
+                        totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds
+                    },
+                    spread = "source-minimum-spread;skill-condition-perk-ammo-modifiers-unbound",
+                    tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
+                };
+                GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
             }
-            if (!from.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f)
-                throw new InvalidDataException("Source projectile transform is invalid.");
-            // Collision resolution is independent of later damage/effect lanes.
-            // Unsupported impact behavior remains identified in the observation.
-            var traces = TraceProjectiles(from, direction);
-            if (!_weaponHandling!.ConsumeShot(weapon, _shot, _presentationRecords!)) return;
-            _shotsFired++;
-            var collisionDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            EnsureWeaponSounds();
-            if (weapon.Sounds.TryGetValue("shoot", out var sound)) _weaponSounds!.DispatchSound(sound);
-            else _weaponUnboundEvents.Add("weapon-shoot-sound");
-            actor.FlashMuzzle();
-            var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            var damage = ApplyProjectileDamage(traces);
-            var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (weapon.ShellModel is not null && !_shotEffectErrors.ContainsKey("casing-prepare"))
-                TryShotEffect("casing", () =>
-                {
-                    var shell = actor.ShellTransform();
-                    if (_xr is null && !_thirdPersonMode) shell = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * shell;
-                    _shotEffects!.EjectCasing(shell, _camera.GlobalPosition);
-                });
-            var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            var impactCount = ApplyProjectileImpacts(traces);
-            var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces[^1];
-            _lastShot = new
+            catch (Exception error)
             {
-                ordinal = _shotsFired,
-                weapon = weapon.Form.ToString(),
-                ammunition = _shot.Ammunition.ToString(),
-                projectile = _shot.Projectile.Form.ToString(),
-                projectiles = _shot.Projectiles,
-                projectileHits = damage.HitCount,
-                projectileActorHits = damage.ActorHitCount,
-                projectileImpactRequests = impactCount,
-                origin = new[] { from.X, from.Y, from.Z },
-                direction = new[] { lastTrace.Direction.X, lastTrace.Direction.Y, lastTrace.Direction.Z },
-                point = new[] { lastTrace.Point.X, lastTrace.Point.Y, lastTrace.Point.Z },
-                distanceMeters = from.DistanceTo(lastTrace.Point),
-                collider = lastTrace.Collider?.GetPath().ToString(),
-                reference = lastTrace.Reference,
-                hit = damage.HitCount != 0,
-                loaded = _weaponHandling.Loaded(weapon.Form),
-                damage = damage.LastDamage,
-                damageError = _damageError,
-                timing = new
-                {
-                    collisionMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, collisionDone).TotalMilliseconds,
-                    audioMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(collisionDone, audioDone).TotalMilliseconds,
-                    damageMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(audioDone, damageDone).TotalMilliseconds,
-                    casingMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(damageDone, casingDone).TotalMilliseconds,
-                    impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
-                    totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds
-                },
-                spread = "source-minimum-spread;skill-condition-perk-ammo-modifiers-unbound",
-                tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
-            };
-            GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
-        }
-        catch (Exception error)
-        {
-            _weaponActionError = error.Message; _firePreparationError = error.Message;
-            GD.PushError("OPENNV_WEAPON_SHOT_UNBOUND " + error.Message);
+                _weaponActionError = error.Message; _firePreparationError = error.Message;
+                GD.PushError("OPENNV_WEAPON_SHOT_UNBOUND " + error.Message);
+                return;
+            }
         }
     }
 

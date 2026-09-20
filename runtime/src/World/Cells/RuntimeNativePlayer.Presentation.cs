@@ -97,7 +97,7 @@ internal partial class RuntimeNativePlayer
         if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment))
         {
             var changing = _presentationEquipment is not null;
-            _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _shotPending = false; _shot = null;
+            _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _pendingShotCount = 0; _shot = null;
             try { RebuildPresentation(equipment); }
             catch (Exception error)
             {

@@ -11,6 +11,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal byte AttackAnimation { get; init; }
     internal float AttackMultiplier { get; init; } = 1;
     internal bool Automatic { get; init; }
+    internal float AttackShotsPerSecond { get; init; }
     internal string? ShellModel { get; init; }
     internal string AttackGroup => AttackAnimation switch
     {
@@ -119,6 +120,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             ReloadAnimation = data[15],
             AttackAnimation = data[41],
             AttackMultiplier = BinaryPrimitives.ReadSingleLittleEndian(data[60..]),
+            AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
             Automatic = (data[12] & 2) != 0,
             Ammunition = ammunition,
             Sounds = sounds,
