@@ -10,14 +10,21 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     FalloutFormKey? PlacedImpactObject, FalloutFormKey? ObjectEffect, FalloutFormKey? ImageSpace,
     string? Model)
 {
+    // GECK flag IDs 1..6 are stored as bits 0..5 in EXPL DATA.
     private const uint AlwaysWorldOrientation = 1;
-    private const uint IgnoreLineOfSight = 2;
-    private const uint PushSourceReferenceOnly = 4;
-    private const uint IgnoreImageSpaceSwap = 8;
-    private const uint KnownFlags = AlwaysWorldOrientation | IgnoreLineOfSight | PushSourceReferenceOnly | IgnoreImageSpaceSwap;
+    private const uint KnockDownAlways = 1 << 1;
+    private const uint KnockDownByFormula = 1 << 2;
+    private const uint IgnoreLineOfSight = 1 << 3;
+    private const uint PushSourceReferenceOnly = 1 << 4;
+    private const uint IgnoreImageSpaceSwap = 1 << 5;
+    private const uint KnownFlags = AlwaysWorldOrientation | KnockDownAlways | KnockDownByFormula |
+        IgnoreLineOfSight | PushSourceReferenceOnly | IgnoreImageSpaceSwap;
 
     internal bool IgnoresLineOfSight => (Flags & IgnoreLineOfSight) != 0;
     internal bool UsesWorldOrientation => (Flags & AlwaysWorldOrientation) != 0;
+    internal bool KnocksDownAlways => (Flags & KnockDownAlways) != 0;
+    internal bool KnocksDownByFormula => (Flags & KnockDownByFormula) != 0;
+    internal bool IgnoresImageSpaceSwap => (Flags & IgnoreImageSpaceSwap) != 0;
     internal bool HasUnpresentedVisuals => Light is not null || FirstSound is not null || SecondSound is not null ||
         ImageSpace is not null || ImageSpaceRadius > 0 || Model is not null || ImpactDataSet is not null;
 
@@ -82,6 +89,8 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     {
         if ((Flags & ~KnownFlags) != 0)
             throw new NotSupportedException($"Explosion {Form} flags 0x{Flags:x8} need their source effect owner.");
+        if ((Flags & (KnockDownAlways | KnockDownByFormula)) != 0)
+            throw new NotSupportedException($"Explosion {Form} needs its source knockdown owner.");
         if ((Flags & PushSourceReferenceOnly) != 0)
             throw new NotSupportedException($"Explosion {Form} pushes only its source reference.");
         if (Force != 0 || RadiationLevel != 0 || RadiationDissipationSeconds != 0 || RadiationRadius != 0 ||
