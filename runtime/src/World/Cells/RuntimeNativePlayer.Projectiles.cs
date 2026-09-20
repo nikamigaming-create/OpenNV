@@ -35,7 +35,7 @@ internal partial class RuntimeNativePlayer
         {
             var pelletDirection = FalloutWeaponSpread.Deviate(
                 direction,
-                shot.MinimumSpread,
+                shot.ResolvedMinimumSpread,
                 _weaponHandling!.NextShotRandomUnit);
             var end = origin + pelletDirection * (shot.Projectile.Range * UnitsToMeters);
             var collision = CastShotRay(origin, end);
@@ -57,7 +57,7 @@ internal partial class RuntimeNativePlayer
             for (var index = 0; index < shot.Projectiles; index++)
             {
                 var projectileDirection = FalloutWeaponSpread.Deviate(
-                    direction, shot.MinimumSpread, _weaponHandling!.NextShotRandomUnit);
+                    direction, shot.ResolvedMinimumSpread, _weaponHandling!.NextShotRandomUnit);
                 var flight = effects.PrepareProjectile(shot.Projectile,
                     _configuration.Simulation.GravityMetersPerSecondSquared,
                     origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);

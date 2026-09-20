@@ -8,6 +8,19 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
     FalloutFormKey? RecoveredItem, float RecoveryPercent, FalloutFormKey? ImpactDataSet,
     IReadOnlyList<FalloutAmmoEffect> AmmoEffects)
 {
+    internal float ResolvedMinimumSpread
+    {
+        get
+        {
+            var value = MinimumSpread;
+            foreach (var effect in AmmoEffects.Where(effect => effect.Type == FalloutAmmoEffect.Spread))
+                value = effect.Apply(value);
+            return float.IsFinite(value) && value >= 0
+                ? value
+                : throw new InvalidDataException("Ammo-adjusted minimum spread is invalid.");
+        }
+    }
+
     internal static FalloutWeaponShot Read(FalloutPluginStack records, FalloutFormKey weapon, FalloutFormKey ammunition)
     {
         var source = records.GetEffective(weapon);
@@ -79,7 +92,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
 
     private void RequireSupportedAmmoEffects()
     {
-        var unsupported = AmmoEffects.FirstOrDefault(effect => effect.Type > FalloutAmmoEffect.DamageThreshold);
+        var unsupported = AmmoEffects.FirstOrDefault(effect => effect.Type > FalloutAmmoEffect.Spread);
         if (unsupported is not null)
             throw new NotSupportedException($"Ammo effect {unsupported.Form} type {unsupported.Type} needs its runtime owner.");
     }

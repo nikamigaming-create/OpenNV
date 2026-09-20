@@ -63,7 +63,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var pellets = new List<object>(_enemyShot.Projectiles);
         for (var pellet = 0; pellet < _enemyShot.Projectiles; pellet++)
         {
-            var pelletDirection = FalloutWeaponSpread.Deviate(direction, _enemyShot.MinimumSpread, handling.NextShotRandomUnit);
+            var pelletDirection = FalloutWeaponSpread.Deviate(direction, _enemyShot.ResolvedMinimumSpread, handling.NextShotRandomUnit);
             using var query = PhysicsRayQueryParameters3D.Create(from,
                 from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres), _mask, _enemyRayExclusions);
             query.CollideWithAreas = true;
@@ -147,7 +147,7 @@ internal sealed partial class RuntimeNativeActorCombat
             for (var pellet = 0; pellet < shot.Projectiles; pellet++)
             {
                 var projectileDirection = FalloutWeaponSpread.Deviate(
-                    direction, shot.MinimumSpread, handling.NextShotRandomUnit);
+                    direction, shot.ResolvedMinimumSpread, handling.NextShotRandomUnit);
                 var flight = effects.PrepareProjectile(shot.Projectile, _context!.Gravity,
                     origin, projectileDirection, _mask, _enemyRayExclusions!);
                 flight.OnContact = contact => ApplyProjectilePlayerContact(player, shot, damage, contact);

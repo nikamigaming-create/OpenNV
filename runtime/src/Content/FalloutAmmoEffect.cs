@@ -7,6 +7,7 @@ internal sealed record FalloutAmmoEffect(FalloutFormKey Form, uint Type, uint Op
     internal const uint Damage = 0;
     internal const uint DamageResistance = 1;
     internal const uint DamageThreshold = 2;
+    internal const uint Spread = 3;
 
     internal static FalloutAmmoEffect Read(FalloutPluginStack records, FalloutFormKey form)
     {

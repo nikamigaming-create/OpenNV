@@ -44,7 +44,7 @@ internal partial class RuntimeNativePlayer
         damageError = _damageError,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,skill-condition-spread,critical,sneak,weapon-wear,other-projectile-types,tracers,explosions"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,aim-sway-skill-condition-spread,critical,sneak,weapon-wear,AMEF-weapon-condition-fatigue,other-projectile-types,tracers,explosions"
     };
 
     private void RequestWeaponFire()
@@ -232,7 +232,7 @@ internal partial class RuntimeNativePlayer
                         impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
                         totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds
                     },
-                    spread = "source-minimum-spread;skill-condition-perk-ammo-modifiers-unbound",
+                    spread = "source-minimum-spread+AMEF;aim-sway-skill-condition-perk-modifiers-unbound",
                     tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
                 };
                 GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace?.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
