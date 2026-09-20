@@ -10,10 +10,10 @@ before any golden release. This outcome is not yet achieved. No subagents.
 
 ## Verified candidate
 
-PR #30 is merged at `e9f8851776e5a0dcee647a8c5d4a82b5a5a221ef`.
+PR #31 is merged at `d26c6a246fb57c101e0f79d0e0a16ce4b51911f5`.
 The experimental Windows build is published as
 [`v0.1.0-experimental.20260920`](https://github.com/nikamigaming-create/OpenNV/releases/tag/v0.1.0-experimental.20260920).
-The next branch is `codex/scripted-message-results`. Private evidence
+The current branch is `codex/player-ingestible-effects`. Private evidence
 is under `local/status-audit-20260920/`; no retail files, saves or captures belong
 in Git or the release.
 
@@ -71,7 +71,7 @@ remains an explicit unsupported branch; source binding does not prove its runtim
 pose. Bot corpse aiming now uses live physical centers instead of rest-mesh bounds.
 The next acceptance is ordinary repair with legitimate skills/components,
 recruitment, then source following and door transfer. Current flat/XR sessions
-are `release-flat-20260920-message-a` / `release-xr-20260920-message-a`; recording is off.
+are recorded in the newest private run's live-state; recording is off during development.
 The source's two OnActivate blocks previously queued a superseded, unanswerable
 prompt. Presentation now follows the current result slot and drops obsolete
 callbacks/pending saves. The actual exported flat and simulator runs both reached
@@ -110,9 +110,26 @@ remove temporary raw frames after review/export.
 
 The message fix passes `message-runtime-gate.log`, `message-contract.log` and
 `message-owned.log`, plus ordinary flat/XR input and reviewed footage. The public
-experimental package above predates this fix. Aid still has no Use action:
-next bind owned ALCH/EFIT/MGEF behavior, inventory consumption and saved effects
-to the existing vitals and flat/wrist UI before recording healing.
+experimental package above predates this fix and the current Aid work.
+
+Aid now has a shared Use transaction for ALCH/EFIT/MGEF health modifiers,
+Medicine/Survival scaling, consumption sound, limb restoration and timed healing.
+Active effects retain remaining gameplay time and source identity in save v14;
+v13 saves remain readable. Synthetic and actual Stimpak normal/hardcore checks
+pass, including cold continuation. Actual flat and Elliott Tate wrist input both
+consumed one Stimpak (9 -> 8) with no menu error. This check began at full health;
+ordinary damage followed by visible healing still needs capture. Both final eyes
+were inspected and the flat native save retains the count under schema v14.
+Radiation, other actor values, addiction, scripted effects and unsupported
+archetypes fail before consuming the item; this does not claim all Aid items.
+See [Aid effects](aid-effects.md).
+
+The ordinary Primm run also reproduced NPC attack failure when several weapons
+compete for selection. Resolve selection and unarmed fallback before claiming
+route combat. The priority remains ordinary ED-E repair/recruitment, following
+through the exit, and paired flat/simulator combat with the companion.
 
 See [status](status.md) and [implementation plan](implementation-plan.md) for the
 preserved full scope and evidence levels.
+
+The Aid slice passes `aid-runtime-gate.log` and `aid-owned-focused.log`.

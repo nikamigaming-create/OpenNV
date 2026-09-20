@@ -150,6 +150,7 @@ internal static class OwnedReferenceInteractionProbe
             "Owned repair message waiting state failed before any selection.");
         Console.WriteLine("OPENNV_OWNED_SCRIPTED_CORPSE_ACTIVATION_PASS zeroHealth=true repairMessage=true repairOutcome=unverified");
         OwnedRepairMessageProbe.Run(records);
+        OwnedIngestibleProbe.Run(records, content);
         foreach (var id in new[] { 0x08267fu, 0x0cde03u })
         {
             var reference = records.RuntimeFormKey(id);
