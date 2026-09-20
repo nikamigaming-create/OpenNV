@@ -171,7 +171,15 @@ internal sealed class FalloutQuestScripts
         scheduling = "shared SCPT clocks; running quest admission and retained stop/restart clocks; exact retail MenuMode scheduling unverified",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
-    internal bool TryTakeMessage(out FalloutSourceMessage? message) => _messages.TryDequeue(out message);
+    internal bool TryTakeMessage(out FalloutSourceMessage? message)
+    {
+        // Script execution can publish another message before Godot presents
+        // the first. Only the request owning the consumptive result slot can
+        // accept input. Retain source execution order, not obsolete prompts.
+        while (_messages.TryDequeue(out message))
+            if (message.Request is { } request && MessageResults.IsPending(request)) return true;
+        return false;
+    }
 
     internal void ShowMessage(FalloutFormKey form, FalloutFormKey? script = null, FalloutFormKey? caller = null)
     {
@@ -187,7 +195,7 @@ internal sealed class FalloutQuestScripts
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
             instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture())).ToArray(),
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
-            .Concat(_messages.Select(message => message.Request!)).ToArray(),
+            .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
         FalloutGameModeProgram.ParserVersion);
 

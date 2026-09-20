@@ -55,6 +55,11 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         if (!_worldActive || _layer is not null || GetTree().Paused)
         {
             Scripts.Advance(delta, gameMode: false);
+            if (_current?.Request is { } request && !Scripts.MessageResults.IsPending(request))
+            {
+                CloseMessage();
+                if (Scripts.TryTakeMessage(out var replacement)) Show(replacement!);
+            }
             return;
         }
         if (Scripts.TryTakeMessage(out var restored)) { Show(restored!); return; }
@@ -76,12 +81,13 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             _current = message;
             _layer.AddChild(new NativeOwnedMessageMenu(message, _records, choice =>
             {
-                GD.Print($"OPENNV_SOURCE_MESSAGE_ACCEPT source={message.Form} choice={choice}");
-                Scripts.MessageResults.Select(message.Request ?? throw new InvalidDataException("Message input has no source request."), choice);
-                _layer?.QueueFree();
-                _layer = null;
-                _current = null;
-                GetTree().Paused = _pausedBefore;
+                // A removed canvas may still have an input callback queued.
+                // It must never close or answer its replacement.
+                if (_current?.Request != message.Request) return;
+                var accepted = Scripts.MessageResults.Select(message.Request ??
+                    throw new InvalidDataException("Message input has no source request."), choice);
+                GD.Print($"OPENNV_SOURCE_MESSAGE_{(accepted ? "ACCEPT" : "SUPERSEDED")} source={message.Form} choice={choice}");
+                CloseMessage();
                 if (Scripts.TryTakeMessage(out var next)) Show(next!);
             }, error => Fail(message, error)));
             GD.Print($"OPENNV_SOURCE_MESSAGE_OPEN source={message.Form}");
@@ -91,6 +97,15 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             Fail(message, error);
         }
     }
+
+    private void CloseMessage()
+    {
+        _layer?.QueueFree();
+        _layer = null;
+        _current = null;
+        GetTree().Paused = _pausedBefore;
+    }
+
     private void Fail(FalloutSourceMessage message, Exception error)
     {
         _error = error.Message;

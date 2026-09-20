@@ -10,7 +10,10 @@ before any golden release. This outcome is not yet achieved. No subagents.
 
 ## Verified candidate
 
-The verified candidate includes the `codex/flat-vr-release-audit` work. Private evidence
+PR #30 is merged at `e9f8851776e5a0dcee647a8c5d4a82b5a5a221ef`.
+The experimental Windows build is published as
+[`v0.1.0-experimental.20260920`](https://github.com/nikamigaming-create/OpenNV/releases/tag/v0.1.0-experimental.20260920).
+The next branch is `codex/scripted-message-results`. Private evidence
 is under `local/status-audit-20260920/`; no retail files, saves or captures belong
 in Git or the release.
 
@@ -68,12 +71,15 @@ remains an explicit unsupported branch; source binding does not prove its runtim
 pose. Bot corpse aiming now uses live physical centers instead of rest-mesh bounds.
 The next acceptance is ordinary repair with legitimate skills/components,
 recruitment, then source following and door transfer. Current flat/XR sessions
-are `release-flat-20260920-r` / `release-xr-20260920-ede-a`; recording is off.
-The source has two OnActivate blocks that enqueue the same initial message.
-The first displayed choice belongs to an already superseded result slot, so the
-menu repeats and drops that choice. Resolve message presentation/result ownership
-before treating repair-menu opening as successful menu navigation. The private
-21-second `OpenNV-ED-E-flat-vr-inspection.mp4` labels recruitment/following pending.
+are `release-flat-20260920-message-a` / `release-xr-20260920-message-a`; recording is off.
+The source's two OnActivate blocks previously queued a superseded, unanswerable
+prompt. Presentation now follows the current result slot and drops obsolete
+callbacks/pending saves. The actual exported flat and simulator runs both reached
+Repair -> Parts -> Leave on the first selections. Skills/components remained
+unchanged and the ineligible repair actions stayed absent. The private
+21-second `OpenNV-ED-E-flat-vr-repair-menus.mp4` shows this sequence and labels
+recruitment pending. This is menu navigation, not completed repair or retail
+message-order parity.
 
 Zero-health source actors initialize as corpses. The owned repair-message test
 passes. Non-player MoveTo retains source identity, disabled
@@ -94,8 +100,19 @@ closed; all-people/all-creature/combat coverage cannot be claimed.
 `owned-primm-pose.log` passes the selected owned-data audit. `global-route-native.log`,
 `global-route-bot.log`, `authored-ragdoll-contract.log` and
 `authored-ragdoll-native.log` pass their focused changes. Packaging/notices are
-prepared; no public experimental build has been published. Keep recording off except selected checks;
+verified. The 102.9 MB asset-free experimental ZIP passed packed-resource and
+archive boundary scans. Its packaged executable passed cold Continue and
+ordinary ED-E inspection in flat and the simulator. SHA-256:
+`08c55d05bc4c34d574a7f92e5b8cbc940b9667a603ab8f919d486c14fc83ca29`.
+The release is not a golden build; recruitment, follower behavior and Aid use
+remain unfinished. Keep recording off except selected checks;
 remove temporary raw frames after review/export.
+
+The message fix passes `message-runtime-gate.log`, `message-contract.log` and
+`message-owned.log`, plus ordinary flat/XR input and reviewed footage. The public
+experimental package above predates this fix. Aid still has no Use action:
+next bind owned ALCH/EFIT/MGEF behavior, inventory consumption and saved effects
+to the existing vitals and flat/wrist UI before recording healing.
 
 See [status](status.md) and [implementation plan](implementation-plan.md) for the
 preserved full scope and evidence levels.

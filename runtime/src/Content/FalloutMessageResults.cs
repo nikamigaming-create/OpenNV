@@ -23,10 +23,13 @@ internal sealed class FalloutMessageResults
     internal bool Select(FalloutMessageRequest request, int button)
     {
         if (button is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(button));
-        if (request.Sequence != _sequence || request.Caller != _caller) return false;
+        if (!IsPending(request)) return false;
         _button = button;
         return true;
     }
+
+    internal bool IsPending(FalloutMessageRequest request) =>
+        request.Sequence == _sequence && request.Caller == _caller && _button == -1;
 
     internal int Take(FalloutFormKey caller)
     {
