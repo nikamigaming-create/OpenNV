@@ -7,7 +7,8 @@ internal readonly record struct FalloutWeaponDamage(float Amount, float LimbMult
     IReadOnlyList<FalloutAmmoEffect>? AmmoEffects = null);
 
 internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, FalloutPlayerInventory inventory,
-    Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks)
+    Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks,
+    Func<FalloutCondition, float>? evaluateCondition = null)
 {
     private readonly float _weaponScale = FalloutGameSettingFloats.Read(records, "fDamageWeaponMult");
     private readonly float _skillBase = FalloutGameSettingFloats.Read(records, "fDamageSkillBase");
@@ -34,7 +35,12 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
             damage = Math.Max(0, effect.Apply(damage));
         foreach (var perk in perks().Where(perk => perk.Entry == 0))
         {
-            if (perk.Conditions.Count != 0) throw new NotSupportedException("Conditional weapon damage perk is unbound.");
+            if (perk.Conditions.Count != 0)
+            {
+                if (evaluateCondition is null)
+                    throw new NotSupportedException("Conditional weapon damage perk has no player condition owner.");
+                if (!FalloutCondition.AllPass(perk.Conditions, evaluateCondition)) continue;
+            }
             damage = perk.Function switch
             {
                 1 => perk.Value,

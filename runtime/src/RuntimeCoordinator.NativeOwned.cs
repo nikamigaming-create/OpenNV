@@ -953,7 +953,8 @@ public partial class RuntimeCoordinator
             _nativeContinueOpening ? _nativeOpeningRestore?.State.WeaponHandling : null);
         _nativePlayer.ConfigureCombat(_nativePluginStack!, _nativeGlobals!,
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
-            () => _nativeOpeningStageDriver!.PlayerPerkEntries);
+            () => _nativeOpeningStageDriver!.PlayerPerkEntries,
+            condition => _nativeOpeningStageDriver!.EvaluateRecipeCondition(condition));
         _nativePlayer.CanOccupyPosition = NativeCollisionResident;
         _nativePlayer.IsDefeated = () => _nativeOpeningStageDriver?.Vitals.HitPoints == 0;
         var restore = _nativeContinueOpening

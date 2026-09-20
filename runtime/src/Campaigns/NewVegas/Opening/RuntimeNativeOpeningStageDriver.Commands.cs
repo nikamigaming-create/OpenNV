@@ -202,7 +202,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         GD.Print($"OPENNV_NATIVE_RECIPE_MENU_OPEN category={category.Form} recipes={recipes.Count} source=RCCT-RCPE owner=shared-inventory parity=unverified");
     }
 
-    private float EvaluateRecipeCondition(FalloutCondition condition)
+    internal float EvaluateRecipeCondition(FalloutCondition condition)
     {
         if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
         if (condition.RunOn != 0)

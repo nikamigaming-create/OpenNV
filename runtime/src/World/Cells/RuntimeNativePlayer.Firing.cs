@@ -24,9 +24,12 @@ internal partial class RuntimeNativePlayer
     private double _firePreparationMilliseconds;
     private object? _firePreparationTiming;
     internal void ConfigureCombat(FalloutPluginStack records, FalloutGlobalState globals, Func<int> level,
-        Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks)
+        Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks,
+        Func<FalloutCondition, float> evaluateCondition)
     {
-        _damage = new(records, _presentationInventory!, actorValue, perks); _combatGlobals = globals; _combatLevel = level;
+        _damage = new(records, _presentationInventory!, actorValue, perks, evaluateCondition);
+        _combatGlobals = globals;
+        _combatLevel = level;
     }
     private readonly Dictionary<string, string> _shotEffectErrors = new(StringComparer.Ordinal);
     internal object FiringState => new
