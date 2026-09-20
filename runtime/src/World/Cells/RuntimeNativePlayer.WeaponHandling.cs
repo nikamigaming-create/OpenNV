@@ -125,13 +125,13 @@ internal partial class RuntimeNativePlayer
             var attack = _weaponAction.StartsWith("attack", StringComparison.Ordinal);
             if (attack && weapon.Automatic)
             {
-                var sequence = _weaponActionClip.Sequence;
-                var duration = sequence.StopTime - sequence.StartTime;
+                var automaticSequence = _weaponActionClip.Sequence;
+                var duration = automaticSequence.StopTime - automaticSequence.StartTime;
                 if (!float.IsFinite(weapon.AttackShotsPerSecond) || weapon.AttackShotsPerSecond <= 0 ||
-                    !float.IsFinite(sequence.Frequency) || sequence.Frequency <= 0 || duration <= 0 || _weaponActionHitCount <= 0)
+                    !float.IsFinite(automaticSequence.Frequency) || automaticSequence.Frequency <= 0 || duration <= 0 || _weaponActionHitCount <= 0)
                     throw new InvalidDataException("Automatic weapon cadence is invalid.");
                 _weaponActionSeconds += delta * duration * weapon.AttackShotsPerSecond /
-                    (sequence.Frequency * _weaponActionHitCount);
+                    (automaticSequence.Frequency * _weaponActionHitCount);
             }
             else _weaponActionSeconds += delta * weapon.AnimationMultiplier * (attack ? weapon.AttackMultiplier : 1);
             foreach (var key in _weaponActionKeys!.Crossed(previous, _weaponActionSeconds, previous == 0))
