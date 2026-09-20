@@ -40,7 +40,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _enemyWeapon = FalloutWeaponPresentation.Read(_records, item.FormKey, firstPerson: false);
             if (_enemyWeapon.Automatic && (!float.IsFinite(_enemyWeapon.AttackShotsPerSecond) || _enemyWeapon.AttackShotsPerSecond <= 0))
                 throw new NotSupportedException("Actor automatic weapon has no valid source attack-shot rate.");
-            if (_enemyWeapon.AnimationGroup is not ("1hm" or "2hm" or "1hp" or "2hr" or "2ha" or "1gt"))
+            if (_enemyWeapon.AnimationGroup is not ("1hm" or "2hm" or "1hp" or "2hr" or "2ha" or "2hl" or "1gt"))
                 throw new NotSupportedException("This actor weapon requires its specialized attack owner.");
             owned.Contents.Equip(_records, item.FormKey);
             _enemyObject = new(_enemyWeapon, _skeleton, _content);

@@ -38,7 +38,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
         if (type is not (3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 13))
             throw new NotSupportedException($"Weapon type {type} needs its melee, mine or ammo-free attack owner.");
         var attackAnimation = data[41];
-        if (type is 10 or 13 && attackAnimation is not (114 or 120 or 126 or 132 or 138 or 150 or 156))
+        if (type is 10 or 13 && attackAnimation is not (114 or 120 or 126 or 132 or 138 or 150 or 156 or 162))
             throw new NotSupportedException($"Thrown weapon {weapon} has no source AttackThrow animation.");
         var projectile = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[36..]));
         var count = (int)data[42];
