@@ -21,7 +21,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_enemyShot?.Ammunition != ammo)
         {
             _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo);
-            _enemyShot.RequireHitscan();
+            _enemyShot.RequireRuntimeAttackOwner();
             var socket = _enemyObject!.Nodes.Single(node => node.GetMeta("opennv_nif_source_name", "").AsString() == "ProjectileNode");
             _enemyMuzzle ??= new(_records, _content, socket, _skeleton.UnitsToMetres);
             _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false);
@@ -35,6 +35,11 @@ internal sealed partial class RuntimeNativeActorCombat
         var from = socketPose.Origin;
         var direction = (player.CombatTargetPoint - from).Normalized();
         var resolvedDamage = _enemyDamage!.Resolve(_enemyShot);
+        if (!_enemyShot.Projectile.Hitscan)
+        {
+            ShootProjectilePlayer(player, weapon, handling, from, direction, resolvedDamage);
+            return;
+        }
         if (!handling.ConsumeShot(weapon, _enemyShot, _records)) return;
         (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
         if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
@@ -109,5 +114,87 @@ internal sealed partial class RuntimeNativeActorCombat
             boundary = "stationary-aim-at-source-target;weapon-spread-skill-modifiers,cover,projectile-flight-and-retail-cadence-unmatched"
         };
         GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=ranged projectiles={_enemyShot.Projectiles} hits={hits} health={before:R}->{after:R}");
+    }
+
+    private void ShootProjectilePlayer(RuntimeNativePlayer player, FalloutWeaponPresentation weapon,
+        FalloutWeaponHandling handling, Vector3 origin, Vector3 direction, FalloutWeaponDamage damage)
+    {
+        var shot = _enemyShot!;
+        var effects = _enemyShotEffects!;
+        var flights = new List<RuntimeNativeProjectileFlight>(shot.Projectiles);
+        try
+        {
+            for (var pellet = 0; pellet < shot.Projectiles; pellet++)
+            {
+                var projectileDirection = FalloutWeaponSpread.Deviate(
+                    direction, shot.MinimumSpread, handling.NextShotRandomUnit);
+                var flight = effects.PrepareProjectile(shot.Projectile, _context!.Gravity,
+                    origin, projectileDirection, _mask, _enemyRayExclusions!);
+                flight.OnContact = contact => ApplyProjectilePlayerContact(player, shot, damage, contact);
+                flights.Add(flight);
+            }
+            if (!handling.ConsumeShot(weapon, shot, _records))
+            {
+                foreach (var flight in flights) flight.Free();
+                return;
+            }
+            (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
+            if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
+            _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition);
+            foreach (var flight in flights) effects.LaunchProjectile(flight);
+            _lastAttack = new
+            {
+                kind = "source-projectile-flight",
+                weapon = weapon.Form.ToString(),
+                projectile = shot.Projectile.Form.ToString(),
+                loaded = handling.Loaded(weapon.Form),
+                projectiles = shot.Projectiles,
+                projectileFlights = flights.Count,
+                direction = new[] { direction.X, direction.Y, direction.Z },
+                origin = new[] { origin.X, origin.Y, origin.Z },
+                boundary = "missile-flight;gravity-and-source-speed;ammo-effects,tracer,rotation,bounce,explosions-and-retail-cadence-unmatched"
+            };
+            GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=projectile-flight projectiles={flights.Count}");
+        }
+        catch
+        {
+            foreach (var flight in flights)
+                if (GodotObject.IsInstanceValid(flight) && !flight.IsInsideTree()) flight.Free();
+            throw;
+        }
+    }
+
+    private void ApplyProjectilePlayerContact(RuntimeNativePlayer player, FalloutWeaponShot shot,
+        FalloutWeaponDamage damage, RuntimeNativeProjectileContact contact)
+    {
+        byte? part = null;
+        float? healthBefore = null;
+        float? healthAfter = null;
+        if (contact.Collider == player || contact.Collider is not null && player.IsAncestorOf(contact.Collider))
+        {
+            part = contact.Collider == player ? (byte)0 : player.CombatHitPart(contact.Collider!);
+            healthBefore = _context!.Vitals().ExactHitPoints;
+            _context.DamagePlayer(damage.Amount, part.Value, damage.LimbMultiplier);
+            healthAfter = _context.Vitals().ExactHitPoints;
+            _hits++;
+        }
+        if (contact.Collider is not null && shot.ImpactDataSet is { } set &&
+            FalloutImpact.Resolve(_records, set, part is null ? FalloutImpact.MaterialIndex(
+                NativeNifCollisionBuilder.HitMaterial(contact.Collision)) : 6) is { } impact)
+            _enemyShotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
+        _lastAttack = new
+        {
+            kind = "source-projectile-flight-contact",
+            weapon = _enemyWeapon!.Form.ToString(),
+            projectile = shot.Projectile.Form.ToString(),
+            collider = contact.Collider?.GetPath().ToString(),
+            part,
+            point = new[] { contact.Point.X, contact.Point.Y, contact.Point.Z },
+            damage = part is null ? (float?)null : damage.Amount,
+            limbDamage = part is null ? (float?)null : damage.Amount * damage.LimbMultiplier,
+            healthBefore,
+            healthAfter,
+            direction = new[] { contact.Direction.X, contact.Direction.Y, contact.Direction.Z }
+        };
     }
 }

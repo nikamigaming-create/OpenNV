@@ -46,6 +46,64 @@ internal partial class RuntimeNativePlayer
         return traces;
     }
 
+    private List<RuntimeNativeProjectileFlight> PrepareProjectileFlights(
+        Vector3 origin, Vector3 direction, FalloutWeaponDamage damage)
+    {
+        var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
+        var effects = _shotEffects ?? throw new InvalidOperationException("Projectile effects owner is absent.");
+        var flights = new List<RuntimeNativeProjectileFlight>(shot.Projectiles);
+        try
+        {
+            for (var index = 0; index < shot.Projectiles; index++)
+            {
+                var projectileDirection = FalloutWeaponSpread.Deviate(
+                    direction, shot.MinimumSpread, _weaponHandling!.NextShotRandomUnit);
+                var flight = effects.PrepareProjectile(shot.Projectile,
+                    _configuration.Simulation.GravityMetersPerSecondSquared,
+                    origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);
+                flight.OnContact = contact => ApplyProjectileFlightContact(shot, damage, contact);
+                flights.Add(flight);
+            }
+            return flights;
+        }
+        catch
+        {
+            foreach (var flight in flights) flight.Free();
+            throw;
+        }
+    }
+
+    private void ApplyProjectileFlightContact(FalloutWeaponShot shot, FalloutWeaponDamage damage,
+        RuntimeNativeProjectileContact contact)
+    {
+        _damageError = null;
+        FalloutActorHit? actorHit = null;
+        if (contact.Collider is { } collider && RuntimeNativeActorCombat.Find(collider) is { } combat)
+        {
+            try
+            {
+                actorHit = combat.Hit(collider, damage, _presentationRecords!.RuntimeFormKey(0x14),
+                    _combatLevel!(), _combatGlobals!);
+                GD.Print($"OPENNV_WEAPON_PROJECTILE_ACTOR_HIT projectile={shot.Projectile.Form} reference={actorHit.Reference} part={actorHit.Part} damage={actorHit.HealthDamage:R}");
+            }
+            catch (Exception error)
+            {
+                _damageError = error.Message;
+                GD.PushError($"OPENNV_ACTOR_DAMAGE_UNBOUND reference={ShotReference(collider)} {error.Message}");
+            }
+        }
+
+        if (contact.Collider is null || shot.ImpactDataSet is not { } impactSet) return;
+        TryShotEffect("flight-impact", () =>
+        {
+            var material = actorHit is { } hit
+                ? checked((int)hit.ImpactMaterial)
+                : ShotMaterial(contact.Collision);
+            if (FalloutImpact.Resolve(_presentationRecords!, impactSet, material) is { } impact)
+                _shotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
+        });
+    }
+
     private PlayerProjectileDamageSummary ApplyProjectileDamage(IReadOnlyList<PlayerProjectileTrace> traces)
     {
         _damageError = null;

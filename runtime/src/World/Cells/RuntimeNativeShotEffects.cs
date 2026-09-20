@@ -29,6 +29,10 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private FalloutShellCasing? _shell;
     private string? _shellPath;
     private RuntimeNativeNifPrototype? _shellPrototype;
+    private string? _projectilePath;
+    private RuntimeNativeNifPrototype? _projectilePrototype;
+    private readonly HashSet<RuntimeNativeProjectileFlight> _projectiles = [];
+    private long _projectileLaunches, _projectileHits, _projectileMisses, _projectileErrors;
     private long _casings, _impacts;
     private object? _lastCasing, _lastImpact;
     private string? _decalError;
@@ -40,6 +44,11 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         retainedImpacts = _spareImpact is null ? 0 : 1,
         particles = _effects.Where(effect => effect.Playback is not null).SelectMany(effect => effect.Playback!.Particles)
             .Select(particle => new { particle.BirthCount, particle.ActiveCount, particle.EmissionEnabled }).ToArray(),
+        projectileLaunches = _projectileLaunches,
+        projectileHits = _projectileHits,
+        projectileMisses = _projectileMisses,
+        projectileErrors = _projectileErrors,
+        projectileFlights = _projectiles.Select(projectile => projectile.Observation).ToArray(),
         lastCasing = _lastCasing,
         lastImpact = _lastImpact,
         decals = _decals?.Observation,
@@ -106,6 +115,30 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             };
         }
         catch { root.Free(); throw; }
+    }
+
+    internal RuntimeNativeProjectileFlight PrepareProjectile(FalloutProjectile source, float gravity,
+        Vector3 origin, Vector3 direction, uint collisionMask, IEnumerable<Rid> exclusions)
+    {
+        var path = source.Model ?? throw new NotSupportedException($"Projectile {source.Form} has no source model.");
+        if (_projectilePath != path)
+        {
+            _projectilePrototype?.Scene.Root.Free();
+            _projectilePrototype = new(ReadModel(path), _units);
+            _projectilePath = path;
+        }
+        return new(source, _projectilePrototype!.Instantiate(), _units, gravity, origin, direction, collisionMask, exclusions);
+    }
+
+    internal void LaunchProjectile(RuntimeNativeProjectileFlight projectile)
+    {
+        if (!IsInsideTree() || projectile.IsFinished || _projectiles.Contains(projectile))
+            throw new InvalidOperationException("Source projectile cannot be launched by this effects owner.");
+        AddChild(projectile);
+        _projectiles.Add(projectile);
+        projectile.OnFinished = ProjectileFinished;
+        _projectileLaunches++;
+        projectile.Start();
     }
 
     internal void Impact(FalloutImpact source, Vector3 point, Vector3 normal, Vector3 incoming, Node3D? target = null, bool decal = true,
@@ -200,7 +233,19 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         }
     }
 
-    public override void _ExitTree() { _shellPrototype?.Scene.Root.Free(); _shellPrototype = null; }
+    public override void _ExitTree()
+    {
+        _shellPrototype?.Scene.Root.Free(); _shellPrototype = null;
+        _projectilePrototype?.Scene.Root.Free(); _projectilePrototype = null;
+    }
+
+    private void ProjectileFinished(RuntimeNativeProjectileFlight projectile)
+    {
+        _projectiles.Remove(projectile);
+        if (projectile.Status == "hit") _projectileHits++;
+        else if (projectile.Status == "range-ended") _projectileMisses++;
+        else _projectileErrors++;
+    }
 
     private FalloutNifFile ReadModel(string path) => FalloutNifFile.Read(ReadBytes(path));
     private byte[] ReadBytes(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes :

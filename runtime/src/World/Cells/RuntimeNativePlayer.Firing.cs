@@ -73,7 +73,7 @@ internal partial class RuntimeNativePlayer
             var ammunition = _weaponHandling.Ammunition(weapon)!.Value;
             if (_shot?.Weapon != weapon.Form || _shot.Ammunition != ammunition)
                 _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form, ammunition);
-            _shot.RequireHitscan();
+            _shot.RequireRuntimeAttackOwner();
             var definitionDone = System.Diagnostics.Stopwatch.GetTimestamp();
             _shotEffects ??= new(_presentationRecords!, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask);
             if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
@@ -159,9 +159,15 @@ internal partial class RuntimeNativePlayer
                     throw new InvalidDataException("Source projectile transform is invalid.");
                 // Collision resolution is independent of later damage/effect lanes.
                 // Unsupported impact behavior remains identified in the observation.
-                var traces = TraceProjectiles(from, direction);
+                var isHitscan = _shot.Projectile.Hitscan;
+                IReadOnlyList<PlayerProjectileTrace> traces = isHitscan ? TraceProjectiles(from, direction) : [];
+                List<RuntimeNativeProjectileFlight> preparedFlights = isHitscan
+                    ? []
+                    : PrepareProjectileFlights(from, direction,
+                        (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(_shot));
                 if (!_weaponHandling!.ConsumeShot(weapon, _shot, _presentationRecords!))
                 {
+                    foreach (var flight in preparedFlights) flight.Free();
                     if (weapon.Automatic)
                     {
                         _automaticFireStopped = true;
@@ -179,7 +185,7 @@ internal partial class RuntimeNativePlayer
                 else _weaponUnboundEvents.Add("weapon-shoot-sound");
                 actor.FlashMuzzle();
                 var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                var damage = ApplyProjectileDamage(traces);
+                var damage = isHitscan ? ApplyProjectileDamage(traces) : new PlayerProjectileDamageSummary(0, 0, null);
                 var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 if (weapon.ShellModel is not null && !_shotEffectErrors.ContainsKey("casing-prepare"))
                     TryShotEffect("casing", () =>
@@ -189,9 +195,10 @@ internal partial class RuntimeNativePlayer
                         _shotEffects!.EjectCasing(shell, _camera.GlobalPosition);
                     });
                 var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                var impactCount = ApplyProjectileImpacts(traces);
+                var impactCount = isHitscan ? ApplyProjectileImpacts(traces) : 0;
+                foreach (var flight in preparedFlights) _shotEffects!.LaunchProjectile(flight);
                 var impactDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces[^1];
+                var lastTrace = traces.LastOrDefault(trace => trace.Collider is not null) ?? traces.LastOrDefault();
                 _lastShot = new
                 {
                     ordinal = _shotsFired,
@@ -203,12 +210,16 @@ internal partial class RuntimeNativePlayer
                     projectileActorHits = damage.ActorHitCount,
                     projectileImpactRequests = impactCount,
                     origin = new[] { from.X, from.Y, from.Z },
-                    direction = new[] { lastTrace.Direction.X, lastTrace.Direction.Y, lastTrace.Direction.Z },
-                    point = new[] { lastTrace.Point.X, lastTrace.Point.Y, lastTrace.Point.Z },
-                    distanceMeters = from.DistanceTo(lastTrace.Point),
-                    collider = lastTrace.Collider?.GetPath().ToString(),
-                    reference = lastTrace.Reference,
+                    direction = lastTrace is null
+                        ? new[] { direction.X, direction.Y, direction.Z }
+                        : new[] { lastTrace.Direction.X, lastTrace.Direction.Y, lastTrace.Direction.Z },
+                    point = lastTrace is null ? (float[]?)null : new[] { lastTrace.Point.X, lastTrace.Point.Y, lastTrace.Point.Z },
+                    distanceMeters = lastTrace is null ? 0 : from.DistanceTo(lastTrace.Point),
+                    collider = lastTrace?.Collider?.GetPath().ToString(),
+                    reference = lastTrace?.Reference,
                     hit = damage.HitCount != 0,
+                    projectileFlights = preparedFlights.Count,
+                    flightState = isHitscan ? "hitscan-complete" : "in-flight",
                     loaded = _weaponHandling.Loaded(weapon.Form),
                     damage = damage.LastDamage,
                     damageError = _damageError,
@@ -224,7 +235,7 @@ internal partial class RuntimeNativePlayer
                     spread = "source-minimum-spread;skill-condition-perk-ammo-modifiers-unbound",
                     tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
                 };
-                GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
+                GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace?.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
             }
             catch (Exception error)
             {

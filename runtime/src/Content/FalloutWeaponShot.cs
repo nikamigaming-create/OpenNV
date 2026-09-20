@@ -62,4 +62,17 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey A
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight/explosion simulation.");
         if (AmmoEffects.Count != 0) throw new NotSupportedException("Selected ammunition needs its AMEF modifier owner.");
     }
+
+    internal void RequireRuntimeAttackOwner()
+    {
+        if (Projectile.Hitscan)
+        {
+            RequireHitscan();
+            return;
+        }
+        if (AmmoEffects.Count != 0) throw new NotSupportedException("Selected ammunition needs its AMEF modifier owner.");
+        if (Projectile.Type != 1 || Projectile.Speed <= 0 || Projectile.Model is null || Projectile.Explosion is not null ||
+            (Projectile.Flags & 0x0802) != 0 || Projectile.HasExplicitRotation || Projectile.BouncyMultiplier != 0)
+            throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation, bounce or explosion owner.");
+    }
 }

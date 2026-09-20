@@ -8,6 +8,8 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     FalloutFormKey? MuzzleLight, FalloutFormKey? Explosion)
 {
     internal bool Hitscan => (Flags & 1) != 0;
+    internal bool HasExplicitRotation { get; private init; }
+    internal float BouncyMultiplier { get; private init; }
 
     internal static FalloutProjectile Read(FalloutPluginStack records, FalloutFormKey key)
     {
@@ -16,11 +18,21 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
         var fields = record.ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DATA").Data.Span;
         if (data.Length is not (64 or 68 or 80 or 84)) throw new NotSupportedException($"PROJ DATA extent {data.Length} is unbound.");
-        var result = new FalloutProjectile(key, BinaryPrimitives.ReadUInt16LittleEndian(data), BinaryPrimitives.ReadUInt16LittleEndian(data[2..]),
+        var flags = BinaryPrimitives.ReadUInt16LittleEndian(data);
+        var explicitRotation = (flags & 0x0800) != 0;
+        if (explicitRotation && data.Length < 80)
+            throw new InvalidDataException("Projectile rotation flag has no rotation fields.");
+        var bouncy = data.Length == 84 ? Number(data, 80) : 0;
+        var result = new FalloutProjectile(key, flags, BinaryPrimitives.ReadUInt16LittleEndian(data[2..]),
             Number(data, 4), Number(data, 8), Number(data, 12), Number(data, 24), Path("MODL"), Path("NAM1"), Number(data, 44),
             record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[20..])),
-            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[36..])));
-        if (result.Range <= 0 || result.Speed < 0 || result.Gravity < 0 || result.TracerChance is < 0 or > 1 || result.MuzzleSeconds < 0)
+            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[36..])))
+        {
+            HasExplicitRotation = explicitRotation,
+            BouncyMultiplier = bouncy,
+        };
+        if (result.Range <= 0 || result.Speed < 0 || result.Gravity < 0 || result.TracerChance is < 0 or > 1 ||
+            result.MuzzleSeconds < 0 || result.BouncyMultiplier < 0)
             throw new InvalidDataException("Projectile motion/appearance values are invalid.");
         return result;
 
