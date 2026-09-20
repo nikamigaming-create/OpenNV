@@ -66,9 +66,7 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
             if (!_armorDefense.TryGetValue(key, out var armor))
                 _armorDefense.Add(key, armor = FalloutArmorDefense.Read(records.GetEffective(key)));
             var item = inventory.Item(key)!;
-            var conditions = (item.Variants ?? []).Select(variant => variant.Condition ?? 1).Distinct().ToArray();
-            if (conditions.Length > 1) throw new NotSupportedException("Equipped armor instance selection is unbound.");
-            var condition = conditions.Length == 0 ? 1 : conditions[0];
+            var condition = FalloutWeaponCondition.SelectedCondition(item);
             var rating = _armorRating ??= (FalloutGameSettingFloats.Read(records, "fArmorRatingBase"), FalloutGameSettingFloats.Read(records, "fArmorRatingMax"));
             var factor = rating.Base + condition * (rating.Maximum - rating.Base);
             armorThreshold += armor.Threshold * factor;
