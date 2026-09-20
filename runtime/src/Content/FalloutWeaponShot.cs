@@ -108,7 +108,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
         if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4 or 8) ||
             (Projectile.Flags & ~supportedHitscanFlags) != 0 ||
-            Projectile.HasAlternateTriggerParameters || Projectile.Type == 4 && Projectile.HasAlternateTrigger ||
+            Projectile.HasAlternateTriggerParameters ||
             Projectile.Type == 8 && Projectile.ExplosionSource is not null ||
             Projectile.Explosion is not null || Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight, explosion, alternate-trigger or flag simulation.");
@@ -128,7 +128,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation or ammo-effect owner.");
         if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
-        if (Projectile.HasAlternateTrigger && !(Projectile.Type == 8 && Projectile.ExplosionSource is null))
+        if (Projectile.HasAlternateTrigger && (Projectile.HasAlternateTriggerParameters || Projectile.ExplosionSource is not null))
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its alternative-trigger owner.");
         Projectile.ExplosionSource?.RequireRuntimeDamageOwner();
     }
