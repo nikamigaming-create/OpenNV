@@ -78,13 +78,14 @@ internal sealed partial class RuntimeNativeActorCombat
         var distance = new Vector2(offset.X, offset.Z).Length();
         var reach = _attackRange + (Ranged ? 0 : _radius + TargetRadius(player));
         var visible = CanSeeTarget(player);
-        if (state.Action == "pursue" && distance <= reach && visible)
+        if (state.Action is "pursue" or "idle")
         {
-            if (_enemyWeapon?.IsMeleeWeapon == true && !_enemyWeaponHandling!.CanUse(_enemyWeapon))
-                throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
             var direction = offset; direction.Y = 0;
-            if (direction.IsZeroApprox() || (-_actor.GlobalBasis.Z).Normalized().Dot(direction.Normalized()) > .95f)
-                state = state.Transition("attack");
+            var facing = direction.IsZeroApprox() || (-_actor.GlobalBasis.Z).Normalized().Dot(direction.Normalized()) > .95f;
+            var action = distance > reach || !visible ? "pursue" : facing ? "attack" : "idle";
+            if (action == "attack" && _enemyWeapon?.IsMeleeWeapon == true && !_enemyWeaponHandling!.CanUse(_enemyWeapon))
+                throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
+            if (action != state.Action) state = state.Transition(action);
         }
         if (state.Action == "attack" && state.StartPending && Ranged && !_enemyWeaponHandling!.CanFire(_enemyWeapon!))
         {
@@ -120,7 +121,9 @@ internal sealed partial class RuntimeNativeActorCombat
         var next = state.Seconds + delta * factor;
         if (state.Action == "reload" || state.Action == "attack" && _enemyWeapon?.Automatic != true)
             next = Math.Min(next, clip.Duration);
-        var moving = state.Action == "pursue" && distance > reach;
+        // Inside weapon range is not arrival when the target is occluded.
+        // Waiting to face a visible target uses the idle, never a running clip.
+        var moving = state.Action == "pursue";
         TurnToward(moving ? PursuitTarget(TargetPosition(player), delta) : TargetPosition(player), delta);
         Activity.SetMovement(running: moving, sneaking: false);
         MoveActor(moving ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta);

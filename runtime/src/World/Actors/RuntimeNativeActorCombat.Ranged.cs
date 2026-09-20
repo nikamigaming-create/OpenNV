@@ -66,7 +66,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var spreadDegrees = ResolveNpcShotSpread(_enemyShot);
         if (FriendlyInsideSpread(player, from, TargetPoint(player), spreadDegrees))
         {
-            _lastAttack = new { kind = "held-friendly-spread", target = _state.Engagement!.Target.ToString() };
+            _lastAttack = new { kind = "held-friendly-spread", target = _state.Engagement!.Target.ToString(), blocker = _friendlySpreadBlocker, spreadDegrees };
             return;
         }
         if (!_enemyShot.Projectile.IsInstantRayAttack)
