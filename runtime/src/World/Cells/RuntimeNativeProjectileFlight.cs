@@ -21,6 +21,8 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     private float _travelledMeters;
     private int _contacts, _detonations;
     private int _bounces;
+    private int _transparentLayerPassThroughs;
+    private int _transparentLayerUnresolvedContacts;
     private bool _active;
     private string _status = "prepared";
 
@@ -41,6 +43,8 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         contacts = _contacts,
         detonations = _detonations,
         bounces = _bounces,
+        transparentLayerPassThroughs = _transparentLayerPassThroughs,
+        transparentLayerUnresolvedContacts = _transparentLayerUnresolvedContacts,
         error = Error,
         boundary = "missile-lobber-and-flame-flight;gravity,source-speed,bounce,flame-actor-pass-through-and-source-explosion-radius-damage;flame-audio,explosion-distance-attenuation,force,radiation,projectile-beam-visuals,rotation,tracer-and-retail-parity-unmatched"
     };
@@ -144,6 +148,39 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             _travelledMeters += start.DistanceTo(point);
             var collider = collision.TryGetValue("collider", out value) ? value.AsGodotObject() as Node : null;
             var contact = new RuntimeNativeProjectileContact(collision, collider, point, normal, direction);
+            if (_source.PassesThroughSmallTransparent && collider is not null)
+            {
+                if (RuntimeNativeProjectileCollision.TryGetHavokLayer(collider, out var layer))
+                {
+                    if (layer == RuntimeNativeProjectileCollision.TransparentSmallHavokLayer)
+                    {
+                        if (collider is not CollisionObject3D body || _exclusions.Contains(body.GetRid()))
+                        {
+                            Error = "Transparent collision did not provide a new source collision body to exclude.";
+                            GD.PushError($"OPENNV_PROJECTILE_TRANSPARENT_PASS_UNBOUND projectile={_source.Form} {Error}");
+                            Finish("transparent-pass-through-unbound");
+                            return;
+                        }
+                        _exclusions.Add(body.GetRid());
+                        var segmentLength = start.DistanceTo(destination);
+                        var fraction = segmentLength > .000001f
+                            ? Mathf.Clamp(start.DistanceTo(point) / segmentLength, 0, 1)
+                            : 1;
+                        _velocity += _gravity * (seconds * fraction);
+                        const float clearTransparentMeters = .001f;
+                        _travelledMeters += clearTransparentMeters;
+                        _transparentLayerPassThroughs++;
+                        GlobalPosition = point + direction * clearTransparentMeters;
+                        OrientToVelocity();
+                        if (_travelledMeters >= _rangeMeters - .0001f) Finish("range-ended");
+                        return;
+                    }
+                }
+                else
+                {
+                    _transparentLayerUnresolvedContacts++;
+                }
+            }
             if (_source.PassesThroughActors && collider is not null && RuntimeNativeActorCombat.Find(collider) is { } actor)
             {
                 var added = 0;

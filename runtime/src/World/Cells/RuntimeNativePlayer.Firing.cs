@@ -61,7 +61,7 @@ internal partial class RuntimeNativePlayer
         lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio,supersonic-projectile-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
     };
 
     private float ResolvePlayerShotSpread(FalloutWeaponShot shot)
@@ -194,6 +194,8 @@ internal partial class RuntimeNativePlayer
                 // Collision resolution is independent of later damage/effect lanes.
                 // Unsupported impact behavior remains identified in the observation.
                 var isInstantRay = _shot.Projectile.IsInstantRayAttack;
+                _lastProjectileTransparentLayerPassThroughs = 0;
+                _lastProjectileTransparentLayerUnresolvedContacts = 0;
                 IReadOnlyList<PlayerProjectileTrace> traces = isInstantRay ? TraceProjectiles(from, direction, medianSpreadDegrees) : [];
                 List<RuntimeNativeProjectileFlight> preparedFlights = isInstantRay
                     ? []
@@ -255,6 +257,9 @@ internal partial class RuntimeNativePlayer
                     distanceMeters = lastTrace is null ? 0 : from.DistanceTo(lastTrace.Point),
                     collider = lastTrace?.Collider?.GetPath().ToString(),
                     reference = lastTrace?.Reference,
+                    transparentLayerPassThroughs = _lastProjectileTransparentLayerPassThroughs,
+                    transparentLayerUnresolvedContacts = _lastProjectileTransparentLayerUnresolvedContacts,
+                    colliderHavokLayer = lastTrace?.TerminalHavokLayer,
                     hit = damage.HitCount != 0,
                     projectileFlights = preparedFlights.Count,
                     flightState = !isInstantRay ? "in-flight" : damage.PendingEvents != 0 ? "hitscan-impact-pending" : "instant-ray-complete",

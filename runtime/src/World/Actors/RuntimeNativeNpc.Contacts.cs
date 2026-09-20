@@ -48,6 +48,7 @@ internal static class RuntimeNativeActorContacts
                     }
                     area.SetMeta("opennv_nif_collision_body", collision.Body);
                     area.SetMeta("opennv_nif_collision_bone", node.Name);
+                    area.SetMeta("opennv_collision_havok_layer", built.Body.GetMeta("opennv_collision_havok_layer"));
                     contacts.Add(area);
                 }
                 finally { built.Body.Free(); }

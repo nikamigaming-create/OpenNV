@@ -9,8 +9,12 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
 {
     internal bool Hitscan => (Flags & 1) != 0;
     internal bool HasAlternateTrigger => (Flags & 0x0004) != 0;
+    internal bool HasMuzzleFlash => (Flags & 0x0008) != 0;
     internal bool CanBeDisabled => (Flags & 0x0020) != 0;
     internal bool CanBePickedUp => (Flags & 0x0040) != 0;
+    internal bool HasSupersonicAudio => (Flags & 0x0080) != 0;
+    internal bool PinsLimbs => (Flags & 0x0100) != 0;
+    internal bool PassesThroughSmallTransparent => (Flags & 0x0200) != 0;
     internal bool Detonates => (Flags & 0x0400) != 0;
     internal bool IsInstantRayAttack => Hitscan || Type == 4;
     internal bool PassesThroughActors => Type == 8;
@@ -18,6 +22,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal float BouncyMultiplier { get; private init; }
     internal float ExplosionAltTriggerProximity { get; private init; }
     internal float ExplosionAltTriggerTimer { get; private init; }
+    internal bool HasAlternateTriggerParameters => ExplosionAltTriggerProximity > 0 || ExplosionAltTriggerTimer > 0;
     internal FalloutExplosion? ExplosionSource { get; private init; }
 
     internal float HitscanImpactDelaySeconds(float distanceMeters, float unitsToMeters)

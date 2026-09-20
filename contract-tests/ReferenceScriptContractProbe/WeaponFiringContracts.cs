@@ -84,6 +84,15 @@ internal static class WeaponFiringContracts
             Require(MathF.Abs(shot.Projectile.HitscanImpactDelaySeconds(5, .01f) - 2.5f) < .00001f &&
                 BeamProjectileSpeedDelay(records, Key(17)) == 0,
                 "Hitscan source speed did not determine impact time, or an unflagged beam gained projectile delay.");
+            var ordinaryBullet = shot with { Projectile = shot.Projectile with { Flags = 0x0089 } };
+            ordinaryBullet.RequireRuntimeAttackOwner();
+            var alternateTriggerBullet = shot with { Projectile = shot.Projectile with { Flags = 0x008d } };
+            alternateTriggerBullet.RequireRuntimeAttackOwner();
+            var transparentPassThroughBullet = shot with { Projectile = shot.Projectile with { Flags = 0x028d } };
+            transparentPassThroughBullet.RequireRuntimeAttackOwner();
+            Require(ordinaryBullet.Projectile.HasMuzzleFlash && ordinaryBullet.Projectile.HasSupersonicAudio &&
+                transparentPassThroughBullet.Projectile.PassesThroughSmallTransparent,
+                "Supported source Hitscan appearance and collision flags were not decoded.");
             var beam = (shot with { Projectile = FalloutProjectile.Read(records, Key(17)) });
             Require(!beam.Projectile.Hitscan && beam.Projectile.IsInstantRayAttack,
                 "Beam type did not select the direct-ray path without the Hitscan flag.");
@@ -180,7 +189,7 @@ internal static class WeaponFiringContracts
             Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireInstantRay());
             Reject(() => (shot with { Projectile = shot.Projectile with { Speed = 0 } }).RequireInstantRay());
             Reject(() => shot.Projectile.HitscanImpactDelaySeconds(-.01f, .01f));
-            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 5 } }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0x0101 } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(18)) }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(19)) }).RequireRuntimeAttackOwner());
             Reject(() => (flameShot with { Projectile = flameShot.Projectile with { Flags = (ushort)(flameShot.Projectile.Flags | 0x0100) } }).RequireRuntimeAttackOwner());

@@ -66,13 +66,19 @@ internal sealed partial class RuntimeNativeActorCombat
         var pendingImpacts = 0;
         var pendingLimbDamage = 0.0f;
         var pellets = new List<object>(_enemyShot.Projectiles);
+        var transparentLayerPassThroughs = 0;
+        var transparentLayerUnresolvedContacts = 0;
         for (var pellet = 0; pellet < _enemyShot.Projectiles; pellet++)
         {
             var pelletDirection = FalloutWeaponSpread.Deviate(direction, spreadDegrees, handling.NextShotRandomUnit);
-            using var query = PhysicsRayQueryParameters3D.Create(from,
-                from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres), _mask, _enemyRayExclusions);
-            query.CollideWithAreas = true;
-            using var collision = _actor.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            var exclusions = new Godot.Collections.Array<Rid>();
+            foreach (var body in _enemyRayExclusions!) exclusions.Add(body);
+            using var collision = RuntimeNativeProjectileCollision.CastThroughSmallTransparent(_actor.GetWorld3D(),
+                _enemyShot.Projectile, from,
+                from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres),
+                _mask, exclusions, out var passedThrough, out var unresolvedLayers, out var terminalHavokLayer);
+            transparentLayerPassThroughs += passedThrough;
+            transparentLayerUnresolvedContacts += unresolvedLayers;
             Node? collider = collision.Count == 0 ? null : collision["collider"].AsGodotObject() as Node;
             var point = collision.Count == 0 ? Vector3.Zero : collision["position"].AsVector3();
             var normal = collision.Count == 0 ? Vector3.Zero : collision["normal"].AsVector3();
@@ -121,6 +127,9 @@ internal sealed partial class RuntimeNativeActorCombat
                 part,
                 state = delay > 0 && (playerHit || hasImpact) ? "impact-pending" : part is not null ? "resolved" : collider is not null ? "impact" : "miss",
                 impactDelaySeconds = delay,
+                transparentLayerPassThroughs = passedThrough,
+                transparentLayerUnresolvedContacts = unresolvedLayers,
+                colliderHavokLayer = terminalHavokLayer,
                 point = collision.Count == 0 ? (float[]?)null : new[] { point.X, point.Y, point.Z },
                 damage = part is null ? (float?)null : resolvedDamage.Amount,
                 limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier,
@@ -152,6 +161,8 @@ internal sealed partial class RuntimeNativeActorCombat
             hits,
             pendingHits,
             pendingImpacts,
+            transparentLayerPassThroughs,
+            transparentLayerUnresolvedContacts,
             damage = resolvedDamage.Amount,
             limbDamage = totalLimbDamage,
             pendingLimbDamage,

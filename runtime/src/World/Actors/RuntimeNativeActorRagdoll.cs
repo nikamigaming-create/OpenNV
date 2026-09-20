@@ -91,6 +91,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
                     }
                     rigid.SetMeta("opennv_nif_collision_bone", node.Name);
                     rigid.SetMeta("opennv_nif_collision_body", body.Block.Index);
+                    rigid.SetMeta("opennv_collision_havok_layer", built.Body.GetMeta("opennv_collision_havok_layer"));
                     rigid.SetMeta("opennv_reference_form_key", state.Reference.ToString());
                     var entry = new Body(body.Block.Index, skeleton.BoneIndex(node.Name), built.Body.Transform, rigid);
                     result._bodies.Add(entry); result._bySource.Add(entry.Source, entry);

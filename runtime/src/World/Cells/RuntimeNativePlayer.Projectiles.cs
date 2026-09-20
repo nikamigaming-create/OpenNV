@@ -13,7 +13,8 @@ internal partial class RuntimeNativePlayer
         Node? collider,
         string? reference,
         Vector3 point,
-        float damageDelaySeconds)
+        float damageDelaySeconds,
+        int? terminalHavokLayer)
     {
         internal Vector3 Direction { get; } = direction;
         internal Godot.Collections.Dictionary Collision { get; } = collision;
@@ -21,6 +22,7 @@ internal partial class RuntimeNativePlayer
         internal string? Reference { get; } = reference;
         internal Vector3 Point { get; } = point;
         internal float DamageDelaySeconds { get; } = damageDelaySeconds;
+        internal int? TerminalHavokLayer { get; } = terminalHavokLayer;
         internal FalloutActorHit? ActorHit { get; set; }
     }
 
@@ -55,6 +57,8 @@ internal partial class RuntimeNativePlayer
     }
 
     private readonly List<PendingProjectileImpact> _pendingProjectileImpacts = [];
+    private int _lastProjectileTransparentLayerPassThroughs;
+    private int _lastProjectileTransparentLayerUnresolvedContacts;
     private object? _lastHitscanImpact;
     internal int PendingProjectileImpactCount => _pendingProjectileImpacts.Count;
     internal object? LastHitscanImpact => _lastHitscanImpact;
@@ -72,6 +76,8 @@ internal partial class RuntimeNativePlayer
         float medianSpreadDegrees)
     {
         var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
+        _lastProjectileTransparentLayerPassThroughs = 0;
+        _lastProjectileTransparentLayerUnresolvedContacts = 0;
         var traces = new List<PlayerProjectileTrace>();
         for (var index = 0; index < shot.Projectiles; index++)
         {
@@ -80,7 +86,7 @@ internal partial class RuntimeNativePlayer
                 medianSpreadDegrees,
                 _weaponHandling!.NextShotRandomUnit);
             var end = origin + pelletDirection * (shot.Projectile.Range * UnitsToMeters);
-            if (!shot.Projectile.PassesThroughActors)
+            if (!shot.Projectile.PassesThroughActors && !shot.Projectile.PassesThroughSmallTransparent)
             {
                 AddTrace(origin, end, pelletDirection, SelfQueryBodies);
                 continue;
@@ -89,32 +95,42 @@ internal partial class RuntimeNativePlayer
             var exclusions = new Godot.Collections.Array<Rid>();
             foreach (var body in SelfQueryBodies) exclusions.Add(body);
             var start = origin;
-            var traceCount = traces.Count;
+            int? terminalHavokLayer = null;
             while (start.DistanceTo(end) > .001f)
             {
-                var collision = CastShotRay(start, end, exclusions);
+                var collision = RuntimeNativeProjectileCollision.CastThroughSmallTransparent(GetWorld3D(),
+                    shot.Projectile, start, end, CollisionMask | CollisionLayer, exclusions,
+                out var passedThrough, out var unresolvedLayers, out var hitLayer);
+                _lastProjectileTransparentLayerPassThroughs += passedThrough;
+                _lastProjectileTransparentLayerUnresolvedContacts += unresolvedLayers;
+                terminalHavokLayer = hitLayer;
                 if (!collision.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node collider)
                 {
-                    traces.Add(MakeTrace(pelletDirection, new(), null, end));
+                    traces.Add(MakeTrace(pelletDirection, collision, null, end, terminalHavokLayer));
                     break;
                 }
 
                 var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
-                traces.Add(MakeTrace(pelletDirection, collision, collider, point));
-                if (RuntimeNativeActorCombat.Find(collider) is not { } combat) break;
-
-                var added = 0;
-                foreach (var body in combat.CollisionRids)
+                if (shot.Projectile.PassesThroughActors && RuntimeNativeActorCombat.Find(collider) is { } combat)
                 {
-                    if (exclusions.Contains(body)) continue;
-                    exclusions.Add(body);
-                    added++;
+                    traces.Add(MakeTrace(pelletDirection, collision, collider, point, terminalHavokLayer));
+
+                    var added = 0;
+                    foreach (var body in combat.CollisionRids)
+                    {
+                        if (exclusions.Contains(body)) continue;
+                        exclusions.Add(body);
+                        added++;
+                    }
+                    if (added == 0)
+                        throw new InvalidDataException($"Flame projectile {shot.Projectile.Form} cannot advance past actor collision {ShotReference(collider) ?? collider.Name}.");
+                    start = point + pelletDirection * .001f;
+                    continue;
                 }
-                if (added == 0)
-                    throw new InvalidDataException($"Flame projectile {shot.Projectile.Form} cannot advance past actor collision {ShotReference(collider) ?? collider.Name}.");
-                start = point + pelletDirection * .001f;
+
+                traces.Add(MakeTrace(pelletDirection, collision, collider, point, terminalHavokLayer));
+                break;
             }
-            if (traces.Count == traceCount) traces.Add(MakeTrace(pelletDirection, new(), null, end));
         }
         return traces;
 
@@ -127,10 +143,11 @@ internal partial class RuntimeNativePlayer
         }
 
         PlayerProjectileTrace MakeTrace(Vector3 pelletDirection, Godot.Collections.Dictionary collision,
-            Node? collider, Vector3 point)
+            Node? collider, Vector3 point, int? terminalHavokLayer = null)
         {
             var delay = shot.Projectile.HitscanImpactDelaySeconds(origin.DistanceTo(point), UnitsToMeters);
-            return new(pelletDirection, collision, collider, ShotReference(collider), point, delay);
+            return new(pelletDirection, collision, collider, ShotReference(collider), point, delay,
+                terminalHavokLayer);
         }
     }
 

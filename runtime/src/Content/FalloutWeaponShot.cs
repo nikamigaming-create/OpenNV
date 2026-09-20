@@ -103,13 +103,12 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         if (Projectiles <= 0) throw new InvalidDataException("Instant-ray projectile count is not positive.");
         if (Projectile.Hitscan && Projectile.Speed <= 0)
             throw new InvalidDataException($"Hitscan projectile {Projectile.Form} has no positive source speed for impact timing.");
-        var flameFlagsWithoutExplosion = Projectile.Type == 8 && Projectile.ExplosionSource is null
-            ? (ushort)0x008c
-            : (ushort)0;
+        const ushort supportedHitscanFlags = 0x028d;
         if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
         if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4 or 8) ||
-            (Projectile.Flags & ~(ushort)(1 | flameFlagsWithoutExplosion)) != 0 ||
+            (Projectile.Flags & ~supportedHitscanFlags) != 0 ||
+            Projectile.HasAlternateTriggerParameters || Projectile.Type == 4 && Projectile.HasAlternateTrigger ||
             Projectile.Type == 8 && Projectile.ExplosionSource is not null ||
             Projectile.Explosion is not null || Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight, explosion, alternate-trigger or flag simulation.");
