@@ -23,6 +23,7 @@ internal static class WeaponFiringContracts
             var explosionData = new byte[52]; Float(explosionData, 4, 14); Float(explosionData, 8, 160);
             var explosiveProjectile = new byte[84]; explosiveProjectile[0] = 2; explosiveProjectile[2] = 1;
             Float(explosiveProjectile, 8, 200); Float(explosiveProjectile, 12, 1000); UInt(explosiveProjectile, 36, 12);
+            var thrownWeapon = (byte[])weaponData.Clone(); UInt(thrownWeapon, 0, 13); thrownWeapon[41] = 114; UInt(thrownWeapon, 36, 13);
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
@@ -34,6 +35,8 @@ internal static class WeaponFiringContracts
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
                 .Concat(Record("EXPL", 12, Field("DATA", explosionData)))
                 .Concat(Record("PROJ", 13, Field("MODL", Text("Effects/rocket.nif")), Field("DATA", explosiveProjectile)))
+                .Concat(Record("WEAP", 14, Field("EDID", Text("TestThrownExplosive")), Field("MODL", Text("test-thrown.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", thrownWeapon)))
                 .Concat(Record("MISC", 5, Field("EDID", Text("TestCasing")), Field("DATA", new byte[8])))
                 .Concat(Record("IPDS", 6, Field("DATA", impacts)))
                 .Concat(Record("IPCT", 7, Field("DATA", impactData), Field("MODL", Text("Effects/test-metal.nif"))))
@@ -50,6 +53,12 @@ internal static class WeaponFiringContracts
             Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
                 "Projectile did not resolve its winning EXPL record and source model.");
             (shot with { Projectile = explosiveShot }).RequireRuntimeAttackOwner();
+            var thrownWeaponPresentation = FalloutWeaponPresentation.Read(records, Key(14));
+            var thrownShot = FalloutWeaponShot.Read(records, Key(14), null, thrownWeaponPresentation.HasAmmunitionSource);
+            Require(thrownWeaponPresentation.AnimationGroup == "1gt" && thrownWeaponPresentation.AttackGroup == "attackthrow" &&
+                !thrownWeaponPresentation.IsMine && thrownShot.Projectile.ExplosionSource?.Form == Key(12),
+                "Thrown explosive lost its authored animation or EXPL source.");
+            thrownShot.RequireRuntimeAttackOwner();
             var impact = FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, 4);
             Require(impact is { Duration: .25f, Orientation: 2, Model: "meshes/Effects/test-metal.nif" } && impact.Form == Key(7) &&
                 FalloutImpact.Resolve(records, Key(6), 0) is null, "Impact material selected the wrong source record or replaced a null slot.");
