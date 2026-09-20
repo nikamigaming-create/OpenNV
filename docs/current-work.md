@@ -1,6 +1,34 @@
 # Current work
 
-## Verified candidate
+## Active playtest blockers
+
+The September 20 combat correction fixes player sight-ray ownership, stationary
+turning and pursuit of an occluded target within weapon range. Friendly spread
+queries now select actor/player layers; dense scenery previously exhausted the
+128-contact query and held every shot. Dead/disabled allies no longer hold fire.
+The native source Fiend test passes with 160 world contacts and a blocked route.
+In an ordinary exported flat encounter the Fiend fires, reloads and damages the
+player; ED-E kills him. Pip-Boy Stimpak use consumes one and restores 26 to 65 HP.
+Fresh XR verification of these corrections is still required.
+
+Cloud UV rates now include normalized weather wind and the winning
+fWeatherCloudSpeedMax setting. All 98 loaded WTHR records and synthetic calm,
+override and malformed-input tests pass. Fresh flat motion was inspected.
+Weather transitions and matched retail timing remain open.
+
+The source tumbleweed has a wind-responsive rigid-body flag, but environmental
+wind forces have no runtime owner yet. Implement and test that owner, including
+waking and residency changes in both modes. Moving LOD/loading remains blocking:
+whole-object uploads exceed their nominal frame budget. Property-free distant
+meshes are flat water surfaces in the inspected blocks; their world-water
+material owner remains absent. They must not be described as missing LAND.
+
+The full runtime gate, owned companion audit and native companion friendly-fire/
+empty-magazine checks pass after the combat correction. Private logs are
+`tmp/development-lab/sky-combat-{runtime-gate,owned-companion,companion-audit}.log`,
+`fiend-dense-world-audit.log` and `weather-motion-audit.log`.
+
+## Existing candidate and showcase
 
 The companion gameplay candidate repairs and recruits ED-E through ordinary
 input in flat and Elliott Tate's OpenXR Simulator. Both runs leave Nash Residence
@@ -15,6 +43,8 @@ corpse looting and ED-E outside. It uses independent ordinary-input takes,
 normal playback speed, flat audio and only the simulator's left projection eye.
 Both final eyes were inspected separately. The edit manifest identifies every
 source and cut. The illustrated local document is `PLAYTEST-STATUS.md` beside it.
+That reel and the published experimental package predate the Fiend sight/spread
+and cloud-rate corrections above; the outdoor hostile can run in place in them.
 The reel does not demonstrate player melee, post-damage healing, VR crafting or
 an uninterrupted Goodsprings-to-Primm journey. Keep those requirements open.
 
@@ -53,7 +83,7 @@ No matched-retail or physical-headset acceptance is claimed.
 
 ## Next work
 
-The user must playtest the experimental candidate in flat and a physical headset
+The user must playtest the corrected experimental candidate in flat and a physical headset
 before any golden release. Confirm controller fit, comfort, readability and
 ordinary travel. Fix failed functionality first; preserve the wider
 [implementation plan](implementation-plan.md), [status](status.md) and all 36

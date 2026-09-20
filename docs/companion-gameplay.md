@@ -35,6 +35,17 @@ fire. This conservative firing decision is not matched retail combat tactics.
 Valid muzzle geometry survives an unsupported light lane; that light remains
 absent with an explicit diagnostic.
 
+Sight queries accept the target player's physical body as a successful contact.
+An occluded target within weapon range still requires pursuit; a visible target
+that needs a turn uses the stationary idle. The spread query uses actor/player
+collision layers and ignores dead/disabled allies. World geometry is checked by
+the separate muzzle ray, so scenery cannot exhaust all 128 friendly contacts.
+Saturation or another held-shot reason remains explicit in attack telemetry.
+The native source-player fixture checks turning, a blocked route, actual damage
+and 160 irrelevant world contacts. An ordinary flat continuation independently
+shows the Fiend firing/reloading, player damage, ED-E's kill and subsequent
+Stimpak healing. The older paired showcase predates these corrections.
+
 An ammo-free embedded creature gun with no authored reload clip currently refills
 its virtual magazine at the attack boundary. This explicit recovery policy has
 unmeasured retail cadence. Weapons that consume inventory ammunition or have
@@ -68,6 +79,9 @@ and another kill. None of these fixtures are ordinary recruitment or paired game
 Run `ReferenceScriptContractProbe <owned Data> --companion-gameplay`. The native
 `NativeActorCombatAudit` accepts `<owned Data> --companion-combat <companion ACRE>
 <opponent ACRE> <MoveTo reference>`, with runtime FormIDs written as hex.
+Its `<owned Data> --player-target <NPC ACHR>` mode exercises player visibility,
+stationary turning, occluded pursuit and crowded-scene firing on a labelled
+synthetic floor and wall.
 
 Acquisition of Enhanced Sensors is persisted, but its detection/compass effect
 is not implemented. Script abilities report reached lifecycle/command failures;

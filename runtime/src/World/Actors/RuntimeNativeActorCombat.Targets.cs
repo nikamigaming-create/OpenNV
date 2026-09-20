@@ -85,7 +85,13 @@ internal sealed partial class RuntimeNativeActorCombat
         var eye = (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(head)).Origin;
         using var query = PhysicsRayQueryParameters3D.Create(eye, target, _mask, new(CollisionRids));
         using var hit = _actor.GetWorld3D().DirectSpaceState.IntersectRay(query);
-        return hit.Count == 0 || actor is not null && hit["collider"].AsGodotObject() is Node collider && Find(collider) == actor;
+        if (hit.Count == 0) return true;
+        if (hit["collider"].AsGodotObject() is not Node collider) return false;
+        // A sight ray ends inside the target's physical body. That first
+        // contact is visibility, including when the target is the player.
+        // Other actors and world contacts still occlude the target.
+        if (actor is not null) return Find(collider) == actor;
+        return _context?.Player() is { } player && (collider == player || player.IsAncestorOf(collider));
     }
 
     private Node? TargetContact(Vector3 origin)
@@ -97,13 +103,16 @@ internal sealed partial class RuntimeNativeActorCombat
         return hit.Count != 0 && hit["collider"].AsGodotObject() is Node collider && Find(collider) == _opponent ? collider : null;
     }
 
+    private string? _friendlySpreadBlocker;
+
     private bool FriendlyInsideSpread(RuntimeNativePlayer player, Vector3 origin, Vector3 target, float medianDegrees)
     {
+        _friendlySpreadBlocker = null;
         if (medianDegrees <= 0) return false;
         var displacement = target - origin;
         var length = displacement.Length();
         var halfAngle = Mathf.DegToRad(medianDegrees * 2);
-        if (halfAngle >= MathF.PI / 2) return true;
+        if (halfAngle >= MathF.PI / 2) { _friendlySpreadBlocker = "unbounded-spread"; return true; }
         const int sides = 16;
         // Circumscribe the complete possible source spread, before drawing any
         // shot randomness or consuming ammunition. The native actor volumes
@@ -120,19 +129,24 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             Shape = cone,
             Transform = new(Basis.LookingAt(direction, MathF.Abs(direction.Dot(Vector3.Up)) < .99f ? Vector3.Up : Vector3.Right), origin),
-            CollisionMask = _mask,
+            // World geometry has its own muzzle-line test. Including it in
+            // this bounded actor query can fill every result with scenery
+            // and incorrectly hold all shots in a densely built cell.
+            CollisionMask = _layer | player.CollisionLayer,
             CollideWithAreas = true,
             Exclude = new(CollisionRids)
         };
         var contacts = _actor.GetWorld3D().DirectSpaceState.IntersectShape(query, 128);
-        if (contacts.Count == 128) return true;
+        if (contacts.Count == 128) { _friendlySpreadBlocker = "contact-query-saturated"; return true; }
         foreach (var hit in contacts)
         {
             if (hit["collider"].AsGodotObject() is not Node collider) continue;
-            if ((collider == player || player.IsAncestorOf(collider)) && _state.PlayerTeammate) return true;
+            if ((collider == player || player.IsAncestorOf(collider)) && _state.PlayerTeammate)
+            { _friendlySpreadBlocker = "player"; return true; }
             var other = Find(collider);
-            if (other is null || other == this || other == _opponent) continue;
-            if (_state.PlayerTeammate && other._state.PlayerTeammate || _world.ActorRelation(_state.Reference, other._state.Reference) >= 2) return true;
+            if (other is null || other == this || other == _opponent || other.Dead || !_world.IsEnabled(other._state.Reference)) continue;
+            if (_state.PlayerTeammate && other._state.PlayerTeammate || _world.ActorRelation(_state.Reference, other._state.Reference) >= 2)
+            { _friendlySpreadBlocker = other._state.Reference.ToString(); return true; }
         }
         return false;
     }

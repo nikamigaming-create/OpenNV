@@ -17,6 +17,12 @@ public partial class NativeActorCombatAudit : Node3D
             using var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var globals = FalloutGlobalState.Read(records);
+            if (args.Length == 3 && args[1] == "--player-target")
+            {
+                await ExercisePlayerTarget(records, content, globals, args[2]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length == 5 && args[1] == "--companion-combat")
             {
                 await ExerciseCompanionCombat(records, content, globals, args[2], args[3], args[4]);

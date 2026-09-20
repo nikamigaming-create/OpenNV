@@ -13,6 +13,13 @@ ScriptExpressionProbe.Run();
 QuestScriptExecutionProbe.Run();
 ExteriorLodProbe.Run();
 LoadOrderContracts.Run();
+WeatherMotionProbe.Run();
+
+if (args is ["--audit-weather-motion", var weatherRoot])
+{
+    WeatherMotionProbe.Owned(weatherRoot);
+    return;
+}
 
 if (args.Length == 2 && args[0] == "--audit-load-order")
 {
