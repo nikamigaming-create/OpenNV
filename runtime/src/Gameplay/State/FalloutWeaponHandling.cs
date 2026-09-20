@@ -48,6 +48,12 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
     internal bool CanFire(FalloutWeaponPresentation weapon) => Drawn && weapon.AmmoUse > 0 &&
         Loaded(weapon.Form) >= weapon.AmmoUse && CanUse(weapon);
 
+    internal void ApplyMeleeConditionWear(FalloutWeaponPresentation weapon, FalloutPluginStack records)
+    {
+        var item = inventory.Item(weapon.Form) ?? throw new InvalidOperationException("Attacking weapon is absent.");
+        inventory.Publish([FalloutWeaponCondition.AfterMeleeStrike(records, weapon, item)]);
+    }
+
     internal bool ConsumeShot(FalloutWeaponPresentation weapon, FalloutWeaponShot shot, FalloutPluginStack records)
     {
         if (shot.Weapon != weapon.Form || !weapon.Ammunition.Contains(shot.Ammunition))

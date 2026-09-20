@@ -85,6 +85,7 @@ internal partial class RuntimeNativePlayer
             _damageError = error.Message;
             throw;
         }
+        _weaponHandling!.ApplyMeleeConditionWear(weapon, _presentationRecords!);
         FalloutImpact? impact = null;
         if (collider is not null && !impactBytes.IsEmpty)
         {

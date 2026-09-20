@@ -122,6 +122,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var visible = CanSee(player);
         if (state.Action == "pursue" && distance <= reach && visible)
         {
+            if (_enemyWeapon?.IsMeleeWeapon == true && !_enemyWeaponHandling!.CanUse(_enemyWeapon))
+                throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
             var direction = offset; direction.Y = 0;
             if (direction.IsZeroApprox() || (-_actor.GlobalBasis.Z).Normalized().Dot(direction.Normalized()) > .95f)
                 state = state.Transition("attack");
@@ -227,6 +229,8 @@ internal sealed partial class RuntimeNativeActorCombat
             _context.DamagePlayer(resolvedDamage, selectedPart);
             ++_hits;
         }
+        if (_enemyWeapon?.IsMeleeWeapon == true)
+            _enemyWeaponHandling!.ApplyMeleeConditionWear(_enemyWeapon, _records);
         if (_enemyWeapon?.Sounds.TryGetValue("empty", out var swing) == true) _enemySounds!.DispatchSound(swing);
         _lastAttack = new
         {

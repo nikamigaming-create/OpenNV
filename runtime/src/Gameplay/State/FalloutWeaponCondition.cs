@@ -28,7 +28,24 @@ internal static class FalloutWeaponCondition
             throw new InvalidDataException("Weapon condition update differs from the fired instance.");
         if (!CanUse(weapon, item)) throw new InvalidOperationException("A broken weapon cannot be fired.");
 
-        var loss = ItemHealthLoss(records, weapon.Form, shot);
+        var loss = ItemHealthLoss(records, weapon.Form, shot.AmmoEffects);
+        return ApplyLoss(weapon, item, loss);
+    }
+
+    internal static FalloutCampaignItem AfterMeleeStrike(FalloutPluginStack records,
+        FalloutWeaponPresentation weapon, FalloutCampaignItem item)
+    {
+        if (!weapon.IsMeleeWeapon)
+            throw new InvalidDataException("Melee condition update requires a source melee equipment type.");
+        if (item.FormKey != weapon.Form || item.RecordType != "WEAP" || item.Count != 1)
+            throw new InvalidDataException("Melee condition update differs from the equipped weapon instance.");
+        if (!CanUse(weapon, item)) throw new InvalidOperationException("A broken weapon cannot attack.");
+        return ApplyLoss(weapon, item, ItemHealthLoss(records, weapon.Form, []));
+    }
+
+    private static FalloutCampaignItem ApplyLoss(FalloutWeaponPresentation weapon,
+        FalloutCampaignItem item, float loss)
+    {
         if (loss == 0) return item;
         var variants = item.Variants ?? [new FalloutItemVariant(1)];
         if (variants.Count != 1 || variants[0].Count != 1)
@@ -40,7 +57,8 @@ internal static class FalloutWeaponCondition
         return item with { Variants = [variants[0] with { Condition = condition }] };
     }
 
-    private static float ItemHealthLoss(FalloutPluginStack records, FalloutFormKey weapon, FalloutWeaponShot shot)
+    private static float ItemHealthLoss(FalloutPluginStack records, FalloutFormKey weapon,
+        IReadOnlyList<FalloutAmmoEffect> ammoEffects)
     {
         var source = records.GetEffective(weapon);
         var fields = source.ReadSubrecords().ToArray();
@@ -60,7 +78,7 @@ internal static class FalloutWeaponCondition
             loss = baseDamage * multiplier;
         }
 
-        foreach (var effect in shot.AmmoEffects.Where(effect => effect.Type == FalloutAmmoEffect.WeaponCondition))
+        foreach (var effect in ammoEffects.Where(effect => effect.Type == FalloutAmmoEffect.WeaponCondition))
             loss = effect.Apply(loss);
         if (!float.IsFinite(loss)) throw new InvalidDataException("Ammo-adjusted weapon condition loss is not finite.");
         return Math.Max(0, loss);
