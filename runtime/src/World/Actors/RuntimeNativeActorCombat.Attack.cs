@@ -13,6 +13,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutWeaponHandling? _enemyWeaponHandling;
     private NativeActorWeaponAttachment? _enemyObject;
     private FalloutWeaponDamageResolver? _enemyDamage;
+    private byte[]? _enemySkillValues;
+    private int _enemyStrength;
     private float _naturalDamage, _attackRange, _baseWeaponDamage;
     private NativeOwnedAnimationSoundPlayer? _enemySounds;
     private readonly Dictionary<string, NativeActorCombatAnimation> _combatClips = new(StringComparer.OrdinalIgnoreCase);
@@ -56,7 +58,10 @@ internal sealed partial class RuntimeNativeActorCombat
             var data = _records.GetEffective(item.FormKey).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
             _baseWeaponDamage = BinaryPrimitives.ReadInt16LittleEndian(data[12..]);
             var skills = stats.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.ToArray();
-            if (skills.Length != 28) throw new NotSupportedException("NPC attack skill extent is unbound.");
+            if (statsData.Length != 11 || skills.Length != 28)
+                throw new NotSupportedException("NPC attack stat or skill extent is unbound.");
+            _enemySkillValues = skills;
+            _enemyStrength = statsData.Span[4];
             _enemyDamage = new(_records, owned.Contents, value => value is >= 32 and <= 45 ? skills[value - 32] :
                 throw new NotSupportedException("NPC weapon skill is outside its source skill block."), () => []);
             group = _enemyWeapon.AnimationGroup;

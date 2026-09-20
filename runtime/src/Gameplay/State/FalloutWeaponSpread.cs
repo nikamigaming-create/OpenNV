@@ -10,6 +10,7 @@ internal sealed class FalloutWeaponSpread
     private readonly float _crippledArmOneHanded, _crippledArmTwoHanded;
     private readonly float _crippledArmsOneHanded, _crippledArmsTwoHanded;
     private readonly float _wobbleToSkill, _minimumGunSpread, _strengthRequirementPenalty;
+    private readonly float _npcMaxGunWobbleAngle;
 
     internal FalloutWeaponSpread(FalloutPluginStack records)
     {
@@ -24,6 +25,9 @@ internal sealed class FalloutWeaponSpread
         _wobbleToSkill = FalloutGameSettingFloats.Read(records, "fWobbleToSkillConversion");
         _minimumGunSpread = FalloutGameSettingFloats.Read(records, "fMinGunSpreadValue");
         _strengthRequirementPenalty = FalloutGameSettingFloats.Read(records, "fWeapStrengthReqPenalty");
+        _npcMaxGunWobbleAngle = FalloutGameSettingFloats.Read(records, "fNPCMaxGunWobbleAngle");
+        if (!float.IsFinite(_npcMaxGunWobbleAngle) || _npcMaxGunWobbleAngle < 0)
+            throw new InvalidDataException("NPC maximum gun wobble angle is invalid.");
     }
 
     internal float PlayerMedianDeviationDegrees(FalloutWeaponShot shot, float skill, float strength,
@@ -73,6 +77,18 @@ internal sealed class FalloutWeaponSpread
         var weaponAngle = .0125f * weaponSpread * weaponSpread + .125f * weaponSpread;
         var median = Math.Max(0, playerSpread + weaponAngle) * SourceSpreadDegreeScale;
         if (!float.IsFinite(median)) throw new InvalidDataException("Resolved weapon spread is non-finite.");
+        return median;
+    }
+
+    internal float NpcMedianDeviationDegrees(FalloutWeaponShot shot, float skill, float strength,
+        bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled)
+    {
+        var playerBase = PlayerMedianDeviationDegrees(shot, skill, strength, aiming: true,
+            moving: moving, running: running, sneaking: sneaking, leftArmCrippled: leftArmCrippled,
+            rightArmCrippled: rightArmCrippled, Array.Empty<FalloutPerkEntry>(),
+            static _ => throw new InvalidOperationException("NPC weapon spread cannot evaluate player perk conditions."));
+        var median = playerBase * (1 + _npcMaxGunWobbleAngle);
+        if (!float.IsFinite(median)) throw new InvalidDataException("Resolved NPC weapon spread is non-finite.");
         return median;
     }
 
