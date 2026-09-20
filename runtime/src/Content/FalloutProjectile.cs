@@ -10,6 +10,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal bool Hitscan => (Flags & 1) != 0;
     internal bool HasExplicitRotation { get; private init; }
     internal float BouncyMultiplier { get; private init; }
+    internal FalloutExplosion? ExplosionSource { get; private init; }
 
     internal static FalloutProjectile Read(FalloutPluginStack records, FalloutFormKey key)
     {
@@ -23,13 +24,15 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
         if (explicitRotation && data.Length < 80)
             throw new InvalidDataException("Projectile rotation flag has no rotation fields.");
         var bouncy = data.Length == 84 ? Number(data, 80) : 0;
+        var explosion = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[36..]));
         var result = new FalloutProjectile(key, flags, BinaryPrimitives.ReadUInt16LittleEndian(data[2..]),
             Number(data, 4), Number(data, 8), Number(data, 12), Number(data, 24), Path("MODL"), Path("NAM1"), Number(data, 44),
             record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[20..])),
-            record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[36..])))
+            explosion)
         {
             HasExplicitRotation = explicitRotation,
             BouncyMultiplier = bouncy,
+            ExplosionSource = explosion is { } form ? FalloutExplosion.Read(records, form) : null,
         };
         if (result.Range <= 0 || result.Speed < 0 || result.Gravity < 0 || result.TracerChance is < 0 or > 1 ||
             result.MuzzleSeconds < 0 || result.BouncyMultiplier < 0)

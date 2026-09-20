@@ -22,19 +22,22 @@ internal partial class RuntimeNativePlayer
     private Func<int, float>? _combatActorValue;
     private Func<IReadOnlyList<FalloutPerkEntry>>? _combatPerks;
     private Func<FalloutCondition, float>? _combatCondition;
+    private Action<FalloutWeaponDamage, byte>? _damageSelf;
     private FalloutGlobalState? _combatGlobals;
     private Func<int>? _combatLevel;
     private string? _damageError;
+    private object? _lastExplosion;
     private double _firePreparationMilliseconds;
     private object? _firePreparationTiming;
     internal void ConfigureCombat(FalloutPluginStack records, FalloutGlobalState globals, Func<int> level,
         Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks,
-        Func<FalloutCondition, float> evaluateCondition)
+        Func<FalloutCondition, float> evaluateCondition, Action<FalloutWeaponDamage, byte> damageSelf)
     {
         _damage = new(records, _presentationInventory!, actorValue, perks, evaluateCondition);
         _combatActorValue = actorValue;
         _combatPerks = perks;
         _combatCondition = evaluateCondition;
+        _damageSelf = damageSelf;
         _combatGlobals = globals;
         _combatLevel = level;
     }
@@ -52,9 +55,10 @@ internal partial class RuntimeNativePlayer
         effects = _shotEffects?.State,
         effectErrors = _shotEffectErrors,
         damageError = _damageError,
+        lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,other-projectile-types,tracers,explosions"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,other-projectile-types,tracers,explosion-distance-attenuation,force,radiation,visuals-and-retail-parity"
     };
 
     private float ResolvePlayerShotSpread(FalloutWeaponShot shot)

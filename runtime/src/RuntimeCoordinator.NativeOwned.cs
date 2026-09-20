@@ -954,7 +954,8 @@ public partial class RuntimeCoordinator
         _nativePlayer.ConfigureCombat(_nativePluginStack!, _nativeGlobals!,
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
             () => _nativeOpeningStageDriver!.PlayerPerkEntries,
-            condition => _nativeOpeningStageDriver!.EvaluateRecipeCondition(condition));
+            condition => _nativeOpeningStageDriver!.EvaluateRecipeCondition(condition),
+            (damage, part) => _nativeOpeningStageDriver!.DamagePlayer(damage, part));
         _nativePlayer.CanOccupyPosition = NativeCollisionResident;
         _nativePlayer.IsDefeated = () => _nativeOpeningStageDriver?.Vitals.HitPoints == 0;
         var restore = _nativeContinueOpening

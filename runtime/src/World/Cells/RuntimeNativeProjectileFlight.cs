@@ -18,7 +18,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     private readonly Godot.Collections.Array<Rid> _exclusions = [];
     private Vector3 _velocity;
     private float _travelledMeters;
-    private int _contacts;
+    private int _contacts, _detonations;
     private int _bounces;
     private bool _active;
     private string _status = "prepared";
@@ -38,9 +38,10 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         travelledMeters = _travelledMeters,
         rangeMeters = _rangeMeters,
         contacts = _contacts,
+        detonations = _detonations,
         bounces = _bounces,
         error = Error,
-        boundary = "missile-and-lobber-flight;gravity,source-speed-and-bounce;beam,flame,rotation,tracer,ammo-effects-and-explosions-unmatched"
+        boundary = "missile-and-lobber-flight;gravity,source-speed,bounce-and-source-explosion-radius-damage;explosion-distance-attenuation,force,radiation,visuals,beam,flame,rotation,tracer-and-retail-parity-unmatched"
     };
 
     internal RuntimeNativeProjectileFlight(FalloutProjectile source, Node3D model, float unitsToMeters,
@@ -51,7 +52,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(exclusions);
         if (source.Hitscan || source.Type is not (1 or 2) || source.Speed <= 0 || source.Model is null ||
-            source.Explosion is not null || (source.Flags & 0x0802) != 0 || source.HasExplicitRotation)
+            (source.Flags & 0x0800) != 0 || source.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {source.Form} is outside the missile/lobber owner or needs an explosion owner.");
         if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0 ||
             !float.IsFinite(gravityMetersPerSecondSquared) || gravityMetersPerSecondSquared <= 0 ||
@@ -79,9 +80,13 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         AddChild(model);
     }
 
+    internal Action<Vector3>? OnDetonate { get; set; }
+
     internal void Start()
     {
         if (!IsInsideTree() || _active || IsFinished) throw new InvalidOperationException("Projectile flight is not ready to start.");
+        if (_source.ExplosionSource is not null && OnDetonate is null)
+            throw new InvalidOperationException("Explosive projectile has no runtime detonation owner.");
         GlobalPosition = _origin;
         _velocity = _initialVelocity;
         _active = true;
@@ -187,6 +192,8 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         _active = false;
         _status = status;
         if (contact is { } hit && !NotifyContact(hit)) _status = "contact-error";
+        if (_source.ExplosionSource is not null && contact is { } impact && !NotifyDetonation(impact.Point))
+            _status = "detonation-error";
         try { OnFinished?.Invoke(this); }
         catch (Exception error)
         {
@@ -194,6 +201,22 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             GD.PushError($"OPENNV_PROJECTILE_FINISH_UNBOUND projectile={_source.Form} {Error}");
         }
         QueueFree();
+    }
+
+    private bool NotifyDetonation(Vector3 point)
+    {
+        _detonations++;
+        try
+        {
+            OnDetonate?.Invoke(point);
+            return true;
+        }
+        catch (Exception error)
+        {
+            Error = error.Message;
+            GD.PushError($"OPENNV_PROJECTILE_DETONATION_UNBOUND projectile={_source.Form} {Error}");
+            return false;
+        }
     }
 
     private bool NotifyContact(RuntimeNativeProjectileContact contact)

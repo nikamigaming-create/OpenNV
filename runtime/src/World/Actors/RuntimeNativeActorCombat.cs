@@ -19,6 +19,10 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private RuntimeNativeActorRagdoll? _ragdoll;
     private readonly Dictionary<string, byte> _parts = new(StringComparer.Ordinal);
     internal bool Dead => _state.Injury?.Dead == true;
+    internal bool CanReceiveExplosionDamage => _state.Enabled && !Dead;
+    internal IEnumerable<Rid> CollisionRids => _actor.FindChildren("*", "", true, false)
+        .OfType<CollisionObject3D>().Prepend(_actor as CollisionObject3D).Where(value => value is not null)
+        .Select(value => value!.GetRid());
     internal string? Error { get; private set; }
     internal object Observation => new
     {
@@ -51,8 +55,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _records = records,
             _content = content,
             _layer = layer,
-            _mask = mask
-            , _context = context
+            _mask = mask,
+            _context = context
         };
         actor.AddChild(owner);
         return owner;

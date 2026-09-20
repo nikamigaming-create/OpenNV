@@ -53,6 +53,9 @@ internal partial class RuntimeNativePlayer
         var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
         var effects = _shotEffects ?? throw new InvalidOperationException("Projectile effects owner is absent.");
         var flights = new List<RuntimeNativeProjectileFlight>(shot.Projectiles);
+        FalloutWeaponDamage? explosionDamage = shot.Projectile.ExplosionSource is { } explosion
+            ? (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(shot, explosion.Damage)
+            : null;
         try
         {
             for (var index = 0; index < shot.Projectiles; index++)
@@ -63,6 +66,8 @@ internal partial class RuntimeNativePlayer
                     _configuration.Simulation.GravityMetersPerSecondSquared,
                     origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);
                 flight.OnContact = contact => ApplyProjectileFlightContact(shot, damage, contact);
+                if (shot.Projectile.ExplosionSource is not null)
+                    flight.OnDetonate = point => ApplyProjectileFlightDetonation(shot, explosionDamage!.Value, point);
                 flights.Add(flight);
             }
             return flights;
@@ -103,6 +108,16 @@ internal partial class RuntimeNativePlayer
             if (FalloutImpact.Resolve(_presentationRecords!, impactSet, material) is { } impact)
                 _shotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
         });
+    }
+
+    private void ApplyProjectileFlightDetonation(FalloutWeaponShot shot, FalloutWeaponDamage blastDamage, Vector3 point)
+    {
+        if (shot.Projectile.ExplosionSource is not { } explosion) return;
+        _lastExplosion = RuntimeNativeExplosionCombat.Detonate(this, this, _presentationRecords!, explosion,
+            blastDamage, point, CollisionMask | CollisionLayer, _configuration.World.GameUnitsToMeters,
+            _presentationRecords!.RuntimeFormKey(0x14), _combatLevel!(), _combatGlobals!, this,
+            _damageSelf ?? throw new InvalidOperationException("Player self-damage owner is absent."));
+        GD.Print($"OPENNV_WEAPON_EXPLOSION weapon={shot.Weapon} explosion={explosion.Form} result={System.Text.Json.JsonSerializer.Serialize(_lastExplosion)}");
     }
 
     private PlayerProjectileDamageSummary ApplyProjectileDamage(IReadOnlyList<PlayerProjectileTrace> traces)

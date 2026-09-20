@@ -8,7 +8,7 @@ internal static class WeaponHandlingContracts
         var weaponKey = new FalloutFormKey("Synthetic.esm", 1);
         var ammoKey = new FalloutFormKey("Synthetic.esm", 2);
         var weapon = new FalloutWeaponPresentation(weaponKey, new("weapon", weaponKey, null, null, 0, 0, []), "1hp", 1, 255)
-        { ClipSize = 12, AmmoUse = 1, Ammunition = [ammoKey] };
+        { ClipSize = 12, AmmoUse = 1, ConditionHealth = 100, Ammunition = [ammoKey], HasAmmunitionSource = true };
         var inventory = new FalloutPlayerInventory();
         inventory.Restore(new([new(weaponKey, 1, "weapon", "WEAP", 1, 0, 1), new(ammoKey, 2, "ammo", "AMMO", 17, 0, 0)], null), [1]);
         var state = new FalloutWeaponHandling(inventory);

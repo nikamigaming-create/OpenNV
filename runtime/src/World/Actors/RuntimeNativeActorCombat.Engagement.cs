@@ -22,13 +22,22 @@ internal sealed partial class RuntimeNativeActorCombat
     private bool _engagementPrepared;
     private long _attacks, _hits, _assistsReceived;
     private object? _lastAttack;
+    private object? _lastExplosion;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
     internal bool OwnsPose => _context is not null && _state.Engagement is not null;
     private object EngagementObservation => new
     {
-        state = _state.Engagement, threat = _threat, relation = _relation, attacks = _attacks, hits = _hits,
-        assistsReceived = _assistsReceived, lastAttack = _lastAttack, error = _engagementError,
-        assistanceError = _assistanceError, motion = MotionObservation,
+        state = _state.Engagement,
+        threat = _threat,
+        relation = _relation,
+        attacks = _attacks,
+        hits = _hits,
+        assistsReceived = _assistsReceived,
+        lastAttack = _lastAttack,
+        lastExplosion = _lastExplosion,
+        error = _engagementError,
+        assistanceError = _assistanceError,
+        motion = MotionObservation,
         boundary = "source-aggression-confidence-0-flee-and-faction-assistance;confidence-threat-ratios-stealth-avoidance-cover-and-retail-tactics-unmatched"
     };
 
@@ -43,8 +52,12 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_state.Engagement is not { } state) return null;
         var p = _actor.GlobalPosition; var q = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
-        return _state.Engagement = state with { Position = [p.X, p.Y, p.Z], Rotation = [q.X, q.Y, q.Z, q.W],
-            WeaponHandling = _enemyWeaponHandling?.Capture() ?? state.WeaponHandling };
+        return _state.Engagement = state with
+        {
+            Position = [p.X, p.Y, p.Z],
+            Rotation = [q.X, q.Y, q.Z, q.W],
+            WeaponHandling = _enemyWeaponHandling?.Capture() ?? state.WeaponHandling
+        };
     }
 
     private void Provoke(FalloutFormKey attacker)

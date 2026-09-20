@@ -54,7 +54,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         decals = _decals?.Observation,
         decalError = _decalError,
         sounds = _sounds.State,
-        unbound = "decal-projection-parity,casing-contact-audio,retail-physics-and-pixel-match"
+        unbound = "explosion-visuals-and-force,decal-projection-parity,casing-contact-audio,retail-physics-and-pixel-match"
     };
 
     internal RuntimeNativeShotEffects(FalloutPluginStack records, RuntimeLiveContentSource content, float units,

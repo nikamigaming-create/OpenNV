@@ -100,6 +100,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
 
     internal void RequireHitscan()
     {
+        if (Projectiles <= 0) throw new InvalidDataException("Hitscan projectile count is not positive.");
         if (!Projectile.Hitscan || Projectile.Type is not (1 or 4) || (Projectile.Flags & 2) != 0 || Projectile.Explosion is not null)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight/explosion simulation.");
         RequireSupportedAmmoEffects();
@@ -113,9 +114,14 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             return;
         }
         RequireSupportedAmmoEffects();
-        if (Projectile.Type is not (1 or 2) || Projectile.Speed <= 0 || Projectile.Model is null || Projectile.Explosion is not null ||
-            (Projectile.Flags & 0x0802) != 0 || Projectile.HasExplicitRotation)
-            throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation, explosion or ammo-effect owner.");
+        if (Projectile.Type is not (1 or 2) || Projectile.Speed <= 0 || Projectile.Model is null ||
+            (Projectile.Flags & 0x0800) != 0 || Projectile.HasExplicitRotation)
+            throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation or ammo-effect owner.");
+        if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
+            throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
+        if ((Projectile.Flags & 4) != 0)
+            throw new NotSupportedException($"Projectile {Projectile.Form} needs its alternative-trigger owner.");
+        Projectile.ExplosionSource?.RequireRuntimeDamageOwner();
     }
 
     private void RequireSupportedAmmoEffects()

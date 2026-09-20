@@ -145,6 +145,9 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var shot = _enemyShot!;
         var effects = _enemyShotEffects!;
+        FalloutWeaponDamage? explosionDamage = shot.Projectile.ExplosionSource is { } explosion
+            ? (_enemyDamage ?? throw new InvalidOperationException("Actor damage owner is absent.")).Resolve(shot, explosion.Damage)
+            : null;
         var flights = new List<RuntimeNativeProjectileFlight>(shot.Projectiles);
         try
         {
@@ -155,6 +158,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 var flight = effects.PrepareProjectile(shot.Projectile, _context!.Gravity,
                     origin, projectileDirection, _mask, _enemyRayExclusions!);
                 flight.OnContact = contact => ApplyProjectilePlayerContact(player, shot, damage, contact);
+                if (shot.Projectile.ExplosionSource is not null)
+                    flight.OnDetonate = point => ApplyEnemyProjectileDetonation(player, shot, explosionDamage!.Value, point);
                 flights.Add(flight);
             }
             if (!handling.ConsumeShot(weapon, shot, _records))
@@ -187,7 +192,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 spreadDegrees,
                 direction = new[] { direction.X, direction.Y, direction.Z },
                 origin = new[] { origin.X, origin.Y, origin.Z },
-                boundary = "missile-lobber-flight;source-speed,gravity-and-bounce;ammo-effects,tracer,rotation,explosions-and-retail-cadence-unmatched"
+                boundary = "missile-lobber-flight;source-speed,gravity,bounce-and-EXPL-radius-damage;distance-attenuation,force,radiation,visuals,ammo-effects,tracer,rotation-and-retail-cadence-unmatched"
             };
             GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=projectile-flight projectiles={flights.Count}");
         }
@@ -267,5 +272,15 @@ internal sealed partial class RuntimeNativeActorCombat
             healthAfter,
             direction = new[] { contact.Direction.X, contact.Direction.Y, contact.Direction.Z }
         };
+    }
+
+    private void ApplyEnemyProjectileDetonation(RuntimeNativePlayer player, FalloutWeaponShot shot,
+        FalloutWeaponDamage blastDamage, Vector3 point)
+    {
+        if (shot.Projectile.ExplosionSource is not { } explosion) return;
+        _lastExplosion = RuntimeNativeExplosionCombat.Detonate(_actor, _actor, _records, explosion, blastDamage,
+            point, _mask, _skeleton.UnitsToMetres, _state.Reference, _context!.Level(), _context.Globals,
+            player, _context.DamagePlayer);
+        GD.Print($"OPENNV_ACTOR_WEAPON_EXPLOSION reference={_state.Reference} weapon={shot.Weapon} explosion={explosion.Form} result={System.Text.Json.JsonSerializer.Serialize(_lastExplosion)}");
     }
 }

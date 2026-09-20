@@ -17,6 +17,9 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
     internal FalloutWeaponDamage Resolve(FalloutWeaponShot shot)
         => Resolve(shot.Weapon, shot.BaseDamage, shot.AmmoEffects);
 
+    internal FalloutWeaponDamage Resolve(FalloutWeaponShot shot, float baseDamage)
+        => Resolve(shot.Weapon, baseDamage, shot.AmmoEffects);
+
     internal FalloutWeaponDamage Resolve(FalloutFormKey form, float baseDamage)
         => Resolve(form, baseDamage, []);
 

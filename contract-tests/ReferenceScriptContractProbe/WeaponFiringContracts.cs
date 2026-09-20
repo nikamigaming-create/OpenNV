@@ -16,19 +16,24 @@ internal static class WeaponFiringContracts
             var weaponData = new byte[204]; UInt(weaponData, 0, 3); Float(weaponData, 4, 1); weaponData[14] = 2;
             UInt(weaponData, 104, 41); Float(weaponData, 116, 1.5f); Float(weaponData, 124, .4f);
             weaponData[41] = 32; weaponData[42] = 1; UInt(weaponData, 36, 3); Float(weaponData, 60, 1.25f);
-            var economics = new byte[15]; economics[12] = 16; economics[14] = 5;
+            var economics = new byte[15]; BinaryPrimitives.WriteInt32LittleEndian(economics.AsSpan(4), 100); economics[12] = 16; economics[14] = 5;
             var projectile = new byte[84]; projectile[0] = 1; projectile[2] = 1; Float(projectile, 8, 200); Float(projectile, 12, 1000);
             var overrideProjectile = (byte[])projectile.Clone(); Float(overrideProjectile, 12, 2400);
             var ammo = new byte[20]; UInt(ammo, 4, 4); UInt(ammo, 12, 5); Float(ammo, 16, 100);
+            var explosionData = new byte[52]; Float(explosionData, 4, 14); Float(explosionData, 8, 160);
+            var explosiveProjectile = new byte[84]; explosiveProjectile[0] = 2; explosiveProjectile[2] = 1;
+            Float(explosiveProjectile, 8, 200); Float(explosiveProjectile, 12, 1000); UInt(explosiveProjectile, 36, 12);
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
                 .Concat(Record("WEAP", 1, Field("EDID", Text("TestGun")), Field("MODL", Text("test.nif")),
-                    Field("DATA", economics), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
+                    Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
                     Field("INAM", BitConverter.GetBytes(6u))))
                 .Concat(Record("AMMO", 2, Field("EDID", Text("TestAmmo")), Field("DATA", new byte[13]), Field("DAT2", ammo)))
                 .Concat(Record("PROJ", 3, Field("DATA", projectile)))
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
+                .Concat(Record("EXPL", 12, Field("DATA", explosionData)))
+                .Concat(Record("PROJ", 13, Field("MODL", Text("Effects/rocket.nif")), Field("DATA", explosiveProjectile)))
                 .Concat(Record("MISC", 5, Field("EDID", Text("TestCasing")), Field("DATA", new byte[8])))
                 .Concat(Record("IPDS", 6, Field("DATA", impacts)))
                 .Concat(Record("IPCT", 7, Field("DATA", impactData), Field("MODL", Text("Effects/test-metal.nif"))))
@@ -41,6 +46,10 @@ internal static class WeaponFiringContracts
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
             shot.RequireHitscan();
+            var explosiveShot = FalloutProjectile.Read(records, Key(13));
+            Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
+                "Projectile did not resolve its winning EXPL record and source model.");
+            (shot with { Projectile = explosiveShot }).RequireRuntimeAttackOwner();
             var impact = FalloutImpact.Resolve(records, shot.ImpactDataSet!.Value, 4);
             Require(impact is { Duration: .25f, Orientation: 2, Model: "meshes/Effects/test-metal.nif" } && impact.Form == Key(7) &&
                 FalloutImpact.Resolve(records, Key(6), 0) is null, "Impact material selected the wrong source record or replaced a null slot.");
@@ -68,7 +77,8 @@ internal static class WeaponFiringContracts
             Reject(() => FalloutWeaponDamageResolver.NewVegasConditionMultiplier(-.01f));
             Reject(() => FalloutWeaponDamageResolver.NewVegasConditionMultiplier(1.01f));
             wornInventory.Add(records, Key(1), 1, 1, true, extra: new(1, .9f));
-            Reject(() => worn.Resolve(shot));
+            var mixedCondition = worn.Resolve(shot).Condition;
+            Require(mixedCondition is .25f or .9f, "Mixed condition variants did not select one usable weapon instance.");
             var handling = new FalloutWeaponHandling(inventory);
             Require(!handling.ConsumeShot(weapon, shot, records), "Empty magazine consumed ammunition.");
             handling.CompleteReload(weapon);
@@ -92,8 +102,8 @@ internal static class WeaponFiringContracts
             Reject(() => inventory.ConsumeAmmunition(Key(2), 1, new(Key(5), 5, "invalid", "WEAP", 1, 0, 0)));
             Require(JsonSerializer.Serialize(inventory.Capture()) == beforeFailure, "Invalid return partially consumed ammunition.");
             Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireHitscan());
-            Reject(() => (shot with { Projectiles = 8 }).RequireHitscan());
-            Reject(() => (shot with { AmmoEffects = [Key(5)] }).RequireHitscan());
+            Reject(() => (shot with { Projectiles = 0 }).RequireHitscan());
+            Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireHitscan());
             Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true unsupported=true");
         }
         finally { Directory.Delete(directory, true); }
