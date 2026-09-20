@@ -21,7 +21,9 @@ internal sealed partial class RuntimeNativeActorCombat
     private string? _assistanceError;
     private bool _engagementPrepared;
     private long _attacks, _hits, _assistsReceived;
+    private int _pendingHitscanImpacts;
     private object? _lastAttack;
+    private object? _lastHitscanImpact;
     private object? _lastExplosion;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
     internal bool OwnsPose => _context is not null && _state.Engagement is not null;
@@ -33,7 +35,9 @@ internal sealed partial class RuntimeNativeActorCombat
         attacks = _attacks,
         hits = _hits,
         assistsReceived = _assistsReceived,
+        pendingHitscanImpacts = _pendingHitscanImpacts,
         lastAttack = _lastAttack,
+        lastHitscanImpact = _lastHitscanImpact,
         lastExplosion = _lastExplosion,
         error = _engagementError,
         assistanceError = _assistanceError,

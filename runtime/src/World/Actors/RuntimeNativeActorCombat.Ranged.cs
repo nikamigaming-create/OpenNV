@@ -62,6 +62,9 @@ internal sealed partial class RuntimeNativeActorCombat
         byte? lastPart = null;
         var totalLimbDamage = 0.0f;
         var hits = 0;
+        var pendingHits = 0;
+        var pendingImpacts = 0;
+        var pendingLimbDamage = 0.0f;
         var pellets = new List<object>(_enemyShot.Projectiles);
         for (var pellet = 0; pellet < _enemyShot.Projectiles; pellet++)
         {
@@ -76,29 +79,48 @@ internal sealed partial class RuntimeNativeActorCombat
             byte? part = null;
             float? healthBefore = null;
             float? healthAfter = null;
-            if (collider == player || collider is not null && player.IsAncestorOf(collider))
+            var playerHit = collider == player || collider is not null && player.IsAncestorOf(collider);
+            if (playerHit)
             {
                 part = collider == player ? (byte)0 : player.CombatHitPart(collider!);
-                healthBefore = _context.Vitals().ExactHitPoints;
-                _context.DamagePlayer(resolvedDamage, part.Value);
-                healthAfter = _context.Vitals().ExactHitPoints;
-                totalLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
-                ++hits;
-                ++_hits;
             }
-            if (collider is not null && collision.Count > 0 && _enemyShot.ImpactDataSet is { } set)
+
+            var delay = collider is null ? 0 : _enemyShot.Projectile.HitscanImpactDelaySeconds(from.DistanceTo(point), _skeleton.UnitsToMetres);
+            var hasImpact = collider is not null && _enemyShot.ImpactDataSet is not null;
+            int? impactMaterial = hasImpact
+                ? part is not null ? 6 : FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(collision))
+                : null;
+            if (delay > 0 && (playerHit || hasImpact))
             {
-                var material = collider == player || player.IsAncestorOf(collider)
-                    ? 6
-                    : FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(collision));
-                if (FalloutImpact.Resolve(_records, set, material) is { } impact)
-                    _enemyShotEffects.Impact(impact, point, normal, pelletDirection, collider as Node3D);
+                healthBefore = playerHit ? _context.Vitals().ExactHitPoints : null;
+                ScheduleHitscanContact(player, _enemyShot, resolvedDamage, collider!, part, impactMaterial,
+                    point, normal, pelletDirection, delay);
+                pendingImpacts++;
+                if (playerHit)
+                {
+                    pendingHits++;
+                    pendingLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                }
+            }
+            else if (playerHit || hasImpact)
+            {
+                var result = CompleteHitscanContact(player, _enemyShot, resolvedDamage, collider, part,
+                    impactMaterial, point, normal, pelletDirection, delay);
+                healthBefore = result.HealthBefore;
+                healthAfter = result.HealthAfter;
+                if (result.PlayerHit)
+                {
+                    totalLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                    ++hits;
+                }
             }
             pellets.Add(new
             {
                 index = pellet,
                 collider = collider?.GetPath().ToString(),
                 part,
+                state = delay > 0 && (playerHit || hasImpact) ? "impact-pending" : part is not null ? "resolved" : collider is not null ? "impact" : "miss",
+                impactDelaySeconds = delay,
                 point = collision.Count == 0 ? (float[]?)null : new[] { point.X, point.Y, point.Z },
                 damage = part is null ? (float?)null : resolvedDamage.Amount,
                 limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier,
@@ -128,15 +150,129 @@ internal sealed partial class RuntimeNativeActorCombat
             part = lastPart,
             projectiles = _enemyShot.Projectiles,
             hits,
+            pendingHits,
+            pendingImpacts,
             damage = resolvedDamage.Amount,
             limbDamage = totalLimbDamage,
+            pendingLimbDamage,
             spreadDegrees,
             healthBefore = before,
             healthAfter = after,
             pellets,
-            boundary = "NPC source skill, movement, arm injury and wobble applied;NPC perk conditions,cover,weapon-mod spread and retail cadence unmatched"
+            boundary = "NPC skill,movement,arm injury,wobble and Hitscan source-speed timing applied;NPC perk conditions,cover,weapon-mod spread and retail cadence unmatched"
         };
         GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} kind=ranged projectiles={_enemyShot.Projectiles} hits={hits} health={before:R}->{after:R}");
+    }
+
+    private void ScheduleHitscanContact(RuntimeNativePlayer player, FalloutWeaponShot shot,
+        FalloutWeaponDamage damage, Node collider, byte? part, int? impactMaterial, Vector3 point,
+        Vector3 normal, Vector3 direction, float delaySeconds)
+    {
+        var targetPath = collider.GetPath().ToString();
+        var timer = _actor.GetTree().CreateTimer(delaySeconds, processAlways: false);
+        _pendingHitscanImpacts++;
+        timer.Timeout += () =>
+        {
+            if (!GodotObject.IsInstanceValid(this)) return;
+            _pendingHitscanImpacts = Math.Max(0, _pendingHitscanImpacts - 1);
+            if (!GodotObject.IsInstanceValid(player) || player.IsQueuedForDeletion() || !player.IsInsideTree())
+            {
+                RecordUnboundHitscanImpact(shot, targetPath, part, delaySeconds,
+                    "Player left the scene before NPC Hitscan impact time.");
+                return;
+            }
+
+            var result = CompleteHitscanContact(player, shot, damage, collider, part, impactMaterial,
+                point, normal, direction, delaySeconds, targetPath);
+            GD.Print($"OPENNV_NPC_HITSCAN_IMPACT reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} delay={delaySeconds:R} playerHit={result.PlayerHit} error={result.DamageError ?? result.ImpactError}");
+        };
+    }
+
+    private (float? HealthBefore, float? HealthAfter, bool PlayerHit, string? DamageError, string? ImpactError)
+        CompleteHitscanContact(RuntimeNativePlayer player, FalloutWeaponShot shot, FalloutWeaponDamage damage,
+            Node? collider, byte? part, int? impactMaterial, Vector3 point, Vector3 normal, Vector3 direction,
+            float delaySeconds, string? targetPath = null)
+    {
+        targetPath ??= collider is { } target && GodotObject.IsInstanceValid(target)
+            ? target.GetPath().ToString()
+            : null;
+        float? healthBefore = null;
+        float? healthAfter = null;
+        string? damageError = null;
+        var playerHit = part is not null;
+        if (playerHit)
+        {
+            try
+            {
+                healthBefore = _context!.Vitals().ExactHitPoints;
+                _context.DamagePlayer(damage, part!.Value);
+                healthAfter = _context.Vitals().ExactHitPoints;
+                _hits++;
+            }
+            catch (Exception error)
+            {
+                damageError = error.Message;
+                GD.PushError($"OPENNV_NPC_HITSCAN_DAMAGE_UNBOUND reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} {error.Message}");
+            }
+        }
+
+        string? impactError = null;
+        if (collider is not null && impactMaterial is { } material && shot.ImpactDataSet is { } impactSet)
+        {
+            try
+            {
+                if (FalloutImpact.Resolve(_records, impactSet, material) is { } impact)
+                {
+                    var effects = _enemyShotEffects;
+                    if (effects is null || !GodotObject.IsInstanceValid(effects) || !effects.IsInsideTree())
+                        throw new InvalidOperationException("NPC Hitscan impact effects owner left the scene before impact time.");
+                    var liveTarget = GodotObject.IsInstanceValid(collider) && collider.IsInsideTree()
+                        ? collider as Node3D
+                        : null;
+                    effects.Impact(impact, point, normal, direction, liveTarget, decal: liveTarget is not null);
+                }
+            }
+            catch (Exception error)
+            {
+                impactError = error.Message;
+                GD.PushError($"OPENNV_NPC_HITSCAN_IMPACT_UNBOUND reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} {error.Message}");
+            }
+        }
+
+        _lastHitscanImpact = new
+        {
+            shooter = _state.Reference.ToString(),
+            weapon = shot.Weapon.ToString(),
+            projectile = shot.Projectile.Form.ToString(),
+            target = targetPath,
+            part,
+            delaySeconds,
+            state = damageError is not null ? "damage-unbound" : playerHit ? "player-damaged" : "impact-resolved",
+            healthBefore,
+            healthAfter,
+            damage = playerHit ? damage.Amount : (float?)null,
+            limbDamage = playerHit ? damage.Amount * damage.LimbMultiplier : (float?)null,
+            damageError,
+            impactError
+        };
+        return (healthBefore, healthAfter, playerHit && damageError is null, damageError, impactError);
+    }
+
+    private void RecordUnboundHitscanImpact(FalloutWeaponShot shot, string targetPath, byte? part,
+        float delaySeconds, string error)
+    {
+        _lastHitscanImpact = new
+        {
+            shooter = _state.Reference.ToString(),
+            weapon = shot.Weapon.ToString(),
+            projectile = shot.Projectile.Form.ToString(),
+            target = targetPath,
+            part,
+            delaySeconds,
+            state = "target-unbound",
+            error
+        };
+        GD.PushError($"OPENNV_NPC_HITSCAN_TARGET_UNBOUND reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} {error}");
     }
 
     private void ShootProjectilePlayer(RuntimeNativePlayer player, FalloutWeaponPresentation weapon,
