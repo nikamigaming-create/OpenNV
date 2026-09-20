@@ -69,6 +69,7 @@ internal partial class RuntimeNativePlayer
         var collider = collision.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
         var point = collision.TryGetValue("position", out var position) ? position.AsVector3() : end;
         var reference = ShotReference(collider);
+        var impactBytes = fields.SingleOrDefault(field => field.Signature == "INAM").Data;
         FalloutActorHit? hit = null;
         _damageError = null;
         try
@@ -86,6 +87,23 @@ internal partial class RuntimeNativePlayer
             _damageError = error.Message;
             throw;
         }
+        FalloutImpact? impact = null;
+        if (collider is not null && !impactBytes.IsEmpty)
+        {
+            TryShotEffect("melee-impact", () =>
+            {
+                if (impactBytes.Length != 4) throw new InvalidDataException("Melee WEAP impact-set extent is invalid.");
+                var set = _presentationRecords.GetEffective(weapon.Form).Plugin.AdjustOptionalFormId(
+                    BinaryPrimitives.ReadUInt32LittleEndian(impactBytes.Span));
+                if (set is null) return;
+                var material = hit is { } actorHit ? checked((int)actorHit.ImpactMaterial) : ShotMaterial(collision);
+                impact = FalloutImpact.Resolve(_presentationRecords, set.Value, material);
+                if (impact is not { } source) return;
+                _shotEffects ??= new(_presentationRecords, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask);
+                if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
+                _shotEffects.Impact(source, point, collision["normal"].AsVector3(), direction);
+            });
+        }
         var ordinal = ++_meleeAttacks;
         _lastShot = new
         {
@@ -101,7 +119,9 @@ internal partial class RuntimeNativePlayer
             limbDamage = hit?.LimbDamage,
             healthBefore = hit?.HealthBefore,
             healthAfter = hit?.HealthAfter,
-            unbound = "weapon-impact-data-set"
+            impact = impact?.Form.ToString(),
+            impactError = _shotEffectErrors.GetValueOrDefault("melee-impact"),
+            unbound = "attack-specific-audio"
         };
         GD.Print($"OPENNV_WEAPON_MELEE weapon={weapon.Form} reference={reference} part={hit?.Part} damage={hit?.HealthDamage}");
     }
