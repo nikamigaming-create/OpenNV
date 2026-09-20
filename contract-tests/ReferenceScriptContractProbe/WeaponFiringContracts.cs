@@ -45,6 +45,14 @@ internal static class WeaponFiringContracts
             var lunchboxMine = (byte[])weaponData.Clone(); UInt(lunchboxMine, 0, 12); lunchboxMine[41] = 108;
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
+            var shortDnamWeaponRecords = new[] { 164, 172, 180, 196 }.Select((extent, index) =>
+            {
+                var dnam = weaponData[..extent];
+                if (extent >= 172) UInt(dnam, 168, 7);
+                return Record("WEAP", checked((uint)(30 + index)), Field("EDID", Text("TestWeaponDnam" + extent)),
+                    Field("MODL", Text("test-layout-weapon.nif")), Field("DATA", economics),
+                    Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", dnam), Field("NAM0", BitConverter.GetBytes(2u)));
+            }).ToArray();
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Record("TES4", 0, Field("HEDR", header))
                 .Concat(Record("WEAP", 1, Field("EDID", Text("TestGun")), Field("MODL", Text("test.nif")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", weaponData), Field("NAM0", BitConverter.GetBytes(2u)), Field("MOD2", Text("Projectiles/test-case.nif")),
@@ -80,12 +88,27 @@ internal static class WeaponFiringContracts
                 .Concat(Record("IPDS", 8, Field("DATA", impacts[..^4])))
                 .Concat(Record("GMST", 9, Field("EDID", Text("fDamageWeaponMult")), Field("DATA", BitConverter.GetBytes(2f))))
                 .Concat(Record("GMST", 10, Field("EDID", Text("fDamageSkillBase")), Field("DATA", BitConverter.GetBytes(.25f))))
-                .Concat(Record("GMST", 11, Field("EDID", Text("fDamageSkillMult")), Field("DATA", BitConverter.GetBytes(.75f)))).ToArray());
+                .Concat(Record("GMST", 11, Field("EDID", Text("fDamageSkillMult")), Field("DATA", BitConverter.GetBytes(.75f))))
+                .Concat(shortDnamWeaponRecords.SelectMany(record => record)).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
             shot.RequireInstantRay();
+            foreach (var (extent, index) in new[] { 164, 172, 180, 196 }.Select((extent, index) => (extent, index)))
+            {
+                var key = Key(checked((uint)(30 + index)));
+                var sourceWeapon = FalloutWeaponPresentation.Read(records, key, firstPerson: false);
+                var sourceShot = FalloutWeaponShot.Read(records, key, Key(2));
+                sourceShot.RequireRuntimeAttackOwner();
+                var inventoryForCondition = new FalloutPlayerInventory();
+                inventoryForCondition.Add(records, key, 1, 1, true);
+                var wornWeapon = FalloutWeaponCondition.AfterShot(records, sourceWeapon, sourceShot,
+                    inventoryForCondition.Item(key)!);
+                Require(sourceShot.StrengthRequirement == (extent >= 172 ? 7 : 0) && sourceShot.SkillRequirement == 0 &&
+                    MathF.Abs((wornWeapon.Variants?.Single().Condition ?? 0) - .998f) < .0001f,
+                    $"WEAP DNAM extent {extent} lost an available field or bypassed its condition owner.");
+            }
             Require(MathF.Abs(shot.Projectile.HitscanImpactDelaySeconds(5, .01f) - 2.5f) < .00001f &&
                 BeamProjectileSpeedDelay(records, Key(17)) == 0,
                 "Hitscan source speed did not determine impact time, or an unflagged beam gained projectile delay.");

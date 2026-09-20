@@ -54,13 +54,16 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal string ReloadGroup => ReloadAnimation < 23 ? "reload" + "abcdefghijklmnopqrswxyz"[ReloadAnimation] :
         throw new NotSupportedException($"WEAP reload group {ReloadAnimation} is unbound.");
 
+    internal static bool IsSupportedDnamExtent(int length) => length is
+        120 or 124 or 136 or 164 or 172 or 180 or 196 or 200 or 204;
+
     internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true)
     {
         var weapon = records.GetEffective(key);
         if (weapon.Signature != "WEAP") throw new InvalidDataException("Equipped weapon is not WEAP.");
         var fields = weapon.ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DNAM").Data.Span;
-        if (data.Length is not (120 or 124 or 136 or 200 or 204)) throw new NotSupportedException($"WEAP DNAM extent {data.Length} is unbound.");
+        if (!IsSupportedDnamExtent(data.Length)) throw new NotSupportedException($"WEAP DNAM extent {data.Length} is unbound.");
         var type = BinaryPrimitives.ReadUInt32LittleEndian(data);
         var group = type switch
         {

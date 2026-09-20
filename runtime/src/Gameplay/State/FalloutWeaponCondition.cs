@@ -94,7 +94,7 @@ internal static class FalloutWeaponCondition
         var fields = source.ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DATA").Data.Span;
         var dnam = fields.Single(field => field.Signature == "DNAM").Data.Span;
-        if (source.Signature != "WEAP" || data.Length != 15 || dnam.Length is not (120 or 124 or 136 or 200 or 204))
+        if (source.Signature != "WEAP" || data.Length != 15 || !FalloutWeaponPresentation.IsSupportedDnamExtent(dnam.Length))
             throw new NotSupportedException("Weapon condition source layout is unbound.");
 
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(dnam[56..]);

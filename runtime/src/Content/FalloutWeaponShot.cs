@@ -38,7 +38,7 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         var fields = source.ReadSubrecords().ToArray();
         var data = fields.Single(field => field.Signature == "DNAM").Data.Span;
         var item = fields.Single(field => field.Signature == "DATA").Data.Span;
-        if (data.Length is not (120 or 124 or 136 or 200 or 204) || item.Length != 15)
+        if (!FalloutWeaponPresentation.IsSupportedDnamExtent(data.Length) || item.Length != 15)
             throw new NotSupportedException("Weapon shot record extent is unbound.");
         if (ammunition is null && hasAmmunitionSource || ammunition is not null && !hasAmmunitionSource)
             throw new InvalidDataException("Weapon shot ammunition selection differs from the source WEAP.");
