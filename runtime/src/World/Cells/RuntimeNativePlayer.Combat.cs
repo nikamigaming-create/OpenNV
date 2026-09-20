@@ -7,6 +7,7 @@ internal partial class RuntimeNativePlayer
 {
     private FalloutBodyPartData? _combatBodyParts;
     private readonly Dictionary<string, byte> _combatHitParts = new(StringComparer.Ordinal);
+    internal IReadOnlyList<Rid> CombatCollisionRids => SelfQueryBodies.ToArray();
 
     internal byte CombatHitPart(Node collider)
     {

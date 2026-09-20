@@ -77,89 +77,128 @@ internal sealed partial class RuntimeNativeActorCombat
             var pelletDirection = FalloutWeaponSpread.Deviate(direction, spreadDegrees, handling.NextShotRandomUnit);
             var exclusions = new Godot.Collections.Array<Rid>();
             foreach (var body in _enemyRayExclusions!) exclusions.Add(body);
-            using var collision = RuntimeNativeProjectileCollision.CastThroughSmallTransparent(_actor.GetWorld3D(),
-                _enemyShot.Projectile, from,
-                from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres),
-                _mask, exclusions, out var passedThrough, out var unresolvedLayers, out var terminalHavokLayer);
-            transparentLayerPassThroughs += passedThrough;
-            transparentLayerUnresolvedContacts += unresolvedLayers;
-            Node? collider = collision.Count == 0 ? null : collision["collider"].AsGodotObject() as Node;
-            var point = collision.Count == 0 ? Vector3.Zero : collision["position"].AsVector3();
-            var normal = collision.Count == 0 ? Vector3.Zero : collision["normal"].AsVector3();
-            byte? part = null;
-            float? healthBefore = null;
-            float? healthAfter = null;
-            var playerHit = collider == player || collider is not null && player.IsAncestorOf(collider);
-            var actorTarget = !playerHit && collider is not null && RuntimeNativeActorCombat.Find(collider) is { } target && target != this;
-            if (playerHit)
+            var end = from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres);
+            var start = from;
+            var contacts = new List<object>();
+            var contactIndex = 0;
+            while (start.DistanceTo(end) > .001f)
             {
-                part = collider == player ? (byte)0 : player.CombatHitPart(collider!);
-            }
+                if (contactIndex >= 128)
+                    throw new NotSupportedException($"Projectile {_enemyShot.Projectile.Form} exceeded 128 actor contacts on one ray.");
+                using var collision = RuntimeNativeProjectileCollision.CastThroughSmallTransparent(_actor.GetWorld3D(),
+                    _enemyShot.Projectile, start, end, _mask, exclusions,
+                    out var passedThrough, out var unresolvedLayers, out var terminalHavokLayer);
+                transparentLayerPassThroughs += passedThrough;
+                transparentLayerUnresolvedContacts += unresolvedLayers;
+                if (collision.Count == 0)
+                {
+                    if (contacts.Count == 0)
+                        contacts.Add(new { contact = contactIndex, state = "miss", transparentLayerPassThroughs = passedThrough,
+                            transparentLayerUnresolvedContacts = unresolvedLayers });
+                    break;
+                }
 
-            var delay = collider is null ? 0 : _enemyShot.Projectile.HitscanImpactDelaySeconds(from.DistanceTo(point), _skeleton.UnitsToMetres);
-            var hasImpact = collider is not null && _enemyShot.ImpactDataSet is not null;
-            int? impactMaterial = hasImpact
-                ? part is not null ? 6 : FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(collision))
-                : null;
-            FalloutActorHit? actorHit = null;
-            if (delay > 0 && (playerHit || actorTarget || hasImpact))
-            {
-                healthBefore = playerHit ? _context.Vitals().ExactHitPoints : null;
-                ScheduleHitscanContact(player, _enemyShot, resolvedDamage, collider!, part, impactMaterial,
-                    point, normal, pelletDirection, delay);
-                pendingImpacts++;
-                if (playerHit)
+                var collider = collision.TryGetValue("collider", out var colliderValue)
+                    ? colliderValue.AsGodotObject() as Node
+                    : null;
+                if (collider is null)
                 {
-                    pendingHits++;
-                    pendingLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                    contacts.Add(new { contact = contactIndex++, state = "collider-unbound", terminalHavokLayer });
+                    break;
                 }
-                if (actorTarget)
+
+                var point = collision.TryGetValue("position", out var pointValue) ? pointValue.AsVector3() : end;
+                var normal = collision.TryGetValue("normal", out var normalValue) ? normalValue.AsVector3() : Vector3.Zero;
+                byte? part = null;
+                float? healthBefore = null;
+                float? healthAfter = null;
+                var playerHit = collider == player || player.IsAncestorOf(collider);
+                var actorCombat = playerHit ? null : RuntimeNativeActorCombat.Find(collider);
+                var actorTarget = actorCombat is not null && actorCombat != this;
+                if (playerHit) part = collider == player ? (byte)0 : player.CombatHitPart(collider);
+
+                var delay = _enemyShot.Projectile.HitscanImpactDelaySeconds(from.DistanceTo(point), _skeleton.UnitsToMetres);
+                var hasImpact = _enemyShot.ImpactDataSet is not null;
+                int? impactMaterial = hasImpact
+                    ? part is not null ? 6 : FalloutImpact.MaterialIndex(NativeNifCollisionBuilder.HitMaterial(collision))
+                    : null;
+                FalloutActorHit? actorHit = null;
+                var contactHasOwner = playerHit || actorTarget || hasImpact;
+                var impactPending = delay > 0 && contactHasOwner;
+                if (impactPending)
                 {
-                    pendingActorHits++;
-                    pendingActorLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                    healthBefore = playerHit ? _context.Vitals().ExactHitPoints : null;
+                    ScheduleHitscanContact(player, _enemyShot, resolvedDamage, collider, part, impactMaterial,
+                        point, normal, pelletDirection, delay);
+                    pendingImpacts++;
+                    if (playerHit)
+                    {
+                        pendingHits++;
+                        pendingLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                    }
+                    if (actorTarget)
+                    {
+                        pendingActorHits++;
+                        pendingActorLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                    }
                 }
+                else if (contactHasOwner)
+                {
+                    var result = CompleteHitscanContact(player, _enemyShot, resolvedDamage, collider, part,
+                        impactMaterial, point, normal, pelletDirection, delay);
+                    healthBefore = result.HealthBefore;
+                    healthAfter = result.HealthAfter;
+                    actorHit = result.ActorHit;
+                    if (result.PlayerHit)
+                    {
+                        totalLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
+                        ++hits;
+                    }
+                    if (actorHit is { } targetHit)
+                    {
+                        actorLimbDamage += targetHit.LimbDamage;
+                        ++actorHits;
+                    }
+                }
+
+                contacts.Add(new
+                {
+                    contact = contactIndex++,
+                    collider = collider.GetPath().ToString(),
+                    part,
+                    targetActor = actorHit?.Reference.ToString(),
+                    actorPart = actorHit?.Part,
+                    actorDamage = actorHit?.HealthDamage,
+                    actorLimbDamage = actorHit?.LimbDamage,
+                    state = impactPending ? "impact-pending" : part is not null ? "player-hit" : actorHit is not null ? "actor-hit" : "impact",
+                    impactDelaySeconds = delay,
+                    transparentLayerPassThroughs = passedThrough,
+                    transparentLayerUnresolvedContacts = unresolvedLayers,
+                    colliderHavokLayer = terminalHavokLayer,
+                    point = new[] { point.X, point.Y, point.Z },
+                    damage = part is null ? (float?)null : resolvedDamage.Amount,
+                    limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier,
+                    healthBefore,
+                    healthAfter,
+                    direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z }
+                });
+                lastCollider = collider;
+                if (part is not null) lastPart = part;
+
+                if (!_enemyShot.Projectile.PassesThroughActors || !(playerHit || actorTarget)) break;
+                var actorBodies = playerHit ? player.CombatCollisionRids : actorCombat!.CollisionRids;
+                var added = 0;
+                foreach (var body in actorBodies)
+                {
+                    if (exclusions.Contains(body)) continue;
+                    exclusions.Add(body);
+                    added++;
+                }
+                if (added == 0)
+                    throw new InvalidDataException($"Flame projectile {_enemyShot.Projectile.Form} cannot advance past actor collision {collider.GetPath()}.");
+                start = point + pelletDirection * .001f;
             }
-            else if (playerHit || actorTarget || hasImpact)
-            {
-                var result = CompleteHitscanContact(player, _enemyShot, resolvedDamage, collider, part,
-                    impactMaterial, point, normal, pelletDirection, delay);
-                healthBefore = result.HealthBefore;
-                healthAfter = result.HealthAfter;
-                actorHit = result.ActorHit;
-                if (result.PlayerHit)
-                {
-                    totalLimbDamage += resolvedDamage.Amount * resolvedDamage.LimbMultiplier;
-                    ++hits;
-                }
-                if (actorHit is { } targetHit)
-                {
-                    actorLimbDamage += targetHit.LimbDamage;
-                    ++actorHits;
-                }
-            }
-            pellets.Add(new
-            {
-                index = pellet,
-                collider = collider?.GetPath().ToString(),
-                part,
-                targetActor = actorHit?.Reference.ToString(),
-                actorPart = actorHit?.Part,
-                actorDamage = actorHit?.HealthDamage,
-                actorLimbDamage = actorHit?.LimbDamage,
-                state = delay > 0 && (playerHit || actorTarget || hasImpact) ? "impact-pending" : part is not null || actorHit is not null ? "resolved" : collider is not null ? "impact" : "miss",
-                impactDelaySeconds = delay,
-                transparentLayerPassThroughs = passedThrough,
-                transparentLayerUnresolvedContacts = unresolvedLayers,
-                colliderHavokLayer = terminalHavokLayer,
-                point = collision.Count == 0 ? (float[]?)null : new[] { point.X, point.Y, point.Z },
-                damage = part is null ? (float?)null : resolvedDamage.Amount,
-                limbDamage = part is null ? (float?)null : resolvedDamage.Amount * resolvedDamage.LimbMultiplier,
-                healthBefore,
-                healthAfter,
-                direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z }
-            });
-            if (collider is not null) lastCollider = collider;
-            if (part is not null) lastPart = part;
+            pellets.Add(new { index = pellet, contacts, direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z } });
         }
         if (_casingPresentationError is null)
         {
