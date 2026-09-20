@@ -23,6 +23,9 @@ internal static class WeaponFiringContracts
             var explosionData = new byte[52]; Float(explosionData, 4, 14); Float(explosionData, 8, 160);
             var explosiveProjectile = new byte[84]; explosiveProjectile[0] = 2; explosiveProjectile[2] = 1;
             Float(explosiveProjectile, 8, 200); Float(explosiveProjectile, 12, 1000); UInt(explosiveProjectile, 36, 12);
+            var beamProjectile = new byte[84]; beamProjectile[2] = 4; Float(beamProjectile, 8, 1500); Float(beamProjectile, 12, 1200);
+            var alternateBeamProjectile = (byte[])beamProjectile.Clone(); alternateBeamProjectile[0] = 4;
+            var explosiveBeamProjectile = (byte[])beamProjectile.Clone(); explosiveBeamProjectile[0] = 2; UInt(explosiveBeamProjectile, 36, 12);
             var thrownWeapon = (byte[])weaponData.Clone(); UInt(thrownWeapon, 0, 13); thrownWeapon[41] = 114; UInt(thrownWeapon, 36, 13);
             var mineWeapon = (byte[])weaponData.Clone(); UInt(mineWeapon, 0, 11); mineWeapon[41] = 102;
             var lunchboxMine = (byte[])weaponData.Clone(); UInt(lunchboxMine, 0, 12); lunchboxMine[41] = 108;
@@ -37,6 +40,9 @@ internal static class WeaponFiringContracts
                 .Concat(Record("PROJ", 4, Field("DATA", overrideProjectile)))
                 .Concat(Record("EXPL", 12, Field("DATA", explosionData)))
                 .Concat(Record("PROJ", 13, Field("MODL", Text("Effects/rocket.nif")), Field("DATA", explosiveProjectile)))
+                .Concat(Record("PROJ", 17, Field("MODL", Text("Effects/beam.nif")), Field("DATA", beamProjectile)))
+                .Concat(Record("PROJ", 18, Field("MODL", Text("Effects/alternate-beam.nif")), Field("DATA", alternateBeamProjectile)))
+                .Concat(Record("PROJ", 19, Field("MODL", Text("Effects/explosive-beam.nif")), Field("DATA", explosiveBeamProjectile)))
                 .Concat(Record("WEAP", 14, Field("EDID", Text("TestThrownExplosive")), Field("MODL", Text("test-thrown.nif")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(1)), Field("DNAM", thrownWeapon)))
                 .Concat(Record("WEAP", 15, Field("EDID", Text("TestMine")), Field("MODL", Text("test-mine.nif")),
@@ -54,7 +60,11 @@ internal static class WeaponFiringContracts
             FalloutFormKey Key(uint id) => new("Test.esm", id);
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
-            shot.RequireHitscan();
+            shot.RequireInstantRay();
+            var beam = (shot with { Projectile = FalloutProjectile.Read(records, Key(17)) });
+            Require(!beam.Projectile.Hitscan && beam.Projectile.IsInstantRayAttack,
+                "Beam type did not select the direct-ray path without the Hitscan flag.");
+            beam.RequireRuntimeAttackOwner();
             var explosiveShot = FalloutProjectile.Read(records, Key(13));
             Require(explosiveShot.ExplosionSource is { Damage: 14, Radius: 160 } && explosiveShot.Model == "meshes/Effects/rocket.nif",
                 "Projectile did not resolve its winning EXPL record and source model.");
@@ -121,9 +131,12 @@ internal static class WeaponFiringContracts
             var beforeFailure = JsonSerializer.Serialize(inventory.Capture());
             Reject(() => inventory.ConsumeAmmunition(Key(2), 1, new(Key(5), 5, "invalid", "WEAP", 1, 0, 0)));
             Require(JsonSerializer.Serialize(inventory.Capture()) == beforeFailure, "Invalid return partially consumed ammunition.");
-            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireHitscan());
-            Reject(() => (shot with { Projectiles = 0 }).RequireHitscan());
-            Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireHitscan());
+            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 0 } }).RequireInstantRay());
+            Reject(() => (shot with { Projectile = shot.Projectile with { Flags = 5 } }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(18)) }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectile = FalloutProjectile.Read(records, Key(19)) }).RequireRuntimeAttackOwner());
+            Reject(() => (shot with { Projectiles = 0 }).RequireInstantRay());
+            Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireInstantRay());
             Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true unsupported=true");
         }
         finally { Directory.Delete(directory, true); }

@@ -92,25 +92,26 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             StrengthRequirement = data.Length >= 172 ? checked((int)BinaryPrimitives.ReadUInt32LittleEndian(data[168..])) : 0,
             SkillRequirement = data.Length >= 204 ? checked((int)BinaryPrimitives.ReadUInt32LittleEndian(data[200..])) : 0,
         };
-        if (type is 10 or 13 && result.Projectile.Hitscan)
+        if (type is 10 or 13 && result.Projectile.IsInstantRayAttack)
             throw new NotSupportedException($"Thrown weapon {weapon} needs a source projectile flight.");
         if (result.BaseDamage < 0 || result.MinimumSpread < 0 || result.Spread < 0) throw new InvalidDataException("Shot damage/spread is invalid.");
         return result;
     }
 
-    internal void RequireHitscan()
+    internal void RequireInstantRay()
     {
-        if (Projectiles <= 0) throw new InvalidDataException("Hitscan projectile count is not positive.");
-        if (!Projectile.Hitscan || Projectile.Type is not (1 or 4) || (Projectile.Flags & 2) != 0 || Projectile.Explosion is not null)
-            throw new NotSupportedException($"Projectile {Projectile.Form} needs flight/explosion simulation.");
+        if (Projectiles <= 0) throw new InvalidDataException("Instant-ray projectile count is not positive.");
+        if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4) || (Projectile.Flags & ~1) != 0 ||
+            Projectile.Explosion is not null || Projectile.HasExplicitRotation)
+            throw new NotSupportedException($"Projectile {Projectile.Form} needs flight, explosion, alternate-trigger or flag simulation.");
         RequireSupportedAmmoEffects();
     }
 
     internal void RequireRuntimeAttackOwner()
     {
-        if (Projectile.Hitscan)
+        if (Projectile.IsInstantRayAttack)
         {
-            RequireHitscan();
+            RequireInstantRay();
             return;
         }
         RequireSupportedAmmoEffects();

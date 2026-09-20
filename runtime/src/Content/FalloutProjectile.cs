@@ -8,6 +8,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     FalloutFormKey? MuzzleLight, FalloutFormKey? Explosion)
 {
     internal bool Hitscan => (Flags & 1) != 0;
+    internal bool IsInstantRayAttack => Hitscan || Type == 4;
     internal bool HasExplicitRotation { get; private init; }
     internal float BouncyMultiplier { get; private init; }
     internal FalloutExplosion? ExplosionSource { get; private init; }

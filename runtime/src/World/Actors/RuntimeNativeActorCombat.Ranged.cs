@@ -49,7 +49,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var direction = (player.CombatTargetPoint - from).Normalized();
         var resolvedDamage = _enemyDamage!.Resolve(_enemyShot);
         var spreadDegrees = ResolveNpcShotSpread(_enemyShot);
-        if (!_enemyShot.Projectile.Hitscan)
+        if (!_enemyShot.Projectile.IsInstantRayAttack)
         {
             ShootProjectilePlayer(player, weapon, handling, from, direction, resolvedDamage, spreadDegrees);
             return;
