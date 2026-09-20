@@ -11,18 +11,17 @@ internal sealed partial class FalloutPlayerInventory
         var source = Item(form) ?? throw new InvalidOperationException("Fired ammunition is absent.");
         if (source.RecordType != "AMMO" || count <= 0 || count > source.Count)
             throw new InvalidDataException("Ammunition consumption is invalid.");
-        if (source.Variants is { Count: > 1 } && count != source.Count)
-            throw new NotSupportedException("Firing across distinct ammunition ownership stacks needs its selection owner.");
         if (returned is not null && (returned.RecordType is not ("MISC" or "AMMO") || returned.Count <= 0 || returned.Variants is { Count: > 0 }))
             throw new InvalidDataException("Recovered ammunition has invalid source inventory data.");
         var remaining = source.Count - count;
+        var remainingVariants = remaining == 0 ? null : AfterRemovalVariants(source, count);
         FalloutCampaignItem? addition = null;
         if (returned is not null)
         {
             var previous = returned.FormKey == form ? source with
             {
                 Count = remaining,
-                Variants = remaining == 0 ? null : source.Variants is { Count: 1 } variants ? [variants[0] with { Count = remaining }] : null
+                Variants = remainingVariants
             } : Item(returned.FormKey);
             var stacks = (previous?.Variants ?? (previous is { Count: > 0 } ? [new(previous.Count)] : Array.Empty<FalloutItemVariant>())).ToList();
             var plain = stacks.FindIndex(value => value with { Count = 1 } == new FalloutItemVariant(1));

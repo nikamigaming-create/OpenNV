@@ -55,23 +55,24 @@ internal sealed partial class FalloutPlayerInventory
         else
         {
             var remainingCount = previous.Count - removed;
-            IReadOnlyList<FalloutItemVariant>? remainingVariants = null;
-            if (previous.Variants is { } variants)
-            {
-                var stacks = variants.ToList();
-                var toRemove = removed;
-                for (var index = 0; index < stacks.Count && toRemove > 0; index++)
-                {
-                    var take = Math.Min(toRemove, stacks[index].Count);
-                    stacks[index] = stacks[index] with { Count = stacks[index].Count - take };
-                    toRemove -= take;
-                }
-                if (toRemove != 0) throw new InvalidDataException("Item extra-data stacks do not contain the saved count.");
-                remainingVariants = stacks.Where(stack => stack.Count != 0).ToArray();
-            }
-            Publish([previous with { Count = remainingCount, Variants = remainingVariants }]);
+            Publish([previous with { Count = remainingCount, Variants = AfterRemovalVariants(previous, removed) }]);
         }
         if (!silent) Notifications.Publish([new(FalloutHudEventKind.ItemRemoved, form, removed)]);
+    }
+
+    private static IReadOnlyList<FalloutItemVariant>? AfterRemovalVariants(FalloutCampaignItem item, int removed)
+    {
+        if (item.Variants is not { } variants) return null;
+        var stacks = variants.ToList();
+        var toRemove = removed;
+        for (var index = 0; index < stacks.Count && toRemove > 0; index++)
+        {
+            var take = Math.Min(toRemove, stacks[index].Count);
+            stacks[index] = stacks[index] with { Count = stacks[index].Count - take };
+            toRemove -= take;
+        }
+        if (toRemove != 0) throw new InvalidDataException("Item extra-data stacks do not contain the saved count.");
+        return stacks.Where(stack => stack.Count != 0).ToArray();
     }
     internal void Add(FalloutPluginStack records, FalloutFormKey form, int count, int level, bool silent,
         FalloutGlobalState? globals = null, FalloutItemVariant? extra = null)
