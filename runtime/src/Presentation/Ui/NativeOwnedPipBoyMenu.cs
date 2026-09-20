@@ -32,6 +32,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private FalloutCampaignItem? _selectedItem;
     private int _selectedAttribute;
     private FalloutFormKey? _selectedDetail;
+    private FalloutBodyPartData? _playerBodyParts;
     internal string? Error { get; private set; }
     internal event Action? PageChanged;
     internal void RefreshWorld(FalloutFormKey? world, Vector3 player, float heading)
@@ -45,10 +46,11 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         page = _state.Page.ToString(),
         selection = _state.Selection,
         items = _state.Items.Count,
+        limbs = PlayerLimbObservation,
         tags = _tags.Select(tag => tag.RuntimeFormId).ToArray(),
         map = _map?.State,
         error = Error,
-        unbound = "limb-damage,radiation,timed-skill-effects,skill-advancement,perks,local-map,radio,fast-travel,aid-effects,item-drop-and-repair"
+        unbound = "limb-movement-and-effect-rules,radiation,timed-skill-effects,skill-advancement,perks,local-map,radio,fast-travel,aid-effects,item-drop-and-repair"
     };
 
     internal NativeOwnedPipBoyMenu(FalloutPluginStack records, FalloutPipBoyState state, FalloutPlayerInventory inventory,
@@ -196,8 +198,6 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         else if (_state.Selection == 0)
         {
             Bind("stats_CND_button", "_x", 0); Bind("stats_CND_button", "_y", 0);
-            // The source body illustration can be presented without inventing
-            // health for unbound limb/effect pools. Their meters stay unbound.
             foreach (var (part, art) in new[] { ("head", "head"), ("face", "face_00"), ("torso", "torso"),
                 ("leftarm", "left_arm"), ("rightarm", "right_arm"), ("leftleg", "left_leg"), ("rightleg", "right_leg") })
             {
@@ -205,6 +205,18 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 Bind("stats_player_" + part, "target", 0);
                 if (part == "face") continue;
                 Hide("stats_player_" + part + "_pct", "stats_player_" + part + "_crippled");
+                var sourceParts = PlayerBodyParts.Parts
+                    .Where(candidate => PlayerBodyRegion(candidate) == part && candidate.HealthPercent > 0)
+                    .ToArray();
+                if (sourceParts.Length != 1) continue;
+                var bodyPart = sourceParts[0];
+                var crippleThreshold = vitals.MaximumHitPoints * bodyPart.HealthPercent / 100.0f;
+                if (!float.IsFinite(crippleThreshold) || crippleThreshold <= 0) continue;
+                var damage = vitals.LimbDamage?.GetValueOrDefault(bodyPart.Type) ?? 0;
+                var remaining = Math.Clamp((crippleThreshold - damage) / crippleThreshold, 0, 1);
+                Text("stats_player_" + part + "_pct", remaining.ToString("P0", CultureInfo.InvariantCulture));
+                Bind("stats_player_" + part + "_pct", "visible", 1);
+                Bind("stats_player_" + part + "_crippled", "visible", damage >= crippleThreshold ? 1 : 0);
             }
             Hide("stats_stimpak_button", "stats_healing_mode", "stats_drbag_button", "stats_H20_button", "stats_FOD_button", "stats_SLP_button");
             foreach (var (button, label) in new[] { ("CND", "CND"), ("RAD", "RAD"), ("EFF", "EFF") })
@@ -213,7 +225,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                     if (button == "CND") return;
                     throw new NotSupportedException($"Player {label} state is not connected yet.");
                 });
-            AddText("Limb condition: unavailable", new(75, 560), new(740, 40));
+            AddText("Limb condition uses the winning body-part thresholds.", new(75, 560), new(740, 40));
         }
         else if (_state.Selection is 2 or 3)
         {
@@ -247,6 +259,63 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         if (!icon.IsEmpty) { _tiles.SetFilename(Tile("stats_icon"), FalloutDialogueTopic.Text(icon.Span)); Bind("stats_icon", "visible", 1); }
         Text("stats_description", FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "DESC").Data.Span));
     }
+
+    private FalloutBodyPartData PlayerBodyParts => _playerBodyParts ??=
+        FalloutBodyPartData.Read(_records.GetEffective(_records.RuntimeFormKey(0x1d)));
+
+    private object PlayerLimbObservation
+    {
+        get
+        {
+            var vitals = _vitals();
+            return PlayerBodyParts.Parts.Select(part =>
+            {
+                var threshold = vitals.MaximumHitPoints * part.HealthPercent / 100.0f;
+                var damage = vitals.LimbDamage?.GetValueOrDefault(part.Type) ?? 0;
+                var crippled = threshold > 0 && damage >= threshold;
+                return new
+                {
+                    part.Type,
+                    part.Name,
+                    part.HealthPercent,
+                    threshold,
+                    damage,
+                    remainingPercent = threshold > 0 ? Math.Clamp((threshold - damage) / threshold, 0, 1) * 100 : (float?)null,
+                    crippled
+                };
+            }).ToArray();
+        }
+    }
+
+    private static string? PlayerBodyRegion(FalloutBodyPart part)
+    {
+        var name = Normalize(part.Name);
+        var node = Normalize(part.Node);
+        if (name.Contains("head", StringComparison.Ordinal) || node.Contains("head", StringComparison.Ordinal)) return "head";
+        if (name.Contains("torso", StringComparison.Ordinal) || name.Contains("spine", StringComparison.Ordinal) ||
+            node.Contains("spine", StringComparison.Ordinal) || node.Contains("pelvis", StringComparison.Ordinal)) return "torso";
+        var left = name.Contains("left", StringComparison.Ordinal) || node.Contains("bip01l", StringComparison.Ordinal) ||
+            name.StartsWith("larm", StringComparison.Ordinal) || name.StartsWith("lhand", StringComparison.Ordinal) ||
+            name.StartsWith("lleg", StringComparison.Ordinal);
+        var right = name.Contains("right", StringComparison.Ordinal) || node.Contains("bip01r", StringComparison.Ordinal) ||
+            name.StartsWith("rarm", StringComparison.Ordinal) || name.StartsWith("rhand", StringComparison.Ordinal) ||
+            name.StartsWith("rleg", StringComparison.Ordinal);
+        var arm = name.Contains("arm", StringComparison.Ordinal) || name.Contains("hand", StringComparison.Ordinal) ||
+            node.Contains("arm", StringComparison.Ordinal) || node.Contains("hand", StringComparison.Ordinal) ||
+            node.Contains("clavicle", StringComparison.Ordinal);
+        var leg = name.Contains("leg", StringComparison.Ordinal) || name.Contains("thigh", StringComparison.Ordinal) ||
+            name.Contains("calf", StringComparison.Ordinal) || name.Contains("foot", StringComparison.Ordinal) ||
+            node.Contains("thigh", StringComparison.Ordinal) || node.Contains("calf", StringComparison.Ordinal) ||
+            node.Contains("foot", StringComparison.Ordinal);
+        if (arm && left) return "leftarm";
+        if (arm && right) return "rightarm";
+        if (leg && left) return "leftleg";
+        if (leg && right) return "rightleg";
+        return null;
+
+        static string Normalize(string value) => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    }
+
     private void AddText(string value, Vector2 position, Vector2 size)
     {
         var tile = new XElement("text", new XAttribute("name", "RuntimeText" + _tiles.Root.Descendants().Count()),
