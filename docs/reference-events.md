@@ -18,6 +18,12 @@ Reference locals outlive the Godot nodes. The adapter has no quest/stage table.
 - Stage-completion queries read entered-stage state, not just the current maximum
   stage. Effects execute synchronously so subsequent script queries see them.
   Reached unsupported commands preserve the executed prefix and fault the owner.
+- Message presentation follows the shared consumptive result slot. Superseded
+  requests cannot accept input and are removed before display or cold restoration.
+  A replacement also dismisses an already visible obsolete canvas. Accepted
+  input retains the source button index and can be consumed once by its caller.
+  This resolves a runtime ownership contradiction; multiple-message retail
+  presentation ordering has not been parity-reviewed.
 - XPRM has 32 bytes: three half extents, editor color, an unknown float and a
   shape kind. The native adapter binds boxes and uniform spheres. XTRI is an
   optional uint32 collision layer; the trigger layer is 12. Other shape/filter

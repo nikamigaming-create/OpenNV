@@ -209,13 +209,15 @@ try
     }
     var results = new FalloutMessageResults();
     var request = results.Begin(Key(0x800), Key(0x900));
-    Require(results.Take(Key(0x900)) == -1 && results.Select(request, 3) && results.Take(Key(0x902)) == -1,
+    Require(results.IsPending(request) && results.Take(Key(0x900)) == -1 && results.Select(request, 3) &&
+        !results.IsPending(request) && !results.Select(request, 1) && results.Take(Key(0x902)) == -1,
         "A message result was available before input or consumed by another reference.");
     var coldResults = new FalloutMessageResults();
     coldResults.Restore(JsonSerializer.Deserialize<FalloutMessageResultsSnapshot>(JsonSerializer.Serialize(results.Capture()))!);
     Require(coldResults.Take(Key(0x900)) == 3 && coldResults.Take(Key(0x900)) == -1, "Cold message result was lost or not consumed once.");
     var replacement = results.Begin(Key(0x800), Key(0x902));
-    Require(!results.Select(request, 0) && results.Take(Key(0x900)) == -1 && results.Select(replacement, 2) && results.Take(Key(0x902)) == 2,
+    Require(!results.IsPending(request) && results.IsPending(replacement) && !results.Select(request, 0) &&
+        results.Take(Key(0x900)) == -1 && results.Select(replacement, 2) && results.Take(Key(0x902)) == 2 && !results.IsPending(replacement),
         "A replaced message callback corrupted the current result slot.");
     Console.WriteLine("OPENNV_MESSAGE_RESULT_CONTRACT_PASS callerIsolation=true consumedOnce=true replaced=true staleCallback=true coldResult=true");
     Reject(() => world.IsEnabled(Key(0x907)));

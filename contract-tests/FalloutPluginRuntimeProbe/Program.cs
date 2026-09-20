@@ -247,12 +247,30 @@ try
             "Global script writes did not retain the executed prefix.");
         Require(scriptRuntime.TryTakeMessage(out var message) && message is { Title: "Synthetic title", Text: "Synthetic body" } &&
             message.Buttons.SequenceEqual(["Synthetic choice"]), "Source message identity differs.");
-        Require(scriptRuntime.TryTakeMessage(out var laterMessage) && !scriptRuntime.TryTakeMessage(out _) &&
-            message!.Request?.Caller == new FalloutFormKey("Scripts.esp", 0x74) && laterMessage!.Request?.Caller == new FalloutFormKey("Scripts.esp", 0x73) &&
-            !scriptRuntime.MessageResults.Select(message.Request, 0) && scriptRuntime.MessageResults.Select(laterMessage.Request, 0) &&
+        Require(!scriptRuntime.TryTakeMessage(out _) &&
+            message!.Request?.Caller == new FalloutFormKey("Scripts.esp", 0x73) &&
+            scriptRuntime.MessageResults.Select(message.Request, 0) &&
             scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x74)) == -1 && scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == 0 &&
             scriptRuntime.MessageResults.Take(new("Scripts.esp", 0x73)) == -1,
-            "Executed messages lost their SCPT caller, replacement semantics or consumptive result.");
+            "Message presentation exposed an obsolete prompt or lost its SCPT caller/consumptive result.");
+        var pendingScripts = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(),
+            new FalloutPlayerInventory(), globals, defaultProcessingDelay: 5);
+        pendingScripts.ShowMessage(message!.Form, script: new("Scripts.esp", 0x74));
+        Require(pendingScripts.TryTakeMessage(out var displayedMessage), "Synthetic modal was not queued.");
+        pendingScripts.ShowMessage(message.Form, script: new("Scripts.esp", 0x73));
+        var pending = pendingScripts.Capture(displayedMessage);
+        Require(pending.Messages.Count == 1 && !pendingScripts.MessageResults.IsPending(displayedMessage!.Request!),
+            "A replaced visible prompt remained actionable or was saved as pending.");
+        var pendingCold = new FalloutQuestScripts(scriptStack, questState, new HashSet<FalloutFormKey>(),
+            new FalloutPlayerInventory(), globals, defaultProcessingDelay: 5);
+        // Older saves can contain the superseded visible request as well.
+        pendingCold.Restore(pending with { Messages = [displayedMessage!.Request!, .. pending.Messages] });
+        Require(pendingCold.TryTakeMessage(out var currentMessage) && !pendingCold.TryTakeMessage(out _) &&
+            currentMessage!.Request == pending.Messages.Single() && pendingCold.MessageResults.Select(currentMessage.Request!, 0) &&
+            pendingCold.Capture(currentMessage).Messages.Count == 0 &&
+            pendingCold.MessageResults.Take(new("Scripts.esp", 0x73)) == 0,
+            "Cold modal presentation revived an obsolete prompt or discarded its current result.");
+        Console.WriteLine("OPENNV_MESSAGE_PRESENTATION_PASS latestRequest=true replacementSave=true legacyQueue=true selectedNotReopened=true");
         var beforeMenu = scriptRuntime.Capture();
         Require(beforeMenu.Instances.Single(instance => instance.Quest.ObjectId == 0x76).Clock is
         { Remaining: 0.125f, Invocations: 1 } && questState.Variable(new("Scripts.esp", 0x76), 1) == 1,
