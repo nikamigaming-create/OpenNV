@@ -27,7 +27,8 @@ internal partial class RuntimeNativePlayer
         int ActorHitCount,
         FalloutActorHit? LastDamage);
 
-    private IReadOnlyList<PlayerProjectileTrace> TraceProjectiles(Vector3 origin, Vector3 direction)
+    private IReadOnlyList<PlayerProjectileTrace> TraceProjectiles(Vector3 origin, Vector3 direction,
+        float medianSpreadDegrees)
     {
         var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
         var traces = new List<PlayerProjectileTrace>();
@@ -35,7 +36,7 @@ internal partial class RuntimeNativePlayer
         {
             var pelletDirection = FalloutWeaponSpread.Deviate(
                 direction,
-                shot.ResolvedMinimumSpread,
+                medianSpreadDegrees,
                 _weaponHandling!.NextShotRandomUnit);
             var end = origin + pelletDirection * (shot.Projectile.Range * UnitsToMeters);
             var collision = CastShotRay(origin, end);
@@ -47,7 +48,7 @@ internal partial class RuntimeNativePlayer
     }
 
     private List<RuntimeNativeProjectileFlight> PrepareProjectileFlights(
-        Vector3 origin, Vector3 direction, FalloutWeaponDamage damage)
+        Vector3 origin, Vector3 direction, float medianSpreadDegrees, FalloutWeaponDamage damage)
     {
         var shot = _shot ?? throw new InvalidOperationException("Projectile source is absent.");
         var effects = _shotEffects ?? throw new InvalidOperationException("Projectile effects owner is absent.");
@@ -57,7 +58,7 @@ internal partial class RuntimeNativePlayer
             for (var index = 0; index < shot.Projectiles; index++)
             {
                 var projectileDirection = FalloutWeaponSpread.Deviate(
-                    direction, shot.ResolvedMinimumSpread, _weaponHandling!.NextShotRandomUnit);
+                    direction, medianSpreadDegrees, _weaponHandling!.NextShotRandomUnit);
                 var flight = effects.PrepareProjectile(shot.Projectile,
                     _configuration.Simulation.GravityMetersPerSecondSquared,
                     origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);

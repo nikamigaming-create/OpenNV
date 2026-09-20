@@ -33,6 +33,22 @@ internal partial class RuntimeNativePlayer
         _limbVitals = vitals ?? throw new ArgumentNullException(nameof(vitals));
     }
 
+    private (bool Left, bool Right) CrippledArms(GameplayVitals vitals)
+    {
+        var records = _limbRecords ?? throw new InvalidOperationException("Player body-part source is absent.");
+        var parts = FalloutBodyPartData.Read(records.GetEffective(records.RuntimeFormKey(0x1d))).Parts;
+        var left = parts.Where(part => part.Type is 3 or 4).ToArray();
+        var right = parts.Where(part => part.Type is 5 or 6).ToArray();
+        if (left.Length == 0 || right.Length == 0)
+            throw new NotSupportedException("Weapon spread requires source left and right arm parts.");
+        bool Crippled(IEnumerable<FalloutBodyPart> arm) => arm.Any(part =>
+        {
+            var threshold = vitals.MaximumHitPoints * part.HealthPercent / 100.0f;
+            return threshold > 0 && (vitals.LimbDamage?.GetValueOrDefault(part.Type) ?? 0) >= threshold;
+        });
+        return (Crippled(left), Crippled(right));
+    }
+
     private float CrippledLegMovementSpeedMultiplier()
     {
         if (_limbRecords is null || _limbVitals?.Invoke() is not { } vitals) return 1;

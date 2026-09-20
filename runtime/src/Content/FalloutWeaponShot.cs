@@ -10,6 +10,9 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
 {
     internal uint WeaponAnimationType { get; init; }
     internal byte AttackAnimation { get; init; }
+    internal int SkillActorValue { get; init; }
+    internal int StrengthRequirement { get; init; }
+    internal int SkillRequirement { get; init; }
 
     internal float ResolvedMinimumSpread
     {
@@ -85,6 +88,9 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
         {
             WeaponAnimationType = type,
             AttackAnimation = attackAnimation,
+            SkillActorValue = BinaryPrimitives.ReadInt32LittleEndian(data[104..]),
+            StrengthRequirement = data.Length >= 172 ? checked((int)BinaryPrimitives.ReadUInt32LittleEndian(data[168..])) : 0,
+            SkillRequirement = data.Length >= 204 ? checked((int)BinaryPrimitives.ReadUInt32LittleEndian(data[200..])) : 0,
         };
         if (type is 10 or 13 && result.Projectile.Hitscan)
             throw new NotSupportedException($"Thrown weapon {weapon} needs a source projectile flight.");

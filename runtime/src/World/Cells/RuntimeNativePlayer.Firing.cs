@@ -18,6 +18,10 @@ internal partial class RuntimeNativePlayer
     private FalloutFormKey? _muzzleProjectile;
     private RuntimeNativeShotEffects? _shotEffects;
     private FalloutWeaponDamageResolver? _damage;
+    private FalloutWeaponSpread? _weaponSpread;
+    private Func<int, float>? _combatActorValue;
+    private Func<IReadOnlyList<FalloutPerkEntry>>? _combatPerks;
+    private Func<FalloutCondition, float>? _combatCondition;
     private FalloutGlobalState? _combatGlobals;
     private Func<int>? _combatLevel;
     private string? _damageError;
@@ -28,6 +32,9 @@ internal partial class RuntimeNativePlayer
         Func<FalloutCondition, float> evaluateCondition)
     {
         _damage = new(records, _presentationInventory!, actorValue, perks, evaluateCondition);
+        _combatActorValue = actorValue;
+        _combatPerks = perks;
+        _combatCondition = evaluateCondition;
         _combatGlobals = globals;
         _combatLevel = level;
     }
@@ -47,8 +54,22 @@ internal partial class RuntimeNativePlayer
         damageError = _damageError,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,aim-sway-skill-condition-spread,critical,sneak,weapon-wear,AMEF-weapon-condition-fatigue,other-projectile-types,tracers,explosions"
+        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,other-projectile-types,tracers,explosions"
     };
+
+    private float ResolvePlayerShotSpread(FalloutWeaponShot shot)
+    {
+        var vitals = _limbVitals?.Invoke() ?? throw new InvalidOperationException("Player limb state is absent from weapon spread.");
+        var arms = CrippledArms(vitals);
+        var aiming = _xr is null ? _aiming : _xr.RightAim.GetHasTrackingData();
+        var moving = new Vector2(Velocity.X, Velocity.Z).LengthSquared() > .0001f;
+        var actorValue = _combatActorValue ?? throw new InvalidOperationException("Player actor-value owner is absent.");
+        return (_weaponSpread ??= new(_presentationRecords ?? throw new InvalidOperationException("Weapon source records are absent.")))
+            .PlayerMedianDeviationDegrees(shot, actorValue(shot.SkillActorValue), actorValue(5), aiming,
+                moving, Sprinting, sneaking: false, leftArmCrippled: arms.Left, rightArmCrippled: arms.Right,
+                (_combatPerks ?? throw new InvalidOperationException("Player perk owner is absent."))(),
+                _combatCondition ?? throw new InvalidOperationException("Player condition owner is absent."));
+    }
 
     private void RequestWeaponFire()
     {
@@ -154,6 +175,7 @@ internal partial class RuntimeNativePlayer
                     muzzle = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * muzzle;
                 var from = muzzle.Origin;
                 var direction = -muzzle.Basis.Z.Normalized();
+                var medianSpreadDegrees = ResolvePlayerShotSpread(_shot);
                 if (_xr is null)
                 {
                     var aim = CastShotRay(_camera.GlobalPosition, _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters));
@@ -165,10 +187,10 @@ internal partial class RuntimeNativePlayer
                 // Collision resolution is independent of later damage/effect lanes.
                 // Unsupported impact behavior remains identified in the observation.
                 var isHitscan = _shot.Projectile.Hitscan;
-                IReadOnlyList<PlayerProjectileTrace> traces = isHitscan ? TraceProjectiles(from, direction) : [];
+                IReadOnlyList<PlayerProjectileTrace> traces = isHitscan ? TraceProjectiles(from, direction, medianSpreadDegrees) : [];
                 List<RuntimeNativeProjectileFlight> preparedFlights = isHitscan
                     ? []
-                    : PrepareProjectileFlights(from, direction,
+                    : PrepareProjectileFlights(from, direction, medianSpreadDegrees,
                         (_damage ?? throw new InvalidOperationException("Player damage owner is absent.")).Resolve(_shot));
                 if (!_weaponHandling!.ConsumeShot(weapon, _shot, _presentationRecords!))
                 {
@@ -239,7 +261,11 @@ internal partial class RuntimeNativePlayer
                         impactMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(casingDone, impactDone).TotalMilliseconds,
                         totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, impactDone).TotalMilliseconds
                     },
-                    spread = "source-minimum-spread+AMEF;aim-sway-skill-condition-perk-modifiers-unbound",
+                    spread = new
+                    {
+                        medianDeviationDegrees = medianSpreadDegrees,
+                        source = "FNV aim and minimum weapon spread; skill, movement, arm injuries, requirements and CGS perks; AMEF"
+                    },
                     tracer = _shot.Projectile.TracerChance == 0 ? "source-disabled" : "unbound-source-tracer"
                 };
                 GD.Print($"OPENNV_WEAPON_SHOT weapon={weapon.Form} projectile={_shot.Projectile.Form} reference={lastTrace?.Reference} pellets={_shot.Projectiles} hits={damage.HitCount} loaded={_weaponHandling.Loaded(weapon.Form)} damage={damage.LastDamage?.HealthDamage} damageError={_damageError}");
