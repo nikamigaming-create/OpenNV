@@ -86,8 +86,8 @@ internal sealed partial class NativeOwnedBarterMenu : Control
         _closeButton.Pressed += Close; actions.AddChild(_closeButton);
         _acceptButton = new Button { Name = "AcceptBarter", Text = "Accept", CustomMinimumSize = new(160, 44), FocusMode = FocusModeEnum.All };
         _acceptButton.Pressed += Accept; actions.AddChild(_acceptButton);
-        SetMeta("opennv_ui_source", "ACHR.XMRC; RCPE/RCCT shared-inventory pricing and transaction owner");
-        SetMeta("opennv_ui_unverified", "source-condition-perks-reputation,merchant-restock,matched-pixels,physical-headset-acceptance");
+        SetMeta("opennv_ui_source", "ACHR.XMRC; MISC.Caps001; source barter/item-condition settings; bilateral shared-inventory transaction");
+        SetMeta("opennv_ui_unverified", "price-perks-reputation,merchant-restock,matched-pixels,physical-headset-acceptance");
         Refresh();
     }
 
@@ -156,13 +156,17 @@ internal sealed partial class NativeOwnedBarterMenu : Control
     {
         _selectedSide = side; _selected = item;
         var fromPlayer = side == 0;
-        _quantity = _offers.GetValueOrDefault((fromPlayer, item.FormKey), 1);
+        var inventory = fromPlayer ? _playerInventory : _merchantInventory;
+        _quantity = inventory.Equipped.Contains(item.RuntimeFormId) ? item.Count :
+            _offers.GetValueOrDefault((fromPlayer, item.FormKey), 1);
         UpdateSelection();
     }
 
     private void ChangeQuantity(int delta)
     {
         if (_selected is not { } item) return;
+        var inventory = _selectedSide == 0 ? _playerInventory : _merchantInventory;
+        if (inventory.Equipped.Contains(item.RuntimeFormId)) return;
         _quantity = Math.Clamp(_quantity + delta, 0, item.Count);
         UpdateSelection();
     }
@@ -172,7 +176,7 @@ internal sealed partial class NativeOwnedBarterMenu : Control
         if (_selected is not { } item) return;
         var side = _selectedSide == 0;
         var inventory = side ? _playerInventory : _merchantInventory;
-        if (inventory.Equipped.Contains(item.RuntimeFormId) && _quantity != item.Count)
+        if (_quantity != 0 && inventory.Equipped.Contains(item.RuntimeFormId) && _quantity != item.Count)
         {
             _message.Text = "Equipped items must be traded as a complete stack.";
             return;
@@ -198,7 +202,9 @@ internal sealed partial class NativeOwnedBarterMenu : Control
         }
         _selectedLabel.Text = $"{(_selectedSide == 0 ? "You offer" : "You buy")}: {NameOf(item.FormKey)}";
         _quantityLabel.Text = $"{_quantity}/{item.Count}";
-        _decrease.Disabled = _quantity <= 0; _increase.Disabled = _quantity >= item.Count;
+        var inventory = _selectedSide == 0 ? _playerInventory : _merchantInventory;
+        var equipped = inventory.Equipped.Contains(item.RuntimeFormId);
+        _decrease.Disabled = _quantity <= 0 || equipped; _increase.Disabled = _quantity >= item.Count || equipped;
         _offerButton.Disabled = false; _offerAllButton.Disabled = false;
     }
 

@@ -102,7 +102,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                     throw new InvalidDataException("ShowRecipeMenu argument is not an RCCT category.");
                 OpenRecipeMenu(recipeCategory.FormKey);
                 break;
-            case "showbartermenu" or "sbm" when parts.Length <= 2 && arguments.Count == 1:
+            case "showbartermenu" or "sbm" when parts.Length is 1 or 2 && arguments.Count == 1:
                 if (!int.TryParse(arguments[0], System.Globalization.NumberStyles.Integer,
                         System.Globalization.CultureInfo.InvariantCulture, out var discount) || discount is < -100 or > 100)
                     throw new InvalidDataException("ShowBarterMenu discount must be an integer from -100 through 100.");
