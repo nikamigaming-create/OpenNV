@@ -19,7 +19,7 @@ public partial class RuntimeCoordinator
     private Task<PreparedExteriorGrid>? _nativeGridRead;
     private CancellationTokenSource? _nativeGridReadCancellation;
     private FalloutExteriorGridScene? _nativeGridPending;
-    private Queue<(string Source, Action Upload)>? _nativeGridUploads;
+    private Queue<(string Source, Func<bool> Upload)>? _nativeGridUploads;
     private readonly List<Node3D> _nativeGridStaged = [];
     private readonly Dictionary<FalloutFormKey, Node3D> _nativeGridModels = [];
     private (int X, int Y)? _nativeGridFailed;
@@ -55,6 +55,7 @@ public partial class RuntimeCoordinator
         lastUploadMilliseconds = _nativeGridUploadMilliseconds,
         maximumUploadMilliseconds = _nativeGridMaximumUploadMilliseconds,
         maximumUploadSource = _nativeGridMaximumUploadSource,
+        preparingNpcs = _nativeGridNpcPreparations.Count,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
         error = _nativeGridError
     };
@@ -86,15 +87,17 @@ public partial class RuntimeCoordinator
             if (_nativeGridRead is { IsCompleted: true } read)
             {
                 _nativeGridRead = null;
-                _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
                 StageNativeExteriorGrid(read.GetAwaiter().GetResult());
             }
             if (_nativeGridUploads is { } uploads)
             {
                 var started = Stopwatch.GetTimestamp();
-                while (uploads.TryDequeue(out var upload))
+                // A pending decode or partial body yields. Visit each queued
+                // item at most once this frame, without waiting on a worker.
+                var remaining = uploads.Count;
+                while (remaining-- > 0 && uploads.TryDequeue(out var upload))
                 {
-                    upload.Upload();
+                    if (!upload.Upload()) uploads.Enqueue(upload);
                     _nativeGridUploadMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                     if (_nativeGridUploadMilliseconds > _nativeGridMaximumUploadMilliseconds)
                     { _nativeGridMaximumUploadMilliseconds = _nativeGridUploadMilliseconds; _nativeGridMaximumUploadSource = upload.Source; }
@@ -175,6 +178,8 @@ public partial class RuntimeCoordinator
 
     private void CancelNativeGridRead()
     {
+        foreach (var preparation in _nativeGridNpcPreparations) preparation.Dispose();
+        _nativeGridNpcPreparations.Clear();
         _nativeGridReadCancellation?.Cancel();
         _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
         if (_nativeGridRead is { } abandoned)
@@ -197,19 +202,42 @@ public partial class RuntimeCoordinator
                 var land = RuntimeNativeLandscapeTransportBuilder.Build(prepared.Landscapes[cell.FormKey],
                     _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
                 root.AddChild(land); GamebryoReferenceEnableRuntime.Apply(land, false); _nativeGridStaged.Add(land);
+                return true;
             }
             ));
         var previous = _nativeActiveCell!.References.Select(reference => reference.FormKey).ToHashSet();
         foreach (var reference in grid.Scene.References.Where(reference => !previous.Contains(reference.FormKey) &&
             _nativeReferencePresentation?.HasPrepared(reference.FormKey) != true))
+        {
+            ExteriorNpcPreparation? npc = null;
             _nativeGridUploads.Enqueue((reference.FormKey.ToString(), () =>
             {
                 var before = root.GetChildCount();
+                RuntimeNativeNpc? preparedNpc = null;
                 try
                 {
                     var model = grid.Scene.BaseObjects[reference.Base].ModelPath;
+                    if (grid.Scene.BaseObjects[reference.Base].Signature == "NPC_" && _nativeReferences!.IsEnabled(reference.FormKey))
+                    {
+                        if (npc is null)
+                        {
+                            // Bound both jobs and completed bodies awaiting GPU
+                            // publication; worker slots alone do not bound memory.
+                            if (_nativeGridNpcPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
+                            npc = PrepareExteriorNpc(reference);
+                        }
+                        if (npc is not null)
+                        {
+                            var armor = _nativeReferences.EquippedArmor(reference.FormKey,
+                                _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
+                            if (!armor.SequenceEqual(npc.Appearance.EquippedArmor))
+                            { ReleaseExteriorNpc(npc); npc = null; return false; }
+                            if (!npc.Advance(this, grid.Scene, out preparedNpc)) return false;
+                        }
+                    }
                     PlaceNativeReference(root, grid.Scene, reference, observe: false,
-                        preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model));
+                        preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model), preparedNpc: preparedNpc);
+                    if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
                     var nodes = root.GetChildren().Skip(before).OfType<Node3D>().ToArray();
                     if (nodes.Length > 1) throw new InvalidDataException("A source reference must have one presentation root.");
                     foreach (var node in nodes)
@@ -220,12 +248,18 @@ public partial class RuntimeCoordinator
                 }
                 catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
                 {
+                    if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
                     while (root.GetChildCount() > before) root.GetChild(before).Free();
                     _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
+                    if (grid.Scene.BaseObjects[reference.Base].Signature == "NPC_")
+                        _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                     GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey}: {error.Message}");
                 }
+                ReleaseExteriorNpc(npc); npc = null;
+                return true;
             }
             ));
+        }
     }
 
     private void CommitNativeExteriorGrid()
@@ -275,6 +309,7 @@ public partial class RuntimeCoordinator
         _nativeWalkableGrid.Clear(); foreach (var cell in grid.Cells) _nativeWalkableGrid.Add(cell.Coordinates!.Value);
         _nativeGridUploads = null; _nativeGridPending = null; _nativeGridStaged.Clear(); _nativeGridModels.Clear();
         _nativeGridFailed = null; _nativeGridTarget = null;
+        _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
         var models = grid.Scene.References.Select(reference => grid.Scene.BaseObjects[reference.Base])
             .Where(value => value.ModelPath is not null).Select(value => value.ModelPath!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         _nativeRecentModelSets.Enqueue(models);

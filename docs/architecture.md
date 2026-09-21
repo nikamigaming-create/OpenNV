@@ -229,12 +229,19 @@ Subsequent cell queries visit only that cell's indexed children. The lab's
 all-cell sweep exercises the same index and lifetime owner as ordinary loading.
 
 Exterior residency follows the player's source grid coordinates. Background C#
-reads prepare LAND; Godot stages new terrain and reference uploads, retains the
+reads prepare LAND and NPC NIF/EGM/TRI geometry; Godot stages new terrain and reference uploads, retains the
 overlap, then commits cell membership and lighting. Source ancestry remains
 independent of the active grid. Overlap retains event contacts, OnLoad state and
 actor animation owners. Collision availability guards the edge of the resident
 grid. Source LOD uses the owned quadtree, terrain morph data and a mask of actual
 detailed LAND. Available parent/finer coverage is retained during replacement.
+
+Streamed NPC templates and equipment resolve from reference state on the scene
+thread. Bounded workers prepare source geometry, then detached native skeletons
+and body parts assemble over queue visits. Complete bodies receive gameplay and
+physics bindings through the ordinary reference owner. Cancellation disposes
+unfinished native bodies; source results waiting for assembly share the same
+bounded admission count. Equipment changes invalidate pending appearance work.
 
 Source byte reuse has a 512 MiB LRU; decoded NIF declarations are immutable and
 reused within each file. Eviction removes the cache's ownership without invalidating

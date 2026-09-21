@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
@@ -21,9 +23,31 @@ public partial class NativeActorPerformanceAudit
             var source = records.GetEffective(key);
             var cell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(source)!.Value);
             var reference = cell.References.Single(item => item.FormKey == key);
+            var selection = world.InitializeActorTemplates(key, 1, globals);
             var armor = world.EquippedArmor(key, 1, globals);
-            var actor = RuntimeNativeNpc.Create(records, content, reference, .0142875f,
-                (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, records, new Color(.3f, .3f, .3f)), armor);
+            var started = Stopwatch.GetTimestamp();
+            var appearance = FalloutNpcAppearanceResolver.Resolve(records, reference.Base, key, armor, selection: selection);
+            var sceneThread = System.Environment.CurrentManagedThreadId;
+            var prepared = FalloutContentWorkers.Run(() =>
+            {
+                if (System.Environment.CurrentManagedThreadId == sceneThread) throw new InvalidOperationException("NPC source work ran on the scene thread.");
+                return FalloutNpcPreparedGeometry.Read(appearance, content);
+            }).GetAwaiter().GetResult();
+            var prepareMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            VerifyPreparedNpc(prepared, content);
+            var phases = new List<double>();
+            using var assembly = new RuntimeNativeNpc.Assembly(prepared, content, .0142875f,
+                (look, part, nif, geometry) => NativeNpcMaterial.Resolve(look, part, nif, geometry, records, new Color(.3f, .3f, .3f)));
+            var complete = false;
+            while (!complete)
+            {
+                started = Stopwatch.GetTimestamp();
+                complete = assembly.Advance();
+                phases.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+            var actor = assembly.Take();
+            actor.BindSourceBehavior(records, selection);
+            GD.Print("OPENNV_NPC_ASSEMBLY_COST " + JsonSerializer.Serialize(new { key, prepareMilliseconds, nativeMilliseconds = phases.Sum(), maximumStepMilliseconds = phases.Max(), phases }));
             try
             {
                 AddChild(actor);

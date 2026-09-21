@@ -580,7 +580,7 @@ public partial class RuntimeCoordinator
     }
 
     private void PlaceNativeReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference,
-        bool materializeDisabled = false, bool observe = true, FalloutNifFile? preparedModel = null)
+        bool materializeDisabled = false, bool observe = true, FalloutNifFile? preparedModel = null, RuntimeNativeNpc? preparedNpc = null)
     {
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.");
         const string parityScope = "world/active-cell";
@@ -641,10 +641,11 @@ public partial class RuntimeCoordinator
                 }
                 var equippedArmor = _nativeReferences!.EquippedArmor(reference.FormKey,
                     _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
-                var actor = RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
+                var actor = preparedNpc ?? RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
                     _configuration.World.GameUnitsToMeters, (appearance, part, nif, geometry) =>
                         NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                             NativeAmbient(cell.Cell)), equippedArmor, selection);
+                if (preparedNpc is not null) actor.BindSourceBehavior(_nativePluginStack!, selection);
                 actor.Transform = ReferenceTransform(reference);
                 try { actor.ConfigureContactShapes(_configuration.Player.CollisionLayer); }
                 catch (Exception error) when (error is InvalidDataException or NotSupportedException)

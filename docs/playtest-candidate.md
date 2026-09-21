@@ -55,7 +55,10 @@ VR crafting and an uninterrupted paired route still need gameplay proof.
 Background content preparation adapts to process CPU/memory availability and
 uses at most four workers. The tested safe renderer reaches 60 FPS flat and
 45 FPS in Elliott Tate's simulator at one exterior checkpoint; cell-crossing
-stalls remain. Separate rendering reached about 83 FPS in an intermediate XR
+stalls remain. Streamed NPCs now prepare source geometry on bounded workers and
+assemble complete bodies over multiple frames. A selected walk's largest upload
+fell from 183 to 60 ms, but rolling p95 and cell commit did not improve.
+Separate rendering reached about 83 FPS in an intermediate XR
 build but exposed a Godot shutdown error, so the safe mode remains the default.
 Native actor route searches now share a two-millisecond physics-frame budget;
 one node expansion can overrun it. A selected route request fell from earlier

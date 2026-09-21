@@ -1,15 +1,24 @@
 using Godot;
+using System.Diagnostics;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Presentation.Rendering;
 
 internal static class NativeDdsTexture
 {
+    internal static Action<Image.Format, int, int, double, double>? UploadObserver { get; set; }
+
     internal static ImageTexture Create(Image image)
     {
+        var observer = UploadObserver;
+        var started = observer is null ? 0 : Stopwatch.GetTimestamp();
         var sourceFormat = image.GetFormat();
         var expanded = PreserveAlpha(image);
+        var prepared = observer is null ? 0 : Stopwatch.GetTimestamp();
         var texture = ImageTexture.CreateFromImage(image);
+        observer?.Invoke(sourceFormat, image.GetWidth(), image.GetHeight(),
+            Stopwatch.GetElapsedTime(started, prepared).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(prepared).TotalMilliseconds);
         texture.SetMeta("opennv_dds_source_format", sourceFormat.ToString());
         texture.SetMeta("opennv_dds_upload_format", image.GetFormat().ToString());
         texture.SetMeta("opennv_dds_alpha_owner", expanded ? "BC1-encoded-texels;authored-mips-RGBA8" : "source-format");

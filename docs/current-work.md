@@ -49,8 +49,14 @@ on both D3D12 and Vulkan. See [runtime performance](runtime-performance.md).
 Cloud rates use weather wind and the winning speed setting; all 98 declarations
 and selected native wind tests pass. Ordinary flat/XR wind bodies move with
 independent gusts. A distant body falls below terrain and cold prop persistence
-remains open. Streaming still exhibits whole-object stalls: a selected cell
-crossing reached 175.25 ms upload and 69.57 ms commit. Moving LOD, distant water
+remains open. Streamed NPC source geometry now prepares on bounded workers;
+native assembly yields between body parts and publishes only complete actors.
+The selected flat walk reduced the largest upload slice from 183.46 to 59.67 ms
+and the worst draw interval from 197.09 to 81.33 ms. Rolling p95 and cell commit
+did not improve; see the complete measurements in [performance](runtime-performance.md).
+A fresh Elliott Tate thumbstick run also completes both cell transitions and
+the streamed NPC; its maximum upload is 53.79 ms and last commit 46.63 ms.
+Moving LOD, distant water
 materials, vegetation/alpha and all eligible actor spawns need further work.
 Property-free distant meshes in inspected blocks are water, not missing LAND.
 
@@ -68,7 +74,12 @@ Player melee, VR crafting and an uninterrupted paired Goodsprings-to-Primm trip
 remain unproved.
 
 The current publication checks cover Release/Debug builds, formatting/analyzers,
-contracts, launcher tests and native loading; all pass. Selected owned companion,
+contracts, launcher tests and native loading; all pass. Owned NPC preparation
+checks verify exact source geometry/expression vectors, worker execution,
+cancellation, complete-body publication and freeing abandoned native nodes.
+Private evidence is `tmp/development-lab/stream-npc-publication-*` and
+`stream-upload-{before-01,after-01,xr-01}/moving.private.json`.
+Selected owned companion,
 native follow/curb/combat and exhaustive-versus-bounded projection checks pass.
 Private evidence: `tmp/development-lab/companion-publication-*`,
 `companion-navigation-bounds.log`, `companion-owned-curb-fixed.log`,
@@ -79,8 +90,9 @@ claimed from these checks.
 
 ## Next executable work
 
-Profile moving-world upload/commit stalls and LOD transitions after publishing
-the checked movement candidate. Preserve the genuine copied checkpoints below.
+Reduce the remaining indivisible armor/material uploads, cell commit and moving
+LOD stalls after publishing the checked NPC assembly change. Preserve the genuine
+copied checkpoints below.
 Complete the missing ordinary-input demonstrations and wider source-driven
 actor/admission coverage; do not substitute a selected scene for a playthrough.
 

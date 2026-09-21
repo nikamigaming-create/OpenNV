@@ -12,6 +12,12 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--upload-cost", var uploadRoot, var uploadModel])
+            {
+                ExerciseUploadCost(uploadRoot, uploadModel);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--environment-gpu"])
             {
                 await ExerciseEnvironmentPixels();
