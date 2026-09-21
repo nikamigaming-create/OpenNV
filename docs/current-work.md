@@ -5,7 +5,7 @@
 The user requires all ten mod targets in [mod compatibility](mod-compatibility.md),
 starting with JAM then TTW, with full dependency behavior and ordinary flat/OpenXR
 gameplay from selected owned folders. The target includes settings, save/load and
-cold restart. Work is on `codex/jam-then-ttw`; registration or an individual
+cold restart. Work is on `codex/jam-script-runtime`; registration or an individual
 feature is not completion. Work without subagents.
 
 All ten have local source packages: 26 archives are downloaded, hashed and
@@ -34,8 +34,13 @@ The full required repository gate passes, including Release/Debug builds,
 formatting/analyzers, contracts, launcher tests and native Godot loading. All ten
 owned stacks open, with no missing declared package files; private results are
 `tmp/mod-stack-results.private.json` and `tmp/*-layered-audit.private.json`.
-This is source loading, not working mod gameplay. JAM's 52 scripts still fail
-the generic parser; TTW has 67 parser failures among 1,263 entry-plugin scripts.
+This is source loading, not working mod gameplay. The shared interpreter now
+executes numeric NVSE assignments and eval expressions against existing state,
+with focused cold-state and migration checks passing. JAM has 46 parser failures
+among 52 scripts; TTW has 61 among 1,263 entry-plugin scripts. These source
+admission counts do not establish command execution or mod gameplay. See
+[NVSE script runtime](nvse-script-runtime.md). The full required gate also passes
+with the numeric interpreter change; the launcher/source block is merged.
 Native launcher checks pass at 1280x900 and 1060x700. All 5,407 NMC winning
 textures decode. Two partial
 authored mip chains now upload without fabricating extra levels, with exact GPU
@@ -178,10 +183,10 @@ claimed from these checks.
 ## Next executable work
 
 Implement the actual JAM script, event, UI, animation and persistent-state owners
-against the complete dependency stack. The first missing shared capability is
-NVSE numeric assignments and expressions; arrays, strings, user functions and
-event callbacks also remain unbound. Preserve vanilla expression semantics and
-existing saves while adding each capability.
+against the complete dependency stack. Numeric assignments and expressions are
+implemented. Arrays, strings, user functions and event callbacks remain unbound;
+JAM initialization also needs per-script load/restart events. Preserve vanilla
+expression semantics and existing saves while adding each capability.
 Only after JAM's ordinary-input acceptance passes proceed to TTW's combined
 campaign, transitions and extension behavior. Keep all original campaign and
 physical-headset requirements in scope. Prior candidate evidence is

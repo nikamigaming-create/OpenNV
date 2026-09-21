@@ -11,15 +11,17 @@ internal sealed record FalloutScriptFunction(IReadOnlyList<FalloutScriptArgument
 internal sealed record FalloutScriptEventProgram(string Event, string? Filter, FalloutGameModeProgram Program);
 
 // A source-script owner, independent of menus, locations and quest identities.
-// Unsupported expressions/commands stop the caller before its staged effects commit.
+// Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 1;
+    internal const int ParserVersion = 2;
     private readonly IReadOnlyList<string[]> _lines;
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines) => _lines = lines;
 
-    internal IEnumerable<string> CommandNames => _lines.Select(tokens => tokens[0].ToLowerInvariant())
-        .Where(command => command is not ("if" or "elseif" or "else" or "endif" or "set" or "return"))
+    internal IEnumerable<string> CommandNames => _lines
+        .Where(tokens => tokens.Length < 2 || !FalloutNvseNumericExpression.IsAssignment(tokens[1]))
+        .Select(tokens => tokens[0].ToLowerInvariant())
+        .Where(command => command is not ("if" or "elseif" or "else" or "endif" or "set" or "let" or "eval" or "return"))
         .Select(command => command[(command.LastIndexOf('.') + 1)..]);
 
     internal static FalloutGameModeProgram Read(ReadOnlySpan<byte> source, string blockName = "GameMode", uint? argument = null)
@@ -91,19 +93,22 @@ internal sealed class FalloutGameModeProgram
     {
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
         var active = true;
+        double Condition(string[] tokens) => tokens.Length > 1 && tokens[1].Equals("eval", StringComparison.OrdinalIgnoreCase)
+            ? FalloutNvseNumericExpression.Evaluate(tokens[2..], variable, assign, function)
+            : Evaluate(tokens[1..], variable, function);
         foreach (var tokens in _lines)
         {
             switch (tokens[0].ToLowerInvariant())
             {
                 case "if":
-                    var result = active && Evaluate(tokens[1..], variable, function) != 0;
+                    var result = active && Condition(tokens) != 0;
                     branches.Push((active, result, false));
                     active = result;
                     break;
                 case "elseif":
                     var prior = branches.Pop();
                     if (prior.Else) throw new InvalidDataException("Elseif follows else.");
-                    active = prior.Parent && !prior.Taken && Evaluate(tokens[1..], variable, function) != 0;
+                    active = prior.Parent && !prior.Taken && Condition(tokens) != 0;
                     branches.Push((prior.Parent, prior.Taken || active, false));
                     break;
                 case "else":
@@ -118,9 +123,15 @@ internal sealed class FalloutGameModeProgram
                         throw new NotSupportedException("Script assignment syntax is unbound.");
                     assign(tokens[1], Evaluate(tokens[3..], variable, function));
                     break;
+                case "let" or "eval" when active:
+                    _ = FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function);
+                    break;
                 case "return" when active: yield break;
                 default:
-                    if (active) call(tokens[0], tokens[1..]);
+                    if (!active) break;
+                    if (tokens.Length > 1 && FalloutNvseNumericExpression.IsAssignment(tokens[1]))
+                        _ = FalloutNvseNumericExpression.Evaluate(tokens, variable, assign, function);
+                    else call(tokens[0], tokens[1..]);
                     break;
             }
             yield return true;
@@ -201,7 +212,7 @@ internal sealed class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||[()+*/!<>-]", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||:=|[+*/-]=|[=()+*/!<>-]", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {
@@ -230,6 +241,17 @@ internal sealed class FalloutGameModeProgram
             if (line[index] == ';' && !quoted) return line[..index];
         }
         return line;
+    }
+
+    // Current owners missing from an older snapshot are allowed only when that
+    // parser rejected their unchanged source. Quotes/comments cannot grant a
+    // migration, and current-version saves must contain every admitted owner.
+    internal static bool WasRejectedByParser(string source, int version)
+    {
+        if (version == 0 && HasArgumentSeparator(source)) return true;
+        if (version >= 2) return false;
+        return source.Split('\n').Select(line => StripComment(line).Trim())
+            .Where(line => line.Length != 0).Any(line => Tokens(line).Any(FalloutNvseNumericExpression.IsAssignment));
     }
 
     // Version-zero saves omitted every quest whose source contained an

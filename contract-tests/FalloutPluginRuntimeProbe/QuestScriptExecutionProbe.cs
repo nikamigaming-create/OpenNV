@@ -65,7 +65,7 @@ internal static class QuestScriptExecutionProbe
             Require(state.Stage(quest.FormKey) == 42 && state.Variable(quest.FormKey, 27) == 10,
                 "The complete source calculation did not drive progression.");
             Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { Instances = [], ParserVersion = 0 }));
-            Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { ParserVersion = 2 }));
+            Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { ParserVersion = FalloutGameModeProgram.ParserVersion + 1 }));
             File.WriteAllBytes(Path.Combine(directory, "Commas.esm"), Header().Concat(Quest())
                 .Concat(Script("set result to 7\nSetStage ProbeQuest,42", [1, 2, 3])).ToArray());
             using var commas = FalloutPluginStack.Load(directory, ["Commas.esm"]);
@@ -84,6 +84,7 @@ internal static class QuestScriptExecutionProbe
             var commaCold = CommaScripts(); commaCold.Restore(commaScripts.Capture());
             Require(JsonSerializer.Serialize(commaCold.Capture()) == JsonSerializer.Serialize(commaScripts.Capture()),
                 "Migrated script owners did not survive a current-version cold restore.");
+            NumericColdState(directory);
             File.WriteAllBytes(Path.Combine(directory, "Bad.esm"), Header().Concat(Quest())
                 .Concat(Script("set result to 99\nUnknownReachedCommand", [1, 2, 3])).ToArray());
             using var bad = FalloutPluginStack.Load(directory, ["Bad.esm"]);
@@ -100,10 +101,48 @@ internal static class QuestScriptExecutionProbe
         }
         finally
         {
-            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
+            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Numeric.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
             Directory.Delete(directory);
         }
         Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true");
+    }
+
+    private static void NumericColdState(string directory)
+    {
+        File.WriteAllBytes(Path.Combine(directory, "Numeric.esm"), Header().Concat(Quest())
+            .Concat(Script("timer += 0.25\nlet result := timer * 4\nif eval result > 80\nactive = 1\nendif", [11, 19, 27])).ToArray());
+        using var records = FalloutPluginStack.Load(directory, ["Numeric.esm"]);
+        var quest = new FalloutFormKey("Numeric.esm", 0x100);
+        var state = new FalloutQuestState(records);
+        state.SetVariable(quest, 19, 20);
+        state.SetRunning(quest, true);
+        FalloutQuestScripts Scripts(FalloutQuestState owner) => new(records, owner, new HashSet<FalloutFormKey> { quest },
+            new FalloutPlayerInventory(), defaultProcessingDelay: 1);
+        var scripts = Scripts(state);
+        var initial = scripts.Capture();
+        scripts.Restore(initial with { Instances = [], ParserVersion = 1 });
+        Require(state.Variable(quest, 19) == 20 && scripts.Capture().Instances.Single().Executions == 0 &&
+            scripts.Capture().Instances.Single().Clock!.HasSameBits(initial.Instances.Single().Clock!),
+            "Numeric parser migration reset compiled locals or invented executions/timing.");
+        Scripts(state).Restore(initial with { Instances = [], ParserVersion = 0 });
+        Reject(() => Scripts(state).Restore(initial with { Instances = [] }));
+        FalloutQuestScriptHost host = new((_, _) => throw new InvalidOperationException("Unexpected stage effect."),
+            _ => throw new InvalidOperationException("Unexpected player query."));
+        scripts.AdvanceClaimed(quest, 0.1, host);
+        Require(state.Variable(quest, 19) == 20.25 && state.Variable(quest, 27) == 81 && state.Variable(quest, 11) == 1,
+            "Numeric assignment did not execute against winning compiled quest slots.");
+        var restoredState = new FalloutQuestState(records);
+        restoredState.Restore(JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(state.Capture()))!);
+        var restoredScripts = Scripts(restoredState);
+        restoredScripts.Restore(JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scripts.Capture()))!);
+        for (var frame = 0; frame < 30; ++frame)
+        {
+            scripts.AdvanceClaimed(quest, 0.025, host);
+            restoredScripts.AdvanceClaimed(quest, 0.025, host);
+        }
+        Require(JsonSerializer.Serialize(state.Capture()) == JsonSerializer.Serialize(restoredState.Capture()) &&
+            JsonSerializer.Serialize(scripts.Capture()) == JsonSerializer.Serialize(restoredScripts.Capture()),
+            "Numeric quest execution changed across cold save restoration.");
     }
 
     private static byte[] Quest()

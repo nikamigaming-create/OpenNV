@@ -93,7 +93,9 @@ The author's [JAM 4.6 requirements](https://www.nexusmods.com/newvegas/mods/6666
 include the four main New Vegas DLCs, xNVSE, JIP LN, JohnnyGuitar, kNVSE,
 Stewie Tweaks and UIO. The installed plugin's master declarations supply the
 actual ESM dependencies. The local sample now contains all of those packages.
-Its 52 source scripts currently fail the generic script parser before execution.
+The shared interpreter now executes numeric NVSE assignments and eval conditions;
+46 of its 52 source scripts still fail parsing. Accepted source still needs real
+command and event owners. See [NVSE script runtime](nvse-script-runtime.md).
 The earlier adapters only applied a speed multiplier and global time scale in
 the old CellPlayer path. They do not provide AP behavior, animations, callbacks,
 menus, complete module behavior or native-player integration.
@@ -120,8 +122,8 @@ dotnet run --project contract-tests/FalloutPluginRuntimeProbe --configuration Re
 ```
 
 Reports retain source plugin hashes, active load order, archives, resolved files,
-missing packages and script parser failures. JAM has 52 parser failures; TTW has
-67 among 1,263 entry-plugin scripts. Neither count measures runtime execution.
+missing packages and script parser failures. JAM has 46 parser failures; TTW has
+61 among 1,263 entry-plugin scripts. Neither count measures runtime execution.
 Keep reports and all mod,
 retail and derived files out of Git. Synthetic contracts cover dependency
 resolution, transitive failures, cycles, mixed engine detection, malformed
