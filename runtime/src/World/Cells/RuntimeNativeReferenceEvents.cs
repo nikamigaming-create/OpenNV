@@ -78,25 +78,20 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (old.Trigger is { } trigger) { GamebryoReferenceEnableRuntime.Apply(trigger, false); trigger.QueueFree(); }
             _bindings.Remove(key);
         }
+        var presentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().SingleOrDefault();
+        // The presentation owner already indexes complete resident models and
+        // excludes its inactive warm cache. Do not rediscover that same graph
+        // through thousands of native metadata calls at every grid boundary.
+        var nodes = presentation?.Nodes ?? IndexUnownedNodes(cell, root);
         _nodeReferences.Clear();
-        var identities = cell.References.ToDictionary(reference => reference.FormKey.ToString(), reference => reference.FormKey);
-        var nodes = new Dictionary<FalloutFormKey, Node3D>();
-        foreach (var node in root.GetChildren().OfType<Node3D>())
-        {
-            if (node.IsQueuedForDeletion()) continue;
-            var key = node is RuntimeNativeNpc actor ? actor.Appearance.Reference :
-                node.HasMeta("opennv_reference_form_key") && identities.TryGetValue(node.GetMeta("opennv_reference_form_key").AsString(), out var identity)
-                    ? identity : (FalloutFormKey?)null;
-            if (key is not { } found) continue;
-            if (!retained.Contains(found)) continue; // Inactive warm 3D has no gameplay or contact residency.
-            nodes.Add(found, node);
-            _nodeReferences.Add(node.GetInstanceId(), found);
-        }
         foreach (var reference in cell.References)
         {
+            var node = nodes.GetValueOrDefault(reference.FormKey);
+            if (node is not null && node.IsQueuedForDeletion()) node = null;
+            if (node is not null) _nodeReferences.Add(node.GetInstanceId(), reference.FormKey);
             if (_bindings.TryGetValue(reference.FormKey, out var existing))
             {
-                existing.Node = nodes.GetValueOrDefault(reference.FormKey);
+                existing.Node = node;
                 continue; // Keep OnLoad, contact membership and source clocks.
             }
             var instance = world.Get(reference.FormKey);
@@ -117,11 +112,31 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 instance.ScriptError ??= "Contact binding: " + error.Message;
             }
             _bindings.Add(reference.FormKey, new(reference, instance, cell.BaseObjects[reference.Base].Signature,
-                nodes.GetValueOrDefault(reference.FormKey), trigger, new()));
+                node, trigger, new()));
         }
-        if (_presentation is not null) _presentation.Materialized -= BindMaterialized;
-        _presentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().SingleOrDefault();
-        if (_presentation is not null) _presentation.Materialized += BindMaterialized;
+        if (_presentation != presentation)
+        {
+            if (_presentation is not null) _presentation.Materialized -= BindMaterialized;
+            _presentation = presentation;
+            if (_presentation is not null) _presentation.Materialized += BindMaterialized;
+        }
+    }
+
+    private static IReadOnlyDictionary<FalloutFormKey, Node3D> IndexUnownedNodes(FalloutCellScene cell, Node3D root)
+    {
+        // Standalone native audits can supply source models without a full
+        // presentation owner. Ordinary gameplay uses its authoritative index.
+        var identities = cell.References.ToDictionary(reference => reference.FormKey.ToString(), reference => reference.FormKey);
+        var nodes = new Dictionary<FalloutFormKey, Node3D>();
+        foreach (var node in root.GetChildren().OfType<Node3D>())
+        {
+            if (node.IsQueuedForDeletion()) continue;
+            var key = node is RuntimeNativeNpc actor ? actor.Appearance.Reference :
+                node.HasMeta("opennv_reference_form_key") && identities.TryGetValue(node.GetMeta("opennv_reference_form_key").AsString(), out var identity)
+                    ? identity : (FalloutFormKey?)null;
+            if (key is { } found && identities.ContainsKey(found.ToString())) nodes.Add(found, node);
+        }
+        return nodes;
     }
 
     private void BindMaterialized(FalloutFormKey reference, Node3D node)

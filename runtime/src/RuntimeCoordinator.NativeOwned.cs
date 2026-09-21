@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Diagnostics;
-using System.Text;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Content;
@@ -786,33 +785,7 @@ public partial class RuntimeCoordinator
     private static byte[] NativeReferenceState(
         FalloutPlacedReference reference,
         FalloutBaseObjectDefinition baseObject,
-        string disposition)
-    {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
-        WriteText(writer, reference.FormKey.ToString());
-        WriteText(writer, reference.EditorId);
-        WriteText(writer, reference.Base.ToString());
-        WriteText(writer, baseObject.Signature);
-        WriteText(writer, baseObject.EditorId);
-        WriteText(writer, disposition);
-        writer.Write(reference.Flags);
-        foreach (var value in reference.Position)
-            writer.Write(value);
-        foreach (var value in reference.RotationRadians)
-            writer.Write(value);
-        writer.Write(reference.Scale);
-        WriteText(writer, baseObject.ModelPath ?? string.Empty);
-        writer.Flush();
-        return stream.ToArray();
-    }
-
-    private static void WriteText(BinaryWriter writer, string value)
-    {
-        var bytes = Encoding.UTF8.GetBytes(value);
-        writer.Write(bytes.Length);
-        writer.Write(bytes);
-    }
+        string disposition) => NativeReferenceObservation.Serialize(reference, baseObject, disposition);
 
     private void AddNativeDoorPortal(
         Node3D doorInstance,

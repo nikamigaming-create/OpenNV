@@ -19,6 +19,7 @@ public partial class NativeReferencePresentationAudit : Node3D
             using var records = FalloutPluginStack.Load(content.PluginSources);
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, FalloutDialogueTopic.Find(records, "CELL", "GSDocMitchellHouse").FormKey);
+            world.LoadCell(cell);
             var cards = new[] { "TempRorschachTest01REF" }
                 .Select(name => cell.References.Single(reference => reference.EditorId == name)).ToArray();
             var path = cell.BaseObjects[cards[0].Base].ModelPath!;
@@ -35,12 +36,22 @@ public partial class NativeReferencePresentationAudit : Node3D
                 var node = prototype.InstantiatePlaced(transform); root.AddChild(node); return node;
             });
             root.AddChild(projection);
+            var scene = cell with { References = cards };
+            var events = new RuntimeNativeReferenceEvents();
+            events.Configure(records, world, new(records), scene, root, new((_, _) => false, _ => { }),
+                _ => Transform3D.Identity, units, 1);
+            root.AddChild(events); events.SetProcess(false);
             var first = projection.Resolve(cards[0].FormKey)!;
             // An unplaced resource clone is the mutation control, not a second
             // gameplay reference with invented source identity or placement.
             var second = prototype.Instantiate(); root.AddChild(second);
             static MeshInstance3D Target(Node3D node) => node.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
                 .Single(mesh => mesh.GetMeta("opennv_nif_source_name", "").AsString() == "PipBoyCard01:0");
+            if (events.AimedPresentation(Target(first)) != first || events.AimedPresentation(Target(second)) is not null)
+                throw new InvalidOperationException("Late materialization did not bind the owned reference exclusively.");
+            events.SetResidency(scene, root);
+            if (events.AimedPresentation(Target(first)) != first)
+                throw new InvalidOperationException("Event residency ignored the presentation index for a source model without root metadata.");
             var otherMaterial = Target(second).GetActiveMaterial(0);
             var originalMaterial = Target(first).GetActiveMaterial(0);
             projection.Apply(new(FalloutReferenceEffectKind.Texture, cards[0].FormKey, cards[0].FormKey,
@@ -77,17 +88,23 @@ public partial class NativeReferencePresentationAudit : Node3D
             world.SetEnabled(cards[0].FormKey, true);
             projection.Advance(0);
             projection.SetResidency([], _ => throw new InvalidOperationException("Inactive cache constructed new 3D."), _ => true);
+            events.SetResidency(scene with { References = [] }, root);
+            if (events.AimedPresentation(Target(first)) is not null || events.TryActivate(Target(first)))
+                throw new InvalidOperationException("Warm nonresident geometry retained gameplay activation.");
             if (projection.Nodes.Count != 0 || projection.WarmNodeCount != 1 || first.Visible ||
                 first.ProcessMode != ProcessModeEnum.Disabled || !projection.HasPrepared(cards[0].FormKey))
                 throw new InvalidOperationException("Warm 3D remained resident or was discarded.");
             projection.SetResidency(cards, _ => throw new InvalidOperationException("Boundary reversal rebuilt warm 3D."));
+            events.SetResidency(scene, root);
+            if (events.AimedPresentation(Target(first)) != first)
+                throw new InvalidOperationException("Warm reentry lost the reference's native interaction binding.");
             if (projection.Resolve(cards[0].FormKey) != first || !first.Visible || projection.WarmNodeCount != 0 || materializations != 1 ||
                 Target(first).GetActiveMaterial(0) != replacement)
                 throw new InvalidOperationException("Boundary reversal lost the original instance or its material state.");
             projection.SetResidency([], _ => null, _ => false);
             if (projection.WarmNodeCount != 0 || projection.HasPrepared(cards[0].FormKey) || !first.IsQueuedForDeletion())
                 throw new InvalidOperationException("Expired warm 3D was not evicted.");
-            GD.Print("OPENNV_NATIVE_REFERENCE_PRESENTATION_AUDIT_PASS sharedModel=true instanceTexture=true ownedDds=true enable=true disable=true noRebuild=true fadeOpacity=true reversal=true warmBoundary=true boundedEviction=true pixels=unverified");
+            GD.Print("OPENNV_NATIVE_REFERENCE_PRESENTATION_AUDIT_PASS sharedModel=true instanceTexture=true ownedDds=true enable=true disable=true noRebuild=true fadeOpacity=true reversal=true warmBoundary=true indexedEvents=true lateMaterialization=true inactiveContactsRejected=true boundedEviction=true pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

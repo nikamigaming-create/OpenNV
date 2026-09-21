@@ -53,6 +53,11 @@ public partial class NativeReferenceEventsAudit : Node
             var triggerState = world.Get(Key(0x900));
             Require(triggerState.ScriptError is null && triggerState.Read(1) == 1 && triggerState.Read(3) > 0,
                 "Native physical overlap did not execute the model-less trigger.");
+            events.SetResidency(cell, root);
+            await Frames();
+            Require(root.GetChildren().OfType<Area3D>().Single() == area && triggerState.Read(1) == 1 &&
+                triggerState.Read(5) == 1 && world.Get(Key(0x901)).Read(5) == 1,
+                "Retained residency rebuilt a trigger, repeated OnLoad or lost active contact membership.");
             player.Position = new Vector3(10, 0, 0);
             await Frames();
             Require(triggerState.Read(2) == 1, "Native physical departure did not execute OnTriggerLeave.");
@@ -86,7 +91,7 @@ public partial class NativeReferenceEventsAudit : Node
             world.UnloadCell(cell.Cell.FormKey);
             world.LoadCell(cell);
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
-            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true activation=true faultReentry=true faultActivation=true localState=true parity=unverified");
+            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true parity=unverified");
         }
         catch (Exception error)
         {
@@ -112,8 +117,8 @@ public partial class NativeReferenceEventsAudit : Node
         var source = "begin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
             "begin OnTriggerLeave player\nset departed to departed + 1\nend\n" +
             "begin OnTrigger player\nset contacts to contacts + 1\nend\n" +
-            "begin OnActivate\nset activations to activations + 1\nend";
-        var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"),
+            "begin OnActivate\nset activations to activations + 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
+        var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),
             Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Encoding.ASCII.GetBytes(source)));
         var primitive = new byte[32];
         BinaryPrimitives.WriteSingleLittleEndian(primitive, 4);

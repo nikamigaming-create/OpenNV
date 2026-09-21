@@ -116,3 +116,27 @@ largest draw interval is 159.72 ms and highest rolling p95 is 31.23 ms; larger
 frame spikes remain outside the upload slice. The final settled sample is
 72 FPS with p95 22.07 ms. This is a separate simulator smoke test with a
 level head pose, not a matched flat/XR performance comparison or headset result.
+
+## Cell commit ownership
+
+Live-harness-only phase timing separates cell commits into source/world state,
+reference admission, terrain, events, observation, lighting, LOD and eviction.
+Another ordinary flat walk of the same checkpoint completed both transitions at
+49.05 and 60.12 ms. Interaction-binding reconstruction took 10.75 and 15.94 ms;
+runtime observation took 4.21 and 14.13 ms. These measurements identify commit
+work independently of the preceding upload queue.
+
+Event residency now consumes the presentation owner's existing resident index,
+excluding its warm cache, instead of rediscovering every source identity through
+native node metadata. Existing bindings retain OnLoad and contact membership;
+late materialization subscribes once and reentry restores ordinary activation.
+The source observation encoder preserves the canonical length-prefixed UTF-8,
+field order and Float32 bits in a single sized buffer. A 512-record synthetic
+sample allocates 299,008 bytes versus 593,920 with the previous stream encoder.
+Discovery scope replacement also reuses its string prefix.
+
+Native synthetic contacts and owned reference materialization/warm-residency
+checks pass, as does the complete runtime gate. Post-change exported gameplay
+timing and simulator continuation remain pending while the user plays the
+previously checked package. No frame-time improvement is claimed for these
+latest changes yet.
