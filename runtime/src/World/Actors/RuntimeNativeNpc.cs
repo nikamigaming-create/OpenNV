@@ -319,8 +319,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
     {
         var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, selection: selection), source,
             unitsToMetres, materialOwner);
-        actor._templates = selection;
-        try { actor.ConfigureFaceAnimation(stack); return actor; }
+        try { actor.BindSourceBehavior(stack, selection); return actor; }
         catch { actor.Free(); throw; }
     }
 
@@ -328,70 +327,9 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         float unitsToMetres,
         Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null)
     {
-        if (!appearance.CanConstruct)
-            throw new NotSupportedException(string.Join("; ", appearance.Blockers));
-        var actor = new RuntimeNativeNpc
-        {
-            Name = appearance.Reference is { } reference ? $"Reference_{reference}" : $"Actor_{appearance.Npc}",
-            Appearance = appearance,
-        };
-        try
-        {
-            actor.Skeleton = NativeNifMeshBuilder.BuildActorSkeleton(Read(appearance.SkeletonPath), unitsToMetres);
-            actor.Skeleton.Node.SetMeta("opennv_source_model", appearance.SkeletonPath);
-            actor.AddChild(actor.Skeleton.Node);
-            // The NPC NAM6/NAM7 fields are unused in this engine. In particular,
-            // their legal zero values must not collapse the entire skeleton.
-            actor.Skeleton.Node.Scale = Vector3.One * appearance.RaceHeight;
-            var head = appearance.Models.SingleOrDefault(part => part.Role == "head");
-            var headBinds = head?.ModelPath is { } headPath
-                ? FalloutNpcFaceAttachment.ReadHeadBinds(FalloutNifFile.Read(Read(headPath))) : null;
-            var parts = new List<RuntimeNativeNifScene>();
-            foreach (var part in appearance.Models)
-            {
-                if (part.ModelPath is null)
-                    throw new InvalidDataException($"NPC model {part.Source}/{part.Role} has no NIF path.");
-                try
-                {
-                    var selectedShape = FalloutNpcAppearanceHairShape.Select(appearance, part);
-                    var morphSource = FalloutNpcAppearanceMorph.Resolve(source, part, selectedShape);
-                    var morph = morphSource is null ? null : new FalloutNpcFaceGeometry(appearance, part, morphSource.Geometry, selectedShape);
-                    var expressions = FalloutNpcFaceMorph.Resolve(source, appearance, part, morphSource?.Geometry, selectedShape);
-                    var scene = NativeNifMeshBuilder.AddActorPart(Read(part.ModelPath), actor.Skeleton,
-                        materialOverride: (nif, geometry) => materialOwner?.Invoke(appearance, part, nif, geometry),
-                        geometryOwner: morph is null ? null : morph.Apply,
-                        rigidFaceBinds: FalloutNpcFaceAttachment.UsesHeadModelSpace(part.Role)
-                            ? headBinds ?? throw new NotSupportedException("Rigid FaceGen part has no source skinned head owner.") : null,
-                        selectedGeometryName: selectedShape,
-                        morphOwner: expressions is null ? null : expressions.Build,
-                        contentSource: source, bipedSlots: part.Role is "armor" or "armor-addon" ? part.BipedSlots : 0);
-                    scene.Root.SetMeta("opennv_source_model", part.ModelPath);
-                    scene.Root.SetMeta("opennv_source_part", part.Role);
-                    scene.Root.SetMeta("opennv_source_form", part.Source.ToString());
-                    if (morphSource is not null)
-                        scene.Root.SetMeta("opennv_source_egm", morphSource.ResourceOwner);
-                    parts.Add(scene);
-                }
-                catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
-                {
-                    throw new NotSupportedException($"NPC {appearance.Npc} part {part.Role} ({part.ModelPath}): {error.Message}", error);
-                }
-            }
-            actor.Parts = parts;
-            actor.BindFaceTargets();
-            if (appearance.Reference is { } key) actor.SetMeta("opennv_reference_form_key", key.ToString());
-            actor.SetMeta("opennv_npc_form_key", appearance.Npc.ToString());
-            actor.SetMeta("opennv_source_skeleton", appearance.SkeletonPath);
-            return actor;
-        }
-        catch
-        {
-            // No incomplete body is published when any authored part fails.
-            actor.Free();
-            throw;
-        }
-
-        byte[] Read(string path) => source.TryRead(path, null, out var bytes, out _)
-            ? bytes : throw new FileNotFoundException($"NPC source resource is missing: {path}");
+        var prepared = FalloutNpcPreparedGeometry.Read(appearance, source);
+        using var assembly = new Assembly(prepared, source, unitsToMetres, materialOwner);
+        while (!assembly.Advance()) { }
+        return assembly.Take();
     }
 }

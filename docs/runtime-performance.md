@@ -6,7 +6,7 @@ available logical processors, clamped to one through four workers. A memory
 limit below 8 GiB caps it at two. This is a scheduling policy, not a hardware
 minimum or a promise that a particular frame rate is supported.
 
-Exterior terrain/reference preparation and distant LOD share one admission
+Exterior terrain/reference/NPC preparation and distant LOD share one admission
 limit. The LOD upload queue holds at most twice that worker count and applies
 backpressure. Obsolete grid requests and departing scene owners cancel queued
 work. Already-running source reads finish at a cancellation boundary. Startup
@@ -76,3 +76,43 @@ the host was not isolated. The XR comparison is not an exact build A/B and the
 simulator does not establish physical-headset timing. A flat cell crossing
 reached 175.25 ms for one upload and 69.57 ms for commit before returning to
 60 FPS. Streaming stutter remains a release limitation.
+
+## Incremental NPC admission
+
+A subsequent copied-save flat walk isolated a 182.38 ms NPC construction step;
+scene collection and disabling took under one millisecond. The same ordinary
+movement leases now prepare NIF/EGM/TRI source geometry on the bounded content
+pool, then assemble one native skeleton or body part per queue visit. Incomplete
+bodies stay detached. Only complete actors receive contacts, AI and residency.
+Equipment is checked against current reference state before each step. Grid
+cancellation frees unfinished nodes and cancels source work. At most the worker
+budget's number of NPC preparations, including completed source results waiting
+for publication, can remain in flight.
+
+The selected owned audit compares every prepared geometry/expression vector with
+direct source evaluation, checks worker execution and cancellation, rejects
+partial publication and verifies abandoned native nodes are freed. Synchronous
+construction uses the same assembly owner. This does not establish every actor
+or outfit's admission.
+
+| Same checkpoint and movement leases, safe flat renderer | Before | After |
+| --- | ---: | ---: |
+| Largest streaming upload slice | 183.46 ms | 59.67 ms |
+| Largest observed draw interval during the sampled walk | 197.09 ms | 81.33 ms |
+| Highest rolling p95 during the sampled walk | 26.15 ms | 33.67 ms |
+| Last cell commit | 44.55 ms | 53.50 ms |
+
+Both runs complete the grid with 49 resident cells, 620 retained references and
+63 terrain cache cells. Recording and builds were off; host GPU activity and
+combat timing were not isolated. The reduced worst stall is accompanied by more
+distributed construction work; p95 and commit did not improve in this sample.
+Individual armor/material uploads, cell commit and LOD remain performance work.
+These finite measurements do not support a claim of consistently smooth VR.
+
+An Elliott Tate simulator run using ordinary thumbstick movement from the same
+copied checkpoint completes the same two cell transitions and source NPC body.
+Its largest upload slice is 53.79 ms and last commit 46.63 ms. The sampled walk's
+largest draw interval is 159.72 ms and highest rolling p95 is 31.23 ms; larger
+frame spikes remain outside the upload slice. The final settled sample is
+72 FPS with p95 22.07 ms. This is a separate simulator smoke test with a
+level head pose, not a matched flat/XR performance comparison or headset result.
