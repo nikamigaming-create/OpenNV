@@ -18,6 +18,9 @@ for menus and interaction. The wrist device shares inventory and gameplay state.
 Close the game before switching modes. Preserve a copy of your OpenNV save
 before an extended test; existing retail saves are not loaded or modified.
 OpenNV saves live under `%APPDATA%/Godot/app_userdata/OpenNV/profiles/`.
+Continue and Load both resume the configured OpenNV save slot. A loading message
+appears before scene construction; Load is not yet a browser for multiple saves.
+Existing saved choices remain intact when the new encounter-zone state is added.
 
 ## What to test
 
@@ -29,6 +32,10 @@ OpenNV saves live under `%APPDATA%/Godot/app_userdata/OpenNV/profiles/`.
   results. Exercise combat and corpse loot with a disposable playtest save.
 - Walk outside, inspect cloud movement, distant structures/terrain and mobs,
   push a tumbleweed, and watch animals for independent idle timing.
+- Revisit Primm and Bison Steve: zone-assigned NPCs now initialize, and the broken
+  floor ramp admits ordinary movement in both flat and the XR simulator. The
+  shared controller now explicitly allows slopes up to 50 degrees; this is an
+  OpenNV movement policy, not a measured retail limit.
 
 ## Known limits
 

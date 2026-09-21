@@ -93,6 +93,8 @@ public partial class RuntimeCoordinator
                 sprinting = _nativePlayer.Sprinting,
                 jumpCount = _nativePlayer.JumpCount,
                 stepCount = _nativePlayer.StepCount,
+                stepBlocked = _nativePlayer.StepBlocked,
+                maximumWalkableSlopeDegrees = Mathf.RadToDeg(_nativePlayer.FloorMaxAngle),
                 blockingShape = _nativePlayer.BlockingShape,
                 collisionResident = _nativePlayer.CollisionResident,
                 collisionContacts = _nativePlayer.CollisionContacts,
@@ -352,11 +354,12 @@ public partial class RuntimeCoordinator
         {
             if (action == "sQuit")
                 GetTree().Quit();
-            else if (action is "sNew" or "sContinue")
+            else if (action is "sNew" or "sContinue" or "sLoad")
             {
-                _nativeContinueOpening = action == "sContinue";
-                layer.QueueFree();
-                Callable.From(LoadNativeInitialCell).CallDeferred();
+                if (_nativeStartingGame) return;
+                _nativeStartingGame = true;
+                _nativeContinueOpening = action != "sNew";
+                StartNativeGameFromMenu(layer, action);
             }
             else
             {
@@ -367,6 +370,27 @@ public partial class RuntimeCoordinator
         layer.AddChild(menu);
         AddChild(layer);
         IndexNativeLiveStackForMenu(sources, menu);
+    }
+
+    private bool _nativeStartingGame;
+    private async void StartNativeGameFromMenu(CanvasLayer layer, string action)
+    {
+        var menu = layer.GetChild<NativeGamebryoStartMenu>(0);
+        menu.ShowLoading(_nativeContinueOpening);
+        GD.Print($"OPENNV_NATIVE_MENU_LOAD action={action} save={_nativeContinueOpening}");
+        try
+        {
+            // Publish the loading state in flat and the shared XR menu surface
+            // before synchronous native scene publication starts.
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            LoadNativeInitialCell();
+            layer.QueueFree();
+        }
+        catch (Exception error)
+        {
+            GD.PushError($"OPENNV_NATIVE_MENU_LOAD_FAIL {error}");
+            menu.ShowLoadFailure();
+        }
     }
 
     private void LoadNativeInitialCell()
@@ -394,6 +418,7 @@ public partial class RuntimeCoordinator
             _nativePrewarmedInitialCellRoot = null;
             _nativeReferences?.Dispose();
             _nativeReferences = new(stack);
+            _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
@@ -527,6 +552,8 @@ public partial class RuntimeCoordinator
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
         const string parityScope = "world/active-cell";
+        _nativeReferences!.EnterEncounterCell(cell.Cell.FormKey,
+            _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1);
         DiscoverNativeCellReferences(cell);
         _nativeActorDivergences.Clear();
         _nativeReferenceDivergences.Clear();
@@ -812,7 +839,7 @@ public partial class RuntimeCoordinator
         _nativePlayer!.SetModalInput(true);
         // Activation queues streaming. A presentation failure must not become a
         // permanent source-script fault or consume the reciprocal door's state.
-        Callable.From(async () =>
+        Callable.From((Action)(async () =>
         {
             try { await StreamNativeDoorTransition(reference); }
             catch (Exception error)
@@ -821,7 +848,7 @@ public partial class RuntimeCoordinator
                 GD.PushError($"OPENNV_NATIVE_DOOR_STREAM_FAIL {error}");
             }
             finally { _nativeDoorLoading = false; _nativePlayer!.SetModalInput(false); }
-        }).CallDeferred();
+        })).CallDeferred();
     }
 
     private async System.Threading.Tasks.Task StreamNativeDoorTransition(

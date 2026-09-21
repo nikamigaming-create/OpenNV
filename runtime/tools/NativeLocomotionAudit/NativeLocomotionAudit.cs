@@ -1,8 +1,10 @@
 using Godot;
+using OpenNV.Runtime;
 using OpenNV.Runtime.World.Cells;
 
 public partial class NativeLocomotionAudit : Node3D
 {
+    private float FloorAngle => Mathf.DegToRad(RuntimeConfiguration.Load().Player.MaximumWalkableSlopeDegrees);
     public override async void _Ready()
     {
         try
@@ -22,7 +24,10 @@ public partial class NativeLocomotionAudit : Node3D
             await Check(.3f, true, false);
             await Check(.3f, false, true, .38f, 2.3f, .015f);
             await Check(.3f, true, false, .38f, 2.3f, .015f);
-            GD.Print("OPENNV_NATIVE_LOCOMOTION_PASS curb=true tallWall=true lowCeiling=true airborne=true sourceStepHeightAndCameraParity=unverified");
+            await CheckSlope(46, true);
+            await CheckSlope(46, true, .2f);
+            await CheckSlope(60, false);
+            GD.Print("OPENNV_NATIVE_LOCOMOTION_PASS curb=true tallWall=true lowCeiling=true airborne=true slopeAscentDescent=true steepSlopeRefused=true sourceStepHeightAndCameraParity=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -40,7 +45,7 @@ public partial class NativeLocomotionAudit : Node3D
         Box(new(0, -.5f, -2), new(16, 1, 16));
         if (lowCeiling) Box(new(0, 2.5f, -2), new(16, 1, 16));
         else Box(new(0, 1, -2), new(4, 2, 2));
-        var body = new CharacterBody3D { FloorSnapLength = .32f, Position = new(0, .1f, 1) };
+        var body = new CharacterBody3D { FloorSnapLength = .32f, FloorMaxAngle = FloorAngle, Position = new(0, .1f, 1) };
         body.AddChild(new CollisionShape3D { Position = new(0, .9f, 0), Shape = new CapsuleShape3D { Height = 1.8f, Radius = .32f } });
         scene.AddChild(body);
         try
@@ -114,7 +119,7 @@ public partial class NativeLocomotionAudit : Node3D
         Box(new(0, -.5f, -3), new(10, 1, 20));
         Box(new(0, height / 2, -5), new(4, height, 8));
         if (ceiling) Box(new(0, bodyHeight + .7f, -3), new(10, 1, 20));
-        var body = new CharacterBody3D { FloorSnapLength = radius, Position = new(0, .1f, 0) };
+        var body = new CharacterBody3D { FloorSnapLength = radius, FloorMaxAngle = FloorAngle, Position = new(0, .1f, 0) };
         body.AddChild(new CollisionShape3D { Position = new(0, bodyHeight / 2, 0), Shape = new CapsuleShape3D { Height = bodyHeight, Radius = radius } });
         scene.AddChild(body);
         try
@@ -137,6 +142,64 @@ public partial class NativeLocomotionAudit : Node3D
             GD.Print($"OPENNV_NATIVE_LOCOMOTION_CASE height={height} ceiling={ceiling} radius={radius} bodyHeight={bodyHeight} stride={stride} steps={steps} position={body.Position}");
             if (shouldClimb ? steps == 0 || body.Position.Z > -3 || body.Position.Y < height - .02f : steps != 0 || body.Position.Z < -.9f)
                 throw new InvalidOperationException("Capsule step/obstruction traversal differs from the synthetic collision scene.");
+        }
+        finally { scene.QueueFree(); await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame); }
+    }
+
+    private async Task CheckSlope(float degrees, bool shouldClimb, float lip = 0)
+    {
+        var scene = new Node3D(); AddChild(scene);
+        var height = lip + 3 * MathF.Tan(Mathf.DegToRad(degrees));
+        void Box(Vector3 position, Vector3 size)
+        {
+            var box = new StaticBody3D { Position = position };
+            box.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+            scene.AddChild(box);
+        }
+        Box(new(0, -.5f, -3), new(10, 1, 16));
+        Box(new(0, height - .25f, -6), new(4, .5f, 4));
+        var ramp = new StaticBody3D();
+        var a = new Vector3(-2, lip, -1); var b = new Vector3(2, lip, -1);
+        var c = new Vector3(-2, height, -4); var d = new Vector3(2, height, -4);
+        ramp.AddChild(new CollisionShape3D
+        {
+            Shape = new ConcavePolygonShape3D { Data = [a, b, c, c, b, d], BackfaceCollision = true }
+        });
+        scene.AddChild(ramp);
+        var body = new CharacterBody3D { FloorSnapLength = .32f, FloorMaxAngle = FloorAngle, Position = new(0, .05f, 0) };
+        body.AddChild(new CollisionShape3D { Position = new(0, .9f, 0), Shape = new CapsuleShape3D { Height = 1.8f, Radius = .32f } });
+        scene.AddChild(body);
+        try
+        {
+            for (var frame = 0; frame < 300 && body.Position.Z > -4.7f; frame++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                body.Velocity = new(0, -.2f, -3);
+                if (NativeCharacterStep.TryStep(body, new(0, 0, -.05f), .4f)) body.Velocity = Vector3.Down * .01f;
+                body.MoveAndSlide();
+            }
+            var top = body.Position;
+            if (shouldClimb ? top.Z > -4.7f || Math.Abs(top.Y - height) > .05f : top.Z < -1.5f || top.Y > .5f)
+                throw new InvalidOperationException($"Slope classification failed: angle={degrees} position={top}.");
+            if (shouldClimb)
+            {
+                for (var frame = 0; frame < 300 && body.Position.Z < .5f; frame++)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    body.Velocity = new(0, -.2f, 3); body.MoveAndSlide();
+                }
+                // The raised landing ends in a small drop. Let gravity settle
+                // the capsule before checking the destination's floor support.
+                var gravity = RuntimeConfiguration.Load().Simulation.GravityMetersPerSecondSquared;
+                for (var frame = 0; frame < 30 && !body.IsOnFloor(); frame++)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    body.Velocity = new(0, body.Velocity.Y - gravity / 60, 0); body.MoveAndSlide();
+                }
+                if (body.Position.Z < .5f || Math.Abs(body.Position.Y) > .05f || !body.IsOnFloor())
+                    throw new InvalidOperationException($"Walkable slope descent lost support: {body.Position}.");
+            }
+            GD.Print($"OPENNV_NATIVE_SLOPE_PASS degrees={degrees} lip={lip} climbed={shouldClimb} top={top} end={body.Position}");
         }
         finally { scene.QueueFree(); await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame); }
     }

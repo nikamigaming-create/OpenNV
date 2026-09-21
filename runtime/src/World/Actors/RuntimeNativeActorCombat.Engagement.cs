@@ -8,7 +8,8 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Player, Func<GameplayVitals> Vitals,
     Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,
     Func<int> Level, FalloutGlobalState Globals, float StepHeight, float Gravity,
-    Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null);
+    Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null,
+    float MaximumWalkableSlopeDegrees = PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
 
 internal sealed partial class RuntimeNativeActorCombat
 {

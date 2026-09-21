@@ -69,6 +69,8 @@ internal sealed partial class FalloutReferenceWorld
         var owner = npc.Signature is "NPC_" or "CREA" ? FalloutActorTemplateOwner.Resolve(records, npc, 256, actor.Templates) : npc;
         var fields = owner.ReadSubrecords().ToArray();
         var inventory = new FalloutReferenceInventory();
+        var inventoryLevel = actor.Templates?.Level ??
+            (ReferenceEncounterZone(actor) is { } zone ? EncounterLevel(zone, level) : level);
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "CNTO") continue;
@@ -90,7 +92,7 @@ internal sealed partial class FalloutReferenceWorld
                 extra = new(count, condition, itemOwner, type == "NPC_" ? owner.Plugin.AdjustOptionalFormId(argument) : null,
                     type == "FACT" ? unchecked((int)argument) : null);
             }
-            inventory.Contents.Add(records, item, count, level, true, globals, extra);
+            inventory.Contents.Add(records, item, count, inventoryLevel, true, globals, extra);
         }
         actor.Inventory = inventory;
         return inventory;

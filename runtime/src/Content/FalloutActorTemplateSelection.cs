@@ -4,7 +4,8 @@ using System.Security.Cryptography;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutActorTemplateChoice(FalloutFormKey List, string SourceSha256, FalloutFormKey? Actor);
-internal sealed record FalloutActorTemplateSnapshot(int Level, ulong RandomState, IReadOnlyList<FalloutActorTemplateChoice> Choices);
+internal sealed record FalloutActorTemplateSnapshot(int Level, ulong RandomState, IReadOnlyList<FalloutActorTemplateChoice> Choices,
+    int? ListLevel = null, bool? CalculateAllLevels = null);
 internal sealed class FalloutActorNotSelectedException : Exception
 {
     internal FalloutActorNotSelectedException(FalloutFormKey list) : base($"Actor list {list} selected no actor.") { }
@@ -19,16 +20,21 @@ internal sealed class FalloutActorTemplateSelection
     private readonly Func<FalloutFormKey, float>? _global;
     private readonly bool _restored;
     internal int Level { get; }
+    private readonly int? _listLevel;
+    private readonly bool? _calculateAllLevels;
+    private int ListLevel => _listLevel ?? Level;
     internal bool Absent => _choices.Values.Any(choice => choice.Actor is null);
 
-    internal FalloutActorTemplateSelection(int level, ulong seed, Func<FalloutFormKey, float>? global = null)
+    internal FalloutActorTemplateSelection(int level, ulong seed, Func<FalloutFormKey, float>? global = null,
+        int? listLevel = null, bool? calculateAllLevels = null)
     {
-        if (level < 1) throw new ArgumentOutOfRangeException(nameof(level));
+        if (level is < 1 or > ushort.MaxValue || listLevel is < 1 or > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(level));
         Level = level; _random = new(seed); _global = global;
+        _listLevel = listLevel; _calculateAllLevels = calculateAllLevels;
     }
 
     internal FalloutActorTemplateSelection(FalloutActorTemplateSnapshot snapshot)
-        : this(snapshot.Level, snapshot.RandomState)
+        : this(snapshot.Level, snapshot.RandomState, listLevel: snapshot.ListLevel, calculateAllLevels: snapshot.CalculateAllLevels)
     {
         _restored = true;
         if (snapshot.Choices is null) throw new InvalidDataException("Saved actor choices are absent.");
@@ -55,7 +61,7 @@ internal sealed class FalloutActorTemplateSelection
         {
             if (retained.SourceSha256 != hash) throw new InvalidDataException($"Saved actor list {list.FormKey} differs from its winning source.");
             if (retained.Actor is { } actor && !list.ReadSubrecords().Where(field => field.Signature == "LVLO").Any(field =>
-                field.Data.Length == 12 && BinaryPrimitives.ReadUInt16LittleEndian(field.Data.Span) <= Level &&
+                field.Data.Length == 12 && BinaryPrimitives.ReadUInt16LittleEndian(field.Data.Span) <= ListLevel &&
                 list.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span[4..])) == actor))
                 throw new InvalidDataException($"Saved actor choice is not eligible in {list.FormKey}.");
             return retained.Actor ?? throw new FalloutActorNotSelectedException(list.FormKey);
@@ -83,8 +89,8 @@ internal sealed class FalloutActorTemplateSelection
                 throw new NotSupportedException("Leveled actor entry extent/count is unbound.");
             return (Level: BinaryPrimitives.ReadUInt16LittleEndian(data),
                 Actor: list.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data[4..])));
-        }).Where(entry => entry.Level <= Level).ToArray();
-        if (entries.Length != 0 && (flagsField.Span[0] & 1) == 0)
+        }).Where(entry => entry.Level <= ListLevel).ToArray();
+        if (entries.Length != 0 && !(_calculateAllLevels ?? (flagsField.Span[0] & 1) != 0))
             entries = entries.Where(entry => entry.Level == entries.Max(candidate => candidate.Level)).ToArray();
         FalloutFormKey? selected = entries.Length == 0 || chance > 0 && _random.NextBounded(100) < chance
             ? null : entries[checked((int)_random.NextBounded((uint)entries.Length))].Actor;
@@ -93,5 +99,5 @@ internal sealed class FalloutActorTemplateSelection
     }
 
     internal FalloutActorTemplateSnapshot Capture() => new(Level, _random.State,
-        _choices.Values.OrderBy(choice => choice.List.ToString(), StringComparer.Ordinal).ToArray());
+        _choices.Values.OrderBy(choice => choice.List.ToString(), StringComparer.Ordinal).ToArray(), _listLevel, _calculateAllLevels);
 }

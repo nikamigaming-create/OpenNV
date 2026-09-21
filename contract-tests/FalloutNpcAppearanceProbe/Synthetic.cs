@@ -21,6 +21,7 @@ internal static class Synthetic
                 Npc(0x112, 0, 0, eyes: null), Npc(0x113, 0, 0, eyes: 0),
                 Npc(0x114, 0, 0, female: true, eyes: null), Npc(0x115, 64, 0x112),
                 Npc(0x116, 0, 0, eyes: 0x300),
+                Npc(0x117, 0, 0, female: true, armor: 0x406),
                 ActorList(0x703, 0, 1, (1, 0x704), (1, 0x704)), ActorList(0x704, 0, 0, (1, 0x101)),
                 ActorList(0x705, 0, 0, (1, 0x100), (1, 0x101)), ActorList(0x706, 25, 0, (1, 0x101)),
                 ActorList(0x707, 0, 0, (2, 0x101)), ActorList(0x708, 0, 0, (1, 0x708)),
@@ -31,6 +32,7 @@ internal static class Synthetic
                 Head(0x302, 0x303), Head(0x303, 0), Head(0x304, 0x305), Head(0x305, 0x304),
                 Armor(0x400, "base.nif", 4, 0x410), Armor(0x401, "template.nif", 4, 0),
                 Armor(0x402, "conflict.nif", 4, 0),
+                Record("ARMO", 0x406, Field("BMDT", Combine(U32(4), U32(0))), Field("MODL", Z("shared-body.nif")), Field("MODD", [1])),
                 Armor(0x404, "equipped-left-glove.nif", 8, 0), Armor(0x405, "default-body.nif", 4, 0x414),
                 Record("FLST", 0x414, Field("LNAM", U32(0x413))),
                 Record("ARMA", 0x413, Field("BMDT", Combine(U32(16), U32(0))), Field("MOD3", Z("female-default-hand.nif"))),
@@ -46,6 +48,9 @@ internal static class Synthetic
                 Armor(0x400, "winning.nif", 4, 0x410), Record("TXST", 0x500, Field("TX00", Z("winning.dds")))));
             using var stack = FalloutPluginStack.Load(directory.FullName, ["base.esm", "override.esp"]);
             var appearance = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100));
+            var sharedArmor = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x117));
+            Require(sharedArmor.CanConstruct && sharedArmor.Models.Single(part => part.Role == "armor").ModelPath == "meshes/shared-body.nif",
+                "Female ARMO without an override must retain the source male model.");
             Require(appearance.Models.Where(part => part.Role is "eye-left" or "eye-right")
                 .All(part => part.TexturePath == "textures/eye.dds" && part.TextureSource == Key(0x310)),
                 "Explicit ENAM must override both eye textures with its winning EYES record.");

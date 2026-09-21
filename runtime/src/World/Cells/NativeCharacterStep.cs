@@ -46,7 +46,7 @@ internal static class NativeCharacterStep
         var contact = result.GetCollisionPoint(wall);
         var forward = motion.Normalized();
         using var ray = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]);
-        float? supportedHeight = null;
+        blocked = "landing-support";
         for (var probe = 0; probe < 4; probe++)
         {
             var reach = probe == 0 ? body.SafeMargin * 4 : maximumHeight / (1 << (3 - probe));
@@ -55,23 +55,24 @@ internal static class NativeCharacterStep
             ray.From = ahead; ray.To = ahead - Vector3.Up * maximumHeight;
             using var landing = body.GetWorld3D().DirectSpaceState.IntersectRay(ray);
             if (landing.Count == 0 || landing["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) continue;
-            supportedHeight = landing["position"].AsVector3().Y;
-            break;
+            var up = landing["position"].AsVector3().Y - from.Origin.Y + body.SafeMargin;
+            blocked = "step-height";
+            if (up <= body.SafeMargin * 2 || up > maximumHeight + body.SafeMargin) continue;
+            parameters.From = from;
+            parameters.Motion = Vector3.Up * up;
+            blocked = "headroom";
+            if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) continue;
+            parameters.From = from.Translated(parameters.Motion);
+            parameters.Motion = motion;
+            blocked = "forward-clearance";
+            // A sloped landing's first ray can be too low to clear the whole
+            // capsule. Try the remaining supported heights within the same
+            // step bound; each candidate still needs both complete sweeps.
+            if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) continue;
+            body.GlobalPosition = parameters.From.Origin + motion;
+            blocked = null;
+            return true;
         }
-        blocked = "landing-support";
-        if (supportedHeight is not { } surface) return false;
-        var up = surface - from.Origin.Y + body.SafeMargin;
-        blocked = "step-height";
-        if (up <= body.SafeMargin * 2 || up > maximumHeight + body.SafeMargin) return false;
-        parameters.Motion = Vector3.Up * up;
-        blocked = "headroom";
-        if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) return false;
-        parameters.From = from.Translated(parameters.Motion);
-        parameters.Motion = motion;
-        blocked = "forward-clearance";
-        if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) return false;
-        body.GlobalPosition = parameters.From.Origin + motion;
-        blocked = null;
-        return true;
+        return false;
     }
 }

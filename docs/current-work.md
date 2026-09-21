@@ -28,6 +28,23 @@ Source acquisition of Enhanced Sensors is saved; its detection effect and NPC
 radio are unbound. Ammo-free embedded weapon recharge, broader tactics,
 unarmed NPC fallback, hit/death events, XP and full damage ordering remain open.
 
+## Latest user playtest corrections
+
+The preserved Bison Steve save restores correctly. Continue/Load now display
+loading feedback and both resume the configured save; failures stay visible.
+Persistent encounter-zone levels unblock hotel actor admission, including cold
+restoration. The selected Primm exterior/12-interior audit passes admission/resource checks for 54 enabled
+actors; 48 source-disabled actors stay disabled. All 14 enabled hotel NPCs prepare,
+and six upstairs NPCs are present in an exported continuation. A missing female
+ARMO model now falls back to the source male model and its material fields.
+
+The authored broken-floor walkway exceeds Godot's implicit 45-degree limit.
+An explicit 50-degree OpenNV controller policy is shared by flat/XR players,
+actors and capsule queries. Both ordinary modes climb it without jumping; XR
+also returns down it. Walls, low ceilings and steep slopes remain blocked.
+This is a bounded locomotion correction, not a measured retail slope policy.
+See [encounter admission and traversal](encounter-admission.md) for contracts,
+source references and limitations. User saves remain untouched by these tests.
 ## Performance and exterior work
 
 Content preparation adapts to process CPU/memory availability: one quarter of
@@ -90,33 +107,19 @@ claimed from these checks.
 
 ## Next executable work
 
-The user's flat playtest exposed a full save after every completed weapon
-animation: capture took 26.57 ms and writing took 131.16 ms. That per-shot trigger
-is removed from the shared flat/XR weapon owner. Four ordinary shots and a reload
-in each mode leave the save file unchanged; explicit F5/controller saving persists
-the final 12-round magazine. Flat-to-XR and XR-to-flat cold Continue preserve
-ammunition and shot random state. Private evidence is
-`tmp/development-lab/weapon-save-{flat-01,xr-03,cold-flat-01}/result.private.json`.
+Deliver the corrected candidate for the user's flat and physical-headset tests.
+The full runtime gate, owned encounter/companion audits and native locomotion
+checks identify the verified scope. Private evidence is
+`tmp/development-lab/load-encounter-*`, `primm-population-audit.json` and
+`load-encounters-{flat-02,xr-01}`. The release manifest identifies packaged source.
+Do not run competing gameplay/performance checks during the user's playtest.
 
-Resident interaction indexing and single-buffer observation encoding are merged.
-The matching exported flat walk reduces the two measured commits from 49.05/60.12
-to 29.85/39.48 ms, with unchanged residency and an empty queue. The last interaction
-phase is 4.91 ms versus 15.94 ms. Initial Continue loading contaminates the early
-draw window, so it is not a gameplay frame-time comparison. Private evidence is
-`tmp/development-lab/stream-commit-{before-01,after-01}/moving.private.json`.
-
-The full runtime gate and selected owned companion audit pass for this fix;
-private logs are `tmp/development-lab/weapon-save-{gate,owned}.log`. The corrected
-experimental candidate preserves the user's existing shared save. The release
-manifest identifies its exact packaged source. Do not run competing gameplay or
-performance checks during the user's playtest.
-
-Next performance work: remaining indivisible armor/material uploads, cell commit,
-explicit save pauses and moving LOD still need work. Preserve the genuine
-copied checkpoints below.
-Complete the missing ordinary-input demonstrations and wider source-driven
-actor/admission coverage; do not substitute a selected scene for a playthrough.
-
+Remaining priorities: unsupported actor scripts/packages and resources, broader
+population and building coverage, indivisible material uploads, cell commit,
+explicit-save pauses and moving LOD. The per-shot full-save trigger is already
+removed; explicit saving remains synchronous. Finish the missing ordinary-input
+combat/crafting demonstrations and continuous paired route without replacing
+campaign behavior with selected scenes. Preserve the genuine checkpoints below.
 - `tmp/development-lab/ede-ready-to-repair-20260920.json`: Nash, Repair 31 and
   three Scrap Metal, two Sensor Modules and one Scrap Electronics collected.
 - `tmp/development-lab/ede-outside-before-combat-20260920.json`: recruited follower

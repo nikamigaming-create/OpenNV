@@ -246,8 +246,11 @@ internal static class FalloutNpcAppearanceResolver
         var record = Require(stack, key, "ARMO");
         var data = Bytes(record, "BMDT", 8);
         var mask = BinaryPrimitives.ReadUInt32LittleEndian(data);
-        var part = ReadModel(stack, record, "armor", female ? "MOD3" : "MODL", female ? "MO3S" : "MODS",
-            female ? "MOSD" : "MODD", mask, null);
+        // ARMO's female model is an optional override of the male model.
+        // Carry the chosen model's material swaps and flags with that geometry.
+        var femaleModel = female && PathField(record, "MOD3", "meshes", required: false) is not null;
+        var part = ReadModel(stack, record, "armor", femaleModel ? "MOD3" : "MODL", femaleModel ? "MO3S" : "MODS",
+            femaleModel ? "MOSD" : "MODD", mask, null);
         var addons = new List<FalloutNpcAppearancePart>();
         if (OptionalForm(record, "BIPL") is { } listKey)
         {

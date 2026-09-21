@@ -19,10 +19,10 @@ internal static class OwnedCompanionPackageProbe
         if (health.Health != 180 || later.Health != 540) throw new InvalidDataException("Owned scaled creature health differs.");
         using var world = new FalloutReferenceWorld(records);
         var placed = records.RuntimeFormKey(0x1732d1);
-        var rejectedHoldingZone = false;
-        try { world.InitializeActorTemplates(placed, 1); }
-        catch (NotSupportedException) { rejectedHoldingZone = true; }
-        if (!rejectedHoldingZone) throw new InvalidDataException("Unbound holding-cell encounter zone was silently admitted.");
+        using var holdingWorld = new FalloutReferenceWorld(records);
+        holdingWorld.InitializeActorTemplates(placed, 1);
+        if (holdingWorld.CaptureEncounterZones().Count != 1)
+            throw new InvalidDataException("Authored holding zone was not retained.");
         world.MoveTo(placed, records.RuntimeFormKey(0x1572e6));
         world.InitializeActorTemplates(placed, 1);
         if (world.Health(placed).Base != 180 || world.Placement(placed).Cell == world.Get(placed).Cell)

@@ -32,6 +32,7 @@ internal sealed partial class NativeGamebryoStartMenu : Control
     private bool _canContinue;
     private NativeStartMenuConfirmation? _confirmation;
     private FalloutPluginStack? _records;
+    private Label? _loadStatus;
 
     internal NativeGamebryoStartMenu(Action<string> activate)
     {
@@ -145,6 +146,31 @@ internal sealed partial class NativeGamebryoStartMenu : Control
         Layout();
     }
 
+    internal void ShowLoading(bool savedGame)
+    {
+        foreach (var button in _buttons) { button.Disabled = true; button.Hide(); }
+        _loadStatus = new Label
+        {
+            Name = "LoadStatus",
+            Text = savedGame ? "Loading saved game..." : "Starting new game...",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            MouseFilter = MouseFilterEnum.Ignore
+        };
+        _loadStatus.AddThemeFontOverride("font", new NativeBitmapFontAsset(_font, _atlas).CreateFontFile());
+        _loadStatus.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(_font.SourceSize));
+        _loadStatus.AddThemeColorOverride("font_color", _color);
+        _canvas.AddChild(_loadStatus);
+        Layout();
+    }
+
+    internal void ShowLoadFailure()
+    {
+        _loadStatus!.Text = "The game could not be loaded. Close the game and check the log for details.";
+        var quit = _buttons[_actions.ToList().IndexOf("sQuit")];
+        quit.Disabled = false; quit.Show(); quit.GrabFocus();
+    }
+
     private void RefreshEnabled()
     {
         for (var index = 0; index < _buttons.Count; ++index)
@@ -163,6 +189,11 @@ internal sealed partial class NativeGamebryoStartMenu : Control
         var canvasWidth = size.X / scale;
         _canvas.Scale = Vector2.One * scale;
         _canvas.Size = new Vector2(canvasWidth, canvasHeight);
+        if (_loadStatus is not null)
+        {
+            _loadStatus.Position = new Vector2(canvasWidth * .2f, canvasHeight * .75f);
+            _loadStatus.Size = new Vector2(canvasWidth * .6f, canvasHeight * .15f);
+        }
         var wide = size.X / size.Y >= 16.0f / 9.0f;
         var crop = _settings.Number("Interface", wide ? "iSafeZoneXWide" : "iSafeZoneX");
         var title = Named(_menu, "main_title");

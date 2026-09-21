@@ -19,6 +19,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal bool Sprinting { get; private set; }
     internal int JumpCount { get; private set; }
     internal int StepCount { get; private set; }
+    internal string? StepBlocked { get; private set; }
     internal string? BlockingShape { get; private set; }
     internal bool CollisionResident { get; private set; } = true;
     internal object[] CollisionContacts => Enumerable.Range(0, GetSlideCollisionCount()).Select(index =>
@@ -132,6 +133,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         CollisionLayer = configuration.Player.CollisionLayer;
         CollisionMask = configuration.Player.CollisionMask;
         FloorSnapLength = configuration.Player.CapsuleRadiusMeters;
+        FloorMaxAngle = Mathf.DegToRad(configuration.Player.MaximumWalkableSlopeDegrees);
         AddChild(new CollisionShape3D
         {
             Name = "NativePlayerCapsule",
@@ -306,7 +308,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         Velocity = velocity;
         var positionBeforeMotion = GlobalPosition;
-        if (NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters))
+        var stepped = NativeCharacterStep.TryStep(this, horizontalMotion, _configuration.Player.StepHeightMeters, out var stepBlocked);
+        StepBlocked = stepBlocked;
+        if (stepped)
         {
             ++StepCount;
             Velocity = Vector3.Down * 0.01f;
