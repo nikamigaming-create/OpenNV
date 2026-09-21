@@ -90,25 +90,29 @@ claimed from these checks.
 
 ## Next executable work
 
-The user requested immediate flat/VR playtesting. The flat playtest is running
-from experimental release `0.1.0-experimental.20260920.5`; both private launchers
-use that checked package and the existing shared save. Do not interrupt it or run
-competing gameplay/performance checks during the user's session.
+The user's flat playtest exposed a full save after every completed weapon
+animation: capture took 26.57 ms and writing took 131.16 ms. That per-shot trigger
+is removed from the shared flat/XR weapon owner. Four ordinary shots and a reload
+in each mode leave the save file unchanged; explicit F5/controller saving persists
+the final 12-round magazine. Flat-to-XR and XR-to-flat cold Continue preserve
+ammunition and shot random state. Private evidence is
+`tmp/development-lab/weapon-save-{flat-01,xr-03,cold-flat-01}/result.private.json`.
 
-A fresh instrumented walk completed both cell transitions. Cell commits took
-49.05 and 60.12 ms; rebuilding interaction bindings took 10.75 and 15.94 ms.
-Native events now reuse the resident presentation index, and reference observation
-encoding avoids temporary field buffers. Canonical bytes, retained trigger contacts,
-OnLoad, owned warm reentry and late materialization pass component checks; the full
-local gate passes. These changes are not in the user's packaged release and their
-ordinary gameplay timing has not yet been measured. Private evidence is
-`tmp/development-lab/stream-commit-{before-01,events.log,owned.log,gate.log}`.
+Resident interaction indexing and single-buffer observation encoding are merged.
+The matching exported flat walk reduces the two measured commits from 49.05/60.12
+to 29.85/39.48 ms, with unchanged residency and an empty queue. The last interaction
+phase is 4.91 ms versus 15.94 ms. Initial Continue loading contaminates the early
+draw window, so it is not a gameplay frame-time comparison. Private evidence is
+`tmp/development-lab/stream-commit-{before-01,after-01}/moving.private.json`.
 
-After the playtest ends, export the updated source and repeat the preserved
-ordinary walk with recording off. Compare the live-harness-only commit phases,
-then check Elliott Tate simulator continuation and package the verified candidate.
-The remaining
-indivisible armor/material uploads and moving LOD also need work. Preserve the genuine
+The full runtime gate and selected owned companion audit pass for this fix;
+private logs are `tmp/development-lab/weapon-save-{gate,owned}.log`. The corrected
+experimental candidate preserves the user's existing shared save. The release
+manifest identifies its exact packaged source. Do not run competing gameplay or
+performance checks during the user's playtest.
+
+Next performance work: remaining indivisible armor/material uploads, cell commit,
+explicit save pauses and moving LOD still need work. Preserve the genuine
 copied checkpoints below.
 Complete the missing ordinary-input demonstrations and wider source-driven
 actor/admission coverage; do not substitute a selected scene for a playthrough.
