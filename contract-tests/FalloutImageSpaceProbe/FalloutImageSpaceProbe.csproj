@@ -26,5 +26,6 @@
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
   </ItemGroup>
 </Project>

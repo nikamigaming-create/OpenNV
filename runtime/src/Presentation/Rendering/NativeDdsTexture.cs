@@ -8,6 +8,17 @@ internal static class NativeDdsTexture
 {
     internal static Action<Image.Format, int, int, double, double>? UploadObserver { get; set; }
 
+    internal static Texture2D Load(byte[] payload, string source, bool normal = false)
+    {
+        if (FalloutDdsMipChain.ReadPartial(payload) is { } partial) return NativePartialMipTexture.Create(payload, partial);
+        using var image = new Image();
+        var error = image.LoadDdsFromBuffer(payload);
+        if (error != Error.Ok || image.IsEmpty()) throw new InvalidDataException($"Owned DDS decoding failed: {source}, {error}.");
+        if (normal && image.GetFormat() == Image.Format.L8)
+            throw new NotSupportedException($"Normal texture has an unsupported single-channel format: {source}");
+        return Create(image);
+    }
+
     internal static ImageTexture Create(Image image)
     {
         var observer = UploadObserver;

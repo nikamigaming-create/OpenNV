@@ -200,11 +200,7 @@ internal static class NativeFaceGenMaterial
             return texture;
         if (!content.TryRead(path, null, out var bytes, out var identity))
             throw new FileNotFoundException($"Source FaceGen texture is missing: {path}");
-        using var image = new Image();
-        var error = image.LoadDdsFromBuffer(bytes);
-        if (error != Error.Ok || image.IsEmpty())
-            throw new InvalidDataException($"Source FaceGen DDS failed to decode: {identity}, {error}.");
-        texture = NativeDdsTexture.Create(image);
+        texture = NativeDdsTexture.Load(bytes, identity);
         texture.SetMeta("opennv_source_texture", identity);
         cache.Add(path, texture);
         return texture;

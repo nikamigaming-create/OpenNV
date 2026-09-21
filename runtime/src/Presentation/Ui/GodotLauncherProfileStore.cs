@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
@@ -7,7 +9,11 @@ namespace OpenNV.Runtime.Presentation.Ui;
 internal sealed record GodotLauncherProfile(
     string CampaignId,
     string InstallRoot,
-    string SavePath);
+    string SavePath,
+    string? BaseInstallRoot = null,
+    IReadOnlyList<string>? DependencyRoots = null,
+    IReadOnlyList<string>? EnabledMods = null,
+    bool AutomaticModOrder = true);
 
 /// <summary>
 /// Stores only user-selected installation roots and OpenNV save locations.
@@ -17,35 +23,120 @@ internal sealed class GodotLauncherProfileStore
 {
     private const string Schema = "opennv-godot-launcher-profiles/v1";
     private readonly string _path;
+    private readonly string _saveRoot;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true,
+    };
     private readonly Dictionary<string, GodotLauncherProfile> _profiles =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private GodotLauncherProfileStore(string path) => _path = path;
+    private GodotLauncherProfileStore(string path, string saveRoot) => (_path, _saveRoot) = (path, saveRoot);
 
     internal static GodotLauncherProfileStore Load()
     {
         var path = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");
-        var store = new GodotLauncherProfileStore(path);
-        store.Read();
+        var store = Open(path, ProjectSettings.GlobalizePath("user://profiles"));
         store.ImportLegacyRegistrations();
+        return store;
+    }
+
+    internal static GodotLauncherProfileStore Open(string path, string saveRoot)
+    {
+        var store = new GodotLauncherProfileStore(Path.GetFullPath(path), Path.GetFullPath(saveRoot));
+        store.Read();
         return store;
     }
 
     internal bool TryGet(string campaignId, out GodotLauncherProfile profile) =>
         _profiles.TryGetValue(campaignId, out profile!);
 
-    internal GodotLauncherProfile Save(string campaignId, string installRoot)
+    internal GodotLauncherProfile Save(string campaignId, string installRoot, string? baseInstallRoot = null,
+        IReadOnlyList<string>? dependencyRoots = null)
     {
+        campaignId = campaignId.ToLowerInvariant();
+        var previous = _profiles.GetValueOrDefault(campaignId);
         var profile = new GodotLauncherProfile(
             campaignId,
             Path.GetFullPath(installRoot),
-            DefaultSavePath(campaignId));
+            SavePath(campaignId),
+            baseInstallRoot is null ? null : Path.GetFullPath(baseInstallRoot),
+            dependencyRoots?.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            previous?.EnabledMods,
+            previous?.AutomaticModOrder ?? true);
         _profiles[campaignId] = profile;
-        Persist();
+        try { Persist(); }
+        catch
+        {
+            if (previous is null) _profiles.Remove(campaignId);
+            else _profiles[campaignId] = previous;
+            throw;
+        }
         return profile;
     }
 
+    internal IReadOnlyList<string> EnabledMods(string campaignId) =>
+        _profiles.GetValueOrDefault(campaignId)?.EnabledMods ?? [];
+
+    internal bool AutomaticModOrder(string campaignId) => _profiles.GetValueOrDefault(campaignId)?.AutomaticModOrder ?? true;
+
+    internal void SetAutomaticModOrder(string campaignId, bool automatic)
+    {
+        if (!_profiles.TryGetValue(campaignId, out var previous))
+            throw new InvalidOperationException("Choose your game folder first.");
+        var ids = previous.EnabledMods ?? [];
+        if (!automatic && previous.AutomaticModOrder && ModStack(campaignId) is { } stack)
+            ids = FalloutModLoadOrder.OrderMods(stack.Mods).Select(mod => mod.Id).ToArray();
+        _profiles[campaignId] = previous with { AutomaticModOrder = automatic, EnabledMods = ids };
+        try { Persist(); }
+        catch { _profiles[campaignId] = previous; throw; }
+    }
+
+    internal void SetEnabledMods(string campaignId, IReadOnlyList<string> ids)
+    {
+        if (campaignId != "newvegas") throw new ArgumentException("These mods require New Vegas.");
+        if (!_profiles.TryGetValue(campaignId, out var previous))
+            throw new InvalidOperationException("Choose your New Vegas game folder first.");
+        foreach (var id in ids) _ = FalloutModCatalog.Get(id);
+        if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
+            throw new ArgumentException("A mod can only be enabled once.");
+        _profiles[campaignId] = previous with { EnabledMods = ids.ToArray() };
+        try { Persist(); }
+        catch { _profiles[campaignId] = previous; throw; }
+    }
+
+    internal FalloutModStackSelection? ModStack(string campaignId)
+    {
+        var ids = EnabledMods(campaignId);
+        if (ids.Count == 0) return null;
+        if (campaignId != "newvegas") throw new InvalidDataException("This game cannot use New Vegas mods.");
+        return new(ids.Select(id =>
+        {
+            _ = FalloutModCatalog.Get(id);
+            if (!_profiles.TryGetValue(id, out var profile))
+                throw new InvalidDataException($"Choose a folder for {FalloutModCatalog.Get(id).Title}.");
+            return new FalloutModSelection(id, profile.InstallRoot, profile.DependencyRoots ?? []);
+        }).ToArray(), AutomaticModOrder(campaignId));
+    }
+
+    internal string LaunchSavePath(string campaignId)
+    {
+        var stack = ModStack(campaignId);
+        if (stack is null) return _profiles[campaignId].SavePath;
+        var identity = JsonSerializer.Serialize(stack.AutomaticOrder ? FalloutModLoadOrder.OrderMods(stack.Mods) : stack.Mods);
+        if (OperatingSystem.IsWindows()) identity = identity.ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant()[..24];
+        return Path.Combine(_saveRoot, campaignId, "mod-stacks", hash, SaveFileName(campaignId));
+    }
+
     internal static string DefaultSavePath(string campaignId)
+        => ProjectSettings.GlobalizePath($"user://profiles/{campaignId.ToLowerInvariant()}/{SaveFileName(campaignId)}");
+
+    private string SavePath(string campaignId) => Path.Combine(_saveRoot, campaignId.ToLowerInvariant(), SaveFileName(campaignId));
+
+    private static string SaveFileName(string campaignId)
     {
         var fileName = campaignId.ToLowerInvariant() switch
         {
@@ -53,9 +144,12 @@ internal sealed class GodotLauncherProfileStore
             "fallout2" => "chosen-v1.json",
             "fallout3" => "capital-wasteland-v1.json",
             "newvegas" => "courier-v1.json",
-            _ => throw new ArgumentException($"Unknown standalone campaign: {campaignId}", nameof(campaignId)),
+            "jam" => "courier-jam-v1.json",
+            "ttw" => "wastelands-v1.json",
+            _ when FalloutModInstallation.IsMod(campaignId) => $"courier-{campaignId}-v1.json",
+            _ => throw new ArgumentException($"Unknown campaign: {campaignId}", nameof(campaignId)),
         };
-        return ProjectSettings.GlobalizePath($"user://profiles/{campaignId.ToLowerInvariant()}/{fileName}");
+        return fileName;
     }
 
     private void Read()
@@ -72,19 +166,26 @@ internal sealed class GodotLauncherProfileStore
                 return;
             foreach (var property in profiles.EnumerateObject())
             {
-                if (property.Value.ValueKind != JsonValueKind.Object ||
-                    !property.Value.TryGetProperty("campaignId", out var campaign) ||
-                    !property.Value.TryGetProperty("installRoot", out var install) ||
-                    !property.Value.TryGetProperty("savePath", out var save))
+                if (property.Value.ValueKind != JsonValueKind.Object)
                     continue;
-                var campaignId = campaign.GetString();
-                var installRoot = install.GetString();
-                var savePath = save.GetString();
-                if (string.IsNullOrWhiteSpace(campaignId) ||
-                    string.IsNullOrWhiteSpace(installRoot) ||
-                    string.IsNullOrWhiteSpace(savePath))
+                // Previous v1 writers emitted PascalCase record properties,
+                // although the reader expected camelCase. Accept both.
+                GodotLauncherProfile? profile;
+                try { profile = property.Value.Deserialize<GodotLauncherProfile>(JsonOptions); }
+                catch (JsonException) { continue; }
+                if (profile is null || string.IsNullOrWhiteSpace(profile.CampaignId) ||
+                    !property.Name.Equals(profile.CampaignId, StringComparison.OrdinalIgnoreCase) ||
+                    !Path.IsPathFullyQualified(profile.InstallRoot ?? string.Empty) ||
+                    !Path.IsPathFullyQualified(profile.SavePath ?? string.Empty) ||
+                    profile.BaseInstallRoot is { } baseRoot && !Path.IsPathFullyQualified(baseRoot) ||
+                    profile.DependencyRoots?.Any(path => !Path.IsPathFullyQualified(path ?? string.Empty)) == true)
                     continue;
-                _profiles[campaignId] = new GodotLauncherProfile(campaignId, installRoot, savePath);
+                if (profile.EnabledMods is { } enabled && (property.Name != "newvegas" ||
+                    enabled.Distinct(StringComparer.OrdinalIgnoreCase).Count() != enabled.Count ||
+                    enabled.Any(id => !FalloutModInstallation.IsMod(id)))) continue;
+                try { _ = SaveFileName(profile.CampaignId); }
+                catch (ArgumentException) { continue; }
+                _profiles[profile.CampaignId] = profile;
             }
         }
         catch (JsonException)
@@ -130,7 +231,7 @@ internal sealed class GodotLauncherProfileStore
         var selected = dataRoot.GetString();
         if (string.IsNullOrWhiteSpace(selected))
             return false;
-        _profiles[campaignId] = new GodotLauncherProfile(campaignId, selected, DefaultSavePath(campaignId));
+        _profiles[campaignId] = new GodotLauncherProfile(campaignId, selected, SavePath(campaignId));
         return true;
     }
 
@@ -145,7 +246,7 @@ internal sealed class GodotLauncherProfileStore
         var selected = root.GetString();
         if (string.IsNullOrWhiteSpace(selected))
             return false;
-        _profiles["fallout1"] = new GodotLauncherProfile("fallout1", selected, DefaultSavePath("fallout1"));
+        _profiles["fallout1"] = new GodotLauncherProfile("fallout1", selected, SavePath("fallout1"));
         return true;
     }
 
@@ -166,7 +267,7 @@ internal sealed class GodotLauncherProfileStore
         var selected = root.GetString();
         if (string.IsNullOrWhiteSpace(selected))
             return false;
-        _profiles["fallout2"] = new GodotLauncherProfile("fallout2", selected, DefaultSavePath("fallout2"));
+        _profiles["fallout2"] = new GodotLauncherProfile("fallout2", selected, SavePath("fallout2"));
         return true;
     }
 
@@ -202,7 +303,7 @@ internal sealed class GodotLauncherProfileStore
         };
         File.WriteAllText(
             temporary,
-            JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+            JsonSerializer.Serialize(document, JsonOptions) + System.Environment.NewLine);
         File.Move(temporary, _path, overwrite: true);
     }
 }

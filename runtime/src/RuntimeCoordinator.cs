@@ -105,7 +105,7 @@ public partial class RuntimeCoordinator : Node3D
                 _nativeInstallation = NativeGameInstallation.Detect(dataRoot);
                 RuntimeLaunchValidator.ValidateInstallation(_options, _nativeInstallation);
                 if (_nativeInstallation.Game is NativeGame.Fallout3 or NativeGame.FalloutNewVegas)
-                    RuntimeLiveContentSource.Configure(
+                    ConfigureSelectedContent(
                         dataRoot,
                         RequireOption(_options, "campaign"));
                 else

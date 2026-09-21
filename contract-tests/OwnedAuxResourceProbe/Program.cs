@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
+DdsMipContracts.Run();
+
 static byte[] Strings(params (uint Id, byte[] Value)[] rows)
 {
     var data = rows.SelectMany(row => row.Value.Append((byte)0)).ToArray();

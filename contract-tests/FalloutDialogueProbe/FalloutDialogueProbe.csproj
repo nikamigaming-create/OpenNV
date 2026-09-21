@@ -47,6 +47,7 @@
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
     <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
   </ItemGroup>

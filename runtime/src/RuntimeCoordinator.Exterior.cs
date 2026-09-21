@@ -12,7 +12,7 @@ namespace OpenNV.Runtime;
 public partial class RuntimeCoordinator
 {
     private FalloutExteriorGrid? _nativeExteriorGrid;
-    private readonly Dictionary<string, ImageTexture> _nativeLandscapeTextures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Texture2D> _nativeLandscapeTextures = new(StringComparer.OrdinalIgnoreCase);
     private Node3D? _nativeStreamRoot;
     private sealed record PreparedExteriorGrid(FalloutExteriorGridScene Grid, IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTransport> Landscapes,
         IReadOnlyDictionary<string, FalloutNifFile> Models);

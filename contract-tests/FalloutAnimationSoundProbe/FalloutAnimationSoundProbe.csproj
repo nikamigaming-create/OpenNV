@@ -11,6 +11,7 @@
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationPlayback.cs" Link="FalloutIdleAnimationPlayback.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.cs" Link="FalloutNifFile.cs" />

@@ -92,6 +92,54 @@
       "launchable": false,
       "status": "complete plugin semantics are not implemented",
       "presentations": {}
+    },
+    {
+      "id": "YUP",
+      "launchable": false,
+      "status": "Folder and dependencies can be selected; complete bug-fix behavior is under development",
+      "presentations": {}
+    },
+    {
+      "id": "JSawyer",
+      "launchable": false,
+      "status": "Folder and dependencies can be selected; balance, survival and configuration behavior is under development",
+      "presentations": {}
+    },
+    {
+      "id": "Uncut-Wasteland",
+      "launchable": false,
+      "status": "Folder can be selected; restored world content needs gameplay verification",
+      "presentations": {}
+    },
+    {
+      "id": "Living-Desert",
+      "launchable": false,
+      "status": "Folder and dependencies can be selected; travelers, patrols and world consequences are under development",
+      "presentations": {}
+    },
+    {
+      "id": "NMC",
+      "launchable": false,
+      "status": "Texture and patch folders can be selected; presentation verification is pending",
+      "presentations": {}
+    },
+    {
+      "id": "EVE",
+      "launchable": false,
+      "status": "Folder can be selected with the matching DLC variant; complete visual effects are under development",
+      "presentations": {}
+    },
+    {
+      "id": "Nevada-Skies",
+      "launchable": false,
+      "status": "Folder and dependencies can be selected; weather and configuration behavior is under development",
+      "presentations": {}
+    },
+    {
+      "id": "Bounties",
+      "launchable": false,
+      "status": "Folder and Someguy Series dependency can be selected; quest gameplay needs verification",
+      "presentations": {}
     }
   ],
   "dataFlow": {

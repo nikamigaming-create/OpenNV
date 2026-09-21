@@ -8,10 +8,22 @@ OpenXR Simulator and is labelled accordingly.
 
 ## Immediate outcome
 
-Deliver a fresh functional flat/OpenXR simulator side-by-side and a checked,
-asset-free experimental Windows release. The user then playtests flat and a
-physical headset. Clean up documentation from current code and actual tests.
-Work in this task without subagents.
+Implement the ten authorized targets in [mod compatibility](mod-compatibility.md),
+starting with complete JAM support, then TTW, exposed as launcher options.
+The user selects the owned base/mod/dependency folders; runtime source
+resolution, settings and persistent state must work without a generated profile
+or developer command. The requested acceptance is full out-of-box behavior,
+including dependency semantics, ordinary flat/OpenXR input and cold save/load.
+Use `codex/jam-then-ttw` for this work. Do not label registration, a parser pass
+or the earlier sprint/time-scale adapters as mod support. The exact verified
+state and next owners are in [mod compatibility](mod-compatibility.md).
+Work in this task without subagents. Preserve the original campaign, release
+and physical-headset requirements below.
+
+Launcher UX must use original ImageGen artwork and readable native controls.
+Mods are additive checkboxes beneath the active game. Load order is automatic
+from authored dependencies and verified rules, with optional Advanced overrides.
+Selecting mod settings must not replace the active game or disable other mods.
 
 ## Execution
 
