@@ -9,6 +9,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private bool _packageWeaponPrepared;
     private uint _packageWeaponType;
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
+    internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeapon;
 
     private void PreparePackageWeapon(bool drawn)
     {

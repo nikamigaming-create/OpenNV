@@ -40,7 +40,11 @@ wait along with the existing package motion. Restoration rejects changed routes.
 Synthetic tests cover route order, waits, reverse/wrap/completion, cold state,
 source drift, save-slot promotion, backup retention and malformed entries.
 The selected owned audit covers the two elevated Primm riflemen's ten-point
-routes and idle resources. Native flat observation reaches both first markers,
+routes and idle resources. Their marker idles bind the actual equipped weapon
+and animation objects; alternative weapon-model channels retain explicit absent
+targets. A native component check applies all twelve marker clips to both
+riflemen with their source inventory weapon, with no unbound channels.
+Native flat observation reaches both first markers,
 waits and proceeds; one rifleman also reaches the second marker. Full-loop and
 all-package acceptance remain open. A source-enabled actor without a linked
 patrol start still reports that unsupported procedure explicitly.
@@ -48,6 +52,9 @@ patrol start still reports that unsupported procedure explicitly.
 Ordinary checks cover flat pause/manual save and Stimpak health 64.94 to 104.54;
 Elliott Tate controller input covers death recovery, selected load, pause using
 both buttons, manual save, main-menu return and Stimpak health 161.19 to 200.
-Both final eyes of the death menu were inspected. The local physical launcher
+Both final eyes of the death menu were inspected.
+The exported flat executable also rejects movement, save and Escape after death,
+then loads a healthy selected Primm slot in process and restores movement.
+The local physical launcher
 selects Oculus OpenXR per process; physical tracking, controls and comfort still
 require the user's headset test. These checks are not whole-game or retail parity.

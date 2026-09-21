@@ -42,6 +42,9 @@ had no death/reload presentation and Aid correctly rejected that state. Zero
 health now pauses gameplay with a load menu; interaction and manual saves cannot
 overwrite a playable Continue file after death. The original file is preserved,
 with three earlier genuine checkpoints added privately as selectable slots.
+The exported flat executable rejects movement/save/Resume after death and loads
+a healthy Primm slot in process. Marker idles now bind the actual equipped rifle;
+all twelve source marker clips pass native channel/pose checks for both riflemen.
 Fresh ordinary Stimpak use changes flat health 64.94 to 104.54 and simulator
 health 161.19 to 200, consuming one item in each mode. Physical acceptance and
 source death animation/camera parity remain open.

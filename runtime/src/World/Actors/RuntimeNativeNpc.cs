@@ -132,12 +132,18 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                 part.Root.SetMeta("opennv_animation_object_form", item.Form.ToString());
                 created.Add(part.Root);
             }
+            var weapon = Combat?.AnimationWeapon;
+            var objectNodes = created.SelectMany(root => root.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(root)).ToArray();
+            var externalTargets = weapon?.Targets.ToHashSet(StringComparer.Ordinal);
+            if (externalTargets is not null)
+                externalTargets.UnionWith(objectNodes.Select(node => node.Name.ToString()));
             Action<float>? BindObject(FalloutNifControllerLink link)
             {
                 if (link.ControllerType is not ("NiTransformController" or "NiVisController") || link.PropertyType.Length != 0 ||
                     link.Variable1.Length != 0 || link.Variable2.Length != 0) return null;
-                var matches = created.SelectMany(root => root.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(root))
+                var matches = objectNodes
                     .Where(node => node.Name.ToString().Equals(link.NodeName, StringComparison.Ordinal)).ToArray();
+                if (matches.Length == 0) return weapon?.Bind(source, link);
                 if (matches.Length != 1) return null;
                 if (link.ControllerType == "NiVisController")
                 {
@@ -155,7 +161,11 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                     if (sample.Scale is { } scale) matches[0].Scale = Vector3.One * scale;
                 };
             }
-            var selected = new RuntimeNativeNifAnimation(source, sequences[0], Skeleton, BindObject);
+            var selected = new RuntimeNativeNifAnimation(source, sequences[0], Skeleton, BindObject,
+                externalObjectTargets: externalTargets);
+            if (selected.UnboundChannels.Count != 0)
+                throw new NotSupportedException($"IDLE {idle.Form} has unbound source channels: " +
+                    string.Join("; ", selected.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
             var clock = new FalloutIdleAnimationPlayback(selected.Sequence.StartTime, selected.Sequence.StopTime,
                 selected.Sequence.Frequency, selected.Sequence.CycleType,
                 selected.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), timing.SelectAdditionalLoops(_aiRandom.NextBounded));

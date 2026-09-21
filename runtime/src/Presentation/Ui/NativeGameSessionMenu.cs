@@ -21,7 +21,7 @@ internal sealed partial class NativeGameSessionMenu : Control
     private string? _selected;
     private readonly List<Button> _rows = [];
     private IReadOnlyList<RuntimeSaveSlotMetadata> _slots = [];
-    private const int PageSize = 4;
+    private int PageSize => _inGame && !_defeated ? 3 : 4;
 
     internal NativeGameSessionMenu(RuntimeSaveSlotCatalog catalog, bool inGame, bool showSaves, bool defeated,
         Action resume, Action save, Action<RuntimeSaveSlotMetadata> load, Action title, Action quit,
@@ -146,7 +146,7 @@ internal sealed partial class NativeGameSessionMenu : Control
         }).Disabled = _slots.Count == 0;
         AddButton("Back", "BACK", Back);
         _status.Text = failures.Count > 0 ? $"{failures.Count} unavailable save(s): {failures[0]}" :
-            _slots.Count == 0 ? "No saved games yet." : $"{_slots.Count} saved games — page {_page + 1}";
+            _slots.Count == 0 ? "No saved games yet." : $"{_slots.Count} saved games / page {_page + 1}";
     }
 
     private void Confirm(string question, Action action)

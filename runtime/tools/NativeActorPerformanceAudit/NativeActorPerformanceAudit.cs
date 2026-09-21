@@ -10,6 +10,12 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--patrol-idles", var patrolRoot, var patrolReference, var patrolPackage])
+            {
+                ExercisePatrolIdles(patrolRoot, patrolReference, patrolPackage);
+                GetTree().Quit();
+                return;
+            }
             if (args is ["--appearance", var appearanceRoot, .. var references])
             {
                 ExerciseAppearances(appearanceRoot, references);

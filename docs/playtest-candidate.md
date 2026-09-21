@@ -22,8 +22,9 @@ for menus and interaction. The wrist device shares inventory and gameplay state.
 Close the game before switching modes. Preserve a copy of your OpenNV save
 before an extended test; existing retail saves are not loaded or modified.
 OpenNV saves live under `%APPDATA%/Godot/app_userdata/OpenNV/profiles/`.
-Continue and Load both resume the configured OpenNV save slot. A loading message
-appears before scene construction; Load is not yet a browser for multiple saves.
+Continue resumes the configured OpenNV save; Load opens the saved-game browser.
+A loading message appears before scene construction. Zero health pauses play
+and offers an earlier save; it cannot silently resume or consume healing items.
 Existing saved choices remain intact when the new encounter-zone state is added.
 
 ## What to test
