@@ -15,6 +15,27 @@ internal sealed record FalloutBodyPart(byte Type, string Name, string Node, stri
 // resources. NAM1/NAM4 follow BPND and belong to that same part.
 internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<FalloutBodyPart> Parts)
 {
+    internal int CrippledMobilityCount(float maximumHealth, IReadOnlyDictionary<byte, float> damage)
+    {
+        if (!float.IsFinite(maximumHealth) || maximumHealth <= 0)
+            throw new InvalidDataException("Mobility condition requires positive finite health.");
+        var seen = 0;
+        var count = 0;
+        foreach (var part in Parts)
+        {
+            // BPND's actor-value binding defines function. A robot's weapon
+            // may reuse a thigh bone without being a mobility limb.
+            if (part.ActorValue is not (29 or 30) || part.HealthPercent == 0) continue;
+            var bit = 1 << (part.ActorValue - 29);
+            if ((seen & bit) != 0) throw new NotSupportedException("Mobility actor value has multiple source health thresholds.");
+            seen |= bit;
+            var injury = damage.GetValueOrDefault(part.Type);
+            if (!float.IsFinite(injury) || injury < 0) throw new InvalidDataException("Mobility damage is invalid.");
+            if (injury >= maximumHealth * part.HealthPercent / 100) count++;
+        }
+        return count;
+    }
+
     internal float LimbCondition(int actorValue, float maximumHealth, IReadOnlyDictionary<byte, float>? damage)
     {
         var matching = Parts.Where(part => part.ActorValue == actorValue && part.HealthPercent > 0).ToArray();

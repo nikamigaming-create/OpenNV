@@ -1,134 +1,97 @@
 # Current work
 
-## Active playtest blockers
+## Verified candidate
 
-The September 20 combat correction fixes player sight-ray ownership, stationary
-turning and pursuit of an occluded target within weapon range. Friendly spread
-queries now select actor/player layers; dense scenery previously exhausted the
-128-contact query and held every shot. Dead/disabled allies no longer hold fire.
-The native source Fiend test passes with 160 world contacts and a blocked route.
-In an ordinary exported flat encounter the Fiend fires, reloads and damages the
-player; ED-E kills him. Fresh Elliott Tate simulator gameplay also confirms the
-Fiend firing and ED-E's kill followed by Follow. Ordinary Pip-Boy Stimpak use
-consumes one in each mode: flat HP 26 to 65 and simulator saved HP 94 to 133.
+OpenNV remains an experimental flat/OpenXR playtest. The active implementation
+plan and all 36 recovery requirements remain in scope. Work in this task without
+subagents. The user must playtest flat and a physical headset before any golden
+release; simulator evidence cannot provide that acceptance.
 
-Cloud UV rates now include normalized weather wind and the winning
-fWeatherCloudSpeedMax setting. All 98 loaded WTHR records and synthetic calm,
-override and malformed-input tests pass. Fresh flat motion was inspected.
-Weather transitions and matched retail timing remain open.
+Fresh ordinary flat and Elliott Tate simulator checks repair and recruit ED-E
+with previously collected parts. Mobile actor MoveTo now projects onto authored
+NAVM; inherited Immobile creatures and ordinary objects retain exact offsets.
+ED-E's controller root settles at the Nash floor in both modes, recruitment
+completes and Follow is active. The source hover skeleton is unchanged.
+A close camera can still crop him; antenna appearance needs reference review.
 
-The source wind-responsive rigid-body flag now drives a shared exterior wind
-owner. Selected owned native checks pass wake, independent gusts, frozen/interior
-exclusion, disabled stops and warm reentry. Ordinary flat/XR telemetry confirms
-active forces and changing poses. One distant body falls below terrain, and cold
-prop pose persistence remains open; see [environmental wind](environmental-wind.md).
-Moving LOD/loading and frame performance remain blocking:
-whole-object uploads exceed their nominal frame budget. Property-free distant
-meshes are flat water surfaces in the inspected blocks; their world-water
-material owner remains absent. They must not be described as missing LAND.
+The preserved second-hostile checkpoint now crosses the source curb in both
+modes, kills the additional hostile and resumes Follow. Source navigation is
+refined with the actor's actual capsule. Unavailable routes idle and retry;
+searches yield under a shared two-millisecond physics-thread budget. Source
+mesh bounds accelerate exact triangle projection. A selected route request
+measures 2.71 ms versus earlier 52-142 ms samples. This is a finite encounter
+result, not all-route or combat acceptance. See [creature packages](creature-packages.md).
 
-The current performance work caches winning float/integer settings, publishes
-shared exterior shader constants, reuses HDR texture names and bounds background
-content preparation by process CPU/memory availability. This 28-thread/32-GiB
-Windows machine selects four workers. LOD uses a bounded upload queue; obsolete
-grid preparations cancel. Source scene/gameplay publication stays on its owner.
-Both D3D12 and Vulkan environment pixel checks pass. See
-[runtime performance](runtime-performance.md) for policy and measurements.
+The earlier exported encounters verify the Fiend firing/reloading, player
+damage, ED-E's first kill, corpse loot and post-damage Stimpak use in both modes.
+Source acquisition of Enhanced Sensors is saved; its detection effect and NPC
+radio are unbound. Ammo-free embedded weapon recharge, broader tactics,
+unarmed NPC fallback, hit/death events, XP and full damage ordering remain open.
 
-The same stationary flat checkpoint improves from 15 FPS (p95 80.61 ms) to
-60 FPS (p95 17.60 ms). Current safe-mode XR measures 45 FPS (p95 about 28 ms).
-Separate rendering measured about 83 FPS in XR, but this Godot build emits a
-render-thread finalize error on exit; safe mode remains the release default.
-Cell-crossing flat gameplay exposed a 175.25 ms upload and 69.57 ms commit.
-These are selected, non-isolated Windows measurements, not performance acceptance.
-The full runtime gate and selected wind/weather audits pass; current private
-logs are `tmp/development-lab/wind-core-{runtime-gate,native,owned-weather}.log`.
+## Performance and exterior work
 
-The full runtime gate, owned companion audit and native companion friendly-fire/
-empty-magazine checks pass after the combat correction. Private logs are
-`tmp/development-lab/sky-combat-{runtime-gate,owned-companion,companion-audit}.log`,
-`fiend-dense-world-audit.log` and `weather-motion-audit.log`.
+Content preparation adapts to process CPU/memory availability: one quarter of
+logical processors, clamped to one through four workers, at most two below
+8 GiB. This 28-thread/32-GiB Windows host selects four. Exterior/LOD preparation
+shares that admission limit, bounded upload queues and cancellation. Scene,
+gameplay and physics publication remains on its owning thread. The OS schedules
+core types; no hard-coded affinity is applied.
 
-## Existing candidate and showcase
+Cached winning settings and shared exterior shader constants improved the
+selected stationary flat checkpoint from 15 FPS / p95 80.61 ms to
+60 FPS / p95 17.60 ms. A selected safe-renderer simulator continuation after the
+navigation changes measured 82 FPS / p95 20.03 ms. Earlier safe XR measured
+45 FPS / p95 28.23 ms; these are different samples, not an isolated A/B or
+physical-headset performance acceptance. Separate rendering remains an explicit
+development option because this Godot build errors during render-thread shutdown
+on both D3D12 and Vulkan. See [runtime performance](runtime-performance.md).
 
-The companion gameplay candidate repairs and recruits ED-E through ordinary
-input in flat and Elliott Tate's OpenXR Simulator. Both runs leave Nash Residence
-through its real door, let ED-E kill the source hostile outside, resume Follow
-and loot the corpse. These are selected gameplay results, not campaign or retail
-parity acceptance. Work in this task without subagents.
+Cloud rates use weather wind and the winning speed setting; all 98 declarations
+and selected native wind tests pass. Ordinary flat/XR wind bodies move with
+independent gusts. A distant body falls below terrain and cold prop persistence
+remains open. Streaming still exhibits whole-object stalls: a selected cell
+crossing reached 175.25 ms upload and 69.57 ms commit. Moving LOD, distant water
+materials, vegetation/alpha and all eligible actor spawns need further work.
+Property-free distant meshes in inspected blocks are water, not missing LAND.
 
-The private two-minute-fifteen comparison is
+## Deliverables and evidence
+
+The private 2:15 comparison is
 `local/recordings/playtest-20260920/OpenNV-flat-vr-companion-showcase-updated.mp4`.
-It pairs dialogue, barter, Pip-Boy inventory, recruitment, companion combat,
-corpse looting, post-combat healing and ED-E outside. It uses independent ordinary-input takes,
-normal playback speed, flat audio and only the simulator's left projection eye.
-Both final eyes were inspected separately. The edit manifest identifies every
-source and cut. The illustrated local document is `PLAYTEST-STATUS.md` beside it.
-Its outdoor combat chapter uses fresh corrected flat/XR takes through the kill.
-The healing chapter uses the verified post-damage takes; earlier working
-dialogue/inventory/recruitment/loot chapters remain, identified in the manifest.
-The full edit decodes successfully and its selected action frames were inspected.
-The reel does not demonstrate player melee, VR crafting or
-an uninterrupted Goodsprings-to-Primm journey. Keep those requirements open.
+It pairs dialogue, barter, Pip-Boy inventory/illustrations, recruitment, the
+corrected first encounter, loot, healing and ED-E outside. Independent ordinary
+input takes use normal speed, flat audio and Elliott Tate's left projection eye;
+both eyes were separately inspected. The adjacent edit manifest identifies
+sources/cuts/hashes. The reel predates the latest indoor placement/curb changes.
+New inspected pictures and results are in the adjacent `PLAYTEST-STATUS.md`.
+Player melee, VR crafting and an uninterrupted paired Goodsprings-to-Primm trip
+remain unproved.
 
-## Shared implementation and checks
+The current publication checks cover Release/Debug builds, formatting/analyzers,
+contracts, launcher tests and native loading; all pass. Selected owned companion,
+native follow/curb/combat and exhaustive-versus-bounded projection checks pass.
+Private evidence: `tmp/development-lab/companion-publication-*`,
+`companion-navigation-bounds.log`, `companion-owned-curb-fixed.log`,
+`companion-curb-{flat-02,xr-01}/result.private.json` and
+`companion-repair-{flat-02,xr-01}/result.private.json`.
+The release manifest identifies the exact packaged commit; no retail parity is
+claimed from these checks.
 
-Recruitment results retain faction scope, perks, flags and combat style in save
-v16; v15/v14 saves remain readable. Moved references are discovered and event-bound
-before materialization. Source activation/greeting scripts and explicit INFO
-sounds now reach their owners. Creature weapons use source contacts and damage;
-teammates refuse friendly muzzle/spread obstructions and resume packages after
-OnCombatEnd. Follower door arrivals require source NAVM and native capsule
-clearance with destination physics active while staged gameplay is stopped.
+## Next executable work
 
-Source-portal A* retains directed external edges and refines short segments with
-the actual player capsule. The ordinary flat route reached Primm and Nash, then
-collected the required three Scrap Metal, two Sensor Modules and one Scrap
-Electronics. No repair skills or parts were granted.
+Profile moving-world upload/commit stalls and LOD transitions after publishing
+the checked movement candidate. Preserve the genuine copied checkpoints below.
+Complete the missing ordinary-input demonstrations and wider source-driven
+actor/admission coverage; do not substitute a selected scene for a playthrough.
 
-The September 20 publication gate passes Release/Debug builds, formatting,
-analyzers, contracts, launcher tests and native Godot loading. Selected owned
-recruitment/cold-state and two-phase native companion combat checks pass. The
-native fixture separately verifies friendly obstruction and empty-magazine
-recovery. Its floor is synthetic; ordinary footage supplies the gameplay lane.
-Logs: `local/status-audit-20260920/companion-publication-{runtime-gate,owned,native}.log`.
-No matched-retail or physical-headset acceptance is claimed.
+- `tmp/development-lab/ede-ready-to-repair-20260920.json`: Nash, Repair 31 and
+  three Scrap Metal, two Sensor Modules and one Scrap Electronics collected.
+- `tmp/development-lab/ede-outside-before-combat-20260920.json`: recruited follower
+  after the real door exit, before combat.
+- `tmp/development-lab/ede-{flat,xr}-companion-kill-looted-20260920.json`: genuine
+  first-kill/loot outcomes; the XR checkpoint exposes the second encounter.
 
-## Private continuation
-
-- `tmp/development-lab/ede-ready-to-repair-20260920.json`: genuine Nash checkpoint,
-  Repair 31 and all collected parts. Use copies for repeat checks.
-- `tmp/development-lab/ede-outside-before-combat-20260920.json`: actual follower
-  door save, 200 player HP, before the outdoor encounter.
-- `tmp/development-lab/ede-flat-companion-kill-looted-20260920.json` and
-  `tmp/development-lab/ede-xr-companion-kill-looted-20260920.json`: real kill/loot
-  outcomes. Cold flat continuation was also exercised.
-
-## Next work
-
-The user must playtest the corrected experimental candidate in flat and a physical headset
-before any golden release. Confirm controller fit, comfort, readability and
-ordinary travel. Fix failed functionality first; preserve the wider
-[implementation plan](implementation-plan.md), [status](status.md) and all 36
-[recovery requirements](recovery-checklist.md).
-
-Repaired flying actors initially sit too high above a raised MoveTo target in
-Nash; following settles their root, and the exterior arrival is clear. Interior
-height and antenna appearance still need review. Enhanced Sensors acquisition is
-saved, but its detection effect and NPC radio are unbound. Embedded ammo-free
-guns without reload clips refill at an attack boundary; exact retail cadence is
-unmeasured. Muzzle-light flicker and some impact particles/materials remain
-explicit visual divergences. Broader tactics, unarmed NPC fallback, hit/death
-scripts, XP and full damage ordering are open.
-
-Streaming retains the upload/commit spikes measured above. Profile moving
-gameplay and distinguish CPU, GPU and streaming costs. Moving LOD, missing draws,
-vegetation/alpha, wind-body terrain residency and all eligible actor spawns require further
-work. Clouds and water-tower cutouts were viewed, but that does not prove exterior
-completion. Use the
-new package's `release-manifest.json` to identify its exact source commit.
-
-No retail assets, saves, captures or private executable analysis belong in Git
-or public releases. Recording stays off outside selected visual checks. Remove
-temporary frames after inspection/export; keep the requested deliverables and
-only diagnostics still needed for active defects.
+Private assets, saves, captures and executable observations stay out of Git and
+public releases. Recording stays off outside selected visual checks. Keep only
+requested deliverables and diagnostics needed for active defects; the private
+cleanup-pending list records frame deletion previously blocked by automatic review.

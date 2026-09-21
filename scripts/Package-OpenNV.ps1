@@ -25,7 +25,15 @@ New-Item -ItemType Directory -Path $output | Out-Null
 foreach ($file in @('OpenNV.exe', 'OpenNV.pck', 'runtime-manifest.json')) {
     Copy-Item -LiteralPath (Join-Path $export $file) -Destination $output
 }
-Copy-Item -LiteralPath $runtimeData[0].FullName -Destination $output -Recurse
+foreach ($file in Get-ChildItem -LiteralPath $runtimeData[0].FullName -Recurse -File) {
+    # Export/publish can retain temporary replacement files beside the real
+    # runtime libraries. They are build residue, not runtime dependencies.
+    if ($file.Extension -ieq '.tmp') { continue }
+    $relative = [IO.Path]::GetRelativePath($export, $file.FullName)
+    $destination = Join-Path $output $relative
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $destination
+}
 Copy-Item -LiteralPath (Join-Path $repo 'runtime/licenses') -Destination $output -Recurse
 foreach ($file in @('NOTICE.md')) {
     Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $output

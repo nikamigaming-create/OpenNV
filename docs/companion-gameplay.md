@@ -44,7 +44,8 @@ Saturation or another held-shot reason remains explicit in attack telemetry.
 The native source-player fixture checks turning, a blocked route, actual damage
 and 160 irrelevant world contacts. An ordinary flat continuation independently
 shows the Fiend firing/reloading, player damage, ED-E's kill and subsequent
-Stimpak healing. The older paired showcase predates these corrections.
+Stimpak healing. The refreshed paired showcase includes this corrected encounter
+and post-damage healing in both modes.
 
 An ammo-free embedded creature gun with no authored reload clip currently refills
 its virtual magazine at the attack boundary. This explicit recovery policy has
@@ -59,8 +60,18 @@ disabled; default Godot body removal would otherwise invalidate all arrival
 queries. Ordinary flat and Elliott Tate simulator runs repaired and recruited
 ED-E, exited Nash together, let him kill the source hostile, resumed Follow and
 looted the corpse. Flat cold continuation also passed. The simulator is not
-physical-headset acceptance. Repaired flying actors can initially sit too high
-above a raised MoveTo target; interior placement remains a known defect.
+physical-headset acceptance. Mobile actor MoveTo now projects onto authored NAVM;
+inherited Immobile creature flags preserve exact offsets. Ordinary repair in both
+modes places ED-E on the Nash floor, with recruitment and Follow active. His
+source skeleton and hover animation are unchanged. Antenna appearance still
+needs a matched reference review.
+
+Follow and combat refine source navigation with the actor's own capsule, yield
+native searches under a shared physics-frame budget, and idle while a route is
+unavailable. A replay of the second outdoor encounter in both modes now crosses
+the source curb, kills the additional hostile and resumes Follow. The selected
+curb fixture advances 3.60 m after previously advancing only 0.0023 m. This does
+not establish every route or tactic; see [creature packages](creature-packages.md).
 
 Actor aim uses the source BPNT target bone, with BPNN fallback only when BPNT is
 empty. Humanoid torso BPNN can name the accumulation root below the chest.

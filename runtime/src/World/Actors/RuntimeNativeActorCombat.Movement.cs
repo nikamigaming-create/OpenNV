@@ -10,11 +10,8 @@ internal sealed partial class RuntimeNativeActorCombat
 {
     private CharacterBody3D? _mover;
     private float _radius, _motionScale, _turnSpeed;
-    private Vector3[] _pursuitPath = [];
-    private int _pursuitCursor;
-    private Vector3 _routeTarget;
-    private double _routeClock;
     private string? _movementBlock;
+    private string? _stepBlock;
     private (float One, float Two)? _crippledLegSpeedSettings;
     private int? _crippledLegCount;
     private float _crippledLegSpeedMultiplier = 1;
@@ -24,7 +21,18 @@ internal sealed partial class RuntimeNativeActorCombat
         radius = _radius,
         waypoints = _pursuitPath.Length,
         cursor = _pursuitCursor,
+        waypoint = _pursuitCursor < _pursuitPath.Length ? new float[]
+            { _pursuitPath[_pursuitCursor].X, _pursuitPath[_pursuitCursor].Y, _pursuitPath[_pursuitCursor].Z } : null,
+        onFloor = _mover?.IsOnFloor(),
+        velocity = _mover is { } body ? new float[] { body.Velocity.X, body.Velocity.Y, body.Velocity.Z } : null,
+        routeError = _routeError,
+        routeRequests = _routeRequests,
+        routePlanning = _routeSearch is not null,
+        routeMilliseconds = _routeMilliseconds,
+        routeSourceMilliseconds = _routeSourceMilliseconds,
+        routeMaximumSliceMilliseconds = _routeMaximumSliceMilliseconds,
         blocked = _movementBlock,
+        stepBlocked = _stepBlock,
         crippledLegs = _crippledLegCount,
         crippledLegSpeedMultiplier = _crippledLegSpeedMultiplier,
         limbMovementError = _crippledLegMovementError,
@@ -80,23 +88,6 @@ internal sealed partial class RuntimeNativeActorCombat
         _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 : Math.Min(1, _turnSpeed * (float)delta / angle))).Scaled(_actor.Scale);
     }
 
-    private Vector3 PursuitTarget(Vector3 target, double delta)
-    {
-        _routeClock -= delta;
-        if (_routeClock <= 0 && (_pursuitCursor >= _pursuitPath.Length || target.DistanceTo(_routeTarget) > _radius))
-        {
-            _pursuitPath = _context!.Route(_actor.GlobalPosition, target);
-            _pursuitCursor = 0; _routeTarget = target; _routeClock = .5;
-        }
-        while (_pursuitCursor < _pursuitPath.Length)
-        {
-            var offset = _pursuitPath[_pursuitCursor] - _actor.GlobalPosition;
-            if (new Vector2(offset.X, offset.Z).Length() > _radius * .5f) return _pursuitPath[_pursuitCursor];
-            _pursuitCursor++;
-        }
-        return target;
-    }
-
     private void MoveActor(Vector3 localMotion, double delta)
     {
         var body = _mover!;
@@ -107,7 +98,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var velocity = delta > 0 ? motion / (float)delta : Vector3.Zero;
         velocity.Y = body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) : body.Velocity.Y - _context.Gravity * (float)delta;
         body.Velocity = velocity;
-        if (NativeCharacterStep.TryStep(body, motion, _context.StepHeight))
+        if (NativeCharacterStep.TryStep(body, motion, _context.StepHeight, out _stepBlock))
         { body.Velocity = Vector3.Down * .01f; body.MoveAndSlide(); }
         else body.MoveAndSlide();
         _movementBlock = body.IsOnWall() && body.GetSlideCollisionCount() > 0
@@ -126,20 +117,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
         try
         {
-            var parts = _world.BodyParts(_state.Reference).Parts;
-            var left = parts.Where(part => part.HealthPercent > 0 && LegRegion(part) == "left").ToArray();
-            var right = parts.Where(part => part.HealthPercent > 0 && LegRegion(part) == "right").ToArray();
-            if (left.Length != 1 || right.Length != 1)
-                throw new NotSupportedException("Actor locomotion requires one source part for each leg.");
-
             var maximumHealth = _world.Health(_state.Reference).Base;
-            static bool Crippled(FalloutBodyPart part, float maximumHealth, IReadOnlyDictionary<byte, float> damage)
-            {
-                var threshold = maximumHealth * part.HealthPercent / 100.0f;
-                return threshold > 0 && damage.GetValueOrDefault(part.Type) >= threshold;
-            }
-            var count = (Crippled(left[0], maximumHealth, limbDamage) ? 1 : 0) +
-                (Crippled(right[0], maximumHealth, limbDamage) ? 1 : 0);
+            var count = _world.BodyParts(_state.Reference).CrippledMobilityCount(maximumHealth, limbDamage);
             _crippledLegCount = count;
             if (count == 0)
             {
@@ -169,20 +148,4 @@ internal sealed partial class RuntimeNativeActorCombat
         }
     }
 
-    private static string? LegRegion(FalloutBodyPart part)
-    {
-        static string Normalize(string value) => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-
-        var name = Normalize(part.Name);
-        var node = Normalize(part.Node);
-        var left = name.Contains("left", StringComparison.Ordinal) || node.Contains("bip01l", StringComparison.Ordinal) ||
-            name.StartsWith("lleg", StringComparison.Ordinal);
-        var right = name.Contains("right", StringComparison.Ordinal) || node.Contains("bip01r", StringComparison.Ordinal) ||
-            name.StartsWith("rleg", StringComparison.Ordinal);
-        var leg = name.Contains("leg", StringComparison.Ordinal) || name.Contains("thigh", StringComparison.Ordinal) ||
-            name.Contains("calf", StringComparison.Ordinal) || name.Contains("foot", StringComparison.Ordinal) ||
-            node.Contains("thigh", StringComparison.Ordinal) || node.Contains("calf", StringComparison.Ordinal) ||
-            node.Contains("foot", StringComparison.Ordinal);
-        return leg && left ? "left" : leg && right ? "right" : null;
-    }
 }

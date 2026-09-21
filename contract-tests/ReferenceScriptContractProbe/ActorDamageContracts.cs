@@ -109,6 +109,16 @@ internal static class ActorDamageContracts
                 "Limb actor values ignored source identity, fractional damage or cripple clamping.");
             Reject(() => limbTable.LimbCondition(25, 200, null));
             Reject(() => limbTable.LimbCondition(29, 0, null));
+            Check(limbTable.CrippledMobilityCount(200, new Dictionary<byte, float> { [7] = 50 }) == 1,
+                "Source mobility actor value did not select its damage threshold.");
+            var renamed = limbTable with { Parts = [limbTable.Parts[0] with { Name = "Weapon", Node = "Bip01 R Thigh", ActorValue = 28 }] };
+            Check(renamed.CrippledMobilityCount(200, new Dictionary<byte, float> { [7] = 100 }) == 0,
+                "A legacy thigh bone was mistaken for a source mobility limb.");
+            var two = limbTable with { Parts = [limbTable.Parts[0], limbTable.Parts[0] with { Type = 8, ActorValue = 30 }] };
+            Check(two.CrippledMobilityCount(200, new Dictionary<byte, float> { [7] = 50, [8] = 50 }) == 2,
+                "Independent left/right mobility damage was lost.");
+            Reject(() => (limbTable with { Parts = [limbTable.Parts[0], limbTable.Parts[0]] })
+                .CrippledMobilityCount(200, new Dictionary<byte, float>()));
             var vitals = new GameplayVitals(1, 200, 200, 70, 70, 0, 100, RadiationRads: 12.5f).Damage(.25f);
             vitals.Validate();
             var restoredVitals = JsonSerializer.Deserialize<GameplayVitals>(JsonSerializer.Serialize(vitals))!;

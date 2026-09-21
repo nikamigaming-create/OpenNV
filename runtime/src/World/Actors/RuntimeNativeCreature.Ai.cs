@@ -135,9 +135,8 @@ internal sealed partial class RuntimeNativeCreature
             {
                 var target = TargetPosition(dialogue.Target);
                 var distance = dialogue.ActivationDistance * Skeleton.UnitsToMetres;
-                if (GlobalPosition.DistanceTo(target) > distance)
-                    Combat.AdvancePackageMotion(_aiPackage!, target, distance, false, delta);
-                else if (Combat.PackagePlayer?.ModalInput != true)
+                Combat.AdvancePackageMotion(_aiPackage!, target, distance, false, delta);
+                if (GlobalPosition.DistanceTo(target) <= distance && IsOnFloor() && Combat.PackagePlayer?.ModalInput != true)
                 {
                     (BeginPackageDialogue ?? throw new NotSupportedException("Creature dialogue has no conversation owner."))
                         (dialogue, () => { _packageEvents!.Complete(); _evaluateRequested = true; });
