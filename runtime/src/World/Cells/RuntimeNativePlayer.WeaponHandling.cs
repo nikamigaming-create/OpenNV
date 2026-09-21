@@ -168,7 +168,9 @@ internal partial class RuntimeNativePlayer
                 var continueAutomaticFire = weapon.Automatic && _weaponTriggerHeld && !_automaticFireStopped &&
                     CanContinueAutomaticFire(weapon) && _weaponAction != "unequip";
                 GD.Print($"OPENNV_WEAPON_ACTION_END weapon={weapon.Form} group={_weaponAction}");
-                CancelWeaponAction(); SaveGame?.Invoke();
+                // Normal save actions capture this shared weapon state. A
+                // completed animation must not write the campaign every shot.
+                CancelWeaponAction();
                 if (continueAutomaticFire) RequestWeaponFire();
             }
             else

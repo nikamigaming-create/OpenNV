@@ -12,6 +12,7 @@ the same OpenNV save. The VR launcher does not change your system runtime.
 Godot and .NET are included; development tools are not needed to play.
 
 Use WASD/mouse and E to move/look/activate in flat mode; Tab opens the Pip-Boy.
+F5 saves in flat; the left controller's primary button saves in VR.
 In VR use the thumbsticks for movement/turning and the controller pointer/trigger
 for menus and interaction. The wrist device shares inventory and gameplay state.
 Close the game before switching modes. Preserve a copy of your OpenNV save
@@ -58,6 +59,11 @@ uses at most four workers. The tested safe renderer reaches 60 FPS flat and
 stalls remain. Streamed NPCs now prepare source geometry on bounded workers and
 assemble complete bodies over multiple frames. A selected walk's largest upload
 fell from 183 to 60 ms, but rolling p95 and cell commit did not improve.
+Subsequent resident-index changes reduce two measured cell commits from 49/60
+to 30/39 ms. A completed shot, reload or holster no longer triggers a full
+campaign save. Ordinary firing/reload and explicit saves pass in both modes;
+cold Continue preserves the updated magazine and ammunition across modes.
+Explicit save capture/writing still runs synchronously and can pause play.
 Separate rendering reached about 83 FPS in an intermediate XR
 build but exposed a Godot shutdown error, so the safe mode remains the default.
 Native actor route searches now share a two-millisecond physics-frame budget;

@@ -136,7 +136,30 @@ sample allocates 299,008 bytes versus 593,920 with the previous stream encoder.
 Discovery scope replacement also reuses its string prefix.
 
 Native synthetic contacts and owned reference materialization/warm-residency
-checks pass, as does the complete runtime gate. Post-change exported gameplay
-timing and simulator continuation remain pending while the user plays the
-previously checked package. No frame-time improvement is claimed for these
-latest changes yet.
+checks pass, as does the complete runtime gate. A subsequent exported flat walk
+from the same checkpoint and look angle completes both transitions at 29.85 and
+39.48 ms. The last commit spends 4.91 ms rebuilding bindings and 2.30 ms on
+runtime observation, versus 15.94 and 14.13 ms before. It retains the same 49
+resident cells, 620 warm references and 63 terrain cells with an empty queue.
+The early draw-interval window includes initial Continue loading, so it is not
+used for a gameplay frame-time comparison. Commit and individual upload stalls
+remain; these samples are not whole-route performance acceptance.
+
+## Weapon action saves
+
+The user's flat playtest log exposed a separate stall: a completed shot invoked
+the full campaign writer. Its snapshot took 26.57 ms and validation/serialization/
+file publication took 131.16 ms, for a roughly 15 MB save. The same call also ran
+after reload, equip and holster animations.
+
+Weapon action completion now leaves updated ammunition, condition and random
+state with the shared gameplay owner. Existing explicit, scripted and transition
+save actions capture that state. A save is no longer requested by animation
+completion. This removes the repeated save trigger; explicit save capture and
+writing remain synchronous and can still pause the game.
+
+Fresh ordinary flat and Elliott Tate controller runs each fire four shots and
+reload without changing the saved file. Explicit saving persists the final
+12-round magazine. Cold Continue in the other mode verifies the magazine,
+carried ammunition and exact shot-random state. This is selected
+weapon/save evidence, not all-combat or physical-headset acceptance.
