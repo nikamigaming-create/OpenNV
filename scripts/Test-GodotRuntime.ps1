@@ -124,6 +124,14 @@ if ($LASTEXITCODE -ne 0 -or $referenceText -match "(?m)^ERROR:" -or
 }
 Write-Output "OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true activation=true localState=true"
 
+$locomotionOutput = & $Godot --headless --path $runtime res://tools/NativeLocomotionAudit/NativeLocomotionAudit.tscn 2>&1
+$locomotionText = $locomotionOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $locomotionText -match "(?m)^ERROR:" -or
+    $locomotionText -notmatch "OPENNV_NATIVE_LOCOMOTION_PASS" -or $locomotionText -notmatch "steepSlopeRefused=true") {
+    throw "OpenNV native locomotion failed:`n$locomotionText"
+}
+Write-Output "OPENNV_NATIVE_LOCOMOTION_PASS slopes=true steps=true walls=true ceilings=true unsupportedFloorRefused=true"
+
 $traceOutput = & $Godot --headless --path $runtime res://tools/NativeRenderTraceAudit/NativeRenderTraceAudit.tscn 2>&1
 $traceText = $traceOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $traceText -match "(?m)^ERROR:" -or

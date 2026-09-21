@@ -1292,12 +1292,20 @@ try
         "Saving a restored legacy player must upgrade its anchor without applying the offset twice.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
     var validSaveBytes = File.ReadAllBytes(syntheticSavePath);
-    var referenceSave = syntheticCampaignState with { Schema = FalloutNativeCampaignSave.ExpectedSchema, References = [] };
+    var referenceSave = syntheticCampaignState with { Schema = FalloutNativeCampaignSave.ExpectedSchema, References = [], EncounterZones = [] };
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave);
     var referenceRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { EncounterZones = null }), "missing encounter-zone state");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ActorOverridesSchema, EncounterZones = null });
+    var legacyZones = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.WithWorldState(legacyZones.State, referenceSave.ActiveCell,
+        referenceSave.PlayerPosition, referenceSave.PlayerRotation).EncounterZones is { Count: 0 },
+        "Legacy campaign did not acquire an explicit empty encounter owner when upgraded.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave);
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { References = null }), "save state is invalid");
     Require(FalloutNativeCampaignSave.RestorePlayerViewPitch(referenceRestore.State) == -0.3562573f,
         "Cold campaign save lost the independent player look pitch.");

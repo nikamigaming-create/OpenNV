@@ -41,16 +41,22 @@ internal sealed class FalloutExteriorGrid(FalloutPluginStack records)
         lock (_gate) return ResolveCore(world, persistentCell, x, y, diameter);
     }
 
-    private FalloutExteriorGridScene ResolveCore(FalloutFormKey world, FalloutFormKey persistentCell, float x, float y, int diameter)
+    internal FalloutFormKey SpatialCell(FalloutFormKey world, float x, float y)
     {
-        if (diameter < 1 || diameter % 2 == 0) throw new InvalidDataException("Exterior grid diameter must be positive and odd.");
-        if (!float.IsFinite(x) || !float.IsFinite(y)) throw new InvalidDataException("Exterior player position is not finite.");
+        if (!float.IsFinite(x) || !float.IsFinite(y)) throw new InvalidDataException("Exterior position is not finite.");
+        lock (_gate)
+            return WorldCells(world).TryGetValue(((int)MathF.Floor(x / 4096), (int)MathF.Floor(y / 4096)), out var cell)
+                ? cell : throw new InvalidDataException("Position has no authored exterior grid cell.");
+    }
+
+    private Dictionary<(int X, int Y), FalloutFormKey> WorldCells(FalloutFormKey world)
+    {
         if (!_worlds.TryGetValue(world, out var index))
         {
             index = [];
             foreach (var record in records.EffectiveRecords("CELL"))
             {
-                if (record.FormKey == persistentCell || FalloutCellSceneReader.ParentWorldspace(record) != world) continue;
+                if ((record.Flags & 0x400) != 0 || FalloutCellSceneReader.ParentWorldspace(record) != world) continue;
                 var field = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "XCLC").Data;
                 if (field.IsEmpty) continue;
                 if (field.Length is not (8 or 12)) throw new InvalidDataException("Exterior CELL coordinates have an invalid extent.");
@@ -59,6 +65,14 @@ internal sealed class FalloutExteriorGrid(FalloutPluginStack records)
             }
             _worlds.Add(world, index);
         }
+        return index;
+    }
+
+    private FalloutExteriorGridScene ResolveCore(FalloutFormKey world, FalloutFormKey persistentCell, float x, float y, int diameter)
+    {
+        if (diameter < 1 || diameter % 2 == 0) throw new InvalidDataException("Exterior grid diameter must be positive and odd.");
+        if (!float.IsFinite(x) || !float.IsFinite(y)) throw new InvalidDataException("Exterior player position is not finite.");
+        var index = WorldCells(world);
         var center = ((int)MathF.Floor(x / 4096), (int)MathF.Floor(y / 4096));
         if (!index.TryGetValue(center, out var active)) throw new InvalidDataException("Player has no authored exterior grid cell.");
         var radius = diameter / 2;

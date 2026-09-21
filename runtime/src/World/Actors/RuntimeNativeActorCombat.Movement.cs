@@ -67,6 +67,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
         mover.CollisionLayer = 0; mover.CollisionMask = _mask;
         mover.FloorSnapLength = radius;
+        mover.FloorMaxAngle = Mathf.DegToRad(_context?.MaximumWalkableSlopeDegrees ?? PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
         mover.AddChild(new CollisionShape3D
         {
             Name = "SourceActorMovementEnvelope",

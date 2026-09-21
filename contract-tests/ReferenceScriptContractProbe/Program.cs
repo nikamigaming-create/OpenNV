@@ -237,6 +237,7 @@ finally
 
 ConversationContracts.Run();
 ActorSourceContracts.Run();
+EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
@@ -246,6 +247,8 @@ if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);
 else if (args is [var companionRoot, "--companion-packages"]) OwnedCompanionPackageProbe.Run(companionRoot);
 else if (args is [var companionGameplayRoot, "--companion-gameplay"]) OwnedCompanionGameplayProbe.Run(companionGameplayRoot);
+else if (args is [var zoneRoot, "--encounter-zones", var zoneCell, var zoneSave, var zoneOutput])
+    OwnedEncounterZoneProbe.Run(zoneRoot, zoneCell, zoneSave, zoneOutput);
 StageAndInventoryContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();

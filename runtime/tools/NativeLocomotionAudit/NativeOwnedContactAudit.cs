@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Cells;
@@ -32,7 +33,8 @@ internal static class NativeOwnedContactAudit
             float.Parse(arguments[3], CultureInfo.InvariantCulture), float.Parse(arguments[4], CultureInfo.InvariantCulture)),
             CollisionLayer = 2,
             CollisionMask = 1,
-            FloorSnapLength = .32f
+            FloorSnapLength = .32f,
+            FloorMaxAngle = Mathf.DegToRad(RuntimeConfiguration.Load().Player.MaximumWalkableSlopeDegrees)
         };
         if (arguments.Length >= 9)
         {

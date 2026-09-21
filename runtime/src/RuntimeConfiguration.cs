@@ -244,6 +244,9 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(Player.MoveSpeedMetersPerSecond, nameof(Player.MoveSpeedMetersPerSecond));
         RequirePositive(Player.SprintSpeedMultiplier, nameof(Player.SprintSpeedMultiplier));
         RequirePositive(Player.StepHeightMeters, nameof(Player.StepHeightMeters));
+        RequirePositive(Player.MaximumWalkableSlopeDegrees, nameof(Player.MaximumWalkableSlopeDegrees));
+        if (Player.MaximumWalkableSlopeDegrees >= 90)
+            throw new InvalidDataException("Walkable slope must be below a vertical wall.");
         RequirePositive(Player.ActivationDistanceMeters, nameof(Player.ActivationDistanceMeters));
         RequirePositive(Player.FireRayDistanceMeters, nameof(Player.FireRayDistanceMeters));
         RequirePositive(Player.CameraNearMeters, nameof(Player.CameraNearMeters));

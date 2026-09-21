@@ -59,9 +59,12 @@ path. Per-instance texture changes remain transient with presentation lifetime.
 Leveled actor templates retain a reference-owned random choice, source hash and
 selection level in the same snapshot. Appearance, inventory, script attachment,
 voice, factions and combat consume that selection. Reentry cannot reroll a
-creature or outfit. Encounter-zone level initialization remains unbound and
-rejects that admission; an appearance-only audit at a supplied level does not
-prove spawning or zone behavior.
+creature or outfit. Encounter zones retain their first admission level across
+connected cells and saves. Reference/CELL/WRLD assignments and source difficulty
+multipliers feed the same actor selection; persistent exterior references use
+their spatial CELL. Save v17 carries zone state, while earlier saved actor choices
+remain unchanged. See [encounter admission](encounter-admission.md); resource
+preparation alone does not establish visible or functioning actors.
 FalloutConversation owns INFO selection, results and choices; native source menu
 and voice adapters report input/completion. Actual player furniture and posed
 actor query contacts now connect to reference events. Complete event/physics,

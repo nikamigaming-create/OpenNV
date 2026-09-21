@@ -76,6 +76,10 @@ internal sealed record PlayerConfiguration(
     // User-requested OpenNV locomotion option, separate from source game stats.
     public float SprintSpeedMultiplier { get; init; } = 1.6f;
     public float StepHeightMeters { get; init; } = 0.4f;
+    // OpenNV controller policy, not a measured retail slope limit. Authored
+    // walkways exceed Godot's implicit 45-degree default.
+    internal const float DefaultMaximumWalkableSlopeDegrees = 50;
+    public float MaximumWalkableSlopeDegrees { get; init; } = DefaultMaximumWalkableSlopeDegrees;
 }
 
 internal sealed record DesktopInputConfiguration(

@@ -19,5 +19,5 @@ public partial class RuntimeCoordinator
         {
             if (_nativeReferenceEvents?.DispatchActorEvent(actor, name) != true)
                 throw new InvalidOperationException($"Actor event {actor}/{name} has no resident owner.");
-        }, () => _nativeActiveCell?.Cell.FormKey);
+        }, () => _nativeActiveCell?.Cell.FormKey, _configuration.Player.MaximumWalkableSlopeDegrees);
 }

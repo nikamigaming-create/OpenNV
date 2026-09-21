@@ -223,17 +223,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
     {
         var instance = Actor(reference);
         if (instance.Templates is { } retained) return retained;
-        var selection = new FalloutActorTemplateSelection(level,
-            BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))), globals is null ? null : globals.Get);
+        var encounter = ActorEncounter(instance, level);
+        var selection = new FalloutActorTemplateSelection(encounter.Level,
+            BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))), globals is null ? null : globals.Get,
+            encounter.ListLevel, encounter.AllLevels);
         selection.ResolveAll(records, instance.Base);
-        var scaled = !selection.Absent && (System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(
-            FalloutActorTemplateOwner.Resolve(records, records.GetEffective(instance.Base), 2, selection)
-                .ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span) & 0x80) != 0;
-        if ((selection.Capture().Choices.Count != 0 || scaled) &&
-            new[] { reference, instance.Placement?.Cell ?? instance.Cell }.Select(records.GetEffective).SelectMany(record => record.ReadSubrecords())
-                .Any(field => field.Signature == "XEZN" &&
-                    (field.Data.Length != 4 || System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) != 0)))
-            throw new NotSupportedException($"Actor {reference} requires its persistent encounter-zone level owner.");
         instance.Templates = selection;
         BindTemplateScript(instance);
         return selection;
@@ -353,6 +347,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
         _definitions.Clear();
         _healthSources.Clear();
         _bodyParts.Clear();
+        _encounterZones.Clear();
+        _cellEncounterZones.Clear();
         _disposed = true;
     }
 }
