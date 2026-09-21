@@ -57,17 +57,18 @@ through its real door, let ED-E kill the source hostile outside, resume Follow
 and loot the corpse. These are selected gameplay results, not campaign or retail
 parity acceptance. Work in this task without subagents.
 
-The private two-minute comparison is
-`local/recordings/playtest-20260920/OpenNV-flat-vr-companion-showcase.mp4`.
+The private two-minute-fifteen comparison is
+`local/recordings/playtest-20260920/OpenNV-flat-vr-companion-showcase-updated.mp4`.
 It pairs dialogue, barter, Pip-Boy inventory, recruitment, companion combat,
-corpse looting and ED-E outside. It uses independent ordinary-input takes,
+corpse looting, post-combat healing and ED-E outside. It uses independent ordinary-input takes,
 normal playback speed, flat audio and only the simulator's left projection eye.
 Both final eyes were inspected separately. The edit manifest identifies every
 source and cut. The illustrated local document is `PLAYTEST-STATUS.md` beside it.
-That reel and the published experimental package predate the Fiend sight/spread
-and cloud-rate corrections above; the outdoor hostile can run in place in them.
-Fresh post-damage healing takes exist in both modes but are not yet in that reel.
-The reel does not demonstrate player melee, post-damage healing, VR crafting or
+Its outdoor combat chapter uses fresh corrected flat/XR takes through the kill.
+The healing chapter uses the verified post-damage takes; earlier working
+dialogue/inventory/recruitment/loot chapters remain, identified in the manifest.
+The full edit decodes successfully and its selected action frames were inspected.
+The reel does not demonstrate player melee, VR crafting or
 an uninterrupted Goodsprings-to-Primm journey. Keep those requirements open.
 
 ## Shared implementation and checks
