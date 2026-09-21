@@ -27,6 +27,7 @@ public partial class RuntimeCoordinator
     private double _nativeGridMaximumUploadMilliseconds;
     private string? _nativeGridMaximumUploadSource;
     private double _nativeGridCommitMilliseconds;
+    private IReadOnlyDictionary<string, double>? _nativeGridCommitPhases;
     private (int X, int Y)? _nativeGridTarget;
     private string? _nativeGridError;
     private readonly HashSet<(int X, int Y)> _nativeWalkableGrid = [];
@@ -57,6 +58,7 @@ public partial class RuntimeCoordinator
         maximumUploadSource = _nativeGridMaximumUploadSource,
         preparingNpcs = _nativeGridNpcPreparations.Count,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
+        lastCommitPhasesMilliseconds = _nativeGridCommitPhases,
         error = _nativeGridError
     };
 
@@ -265,6 +267,16 @@ public partial class RuntimeCoordinator
     private void CommitNativeExteriorGrid()
     {
         var started = Stopwatch.GetTimestamp();
+        var phases = _options.ContainsKey("live-harness") ? new Dictionary<string, double>() : null;
+        _nativeGridCommitPhases = phases;
+        var phaseStarted = started;
+        void Mark(string phase)
+        {
+            if (phases is null) return;
+            var now = Stopwatch.GetTimestamp();
+            phases.Add(phase, Stopwatch.GetElapsedTime(phaseStarted, now).TotalMilliseconds);
+            phaseStarted = now;
+        }
         var root = _nativeCurrentCellRoot!; var grid = _nativeGridPending!;
         var previous = _nativeActiveCell!.Cell.FormKey;
         var retained = grid.Cells.Select(cell => cell.FormKey).ToHashSet();
@@ -277,12 +289,16 @@ public partial class RuntimeCoordinator
         _nativeReferences.UnloadCell(previous);
         _nativeActiveCell = grid.Scene;
         _nativeSkyLighting.Restore(sky.Capture());
+        Mark("world-and-weather");
         var center = grid.Scene.Cell.Coordinates!.Value;
         DiscoverNativeCellReferences(grid.Scene);
+        Mark("source-discovery");
         _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference),
             reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
                 Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
+        Mark("reference-residency");
         foreach (var (key, model) in _nativeGridModels) _nativeReferencePresentation.Register(key, model);
+        Mark("reference-publication");
         foreach (var land in root.GetChildren().OfType<RuntimeNativeLandscapeTransport>())
         {
             var active = retained.Contains(land.Source.ActiveCell);
@@ -298,11 +314,16 @@ public partial class RuntimeCoordinator
         {
             _nativeLandLastUse.Remove(land.Source.ActiveCell); land.QueueFree();
         }
+        Mark("terrain-residency");
         _nativeReferenceEvents!.SetResidency(grid.Scene, root);
+        Mark("reference-events");
         ObserveNativeResidentReferences(grid.Scene);
+        Mark("runtime-observation");
         var environment = root.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().Single();
         foreach (var node in _nativeGridStaged) environment.Register(node);
+        Mark("environment-registration");
         root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single().SetDetailGrid(grid);
+        Mark("lod-detail-mask");
         foreach (var actor in _nativeGridModels.Values.OfType<RuntimeNativeNpc>())
             actor.BeginPackageDialogue = (package, completed) => _nativeOpeningStageDriver!.RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);
         foreach (var actor in _nativeReferencePresentation.Actors) actor.UpdateResidentScene(grid.Scene);
@@ -310,6 +331,7 @@ public partial class RuntimeCoordinator
         _nativeGridUploads = null; _nativeGridPending = null; _nativeGridStaged.Clear(); _nativeGridModels.Clear();
         _nativeGridFailed = null; _nativeGridTarget = null;
         _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
+        Mark("actor-residency");
         var models = grid.Scene.References.Select(reference => grid.Scene.BaseObjects[reference.Base])
             .Where(value => value.ModelPath is not null).Select(value => value.ModelPath!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         _nativeRecentModelSets.Enqueue(models);
@@ -319,10 +341,12 @@ public partial class RuntimeCoordinator
         {
             _nativeNifPrototypes[path].Scene.Root.Free(); _nativeNifPrototypes.Remove(path);
         }
+        Mark("prototype-eviction");
         var textures = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Where(land => !land.IsQueuedForDeletion())
             .SelectMany(land => land.Source.Textures.Values).SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath })
             .Where(path => path is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var path in _nativeLandscapeTextures.Keys.Where(path => !textures.Contains(path)).ToArray()) _nativeLandscapeTextures.Remove(path);
+        Mark("texture-prune");
         _nativeGridCommitMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         GD.Print($"OPENNV_EXTERIOR_STREAM_READY previous={previous} active={grid.Scene.Cell.FormKey} cells={grid.Cells.Count} overlap=retained commitMs={_nativeGridCommitMilliseconds:F3}");
     }
