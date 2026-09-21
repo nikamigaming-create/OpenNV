@@ -307,6 +307,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
                 if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
                     .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Saved package motion differs from the winning package.");
+                if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
                 instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
             }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);

@@ -145,6 +145,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _state.Engagement = new(_records.RuntimeFormKey(0x14));
             }
             if (!ResolveTarget(player)) return;
+            StopPackageMotion(); _enemyObject?.Root.Show();
             _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
             _detectRange = ThreatRadius(_threat);
             if (!float.IsFinite(_detectRange) || _detectRange <= 0) throw new InvalidDataException("Actor threat radius is invalid.");

@@ -15,6 +15,7 @@ public partial class RuntimeCoordinator
         private readonly Task<FalloutNpcPreparedGeometry> _read;
         private RuntimeNativeNpc.Assembly? _assembly;
         internal FalloutNpcAppearance Appearance { get; }
+        internal Task ReadTask => _read;
 
         internal ExteriorNpcPreparation(FalloutNpcAppearance appearance, RuntimeLiveContentSource source, CancellationToken cancellation)
         {

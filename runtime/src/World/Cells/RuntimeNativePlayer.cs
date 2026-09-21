@@ -224,7 +224,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         if (inputEvent.IsActionPressed(input.Cancel.Action))
         {
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+            if (!_modalInput) OpenPauseMenu?.Invoke();
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -264,6 +264,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
 
     internal event Action? OpenPipBoy;
+    internal event Action? OpenPauseMenu;
 
     public override void _PhysicsProcess(double delta)
     {

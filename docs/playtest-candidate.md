@@ -12,14 +12,19 @@ the same OpenNV save. The VR launcher does not change your system runtime.
 Godot and .NET are included; development tools are not needed to play.
 
 Use WASD/mouse and E to move/look/activate in flat mode; Tab opens the Pip-Boy.
-F5 saves in flat; the left controller's primary button saves in VR.
+Escape opens the pause menu in flat. In VR, use the left Menu button or click
+the right stick. Use **Save / Load** to create a new save, select an earlier
+save, or return to the main menu. F5 in flat and the left controller's primary
+button in VR create separate manual saves. Earlier slots remain available;
+loading another slot also preserves the previous Continue save.
 In VR use the thumbsticks for movement/turning and the controller pointer/trigger
 for menus and interaction. The wrist device shares inventory and gameplay state.
 Close the game before switching modes. Preserve a copy of your OpenNV save
 before an extended test; existing retail saves are not loaded or modified.
 OpenNV saves live under `%APPDATA%/Godot/app_userdata/OpenNV/profiles/`.
-Continue and Load both resume the configured OpenNV save slot. A loading message
-appears before scene construction; Load is not yet a browser for multiple saves.
+Continue resumes the configured OpenNV save; Load opens the saved-game browser.
+A loading message appears before scene construction. Zero health pauses play
+and offers an earlier save; it cannot silently resume or consume healing items.
 Existing saved choices remain intact when the new encounter-zone state is added.
 
 ## What to test

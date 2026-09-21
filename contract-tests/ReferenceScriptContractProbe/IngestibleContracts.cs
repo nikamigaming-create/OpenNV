@@ -72,6 +72,11 @@ internal static class IngestibleContracts
             Reject(() => Owner(Vitals(initial)).Restore(saved with { Effects = [saved.Effects[0] with { ItemHash = new string('0', 64) }] }));
             Reject(() => Owner(Vitals(initial)).Restore(saved with { Effects = [saved.Effects[0] with { Magnitude = -1 }] }));
             Check(inventory.Item(Key(2))!.Count == 2, "Timed healing consumed more than one inventory item.");
+            var deadVitals = Vitals(initial.Damage(1000));
+            var dead = Owner(deadVitals); var retainedCount = inventory.Item(Key(1))!.Count;
+            Reject(() => dead.Prepare(Key(1)));
+            Check(deadVitals.State.HitPoints == 0 && inventory.Item(Key(1))!.Count == retainedCount,
+                "Dead Aid use consumed an item or silently revived the player.");
             Console.WriteLine("OPENNV_INGESTIBLE_CONTRACT_PASS sourceMagnitude=true limbs=true atomic=true staleInput=true duration=true finalRemainder=true noDuration=true cold=true driftRejected=true");
         }
         finally { File.Delete(path); Directory.Delete(directory); }

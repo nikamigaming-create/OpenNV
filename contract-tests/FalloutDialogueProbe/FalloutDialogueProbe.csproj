@@ -24,6 +24,7 @@
     <Compile Include="../../runtime/src/Content/FalloutHeadTrackingState.cs" Link="FalloutHeadTrackingState.cs" />
     <Compile Include="../../runtime/src/Content/FalloutLookCommands.cs" Link="FalloutLookCommands.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleCollectionPlayback.cs" Link="FalloutIdleCollectionPlayback.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutIdleCollection.cs" Link="FalloutIdleCollection.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleConditions.cs" Link="FalloutIdleConditions.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationData.cs" Link="FalloutIdleAnimationData.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationPlayback.cs" Link="FalloutIdleAnimationPlayback.cs" />

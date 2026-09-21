@@ -63,7 +63,8 @@ use the void callable adapter so an asynchronous Task is not converted to Varian
   malformed records and atomic cold restoration.
 - The selected owned audit reads 28 ECZN records and follows the Primm exterior
   grid's door graph through 12 connected interiors. It passes admission/resource checks for all 54 enabled
-  actors in that set; 48 source-disabled references remain disabled. All 14
+  actors in that set; 48 references disabled in the selected saved state remain
+  disabled, including prior combat deaths. All 14
   enabled hotel NPCs prepare. Preparation does not prove rendering or gameplay.
 - Ordinary exported Load/Continue restore genuine copied saves. The upstairs
   hotel continuation publishes its six enabled NPCs. Flat movement and Elliott

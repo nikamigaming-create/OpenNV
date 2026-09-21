@@ -174,7 +174,7 @@ internal sealed partial class NativeGamebryoStartMenu : Control
     private void RefreshEnabled()
     {
         for (var index = 0; index < _buttons.Count; ++index)
-            _buttons[index].Disabled = _confirmation is not null || _actions[index] is "sContinue" or "sLoad" && !_canContinue;
+            _buttons[index].Disabled = _confirmation is not null || _actions[index] == "sContinue" && !_canContinue;
     }
 
     private void Layout()

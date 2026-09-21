@@ -339,6 +339,11 @@ public partial class RuntimeCoordinator
                 _nativePrewarmedInitialCellRoot = BuildNativeCellRoot(initialCell, transition, sourceSide: true);
             if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
             menu.SetReady(stack, _nativeOpeningRestore is not null);
+            if (_continueAfterRestart && _nativeOpeningRestore is not null)
+            {
+                _continueAfterRestart = false; _nativeStartingGame = true; _nativeContinueOpening = true;
+                StartNativeGameFromMenu(menu.GetParent<CanvasLayer>(), "sLoad");
+            }
         }
         catch (Exception exception)
         {
@@ -354,7 +359,9 @@ public partial class RuntimeCoordinator
         {
             if (action == "sQuit")
                 GetTree().Quit();
-            else if (action is "sNew" or "sContinue" or "sLoad")
+            else if (action == "sLoad")
+                OpenNativeSessionMenu(showSaves: true, layer.GetChild<Control>(0));
+            else if (action is "sNew" or "sContinue")
             {
                 if (_nativeStartingGame) return;
                 _nativeStartingGame = true;
@@ -990,7 +997,8 @@ public partial class RuntimeCoordinator
             (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                 NativeAmbient(_nativeActiveCell?.Cell ?? throw new InvalidOperationException("Player body has no active cell."))));
         _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
-        _nativePlayer.SaveGame = SaveNativeInteraction;
+        _nativePlayer.SaveGame = SaveNativeManualSlot;
+        _nativePlayer.OpenPauseMenu += ToggleNativeSessionMenu;
         _nativePlayer.Configure(_configuration, ReferenceTransform(marker));
         _nativePlayer.ConfigureLocomotion(_nativePluginStack!, () => _nativeOpeningStageDriver?.Vitals);
         _nativePlayer.ConfigurePresentation(_nativePluginStack!, _nativeInventory,

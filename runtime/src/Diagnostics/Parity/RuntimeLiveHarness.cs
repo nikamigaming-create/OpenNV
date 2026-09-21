@@ -90,6 +90,11 @@ internal sealed partial class RuntimeLiveHarness : Node
             throw new ArgumentException("--live-harness requires an absolute private command directory.");
         _directory = directory;
         Directory.CreateDirectory(directory);
+        // An in-process save load replaces this node. Already acknowledged
+        // input belongs to the old session and must never be replayed.
+        _nextRequest = checked(Directory.EnumerateFiles(directory, "*.receipt.json")
+            .Select(path => ulong.TryParse(Path.GetFileName(path).Split('.')[0], out var value) ? value : 0)
+            .DefaultIfEmpty().Max() + 1);
         _captureState = captureState;
         _captureGameplay = captureGameplay;
         _captureSummary = captureSummary ?? captureGameplay;

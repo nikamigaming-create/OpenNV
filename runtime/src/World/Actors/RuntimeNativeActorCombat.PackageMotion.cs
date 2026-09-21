@@ -12,15 +12,33 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeOwnedAnimationSoundPlayer? _packageSounds;
     private readonly Dictionary<FalloutFormKey, string> _packageHashes = [];
     internal bool PackageOwnsPose { get; private set; }
+    internal bool PackageMoving { get; private set; }
     internal bool PackageMovementReady => _context?.Player() is { CollisionResident: true } &&
         _context.Resident(_actor.GlobalPosition) && _world.IsEnabled(_state.Reference) &&
         !Dead && !_state.Unconscious && !_state.Restrained;
     internal RuntimeNativePlayer? PackagePlayer => _context?.Player();
     internal FalloutFormKey? PackagePlayerCell => _context?.PlayerCell?.Invoke();
+    internal FalloutActorPackageMotion? PackageMotion => _state.PackageMotion;
+    internal uint PackageRandom(uint bound) => _state.SoundRandom.NextBounded(bound);
+    internal void SetPatrolProgress(FalloutPatrolProgress progress)
+    {
+        if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { Patrol = progress };
+    }
+    internal void FacePackageDirection(Vector3 direction, double delta) => TurnToward(_actor.GlobalPosition + direction, delta);
+    internal Vector3 ProjectPackageDestination(Vector3 authored)
+    {
+        PrepareMovement();
+        var route = _context!.Route(authored, authored);
+        if (route.Length == 0 || route[^1].DistanceTo(authored) > _radius * 6)
+            throw new NotSupportedException("Patrol marker has no nearby authored navigation floor.");
+        return route[^1];
+    }
 
     internal void StopPackageMotion()
     {
         PackageOwnsPose = false;
+        PackageMoving = false;
+        _packageWeapon?.Root.Hide();
         if (!OwnsPose && _mover is not null) _mover.Velocity = Vector3.Up * _mover.Velocity.Y;
     }
 
@@ -34,7 +52,7 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     internal void AdvancePackageMotion(FalloutPluginRecord package, Vector3 target, float distance,
-        bool running, double delta)
+        bool running, double delta, bool weaponDrawn = false, bool requireArrivalHeight = false)
     {
         StopPackageMotion();
         if (OwnsPose || !PackageMovementReady) return;
@@ -43,18 +61,21 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
             _packageIdle = new(SelectPath(directory, "mtidle", "locomotion/mtidle"), _content, _skeleton, null, true);
-            _packageWalk = new(SelectPath(directory, "mtforward", "locomotion/mtforward"), _content, _skeleton, null, true);
-            _packageRun = new(SelectPath(directory, "mtfastforward", "locomotion/mtfastforward", "mtforward", "locomotion/mtforward"),
+            var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
+            _packageWalk = new(SelectPath(directory, "mtforward", $"locomotion/{gender}/mtforward", "locomotion/mtforward"), _content, _skeleton, null, true);
+            _packageRun = new(SelectPath(directory, "mtfastforward", $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward", "mtforward", $"locomotion/{gender}/mtforward", "locomotion/mtforward"),
                 _content, _skeleton, null, true);
             _packageSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
             _actor.AddChild(_packageSounds);
         }
+        PreparePackageWeapon(weaponDrawn);
         if (!_packageHashes.TryGetValue(package.FormKey, out var hash))
             _packageHashes.Add(package.FormKey, hash = Convert.ToHexString(SHA256.HashData(package.ReadData())));
         var offset = target - _actor.GlobalPosition;
-        var moving = new Vector2(offset.X, offset.Z).Length() > distance;
+        var moving = (requireArrivalHeight ? offset.Length() : new Vector2(offset.X, offset.Z).Length()) > distance;
         var destination = moving ? PursuitTarget(target, delta, distance) : null;
         moving &= destination.HasValue;
+        PackageMoving = moving;
         var clip = moving ? running ? _packageRun! : _packageWalk! : _packageIdle;
         var retained = _state.PackageMotion;
         var same = retained?.Package == package.FormKey && retained.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase);
@@ -72,9 +93,11 @@ internal sealed partial class RuntimeNativeActorCombat
         var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
         if (root >= 0) _skeleton.Node.SetBonePose(root, Transform3D.Identity);
         clip.Animation.ApplySourceTime(clip.Time(next));
+        if (weaponDrawn) { _packageAim?.Animation.ApplySourceTime(_packageAim.Time(next)); _packageGrip?.Animation.ApplySourceTime(_packageGrip.Time(next)); }
         var position = _actor.GlobalPosition; var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         _state.PackageMotion = new(package.FormKey, hash, clip.Path, clip.Hash, next, false,
-            [position.X, position.Y, position.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W]);
+            [position.X, position.Y, position.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
+            retained?.Package == package.FormKey ? retained.Patrol : null);
         PackageOwnsPose = true;
     }
 }

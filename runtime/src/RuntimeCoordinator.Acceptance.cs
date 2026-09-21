@@ -345,6 +345,7 @@ public partial class RuntimeCoordinator
                 "Launch with --xr-mode on before --, connect the headset, and verify the active OpenXR runtime.");
         GetViewport().UseXR = true;
         _nativeXr = new(_configuration);
+        _nativeXr.MenuRequested = ToggleNativeSessionMenu;
         AddChild(_nativeXr);
         Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);

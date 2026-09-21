@@ -190,7 +190,17 @@ public partial class RuntimeCoordinator
         _nativeGridRead = null;
     }
 
-    public override void _ExitTree() => CancelNativeGridRead();
+    public override void _ExitTree()
+    {
+        CancelNativeGridRead();
+        if (!_retiringNativeSession) return;
+        // Reload has drained source workers. Detached prototypes are outside
+        // the scene tree and must be released with the retired record owners.
+        foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();
+        _nativeNifPrototypes.Clear();
+        _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
+        _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
+    }
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
     {

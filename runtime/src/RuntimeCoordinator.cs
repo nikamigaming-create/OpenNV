@@ -92,7 +92,9 @@ public partial class RuntimeCoordinator : Node3D
         try
         {
             _configuration = RuntimeConfiguration.Load();
-            _options = ParseOptions(OS.GetCmdlineUserArgs());
+            _options = _nextSessionOptions ?? ParseOptions(OS.GetCmdlineUserArgs());
+            _continueAfterRestart = _nextSessionContinue;
+            _nextSessionOptions = null; _nextSessionContinue = false;
             if (_options.TryGetValue("parity-channel", out var parityChannel))
                 EnableParityPublisher(parityChannel, _options.GetValueOrDefault("parity-capture"));
             else if (_options.ContainsKey("parity-capture"))

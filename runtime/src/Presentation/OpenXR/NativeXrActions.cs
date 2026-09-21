@@ -16,6 +16,7 @@ internal static class NativeXrActions
     internal static readonly StringName Jump = "jump";
     internal static readonly StringName PipBoy = "pipboy";
     internal static readonly StringName Save = "save";
+    internal static readonly StringName Menu = "menu";
     internal static readonly StringName Activate = "activate";
     internal static readonly StringName Turn = "turn";
     internal static readonly StringName FingerTrigger = "finger_trigger";
