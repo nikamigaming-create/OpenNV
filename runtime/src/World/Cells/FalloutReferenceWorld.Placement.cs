@@ -42,6 +42,8 @@ internal sealed partial class FalloutReferenceWorld
         var target = Placement(destination);
         var moved = new FalloutReferencePlacement(target.Cell,
             [target.Position[0] + x, target.Position[1] + y, target.Position[2] + z], previous.RotationRadians);
+        moved.Validate();
+        moved = ProjectMovedActor(instance, moved);
         SetPlacement(reference, moved);
     }
 

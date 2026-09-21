@@ -21,6 +21,8 @@ internal static class ActorSourceContracts
                 Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1),
                 Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
                 Creature(0x806, 66, 0x821, "creatures/local/skeleton.nif", "local.nif", 1),
+                ImmobileCreature(0x808),
+                Creature(0x809, 64, 0x808, "creatures/local/skeleton.nif", "local.nif", 1),
                 ActorList(0x820, 0, (1, 0x800), (1, 0x804), (10, 0x804)),
                 ActorList(0x821, 100, (1, 0x800)),
                 Record("MISC", 0x840, Field("EDID", Text("CreatureLoot")), Field("DATA", new byte[8])),
@@ -31,12 +33,14 @@ internal static class ActorSourceContracts
                 Record("CSTY", 0x8e3, Field("CSSD", new byte[64])),
                 Cell(0x881, Record("REFR", 0x908, Field("NAME", BitConverter.GetBytes(0x844u)),
                     Field("DATA", new float[] { 10, 20, 30, 0, 0, 1 }.SelectMany(BitConverter.GetBytes).ToArray()))),
+                NavigationFloor(0xb100, 0x881, 5),
                 Record("STAT", 0x844), Record("ACTI", 0x845, Field("SCRI", BitConverter.GetBytes(0x891u))),
                 Cell(0x880, Join(Record("ACRE", 0x900, Field("NAME", BitConverter.GetBytes(0x801u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x901, Field("NAME", BitConverter.GetBytes(0x804u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x902, Field("NAME", BitConverter.GetBytes(0x804u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x906, Field("NAME", BitConverter.GetBytes(0x805u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x907, Field("NAME", BitConverter.GetBytes(0x806u)), Field("DATA", new byte[24])),
+                    Record("ACRE", 0x909, Field("NAME", BitConverter.GetBytes(0x809u)), Field("DATA", new byte[24])),
                     Marker(0x903, "SourceMapMarker"), Marker(0x905, "OtherMapMarker"),
                     Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x845u)), Field("DATA", new byte[24])))),
                 Record("SCPT", 0x890, Field("SCTX", Text("begin OnActivate\nif GetUnconscious\nSetUnconscious 0\nelse\nSetUnconscious 1\nendif\nend"))),
@@ -172,7 +176,7 @@ internal static class ActorSourceContracts
             world.ReplaceResidentCell(sourceAfterMove);
             world.LoadCell(destinationAfterMove);
             Check(world.Get(Key(0x901)).Cell == Key(0x880) && world.Placement(Key(0x901)).Cell == Key(0x881) &&
-                world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 34 }) &&
+                world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 5 }) &&
                 !sourceAfterMove.References.Any(reference => reference.FormKey == Key(0x901)) &&
                 destinationAfterMove.References.Count(reference => reference.FormKey == Key(0x901)) == 1 &&
                 world.IsResident(Key(0x901)), "MoveTo lost source identity, offsets or destination residency.");
@@ -184,10 +188,16 @@ internal static class ActorSourceContracts
                     "Creature inventory changes leaked to a peer or were lost in the save.");
                 Check(inventoryRestore.Get(Key(0x901)) is { Restrained: true, PlayerTeammate: true } &&
                     inventoryRestore.ComposeResidency(destinationScene).References.Single(reference => reference.FormKey == Key(0x901))
-                        .Position.SequenceEqual(new float[] { 12, 23, 34 }), "Cold save lost moved actor placement or companion flags.");
+                        .Position.SequenceEqual(new float[] { 12, 23, 5 }), "Cold save lost moved actor placement or companion flags.");
             }
             Reject(() => world.MoveTo(Key(0x901), Key(0x908), float.NaN));
-            Check(world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 34 }), "Rejected movement mutated placement.");
+            Check(world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 5 }), "Rejected movement mutated placement.");
+            Reject(() => world.MoveTo(Key(0x901), Key(0x903)));
+            Check(world.Placement(Key(0x901)).Position.SequenceEqual(new float[] { 12, 23, 5 }), "Missing navigation partially moved an actor.");
+            world.MoveTo(Key(0x903), Key(0x908), 2, 3, 4);
+            Check(world.Placement(Key(0x903)).Position.SequenceEqual(new float[] { 12, 23, 34 }), "A non-actor MoveTo lost its exact offset.");
+            world.MoveTo(Key(0x909), Key(0x908), 2, 3, 4);
+            Check(world.Placement(Key(0x909)).Position.SequenceEqual(new float[] { 12, 23, 34 }), "Inherited Immobile model flags did not preserve an exact MoveTo.");
             var quests = new FalloutQuestState(records);
             FalloutFormKey? queriedHealth = null;
             var healthConditions = new FalloutDialogueConditions(records, quests, Key(0x900), speaker,
@@ -276,6 +286,23 @@ internal static class ActorSourceContracts
         return Record("CREA", id, Field("ACBS", acbs), Field("TPLT", BitConverter.GetBytes(template)), Field("MODL", Text(skeleton)),
             Field("NIFZ", Text(part)), Field("BNAM", BitConverter.GetBytes(scale)), Field("VTCK", BitConverter.GetBytes(0x850u)),
             Field("SCRI", BitConverter.GetBytes(0x890u)), Join(extra));
+    }
+    private static byte[] NavigationFloor(uint id, uint cell, float height)
+    {
+        var triangle = new byte[16];
+        BinaryPrimitives.WriteUInt16LittleEndian(triangle.AsSpan(2), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(triangle.AsSpan(4), 2);
+        for (var edge = 0; edge < 3; edge++) BinaryPrimitives.WriteInt16LittleEndian(triangle.AsSpan(6 + edge * 2), -1);
+        return Record("NAVM", id, Field("NVER", BitConverter.GetBytes(11u)),
+            Field("DATA", new uint[] { cell, 3, 1, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray()),
+            Field("NVVX", new float[] { -100, -100, height, 200, -100, height, -100, 200, height }.SelectMany(BitConverter.GetBytes).ToArray()),
+            Field("NVTR", triangle));
+    }
+    private static byte[] ImmobileCreature(uint id)
+    {
+        var record = Creature(id, 0, 0, "creatures/test/skeleton.nif", "body.nif", 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(record.AsSpan(30), 0x00800000);
+        return record;
     }
     private static byte[] ActorList(uint id, byte chance, params (ushort Level, uint Actor)[] entries) =>
         Record("LVLC", id, Field("LVLD", [chance]), Field("LVLF", [0]), Join(entries.Select(entry =>

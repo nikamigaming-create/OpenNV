@@ -20,6 +20,8 @@ public partial class NativeLocomotionAudit : Node3D
             await Check(.3f, false, true);
             await Check(2, false, false);
             await Check(.3f, true, false);
+            await Check(.3f, false, true, .38f, 2.3f, .015f);
+            await Check(.3f, true, false, .38f, 2.3f, .015f);
             GD.Print("OPENNV_NATIVE_LOCOMOTION_PASS curb=true tallWall=true lowCeiling=true airborne=true sourceStepHeightAndCameraParity=unverified");
             GetTree().Quit();
         }
@@ -99,7 +101,8 @@ public partial class NativeLocomotionAudit : Node3D
         finally { scene.QueueFree(); await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame); }
     }
 
-    private async Task Check(float height, bool ceiling, bool shouldClimb)
+    private async Task Check(float height, bool ceiling, bool shouldClimb,
+        float radius = .32f, float bodyHeight = 1.8f, float stride = .06f)
     {
         var scene = new Node3D(); AddChild(scene);
         void Box(Vector3 position, Vector3 size)
@@ -110,23 +113,28 @@ public partial class NativeLocomotionAudit : Node3D
         }
         Box(new(0, -.5f, -3), new(10, 1, 20));
         Box(new(0, height / 2, -5), new(4, height, 8));
-        if (ceiling) Box(new(0, 2.5f, -3), new(10, 1, 20));
-        var body = new CharacterBody3D { FloorSnapLength = .32f, Position = new(0, .1f, 0) };
-        body.AddChild(new CollisionShape3D { Position = new(0, .9f, 0), Shape = new CapsuleShape3D { Height = 1.8f, Radius = .32f } });
+        if (ceiling) Box(new(0, bodyHeight + .7f, -3), new(10, 1, 20));
+        var body = new CharacterBody3D { FloorSnapLength = radius, Position = new(0, .1f, 0) };
+        body.AddChild(new CollisionShape3D { Position = new(0, bodyHeight / 2, 0), Shape = new CapsuleShape3D { Height = bodyHeight, Radius = radius } });
         scene.AddChild(body);
         try
         {
             if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f)) throw new InvalidOperationException("Airborne controller climbed a step.");
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            body.Position = new(0, 1, -.7f);
+            if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f))
+                throw new InvalidOperationException("Unsupported descending capsule climbed a step.");
+            body.Position = new(0, .1f, 0);
             var steps = 0;
-            for (var frame = 0; frame < 90; frame++)
+            for (var frame = 0; frame < (int)Math.Ceiling(5.4f / stride); frame++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-                body.Velocity = new(0, -.2f, -3.6f);
-                if (NativeCharacterStep.TryStep(body, new(0, 0, -.06f), .4f))
+                body.Velocity = new(0, -.2f, -stride * 60);
+                if (NativeCharacterStep.TryStep(body, new(0, 0, -stride), .4f))
                 { ++steps; body.Velocity = Vector3.Down * .01f; }
                 body.MoveAndSlide();
             }
-            GD.Print($"OPENNV_NATIVE_LOCOMOTION_CASE height={height} ceiling={ceiling} steps={steps} position={body.Position}");
+            GD.Print($"OPENNV_NATIVE_LOCOMOTION_CASE height={height} ceiling={ceiling} radius={radius} bodyHeight={bodyHeight} stride={stride} steps={steps} position={body.Position}");
             if (shouldClimb ? steps == 0 || body.Position.Z > -3 || body.Position.Y < height - .02f : steps != 0 || body.Position.Z < -.9f)
                 throw new InvalidOperationException("Capsule step/obstruction traversal differs from the synthetic collision scene.");
         }

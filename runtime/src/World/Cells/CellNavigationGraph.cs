@@ -132,18 +132,21 @@ internal sealed partial class CellNavigationGraph
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor travel.");
-        return _navmeshes
-            .Select(value =>
-            {
-                var nearest = value.NearestTriangle(point);
-                return new NearestNodeResult(
-                    new NavigationNode(value, nearest.Index),
-                    nearest.Point,
-                    nearest.DistanceSquared);
-            })
-            .OrderBy(value => value.DistanceSquared)
-            .ThenBy(value => value.Node.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
-            .First();
+        NearestNodeResult? best = null;
+        foreach (var candidate in _navmeshes.Select(mesh => (Mesh: mesh, Distance: mesh.BoundsDistanceSquared(point)))
+                     .OrderBy(value => value.Distance).ThenBy(value => value.Mesh.FormId, StringComparer.OrdinalIgnoreCase))
+        {
+            // Source mesh bounds are a lower distance bound, not a replacement
+            // for triangle projection. Keep equal-distance candidates so the
+            // existing FormID tie order remains deterministic.
+            if (best is not null && candidate.Distance > best.DistanceSquared) break;
+            var nearest = candidate.Mesh.NearestTriangle(point);
+            if (best is null || nearest.DistanceSquared < best.DistanceSquared ||
+                nearest.DistanceSquared == best.DistanceSquared &&
+                StringComparer.OrdinalIgnoreCase.Compare(candidate.Mesh.FormId, best.Node.NavMesh.FormId) < 0)
+                best = new(new(candidate.Mesh, nearest.Index), nearest.Point, nearest.DistanceSquared);
+        }
+        return best!;
     }
 
     private IReadOnlyList<NavigationNode> FindTrianglePath(
@@ -303,6 +306,20 @@ internal sealed partial class CellNavigationGraph
             Vertices = vertices;
             Triangles = triangles;
             ExternalConnections = externalConnections;
+            _minimum = _maximum = vertices[0];
+            foreach (var vertex in vertices)
+            {
+                _minimum = new(Math.Min(_minimum.X, vertex.X), Math.Min(_minimum.Y, vertex.Y), Math.Min(_minimum.Z, vertex.Z));
+                _maximum = new(Math.Max(_maximum.X, vertex.X), Math.Max(_maximum.Y, vertex.Y), Math.Max(_maximum.Z, vertex.Z));
+            }
+        }
+
+        private readonly Vector3 _minimum, _maximum;
+        internal float BoundsDistanceSquared(Vector3 point)
+        {
+            var nearest = new Vector3(Math.Clamp(point.X, _minimum.X, _maximum.X),
+                Math.Clamp(point.Y, _minimum.Y, _maximum.Y), Math.Clamp(point.Z, _minimum.Z, _maximum.Z));
+            return point.DistanceSquaredTo(nearest);
         }
 
         internal string FormId { get; }

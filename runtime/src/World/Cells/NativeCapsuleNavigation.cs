@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Godot;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -7,6 +8,33 @@ namespace OpenNV.Runtime.World.Cells;
 // part of a node identity, so a bridge cannot join the floor beneath it.
 internal static class NativeCapsuleNavigation
 {
+    private static ulong _workFrame;
+    private static double _workMilliseconds;
+
+    // All runtime actor searches share this physics-thread budget. Queries
+    // stay with their native owner and yield between node expansions; source
+    // reads can use content workers, but physics is not safe worker-pool work.
+    internal static bool Advance(IEnumerator<IReadOnlyList<Vector3>?> search, out IReadOnlyList<Vector3>? result)
+    {
+        var frame = Engine.GetPhysicsFrames();
+        if (_workFrame != frame) { _workFrame = frame; _workMilliseconds = 0; }
+        result = null;
+        if (_workMilliseconds >= 2) return false;
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            for (var nodes = 0; nodes < 16 && _workMilliseconds + Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2; nodes++)
+            {
+                if (!search.MoveNext()) throw new InvalidOperationException("Capsule search ended without a route.");
+                if (search.Current is not { } path) continue;
+                result = path;
+                return true;
+            }
+            return false;
+        }
+        finally { _workMilliseconds += Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
+    }
+
     internal static (Vector3 Target, int Resume) CorridorPrefix(Vector3 start, IReadOnlyList<Vector3> path, float length)
     {
         if (path.Count == 0 || !float.IsFinite(length) || length <= 0)
@@ -23,6 +51,14 @@ internal static class NativeCapsuleNavigation
     }
 
     internal static IReadOnlyList<Vector3> Find(CharacterBody3D body, Vector3 start, Vector3 target,
+        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200)
+    {
+        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes))
+            if (result is not null) return result;
+        throw new InvalidOperationException("Capsule search ended without a route.");
+    }
+
+    internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200)
     {
         if (!start.IsFinite() || !target.IsFinite() || stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0)
@@ -79,7 +115,8 @@ internal static class NativeCapsuleNavigation
                 var path = new List<Vector3> { goal };
                 while (current != first) { path.Add(positions[current]); current = parents[current]; }
                 path.Reverse();
-                return path;
+                yield return path;
+                yield break;
             }
             for (var z = -1; z <= 1; z++)
                 for (var x = -1; x <= 1; x++)
@@ -94,6 +131,7 @@ internal static class NativeCapsuleNavigation
                     costs[key] = cost; positions[key] = next; parents[key] = current;
                     open.Enqueue(key, cost + Flat(next, target) + Math.Abs(next.Y - target.Y));
                 }
+            yield return null;
         }
         throw new InvalidOperationException($"No supported capsule route within {closed.Count} native collision nodes; nearest target distance={nearest:F3}m.");
     }

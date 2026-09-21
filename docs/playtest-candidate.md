@@ -45,8 +45,9 @@ completed functionality in promotional material.
 The ordinary flat bot reached Primm and entered Nash Residence. Fresh flat and
 simulator runs repaired ED-E with collected parts, recruited him, exited together,
 let him kill an outdoor hostile, and looted that corpse. Follow resumes after
-combat. Repaired flying actors can initially sit too high above a raised repair
-target. Enhanced Sensors acquisition is saved, but its detection effect and
+combat. Fresh checks also cross the curb during a second hostile encounter.
+Mobile actor placement now uses the authored navigation floor; ordinary repair
+in both modes keeps ED-E off the counter. Enhanced Sensors acquisition is saved, but its detection effect and
 the NPC radio remain unbound. Muzzle-light flicker and some impact particles are
 missing. Ordinary post-damage Stimpak use now passes in both modes. Player melee,
 VR crafting and an uninterrupted paired route still need gameplay proof.
@@ -56,6 +57,9 @@ uses at most four workers. The tested safe renderer reaches 60 FPS flat and
 45 FPS in Elliott Tate's simulator at one exterior checkpoint; cell-crossing
 stalls remain. Separate rendering reached about 83 FPS in an intermediate XR
 build but exposed a Godot shutdown error, so the safe mode remains the default.
+Native actor route searches now share a two-millisecond physics-frame budget;
+one node expansion can overrun it. A selected route request fell from earlier
+52–142 ms samples to 2.71 ms after source-projection and search changes.
 These are selected Windows measurements, not headset or cross-platform acceptance.
 
 The user's flat and physical headset playtests are required before considering

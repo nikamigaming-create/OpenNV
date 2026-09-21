@@ -21,7 +21,7 @@ internal sealed partial class RuntimeNativeActorCombat
     internal void StopPackageMotion()
     {
         PackageOwnsPose = false;
-        if (!OwnsPose && _mover is not null) _mover.Velocity = Vector3.Zero;
+        if (!OwnsPose && _mover is not null) _mover.Velocity = Vector3.Up * _mover.Velocity.Y;
     }
 
     internal void RestorePackageMotion()
@@ -53,6 +53,8 @@ internal sealed partial class RuntimeNativeActorCombat
             _packageHashes.Add(package.FormKey, hash = Convert.ToHexString(SHA256.HashData(package.ReadData())));
         var offset = target - _actor.GlobalPosition;
         var moving = new Vector2(offset.X, offset.Z).Length() > distance;
+        var destination = moving ? PursuitTarget(target, delta, distance) : null;
+        moving &= destination.HasValue;
         var clip = moving ? running ? _packageRun! : _packageWalk! : _packageIdle;
         var retained = _state.PackageMotion;
         var same = retained?.Package == package.FormKey && retained.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase);
@@ -62,7 +64,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var seconds = same ? retained!.Seconds : 0;
         var includeStart = !same || retained!.StartPending;
         var next = seconds + delta;
-        if (moving) TurnToward(PursuitTarget(target, delta), delta);
+        if (destination is { } waypoint) TurnToward(waypoint, delta);
         Activity.SetMovement(running && moving, sneaking: false);
         MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta);
         foreach (var key in clip.Events.Crossed(seconds, next, includeStart)) _packageSounds!.Dispatch(key);

@@ -7,6 +7,7 @@ internal static class NativeNavigationContracts
 {
     internal static void Run()
     {
+        CheckProjectionBounds();
         var prefix = NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero,
             [new(0, 0, 6), new(2, 0, 6), new(2, 4, 0)], 8);
         if (prefix.Target != new Vector3(2, 0, 6) || prefix.Resume != 2)
@@ -100,5 +101,43 @@ internal static class NativeNavigationContracts
             FalloutExteriorStreamTarget.Predict(-1, -1, -1000, 1000, units) != (-2, 0))
             throw new InvalidOperationException("Exterior demand lost early loading, negative-grid ownership or bounded lookahead.");
         Console.WriteLine("OPENNV_WORLD_NAVIGATION_CONTRACT_PASS sourceEdgeFlags=true distantProjection=true boundedPrefetch=true");
+    }
+
+    private static void CheckProjectionBounds()
+    {
+        var meshes = Enumerable.Range(0, 32).Select(index =>
+        {
+            var x = index % 4 * 100f - 200;
+            var y = index / 4 % 4 * 100f - 200;
+            var z = index < 16 ? -10f : 10f;
+            return new
+            {
+                formId = $"mesh-{index:D3}",
+                cellFormId = "cell",
+                version = 11,
+                verticesGameUnits = new float[][] { [x, y, z], [x + 100, y, z], [x, y + 100, z] },
+                triangles = new[] { new { vertexIndices = new[] { 0, 1, 2 }, adjacentTriangles = new[] { -1, -1, -1 }, flags = 0 } },
+                externalConnections = Array.Empty<object>()
+            };
+        }).ToArray();
+        CellNavigationGraph Graph(object[] values)
+        {
+            using var document = JsonDocument.Parse(JsonSerializer.Serialize(new { schema = "opennv-owned-cell-navigation/v1", navmeshes = values }));
+            return CellNavigationGraph.Load(document.RootElement, new HashSet<string> { "cell" });
+        }
+        var graph = Graph(meshes.Cast<object>().Reverse().ToArray());
+        var individual = meshes.Select(mesh => (mesh.formId, Graph: Graph([mesh]))).ToArray();
+        var random = new Random(1701);
+        for (var index = 0; index < 400; index++)
+        {
+            var extent = index < 200 ? 300f : 200000f;
+            var point = new Vector3((random.NextSingle() * 2 - 1) * extent,
+                (random.NextSingle() * 2 - 1) * extent, index % 3 == 0 ? 0 : (random.NextSingle() * 2 - 1) * 100);
+            var expected = individual.Select(value => (value.formId, Point: value.Graph.FindNearestPoint(point)))
+                .OrderBy(value => point.DistanceSquaredTo(value.Point)).ThenBy(value => value.formId, StringComparer.OrdinalIgnoreCase).First().Point;
+            if (graph.FindNearestPoint(point) != expected)
+                throw new InvalidOperationException("Bounded projection changed exhaustive triangle distance or deterministic floor ties.");
+        }
+        Console.WriteLine("OPENNV_NAVIGATION_PROJECTION_PASS exhaustiveAgreement=400 stackedFloors=true distantQueries=true formIdTies=true");
     }
 }

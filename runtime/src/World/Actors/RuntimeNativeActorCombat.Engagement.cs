@@ -200,17 +200,25 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (offset.IsZeroApprox()) offset = _actor.GlobalBasis.Z;
         var target = _actor.GlobalPosition + offset.Normalized() * _detectRange;
-        var clip = Clip(_movementPath, true);
+        var destination = PursuitTarget(target, delta, 0);
+        var clip = destination.HasValue ? Clip(_movementPath, true) : _combatIdle!;
         if (state.Action != "flee") state = state.Transition("flee");
+        if (state.Animation is { } previous && !previous.Equals(clip.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!previous.Equals(_movementPath, StringComparison.OrdinalIgnoreCase) &&
+                !previous.Equals(_combatIdle!.Path, StringComparison.OrdinalIgnoreCase) ||
+                !state.AnimationHash!.Equals(Clip(previous, true).Hash, StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("Saved flee animation differs from the winning source.");
+            state = state.Transition("flee");
+        }
         if (state.Animation is not null && (!state.Animation.Equals(clip.Path, StringComparison.OrdinalIgnoreCase) ||
             !state.AnimationHash!.Equals(clip.Hash, StringComparison.OrdinalIgnoreCase)))
             throw new NotSupportedException("Saved flee animation differs from the winning source.");
         state = state with { Animation = clip.Path, AnimationHash = clip.Hash };
         var next = state.Seconds + delta;
-        var destination = PursuitTarget(target, delta);
-        TurnToward(destination, delta);
-        Activity.SetMovement(running: true, sneaking: false);
-        MoveActor(clip.RootDisplacement(state.Seconds, next), delta);
+        if (destination is { } waypoint) TurnToward(waypoint, delta);
+        Activity.SetMovement(running: destination.HasValue, sneaking: false);
+        MoveActor(destination.HasValue ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta);
         foreach (var key in clip.Events.Crossed(state.Seconds, next, state.StartPending))
             _enemySounds!.Dispatch(key);
         PublishCombatPose(clip, clip.Time(next), next);
@@ -228,6 +236,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
+        _routeSearch?.Dispose(); _routeSearch = null;
         // A door can materialize the same reference in its destination before
         // the previous presentation leaves the tree. Only the current binding
         // may capture a pose or release the shared save callback.

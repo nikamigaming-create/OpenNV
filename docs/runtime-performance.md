@@ -39,6 +39,24 @@ off. Moving gameplay must be measured separately from loading and stationary
 views. Whole-object uploads still can exceed the nominal three-millisecond
 publication budget; bounded CPU preparation does not solve that stall by itself.
 
+Actor navigation retains exact source triangle projection but first orders mesh
+bounds by their minimum possible distance. Queries stop when remaining bounds
+cannot beat the nearest triangle, including deterministic equal-distance ties.
+The synthetic selection check agrees with exhaustive per-mesh projection for
+400 near/distant queries over stacked floors. One owned world graph contains
+4,036 admitted meshes and 589,546 triangles; 40 warm repeated queries on the
+selected Primm route measured median 1.81 ms and p95 2.00 ms. Unbound source NAVM
+records remain diagnostics; the counts are not world-navigation acceptance.
+
+Native actor capsule searches yield between node expansions under one shared
+two-millisecond physics-thread budget; each search admits at most 512 nodes.
+The budget can overrun by an expansion, and source graph preparation/projection
+is measured separately. Source reads use content workers; native physics queries
+remain on their owning thread. A selected simulator route request measured
+2.71 ms total, 1.63 ms for the source corridor and a 1.08 ms largest native slice.
+Earlier unbounded requests in this encounter measured 52-142 ms. Other actors,
+large custom meshes and moving-world contention still need profiling.
+
 Windows is the measured platform. Synthetic budget tests cover small, large and
 memory-constrained process limits. Physical-headset timing, other operating
 systems, integrated GPUs and constrained machines remain unverified.
@@ -49,7 +67,8 @@ September 20 measurements on an i7-14700F / RTX 4070 SUPER / 32-GiB Windows host
 | --- | ---: | ---: |
 | Flat stationary baseline, prior runtime | 15 | 57.93 / 80.61 ms |
 | Same flat checkpoint, current safe renderer | 60 | 16.67 / 17.60 ms |
-| Current OpenXR simulator, safe renderer | 45 | 22.21 / 28.23 ms |
+| Earlier OpenXR simulator sample, safe renderer | 45 | 22.21 / 28.23 ms |
+| After navigation changes, second encounter, safe renderer | 82 | 11.30 / 20.03 ms |
 | Intermediate OpenXR build, separate renderer | 83 | 11.21 / 20.08 ms |
 
 These samples keep recording/builds off. Other GPU applications were active;

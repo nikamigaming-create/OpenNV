@@ -78,11 +78,17 @@ internal sealed partial class RuntimeNativeActorCombat
         var distance = new Vector2(offset.X, offset.Z).Length();
         var reach = _attackRange + (Ranged ? 0 : _radius + TargetRadius(player));
         var visible = CanSeeTarget(player);
+        Vector3? destination = null;
         if (state.Action is "pursue" or "idle")
         {
             var direction = offset; direction.Y = 0;
             var facing = direction.IsZeroApprox() || (-_actor.GlobalBasis.Z).Normalized().Dot(direction.Normalized()) > .95f;
             var action = distance > reach || !visible ? "pursue" : facing ? "attack" : "idle";
+            if (action == "pursue")
+            {
+                destination = PursuitTarget(TargetPosition(player), delta, Ranged ? _radius * 2 + TargetRadius(player) : reach);
+                if (destination is null) action = "idle";
+            }
             if (action == "attack" && _enemyWeapon?.IsMeleeWeapon == true && !_enemyWeaponHandling!.CanUse(_enemyWeapon))
                 throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
             if (action != state.Action) state = state.Transition(action);
@@ -124,7 +130,7 @@ internal sealed partial class RuntimeNativeActorCombat
         // Inside weapon range is not arrival when the target is occluded.
         // Waiting to face a visible target uses the idle, never a running clip.
         var moving = state.Action == "pursue";
-        TurnToward(moving ? PursuitTarget(TargetPosition(player), delta) : TargetPosition(player), delta);
+        TurnToward(destination ?? TargetPosition(player), delta);
         Activity.SetMovement(running: moving, sneaking: false);
         MoveActor(moving ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta);
         foreach (var key in clip.Events.Crossed(state.Seconds, next, state.StartPending))
