@@ -147,4 +147,11 @@ internal sealed partial class NativeXrCanvas : Node3D
         _view.PushInput(press, true); _view.PushInput(release, true);
         _scrollDelay = .18; ++_scrollEvents;
     }
+
+    internal void Cancel()
+    {
+        using var press = new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true };
+        using var release = new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape };
+        _view.PushInput(press, true); _view.PushInput(release, true);
+    }
 }

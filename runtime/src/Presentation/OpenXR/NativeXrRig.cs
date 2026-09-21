@@ -31,6 +31,8 @@ internal sealed partial class NativeXrRig : Node3D
     internal Func<Transform3D, bool, bool, Vector3?>? PointAtPipBoy { get; set; }
     internal Action<Transform3D>? PoseWristDevice { get; set; }
     internal Action<bool>? SetPipBoyHeld { get; set; }
+    internal Action? MenuRequested { get; set; }
+    internal void CancelModal() => _canvas.Cancel();
     internal bool WorldPointer { get; private set; }
     internal object State => new
     {
@@ -122,6 +124,7 @@ internal sealed partial class NativeXrRig : Node3D
         if (!right) _rightInputReady = false;
         else if (RightGrip.GetFloat(NativeXrActions.Fire) < _configuration.Xr.ActionThreshold && !RightGrip.IsButtonPressed(NativeXrActions.Reload) && !RightGrip.IsButtonPressed(NativeXrActions.Grab))
             _rightInputReady = true;
+        if (Edge("menu", LeftGrip.IsButtonPressed(NativeXrActions.Menu) || RightGrip.IsButtonPressed(NativeXrActions.Menu))) MenuRequested?.Invoke();
         var modal = Modal?.Invoke() ?? _player is null;
         var stick = left ? LeftGrip.GetVector2(NativeXrActions.Move) : Vector2.Zero;
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;

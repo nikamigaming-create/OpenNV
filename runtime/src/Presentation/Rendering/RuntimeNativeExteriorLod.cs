@@ -164,6 +164,13 @@ internal partial class RuntimeNativeExteriorLod : Node3D
 
     public override void _ExitTree() => _readCancellation.Cancel();
 
+    internal Task StopSourceReads()
+    {
+        SetProcess(false);
+        _readCancellation.Cancel();
+        return _read ?? Task.CompletedTask;
+    }
+
     private void Upload(Payload payload)
     {
         var root = new Node3D { Name = $"LOD_{payload.Block.Level}_{payload.Block.X}_{payload.Block.Y}", Visible = false };

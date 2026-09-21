@@ -45,7 +45,32 @@ try
     {
     }
 
-    Console.WriteLine("OPENNV_RUNTIME_SAVE_SLOT_PASS create=1 select=1 canonical-load=1 metadata=actual-save");
+    var rejected = 0;
+    if (catalog.ReadSlots(true, (_, _) => rejected++).Count != 2 || rejected != 1)
+        throw new InvalidOperationException("One rejected slot hid the current/valid saves.");
+    Write(4, "Later State");
+    var later = File.ReadAllBytes(canonical);
+    catalog.Activate(first.Id, preserveCurrent: true);
+    if (!catalog.ReadSlots(false, (_, _) => { }).Any(slot => File.ReadAllBytes(slot.Path).SequenceEqual(later)))
+        throw new InvalidOperationException("Loading lost the previous Continue save.");
+    var before = File.ReadAllBytes(canonical);
+    try { catalog.Activate("../authoritative"); throw new Exception("Unsafe slot ID accepted."); }
+    catch (InvalidOperationException) { }
+    if (!File.ReadAllBytes(canonical).SequenceEqual(before)) throw new Exception("Rejected load changed Continue.");
+
+    var native = new RuntimeSaveSlotCatalog(Path.Combine(directory, "native.json"), root =>
+    {
+        if (root.GetProperty("Schema").GetString() != "opennv-native-fnv-campaign-save/v18")
+            throw new InvalidDataException("Native schema differs.");
+    });
+    var nativeSlot = native.Create(() => File.WriteAllText(Path.Combine(directory, "native.json"),
+        JsonSerializer.Serialize(new { Schema = "opennv-native-fnv-campaign-save/v18", PlayerName = "Courier",
+            ActiveCell = new { OwnerPlugin = "Source.esm", ObjectId = 0x123u }, Vitals = new { HitPoints = 32.5 } })));
+    if (nativeSlot.CharacterName != "Courier" || nativeSlot.MapName != "Source.esm:000123" || nativeSlot.HitPoints != 33 ||
+        native.ReadSlots(true).Count != 2)
+        throw new InvalidOperationException("Native metadata/current save did not survive the catalog.");
+
+    Console.WriteLine("OPENNV_RUNTIME_SAVE_SLOT_PASS classic=true native=true select=true preserveContinue=true malformedIsolated=true metadata=actual-save");
 }
 finally
 {

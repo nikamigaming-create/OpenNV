@@ -110,8 +110,11 @@ public partial class RuntimeCoordinator
     {
         // The source owns creation autosaves. Later interactions update that
         // existing campaign save without manufacturing an earlier stage.
-        if (_nativeOpeningStageDriver is { HasCampaignSave: true } driver)
-            Callable.From(() => { driver.PersistWorldState(_nativeActiveCell!.Cell.FormKey); }).CallDeferred();
+        if (_nativeOpeningStageDriver is { HasCampaignSave: true } driver && driver.Vitals.HitPoints > 0)
+            Callable.From(() =>
+            {
+                if (driver.Vitals.HitPoints > 0) driver.PersistWorldState(_nativeActiveCell!.Cell.FormKey);
+            }).CallDeferred();
     }
 
     private void ActivateNativeObject(FalloutPlacedReference reference, Node3D? node, string type)

@@ -12,7 +12,11 @@ the same OpenNV save. The VR launcher does not change your system runtime.
 Godot and .NET are included; development tools are not needed to play.
 
 Use WASD/mouse and E to move/look/activate in flat mode; Tab opens the Pip-Boy.
-F5 saves in flat; the left controller's primary button saves in VR.
+Escape opens the pause menu in flat. In VR, use the left Menu button or click
+the right stick. Use **Save / Load** to create a new save, select an earlier
+save, or return to the main menu. F5 in flat and the left controller's primary
+button in VR create separate manual saves. Earlier slots remain available;
+loading another slot also preserves the previous Continue save.
 In VR use the thumbsticks for movement/turning and the controller pointer/trigger
 for menus and interaction. The wrist device shares inventory and gameplay state.
 Close the game before switching modes. Preserve a copy of your OpenNV save

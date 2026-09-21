@@ -47,6 +47,7 @@ internal partial class RuntimeNativeNpc
     private int CurrentAiPackage => _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
     {
         6 => 14, // Source PACK travel type -> script-visible Travel package.
+        13 => 37, // Fallout script-visible Patrol code (not the PACK type).
         _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
     };
 
@@ -89,6 +90,7 @@ internal partial class RuntimeNativeNpc
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
         currentProcedure = _sitting == 2 ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
+        patrol = _patrol is null ? null : new { source = _patrol.SourceSha256, points = _patrol.Points.Count, progress = _patrolProgress, status = _patrolStatus },
         dialoguePackage = _dialoguePackage is null ? null : new
         {
             source = _dialoguePackage,
@@ -178,7 +180,7 @@ internal partial class RuntimeNativeNpc
     private double PreparePackageIdle(double delta)
     {
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
-            _aiError is not null || _sitting is 2 or 4 || _travelActive) return delta;
+            _aiError is not null || _sitting is 2 or 4 || _travelActive || _patrol is not null && _patrolProgress?.Arrived != true) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
         try
         {
@@ -223,11 +225,13 @@ internal partial class RuntimeNativeNpc
                 _travelActive = false;
                 ClearFurniture();
                 _dialoguePackage = null; _dialoguePackageRequested = false;
+                _patrol = null; _patrolProgress = null;
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
+            if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             var fields = selected.ReadSubrecords().ToArray();
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;
@@ -262,6 +266,7 @@ internal partial class RuntimeNativeNpc
 
     private float EvaluateAiCondition(FalloutCondition condition) => condition.Function switch
     {
+        25 => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
         58 or 59 or 79 or 546 => _questState!.Evaluate(condition),
         63 => Activity.Attacked ? 1 : 0,
         69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,
@@ -272,6 +277,7 @@ internal partial class RuntimeNativeNpc
         77 => _aiRandom.NextBounded(100),
         91 => Activity.Alerted ? 1 : 0,
         101 => WeaponDrawn ? 1 : 0,
+        108 => Combat?.WeaponAnimationType ?? 0,
         110 => CurrentAiPackage,
         143 => CurrentAiProcedure,
         159 => _sitting,

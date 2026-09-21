@@ -342,6 +342,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     internal FalloutNativeCampaignState PersistWorldState(FalloutFormKey activeCell)
     {
+        if (Vitals.HitPoints == 0)
+            throw new InvalidOperationException("Cannot replace a playable save after player death.");
         if (!File.Exists(_savePath))
             throw new InvalidOperationException(
                 "Native world state has no prior save.");

@@ -30,11 +30,36 @@ unarmed NPC fallback, hit/death events, XP and full damage ordering remain open.
 
 ## Latest user playtest corrections
 
-The preserved Bison Steve save restores correctly. Continue/Load now display
-loading feedback and both resume the configured save; failures stay visible.
+Flat Escape and XR Menu/right-stick click open a shared pause menu. The save
+browser creates separate manual slots, selects earlier saves and preserves the
+previous Continue file before promotion. An in-process main-menu return and
+selected-save reload drain source workers and release the retired scene owners.
+Ordinary flat saves and Elliott Tate controller menu/save/load/title operations
+pass; the XR death screen was inspected in both final eyes.
+
+The user's current Bison Steve save contains zero health. Previously the runtime
+had no death/reload presentation and Aid correctly rejected that state. Zero
+health now pauses gameplay with a load menu; interaction and manual saves cannot
+overwrite a playable Continue file after death. The original file is preserved,
+with three earlier genuine checkpoints added privately as selectable slots.
+Fresh ordinary Stimpak use changes flat health 64.94 to 104.54 and simulator
+health 161.19 to 200, consuming one item in each mode. Physical acceptance and
+source death animation/camera parity remain open.
+
+The two enabled elevated Primm riflemen use authored linked Patrol routes.
+They now reach source markers, wait and proceed under native capsule collision.
+Marker arrival projects onto nearby source NAVM instead of comparing feet with
+an elevated editor marker. Route progress is retained in v18 saves; v17 and
+earlier supported saves remain readable. Source idles and weapon conditions use
+the same actors. See [patrol and session recovery](patrol-session-recovery.md).
+This does not certify the whole roller-coaster loop or all actor packages.
+
+Continue/Load display loading feedback; failures stay visible.
 Persistent encounter-zone levels unblock hotel actor admission, including cold
 restoration. The selected Primm exterior/12-interior audit passes admission/resource checks for 54 enabled
-actors; 48 source-disabled actors stay disabled. All 14 enabled hotel NPCs prepare,
+actors; 48 disabled actors in that saved state stay disabled, including previous
+combat deaths. This is not a count of initially disabled source placements.
+All 14 enabled hotel NPCs prepare,
 and six upstairs NPCs are present in an exported continuation. A missing female
 ARMO model now falls back to the source male model and its material fields.
 

@@ -230,7 +230,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                 idleDelta = PreparePackageIdle(idleDelta);
             }
             Skeleton.ResetMorphPublication();
-            if (_baseAnimation is not null && _animation is not null)
+            if (Combat?.PackageOwnsPose == true) _animation?.ApplySourceTime(_animationSeconds);
+            else if (_baseAnimation is not null && _animation is not null)
                 RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
             else if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
             else _animation?.ApplySourceTime(_animationSeconds);

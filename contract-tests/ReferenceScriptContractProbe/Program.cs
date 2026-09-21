@@ -239,6 +239,7 @@ ConversationContracts.Run();
 ActorSourceContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
+PatrolContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 PlayerSkillContracts.Run();
@@ -249,6 +250,7 @@ else if (args is [var companionRoot, "--companion-packages"]) OwnedCompanionPack
 else if (args is [var companionGameplayRoot, "--companion-gameplay"]) OwnedCompanionGameplayProbe.Run(companionGameplayRoot);
 else if (args is [var zoneRoot, "--encounter-zones", var zoneCell, var zoneSave, var zoneOutput])
     OwnedEncounterZoneProbe.Run(zoneRoot, zoneCell, zoneSave, zoneOutput);
+else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolProbe.Run(patrolRoot, patrolOutput);
 StageAndInventoryContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();
