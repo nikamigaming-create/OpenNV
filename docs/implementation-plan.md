@@ -14,7 +14,8 @@ The user selects the owned base/mod/dependency folders; runtime source
 resolution, settings and persistent state must work without a generated profile
 or developer command. The requested acceptance is full out-of-box behavior,
 including dependency semantics, ordinary flat/OpenXR input and cold save/load.
-Use `codex/jam-then-ttw` for this work. Do not label registration, a parser pass
+Use fresh `codex/` branches from current main for each published block. Do not
+label registration, a parser pass
 or the earlier sprint/time-scale adapters as mod support. The exact verified
 state and next owners are in [mod compatibility](mod-compatibility.md).
 Work in this task without subagents. Preserve the original campaign, release

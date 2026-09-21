@@ -207,9 +207,9 @@ internal sealed class FalloutQuestScripts
         var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
         var owners = _instances.Select(instance => instance.Quest.FormKey).ToHashSet();
         var newlyParsed = _instances.Where(instance => !states.ContainsKey(instance.Quest.FormKey)).ToArray();
-        if (states.Keys.Any(key => !owners.Contains(key)) || newlyParsed.Any(instance => snapshot.ParserVersion != 0 ||
-            !FalloutGameModeProgram.HasArgumentSeparator(FalloutDialogueTopic.ScriptText(
-                instance.Script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span))))
+        if (states.Keys.Any(key => !owners.Contains(key)) || newlyParsed.Any(instance =>
+            !FalloutGameModeProgram.WasRejectedByParser(FalloutDialogueTopic.ScriptText(
+                instance.Script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span), snapshot.ParserVersion)))
             throw new InvalidDataException("Saved quest script owners differ from the winning source graph.");
         foreach (var instance in _instances)
         {

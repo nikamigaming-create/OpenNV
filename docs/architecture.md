@@ -151,6 +151,12 @@ random state in saves. Godot supplies playback, input and completion callbacks.
 The original source program now advances the ordinary opening; a predicted
 stage edge cannot replace its execution.
 
+Numeric NVSE assignments and eval expressions use these same script state
+owners. Their logical operators retain numeric operand values independently
+of vanilla boolean expressions. Parser-version migration preserves admitted
+owners, locals and clocks; unknown functions and value families stay explicit.
+See [NVSE script runtime](nvse-script-runtime.md) for the implemented boundary.
+
 Destroyed references reject ordinary activation. MarkForDelete retains a
 tombstone and commits deletion across residency teardown/reload. Neither a new
 model nor an enable request can resurrect that state. Pip-Boy selection and
