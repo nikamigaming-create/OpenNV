@@ -6,6 +6,20 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
+if (args is ["--audit-mod-stack", var stackGame, var stackFile])
+{
+    ModStackContracts.Owned(stackGame, stackFile);
+    return;
+}
+if (args.Length >= 4 && args[0] == "--audit-mod-install")
+{
+    ModInstallationContracts.Owned(args[1], args[2], args[3], args[4..]);
+    return;
+}
+ModInstallationContracts.Run();
+ModContentContracts.Run();
+if (args is ["--mod-install-contracts"]) return;
+
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();

@@ -11,20 +11,12 @@ internal static class NativeOwnedMediaLoader
     private static readonly string Mp3Extension = string.Concat(
         ".mp", char.ConvertFromUtf32(AsciiDigitThree));
 
-    internal static ImageTexture LoadTexture(
+    internal static Texture2D LoadTexture(
         string logicalPath,
         string? preferredArchive = null)
     {
         var payload = Read(logicalPath, preferredArchive, out var source);
-        NativeOwnedMediaFormat.ValidateDds(payload);
-        var image = new Image();
-        var result = image.LoadDdsFromBuffer(payload);
-        if (result != Error.Ok || image.IsEmpty())
-            throw new InvalidDataException(
-                $"Godot rejected owned DDS data from {source}: {result}");
-        return NativeDdsTexture.Create(image) ??
-            throw new InvalidDataException(
-                $"Godot could not create a texture from owned DDS data: {source}");
+        return NativeDdsTexture.Load(payload, source);
     }
 
     internal static AudioStream LoadAudio(

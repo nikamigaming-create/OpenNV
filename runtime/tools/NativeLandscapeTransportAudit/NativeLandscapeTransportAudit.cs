@@ -40,7 +40,7 @@ public partial class NativeLandscapeTransportAudit : Node3D
             restored.Restore(snapshot); restored.EnterCell(grid.Scene.Cell, globals, entry);
             if (JsonSerializer.Serialize(snapshot) != JsonSerializer.Serialize(restored.Capture()))
                 throw new InvalidDataException("Cold exterior sky changed its weather or random continuation.");
-            var textureCache = new Dictionary<string, ImageTexture>(StringComparer.OrdinalIgnoreCase);
+            var textureCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
             var terrain = new List<RuntimeNativeLandscapeTransport>();
             foreach (var cell in grid.Cells)
             {

@@ -2356,15 +2356,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (string.IsNullOrEmpty(logicalPath))
                 return null;
             var (payload, source) = ReadTexture(logicalPath);
-            var image = new Image();
-            var error = image.LoadDdsFromBuffer(payload);
-            if (error != Error.Ok || image.IsEmpty())
-                throw new InvalidDataException(
-                    $"Godot could not decode native NIF DDS texture {source}: {error}");
-            if (normal && image.GetFormat() == Image.Format.L8)
-                throw new NotSupportedException(
-                    $"Native NIF normal texture has an unsupported single-channel format: {source}");
-            var texture = NativeDdsTexture.Create(image);
+            var texture = NativeDdsTexture.Load(payload, source, normal);
             texture.SetMeta("opennv_source_texture", source);
             texture.SetMeta("opennv_logical_texture", logicalPath);
             return texture;

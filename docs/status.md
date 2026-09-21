@@ -1,6 +1,6 @@
 # Product status
 
-Updated September 20, 2026 from current code and fresh tests. OpenNV is
+Updated September 21, 2026 from current code and fresh tests. OpenNV is
 experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
@@ -9,7 +9,7 @@ simulator presentation and physical acceptance are separate evidence levels.
 
 | System | Current implementation | Evidence and remaining work |
 | --- | --- | --- |
-| Launcher | Godot install/profile picker enters the existing coordinator in process. | Fresh Windows export and flat/simulator entry pass. XR is enabled experimentally; physical acceptance remains open. |
+| Launcher | Searchable Godot game/mod library, additive mod checkboxes, folder/dependency setup, automatic ordering and optional overrides enter the existing coordinator in process. | Native checks pass at 1280x900 and 1060x700. All ten target sources and combined JAM/TTW/NMC open through the shared source owner. Mod gameplay remains gated; scripts and extension behavior are incomplete. See [mod compatibility](mod-compatibility.md). |
 | Session/save recovery | Shared pause, save browser, separate manual slots, preserved previous Continue and in-process main-menu return. Zero health enters a reload menu and blocks post-death saves. | Flat save/healing and Elliott Tate controller pause/load/save/title/healing operations pass. XR death UI was inspected in both eyes. Physical buttons/readability and retail death presentation remain open; see [recovery](patrol-session-recovery.md). |
 | Opening/dialogue | Reference events, quest/INFO effects, conversations and topic paging use shared C# owners. | Fresh owned opening/farewell and native questionnaire checks pass (14 choices, 18 responses). Prior ordinary stage-200 and Victor runs exist; broader dialogue, original tag/trait UI and physical XR remain open. |
 | Inventory/Pip-Boy | Items, conditions, equipment, magazines, containers and flat/wrist views share state. | Fresh flat Stats/Items pixels and original illustrations were inspected. Inventory UI and cold-state component checks pass. Full item actions, quantity/theft behavior and physical readability remain incomplete. |

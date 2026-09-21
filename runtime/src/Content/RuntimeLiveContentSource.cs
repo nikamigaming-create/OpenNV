@@ -14,6 +14,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
     internal const string Fallout3Game = "fallout-3";
 
     private readonly IReadOnlyList<string> _archivePaths;
+    private readonly FalloutContentLayers _layers;
     private readonly ConcurrentDictionary<string, Lazy<FalloutBsaArchive>> _openArchives =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _archiveResources =
@@ -32,9 +33,11 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         string stackId,
         string edition,
         string engineBuild,
-        string contentVersion)
+        string contentVersion,
+        FalloutContentLayers layers)
     {
         ContentRoot = contentRoot;
+        _layers = layers;
         PluginSources = pluginSources;
         _archivePaths = archivePaths;
         Game = game;
@@ -77,6 +80,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
     internal IReadOnlyList<string> CleanRoomSemanticCapabilities { get; }
     internal string Campaign { get; }
     internal string ContentRoot { get; }
+    internal IReadOnlyList<string> ContentRoots => _layers.Roots;
     internal Task ArchiveWarmup { get; }
     internal IReadOnlyList<string> ArchivePaths => _archivePaths;
     // Opt-in diagnostics. Ordinary reads do not hash, copy or journal payloads.
@@ -111,16 +115,19 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         var extent = GetArchive(file).StoredExtent(identity[(split + 2)..]);
         return (file, extent.Offset, extent.Bytes, extent.Compressed);
     }
-    internal static void Configure(string selectedRoot, string expectedCampaign)
+    internal static void Configure(string selectedRoot, string expectedCampaign,
+        IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null)
     {
         Current?.Dispose();
         Current = null;
-        Current = Open(selectedRoot, expectedCampaign);
+        Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins);
     }
 
     // Donor libraries have their own lifetime. Opening another owned game must
     // not dispose the active campaign or change its texture resolution.
-    internal static RuntimeLiveContentSource Open(string selectedRoot, string expectedCampaign)
+    internal static RuntimeLiveContentSource Open(string selectedRoot, string expectedCampaign,
+        IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
+        string? archiveIniPath = null)
     {
         var installation = NativeGameInstallation.Detect(selectedRoot);
         if (installation.Game is not (NativeGame.FalloutNewVegas or NativeGame.Fallout3))
@@ -134,7 +141,13 @@ internal sealed class RuntimeLiveContentSource : IDisposable
             throw new InvalidDataException(
                 $"Selected installation is {campaign}, not requested campaign {expectedCampaign}.");
 
-        var pluginFiles = ResolvePluginOrder(installation.ContentRoot, installation.Game);
+        var layers = new FalloutContentLayers(new[] { installation.ContentRoot }.Concat((additionalContentRoots ?? [])
+            .Where(path => !Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)).Equals(
+                Path.TrimEndingDirectorySeparator(installation.ContentRoot), OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))));
+        var pluginFiles = activePlugins is null
+            ? ResolvePluginOrder(layers, installation.Game)
+            : ResolveSelectedPluginOrder(layers, installation.Game, activePlugins);
         var plugins = pluginFiles.Select(path =>
         {
             var info = new FileInfo(path);
@@ -148,15 +161,15 @@ internal sealed class RuntimeLiveContentSource : IDisposable
             throw new InvalidDataException("The selected Data folder contains no live ESM/ESP files.");
 
         var archives = ResolveArchiveOrder(
-            installation.ContentRoot,
+            layers,
             plugins,
-            installation.Game);
+            installation.Game, archiveIniPath);
         if (archives.Count == 0)
             throw new InvalidDataException("The selected Data folder contains no live BSA files.");
 
         var edition = campaign;
         var build = installation.Game == NativeGame.Fallout3 ? "1.7.0.4" : "1.4.0.525";
-        var identity = ComputeLiveIdentity(plugins, archives);
+        var identity = ComputeLiveIdentity(plugins, archives, layers.Roots.Count > 1 ? layers.Roots : []);
         return new RuntimeLiveContentSource(
             installation.ContentRoot,
             plugins,
@@ -166,7 +179,8 @@ internal sealed class RuntimeLiveContentSource : IDisposable
             identity,
             edition,
             build,
-            build);
+            build,
+            layers);
     }
 
     internal static void Clear()
@@ -227,13 +241,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         ArchiveWarmup.GetAwaiter().GetResult();
         var paths = _archiveWinners.Keys.Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var directory = Path.GetFullPath(Path.Combine(ContentRoot, prefix.Replace('\\', Path.DirectorySeparatorChar)));
-        var rootPrefix = Path.TrimEndingDirectorySeparator(ContentRoot) + Path.DirectorySeparatorChar;
-        if (!directory.StartsWith(rootPrefix, PathComparison))
-            throw new InvalidDataException("Owned resource directory escapes the installation.");
-        if (Directory.Exists(directory))
-            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
-                paths.Add(FalloutBsaArchive.CanonicalPath(Path.GetRelativePath(ContentRoot, file)));
+        paths.UnionWith(_layers.ResourcePathsUnder(logicalDirectory));
         return paths.Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -242,19 +250,12 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         string? preferredArchive,
         out string archivePath)
     {
-        if (!string.IsNullOrWhiteSpace(preferredArchive))
-        {
-            var preferredPath = CandidateArchives(preferredArchive).First();
-            if (GetArchive(preferredPath).Contains(canonical))
-            {
-                archivePath = preferredPath;
-                return true;
-            }
-        }
+        // A provenance hint must never bypass the winning resource in the active stack.
+        ValidateArchiveHint(preferredArchive);
         if (ArchiveWarmup.IsCompletedSuccessfully &&
             _archiveWinners.TryGetValue(canonical, out archivePath!))
             return true;
-        foreach (var candidate in CandidateArchives(preferredArchive))
+        foreach (var candidate in _archivePaths.Reverse())
         {
             if (GetArchive(candidate).Contains(canonical))
             {
@@ -268,20 +269,11 @@ internal sealed class RuntimeLiveContentSource : IDisposable
 
     private bool TryResolveLoose(string logicalPath, out string path)
     {
-        var relative = FalloutBsaArchive.CanonicalPath(logicalPath)
-            .Replace('/', Path.DirectorySeparatorChar);
-        var candidate = Path.GetFullPath(Path.Combine(ContentRoot, relative));
-        var prefix = Path.TrimEndingDirectorySeparator(ContentRoot) + Path.DirectorySeparatorChar;
-        if (!candidate.StartsWith(prefix, PathComparison) || !File.Exists(candidate))
-        {
-            path = string.Empty;
-            return false;
-        }
-        path = candidate;
-        return true;
+        path = _layers.ResolveFile(logicalPath) ?? string.Empty;
+        return path.Length != 0;
     }
 
-    private IEnumerable<string> CandidateArchives(string? preferredArchive)
+    private void ValidateArchiveHint(string? preferredArchive)
     {
         if (!string.IsNullOrWhiteSpace(preferredArchive))
         {
@@ -291,14 +283,6 @@ internal sealed class RuntimeLiveContentSource : IDisposable
                 Path.GetFileName(path), preferredArchive, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (preferred.Length != 1)
                 throw new InvalidDataException($"The requested live BSA is missing or ambiguous: {preferredArchive}");
-            yield return preferred[0];
-        }
-        for (var index = _archivePaths.Count - 1; index >= 0; --index)
-        {
-            if (string.Equals(Path.GetFileName(_archivePaths[index]), preferredArchive,
-                    StringComparison.OrdinalIgnoreCase))
-                continue;
-            yield return _archivePaths[index];
         }
     }
 
@@ -311,6 +295,9 @@ internal sealed class RuntimeLiveContentSource : IDisposable
 
     public void Dispose()
     {
+        // Warmup owns archive handles too; do not let it reopen them after disposal.
+        try { ArchiveWarmup.GetAwaiter().GetResult(); }
+        catch (Exception) { /* A failed warmup still has to release every opened archive. */ }
         _payloads.Clear();
         foreach (var archive in _openArchives.Values)
         {
@@ -320,8 +307,54 @@ internal sealed class RuntimeLiveContentSource : IDisposable
     }
 
     internal static IReadOnlyList<string> ResolvePluginOrder(string dataRoot, NativeGame game, string? activePluginsPath = null)
+        => ResolvePluginOrder(new FalloutContentLayers([dataRoot]), game, activePluginsPath);
+
+    internal static IReadOnlyList<string> ResolveSelectedPluginOrder(FalloutContentLayers layers, NativeGame game,
+        IReadOnlyList<string> selectedPlugins)
     {
-        var files = Directory.EnumerateFiles(dataRoot).ToArray();
+        var available = layers.TopLevelFiles();
+        var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in selectedPlugins)
+        {
+            var canonical = FalloutBsaArchive.CanonicalPath(name);
+            if (canonical.Contains('\\') || Path.GetExtension(canonical) is not (".esm" or ".esp"))
+                throw new InvalidDataException($"Selected plugin must be an ESM/ESP filename: {name}");
+            if (!requested.Add(name)) throw new InvalidDataException($"Selected plugin is repeated: {name}");
+        }
+        var result = new List<string>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Visit(string name)
+        {
+            if (visited.Contains(name)) return;
+            if (!visiting.Add(name)) throw new InvalidDataException($"Plugin masters contain a cycle through {name}.");
+            if (!available.TryGetValue(name, out var path))
+                throw new FileNotFoundException($"Selected plugin or transitive master is missing: {name}");
+            foreach (var master in FalloutPlugin.ReadMasterNames(path)) Visit(master);
+            visiting.Remove(name);
+            visited.Add(name);
+            result.Add(path);
+        }
+        Visit(game == NativeGame.Fallout3 ? "Fallout3.esm" : "FalloutNV.esm");
+        if (game == NativeGame.FalloutNewVegas)
+        {
+            var implicitPlugins = available.Keys.Where(name => Path.GetExtension(name).Equals(".nam", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(marker => new[] { Path.ChangeExtension(marker, ".esm"), Path.ChangeExtension(marker, ".esp") })
+                .Where(name => available.ContainsKey(name) && !requested.Contains(name))
+                .OrderBy(name => FalloutPlugin.ReadMasterFlag(available[name]) ? 0 : 1)
+                .ThenBy(name => File.GetLastWriteTimeUtc(available[name]))
+                .ThenByDescending(name => name, StringComparer.OrdinalIgnoreCase);
+            foreach (var name in implicitPlugins) Visit(name);
+        }
+        // Preserve explicit priority within each engine partition; dependencies always precede consumers.
+        foreach (var name in selectedPlugins.OrderBy(name => available.TryGetValue(name, out var path) &&
+                     FalloutPlugin.ReadMasterFlag(path) ? 0 : 1)) Visit(name);
+        return result;
+    }
+
+    private static IReadOnlyList<string> ResolvePluginOrder(FalloutContentLayers layers, NativeGame game, string? activePluginsPath = null)
+    {
+        var files = layers.TopLevelFiles().Values.ToArray();
         var available = files
             .Where(path => Path.GetExtension(path) is var extension &&
                 (extension.Equals(".esm", StringComparison.OrdinalIgnoreCase) ||
@@ -382,8 +415,15 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         string dataRoot,
         IReadOnlyList<FalloutPluginSource> plugins,
         NativeGame game, string? archiveIniPath = null)
+        => ResolveArchiveOrder(new FalloutContentLayers([dataRoot]), plugins, game, archiveIniPath);
+
+    internal static IReadOnlyList<string> ResolveArchiveOrder(
+        FalloutContentLayers layers,
+        IReadOnlyList<FalloutPluginSource> plugins,
+        NativeGame game, string? archiveIniPath = null)
     {
-        var available = Directory.EnumerateFiles(dataRoot)
+        var dataRoot = layers.Roots[0];
+        var available = layers.TopLevelFiles().Values
             .Where(path => Path.GetExtension(path).Equals(".bsa", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(path => Path.GetFileName(path)!, Path.GetFullPath, StringComparer.OrdinalIgnoreCase);
         var result = new List<string>();
@@ -425,7 +465,9 @@ internal sealed class RuntimeLiveContentSource : IDisposable
             foreach (var name in available.Keys.Where(name =>
                          Path.GetFileNameWithoutExtension(name).Equals(stem, StringComparison.OrdinalIgnoreCase) ||
                          Path.GetFileNameWithoutExtension(name).StartsWith(
-                             stem + " - ", StringComparison.OrdinalIgnoreCase))
+                             stem + " - ", StringComparison.OrdinalIgnoreCase) ||
+                         Path.GetFileNameWithoutExtension(name).StartsWith(
+                             stem + "-", StringComparison.OrdinalIgnoreCase))
                      .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                      .ToArray())
             {
@@ -440,9 +482,12 @@ internal sealed class RuntimeLiveContentSource : IDisposable
 
     private static string ComputeLiveIdentity(
         IReadOnlyList<FalloutPluginSource> plugins,
-        IReadOnlyList<string> archives)
+        IReadOnlyList<string> archives,
+        IReadOnlyList<string> layers)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (var layer in layers)
+            hash.AppendData(Encoding.UTF8.GetBytes($"L\0{layer}\n"));
         foreach (var plugin in plugins)
             hash.AppendData(Encoding.UTF8.GetBytes(
                 $"P\0{plugin.Name}\0{plugin.RegisteredBytes}\0{plugin.RegisteredMtimeUnixMilliseconds}\n"));
@@ -454,10 +499,6 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         }
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
-
-    private static StringComparison PathComparison => OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal;
 
     private readonly record struct LoosePayload(
         long Bytes,

@@ -97,11 +97,7 @@ internal static class NativeNpcMaterial
     {
         if (!source.TryRead(path, null, out var bytes, out var identity))
             throw new FileNotFoundException($"NPC texture is absent: {path}");
-        using var image = new Image();
-        var error = image.LoadDdsFromBuffer(bytes);
-        if (error != Error.Ok || image.IsEmpty())
-            throw new InvalidDataException($"NPC texture {identity} failed DDS decoding: {error}");
-        var texture = NativeDdsTexture.Create(image);
+        var texture = NativeDdsTexture.Load(bytes, identity);
         texture.SetMeta("opennv_source_texture", identity);
         return texture;
     }

@@ -12,6 +12,8 @@ internal sealed record NativeGameInstallation(NativeGame Game, string InstallRoo
 {
     private const string FalloutNewVegasMasterName = "FalloutNV" + ".esm";
 
+    internal bool IsTaleOfTwoWastelands => ContainsFile(ContentRoot, "TaleOfTwoWastelands.esm");
+
     internal static NativeGameInstallation Detect(string selectedRoot)
     {
         if (string.IsNullOrWhiteSpace(selectedRoot))
@@ -35,10 +37,12 @@ internal sealed record NativeGameInstallation(NativeGame Game, string InstallRoo
             return NativeGame.Fallout2;
         if (ContainsFile(installRoot, "critter.dat") && ContainsFile(installRoot, "master.dat"))
             return NativeGame.Fallout1;
-        if (ContainsFile(contentRoot, "Fallout3.esm"))
-            return NativeGame.Fallout3;
+        // TTW uses the New Vegas engine even though its output also contains
+        // Fallout3.esm. Do not route it through standalone Fallout 3 behavior.
         if (ContainsFile(contentRoot, FalloutNewVegasMasterName))
             return NativeGame.FalloutNewVegas;
+        if (ContainsFile(contentRoot, "Fallout3.esm"))
+            return NativeGame.Fallout3;
         throw new InvalidDataException(
             "The selected folder is not a recognized Fallout 1, Fallout 2, Fallout 3, or Fallout: New Vegas installation.");
     }

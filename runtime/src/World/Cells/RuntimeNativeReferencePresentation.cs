@@ -163,9 +163,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
         {
             var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned resources are absent.");
             if (!content.TryRead(logical, null, out var payload, out var source)) throw new FileNotFoundException($"Texture replacement {logical} is absent.");
-            using var decoded = new Image();
-            if (decoded.LoadDdsFromBuffer(payload) != Godot.Error.Ok || decoded.IsEmpty()) throw new InvalidDataException($"Texture replacement {logical} is invalid.");
-            texture = NativeDdsTexture.Create(decoded);
+            texture = NativeDdsTexture.Load(payload, source);
             texture.SetMeta("opennv_source_texture", source); texture.SetMeta("opennv_logical_texture", logical);
             _textures.Add(logical, texture);
         }

@@ -6,8 +6,8 @@ using OpenNV.Runtime.Presentation.Rendering;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record RuntimeLandscapeTextureResources(
-    ImageTexture Diffuse,
-    ImageTexture? Normal);
+    Texture2D Diffuse,
+    Texture2D? Normal);
 
 internal partial class RuntimeNativeLandscapeTransport : Node3D
 {
@@ -32,7 +32,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
     internal static RuntimeNativeLandscapeTransport Build(
         FalloutLandscapeTransport source,
         float gameUnitsToMeters,
-        IDictionary<string, ImageTexture>? decodedTextures = null)
+        IDictionary<string, Texture2D>? decodedTextures = null)
     {
         if (!float.IsFinite(gameUnitsToMeters) || gameUnitsToMeters <= 0.0f)
             throw new ArgumentOutOfRangeException(
@@ -42,8 +42,8 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             QuadrantSide * QuadrantSide)
             throw new NotSupportedException(
                 $"Native LAND {source.Landscape} has incomplete base-quadrant transport.");
-        decodedTextures ??= new Dictionary<string, ImageTexture>(StringComparer.OrdinalIgnoreCase);
-        ImageTexture Texture(string path)
+        decodedTextures ??= new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        Texture2D Texture(string path)
         {
             if (!decodedTextures.TryGetValue(path, out var texture))
                 decodedTextures.Add(path, texture = NativeOwnedMediaLoader.LoadTexture(path));

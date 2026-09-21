@@ -31,7 +31,8 @@ public partial class RuntimeCoordinator
                 ["presentation"] = request.Presentation,
                 ["save-path"] = request.SavePath,
             };
-            if (request.CampaignId is "newvegas" or "fallout3")
+            request.ModSelection?.WriteOptions(_options);
+            if (request.EngineCampaign is "fallout-new-vegas" or "fallout-3")
                 _options["opening-menu"] = "true";
             if (request.Presentation == "openxr")
             {
@@ -46,7 +47,7 @@ public partial class RuntimeCoordinator
             _nativeInstallation = NativeGameInstallation.Detect(request.DataRoot);
             RuntimeLaunchValidator.ValidateInstallation(_options, _nativeInstallation);
             if (_nativeInstallation.Game is NativeGame.Fallout3 or NativeGame.FalloutNewVegas)
-                RuntimeLiveContentSource.Configure(request.DataRoot, request.EngineCampaign);
+                ConfigureSelectedContent(request.DataRoot, request.EngineCampaign);
             else
                 RuntimeLiveContentSource.Clear();
 
@@ -67,5 +68,11 @@ public partial class RuntimeCoordinator
             launcher.ReportLaunchFailure(exception.Message);
             GD.PushError($"OPENNV_GODOT_IN_PROCESS_ROUTE_FAIL {exception}");
         }
+    }
+
+    private void ConfigureSelectedContent(string baseRoot, string campaign)
+    {
+        var mod = FalloutModStackSelection.ReadOptions(_options)?.Resolve(baseRoot);
+        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins);
     }
 }

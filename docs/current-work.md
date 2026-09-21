@@ -1,5 +1,47 @@
 # Current work
 
+## Active implementation
+
+The user requires all ten mod targets in [mod compatibility](mod-compatibility.md),
+starting with JAM then TTW, with full dependency behavior and ordinary flat/OpenXR
+gameplay from selected owned folders. The target includes settings, save/load and
+cold restart. Work is on `codex/jam-then-ttw`; registration or an individual
+feature is not completion. Work without subagents.
+
+All ten have local source packages: 26 archives are downloaded, hashed and
+extracted under `D:\OpenNV-Mods`; TTW uses the existing `D:\TTW\Installed`.
+The private inventory is `tmp/mod-packages.private.json`. Chrome downloads work
+when the download event is awaited alongside the download action.
+
+The launcher setup now covers all ten targets, nested extracted Data folders,
+ordered dependencies/patches, transitive masters, alternative EVE DLC
+variants and separate saves. Selected folders feed the ordinary live source
+owner and survive session restarts. Later loose folders and same-named archives
+win without writing to the game directory; active plugin archives also accept
+compact dash suffixes. Unrelated retail plugin selections stay out of mod profiles.
+The earlier profile casing and mixed TTW engine detection bugs are corrected.
+
+The user additionally required ImageGen artwork, substantially better UI/UX,
+additive mod selection and automatic load order with optional advanced tweaks.
+The native launcher now uses original generated Mojave art, a searchable library,
+independent mod checkboxes and a separate folder inspector. The shared C# stack
+planner applies authored masters and reviewed rules. Enabled selections, automatic
+mode and manual overrides survive restart, with saves isolated per effective stack.
+The combined JAM + TTW + NMC owned stack opens and all three remain enabled in
+the native launcher. No gameplay claim follows from these source checks.
+
+The full required repository gate passes, including Release/Debug builds,
+formatting/analyzers, contracts, launcher tests and native Godot loading. All ten
+owned stacks open, with no missing declared package files; private results are
+`tmp/mod-stack-results.private.json` and `tmp/*-layered-audit.private.json`.
+This is source loading, not working mod gameplay. JAM's 52 scripts still fail
+the generic parser; TTW has 67 parser failures among 1,263 entry-plugin scripts.
+Native launcher checks pass at 1280x900 and 1060x700. All 5,407 NMC winning
+textures decode. Two partial
+authored mip chains now upload without fabricating extra levels, with exact GPU
+byte readback and no resource leak. Pixel presentation remains unverified.
+Gameplay routes remain unavailable while implementation/acceptance is incomplete.
+
 ## Verified candidate
 
 OpenNV remains an experimental flat/OpenXR playtest. The active implementation
@@ -135,9 +177,14 @@ claimed from these checks.
 
 ## Next executable work
 
-Deliver the corrected candidate for the user's flat and physical-headset tests.
-The full runtime gate, owned encounter/companion audits and native locomotion
-checks identify the verified scope. Private evidence is
+Implement the actual JAM script, event, UI, animation and persistent-state owners
+against the complete dependency stack. The first missing shared capability is
+NVSE numeric assignments and expressions; arrays, strings, user functions and
+event callbacks also remain unbound. Preserve vanilla expression semantics and
+existing saves while adding each capability.
+Only after JAM's ordinary-input acceptance passes proceed to TTW's combined
+campaign, transitions and extension behavior. Keep all original campaign and
+physical-headset requirements in scope. Prior candidate evidence is
 `tmp/development-lab/load-encounter-*`, `primm-population-audit.json` and
 `load-encounters-{flat-02,xr-01}`. The release manifest identifies packaged source.
 Do not run competing gameplay/performance checks during the user's playtest.

@@ -265,6 +265,30 @@ internal sealed class FalloutPlugin : IDisposable
         return (BinaryPrimitives.ReadUInt32LittleEndian(header[RecordFlagsOffset..]) & 1) != 0;
     }
 
+    internal static IReadOnlyList<string> ReadMasterNames(string path)
+    {
+        var fullPath = System.IO.Path.GetFullPath(path);
+        using var stream = File.OpenRead(fullPath);
+        Span<byte> bytes = stackalloc byte[RecordHeaderSize];
+        stream.ReadExactly(bytes);
+        if (!bytes[..SignatureSize].SequenceEqual("TES4"u8))
+            throw new FalloutPluginFormatException($"Plugin must begin with TES4: {fullPath}");
+        var size = BinaryPrimitives.ReadUInt32LittleEndian(bytes[RecordSizeOffset..]);
+        var flags = BinaryPrimitives.ReadUInt32LittleEndian(bytes[RecordFlagsOffset..]);
+        if (size > int.MaxValue || size > stream.Length - RecordHeaderSize ||
+            (flags & FalloutPluginRecord.CompressedFlag) != 0)
+            throw new FalloutPluginFormatException($"Plugin TES4 header extent or compression is invalid: {fullPath}");
+        using var plugin = new FalloutPlugin(fullPath, System.IO.Path.GetFileName(fullPath), stream.Length, [], [], []);
+        var header = new FalloutPluginRecord(plugin, "TES4", 0, flags, 0, 0, RecordHeaderSize, (int)size, []);
+        var names = header.ReadSubrecords().Where(field => field.Signature == MasterSignature)
+            .Select(field => DecodeZeroTerminated(field.Data.Span, "plugin master")).ToArray();
+        if (names.Distinct(StringComparer.OrdinalIgnoreCase).Count() != names.Length ||
+            names.Any(name => string.IsNullOrWhiteSpace(name) || name.Contains('/') || name.Contains('\\') ||
+                name.Contains(':') || name is "." or ".." || name.Equals(plugin.Name, StringComparison.OrdinalIgnoreCase)))
+            throw new FalloutPluginFormatException($"Plugin master names are invalid or duplicated: {fullPath}");
+        return names;
+    }
+
     internal static FalloutPlugin Open(string path, string? canonicalName = null)
     {
         var fullPath = System.IO.Path.GetFullPath(path);

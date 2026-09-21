@@ -10,7 +10,7 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     private readonly List<ShaderMaterial> _atmosphere = [];
     private readonly List<ShaderMaterial> _stars = [];
     private readonly List<(MeshInstance3D Mesh, ShaderMaterial Material, int Layer)> _clouds = [];
-    private readonly Dictionary<string, ImageTexture> _textures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.OrdinalIgnoreCase);
     private FalloutFormKey? _weather;
     private FalloutPluginSubrecord[] _weatherFields = [];
     private readonly double[] _cloudOffsets = new double[4];
