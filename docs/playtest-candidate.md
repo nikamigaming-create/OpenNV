@@ -37,8 +37,9 @@ Simulator. Simulator evidence does not certify a physical headset. Some NPC
 packages and source scripts remain unsupported. Missing SpeedTree vegetation,
 streaming stalls, distant-material failures, and broader encounter coverage
 remain visible issues. Gecko ragdoll/sever component checks pass with Jolt;
-ordinary combat is not accepted as complete. Environmental wind forces are not yet owned,
-so physical props can settle and sleep. These limits must not be described as
+ordinary combat is not accepted as complete. Source wind flags now drive
+independent exterior gusts in both modes. A distant body still falls below terrain;
+cold dynamic-prop persistence remains unverified. These limits must not be described as
 completed functionality in promotional material.
 
 The ordinary flat bot reached Primm and entered Nash Residence. Fresh flat and
@@ -47,7 +48,15 @@ let him kill an outdoor hostile, and looted that corpse. Follow resumes after
 combat. Repaired flying actors can initially sit too high above a raised repair
 target. Enhanced Sensors acquisition is saved, but its detection effect and
 the NPC radio remain unbound. Muzzle-light flicker and some impact particles are
-missing. Player melee and post-damage healing still need paired gameplay proof.
+missing. Ordinary post-damage Stimpak use now passes in both modes. Player melee,
+VR crafting and an uninterrupted paired route still need gameplay proof.
+
+Background content preparation adapts to process CPU/memory availability and
+uses at most four workers. The tested safe renderer reaches 60 FPS flat and
+45 FPS in Elliott Tate's simulator at one exterior checkpoint; cell-crossing
+stalls remain. Separate rendering reached about 83 FPS in an intermediate XR
+build but exposed a Godot shutdown error, so the safe mode remains the default.
+These are selected Windows measurements, not headset or cross-platform acceptance.
 
 The user's flat and physical headset playtests are required before considering
 a golden release. Record the mode, location, action, visible result, and build

@@ -31,9 +31,7 @@ internal static class NativeNifEffectMaterial
         uniform int alpha_test_function;
         uniform float alpha_threshold;
         uniform vec2 source_fog_blend;
-        instance uniform vec3 source_fog_color : instance_index(1);
-        instance uniform vec3 source_fog_range : instance_index(2);
-        instance uniform float source_fog_game_units_per_meter : instance_index(3);
+        {{NativeNifMaterialEnvironment.ShaderSource}}
         varying float source_view_opacity;
         varying float source_fog_factor;
         {{RetailVertexFog.ShaderSource}}
@@ -50,7 +48,7 @@ internal static class NativeNifEffectMaterial
             UV = owned_texture_transform(UV);
             vec4 view_position = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
             source_fog_factor = owned_vertex_fog(view_position,
-                PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
+                PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());
             source_view_opacity = 1.0;
             if (falloff_enabled) {
                 vec3 view_normal = mat3(MODELVIEW_MATRIX) * NORMAL;
@@ -75,7 +73,7 @@ internal static class NativeNifEffectMaterial
             if (alpha_test_enabled && !accepted(alpha)) discard;
             vec3 material_color = owned_emissive_color(source_color_multiplier.rgb, source_emissive_multiple);
             vec3 color = sampled.rgb * COLOR.rgb * owned_no_light_color(material_color);
-            ALBEDO = owned_no_light_fog(color, source_fog_color, source_fog_factor, source_fog_blend);
+            ALBEDO = owned_no_light_fog(color, owned_environment_fog_color(), source_fog_factor, source_fog_blend);
             // A rendered-menu target is composed as display-encoded UI. Undo
             // Godot's output transfer here, as for the device's lit surfaces.
             if (source_store_encoded)

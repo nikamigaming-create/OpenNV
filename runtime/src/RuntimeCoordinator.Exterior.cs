@@ -17,6 +17,7 @@ public partial class RuntimeCoordinator
     private sealed record PreparedExteriorGrid(FalloutExteriorGridScene Grid, IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTransport> Landscapes,
         IReadOnlyDictionary<string, FalloutNifFile> Models);
     private Task<PreparedExteriorGrid>? _nativeGridRead;
+    private CancellationTokenSource? _nativeGridReadCancellation;
     private FalloutExteriorGridScene? _nativeGridPending;
     private Queue<(string Source, Action Upload)>? _nativeGridUploads;
     private readonly List<Node3D> _nativeGridStaged = [];
@@ -64,7 +65,7 @@ public partial class RuntimeCoordinator
         {
             foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
             _nativeGridStaged.Clear(); _nativeGridModels.Clear(); _nativeGridUploads = null; _nativeGridPending = null;
-            _nativeGridRead = null; _nativeStreamRoot = null; _nativeGridFailed = null; _nativeGridTarget = null;
+            CancelNativeGridRead(); _nativeStreamRoot = null; _nativeGridFailed = null; _nativeGridTarget = null;
             _nativeLandLastUse.Clear(); _nativeRecentModelSets.Clear();
         }
         if (_nativePlayer is not { } player || _nativeActiveCell?.Cell.Worldspace is not { } world ||
@@ -80,11 +81,12 @@ public partial class RuntimeCoordinator
             {
                 foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
                 _nativeGridStaged.Clear(); _nativeGridModels.Clear(); _nativeGridUploads = null; _nativeGridPending = null;
-                _nativeGridRead = null; _nativeGridTarget = null;
+                CancelNativeGridRead(); _nativeGridTarget = null;
             }
             if (_nativeGridRead is { IsCompleted: true } read)
             {
                 _nativeGridRead = null;
+                _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
                 StageNativeExteriorGrid(read.GetAwaiter().GetResult());
             }
             if (_nativeGridUploads is { } uploads)
@@ -115,45 +117,73 @@ public partial class RuntimeCoordinator
             var resident = _nativeWalkableGrid.ToHashSet();
             var residentModels = _nativeNifPrototypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var content = RuntimeLiveContentSource.Current!;
-            _nativeGridRead = Task.Run(() =>
+            _nativeGridReadCancellation = new();
+            var cancellation = _nativeGridReadCancellation.Token;
+            _nativeGridRead = Task.Run(async () =>
             {
-                var grid = ResolveExterior(world, [(target.Item1 + .5f) * 4096, (target.Item2 + .5f) * 4096, position.Y / units]);
-                var lands = grid.Cells.Where(cell => !resident.Contains(cell.Coordinates!.Value)).ToDictionary(cell => cell.FormKey,
-                    cell => FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, grid.PersistentCell));
+                var (grid, lands) = await FalloutContentWorkers.Run(() =>
+                {
+                    var resolved = ResolveExterior(world, [(target.Item1 + .5f) * 4096, (target.Item2 + .5f) * 4096, position.Y / units]);
+                    var landscapes = resolved.Cells.Where(cell => !resident.Contains(cell.Coordinates!.Value)).ToDictionary(cell => cell.FormKey,
+                        cell =>
+                        {
+                            cancellation.ThrowIfCancellationRequested();
+                            return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, resolved.PersistentCell);
+                        });
+                    foreach (var path in landscapes.Values.SelectMany(land => land.Textures.Values)
+                        .SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        _ = content.TryRead(path, null, out _, out _);
+                    }
+                    return (resolved, landscapes);
+                }, cancellation);
                 var models = new Dictionary<string, FalloutNifFile>(StringComparer.OrdinalIgnoreCase);
-                foreach (var path in lands.Values.SelectMany(land => land.Textures.Values)
-                    .SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
-                    _ = content.TryRead(path, null, out _, out _);
-                foreach (var path in grid.Scene.References.Select(reference => grid.Scene.BaseObjects[reference.Base])
+                var paths = grid.Scene.References.Select(reference => grid.Scene.BaseObjects[reference.Base])
                     .Where(model => model.Signature is not ("NPC_" or "CREA") && model.ModelPath is not null)
-                    .Select(model => model.ModelPath!).Distinct(StringComparer.OrdinalIgnoreCase).Where(path => !residentModels.Contains(path)))
+                    .Select(model => model.ModelPath!).Distinct(StringComparer.OrdinalIgnoreCase).Where(path => !residentModels.Contains(path)).ToArray();
+                var prepared = await Task.WhenAll(paths.Select(path => FalloutContentWorkers.Run(() =>
                 {
                     try
                     {
-                        if (!content.TryRead(path, null, out var bytes, out _)) continue;
+                        if (!content.TryRead(path, null, out var bytes, out _)) return (Path: path, Nif: (FalloutNifFile?)null);
                         var nif = FalloutNifFile.Read(bytes);
                         foreach (var block in nif.Blocks.Where(block => block.TypeName == "BSShaderTextureSet"))
                             foreach (var texture in ((FalloutNifShaderTextureSet)nif.ReadObject(block.Index)).Textures.Where(texture => texture.Length != 0))
                                 _ = content.TryRead(FalloutNifSurfaceInputs.TexturePath(texture), null, out _, out _);
-                        models.Add(path, nif);
+                        return (Path: path, Nif: (FalloutNifFile?)nif);
                     }
                     // Prefetch does not admit or substitute a model. The ordinary
                     // reference owner still reports any enabled source failure.
-                    catch (Exception error) when (error is IOException or NotSupportedException) { }
-                }
+                    catch (Exception error) when (error is IOException or NotSupportedException) { return (Path: path, Nif: (FalloutNifFile?)null); }
+                }, cancellation)));
+                foreach (var item in prepared)
+                    if (item.Nif is not null) models.Add(item.Path, item.Nif);
                 return new PreparedExteriorGrid(grid, lands, models);
             });
         }
         catch (Exception error)
         {
             _nativeGridError = error.Message; _nativeGridFailed = _nativeGridTarget ?? coordinates;
-            _nativeGridRead = null; _nativeGridUploads = null; _nativeGridPending = null;
+            CancelNativeGridRead(); _nativeGridUploads = null; _nativeGridPending = null;
             _nativeGridTarget = null;
             foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
             _nativeGridStaged.Clear(); _nativeGridModels.Clear();
             GD.PushError($"OPENNV_EXTERIOR_STREAM_FAIL cell={coordinates}: {error.Message}");
         }
     }
+
+    private void CancelNativeGridRead()
+    {
+        _nativeGridReadCancellation?.Cancel();
+        _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
+        if (_nativeGridRead is { } abandoned)
+            _ = abandoned.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        _nativeGridRead = null;
+    }
+
+    public override void _ExitTree() => CancelNativeGridRead();
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
     {
@@ -305,6 +335,21 @@ public partial class RuntimeCoordinator
         sky.ImageSpace = imageSpace;
         sky.Configure(_nativePluginStack!, _nativeSkyLighting!, () => _nativeGameTime!.Hour, _configuration.World.GameUnitsToMeters, this);
         root.AddChild(sky);
+        var wind = new RuntimeNativeWind { Name = "ExteriorWindOwner" };
+        FalloutFormKey? windWeather = null;
+        float windSpeed = 0;
+        wind.Configure(() =>
+        {
+            var weather = _nativeSkyLighting!.ActiveWeather.Form;
+            if (windWeather != weather)
+            {
+                windSpeed = FalloutWeatherMotion.Read(_nativePluginStack!.GetEffective(weather),
+                    FalloutGameSettingFloats.Read(_nativePluginStack, "fWeatherCloudSpeedMax")).WindSpeed;
+                windWeather = weather;
+            }
+            return (windSpeed, FalloutWindForce.InitialHeading);
+        }, _configuration.World.GameUnitsToMeters);
+        root.AddChild(wind);
     }
 
     private Color NativeAmbient(FalloutCellDefinition cell)

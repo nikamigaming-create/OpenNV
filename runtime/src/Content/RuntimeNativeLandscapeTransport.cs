@@ -121,15 +121,12 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             render_mode cull_back, ambient_light_disabled, specular_disabled;
             uniform sampler2D base_texture : filter_linear_mipmap_anisotropic, repeat_enable;
             uniform float tiling;
-            instance uniform vec3 source_ambient : instance_index(0);
-            instance uniform vec3 source_fog_color : instance_index(1);
-            instance uniform vec3 source_fog_range : instance_index(2);
-            instance uniform float source_fog_game_units_per_meter : instance_index(3);
             varying float source_fog_factor;
             """);
+        shader.AppendLine(NativeNifMaterialEnvironment.ShaderSource);
         shader.AppendLine(RetailVertexFog.ShaderSource);
         shader.AppendLine(NativeExteriorDetailBlend.NearDeclarations);
-        var vertex = new StringBuilder("void vertex() {\nsource_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);\n");
+        var vertex = new StringBuilder("void vertex() {\nsource_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());\n");
         vertex.AppendLine(NativeExteriorDetailBlend.NearVertex);
         for (var pack = 0; pack * 4 < weights.Length; pack++)
         {
@@ -164,7 +161,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             else fragment.AppendLine($"normal_sample += vec3(0.0,0.0,1.0) * {Weight(index + 1)};");
         }
         shader.Append(vertex).AppendLine("}").Append(fragment)
-            .AppendLine("ALBEDO = albedo * COLOR.rgb; EMISSION = ALBEDO * source_ambient; NORMAL_MAP = normalize(normal_sample) * 0.5 + 0.5; FOG = vec4(source_fog_color, source_fog_factor); }");
+            .AppendLine("ALBEDO = albedo * COLOR.rgb; EMISSION = ALBEDO * owned_environment_ambient(); NORMAL_MAP = normalize(normal_sample) * 0.5 + 0.5; FOG = vec4(owned_environment_fog_color(), source_fog_factor); }");
         RetailLighting.AppendDiffuseLightFunction(shader);
         var code = shader.ToString();
         if (!Shaders.TryGetValue(code, out var compiled)) Shaders.Add(code, compiled = new Shader { Code = code });

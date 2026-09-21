@@ -38,7 +38,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     private void BindAdded(Node node)
     {
         if (node is not GeometryInstance3D mesh || !_scene.IsAncestorOf(mesh) || mesh.GetViewport() != _scene.GetViewport() || !_meshes.Add(mesh)) return;
-        if (_lightingBound) NativeNifMaterialEnvironment.Bind(mesh, _ambient, _fog, _range, _units);
+        NativeNifMaterialEnvironment.BindExterior(mesh);
     }
 
     private void RemoveSurface(Node node) { if (node is GeometryInstance3D mesh) _meshes.Remove(mesh); }
@@ -121,7 +121,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         if (!_lightingBound || _ambient != nextAmbient || _fog != nextFog || _range != nextRange)
         {
             _ambient = nextAmbient; _fog = nextFog; _range = nextRange; _lightingBound = true;
-            foreach (var mesh in _meshes) NativeNifMaterialEnvironment.Bind(mesh, _ambient, _fog, _range, _units);
+            NativeNifMaterialEnvironment.PublishExterior(_ambient, _fog, _range, _units);
         }
         SetMeta("opennv_source_weather", weather.Form.ToString());
     }

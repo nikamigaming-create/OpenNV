@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueVoice.cs" Link="FalloutDialogueVoice.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
     <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />

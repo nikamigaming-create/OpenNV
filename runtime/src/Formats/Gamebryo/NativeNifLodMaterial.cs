@@ -72,10 +72,7 @@ internal static class NativeNifLodMaterial
             uniform vec4 detail_bounds;
             uniform vec2 lod_camera_xz;
             uniform vec2 morph_range = vec2(1e10, 1e11);
-            instance uniform vec3 source_ambient : instance_index(0);
-            instance uniform vec3 source_fog_color : instance_index(1);
-            instance uniform vec3 source_fog_range : instance_index(2);
-            instance uniform float source_fog_game_units_per_meter : instance_index(3);
+            {{NativeNifMaterialEnvironment.ShaderSource}}
             varying vec2 source_world_xz;
             varying float source_fog_factor;
             {{NativeNifPointLighting.ShaderSource}}
@@ -90,7 +87,7 @@ internal static class NativeNifLodMaterial
                 }
                 source_world_xz = world.xz;
                 source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
-                    PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
+                    PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());
             }
             void fragment() {
                 vec2 detail_uv = (source_world_xz - detail_bounds.xy) / max(detail_bounds.zw - detail_bounds.xy, vec2(0.001));
@@ -108,8 +105,8 @@ internal static class NativeNifLodMaterial
                         "NORMAL = normalize(TANGENT * decoded.x + BINORMAL * decoded.y + NORMAL * decoded.z);")}}
                 }
                 ALBEDO = base;
-                EMISSION = base * source_ambient;
-                FOG = vec4(source_fog_color, source_fog_factor);
+                EMISSION = base * owned_environment_ambient();
+                FOG = vec4(owned_environment_fog_color(), source_fog_factor);
             }
             """);
         RetailLighting.AppendDiffuseLightFunction(code);

@@ -57,10 +57,7 @@ internal static class NativeNifLightingMaterial
             uniform bool use_environment_mask;
             uniform bool environment_light_fade;
             uniform float environment_scale;
-            instance uniform vec3 source_ambient : instance_index(0);
-            instance uniform vec3 source_fog_color : instance_index(1);
-            instance uniform vec3 source_fog_range : instance_index(2);
-            instance uniform float source_fog_game_units_per_meter : instance_index(3);
+            {{NativeNifMaterialEnvironment.ShaderSource}}
             varying float source_fog_factor;
             varying float source_specular_mask;
             varying vec3 source_tangent_eye;
@@ -77,7 +74,7 @@ internal static class NativeNifLightingMaterial
                     source_tangent_eye = normalize(vec3(dot(TANGENT, local_eye), dot(BINORMAL, local_eye), dot(NORMAL, local_eye)));
                 }
                 source_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0),
-                    PROJECTION_MATRIX, source_fog_range, source_fog_game_units_per_meter);
+                    PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());
             }
             void fragment() {
                 {{NativeExteriorDetailBlend.NearFragment}}
@@ -113,11 +110,11 @@ internal static class NativeNifLightingMaterial
                 vec3 lit = base.rgb + (environment_light_fade ? reflection : vec3(0.0));
                 ALBEDO = lit;
                 vec3 glow = use_emissive_map ? texture(emissive_map, UV).rgb : vec3(1.0);
-                EMISSION = lit * (source_ambient + owned_point_irradiance(VERTEX, NORMAL, VIEW, false));
+                EMISSION = lit * (owned_environment_ambient() + owned_point_irradiance(VERTEX, NORMAL, VIEW, false));
                 if (!use_hair) EMISSION += glow * owned_emissive_color(emissive_color * emissive_multiple, emissive_multiple);
                 if (!environment_light_fade) EMISSION += reflection;
                 EMISSION = owned_output_color(EMISSION);
-                FOG = vec4(source_fog_color, source_fog_factor);
+                FOG = vec4(owned_environment_fog_color(), source_fog_factor);
                 {{(state.Blend == FalloutNifBlendMode.Opaque ? "" : state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= base.a;")}}
             }
             """);
