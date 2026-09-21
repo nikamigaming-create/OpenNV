@@ -37,13 +37,14 @@ internal sealed class ParityObservationRegistry
             throw new InvalidDataException("Parity discovery rows are invalid or duplicated.");
         lock (_gate)
         {
+            var prefix = scope + "/";
             foreach (var key in _observations.Keys
-                         .Where(key => key.StartsWith(scope + "/", StringComparison.Ordinal))
+                         .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
                          .ToArray())
                 _observations.Remove(key);
             foreach (var row in materialized)
             {
-                var key = $"{scope}/{row.Identity}";
+                var key = prefix + row.Identity;
                 _observations.Add(key, new Observation(row.Category, row.SourceState, null));
             }
             _snapshot = null;

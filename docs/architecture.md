@@ -235,6 +235,10 @@ independent of the active grid. Overlap retains event contacts, OnLoad state and
 actor animation owners. Collision availability guards the edge of the resident
 grid. Source LOD uses the owned quadtree, terrain morph data and a mask of actual
 detailed LAND. Available parent/finer coverage is retained during replacement.
+Reference events reuse the presentation owner's resident index; warm geometry
+cannot retain activation bindings. Source discovery and runtime observations
+still cover the full resident denominator, with canonical fields encoded into
+one sized buffer rather than temporary per-field arrays.
 
 Streamed NPC templates and equipment resolve from reference state on the scene
 thread. Bounded workers prepare source geometry, then detached native skeletons

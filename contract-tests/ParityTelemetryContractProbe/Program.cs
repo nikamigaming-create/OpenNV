@@ -2,6 +2,8 @@ using OpenNV.Runtime.Diagnostics.Parity;
 using System.Diagnostics;
 using System.Security.Cryptography;
 
+NativeReferenceObservationProbe.Run();
+
 var traceDirectory = Path.Combine(Path.GetTempPath(), "opennv-trace-contract-" + Guid.NewGuid().ToString("N"));
 try
 {

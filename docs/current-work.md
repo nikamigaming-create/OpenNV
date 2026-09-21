@@ -90,16 +90,24 @@ claimed from these checks.
 
 ## Next executable work
 
-The flat playtest is running from experimental release
-`0.1.0-experimental.20260920.5`. Do not interrupt the user's game or run competing
-gameplay/performance checks during that session. Local commit-phase timing work
-on `codex/exterior-commit-timing` compiles, but has not been exercised or published.
-It is gated by the live harness and separates world/weather, reference admission,
-terrain, events, observation, environment, LOD and eviction costs.
+The user requested immediate flat/VR playtesting. The flat playtest is running
+from experimental release `0.1.0-experimental.20260920.5`; both private launchers
+use that checked package and the existing shared save. Do not interrupt it or run
+competing gameplay/performance checks during the user's session.
 
-After the playtest ends, export that candidate and repeat the preserved ordinary
-walk with recording off. Use the phase results to select the next general owner
-to fix, then run owned checks and the full gate before publication. The remaining
+A fresh instrumented walk completed both cell transitions. Cell commits took
+49.05 and 60.12 ms; rebuilding interaction bindings took 10.75 and 15.94 ms.
+Native events now reuse the resident presentation index, and reference observation
+encoding avoids temporary field buffers. Canonical bytes, retained trigger contacts,
+OnLoad, owned warm reentry and late materialization pass component checks; the full
+local gate passes. These changes are not in the user's packaged release and their
+ordinary gameplay timing has not yet been measured. Private evidence is
+`tmp/development-lab/stream-commit-{before-01,events.log,owned.log,gate.log}`.
+
+After the playtest ends, export the updated source and repeat the preserved
+ordinary walk with recording off. Compare the live-harness-only commit phases,
+then check Elliott Tate simulator continuation and package the verified candidate.
+The remaining
 indivisible armor/material uploads and moving LOD also need work. Preserve the genuine
 copied checkpoints below.
 Complete the missing ordinary-input demonstrations and wider source-driven
