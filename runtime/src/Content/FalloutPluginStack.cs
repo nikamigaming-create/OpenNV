@@ -160,7 +160,7 @@ internal sealed class FalloutPluginStack : IDisposable
                 sources.Count,
                 new ParallelOptions
                 {
-                    MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 2, 6),
+                    MaxDegreeOfParallelism = FalloutContentWorkers.Concurrency,
                 },
                 index => opened[index] = FalloutPlugin.Open(
                     Path.GetFullPath(sources[index].AbsolutePath),

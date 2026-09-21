@@ -61,6 +61,8 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _EnterTree()
     {
+        _renderingMethod = RenderingServer.GetCurrentRenderingMethod();
+        _graphicsAdapter = RenderingServer.GetVideoAdapterName();
         foreach (var button in GetTree().Root.FindChildren("*", nameof(BaseButton), true, false).OfType<BaseButton>()) _controls.Add(button);
         TrackNode(GetTree().Root);
         foreach (var viewport in GetTree().Root.FindChildren("*", nameof(Viewport), true, false)) TrackNode(viewport);
@@ -340,6 +342,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             throw new IOException("Live-state publication exceeded its interval; one pending snapshot is retained.");
         CompleteStateWrite();
         var started = Stopwatch.GetTimestamp();
+        var renderTiming = SampleRenderTiming();
         var identity = _captureIdentity();
         var controls = _controls.Where(button => button.IsVisibleInTree() && !button.Disabled)
             .Select(button =>
@@ -374,6 +377,14 @@ internal sealed partial class RuntimeLiveHarness : Node
             performance = new
             {
                 jitOptimizationDisabled = JitOptimizationDisabled,
+                renderThreadModel = ProjectSettings.GetSetting("rendering/driver/threads/thread_model").AsInt32(),
+                contentWorkerLimit = FalloutContentWorkers.Concurrency,
+                availableProcessors = FalloutContentWorkers.AvailableProcessors,
+                availableMemoryBytes = FalloutContentWorkers.AvailableMemoryBytes,
+                platform = OS.GetName(),
+                architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+                renderingMethod = _renderingMethod,
+                graphicsAdapter = _graphicsAdapter,
                 framesPerSecond = Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeFps),
                 processMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeProcess),
                 physicsMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimePhysicsProcess),
@@ -383,13 +394,10 @@ internal sealed partial class RuntimeLiveHarness : Node
                 previousFileMilliseconds = _lastFileMilliseconds,
                 hostDrawIntervals = _frameIntervals.Capture(),
                 drawCalls = Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderTotalDrawCallsInFrame),
-                renderSetupCpuMilliseconds = RenderingServer.GetFrameSetupTimeCpu(),
-                viewports = _viewports.Select(viewport => new
-                {
-                    name = viewport.Name.ToString(),
-                    cpuMilliseconds = RenderingServer.ViewportGetMeasuredRenderTimeCpu(viewport.GetViewportRid()),
-                    gpuMilliseconds = RenderingServer.ViewportGetMeasuredRenderTimeGpu(viewport.GetViewportRid())
-                }).ToArray(),
+                renderSetupCpuMilliseconds = renderTiming?.SetupMilliseconds,
+                renderMeasurementAgeMilliseconds = renderTiming is null ? (double?)null : Stopwatch.GetElapsedTime(renderTiming.Timestamp).TotalMilliseconds,
+                renderMeasurementError = renderTiming?.Error,
+                viewports = renderTiming?.Viewports,
             },
             held = _held.Keys.Select(key => key.ToString()).ToArray(),
             controls,

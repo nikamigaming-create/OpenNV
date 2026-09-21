@@ -14,6 +14,8 @@ QuestScriptExecutionProbe.Run();
 ExteriorLodProbe.Run();
 LoadOrderContracts.Run();
 WeatherMotionProbe.Run();
+WindForceProbe.Run();
+ContentWorkerProbe.Run();
 
 if (args is ["--audit-weather-motion", var weatherRoot])
 {

@@ -65,6 +65,7 @@ internal static class NativeNifCollisionBuilder
         result.SetMeta("opennv_nif_collision_body", body.Block.Index);
         result.SetMeta("opennv_collision_havok_layer", body.Filter.Layer);
         result.SetMeta("opennv_nif_collision_mass", body.Mass);
+        result.SetMeta("opennv_nif_body_flags", body.BodyFlags);
         result.SetMeta("opennv_nif_collision_motion_system", body.MotionSystem);
         result.SetMeta("opennv_nif_collision_constraints", body.Constraints.Length);
         result.SetMeta("opennv_nif_collision_pinned", pinToWorld);

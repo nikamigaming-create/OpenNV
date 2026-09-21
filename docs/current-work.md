@@ -8,20 +8,41 @@ queries now select actor/player layers; dense scenery previously exhausted the
 128-contact query and held every shot. Dead/disabled allies no longer hold fire.
 The native source Fiend test passes with 160 world contacts and a blocked route.
 In an ordinary exported flat encounter the Fiend fires, reloads and damages the
-player; ED-E kills him. Pip-Boy Stimpak use consumes one and restores 26 to 65 HP.
-Fresh XR verification of these corrections is still required.
+player; ED-E kills him. Fresh Elliott Tate simulator gameplay also confirms the
+Fiend firing and ED-E's kill followed by Follow. Ordinary Pip-Boy Stimpak use
+consumes one in each mode: flat HP 26 to 65 and simulator saved HP 94 to 133.
 
 Cloud UV rates now include normalized weather wind and the winning
 fWeatherCloudSpeedMax setting. All 98 loaded WTHR records and synthetic calm,
 override and malformed-input tests pass. Fresh flat motion was inspected.
 Weather transitions and matched retail timing remain open.
 
-The source tumbleweed has a wind-responsive rigid-body flag, but environmental
-wind forces have no runtime owner yet. Implement and test that owner, including
-waking and residency changes in both modes. Moving LOD/loading remains blocking:
+The source wind-responsive rigid-body flag now drives a shared exterior wind
+owner. Selected owned native checks pass wake, independent gusts, frozen/interior
+exclusion, disabled stops and warm reentry. Ordinary flat/XR telemetry confirms
+active forces and changing poses. One distant body falls below terrain, and cold
+prop pose persistence remains open; see [environmental wind](environmental-wind.md).
+Moving LOD/loading and frame performance remain blocking:
 whole-object uploads exceed their nominal frame budget. Property-free distant
 meshes are flat water surfaces in the inspected blocks; their world-water
 material owner remains absent. They must not be described as missing LAND.
+
+The current performance work caches winning float/integer settings, publishes
+shared exterior shader constants, reuses HDR texture names and bounds background
+content preparation by process CPU/memory availability. This 28-thread/32-GiB
+Windows machine selects four workers. LOD uses a bounded upload queue; obsolete
+grid preparations cancel. Source scene/gameplay publication stays on its owner.
+Both D3D12 and Vulkan environment pixel checks pass. See
+[runtime performance](runtime-performance.md) for policy and measurements.
+
+The same stationary flat checkpoint improves from 15 FPS (p95 80.61 ms) to
+60 FPS (p95 17.60 ms). Current safe-mode XR measures 45 FPS (p95 about 28 ms).
+Separate rendering measured about 83 FPS in XR, but this Godot build emits a
+render-thread finalize error on exit; safe mode remains the release default.
+Cell-crossing flat gameplay exposed a 175.25 ms upload and 69.57 ms commit.
+These are selected, non-isolated Windows measurements, not performance acceptance.
+The full runtime gate and selected wind/weather audits pass; current private
+logs are `tmp/development-lab/wind-core-{runtime-gate,native,owned-weather}.log`.
 
 The full runtime gate, owned companion audit and native companion friendly-fire/
 empty-magazine checks pass after the combat correction. Private logs are
@@ -36,16 +57,18 @@ through its real door, let ED-E kill the source hostile outside, resume Follow
 and loot the corpse. These are selected gameplay results, not campaign or retail
 parity acceptance. Work in this task without subagents.
 
-The private two-minute comparison is
-`local/recordings/playtest-20260920/OpenNV-flat-vr-companion-showcase.mp4`.
+The private two-minute-fifteen comparison is
+`local/recordings/playtest-20260920/OpenNV-flat-vr-companion-showcase-updated.mp4`.
 It pairs dialogue, barter, Pip-Boy inventory, recruitment, companion combat,
-corpse looting and ED-E outside. It uses independent ordinary-input takes,
+corpse looting, post-combat healing and ED-E outside. It uses independent ordinary-input takes,
 normal playback speed, flat audio and only the simulator's left projection eye.
 Both final eyes were inspected separately. The edit manifest identifies every
 source and cut. The illustrated local document is `PLAYTEST-STATUS.md` beside it.
-That reel and the published experimental package predate the Fiend sight/spread
-and cloud-rate corrections above; the outdoor hostile can run in place in them.
-The reel does not demonstrate player melee, post-damage healing, VR crafting or
+Its outdoor combat chapter uses fresh corrected flat/XR takes through the kill.
+The healing chapter uses the verified post-damage takes; earlier working
+dialogue/inventory/recruitment/loot chapters remain, identified in the manifest.
+The full edit decodes successfully and its selected action frames were inspected.
+The reel does not demonstrate player melee, VR crafting or
 an uninterrupted Goodsprings-to-Primm journey. Keep those requirements open.
 
 ## Shared implementation and checks
@@ -98,10 +121,11 @@ unmeasured. Muzzle-light flicker and some impact particles/materials remain
 explicit visual divergences. Broader tactics, unarmed NPC fallback, hit/death
 scripts, XP and full damage ordering are open.
 
-Streaming retains measured upload/commit spikes. Moving LOD, missing draws,
-vegetation/alpha, environmental wind and all eligible actor spawns require further
+Streaming retains the upload/commit spikes measured above. Profile moving
+gameplay and distinguish CPU, GPU and streaming costs. Moving LOD, missing draws,
+vegetation/alpha, wind-body terrain residency and all eligible actor spawns require further
 work. Clouds and water-tower cutouts were viewed, but that does not prove exterior
-completion. The previous public package predates the companion changes; use the
+completion. Use the
 new package's `release-manifest.json` to identify its exact source commit.
 
 No retail assets, saves, captures or private executable analysis belong in Git

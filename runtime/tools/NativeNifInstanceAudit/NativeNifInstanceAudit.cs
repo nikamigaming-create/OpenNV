@@ -12,6 +12,12 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--environment-gpu"])
+            {
+                await ExerciseEnvironmentPixels();
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--particle-buffer"])
             {
                 ExerciseParticleBuffer();
@@ -45,6 +51,12 @@ public partial class NativeNifInstanceAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--rigid", var rigidRoot, var rigidModel])
             {
                 await ExerciseRigidBodyPhysics(rigidRoot, rigidModel);
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--wind", var windRoot, var windModel])
+            {
+                await ExerciseWind(windRoot, windModel);
                 GetTree().Quit();
                 return;
             }

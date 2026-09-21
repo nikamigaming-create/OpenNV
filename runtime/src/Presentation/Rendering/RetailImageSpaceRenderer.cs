@@ -321,6 +321,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private Rid _shader;
     private Rid _pipeline;
     private readonly Dictionary<(Rid Source, Rid Sampler, Rid Second, Rid SecondSampler, Rid Destination), Rid> _uniformSets = [];
+    private readonly Dictionary<string, StringName> _textureNames = new(StringComparer.Ordinal);
     private Rid _pointSampler;
     private Rid _linearSampler;
     private int _operational;
@@ -740,7 +741,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         Vector2I size,
         out bool created)
     {
-        var textureName = new StringName(name);
+        if (!_textureNames.TryGetValue(name, out var textureName))
+            _textureNames.Add(name, textureName = new StringName(name));
         created = !buffers.HasTexture(TextureContext, textureName);
         return buffers.CreateTexture(
             TextureContext,
@@ -774,6 +776,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
             using var second = SampledUniform(1, samplerOne, sourceOne);
             using var output = ImageUniform(2, destination);
             var uniforms = new Godot.Collections.Array<RDUniform> { first, second, output };
+            using var uniformsOwner = (Godot.Collections.Array)uniforms;
             uniformSet = UniformSetCacheRD.GetCache(_shader, 0, uniforms);
             if (_uniformSets.Count > 128)
                 foreach (var obsolete in _uniformSets.Where(pair => !_renderingDevice!.UniformSetIsValid(pair.Value)).Select(pair => pair.Key).ToArray())

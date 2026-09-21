@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -21,7 +21,8 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private readonly Dictionary<string, string> _errors = [];
     private IReadOnlyList<FalloutLodBlock> _selected = [];
     private Task? _read;
-    private ConcurrentQueue<ReadResult>? _uploads;
+    private ChannelReader<ReadResult>? _uploads;
+    private readonly CancellationTokenSource _readCancellation = new();
     private ImageTexture _mask = null!;
     private Vector4 _detailBounds;
     private Vector3 _lastSelection = new(float.PositiveInfinity, 0, 0);
@@ -42,6 +43,8 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         cacheBudgetBytes = CacheBudgetBytes,
         loading = _read is not null || _uploads is not null,
         pendingUploads = _uploads?.Count ?? 0,
+        preparationWorkers = FalloutContentWorkers.Concurrency,
+        preparedQueueLimit = FalloutContentWorkers.Concurrency * 2,
         errors = _errors.ToArray(),
         lastUploadMilliseconds = _lastUploadMilliseconds,
         maximumUploadMilliseconds = _maximumUploadMilliseconds
@@ -96,7 +99,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         {
             var started = Stopwatch.GetTimestamp();
             var changed = false;
-            while (uploads.TryDequeue(out var result))
+            while (uploads.TryRead(out var result))
             {
                 try
                 {
@@ -110,7 +113,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
                 if (_lastUploadMilliseconds >= 3) break;
             }
             if (changed) Commit();
-            if (uploads.IsEmpty && _read is null) _uploads = null;
+            if (uploads.Count == 0 && _read is null) _uploads = null;
         }
         _updateTime += (float)delta;
         if (_updateTime < .05f) return;
@@ -124,28 +127,42 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         if (missing.Count == 0) { Commit(); return; }
         // CPU reads/decompression stay off the render thread. Uploads retain
         // the preceding complete cover until the new selection is constructed.
-        var output = new ConcurrentQueue<ReadResult>();
-        _uploads = output;
-        _read = Task.Run(() =>
+        var output = Channel.CreateBounded<ReadResult>(new BoundedChannelOptions(FalloutContentWorkers.Concurrency * 2)
+        { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+        _uploads = output.Reader;
+        var cancellation = _readCancellation.Token;
+        _read = Task.Run(async () =>
         {
             FalloutNifFile Read(string path, out int size)
             {
                 if (!_source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
                 size = bytes.Length; return FalloutNifFile.Read(bytes);
             }
-            foreach (var block in missing)
+            try
             {
-                try
+                await Parallel.ForEachAsync(missing, new ParallelOptions
+                { MaxDegreeOfParallelism = FalloutContentWorkers.Concurrency, CancellationToken = cancellation }, async (block, token) =>
                 {
-                    var terrain = Read(block.Terrain, out var terrainBytes);
-                    var objectBytes = 0;
-                    var objects = block.Objects is { } path ? Read(path, out objectBytes) : null;
-                    output.Enqueue(new(block, new(block, terrain, objects, terrainBytes + objectBytes), null));
-                }
-                catch (Exception error) { output.Enqueue(new(block, null, error)); }
+                    var result = await FalloutContentWorkers.Run(() =>
+                    {
+                        try
+                        {
+                            var terrain = Read(block.Terrain, out var terrainBytes);
+                            var objectBytes = 0;
+                            var objects = block.Objects is { } path ? Read(path, out objectBytes) : null;
+                            return new ReadResult(block, new(block, terrain, objects, terrainBytes + objectBytes), null);
+                        }
+                        catch (Exception error) { return new ReadResult(block, null, error); }
+                    }, token);
+                    await output.Writer.WriteAsync(result, token);
+                });
             }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+            finally { output.Writer.TryComplete(); }
         });
     }
+
+    public override void _ExitTree() => _readCancellation.Cancel();
 
     private void Upload(Payload payload)
     {

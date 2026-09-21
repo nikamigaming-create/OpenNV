@@ -53,7 +53,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
                 _archivePaths,
                 new ParallelOptions
                 {
-                    MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 2, 8),
+                    MaxDegreeOfParallelism = FalloutContentWorkers.Concurrency,
                 },
                 path => _ = GetArchive(path));
             foreach (var archivePath in _archivePaths)

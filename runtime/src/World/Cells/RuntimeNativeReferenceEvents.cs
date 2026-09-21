@@ -259,8 +259,11 @@ internal partial class RuntimeNativeReferenceEvents : Node
         var tree = GetTree();
         foreach (var binding in _bindings.Values)
         {
+            var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
+                !_abilityActors.Contains(binding.Reference.FormKey);
+            if (!needsAbilities && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
-            if (binding.Signature is "NPC_" or "CREA" && binding.Node is not null && _world.IsEnabled(binding.Reference.FormKey) &&
+            if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
                 _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
             if (binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             var enabled = _world.IsEnabled(binding.Reference.FormKey);

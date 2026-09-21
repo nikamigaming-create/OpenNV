@@ -147,6 +147,7 @@ public partial class RuntimeCoordinator
             gameTimeUnbound = _nativeGameTimeUnbound,
             skyLighting = _nativeSkyLighting?.Unbound is null ? _nativeSkyLighting?.Capture() : null,
             skyLightingUnbound = _nativeSkyLighting?.Unbound,
+            wind = cellChildren?.OfType<RuntimeNativeWind>().SingleOrDefault()?.State,
             playerInventory = _nativeInventory.Items,
             ingestibles = _nativeOpeningStageDriver?.IngestibleState,
             gameplayHud = _nativeGameplayHud?.State,
