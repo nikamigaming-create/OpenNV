@@ -4,7 +4,11 @@ using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
-internal enum FalloutScriptArgumentKind { Number, Identifier, String, Value }
+internal enum FalloutScriptArgumentKind
+{
+    Number, Identifier, String, Value,
+    OptionalNumber, OptionalIdentifier, OptionalString, OptionalValue,
+}
 internal readonly record struct FalloutScriptArgument(FalloutScriptValue Value, string? Identifier = null)
 {
     internal FalloutScriptArgument(double number, string? identifier = null)

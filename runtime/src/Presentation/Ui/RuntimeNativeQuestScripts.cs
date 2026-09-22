@@ -31,12 +31,12 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
 
     internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
         FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null,
-        FalloutScriptEvents? events = null)
+        FalloutScriptEvents? events = null, FalloutScriptStorage? storage = null)
     {
         Name = "NativeQuestScripts";
         _records = records;
         _inventory = inventory;
-        Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events);
+        Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events, storage: storage);
         _events = new(Scripts.Events, () => Scripts.Host?.InvokeFunction);
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue + 1;

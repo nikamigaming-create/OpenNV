@@ -61,7 +61,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
     IReadOnlyList<FalloutMessageRequest> Messages, FalloutHudNotificationsSnapshot? Notifications = null,
     FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
     IReadOnlyList<FalloutFormKey>? SaidInfos = null, int ParserVersion = 0,
-    FalloutScriptValueStoreSnapshot? Values = null)
+    FalloutScriptValueStoreSnapshot? Values = null, FalloutAuxiliaryStoreSnapshot? Auxiliary = null)
 {
     internal void Validate()
     {
@@ -71,6 +71,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
             throw new InvalidDataException("Saved quest script owners are missing.");
         if (Values is { Strings: null })
             throw new InvalidDataException("Saved script value state is missing its string table.");
+        Auxiliary?.Validate();
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
         if (Messages.Count != 0 && MessageResults is null ||
@@ -149,6 +150,8 @@ internal sealed class FalloutQuestScripts
     private readonly FalloutQuestScriptInitialization _initialization;
     internal FalloutReferenceWorld? References { get; }
     internal FalloutScriptValueStore ScriptValues { get; }
+    internal FalloutAuxiliaryStore Auxiliary { get; }
+    internal FalloutScriptIniStore? Ini { get; }
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
     internal FalloutScriptSession Session { get; } = new();
@@ -173,6 +176,7 @@ internal sealed class FalloutQuestScripts
         session = Session.Capture(),
         events = Events.State,
         strings = ScriptValues.Capture(),
+        auxiliary = Auxiliary.State,
         objectives = _quests.ObjectiveState,
         variables = _quests.VariableState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
@@ -205,7 +209,7 @@ internal sealed class FalloutQuestScripts
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
-        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture());
+        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent());
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
@@ -213,6 +217,7 @@ internal sealed class FalloutQuestScripts
             throw new InvalidOperationException("Script restoration requires a fresh owner.");
         snapshot.Validate();
         ScriptValues.Restore(snapshot.Values);
+        Auxiliary.RestorePermanent(snapshot.Auxiliary);
         ValidateStringHandles();
         References?.ValidateStringHandles();
         var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
@@ -268,7 +273,8 @@ internal sealed class FalloutQuestScripts
 
     internal FalloutQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimedQuests,
         FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, float? defaultProcessingDelay = null,
-        FalloutReferenceWorld? references = null, FalloutScriptEvents? events = null)
+        FalloutReferenceWorld? references = null, FalloutScriptEvents? events = null,
+        FalloutScriptStorage? storage = null, FalloutAuxiliaryStore? auxiliary = null)
     {
         _records = records;
         _quests = quests;
@@ -276,6 +282,8 @@ internal sealed class FalloutQuestScripts
         _globals = globals;
         References = references;
         ScriptValues = references?.ScriptValues ?? new();
+        Auxiliary = references?.Auxiliary ?? storage?.Auxiliary ?? auxiliary ?? new();
+        Ini = references?.Ini ?? storage?.Ini;
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
@@ -421,34 +429,151 @@ internal sealed class FalloutQuestScripts
             var quest = Form(name);
             return quest.Signature == "QUST" ? quest : throw new InvalidDataException("Script quest argument is not QUST.");
         }
-        FalloutScriptFunction? Function(string name) => name.ToLowerInvariant() switch
+        string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"'
+            ? token[1..^1]
+            : values.Read(token).Text;
+        double NumberArgument(string token) => FalloutNvseNumericExpression.EvaluateValue([token], values, Function).Number;
+        int AuxiliaryIndex(IReadOnlyList<string> arguments, int position, int fallback)
         {
-            "getgameloaded" => new([], _ => Events.GetGameLoaded(instance.Script.FormKey) ? 1 : 0),
-            "getgamerestarted" => new([], _ => Events.GetGameRestarted(instance.Script.FormKey) ? 1 : 0),
-            "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-            {
-                var quest = Quest(arguments[0].Identifier!).FormKey;
-                return _quests.Stage(quest);
-            }),
-            "getsecondspassed" => new([], _ => instance.Clock.Elapsed),
-            "getbuttonpressed" => new([], _ => MessageResults.Take(instance.Script.FormKey)),
-            "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
-            "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
-            {
-                var index = arguments[1].Number;
-                if (index != Math.Truncate(index)) throw new InvalidDataException("Objective index is fractional.");
-                return _quests.Objective(Quest(arguments[0].Identifier!).FormKey, checked((uint)index)).Displayed ? 1 : 0;
-            }),
-            "player.getactorvalue" or "player.getav" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-            {
-                if (!instance.Bindings.HasPlayerReference) throw new InvalidDataException("Player function has no compiled engine reference.");
-                return host?.PlayerActorValue(arguments[0].Identifier!) ?? throw new NotSupportedException("Player actor values have no gameplay owner.");
-            }),
-            _ => null,
-        };
-        (program ?? instance.Program).Execute(Read, Write, (command, arguments) =>
+            if (arguments.Count <= position) return fallback;
+            var value = NumberArgument(arguments[position]);
+            return AuxiliaryIndexValue(value);
+        }
+        int AuxiliaryIndexValue(double value) => value != Math.Truncate(value) || value < -1 || value > int.MaxValue
+            ? throw new InvalidDataException("Auxiliary variable index is invalid.") : (int)value;
+        FalloutFormKey AuxiliaryValueOwner(FalloutScriptValue value)
         {
-            arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function);
+            if (value.Kind != FalloutScriptValueKind.Form || value.Number <= 0 ||
+                value.Number > uint.MaxValue || value.Number != Math.Truncate(value.Number))
+                throw new InvalidDataException("Auxiliary variable owner has no valid form identity.");
+            return _records.RuntimeFormKey((uint)value.Number);
+        }
+        FalloutFormKey AuxiliaryTarget(string[] parts, IReadOnlyList<FalloutScriptArgument>? arguments = null) =>
+            arguments is { Count: >= 3 } ? AuxiliaryValueOwner(arguments[2].Value) : parts.Length == 1
+                ? instance.Bindings.HasPlayerReference
+                    ? instance.Bindings.Reference("PlayerRef")
+                    : _records.RuntimeFormKey(0x14)
+                : instance.Bindings.Reference(parts[0]);
+        FalloutFormKey ReferenceArgument(string token)
+        {
+            if (FalloutScriptBindings.IsPlayer(token) || TryForm(token) is not null)
+                return instance.Bindings.Reference(token);
+            return AuxiliaryValueOwner(NumberArgument(token));
+        }
+        FalloutScriptFunction? Function(string name)
+        {
+            var parts = name.Split('.');
+            var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length <= 2 && operation is "auxiliaryvariablegetfloat" or "auxvargetflt" or
+                "auxiliaryvariablegettype" or "auxvartype" or "auxiliaryvariablegetref" or "auxvargetref" or
+                "auxiliaryvariablegetstring" or "auxvargetstr")
+            {
+                return operation switch
+                {
+                    "auxiliaryvariablegetfloat" or "auxvargetflt" =>
+                        new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                            FalloutScriptArgumentKind.OptionalValue],
+                            arguments => Auxiliary.GetFloat(AuxiliaryTarget(parts, arguments), instance.Script.FormKey.OwnerPlugin,
+                                arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0)),
+                    "auxiliaryvariablegettype" or "auxvartype" =>
+                        new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                            FalloutScriptArgumentKind.OptionalValue],
+                            arguments => Auxiliary.GetType(AuxiliaryTarget(parts, arguments), instance.Script.FormKey.OwnerPlugin,
+                                arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0)),
+                    "auxiliaryvariablegetref" or "auxvargetref" =>
+                        FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                            FalloutScriptArgumentKind.OptionalValue],
+                            arguments =>
+                            {
+                                var form = Auxiliary.GetForm(AuxiliaryTarget(parts, arguments), instance.Script.FormKey.OwnerPlugin,
+                                    arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0);
+                                return FalloutScriptValue.Form(form is { } value ? _records.RuntimeFormId(value) : 0);
+                            }),
+                    _ => FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                        FalloutScriptArgumentKind.OptionalValue],
+                        arguments => FalloutScriptValue.String(Auxiliary.GetString(AuxiliaryTarget(parts, arguments),
+                            instance.Script.FormKey.OwnerPlugin, arguments[0].Text,
+                            arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0))),
+                };
+            }
+            if (parts.Length == 1 && operation is "getinifloat" or "getinistring")
+            {
+                var ini = Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
+                return operation == "getinifloat"
+                    ? new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalString],
+                        arguments => ini.GetFloat(arguments[0].Text, arguments.Count == 2 ? arguments[1].Text : null,
+                            instance.Script.FormKey.OwnerPlugin))
+                    : FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalString],
+                        arguments => FalloutScriptValue.String(ini.GetString(arguments[0].Text,
+                            arguments.Count == 2 ? arguments[1].Text : null, instance.Script.FormKey.OwnerPlugin)));
+            }
+            return name.ToLowerInvariant() switch
+            {
+                "getgameloaded" => new([], _ => Events.GetGameLoaded(instance.Script.FormKey) ? 1 : 0),
+                "getgamerestarted" => new([], _ => Events.GetGameRestarted(instance.Script.FormKey) ? 1 : 0),
+                "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    var quest = Quest(arguments[0].Identifier!).FormKey;
+                    return _quests.Stage(quest);
+                }),
+                "getsecondspassed" => new([], _ => instance.Clock.Elapsed),
+                "getbuttonpressed" => new([], _ => MessageResults.Take(instance.Script.FormKey)),
+                "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
+                "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var index = arguments[1].Number;
+                    if (index != Math.Truncate(index)) throw new InvalidDataException("Objective index is fractional.");
+                    return _quests.Objective(Quest(arguments[0].Identifier!).FormKey, checked((uint)index)).Displayed ? 1 : 0;
+                }),
+                "player.getactorvalue" or "player.getav" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                {
+                    if (!instance.Bindings.HasPlayerReference) throw new InvalidDataException("Player function has no compiled engine reference.");
+                    return host?.PlayerActorValue(arguments[0].Identifier!) ?? throw new NotSupportedException("Player actor values have no gameplay owner.");
+                }),
+                _ => null,
+            };
+        }
+        void Call(string command, IReadOnlyList<string> rawArguments)
+        {
+            var parts = command.Split('.');
+            var operation = parts[^1].ToLowerInvariant();
+            var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
+            var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length <= 2 && operation is "setinifloat" or "setinistring")
+            {
+                var ini = Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
+                if (arguments.Count is < 2 or > 3) throw new InvalidDataException($"{command} has an invalid argument count.");
+                var key = StringArgument(arguments[0]);
+                var file = arguments.Count == 3 ? StringArgument(arguments[2]) : null;
+                if (operation == "setinifloat") ini.SetFloat(key, NumberArgument(arguments[1]), file, caller);
+                else ini.SetString(key, StringArgument(arguments[1]), file, caller);
+                return;
+            }
+            if (parts.Length <= 2 && operation is "auxiliaryvariablesetfloat" or "auxvarsetflt" or
+                "auxiliaryvariablesetref" or "auxvarsetref" or "auxiliaryvariablesetstring" or "auxvarsetstr" or
+                "auxiliaryvariableerase" or "auxvarerase")
+            {
+                var target = AuxiliaryTarget(parts);
+                if (operation is "auxiliaryvariableerase" or "auxvarerase")
+                {
+                    if (arguments.Count is < 1 or > 3) throw new InvalidDataException($"{command} has an invalid argument count.");
+                    var eraseOwner = arguments.Count == 3 ? ReferenceArgument(arguments[2]) : target;
+                    _ = Auxiliary.Erase(eraseOwner, caller, StringArgument(arguments[0]),
+                        AuxiliaryIndex(arguments, 1, -1));
+                    return;
+                }
+                if (arguments.Count is < 2 or > 4) throw new InvalidDataException($"{command} has an invalid argument count.");
+                var name = StringArgument(arguments[0]);
+                var setOwner = arguments.Count == 4 ? ReferenceArgument(arguments[3]) : target;
+                var index = AuxiliaryIndex(arguments, 2, 0);
+                if (operation is "auxiliaryvariablesetfloat" or "auxvarsetflt")
+                    _ = Auxiliary.SetFloat(setOwner, caller, name, NumberArgument(arguments[1]), index);
+                else if (operation is "auxiliaryvariablesetref" or "auxvarsetref")
+                    _ = Auxiliary.SetForm(setOwner, caller, name, ReferenceArgument(arguments[1]), index);
+                else
+                    _ = Auxiliary.SetString(setOwner, caller, name, StringArgument(arguments[1]), index);
+                return;
+            }
             switch (command.ToLowerInvariant())
             {
                 case "sv_destruct" when arguments.Count > 0:
@@ -488,7 +613,8 @@ internal sealed class FalloutQuestScripts
                     break;
                 default: throw new NotSupportedException($"Reached script command {command} with {arguments.Count} arguments has no owner.");
             }
-        }, Function, values: values);
+        }
+        (program ?? instance.Program).Execute(Read, Write, Call, Function, values: values);
         // Each reached operation publishes in source order. A later failure
         // retains the executed prefix, including consumptive message results
         // and nested SetStage scripts. Retrying a failed instance is forbidden.

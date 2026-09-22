@@ -30,6 +30,7 @@ QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 ScriptValueProbe.Run();
+ScriptStorageProbe.Run();
 NvseNumericProbe.Run();
 NvseEventProbe.Run();
 QuestScriptExecutionProbe.Run();
