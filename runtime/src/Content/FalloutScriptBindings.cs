@@ -9,8 +9,8 @@ internal sealed class FalloutScriptBindings
     private readonly FalloutPluginStack _records;
     private readonly FalloutPluginRecord _owner;
     private readonly Dictionary<string, FalloutPluginRecord> _forms = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<FalloutFormKey, IReadOnlyDictionary<string, uint>> _variables = [];
-    private readonly Dictionary<string, (FalloutFormKey Owner, uint Index)> _slots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<FalloutFormKey, IReadOnlyDictionary<string, FalloutScriptLocalDeclaration>> _variables = [];
+    private readonly Dictionary<string, (FalloutFormKey Owner, uint Index, FalloutScriptLocalKind Kind)> _slots = new(StringComparer.OrdinalIgnoreCase);
     internal bool HasPlayerReference { get; }
     internal FalloutFormKey Source { get; }
     private readonly FalloutFormKey? _playerReference;
@@ -55,6 +55,14 @@ internal sealed class FalloutScriptBindings
 
     internal (FalloutFormKey Owner, uint Index) Variable(string name)
     {
+        var slot = Local(name);
+        return (slot.Owner, slot.Index);
+    }
+
+    internal FalloutScriptLocalKind VariableKind(string name) => Local(name).Kind;
+
+    private (FalloutFormKey Owner, uint Index, FalloutScriptLocalKind Kind) Local(string name)
+    {
         if (_slots.TryGetValue(name, out var slot)) return slot;
         var split = name.Split('.');
         var owner = split.Length == 1 ? _owner : split.Length == 2 ? Form(split[0]) :
@@ -65,12 +73,12 @@ internal sealed class FalloutScriptBindings
             throw new NotSupportedException($"Script variable owner {owner.FormKey} has no attached script.");
         if (!_variables.TryGetValue(script.FormKey, out var variables))
         {
-            variables = FalloutScriptLocals.Read(script);
+            variables = FalloutScriptLocals.ReadDeclarations(script);
             _variables.Add(script.FormKey, variables);
         }
         if (!variables.TryGetValue(split[^1], out var value))
             throw new NotSupportedException($"Script operand {name} has no variable owner.");
-        slot = (owner.FormKey, value);
+        slot = (owner.FormKey, value.Index, value.Kind);
         _slots.Add(name, slot);
         return slot;
     }

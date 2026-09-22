@@ -15,25 +15,30 @@ internal sealed partial class FalloutReferenceScripts
         return definition;
     }
 
-    internal double InvokeFunction(FalloutFormKey script, FalloutFormKey? caller, IReadOnlyList<double> arguments, double seconds) =>
-        InvokeFunction(script, caller, arguments, seconds, new());
+    internal double InvokeFunction(FalloutFormKey script, FalloutFormKey? caller,
+        IReadOnlyList<double> arguments, double seconds) =>
+        InvokeFunctionValue(script, caller, arguments.Select(value => (FalloutScriptValue)value).ToArray(), seconds).Number;
 
-    private double InvokeFunction(FalloutFormKey script, FalloutFormKey? caller, IReadOnlyList<double> arguments, double seconds,
-        FalloutScriptExecutionBudget budget)
+    private FalloutScriptValue InvokeFunctionValue(FalloutFormKey script, FalloutFormKey? caller,
+        IReadOnlyList<FalloutScriptValue> arguments, double seconds,
+        FalloutScriptExecutionBudget? suppliedBudget = null)
     {
         var definition = UserFunction(script);
-        if (arguments.Count != definition.Parameters.Count) throw new InvalidDataException("Function argument count differs from its declaration.");
+        if (arguments.Count != definition.Parameters.Count)
+            throw new InvalidDataException("Function argument count differs from its declaration.");
         if (_functionDepth >= 30) throw new NotSupportedException("User function recursion exceeds 30 calls.");
         if (caller is { } reference && records.RuntimeFormId(reference) != 0x14 &&
             records.GetEffective(reference).Signature is not ("REFR" or "ACHR" or "ACRE"))
             throw new InvalidDataException("Function caller is not a reference.");
         var frame = new FalloutUserFunctionFrame(definition);
-        for (var index = 0; index < arguments.Count; ++index) frame.Write(definition.Parameters[index], arguments[index]);
+        for (var index = 0; index < arguments.Count; ++index)
+            frame.WriteValue(definition.Parameters[index], arguments[index]);
         ++_functionDepth;
         try
         {
-            foreach (var _ in Steps(caller ?? script, _functions[script].Bindings, definition.Program, null, seconds, frame, budget)) { }
-            return frame.Result;
+            foreach (var _ in Steps(caller ?? script, _functions[script].Bindings, definition.Program, null,
+                seconds, frame, suppliedBudget ?? new())) { }
+            return frame.ResultValue;
         }
         finally { --_functionDepth; }
     }

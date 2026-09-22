@@ -35,9 +35,10 @@ formatting/analyzers, contracts, launcher tests and native Godot loading. All te
 owned stacks open, with no missing declared package files; private results are
 `tmp/mod-stack-results.private.json` and `tmp/*-layered-audit.private.json`.
 This is source loading, not working mod gameplay. The shared interpreter now
-executes numeric NVSE assignments and eval expressions against existing state,
-with focused cold-state and migration checks passing. JAM has 34 parser failures
-among 52 scripts; TTW's last source audit had 61 among 1,263 entry-plugin scripts.
+executes numeric and typed NVSE assignments and eval expressions against existing
+state, with focused cold-state and migration checks passing. JAM's latest source
+audit accepts 31 and rejects 21 of 52 scripts; TTW's last source audit had 61
+among 1,263 entry-plugin scripts.
 These source admission counts do not establish command execution or mod gameplay.
 See [NVSE script runtime](nvse-script-runtime.md).
 Native launcher checks pass at 1280x900 and 1060x700. All 5,407 NMC winning
@@ -58,12 +59,20 @@ Full MCM menu/settings behavior is explicitly included in JAM acceptance.
 The full required gate passes with the function/event changes; its private log is
 `tmp/jam-events-gate.log`.
 
+Block 1 of the [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) is now implemented
+in the shared expression, quest, reference and save owners. Numbers, named forms,
+quoted strings, concatenation, `$`/`ToString`, typed string arguments/results,
+`reference` locals, isolated typed UDF frames, string handles/copy/destruction and
+validated cold state all have focused synthetic coverage. The selected owned audit
+still reports 461 quest owners, 41 visible unbound summary entries and no fabricated
+owned string entries; remaining failures stay visible and are not treated as
+gameplay support.
+
 The durable [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) is the next execution
 guide. The verified runtime baseline is main `252ba59` (PR 45, all checks passed).
-Start with typed strings and state, then configuration/auxiliary storage and
-source-driven MCM UI. An incomplete string experiment is preserved privately;
-it is not part of the verified runtime. The plan specifies owners, ordinary-input
-acceptance and the checked publication loop without requiring that experiment.
+The next block is configuration/auxiliary storage, followed by source-driven MCM
+UI. Arrays, full MCM behavior and ordinary-input acceptance remain open. The plan
+specifies owners and the checked publication loop.
 
 ## Verified candidate
 
@@ -203,11 +212,12 @@ claimed from these checks.
 Implement the actual JAM script, event, UI, animation and persistent-state owners
 against the complete dependency stack. Numeric assignments and expressions are
 implemented, along with scalar user functions, loops and frame/key event owners.
-Next are typed strings/arrays and actual UI/MCM, actor-effect/perk and render-event
-owners reached by JAM initialization. Preserve vanilla expression semantics and
-existing saves while adding each capability. New-game-only lifecycle signalling,
-main-menu callbacks without a world, XR key adaptation and full dependency
-behavior still require implementation/evidence.
+Typed string state is implemented and verified; next are INI/JIP auxiliary storage
+and actual UI/MCM, followed by actor-effect/perk and render-event owners reached by
+JAM initialization. Preserve vanilla expression semantics and existing saves while
+adding each capability. Arrays, new-game-only lifecycle signalling, main-menu
+callbacks without a world, XR key adaptation and full dependency behavior still
+require implementation/evidence.
 Only after JAM's ordinary-input acceptance passes proceed to TTW's combined
 campaign, transitions and extension behavior. Keep all original campaign and
 physical-headset requirements in scope. Prior candidate evidence is

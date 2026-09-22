@@ -218,17 +218,49 @@ internal static class FalloutNativeCampaignSave
                 .SequenceEqual(expectedGrant!.EquippedRuntimeFormIds.Order())))
             throw new InvalidDataException(
                 "Native campaign save loadout differs from the live farewell/tag-skill contract.");
-        if (state.Quests is not null) new FalloutQuestState(stack).Restore(state.Quests);
+        FalloutQuestState? validatedQuests = null;
+        FalloutScriptValueStore? validatedValues = null;
+        if (state.Quests is not null)
+        {
+            validatedQuests = new FalloutQuestState(stack);
+            validatedQuests.Restore(state.Quests);
+        }
+        if (state.Scripts is { } savedScripts)
+        {
+            validatedValues = new FalloutScriptValueStore();
+            validatedValues.Restore(savedScripts.Values);
+            if (state.Quests is not null)
+                ValidateQuestStringHandles(stack, state.Quests, validatedValues);
+        }
         if (state.Globals is not null) FalloutGlobalState.Read(stack).Restore(state.Globals);
         if (state.SkyLighting is not null) FalloutSkyLightingState.ValidateSnapshot(stack, state.SkyLighting);
         if (state.References is not null)
         {
-            using var references = new FalloutReferenceWorld(stack);
+            using var references = new FalloutReferenceWorld(stack, validatedValues);
             references.RestoreEncounterZones(state.EncounterZones);
             references.Restore(state.References);
+            references.ValidateStringHandles();
             references.RestoreActorOverrides(state.ActorOverrides);
         }
         return new FalloutNativeCampaignRestore(state, inventory);
+    }
+
+    private static void ValidateQuestStringHandles(FalloutPluginStack stack,
+        IReadOnlyList<FalloutQuestSnapshot> snapshots, FalloutScriptValueStore values)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            var quest = stack.GetEffective(snapshot.Quest);
+            var script = FalloutScriptLocals.AttachedScript(stack, quest);
+            if (script is null) continue;
+            foreach (var declaration in FalloutScriptLocals.ReadDeclarations(script).Values)
+            {
+                if (declaration.Kind != FalloutScriptLocalKind.String) continue;
+                if (!snapshot.Variables.TryGetValue(declaration.Index, out var raw))
+                    throw new InvalidDataException("Saved quest string local is absent from its winning declaration.");
+                values.ValidateHandle(raw);
+            }
+        }
     }
 
     internal static FalloutNativeCampaignState WithWorldState(

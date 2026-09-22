@@ -169,33 +169,69 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null)
     {
         budget ??= new();
+        var valueStore = world.ScriptValues;
         FalloutScriptEvents Events() => host.Events ?? throw new NotSupportedException("Script event has no process owner.");
         FalloutFormKey? CallingReference() => records.RuntimeFormId(source) == 0x14 ||
             records.GetEffective(source).Signature is "REFR" or "ACHR" or "ACRE" ? source : null;
-        double Read(string name)
+        string FormName(uint runtimeFormId)
         {
-            if (frame?.Contains(name) == true) return frame.Read(name);
-            if (name.Equals("this", StringComparison.OrdinalIgnoreCase)) return CallingReference() is { } caller ? records.RuntimeFormId(caller) : 0;
-            if (FalloutScriptBindings.IsPlayer(name)) return records.RuntimeFormId(bindings.Reference(name));
+            if (runtimeFormId == 0) return "0";
+            var key = records.RuntimeFormKey(runtimeFormId);
+            var record = records.GetEffective(key);
+            var ids = record.ReadSubrecords().Where(field => field.Signature == "EDID").ToArray();
+            return ids.Length == 1 ? FalloutDialogueTopic.Text(ids[0].Data.Span) : key.ToString();
+        }
+        FalloutScriptValue ReadValue(string name)
+        {
+            if (frame?.Contains(name) == true) return frame.ReadValue(name);
+            if (name.Equals("this", StringComparison.OrdinalIgnoreCase))
+                return FalloutScriptValue.Form(CallingReference() is { } caller ? records.RuntimeFormId(caller) : 0);
+            if (FalloutScriptBindings.IsPlayer(name))
+                return FalloutScriptValue.Form(records.RuntimeFormId(bindings.Reference(name)));
             if (bindings.TryForm(name) is { Signature: "GLOB" } global)
                 return (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Get(global.FormKey);
-            if (bindings.TryForm(name) is { } form) return records.RuntimeFormId(form.FormKey);
+            if (bindings.TryForm(name) is { } form)
+                return FalloutScriptValue.Form(records.RuntimeFormId(form.FormKey));
             var key = bindings.Variable(name);
-            return records.GetEffective(key.Owner).Signature == "QUST" ? quests.Variable(key.Owner, key.Index) :
+            var raw = records.GetEffective(key.Owner).Signature == "QUST" ? quests.Variable(key.Owner, key.Index) :
                 world.Get(key.Owner).Read(key.Index);
+            return valueStore.Read(bindings.VariableKind(name), raw);
         }
-        void Write(string name, double value)
+        double Read(string name) => ReadValue(name).Number;
+        void WriteValue(string name, FalloutScriptValue value)
         {
-            if (frame?.Contains(name) == true) { frame.Write(name, value); return; }
+            if (frame?.Contains(name) == true) { frame.WriteValue(name, value); return; }
             if (bindings.TryForm(name) is { Signature: "GLOB" } global)
             {
-                (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Set(global.FormKey, (float)value);
+                var number = value.Number;
+                (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Set(global.FormKey, (float)number);
                 return;
             }
             var key = bindings.Variable(name);
-            if (records.GetEffective(key.Owner).Signature == "QUST") quests.SetVariable(key.Owner, key.Index, value);
-            else world.Get(key.Owner).Write(key.Index, value);
+            var previous = records.GetEffective(key.Owner).Signature == "QUST" ? quests.Variable(key.Owner, key.Index) :
+                world.Get(key.Owner).Read(key.Index);
+            var raw = valueStore.Write(bindings.VariableKind(name), previous, value, bindings.Source.OwnerPlugin);
+            if (records.GetEffective(key.Owner).Signature == "QUST") quests.SetVariable(key.Owner, key.Index, raw);
+            else world.Get(key.Owner).Write(key.Index, raw);
         }
+        void DestroyString(string name)
+        {
+            if (frame?.Contains(name) == true)
+            {
+                if (frame.Definition.Kind(name) != FalloutScriptLocalKind.String)
+                    throw new InvalidDataException("Script destruction target is not a string local.");
+                frame.WriteValue(name, FalloutScriptValue.String(string.Empty));
+                return;
+            }
+            var key = bindings.Variable(name);
+            var previous = records.GetEffective(key.Owner).Signature == "QUST" ? quests.Variable(key.Owner, key.Index) :
+                world.Get(key.Owner).Read(key.Index);
+            var cleared = valueStore.DestroyString(bindings.VariableKind(name), previous);
+            if (records.GetEffective(key.Owner).Signature == "QUST") quests.SetVariable(key.Owner, key.Index, cleared);
+            else world.Get(key.Owner).Write(key.Index, cleared);
+        }
+        void Write(string name, double value) => WriteValue(name, value);
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName);
         FalloutFormKey Reference(string name)
         {
             if (FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is not null) return bindings.Reference(name);
@@ -213,9 +249,15 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length > 2) throw new NotSupportedException("Function caller path is unbound.");
             var definition = this.UserFunction(bindings.Form(name).FormKey);
             foreach (var parameter in definition.Parameters) definition.RequireScalar(parameter);
-            return new(definition.Parameters.Select(_ => FalloutScriptArgumentKind.Number).ToArray(), arguments =>
-                InvokeFunction(definition.Script.FormKey, parts.Length == 2 ? Reference(parts[0]) : CallingReference(),
-                    arguments.Select(argument => argument.Number).ToArray(), seconds, budget));
+            var kinds = definition.Parameters.Select(parameter => definition.Kind(parameter) switch
+            {
+                FalloutScriptLocalKind.String => FalloutScriptArgumentKind.String,
+                FalloutScriptLocalKind.Form => FalloutScriptArgumentKind.Value,
+                _ => FalloutScriptArgumentKind.Number,
+            }).ToArray();
+            return FalloutScriptFunction.Typed(kinds, arguments => InvokeFunctionValue(
+                definition.Script.FormKey, parts.Length == 2 ? Reference(parts[0]) : CallingReference(),
+                arguments.Select(argument => argument.Value).ToArray(), seconds, budget));
         }
         FalloutFormKey Quest(string name)
         {
@@ -314,14 +356,24 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var operation = parts[^1].ToLowerInvariant();
             var target = parts.Length == 1 ? source : parts.Length == 2 ? Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
+            if (operation == "call")
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
+                    Function, UserFunction);
+                return;
+            }
+            if (operation == "setfunctionvalue" && parts.Length == 1)
+            {
+                if (frame is null) throw new NotSupportedException("SetFunctionValue needs an active function call.");
+                frame.ResultValue = FalloutNvseNumericExpression.EvaluateValue(arguments, values,
+                    Function, UserFunction);
+                return;
+            }
+            arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             switch (operation)
             {
-                case "call":
-                    _ = FalloutNvseNumericExpression.Evaluate([command, .. arguments], Read, Write, Function, UserFunction);
-                    break;
-                case "setfunctionvalue" when parts.Length == 1:
-                    if (frame is null) throw new NotSupportedException("SetFunctionValue needs an active function call.");
-                    frame.Result = FalloutNvseNumericExpression.Evaluate(arguments, Read, Write, Function, UserFunction);
+                case "sv_destruct" when arguments.Count > 0:
+                    foreach (var argument in arguments) DestroyString(argument);
                     break;
                 case "setgamemainloopcallback" or "sgmlc" when arguments.Count is >= 2 and <= 4:
                     var register = Boolean(arguments[1]);
@@ -537,7 +589,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
             }
         }
-        return program.Steps(Read, Write, Call, Function, UserFunction, budget);
+        return program.Steps(Read, Write, Call, Function, UserFunction, budget, values);
     }
 
     private static string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"' &&

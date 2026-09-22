@@ -64,6 +64,7 @@ internal static class QuestScriptExecutionProbe
             }
             Require(state.Stage(quest.FormKey) == 42 && state.Variable(quest.FormKey, 27) == 10,
                 "The complete source calculation did not drive progression.");
+            TypedStringColdState(directory);
             Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { Instances = [], ParserVersion = 0 }));
             Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { ParserVersion = FalloutGameModeProgram.ParserVersion + 1 }));
             File.WriteAllBytes(Path.Combine(directory, "Commas.esm"), Header().Concat(Quest())
@@ -101,7 +102,7 @@ internal static class QuestScriptExecutionProbe
         }
         finally
         {
-            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Numeric.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
+            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Numeric.esm", "Strings.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
             Directory.Delete(directory);
         }
         Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true");
@@ -145,6 +146,51 @@ internal static class QuestScriptExecutionProbe
             "Numeric quest execution changed across cold save restoration.");
     }
 
+    private static void TypedStringColdState(string directory)
+    {
+        File.WriteAllBytes(Path.Combine(directory, "Strings.esm"), Header().Concat(StringQuest())
+            .Concat(StringScript()).ToArray());
+        using var records = FalloutPluginStack.Load(directory, ["Strings.esm"]);
+        var quest = new FalloutFormKey("Strings.esm", 0x100);
+        var state = new FalloutQuestState(records);
+        state.SetRunning(quest, true);
+        FalloutQuestScripts Scripts(FalloutQuestState owner) => new(records, owner, new HashSet<FalloutFormKey>(),
+            new FalloutPlayerInventory(), defaultProcessingDelay: 1);
+        var scripts = Scripts(state);
+        scripts.Advance(1);
+        Require(scripts.Capture().Instances.Single().Executions == 1,
+            "A typed string source script did not execute through the quest owner.");
+        var savedQuests = JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(
+            JsonSerializer.Serialize(state.Capture()))!;
+        var savedScripts = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(
+            JsonSerializer.Serialize(scripts.Capture()))!;
+        var textIndex = 11u;
+        var copyIndex = 12u;
+        var textHandle = state.Variable(quest, textIndex);
+        var copyHandle = state.Variable(quest, copyIndex);
+        Require(textHandle != copyHandle && scripts.ScriptValues.Read(FalloutScriptLocalKind.String, textHandle).Text == "Start/7/enabled/changed" &&
+            scripts.ScriptValues.Read(FalloutScriptLocalKind.String, copyHandle).Text == "Start/7/enabled",
+            "A source string assignment did not copy and independently mutate its value.");
+        Require(state.Variable(quest, 14) == 0 && scripts.ScriptValues.Capture().Strings.Count == 2,
+            "sv_Destruct did not clear the source string local and release its owned handle.");
+        var restoredState = new FalloutQuestState(records);
+        restoredState.Restore(savedQuests);
+        var restoredScripts = Scripts(restoredState);
+        restoredScripts.Restore(savedScripts);
+        Require(JsonSerializer.Serialize(state.Capture()) == JsonSerializer.Serialize(restoredState.Capture()) &&
+            JsonSerializer.Serialize(scripts.Capture()) == JsonSerializer.Serialize(restoredScripts.Capture()) &&
+            restoredScripts.ScriptValues.Read(FalloutScriptLocalKind.String, restoredState.Variable(quest, textIndex)).Text ==
+                "Start/7/enabled/changed",
+            "Typed string values did not survive a serialized cold quest restore.");
+        var truncated = savedScripts with
+        {
+            Values = savedScripts.Values! with { Strings = savedScripts.Values.Strings.Take(1).ToArray() },
+        };
+        var invalidState = new FalloutQuestState(records);
+        invalidState.Restore(savedQuests);
+        Reject(() => Scripts(invalidState).Restore(truncated));
+    }
+
     private static byte[] Quest()
     {
         var data = new byte[8]; BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), 0.05f);
@@ -163,6 +209,29 @@ internal static class QuestScriptExecutionProbe
         var fields = Field("SCHR", header).Concat(Field("SCTX", Text("begin GameMode\n" + body + "\nend")))
             .Concat(Field("SCRO", BitConverter.GetBytes(0x100u))).Concat(Field("SCRO", BitConverter.GetBytes(0x14u)));
         foreach (var (name, index) in new[] { "active", "timer", "result" }.Zip(indices))
+        {
+            var declaration = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(declaration, index);
+            fields = fields.Concat(Field("SLSD", declaration)).Concat(Field("SCVR", Text(name)));
+        }
+        return Record("SCPT", 0x200, fields.ToArray());
+    }
+
+    private static byte[] StringQuest()
+    {
+        var data = new byte[8]; BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), 0.05f);
+        return Record("QUST", 0x100, Field("EDID", Text("StringQuest")).Concat(Field("DATA", data))
+            .Concat(Field("SCRI", BitConverter.GetBytes(0x200u))).ToArray());
+    }
+
+    private static byte[] StringScript()
+    {
+        var header = new byte[20]; header[16] = 1;
+        var source = "string_var text\nstring_var copy\nshort index\nbegin GameMode\n" +
+            "set index to 7\nset text to \"Start/\" + $index + \"/enabled\"\n" +
+            "set copy to text\nset text to text + \"/changed\"\nset discard to text\nsv_Destruct discard\nend";
+        source = "string_var discard\n" + source;
+        var fields = Field("SCHR", header).Concat(Field("SCTX", Text(source)));
+        foreach (var (name, index) in new[] { ("text", 11u), ("copy", 12u), ("index", 13u), ("discard", 14u) })
         {
             var declaration = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(declaration, index);
             fields = fields.Concat(Field("SLSD", declaration)).Concat(Field("SCVR", Text(name)));

@@ -80,9 +80,44 @@ internal static class NvseEventProbe
             CallbackMutation(events, scripts, Form, player);
             Failure(events, scripts, quests, quest.FormKey, Form, player);
             FallbackLifecycle(records);
+            ReferenceTypedStrings(directory);
         }
-        finally { File.Delete(Path.Combine(directory, "Events.esm")); Directory.Delete(directory); }
-        Console.WriteLine("OPENNV_NVSE_EVENTS_PASS lifecycle=per-script functions=isolated recursion=true loops=true callbacks=frame-and-key reload=rebound failure=visible");
+        finally
+        {
+            File.Delete(Path.Combine(directory, "Events.esm"));
+            File.Delete(Path.Combine(directory, "StringEvents.esm"));
+            Directory.Delete(directory);
+        }
+        Console.WriteLine("OPENNV_NVSE_EVENTS_PASS lifecycle=per-script functions=isolated recursion=true loops=true callbacks=frame-and-key reload=rebound failure=visible typedStrings=true");
+    }
+
+    private static void ReferenceTypedStrings(string directory)
+    {
+        var data = new byte[8]; data[0] = 1; BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), 0.01f);
+        var quest = Record("QUST", 0x100, Field("EDID", Text("StringQuest"))
+            .Concat(Field("DATA", data)).Concat(Field("SCRI", BitConverter.GetBytes(0x240u))).ToArray());
+        var source = "string_var text\nstring_var copy\nbegin Result\n" +
+            "text = call StringFunction \"reference/owner\"\ncopy = text\ntext += \"/changed\"\nend";
+        File.WriteAllBytes(Path.Combine(directory, "StringEvents.esm"),
+            Record("TES4", 0, Field("HEDR", new byte[12])).Concat(quest)
+                .Concat(Script(0x240, "StringProgram", source, ["text", "copy"], referenceForms: [0x241]))
+                .Concat(Script(0x241, "StringFunction", "string_var value\nbegin Function {value}\nvalue += \"/udf\"\nSetFunctionValue value\nend", ["value"], referenceForms: []))
+                .ToArray());
+        using var records = FalloutPluginStack.Load(directory, ["StringEvents.esm"]);
+        using var world = new FalloutReferenceWorld(records);
+        var quests = new FalloutQuestState(records);
+        var typedScripts = Executor(records, world, quests, new FalloutScriptEvents());
+        var questRecord = records.GetEffective(new FalloutFormKey("StringEvents.esm", 0x100));
+        var script = records.GetEffective(new FalloutFormKey("StringEvents.esm", 0x240));
+        var program = FalloutGameModeProgram.Read(
+            script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span, "Result");
+        typedScripts.ExecuteProgram(questRecord, script, program, 0);
+        var textHandle = quests.Variable(questRecord.FormKey, 1);
+        var copyHandle = quests.Variable(questRecord.FormKey, 2);
+        Require(textHandle != copyHandle &&
+            world.ScriptValues.Read(FalloutScriptLocalKind.String, textHandle).Text == "reference/owner/udf/changed" &&
+            world.ScriptValues.Read(FalloutScriptLocalKind.String, copyHandle).Text == "reference/owner/udf",
+            "The reference executor did not persist typed string locals through its shared world owner.");
     }
 
     private static FalloutReferenceScripts Executor(FalloutPluginStack records, FalloutReferenceWorld world,
@@ -186,12 +221,14 @@ internal static class NvseEventProbe
         return bytes.ToArray();
     }
 
-    private static byte[] Script(uint id, string name, string source, string[] locals, bool quest = false)
+    private static byte[] Script(uint id, string name, string source, string[] locals, bool quest = false,
+        IReadOnlyList<uint>? referenceForms = null)
     {
         var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), (uint)locals.Length);
         if (quest) header[16] = 1;
         var fields = Field("EDID", Text(name)).Concat(Field("SCHR", header)).Concat(Field("SCTX", Text(source)));
-        foreach (var form in new uint[] { 0x14, 0x100, 0x210, 0x211, 0x212, 0x220, 0x233 }) fields = fields.Concat(Field("SCRO", BitConverter.GetBytes(form)));
+        foreach (var form in referenceForms ?? [0x14u, 0x100u, 0x210u, 0x211u, 0x212u, 0x220u, 0x233u])
+            fields = fields.Concat(Field("SCRO", BitConverter.GetBytes(form)));
         for (var i = 0; i < locals.Length; ++i)
         {
             var slot = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(slot, (uint)i + 1);

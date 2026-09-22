@@ -28,10 +28,11 @@ intermediate arithmetic that would otherwise be hidden by a comparison. Reached
 runtime failures remain visible and retain the executed statement prefix; they
 are not converted into successful no-ops.
 
-Parser version 3 also admits named Function headers. Previously omitted quest
-owners require syntax that their saved parser version rejected: braces before
-version 3, assignments before version 2, or argument commas before version 1.
-Quotes and comments cannot authorize migration. Existing locals,
+Parser version 4 also admits `$`/`ToString` string syntax in addition to named
+Function headers. Previously omitted quest owners require syntax that their saved
+parser version rejected: `$` before version 4, braces before version 3,
+assignments before version 2, or argument commas before version 1. Quotes and
+comments cannot authorize migration. Existing locals,
 quest progression and clocks are retained. Current-version saves still require
 all admitted owners, and previously faulted executions are not silently retried.
 
@@ -39,13 +40,14 @@ all admitted owners, and previously faulted executions are not silently retried.
 
 Named [user functions](https://geckwiki.com/index.php/User_Defined_Function)
 resolve through compiled SCRO bindings and winning SCPT records. Object-type
-Function blocks validate parameters against declared slots. Numeric and reference
-locals have independent invocation frames, including nested calls; shared quest,
-reference and global writes still reach the existing authoritative owners.
-`Call` works as a statement and inside numeric expressions. `SetFunctionValue`
-retains the latest return value without ending execution. Calls support up to
-30 nested frames. Arrays, strings, dynamic function references and lambdas remain
-unsupported instead of becoming untyped numeric stand-ins.
+Function blocks validate parameters against declared slots. Numeric, reference
+and string locals have independent typed invocation frames, including nested
+calls; shared quest, reference and global writes still reach the existing
+authoritative owners. `Call` works as a statement and inside expressions, with
+typed string arguments and results. `SetFunctionValue` retains the latest return
+value without ending execution. Calls support up to 30 nested frames. Arrays,
+dynamic function references and lambdas remain unsupported instead of becoming
+untyped numeric stand-ins.
 
 `while`/`loop`, nested `break` and `continue` execute with branch-stack restoration.
 Malformed nesting is rejected before execution. A shared 100,000-statement
@@ -81,23 +83,23 @@ retrying their prefix. Explicit re-registration can replace the failed entry.
 
 ## Evidence and remaining work
 
-Synthetic execution checks cover chained writes, operator precedence, numeric
-function arguments, short-circuit effects, invalid expressions, winning compiled
-quest slots, migration and cold recurrence. Function/event checks cover recursive
-locals, return values, reference callers, loop control, consumptive lifecycle
-queries, frame delays, key edges, mutation during dispatch, failure retention and
-replacement with restored owners. The native Godot audit dispatches physical
-key events into source functions and verifies GameMode/paused MenuMode callbacks
-mutating actual reference slots.
+Synthetic execution checks cover chained writes, operator precedence, numeric and
+typed string function arguments, concatenation, form naming, short-circuit effects,
+invalid expressions, winning compiled quest slots, migration and cold recurrence.
+Function/event checks cover recursive locals, typed return values, reference
+callers, loop control, consumptive lifecycle queries, frame delays, key edges,
+mutation during dispatch, failure retention and replacement with restored owners.
+The native Godot audit dispatches physical key events into source functions and
+verifies GameMode/paused MenuMode callbacks mutating actual reference slots.
 
-The selected JAM source audit now has 34 parser rejections among 52 scripts.
+The selected JAM source audit now has 21 parser rejections among 52 scripts.
 Its six admitted initialization scripts execute through the shared owners and
 reach concrete remaining UI, actor-effect, perk-mutation and render-event gaps.
 The existing mod probe's `--audit-mod-scripts` option reports the reached state
 and failures against selected owned folders. It is headless and has no substitute
 player or presentation host. These checks do not establish JAM gameplay.
 
-Strings, arrays, extended operators and unbound extension calls still need owners.
+Arrays, extended operators and unbound extension calls still need owners.
 MCM's complete menu/settings behavior, render/hit/fire events, XR control mapping,
 focus-loss input handling and callbacks while no world is active remain open.
 Compiled scripts without source also need a bytecode execution path. Source

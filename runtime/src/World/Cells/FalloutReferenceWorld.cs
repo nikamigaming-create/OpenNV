@@ -137,13 +137,17 @@ internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord recor
     internal FalloutPluginRecord Record { get; } = record;
     internal string Sha256 { get; } = Convert.ToHexString(SHA256.HashData(record.ReadData())).ToLowerInvariant();
     internal IReadOnlyDictionary<string, uint> Locals { get; } = FalloutScriptLocals.Read(record);
+    internal IReadOnlyDictionary<string, FalloutScriptLocalDeclaration> Declarations { get; } =
+        FalloutScriptLocals.ReadDeclarations(record);
 }
 
 // World lifetime is independent of draw/resource lifetime. A disabled or model-less
 // reference still owns its script state. Unloading a cell suspends its residency;
 // it cannot reset variables shared with scripts in other cells.
-internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) : IDisposable
+internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
+    FalloutScriptValueStore? scriptValues = null) : IDisposable
 {
+    internal FalloutScriptValueStore ScriptValues { get; } = scriptValues ?? new();
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _instances = [];
     private readonly Dictionary<FalloutFormKey, FalloutReferenceScriptDefinition> _definitions = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutReferenceInstance>> _residentCells = [];
@@ -165,6 +169,19 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records) 
     {
         if (records.GetEffective(owner).Signature == "QUST") quests.SetVariable(owner, index, value);
         else Get(owner).Write(index, value);
+    }
+
+    internal void ValidateStringHandles()
+    {
+        foreach (var instance in _instances.Values)
+        {
+            if (instance.Script is null) continue;
+            foreach (var declaration in instance.Script.Declarations.Values)
+            {
+                if (declaration.Kind != FalloutScriptLocalKind.String) continue;
+                ScriptValues.ValidateHandle(instance.Read(declaration.Index));
+            }
+        }
     }
 
     internal IReadOnlyList<FalloutReferenceInstance> LoadCell(FalloutCellScene scene)
