@@ -274,7 +274,64 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         FalloutScriptFunction? Function(string name)
         {
             var parts = name.Split('.');
+            var operation = parts[^1].ToLowerInvariant();
             FalloutFormKey Target() => parts.Length == 1 ? source : Reference(parts[0]);
+            FalloutFormKey AuxiliaryTarget(IReadOnlyList<FalloutScriptArgument> arguments)
+            {
+                if (arguments.Count >= 3)
+                {
+                    if (arguments[2].Value.Kind != FalloutScriptValueKind.Form)
+                        throw new InvalidDataException("Auxiliary variable owner is not a form.");
+                    var form = arguments[2].Value.Number;
+                    if (form <= 0 || form > uint.MaxValue || form != Math.Truncate(form))
+                        throw new InvalidDataException("Auxiliary variable owner has no valid form identity.");
+                    return records.RuntimeFormKey((uint)form);
+                }
+                return Target();
+            }
+            if (parts.Length <= 2 && operation is "auxiliaryvariablegetfloat" or "auxvargetflt" or
+                "auxiliaryvariablegettype" or "auxvartype" or "auxiliaryvariablegetref" or "auxvargetref" or
+                "auxiliaryvariablegetstring" or "auxvargetstr")
+            {
+                return operation switch
+                {
+                    "auxiliaryvariablegetfloat" or "auxvargetflt" =>
+                        new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                            FalloutScriptArgumentKind.OptionalValue],
+                            arguments => world.Auxiliary.GetFloat(AuxiliaryTarget(arguments), bindings.Source.OwnerPlugin,
+                                arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndex(arguments[1].Number) : 0)),
+                    "auxiliaryvariablegettype" or "auxvartype" =>
+                        new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                            FalloutScriptArgumentKind.OptionalValue],
+                            arguments => world.Auxiliary.GetType(AuxiliaryTarget(arguments), bindings.Source.OwnerPlugin,
+                                arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndex(arguments[1].Number) : 0)),
+                    "auxiliaryvariablegetref" or "auxvargetref" =>
+                        FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                            FalloutScriptArgumentKind.OptionalValue],
+                            arguments =>
+                            {
+                                var form = world.Auxiliary.GetForm(AuxiliaryTarget(arguments), bindings.Source.OwnerPlugin,
+                                    arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndex(arguments[1].Number) : 0);
+                                return FalloutScriptValue.Form(form is { } value ? records.RuntimeFormId(value) : 0);
+                            }),
+                    _ => FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
+                        FalloutScriptArgumentKind.OptionalValue],
+                        arguments => FalloutScriptValue.String(world.Auxiliary.GetString(AuxiliaryTarget(arguments),
+                             bindings.Source.OwnerPlugin, arguments[0].Text,
+                             arguments.Count >= 2 ? AuxiliaryIndex(arguments[1].Number) : 0))),
+                };
+            }
+            if (parts.Length == 1 && operation is "getinifloat" or "getinistring")
+            {
+                var ini = world.Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
+                return operation == "getinifloat"
+                    ? new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalString],
+                        arguments => ini.GetFloat(arguments[0].Text, arguments.Count == 2 ? arguments[1].Text : null,
+                            bindings.Source.OwnerPlugin))
+                    : FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalString],
+                        arguments => FalloutScriptValue.String(ini.GetString(arguments[0].Text,
+                            arguments.Count == 2 ? arguments[1].Text : null, bindings.Source.OwnerPlugin)));
+            }
             if (parts.Length <= 2 && parts[^1].Equals("GetInSameCell", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
@@ -344,6 +401,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             };
         }
         double Number(string argument) => FalloutGameModeProgram.Evaluate([argument], Read, Function);
+        string StringValue(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"'
+            ? token[1..^1]
+            : values.Read(token).Text;
+        int AuxiliaryIndex(double value) => value >= -1 && value <= int.MaxValue && value == Math.Truncate(value) ?
+            (int)value : throw new InvalidDataException("Auxiliary variable index is invalid.");
         bool Boolean(string argument) => Number(argument) switch
         {
             0 => false,
@@ -370,6 +432,41 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return;
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
+            var callerPlugin = bindings.Source.OwnerPlugin;
+            if (parts.Length <= 2 && operation is "setinifloat" or "setinistring")
+            {
+                var ini = world.Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
+                if (arguments.Count is < 2 or > 3) throw new InvalidDataException($"{command} has an invalid argument count.");
+                var key = StringValue(arguments[0]);
+                var file = arguments.Count == 3 ? StringValue(arguments[2]) : null;
+                if (operation == "setinifloat") ini.SetFloat(key, Number(arguments[1]), file, callerPlugin);
+                else ini.SetString(key, StringValue(arguments[1]), file, callerPlugin);
+                return;
+            }
+            if (parts.Length <= 2 && operation is "auxiliaryvariablesetfloat" or "auxvarsetflt" or
+                "auxiliaryvariablesetref" or "auxvarsetref" or "auxiliaryvariablesetstring" or "auxvarsetstr" or
+                "auxiliaryvariableerase" or "auxvarerase")
+            {
+                var auxiliary = world.Auxiliary;
+                if (operation is "auxiliaryvariableerase" or "auxvarerase")
+                {
+                    if (arguments.Count is < 1 or > 3) throw new InvalidDataException($"{command} has an invalid argument count.");
+                    var owner = arguments.Count == 3 ? Reference(arguments[2]) : target;
+                    auxiliary.Erase(owner, callerPlugin, StringValue(arguments[0]),
+                        arguments.Count >= 2 ? AuxiliaryIndex(Number(arguments[1])) : -1);
+                }
+                else
+                {
+                    if (arguments.Count is < 2 or > 4) throw new InvalidDataException($"{command} has an invalid argument count.");
+                    var name = StringValue(arguments[0]);
+                    var owner = arguments.Count == 4 ? Reference(arguments[3]) : target;
+                    var index = arguments.Count >= 3 ? AuxiliaryIndex(Number(arguments[2])) : 0;
+                    if (operation is "auxiliaryvariablesetfloat" or "auxvarsetflt") auxiliary.SetFloat(owner, callerPlugin, name, Number(arguments[1]), index);
+                    else if (operation is "auxiliaryvariablesetref" or "auxvarsetref") auxiliary.SetForm(owner, callerPlugin, name, Reference(arguments[1]), index);
+                    else auxiliary.SetString(owner, callerPlugin, name, StringValue(arguments[1]), index);
+                }
+                return;
+            }
             switch (operation)
             {
                 case "sv_destruct" when arguments.Count > 0:

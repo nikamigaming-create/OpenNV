@@ -13,14 +13,19 @@ internal static class ModInstallationContracts
         var setup = FalloutModInstallation.Detect(id, selected, game, dependencies);
         using var content = setup.OpenSource();
         using var records = FalloutPluginStack.Load(content.PluginSources);
-        using var world = new FalloutReferenceWorld(records);
+        var overlay = Path.Combine(Path.GetTempPath(), $"opennv-owned-script-config-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(overlay);
+        try
+        {
+        var storage = FalloutScriptStorage.Open(content, overlay);
+        using var world = new FalloutReferenceWorld(records, auxiliary: storage.Auxiliary, ini: storage.Ini);
         var quests = new FalloutQuestState(records);
         var events = new FalloutScriptEvents();
         var globals = FalloutGlobalState.Read(records);
         var excluded = records.EffectiveRecords("QUST").Where(quest =>
             FalloutScriptLocals.AttachedScript(records, quest)?.Plugin.Name != setup.EntryPlugin).Select(quest => quest.FormKey).ToHashSet();
         var scripts = new FalloutQuestScripts(records, quests, excluded, new FalloutPlayerInventory(), globals,
-            FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime"), world, events);
+            FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime"), world, events, storage);
         var executor = new FalloutReferenceScripts(records, world, quests, new(
             (_, _) => throw new NotSupportedException("Headless audit has no furniture input."),
             effect => throw new NotSupportedException($"Headless audit has no presentation effect host: {effect.Kind}."), Globals: globals, Events: events));
@@ -39,6 +44,11 @@ internal static class ModInstallationContracts
             scripts = scripts.State,
             boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
         }));
+        }
+        finally
+        {
+            if (Directory.Exists(overlay)) Directory.Delete(overlay, recursive: true);
+        }
     }
 
     internal static void Run()

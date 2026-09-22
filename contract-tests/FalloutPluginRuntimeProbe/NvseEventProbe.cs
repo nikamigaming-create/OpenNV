@@ -86,7 +86,7 @@ internal static class NvseEventProbe
         {
             File.Delete(Path.Combine(directory, "Events.esm"));
             File.Delete(Path.Combine(directory, "StringEvents.esm"));
-            Directory.Delete(directory);
+            Directory.Delete(directory, recursive: true);
         }
         Console.WriteLine("OPENNV_NVSE_EVENTS_PASS lifecycle=per-script functions=isolated recursion=true loops=true callbacks=frame-and-key reload=rebound failure=visible typedStrings=true");
     }
@@ -96,15 +96,23 @@ internal static class NvseEventProbe
         var data = new byte[8]; data[0] = 1; BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), 0.01f);
         var quest = Record("QUST", 0x100, Field("EDID", Text("StringQuest"))
             .Concat(Field("DATA", data)).Concat(Field("SCRI", BitConverter.GetBytes(0x240u))).ToArray());
-        var source = "string_var text\nstring_var copy\nbegin Result\n" +
-            "text = call StringFunction \"reference/owner\"\ncopy = text\ntext += \"/changed\"\nend";
+        var source = "string_var text\nstring_var copy\nshort result\nbegin Result\n" +
+            "text = call StringFunction \"reference/owner\"\ncopy = text\ntext += \"/changed\"\n" +
+            "PlayerRef.AuxiliaryVariableSetFloat \"*_Shared\" 12\n" +
+            "result = PlayerRef.AuxiliaryVariableGetFloat \"*_Shared\" + GetINIFloat \"General:Value\" \"Probe.ini\"\n" +
+            "SetINIFloat \"General:Written\" result \"Probe.ini\"\nend";
         File.WriteAllBytes(Path.Combine(directory, "StringEvents.esm"),
             Record("TES4", 0, Field("HEDR", new byte[12])).Concat(quest)
-                .Concat(Script(0x240, "StringProgram", source, ["text", "copy"], referenceForms: [0x241]))
+                .Concat(Script(0x240, "StringProgram", source, ["text", "copy", "result"], referenceForms: [0x241, 0x14]))
                 .Concat(Script(0x241, "StringFunction", "string_var value\nbegin Function {value}\nvalue += \"/udf\"\nSetFunctionValue value\nend", ["value"], referenceForms: []))
                 .ToArray());
         using var records = FalloutPluginStack.Load(directory, ["StringEvents.esm"]);
-        using var world = new FalloutReferenceWorld(records);
+        var sourceIni = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        { ["Config/Probe.ini"] = Encoding.UTF8.GetBytes("[General]\nValue=5\n") };
+        var storageRoot = Path.Combine(directory, "string-storage");
+        var storage = new FalloutScriptStorage(
+            new FalloutScriptIniStore(path => sourceIni.TryGetValue(path, out var bytes) ? bytes : null, storageRoot));
+        using var world = new FalloutReferenceWorld(records, auxiliary: storage.Auxiliary, ini: storage.Ini);
         var quests = new FalloutQuestState(records);
         var typedScripts = Executor(records, world, quests, new FalloutScriptEvents());
         var questRecord = records.GetEffective(new FalloutFormKey("StringEvents.esm", 0x100));
@@ -118,6 +126,11 @@ internal static class NvseEventProbe
             world.ScriptValues.Read(FalloutScriptLocalKind.String, textHandle).Text == "reference/owner/udf/changed" &&
             world.ScriptValues.Read(FalloutScriptLocalKind.String, copyHandle).Text == "reference/owner/udf",
             "The reference executor did not persist typed string locals through its shared world owner.");
+        var auxiliaryValue = storage.Auxiliary.GetFloat(records.RuntimeFormKey(0x14), "StringEvents.esm", "*_Shared");
+        var iniValue = storage.Ini.GetFloat("General:Written", "Probe.ini", "StringEvents.esm");
+        Require(quests.Variable(questRecord.FormKey, 3) == 17 && auxiliaryValue == 12 && iniValue == 17,
+            $"Reference execution did not reach the shared auxiliary and INI owners: result={quests.Variable(questRecord.FormKey, 3)} " +
+            $"aux={auxiliaryValue} ini={iniValue}");
     }
 
     private static FalloutReferenceScripts Executor(FalloutPluginStack records, FalloutReferenceWorld world,

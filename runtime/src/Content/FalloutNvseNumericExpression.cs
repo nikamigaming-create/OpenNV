@@ -80,7 +80,20 @@ internal static class FalloutNvseNumericExpression
                 var arguments = new List<Func<FalloutScriptArgument>>();
                 foreach (var kind in command.Arguments)
                 {
-                    if (kind == FalloutScriptArgumentKind.Identifier)
+                    var optional = kind is FalloutScriptArgumentKind.OptionalNumber or
+                        FalloutScriptArgumentKind.OptionalIdentifier or FalloutScriptArgumentKind.OptionalString or
+                        FalloutScriptArgumentKind.OptionalValue;
+                    var required = kind switch
+                    {
+                        FalloutScriptArgumentKind.OptionalNumber => FalloutScriptArgumentKind.Number,
+                        FalloutScriptArgumentKind.OptionalIdentifier => FalloutScriptArgumentKind.Identifier,
+                        FalloutScriptArgumentKind.OptionalString => FalloutScriptArgumentKind.String,
+                        FalloutScriptArgumentKind.OptionalValue => FalloutScriptArgumentKind.Value,
+                        _ => kind,
+                    };
+                    if (optional && (at >= tokens.Count || !CanStartOptionalArgument(tokens[at], required)))
+                        break;
+                    if (required == FalloutScriptArgumentKind.Identifier)
                     {
                         if (at >= tokens.Count || !Identifier(tokens[at]))
                             throw new InvalidDataException($"Script function {token} needs an identifier argument.");
@@ -90,7 +103,7 @@ internal static class FalloutNvseNumericExpression
                     else
                     {
                         var argument = Read(14);
-                        arguments.Add(() => kind == FalloutScriptArgumentKind.Number
+                        arguments.Add(() => required == FalloutScriptArgumentKind.Number
                             ? new(argument.Value().Number)
                             : new(argument.Value(), null));
                     }
@@ -148,10 +161,30 @@ internal static class FalloutNvseNumericExpression
         // Parse the complete expression before invoking any stateful command
         // or assignment. Short-circuited branches never read or write state.
         return expression.Value();
+
+        bool CanStartOptionalArgument(string token, FalloutScriptArgumentKind required)
+        {
+            if (!CanStartOperand(token)) return false;
+            // A compiled form token belongs to an optional owner-form slot,
+            // not to the preceding optional integer index. This also keeps
+            // `GetAuxVar "name" SomeReference` distinct from an index read.
+            return required != FalloutScriptArgumentKind.Number || !Identifier(token) ||
+                function?.Invoke(token) is not null || values.Read(token).Kind != FalloutScriptValueKind.Form;
+        }
     }
 
     private static bool Identifier(string token) => Regex.IsMatch(token,
         @"^[A-Za-z_][A-Za-z0-9_.]*$", RegexOptions.CultureInvariant);
+
+    // Optional command arguments are whitespace-delimited in compiled source.
+    // A bare prefix operator after the last required argument is therefore an
+    // expression operator, not an omitted argument. Negative optional values
+    // remain expressible as a parenthesized expression, e.g. (-1).
+    private static bool CanStartOperand(string token) => token is "(" ||
+        token.Equals("ToString", StringComparison.OrdinalIgnoreCase) ||
+        token.Length >= 2 && token[0] == '"' && token[^1] == '"' ||
+        double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out _) ||
+        Identifier(token);
 
     private static int Priority(string op) => op switch
     {

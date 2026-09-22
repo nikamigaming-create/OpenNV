@@ -68,9 +68,21 @@ still reports 461 quest owners, 41 visible unbound summary entries and no fabric
 owned string entries; remaining failures stay visible and are not treated as
 gameplay support.
 
-The durable [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) is the next execution
-guide. The verified runtime baseline is main `252ba59` (PR 45, all checks passed).
-The next block is configuration/auxiliary storage, followed by source-driven MCM
+Block 2 of the [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) is implemented on
+the active `codex/jam-mcm-auxiliary-state` branch. The shared script-storage owner
+now reaches INI float/string reads and writes through selected `Data/Config`
+precedence with an atomic profile overlay, plus JIP typed auxiliary float/form/string
+arrays with public/private and temporary/permanent lifetimes. Quest and reference
+execution share the same storage; permanent state is in script saves, temporary
+state is session-only, and New Game clears both auxiliary lifetimes. Synthetic
+storage and source-script write/readback, serialized restore, cold restart and
+New Game checks pass without changing owned source bytes. The owned JAM audit now
+gets through its reached configuration initializers; the next visible failures are
+JohnnyGuitar render events, Dispel/perk mutation, UI component ownership and one
+remaining parser gap. This is not a working MCM or JAM gameplay claim.
+
+The verified runtime baseline before publication is main `0a1b704` (PR 47, all
+checks passed). The next block after this checked publication is source-driven MCM
 UI. Arrays, full MCM behavior and ordinary-input acceptance remain open. The plan
 specifies owners and the checked publication loop.
 

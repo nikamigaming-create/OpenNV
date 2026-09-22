@@ -24,6 +24,7 @@ public partial class RuntimeCoordinator
     private FalloutPluginStack? _nativePluginStack;
     private FalloutQuestState? _nativeQuestState;
     private FalloutReferenceWorld? _nativeReferences;
+    private FalloutScriptStorage? _nativeScriptStorage;
     private RuntimeNativeReferenceEvents? _nativeReferenceEvents;
     private RuntimeNativeQuestScripts? _nativeQuestScripts;
     private FalloutGlobalState? _nativeGlobals;
@@ -243,8 +244,13 @@ public partial class RuntimeCoordinator
         _nativePluginStack = FalloutPluginStack.Load(sources, out var loadMetrics);
         FalloutAddonNodes.Bind(content, _nativePluginStack);
         _nativeQuestState = new(_nativePluginStack, _nativeInventory.Notifications);
+        var savePath = Path.GetFullPath(RequireOption(_options, "save-path"));
+        var scriptOverlay = Path.Combine(Path.GetDirectoryName(savePath) ??
+            throw new InvalidDataException("Native save path has no profile directory."), "script-config");
+        _nativeScriptStorage = FalloutScriptStorage.Open(content, scriptOverlay);
         _nativeReferences?.Dispose();
-        _nativeReferences = new(_nativePluginStack);
+        _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
+            ini: _nativeScriptStorage.Ini);
         var initialCell = content.Campaign == RuntimeLiveContentSource.Fallout3Game
             ? new FalloutFormKey(NativeFallout3InitialCellPlugin, NativeFallout3InitialCellObjectId)
             : new FalloutFormKey(NativeNewVegasInitialCellPlugin, 0x103df9);
@@ -279,7 +285,6 @@ public partial class RuntimeCoordinator
                 _nativePluginStack,
                 _nativeOpeningControls,
                 _nativeInitialCell);
-            var savePath = Path.GetFullPath(RequireOption(_options, "save-path"));
             _nativeOpeningRestore = null;
             if (File.Exists(savePath))
             {
@@ -424,11 +429,18 @@ public partial class RuntimeCoordinator
             _nativePrewarmedInitialCellRoot?.Free();
             _nativePrewarmedInitialCellRoot = null;
             _nativeReferences?.Dispose();
-            _nativeReferences = new(stack);
+            _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
+                ini: _nativeScriptStorage?.Ini);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
+        }
+        else
+        {
+            // New Game starts a new save lifetime even when the title/menu
+            // owner has remained alive in the same process.
+            _nativeScriptStorage?.Auxiliary.ResetForNewGame();
         }
         if (!fallout3)
         {
@@ -523,7 +535,7 @@ public partial class RuntimeCoordinator
     {
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
         var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals,
-            _nativeReferences, NativeScriptEvents());
+            _nativeReferences, NativeScriptEvents(), _nativeScriptStorage);
         scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
             throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
         if (restore is not null) scripts.Scripts.Restore(restore);

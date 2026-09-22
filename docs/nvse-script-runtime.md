@@ -81,6 +81,35 @@ source also removes all keys for a handler by omitting the key argument; that
 removal form is implemented. Failed callbacks retain a visible error and stop
 retrying their prefix. Explicit re-registration can replace the failed entry.
 
+## INI and auxiliary state
+
+[GetINIFloat](https://geckwiki.com/index.php/GetINIFloat),
+[GetINIString](https://geckwiki.com/index.php/GetINIString),
+[SetINIFloat](https://geckwiki.com/index.php/SetINIFloat) and
+[SetINIString](https://geckwiki.com/index.php/SetINIString) use the selected
+source graph's logical `Data/Config/{filename}` resource for defaults. An
+omitted filename is the calling script plugin's filename with an `.ini`
+extension. `Section:Key` (and the equivalent admitted separators) is matched
+case-insensitively. Missing strings and malformed/missing floats return the
+reached zero values. Writes are copy-on-write into `script-config` beside the
+profile save, retain unrelated source lines and use a relative-path check plus
+an atomic replacement; the selected game and mod folders remain read-only.
+
+[JIP auxiliary variables](https://geckwiki.com/index.php?title=Auxiliary_Variable)
+are owned by a form/reference and the winning calling script plugin. `*_name`
+is temporary/public, `_name` permanent/public, `*name` temporary/private and
+`name` permanent/private. Float, form and string elements retain their types;
+missing or wrong-type reads return the reached zero value. Setters use index 0
+by default, index `-1` appends, and getters use `-1` for the last element.
+Explicit owner forms and the reached alias commands are bound in both quest and
+reference execution through the same storage object.
+
+Permanent variables are included in the validated quest-script save snapshot.
+Restoring a save replaces permanent variables while retaining temporary state
+in the current session; a new process starts with no temporary variables, and
+New Game clears both auxiliary lifetimes. INI overlays intentionally survive
+process restart because they are profile configuration rather than save state.
+
 ## Evidence and remaining work
 
 Synthetic execution checks cover chained writes, operator precedence, numeric and
@@ -92,12 +121,16 @@ mutation during dispatch, failure retention and replacement with restored owners
 The native Godot audit dispatches physical key events into source functions and
 verifies GameMode/paused MenuMode callbacks mutating actual reference slots.
 
-The selected JAM source audit now has 21 parser rejections among 52 scripts.
-Its six admitted initialization scripts execute through the shared owners and
-reach concrete remaining UI, actor-effect, perk-mutation and render-event gaps.
-The existing mod probe's `--audit-mod-scripts` option reports the reached state
-and failures against selected owned folders. It is headless and has no substitute
-player or presentation host. These checks do not establish JAM gameplay.
+The selected JAM source audit still has 21 parser rejections among 52 scripts.
+Its reached configuration initializers now execute through the shared INI and
+auxiliary owners; the next failures are concrete render-event, actor-effect,
+perk-mutation, UI-component and remaining parser gaps. The synthetic storage
+probe covers source-script write/readback, source precedence, overlay atomicity,
+typed/public/private/indexed auxiliary values, save reload, cold restart and
+New Game clearing. The existing mod probe's `--audit-mod-scripts` option reports
+the reached state and failures against selected owned folders. It is headless
+and has no substitute player or presentation host. These checks do not establish
+JAM gameplay or a working MCM menu.
 
 Arrays, extended operators and unbound extension calls still need owners.
 MCM's complete menu/settings behavior, render/hit/fire events, XR control mapping,
