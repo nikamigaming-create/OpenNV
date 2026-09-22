@@ -29,6 +29,7 @@ HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
+ScriptValueProbe.Run();
 NvseNumericProbe.Run();
 NvseEventProbe.Run();
 QuestScriptExecutionProbe.Run();

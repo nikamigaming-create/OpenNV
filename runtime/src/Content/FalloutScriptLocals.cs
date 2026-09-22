@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
@@ -18,10 +19,15 @@ internal static class FalloutScriptLocals
         return script.Signature == "SCPT" ? script : throw new InvalidDataException("Attached script is not SCPT.");
     }
 
-    internal static IReadOnlyDictionary<string, uint> Read(FalloutPluginRecord script)
+    internal static IReadOnlyDictionary<string, uint> Read(FalloutPluginRecord script) =>
+        ReadDeclarations(script).ToDictionary(pair => pair.Key, pair => pair.Value.Index,
+            StringComparer.OrdinalIgnoreCase);
+
+    internal static IReadOnlyDictionary<string, FalloutScriptLocalDeclaration> ReadDeclarations(
+        FalloutPluginRecord script)
     {
         if (script.Signature != "SCPT") throw new InvalidDataException("Variable declaration owner is not SCPT.");
-        var variables = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
+        var variables = new Dictionary<string, (uint Index, byte Flags)>(StringComparer.OrdinalIgnoreCase);
         var declarations = new Dictionary<uint, (byte Flags, string Name)>();
         uint? index = null;
         byte flags = 0;
@@ -47,12 +53,50 @@ internal static class FalloutScriptLocals
             }
             else
             {
-                if (!variables.TryAdd(name, index.Value)) throw new InvalidDataException("Script variable identity is ambiguous.");
+                if (!variables.TryAdd(name, (index.Value, flags)))
+                    throw new InvalidDataException("Script variable identity is ambiguous.");
                 declarations.Add(index.Value, (flags, name));
             }
             index = null;
         }
         if (index is not null) throw new InvalidDataException("Script variable has no source name.");
-        return variables;
+
+        var sourceKinds = ReadSourceKinds(script);
+        if (sourceKinds.Keys.Any(name => !variables.ContainsKey(name)))
+            throw new InvalidDataException("Script source declares a variable without a compiled slot.");
+        return variables.ToDictionary(pair => pair.Key,
+            pair => new FalloutScriptLocalDeclaration(pair.Value.Index,
+                sourceKinds.GetValueOrDefault(pair.Key, FalloutScriptLocalKind.Number)),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, FalloutScriptLocalKind> ReadSourceKinds(
+        FalloutPluginRecord script)
+    {
+        var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
+        if (source.Length == 0) return new Dictionary<string, FalloutScriptLocalKind>();
+        if (source.Length != 1) throw new InvalidDataException("Script source is ambiguous.");
+        var result = new Dictionary<string, FalloutScriptLocalKind>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in FalloutDialogueTopic.ScriptText(source[0].Data.Span).Split('\n'))
+        {
+            var line = FalloutGameModeProgram.StripComment(raw).Trim();
+            if (line.Length == 0) continue;
+            var tokens = FalloutGameModeProgram.Tokens(line);
+            if (tokens.Length == 0) continue;
+            var kind = tokens[0].ToLowerInvariant() switch
+            {
+                "short" or "int" or "long" or "float" => FalloutScriptLocalKind.Number,
+                "ref" or "reference" => FalloutScriptLocalKind.Form,
+                "string_var" => FalloutScriptLocalKind.String,
+                "array_var" => FalloutScriptLocalKind.Array,
+                _ => (FalloutScriptLocalKind?)null,
+            };
+            if (kind is not { } localKind) continue;
+            if (tokens.Length != 2 || !Regex.IsMatch(tokens[1],
+                    @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant) ||
+                !result.TryAdd(tokens[1], localKind))
+                throw new InvalidDataException("Script source variable declaration is ambiguous.");
+        }
+        return result;
     }
 }

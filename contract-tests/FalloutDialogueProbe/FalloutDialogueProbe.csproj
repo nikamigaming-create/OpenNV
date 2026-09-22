@@ -6,6 +6,9 @@
   <ItemGroup>
     <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueVoice.cs" Link="FalloutDialogueVoice.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptValues.cs" Link="FalloutScriptValues.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutNvseNumericExpression.cs" Link="FalloutNvseNumericExpression.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
     <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />
     <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
