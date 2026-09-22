@@ -21,6 +21,10 @@ state and next owners are in [mod compatibility](mod-compatibility.md).
 Work in this task without subagents. Preserve the original campaign, release
 and physical-headset requirements below.
 
+The executable JAM-first breakdown, verified starting point, owner map and
+acceptance gates are in [the JAM/MCM plan for Luna Max](jam-luna-max-plan.md).
+Use it for the current mod implementation; it preserves this plan's full scope.
+
 Launcher UX must use original ImageGen artwork and readable native controls.
 Mods are additive checkboxes beneath the active game. Load order is automatic
 from authored dependencies and verified rules, with optional Advanced overrides.

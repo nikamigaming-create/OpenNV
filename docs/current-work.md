@@ -58,6 +58,13 @@ Full MCM menu/settings behavior is explicitly included in JAM acceptance.
 The full required gate passes with the function/event changes; its private log is
 `tmp/jam-events-gate.log`.
 
+The durable [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) is the next execution
+guide. The verified runtime baseline is main `252ba59` (PR 45, all checks passed).
+Start with typed strings and state, then configuration/auxiliary storage and
+source-driven MCM UI. An incomplete string experiment is preserved privately;
+it is not part of the verified runtime. The plan specifies owners, ordinary-input
+acceptance and the checked publication loop without requiring that experiment.
+
 ## Verified candidate
 
 OpenNV remains an experimental flat/OpenXR playtest. The active implementation
