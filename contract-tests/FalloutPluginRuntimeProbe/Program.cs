@@ -21,6 +21,11 @@ if (args.Length >= 4 && args[0] == "--audit-mod-scripts")
     ModInstallationContracts.OwnedExecution(args[1], args[2], args[3], args[4..]);
     return;
 }
+if (args.Length >= 4 && args[0] == "--audit-mcm-ui")
+{
+    McmUiContracts.Owned(args[1], args[2], args[3], args[4..]);
+    return;
+}
 ModInstallationContracts.Run();
 ModContentContracts.Run();
 if (args is ["--mod-install-contracts"]) return;
@@ -31,6 +36,8 @@ QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 ScriptValueProbe.Run();
 ScriptStorageProbe.Run();
+UiOrganizerProbe.Run();
+UiComponentProbe.Run();
 NvseNumericProbe.Run();
 NvseEventProbe.Run();
 QuestScriptExecutionProbe.Run();

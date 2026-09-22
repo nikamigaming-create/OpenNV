@@ -152,6 +152,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutScriptValueStore ScriptValues { get; }
     internal FalloutAuxiliaryStore Auxiliary { get; }
     internal FalloutScriptIniStore? Ini { get; }
+    internal FalloutUiComponentStore? Ui => References?.Ui;
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
     internal FalloutScriptSession Session { get; } = new();
@@ -432,6 +433,9 @@ internal sealed class FalloutQuestScripts
         string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"'
             ? token[1..^1]
             : values.Read(token).Text;
+        string UiStringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"'
+            ? token[1..^1]
+            : values.Read(token).Text;
         double NumberArgument(string token) => FalloutNvseNumericExpression.EvaluateValue([token], values, Function).Number;
         int AuxiliaryIndex(IReadOnlyList<string> arguments, int position, int fallback)
         {
@@ -504,8 +508,19 @@ internal sealed class FalloutQuestScripts
                         arguments => ini.GetFloat(arguments[0].Text, arguments.Count == 2 ? arguments[1].Text : null,
                             instance.Script.FormKey.OwnerPlugin))
                     : FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalString],
-                        arguments => FalloutScriptValue.String(ini.GetString(arguments[0].Text,
+                            arguments => FalloutScriptValue.String(ini.GetString(arguments[0].Text,
                             arguments.Count == 2 ? arguments[1].Text : null, instance.Script.FormKey.OwnerPlugin)));
+            }
+            if (parts.Length == 1 && operation is "getuifloat" or "getuifloatalt" or "getuistring")
+            {
+                var ui = Ui ?? throw new NotSupportedException("UI functions have no menu-session owner.");
+                return operation switch
+                {
+                    "getuifloat" => new([FalloutScriptArgumentKind.String], arguments => ui.GetFloat(arguments[0].Text)),
+                    "getuifloatalt" => new([FalloutScriptArgumentKind.String], arguments => ui.GetFloat(arguments[0].Text, alt: true)),
+                    _ => FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String],
+                        arguments => FalloutScriptValue.String(ui.GetString(arguments[0].Text))),
+                };
             }
             return name.ToLowerInvariant() switch
             {
@@ -547,6 +562,26 @@ internal sealed class FalloutQuestScripts
                 var file = arguments.Count == 3 ? StringArgument(arguments[2]) : null;
                 if (operation == "setinifloat") ini.SetFloat(key, NumberArgument(arguments[1]), file, caller);
                 else ini.SetString(key, StringArgument(arguments[1]), file, caller);
+                return;
+            }
+            if (parts.Length == 1 && operation is "setuifloat" or "setuifloatalt" or "setuistring" or
+                "setuistringalt" or "setuistringex" or "unloaduicomponent")
+            {
+                var ui = Ui ?? throw new NotSupportedException("UI commands have no menu-session owner.");
+                if (operation == "unloaduicomponent")
+                {
+                    if (arguments.Count != 1) throw new InvalidDataException($"{command} has an invalid argument count.");
+                    _ = ui.Unload(StringArgument(arguments[0]));
+                    return;
+                }
+                if (arguments.Count < 2 || operation == "setuistringex" && arguments.Count > 3 ||
+                    operation != "setuistringex" && arguments.Count != 2)
+                    throw new InvalidDataException($"{command} has an invalid argument count.");
+                var path = StringArgument(arguments[0]);
+                var alt = operation is "setuifloatalt" or "setuistringalt";
+                if (operation is "setuifloat" or "setuifloatalt") _ = ui.SetFloat(path, (float)NumberArgument(arguments[1]), alt);
+                else _ = ui.SetString(path, UiStringArgument(arguments[1]), alt,
+                    arguments.Count == 3 ? UiStringArgument(arguments[2]) : null);
                 return;
             }
             if (parts.Length <= 2 && operation is "auxiliaryvariablesetfloat" or "auxvarsetflt" or

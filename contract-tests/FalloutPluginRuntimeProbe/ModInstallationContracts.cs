@@ -17,33 +17,36 @@ internal static class ModInstallationContracts
         Directory.CreateDirectory(overlay);
         try
         {
-        var storage = FalloutScriptStorage.Open(content, overlay);
-        using var world = new FalloutReferenceWorld(records, auxiliary: storage.Auxiliary, ini: storage.Ini);
-        var quests = new FalloutQuestState(records);
-        var events = new FalloutScriptEvents();
-        var globals = FalloutGlobalState.Read(records);
-        var excluded = records.EffectiveRecords("QUST").Where(quest =>
-            FalloutScriptLocals.AttachedScript(records, quest)?.Plugin.Name != setup.EntryPlugin).Select(quest => quest.FormKey).ToHashSet();
-        var scripts = new FalloutQuestScripts(records, quests, excluded, new FalloutPlayerInventory(), globals,
-            FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime"), world, events, storage);
-        var executor = new FalloutReferenceScripts(records, world, quests, new(
-            (_, _) => throw new NotSupportedException("Headless audit has no furniture input."),
-            effect => throw new NotSupportedException($"Headless audit has no presentation effect host: {effect.Kind}."), Globals: globals, Events: events));
-        scripts.Host = new((_, _) => throw new NotSupportedException("Headless audit has no native quest-stage host."),
-            _ => throw new NotSupportedException("Headless audit has no player actor-value host."), executor.ExecuteProgram, executor.InvokeFunction);
-        events.LoadGame();
-        for (var frame = 0; frame < 360; ++frame)
-        {
-            scripts.Advance(1.0 / 60);
-            events.Advance(1.0 / 60, true, executor.InvokeFunction);
-        }
-        Console.WriteLine(JsonSerializer.Serialize(new
-        {
-            schema = "opennv-mod-script-execution-audit/v1", setup.Id,
-            plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256 }),
-            scripts = scripts.State,
-            boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
-        }));
+            var storage = FalloutScriptStorage.Open(content, overlay);
+            var ui = FalloutUiComponentStore.Open(records, content);
+            using var world = new FalloutReferenceWorld(records, auxiliary: storage.Auxiliary, ini: storage.Ini, ui: ui);
+            var quests = new FalloutQuestState(records);
+            var events = new FalloutScriptEvents();
+            var globals = FalloutGlobalState.Read(records);
+            var excluded = records.EffectiveRecords("QUST").Where(quest =>
+                FalloutScriptLocals.AttachedScript(records, quest)?.Plugin.Name != setup.EntryPlugin)
+                .Select(quest => quest.FormKey).ToHashSet();
+            var scripts = new FalloutQuestScripts(records, quests, excluded, new FalloutPlayerInventory(), globals,
+                FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime"), world, events, storage);
+            var executor = new FalloutReferenceScripts(records, world, quests, new(
+                (_, _) => throw new NotSupportedException("Headless audit has no furniture input."),
+                effect => throw new NotSupportedException($"Headless audit has no presentation effect host: {effect.Kind}."),
+                Globals: globals, Events: events));
+            scripts.Host = new((_, _) => throw new NotSupportedException("Headless audit has no native quest-stage host."),
+                _ => throw new NotSupportedException("Headless audit has no player actor-value host."), executor.ExecuteProgram, executor.InvokeFunction);
+            events.LoadGame();
+            for (var frame = 0; frame < 360; ++frame)
+            {
+                scripts.Advance(1.0 / 60);
+                events.Advance(1.0 / 60, true, executor.InvokeFunction);
+            }
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                schema = "opennv-mod-script-execution-audit/v1", setup.Id,
+                plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256 }),
+                scripts = scripts.State,
+                boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
+            }));
         }
         finally
         {

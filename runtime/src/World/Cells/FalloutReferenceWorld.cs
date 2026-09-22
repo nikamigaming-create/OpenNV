@@ -146,11 +146,12 @@ internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord recor
 // it cannot reset variables shared with scripts in other cells.
 internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     FalloutScriptValueStore? scriptValues = null, FalloutAuxiliaryStore? auxiliary = null,
-    FalloutScriptIniStore? ini = null) : IDisposable
+    FalloutScriptIniStore? ini = null, FalloutUiComponentStore? ui = null) : IDisposable
 {
     internal FalloutScriptValueStore ScriptValues { get; } = scriptValues ?? new();
     internal FalloutAuxiliaryStore Auxiliary { get; } = auxiliary ?? new();
     internal FalloutScriptIniStore? Ini { get; } = ini;
+    internal FalloutUiComponentStore? Ui { get; } = ui;
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _instances = [];
     private readonly Dictionary<FalloutFormKey, FalloutReferenceScriptDefinition> _definitions = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutReferenceInstance>> _residentCells = [];
