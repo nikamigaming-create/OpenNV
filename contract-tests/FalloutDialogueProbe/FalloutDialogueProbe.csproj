@@ -34,6 +34,7 @@
     <Compile Include="../../runtime/src/Content/FalloutScriptPackage.cs" Link="FalloutScriptPackage.cs" />
     <Compile Include="../../runtime/src/Content/FalloutImageSpaceCommands.cs" Link="FalloutImageSpaceCommands.cs" />
     <Compile Include="../../runtime/src/Content/FalloutMenuXml.cs" Link="FalloutMenuXml.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutUiOrganizer.cs" Link="FalloutUiOrganizer.cs" />
     <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutBitmapFont.cs" Link="FalloutBitmapFont.cs" />

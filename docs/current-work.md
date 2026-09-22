@@ -53,7 +53,8 @@ survives scene/save reload with fresh executor bindings; it retains no retired
 world delegates. Synthetic recursion, callback mutation and restoration checks
 pass. Native Godot frame/mode and physical key-edge checks mutate source-owned
 reference slots successfully. The owned JAM execution audit gets past lifecycle
-queries and exposes the next UI, effect, perk and render-event gaps. Evidence is
+queries and the now-owned UI component commands, exposing the next effect, perk
+and render-event gaps. Evidence is
 `tmp/jam-events-{contracts.log,native.log,source.private.json,owned.private.json}`.
 Full MCM menu/settings behavior is explicitly included in JAM acceptance.
 The full required gate passes with the function/event changes; its private log is
@@ -68,23 +69,31 @@ still reports 461 quest owners, 41 visible unbound summary entries and no fabric
 owned string entries; remaining failures stay visible and are not treated as
 gameplay support.
 
-Block 2 of the [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) is implemented on
-the active `codex/jam-mcm-auxiliary-state` branch. The shared script-storage owner
-now reaches INI float/string reads and writes through selected `Data/Config`
-precedence with an atomic profile overlay, plus JIP typed auxiliary float/form/string
-arrays with public/private and temporary/permanent lifetimes. Quest and reference
-execution share the same storage; permanent state is in script saves, temporary
-state is session-only, and New Game clears both auxiliary lifetimes. Synthetic
-storage and source-script write/readback, serialized restore, cold restart and
-New Game checks pass without changing owned source bytes. The owned JAM audit now
-gets through its reached configuration initializers; the next visible failures are
-JohnnyGuitar render events, Dispel/perk mutation, UI component ownership and one
-remaining parser gap. This is not a working MCM or JAM gameplay claim.
+Block 2 of the [JAM/MCM plan for Luna Max](jam-luna-max-plan.md) merged as `9dd4c71`
+(PR 48, all checks passed). The shared script-storage owner now reaches INI
+float/string reads and writes through selected `Data/Config` precedence with an
+atomic profile overlay, plus JIP typed auxiliary float/form/string arrays with
+public/private and temporary/permanent lifetimes. Quest and reference execution
+share the same storage; permanent state is in script saves, temporary state is
+session-only, and New Game clears both auxiliary lifetimes. Synthetic storage and
+source-script write/readback, serialized restore, cold restart and New Game checks
+pass without changing owned source bytes.
 
-The verified runtime baseline before publication is main `0a1b704` (PR 47, all
-checks passed). The next block after this checked publication is source-driven MCM
-UI. Arrays, full MCM behavior and ordinary-input acceptance remain open. The plan
-specifies owners and the checked publication loop.
+The active `codex/jam-mcm-ui` block now resolves the selected UIO manifests,
+MCM start-menu includes and owned MCM/JAM XML through the live source graph. A
+source-owned menu-session component store owns scoped tile lookup, indexed paths,
+float/string traits, source expressions, component unload and the reached UI
+function/command forms in both quest and reference execution. Synthetic organizer
+and component probes pass; the owned source audit reaches past `UnloadUIComponent`
+and now exposes the next render-event, actor-effect, perk-mutation and parser gaps.
+MCM registration/API behavior, Godot menu presentation, ordinary input and actual
+JAM gameplay remain open. This is not a working MCM or JAM gameplay claim.
+
+The verified runtime baseline before this block was main `9dd4c71` (PR 48, all
+checks passed). The next checked block is MCM registration and option behavior,
+followed by ordinary flat/XR menu acceptance. Arrays, full MCM behavior and
+ordinary-input acceptance remain open. The plan specifies owners and the checked
+publication loop.
 
 ## Verified candidate
 
@@ -223,13 +232,13 @@ claimed from these checks.
 
 Implement the actual JAM script, event, UI, animation and persistent-state owners
 against the complete dependency stack. Numeric assignments and expressions are
-implemented, along with scalar user functions, loops and frame/key event owners.
-Typed string state is implemented and verified; next are INI/JIP auxiliary storage
-and actual UI/MCM, followed by actor-effect/perk and render-event owners reached by
-JAM initialization. Preserve vanilla expression semantics and existing saves while
-adding each capability. Arrays, new-game-only lifecycle signalling, main-menu
-callbacks without a world, XR key adaptation and full dependency behavior still
-require implementation/evidence.
+implemented, along with scalar user functions, loops, frame/key event owners,
+INI/JIP auxiliary storage and source-owned UI component state. The next bounded
+owner is MCM registration and option behavior, followed by actor-effect/perk and
+render-event owners reached by JAM initialization. Preserve vanilla expression
+semantics and existing saves while adding each capability. Arrays, new-game-only
+lifecycle signalling, main-menu callbacks without a world, XR key adaptation and
+full dependency behavior still require implementation/evidence.
 Only after JAM's ordinary-input acceptance passes proceed to TTW's combined
 campaign, transitions and extension behavior. Keep all original campaign and
 physical-headset requirements in scope. Prior candidate evidence is

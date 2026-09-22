@@ -110,6 +110,32 @@ in the current session; a new process starts with no temporary variables, and
 New Game clears both auxiliary lifetimes. INI overlays intentionally survive
 process restart because they are profile configuration rather than save state.
 
+## Source-owned UI component state
+
+The selected live source graph resolves UIO manifests and applies their declared
+XML fragments to the owned start, HUD and inventory menu documents before prefab
+expansion. Conditions are evaluated against the active plugin set, optional
+fragments are admitted only when their owned resource exists, and malformed source
+XML is corrected only at the narrow source boundary where the selected retail
+resource requires it. The source audit verifies the selected MCM resource,
+`uio/supported.txt`, `MCM_ModList` and `MCM_Options`; this does not imply that
+Godot has rendered the menu.
+
+Menu-session UI state is owned by a shared C# component store. It resolves named
+and indexed tile paths, evaluates the reached source traits and copy expressions,
+keeps float/string overrides in the component owner, and detaches a component and
+its descendants for `UnloadUIComponent`. `GetUIFloat`, `GetUIFloatAlt`,
+`GetUIString`, `SetUIFloat`, `SetUIFloatAlt`, `SetUIString`, `SetUIStringAlt` and
+`SetUIStringEx` are bound for both quest and reference script execution. The UI
+store is deliberately not part of campaign saves: menu components are recreated
+with the menu source and later presentation owner.
+
+The current store is a source/state contract, not a complete UI implementation.
+MCM registration and option APIs, dynamic component creation, screen/global
+presentation bindings, rendering, ordinary flat/XR input, menu callbacks and
+visible gameplay effects remain open. A passing source or synthetic probe must not
+be reported as a working MCM menu or JAM gameplay.
+
 ## Evidence and remaining work
 
 Synthetic execution checks cover chained writes, operator precedence, numeric and
@@ -124,13 +150,16 @@ verifies GameMode/paused MenuMode callbacks mutating actual reference slots.
 The selected JAM source audit still has 21 parser rejections among 52 scripts.
 Its reached configuration initializers now execute through the shared INI and
 auxiliary owners; the next failures are concrete render-event, actor-effect,
-perk-mutation, UI-component and remaining parser gaps. The synthetic storage
-probe covers source-script write/readback, source precedence, overlay atomicity,
+perk-mutation and remaining parser gaps. The synthetic storage probe covers
+source-script write/readback, source precedence, overlay atomicity,
 typed/public/private/indexed auxiliary values, save reload, cold restart and
-New Game clearing. The existing mod probe's `--audit-mod-scripts` option reports
-the reached state and failures against selected owned folders. It is headless
-and has no substitute player or presentation host. These checks do not establish
-JAM gameplay or a working MCM menu.
+New Game clearing. The UI organizer/component probes cover source injection,
+scoped paths, source traits, typed writes and component detachment. The existing
+mod probe's `--audit-mod-scripts` option reports the reached state and failures
+against selected owned folders; the MCM source probe separately verifies the
+selected MCM/UIO resources. Both are headless and have no substitute player or
+presentation host. These checks do not establish JAM gameplay or a working MCM
+menu.
 
 Arrays, extended operators and unbound extension calls still need owners.
 MCM's complete menu/settings behavior, render/hit/fire events, XR control mapping,

@@ -332,6 +332,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         arguments => FalloutScriptValue.String(ini.GetString(arguments[0].Text,
                             arguments.Count == 2 ? arguments[1].Text : null, bindings.Source.OwnerPlugin)));
             }
+            if (parts.Length == 1 && operation is "getuifloat" or "getuifloatalt" or "getuistring")
+            {
+                var ui = world.Ui ?? throw new NotSupportedException("UI functions have no menu-session owner.");
+                return operation switch
+                {
+                    "getuifloat" => new([FalloutScriptArgumentKind.String], arguments => ui.GetFloat(arguments[0].Text)),
+                    "getuifloatalt" => new([FalloutScriptArgumentKind.String], arguments => ui.GetFloat(arguments[0].Text, alt: true)),
+                    _ => FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String],
+                        arguments => FalloutScriptValue.String(ui.GetString(arguments[0].Text))),
+                };
+            }
             if (parts.Length <= 2 && parts[^1].Equals("GetInSameCell", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
@@ -441,6 +452,26 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 var file = arguments.Count == 3 ? StringValue(arguments[2]) : null;
                 if (operation == "setinifloat") ini.SetFloat(key, Number(arguments[1]), file, callerPlugin);
                 else ini.SetString(key, StringValue(arguments[1]), file, callerPlugin);
+                return;
+            }
+            if (parts.Length == 1 && operation is "setuifloat" or "setuifloatalt" or "setuistring" or
+                "setuistringalt" or "setuistringex" or "unloaduicomponent")
+            {
+                var ui = world.Ui ?? throw new NotSupportedException("UI commands have no menu-session owner.");
+                if (operation == "unloaduicomponent")
+                {
+                    if (arguments.Count != 1) throw new InvalidDataException($"{command} has an invalid argument count.");
+                    _ = ui.Unload(StringValue(arguments[0]));
+                    return;
+                }
+                if (arguments.Count < 2 || operation == "setuistringex" && arguments.Count > 3 ||
+                    operation != "setuistringex" && arguments.Count != 2)
+                    throw new InvalidDataException($"{command} has an invalid argument count.");
+                var path = StringValue(arguments[0]);
+                var alt = operation is "setuifloatalt" or "setuistringalt";
+                if (operation is "setuifloat" or "setuifloatalt") _ = ui.SetFloat(path, (float)Number(arguments[1]), alt);
+                else _ = ui.SetString(path, StringValue(arguments[1]), alt,
+                    arguments.Count == 3 ? StringValue(arguments[2]) : null);
                 return;
             }
             if (parts.Length <= 2 && operation is "auxiliaryvariablesetfloat" or "auxvarsetflt" or

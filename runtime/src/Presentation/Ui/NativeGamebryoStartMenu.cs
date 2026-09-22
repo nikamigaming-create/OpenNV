@@ -1,7 +1,5 @@
 using System.Buffers.Binary;
 using System.Globalization;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Godot;
 using OpenNV.Runtime.Content;
@@ -39,7 +37,7 @@ internal sealed partial class NativeGamebryoStartMenu : Control
         _activate = activate;
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("StartMenu requires owned files.");
         _settings = FalloutInstallationSettings.Read(source);
-        _menu = ReadXml("menus\\options\\start_menu.xml");
+        _menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/options/start_menu.xml")).Elements("menu").Single();
         _itemTemplate = Named(_menu, "lb_item_hotrect");
         _itemText = Named(_itemTemplate, "ListItemText");
         _itemHeight = Literal(_menu, "_item_height");
@@ -227,14 +225,6 @@ internal sealed partial class NativeGamebryoStartMenu : Control
     private static XElement Named(XElement parent, string name) => parent.DescendantsAndSelf().First(element => (string?)element.Attribute("name") == name);
     private static float Literal(XElement element, string trait) => float.Parse(element.Element(trait)?.Value.Trim() ?? throw new InvalidDataException($"Missing owned menu trait {trait}."), CultureInfo.InvariantCulture);
     private static byte[] Read(string path) => RuntimeLiveContentSource.Current!.TryRead(path, null, out var data, out _) ? data : throw new FileNotFoundException("Missing owned menu resource.", path);
-    private static XElement ReadXml(string path)
-    {
-        // Preserve engine entity tokens as strings. No filesystem/XML entity resolution.
-        var text = Encoding.UTF8.GetString(Read(path));
-        text = Regex.Replace(text, @"<!--.*?-->", "", RegexOptions.Singleline);
-        text = Regex.Replace(text, @"&(-?[A-Za-z_][A-Za-z0-9_]*);", match => "entity_" + match.Groups[1].Value);
-        return XElement.Parse(text);
-    }
 }
 
 internal sealed partial class NativeStartMenuConfirmation : Control

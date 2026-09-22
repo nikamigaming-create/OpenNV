@@ -11,13 +11,36 @@ internal static class FalloutMenuXml
     internal static XElement Read(string path)
     {
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned menu source is absent.");
+        return Read(source, path);
+    }
+
+    internal static XElement Read(RuntimeLiveContentSource source, string path)
+    {
         if (!source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Owned menu XML is missing.", path);
-        return Parse(bytes);
+        var document = Parse(bytes);
+        return path.Replace('\\', '/').Equals("menus/options/start_menu.xml", StringComparison.OrdinalIgnoreCase) ||
+            path.Replace('\\', '/').Equals("menus/main/hud_main_menu.xml", StringComparison.OrdinalIgnoreCase) ||
+            path.Replace('\\', '/').Equals("menus/main/inventory_menu.xml", StringComparison.OrdinalIgnoreCase)
+            ? FalloutUiOrganizer.From(source).Apply(path, document)
+            : document;
     }
 
     internal static XElement Parse(ReadOnlySpan<byte> bytes)
     {
         var text = Regex.Replace(Encoding.UTF8.GetString(bytes), @"<!--.*?-->", "", RegexOptions.Singleline);
+        // A small set of malformed tags is present in the selected owned JAM/
+        // MCM resources. Retail's tile loader accepts these source-local
+        // corrections; all other mismatched XML remains rejected.
+        text = text.Replace("<_KeyInut>", "<_KeyInput>", StringComparison.Ordinal);
+        text = text.Replace("</_hightlightHeight>", "</_highlightHeight>", StringComparison.Ordinal);
+        text = text.Replace("<or src=\"me()\" trait=\"_altTarget\"/> </_target>",
+            "<or src=\"me()\" trait=\"_altTarget\"/> </onlyif> </_target>", StringComparison.Ordinal);
+        text = text.Replace("<_JHMOffsetBase> <copy src=\"JHM\" trait=\"_JHMOffset\"/> </_JHMOffset>",
+            "<_JHMOffsetBase> <copy src=\"JHM\" trait=\"_JHMOffset\"/> </_JHMOffsetBase>", StringComparison.Ordinal);
+        text = text.Replace("<_JHMOffsetBase> 20 <_JHMOffsetBase>", "<_JHMOffsetBase> 20 </_JHMOffsetBase>", StringComparison.Ordinal);
+        text = text.Replace("<_JLMAction1> 1 </_JLMInteract1>", "<_JLMAction1> 1 </_JLMAction1>", StringComparison.Ordinal);
+        text = text.Replace("<_JLMAction2> 7 </_JLMInteract2>", "<_JLMAction2> 7 </_JLMAction2>", StringComparison.Ordinal);
+        text = text.Replace("<_JLMAction3> 5 </_JLMInteract3>", "<_JLMAction3> 5 </_JLMAction3>", StringComparison.Ordinal);
         // The owned tile grammar admits an empty property whose opening tag
         // omits its final bracket. Keep it empty; never invent a trait value.
         text = Regex.Replace(text, @"<([A-Za-z_][A-Za-z0-9_.-]*)</\1\s*>", "<$1></$1>");
@@ -105,6 +128,15 @@ internal static class FalloutMenuXml
 
     internal static XElement Expand(XElement source)
     {
+        var live = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned menu source is absent.");
+        return Expand(source, path => Read(live, path));
+    }
+
+    internal static XElement Expand(RuntimeLiveContentSource live, XElement source) =>
+        Expand(source, path => Read(live, path));
+
+    private static XElement Expand(XElement source, Func<string, XElement> read)
+    {
         var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         XElement Build(XElement tile)
         {
@@ -132,7 +164,7 @@ internal static class FalloutMenuXml
             {
                 var path = "menus/prefabs/" + include.Attribute("src")!.Value;
                 if (!active.Add(path)) throw new InvalidDataException("Owned menu prefab cycle.");
-                foreach (var value in Build(Read(path)).Elements()) Merge(value);
+                foreach (var value in Build(read(path)).Elements()) Merge(value);
                 active.Remove(path);
             }
             foreach (var value in tile.Elements().Where(value => value.Name != "include"))
