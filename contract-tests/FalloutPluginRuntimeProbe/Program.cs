@@ -16,6 +16,11 @@ if (args.Length >= 4 && args[0] == "--audit-mod-install")
     ModInstallationContracts.Owned(args[1], args[2], args[3], args[4..]);
     return;
 }
+if (args.Length >= 4 && args[0] == "--audit-mod-scripts")
+{
+    ModInstallationContracts.OwnedExecution(args[1], args[2], args[3], args[4..]);
+    return;
+}
 ModInstallationContracts.Run();
 ModContentContracts.Run();
 if (args is ["--mod-install-contracts"]) return;
@@ -25,7 +30,9 @@ QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 NvseNumericProbe.Run();
+NvseEventProbe.Run();
 QuestScriptExecutionProbe.Run();
+if (args is ["--script-contracts"]) return;
 ExteriorLodProbe.Run();
 LoadOrderContracts.Run();
 WeatherMotionProbe.Run();

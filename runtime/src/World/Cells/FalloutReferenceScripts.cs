@@ -19,7 +19,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<string, bool>? IsPlayerTagSkill = null, FalloutGlobalState? Globals = null,
     Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>>? Command = null,
     Func<FalloutFormKey, bool>? IsInCombat = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null);
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null, FalloutScriptEvents? Events = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
     IReadOnlySet<FalloutFormKey>? TriggerReferences = null);
@@ -28,7 +28,7 @@ internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? 
 // and effects use the same authoritative owners in a lab or a presentation host.
 // An unsupported reached operation stops this instance, preserving the executed
 // prefix and its error; it never silently advances past the missing behavior.
-internal sealed class FalloutReferenceScripts(FalloutPluginStack records, FalloutReferenceWorld world,
+internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutQuestState quests, FalloutReferenceScriptHost host)
 {
     private sealed record InstanceProgram(FalloutScriptBindings Bindings, IReadOnlyList<FalloutScriptEventProgram> Events);
@@ -166,21 +166,27 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
     }
 
     private IEnumerable<bool> Steps(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
-        FalloutFormKey? actor, double seconds)
+        FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null)
     {
+        budget ??= new();
+        FalloutScriptEvents Events() => host.Events ?? throw new NotSupportedException("Script event has no process owner.");
+        FalloutFormKey? CallingReference() => records.RuntimeFormId(source) == 0x14 ||
+            records.GetEffective(source).Signature is "REFR" or "ACHR" or "ACRE" ? source : null;
         double Read(string name)
         {
-            if (name.Equals("this", StringComparison.OrdinalIgnoreCase)) return records.RuntimeFormId(source);
-            if (name.Equals("player", StringComparison.OrdinalIgnoreCase)) return records.RuntimeFormId(bindings.Reference(name));
-            if (bindings.TryForm(name) is { Signature: "REFR" or "ACHR" or "ACRE" } reference) return records.RuntimeFormId(reference.FormKey);
+            if (frame?.Contains(name) == true) return frame.Read(name);
+            if (name.Equals("this", StringComparison.OrdinalIgnoreCase)) return CallingReference() is { } caller ? records.RuntimeFormId(caller) : 0;
+            if (FalloutScriptBindings.IsPlayer(name)) return records.RuntimeFormId(bindings.Reference(name));
             if (bindings.TryForm(name) is { Signature: "GLOB" } global)
                 return (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Get(global.FormKey);
+            if (bindings.TryForm(name) is { } form) return records.RuntimeFormId(form.FormKey);
             var key = bindings.Variable(name);
             return records.GetEffective(key.Owner).Signature == "QUST" ? quests.Variable(key.Owner, key.Index) :
                 world.Get(key.Owner).Read(key.Index);
         }
         void Write(string name, double value)
         {
+            if (frame?.Contains(name) == true) { frame.Write(name, value); return; }
             if (bindings.TryForm(name) is { Signature: "GLOB" } global)
             {
                 (host.Globals ?? throw new NotSupportedException("Script global has no state owner.")).Set(global.FormKey, (float)value);
@@ -189,6 +195,27 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
             var key = bindings.Variable(name);
             if (records.GetEffective(key.Owner).Signature == "QUST") quests.SetVariable(key.Owner, key.Index, value);
             else world.Get(key.Owner).Write(key.Index, value);
+        }
+        FalloutFormKey Reference(string name)
+        {
+            if (FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is not null) return bindings.Reference(name);
+            var value = Read(name);
+            if (value <= 0 || value > uint.MaxValue || value != Math.Truncate(value))
+                throw new InvalidDataException("Script reference variable has no valid form identity.");
+            var key = records.RuntimeFormKey((uint)value);
+            if ((uint)value != 0x14 && records.GetEffective(key).Signature is not ("REFR" or "ACHR" or "ACRE"))
+                throw new InvalidDataException("Script reference variable is not a placed reference.");
+            return key;
+        }
+        FalloutScriptFunction UserFunction(string command, string name)
+        {
+            var parts = command.Split('.');
+            if (parts.Length > 2) throw new NotSupportedException("Function caller path is unbound.");
+            var definition = this.UserFunction(bindings.Form(name).FormKey);
+            foreach (var parameter in definition.Parameters) definition.RequireScalar(parameter);
+            return new(definition.Parameters.Select(_ => FalloutScriptArgumentKind.Number).ToArray(), arguments =>
+                InvokeFunction(definition.Script.FormKey, parts.Length == 2 ? Reference(parts[0]) : CallingReference(),
+                    arguments.Select(argument => argument.Number).ToArray(), seconds, budget));
         }
         FalloutFormKey Quest(string name)
         {
@@ -205,22 +232,10 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
         FalloutScriptFunction? Function(string name)
         {
             var parts = name.Split('.');
-            FalloutFormKey Target() => parts.Length == 1 ? source : bindings.Reference(parts[0]);
+            FalloutFormKey Target() => parts.Length == 1 ? source : Reference(parts[0]);
             if (parts.Length <= 2 && parts[^1].Equals("GetInSameCell", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
-                    FalloutFormKey Reference(string token)
-                    {
-                        if (token.Equals("player", StringComparison.OrdinalIgnoreCase) || bindings.TryForm(token) is not null)
-                            return bindings.Reference(token);
-                        var value = Read(token);
-                        if (value <= 0 || value > uint.MaxValue || value != Math.Truncate(value))
-                            throw new InvalidDataException("Script reference variable has no valid form identity.");
-                        var key = records.RuntimeFormKey((uint)value);
-                        if (records.GetEffective(key).Signature is not ("REFR" or "ACHR" or "ACRE"))
-                            throw new InvalidDataException("Script reference variable is not a placed reference.");
-                        return key;
-                    }
                     return (host.IsInSameCell ?? throw new NotSupportedException("GetInSameCell has no spatial owner."))
                         (parts.Length == 1 ? source : Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0;
                 });
@@ -238,35 +253,38 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                 });
             if (parts.Length == 2 && parts[1].Equals("IsCurrentFurnitureRef", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    host.IsCurrentFurniture(bindings.Reference(parts[0]), bindings.Reference(arguments[0].Identifier!)) ? 1 : 0);
+                    host.IsCurrentFurniture(Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDisabled", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.IsEnabled(parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 0 : 1);
+                return new([], _ => world.IsEnabled(Target()) ? 0 : 1);
             if (parts.Length <= 2 && parts[^1].Equals("GetUnconscious", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.IsUnconscious(parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
+                return new([], _ => world.IsUnconscious(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.Get(parts.Length == 1 ? source : bindings.Reference(parts[0])).PlayerTeammate ? 1 : 0);
+                return new([], _ => world.Get(Target()).PlayerTeammate ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDead", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.IsDead(parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
+                return new([], _ => world.IsDead(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetMapMarkerVisible", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.MapMarkerVisibility(parts.Length == 1 ? source : bindings.Reference(parts[0])));
+                return new([], _ => world.MapMarkerVisibility(Target()));
             if (parts.Length <= 2 && parts[^1].Equals("IsInCombat", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => (host.IsInCombat ?? throw new NotSupportedException("IsInCombat has no gameplay owner."))
-                    (parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
+                    (Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("IsTalking", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => (host.IsTalking ?? throw new NotSupportedException("IsTalking has no speech owner."))
-                    (parts.Length == 1 ? source : bindings.Reference(parts[0])) ? 1 : 0);
+                    (Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].ToLowerInvariant() is "getav" or "getactorvalue")
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))
-                    (parts.Length == 1 ? source : bindings.Reference(parts[0]), arguments[0].Identifier!));
+                    (Target(), arguments[0].Identifier!));
             return name.ToLowerInvariant() switch
             {
+                "getgameloaded" => new([], _ => Events().GetGameLoaded(bindings.Source) ? 1 : 0),
+                "getgamerestarted" => new([], _ => Events().GetGameRestarted(bindings.Source) ? 1 : 0),
+                "getself" or "getselfalt" => new([], _ => CallingReference() is { } caller ? records.RuntimeFormId(caller) : 0),
+                "iskeypressed" => new([FalloutScriptArgumentKind.Number], arguments => Events().IsKeyPressed(checked((int)Index(arguments[0].Number))) ? 1 : 0),
                 "isxbox" or "isps3" => new([], _ => 0),
                 "iswin32" => new([], _ => 1),
                 "getbuttonpressed" => new([], _ => (host.GetButtonPressed ??
                     throw new NotSupportedException("GetButtonPressed has no message result owner."))(
-                        records.GetEffective(source).Signature == "QUST" ?
-                            FalloutScriptLocals.AttachedScript(records, records.GetEffective(source))!.FormKey : source)),
+                        CallingReference() is { } caller && records.RuntimeFormId(caller) != 0x14 ? caller : bindings.Source)),
                 "getsecondspassed" => new([], _ => seconds),
                 "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!) ? 1 : 0),
@@ -294,10 +312,40 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            var target = parts.Length == 1 ? source : parts.Length == 2 ? bindings.Reference(parts[0]) :
+            var target = parts.Length == 1 ? source : parts.Length == 2 ? Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
             switch (operation)
             {
+                case "call":
+                    _ = FalloutNvseNumericExpression.Evaluate([command, .. arguments], Read, Write, Function, UserFunction);
+                    break;
+                case "setfunctionvalue" when parts.Length == 1:
+                    if (frame is null) throw new NotSupportedException("SetFunctionValue needs an active function call.");
+                    frame.Result = FalloutNvseNumericExpression.Evaluate(arguments, Read, Write, Function, UserFunction);
+                    break;
+                case "setgamemainloopcallback" or "sgmlc" when arguments.Count is >= 2 and <= 4:
+                    var register = Boolean(arguments[1]);
+                    var loopScript = bindings.Form(arguments[0]);
+                    if (loopScript.Signature != "SCPT") throw new InvalidDataException("Main-loop handler is not SCPT.");
+                    if (register && this.UserFunction(loopScript.FormKey).Parameters.Count != 0)
+                        throw new InvalidDataException("Main-loop callback must have no parameters.");
+                    Events().SetMainLoop(loopScript.FormKey, parts.Length == 2 ? target : CallingReference() ?? records.RuntimeFormKey(0x14),
+                        register, arguments.Count >= 3 ? checked((int)Index(Number(arguments[2]))) : 1,
+                        arguments.Count == 4 ? checked((int)Index(Number(arguments[3]))) : 3);
+                    break;
+                case "setonkeydowneventhandler" or "setonkeyupeventhandler" when parts.Length == 1 && arguments.Count is 2 or 3:
+                    var keyScript = bindings.Form(arguments[0]);
+                    if (keyScript.Signature != "SCPT") throw new InvalidDataException("Key handler is not SCPT.");
+                    var addKey = Boolean(arguments[1]);
+                    if (addKey)
+                    {
+                        var definition = this.UserFunction(keyScript.FormKey);
+                        if (definition.Parameters.Count != 1 || definition.Types[definition.Parameters[0]] is not ("int" or "short" or "long" or "float"))
+                            throw new InvalidDataException("Key handler must take one numeric parameter.");
+                    }
+                    Events().SetKey(keyScript.FormKey, records.RuntimeFormKey(0x14), addKey, operation == "setonkeydowneventhandler",
+                        arguments.Count == 3 ? checked((int)Index(Number(arguments[2]))) : null);
+                    break;
                 case "resethealth" when arguments.Count == 0:
                     world.ResetHealth(target);
                     break;
@@ -338,7 +386,7 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                         arguments.Count == 4 ? (float)Number(arguments[2]) : 0, arguments.Count == 4 ? (float)Number(arguments[3]) : 0);
                     break;
                 case "short" or "int" or "long" or "float" or "ref" when parts.Length == 1 && arguments.Count == 1:
-                    _ = bindings.Variable(arguments[0]);
+                    if (frame?.Contains(arguments[0]) != true) _ = bindings.Variable(arguments[0]);
                     break;
                 case "startquest" or "stopquest" when parts.Length == 1 && arguments.Count == 1:
                     quests.SetRunning(Quest(arguments[0]), operation == "startquest");
@@ -489,7 +537,7 @@ internal sealed class FalloutReferenceScripts(FalloutPluginStack records, Fallou
                     break;
             }
         }
-        return program.Steps(Read, Write, Call, Function);
+        return program.Steps(Read, Write, Call, Function, UserFunction, budget);
     }
 
     private static string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"' &&

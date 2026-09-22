@@ -16,25 +16,35 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private readonly FalloutPlayerInventory _inventory;
     private NativeOwnedHudMessages? _hud;
     private bool _worldActive;
+    private readonly InputSystem.RuntimeNativeScriptEvents _events;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal object State => new { scripts = Scripts.State, worldActive = _worldActive, message = _current, hud = _hud?.State, error = _error };
 
     internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
-    internal void ActivateWorld() => _worldActive = true;
+    internal void ActivateWorld(bool loaded)
+    {
+        if (_worldActive) return;
+        if (loaded) Scripts.Events.LoadGame();
+        _worldActive = true;
+        _events.Active = true;
+    }
 
     internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
-        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null)
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null,
+        FalloutScriptEvents? events = null)
     {
         Name = "NativeQuestScripts";
         _records = records;
         _inventory = inventory;
-        Scripts = new(records, quests, claimed, inventory, globals, references: references);
+        Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events);
+        _events = new(Scripts.Events, () => Scripts.Host?.InvokeFunction);
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue + 1;
     }
 
     public override void _Ready()
     {
+        AddChild(_events);
         try
         {
             var hudLayer = new CanvasLayer { Name = "NativeHudLayer", Layer = 1, ProcessMode = ProcessModeEnum.Always };

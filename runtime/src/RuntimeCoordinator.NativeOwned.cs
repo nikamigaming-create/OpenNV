@@ -495,7 +495,7 @@ public partial class RuntimeCoordinator
             // New Game retains the timers already running behind StartMenu.
             // Continue replaces that menu session with the saved clocks.
             if (restore is not null || _nativeQuestScripts is null) CreateNativeQuestScripts(restore?.State.Scripts);
-            _nativeQuestScripts!.ActivateWorld();
+            _nativeQuestScripts!.ActivateWorld(restore is not null);
         }
         else if (_nativeQuestScripts is not null)
         {
@@ -522,7 +522,8 @@ public partial class RuntimeCoordinator
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
     {
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
-        var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals, _nativeReferences);
+        var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals,
+            _nativeReferences, NativeScriptEvents());
         scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
             throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
         if (restore is not null) scripts.Scripts.Restore(restore);

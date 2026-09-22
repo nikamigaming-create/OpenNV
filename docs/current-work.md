@@ -5,8 +5,8 @@
 The user requires all ten mod targets in [mod compatibility](mod-compatibility.md),
 starting with JAM then TTW, with full dependency behavior and ordinary flat/OpenXR
 gameplay from selected owned folders. The target includes settings, save/load and
-cold restart. Work is on `codex/jam-script-runtime`; registration or an individual
-feature is not completion. Work without subagents.
+cold restart. Publish each block from a fresh `codex/` branch; registration or an
+individual feature is not completion. Work without subagents.
 
 All ten have local source packages: 26 archives are downloaded, hashed and
 extracted under `D:\OpenNV-Mods`; TTW uses the existing `D:\TTW\Installed`.
@@ -36,16 +36,27 @@ owned stacks open, with no missing declared package files; private results are
 `tmp/mod-stack-results.private.json` and `tmp/*-layered-audit.private.json`.
 This is source loading, not working mod gameplay. The shared interpreter now
 executes numeric NVSE assignments and eval expressions against existing state,
-with focused cold-state and migration checks passing. JAM has 46 parser failures
-among 52 scripts; TTW has 61 among 1,263 entry-plugin scripts. These source
-admission counts do not establish command execution or mod gameplay. See
-[NVSE script runtime](nvse-script-runtime.md). The full required gate also passes
-with the numeric interpreter change; the launcher/source block is merged.
+with focused cold-state and migration checks passing. JAM has 34 parser failures
+among 52 scripts; TTW's last source audit had 61 among 1,263 entry-plugin scripts.
+These source admission counts do not establish command execution or mod gameplay.
+See [NVSE script runtime](nvse-script-runtime.md).
 Native launcher checks pass at 1280x900 and 1060x700. All 5,407 NMC winning
 textures decode. Two partial
 authored mip chains now upload without fabricating extra levels, with exact GPU
 byte readback and no resource leak. Pixel presentation remains unverified.
 Gameplay routes remain unavailable while implementation/acceptance is incomplete.
+
+JAM's shared runtime now also executes scalar user functions, nested loops,
+per-script load/restart queries and main-loop/key callbacks. Process event state
+survives scene/save reload with fresh executor bindings; it retains no retired
+world delegates. Synthetic recursion, callback mutation and restoration checks
+pass. Native Godot frame/mode and physical key-edge checks mutate source-owned
+reference slots successfully. The owned JAM execution audit gets past lifecycle
+queries and exposes the next UI, effect, perk and render-event gaps. Evidence is
+`tmp/jam-events-{contracts.log,native.log,source.private.json,owned.private.json}`.
+Full MCM menu/settings behavior is explicitly included in JAM acceptance.
+The full required gate passes with the function/event changes; its private log is
+`tmp/jam-events-gate.log`.
 
 ## Verified candidate
 
@@ -184,9 +195,12 @@ claimed from these checks.
 
 Implement the actual JAM script, event, UI, animation and persistent-state owners
 against the complete dependency stack. Numeric assignments and expressions are
-implemented. Arrays, strings, user functions and event callbacks remain unbound;
-JAM initialization also needs per-script load/restart events. Preserve vanilla
-expression semantics and existing saves while adding each capability.
+implemented, along with scalar user functions, loops and frame/key event owners.
+Next are typed strings/arrays and actual UI/MCM, actor-effect/perk and render-event
+owners reached by JAM initialization. Preserve vanilla expression semantics and
+existing saves while adding each capability. New-game-only lifecycle signalling,
+main-menu callbacks without a world, XR key adaptation and full dependency
+behavior still require implementation/evidence.
 Only after JAM's ordinary-input acceptance passes proceed to TTW's combined
 campaign, transitions and extension behavior. Keep all original campaign and
 physical-headset requirements in scope. Prior candidate evidence is

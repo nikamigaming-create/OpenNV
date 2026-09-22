@@ -34,11 +34,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                     .Single(npc => npc.Appearance.Reference == actor).CurrentFurniture == furniture, ApplyReferenceEffect,
                 _scripts.MessageResults.Take, actor => _speech!.IsTalking(actor), ActorValue, IsPlayerTagSkill, _globals,
-                ApplyNativeSourceCommand, IsInCombat, IsInSameCell));
+                ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
-        _scriptHost = _scriptHost with { ExecuteProgram = results.ExecuteProgram };
+        _scriptHost = _scriptHost with { ExecuteProgram = results.ExecuteProgram, InvokeFunction = results.InvokeFunction };
         _scripts.Host = _scriptHost;
         _speech!.ExecuteResults = results.ExecuteResult;
         _conversation = new();

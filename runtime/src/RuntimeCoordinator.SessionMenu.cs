@@ -12,6 +12,8 @@ public partial class RuntimeCoordinator
 {
     private static Dictionary<string, string>? _nextSessionOptions;
     private static bool _nextSessionContinue;
+    private static string? _scriptEventSourceIdentity;
+    private static FalloutScriptEvents? _scriptEvents;
     private bool _continueAfterRestart;
     private bool _retiringNativeSession;
     private CanvasLayer? _nativeSessionLayer;
@@ -20,6 +22,20 @@ public partial class RuntimeCoordinator
     private Input.MouseModeEnum _sessionMouseMode;
     private Control? _sessionPreviousMenu;
     private bool _nativeDeathPresented;
+
+    private FalloutScriptEvents NativeScriptEvents()
+    {
+        // A scene reload is still the same application session. Changing the
+        // selected plugin graph starts a new logical engine session instead.
+        var identity = string.Join('\n', _nativePluginStack!.Plugins.Select(plugin =>
+            $"{plugin.Plugin.Path}|{plugin.Bytes}|{plugin.MtimeUnixMilliseconds}"));
+        if (_scriptEventSourceIdentity != identity)
+        {
+            _scriptEventSourceIdentity = identity;
+            _scriptEvents = new();
+        }
+        return _scriptEvents!;
+    }
 
     private void AdvanceNativeDeath()
     {
@@ -137,6 +153,7 @@ public partial class RuntimeCoordinator
             _nextSessionContinue = continueSave;
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             _retiringNativeSession = true;
+            _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
