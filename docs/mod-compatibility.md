@@ -93,9 +93,12 @@ The author's [JAM 4.6 requirements](https://www.nexusmods.com/newvegas/mods/6666
 include the four main New Vegas DLCs, xNVSE, JIP LN, JohnnyGuitar, kNVSE,
 Stewie Tweaks and UIO. The installed plugin's master declarations supply the
 actual ESM dependencies. The local sample now contains all of those packages.
-The shared interpreter now executes numeric NVSE assignments and eval conditions;
-46 of its 52 source scripts still fail parsing. Accepted source still needs real
-command and event owners. See [NVSE script runtime](nvse-script-runtime.md).
+The shared interpreter now executes numeric expressions, scalar user functions,
+loops and per-script lifecycle/frame/key events. MCM's full in-game configuration
+is required by the requested product scope and remains in implementation.
+34 of JAM's 52 source scripts still fail parsing. Its six admitted initialization
+scripts now reach specific UI, actor-effect, perk-mutation and render-event gaps.
+See [NVSE script runtime](nvse-script-runtime.md).
 The earlier adapters only applied a speed multiplier and global time scale in
 the old CellPlayer path. They do not provide AP behavior, animations, callbacks,
 menus, complete module behavior or native-player integration.
@@ -119,11 +122,14 @@ Private owned-data inspection is available through the existing probe:
 
 ```text
 dotnet run --project contract-tests/FalloutPluginRuntimeProbe --configuration Release -- --audit-mod-install <mod-id> <mod-folder> <New-Vegas-folder> [additional-folder ...]
+dotnet run --project contract-tests/FalloutPluginRuntimeProbe --configuration Release -- --audit-mod-scripts <mod-id> <mod-folder> <New-Vegas-folder> [additional-folder ...]
 ```
 
 Reports retain source plugin hashes, active load order, archives, resolved files,
-missing packages and script parser failures. JAM has 46 parser failures; TTW has
-61 among 1,263 entry-plugin scripts. Neither count measures runtime execution.
+missing packages and script parser failures. JAM has 34 parser failures; TTW's
+last source audit had 61 among 1,263 entry-plugin scripts. The execution audit
+reports reached initialization state/errors through the ordinary script owners;
+its headless player and presentation boundaries remain explicit.
 Keep reports and all mod,
 retail and derived files out of Git. Synthetic contracts cover dependency
 resolution, transitive failures, cycles, mixed engine detection, malformed

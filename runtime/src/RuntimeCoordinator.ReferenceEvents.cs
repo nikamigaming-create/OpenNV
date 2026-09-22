@@ -77,7 +77,7 @@ public partial class RuntimeCoordinator
                 (actor, name) => _nativeOpeningStageDriver!.ActorValue(actor, name), name => _nativeOpeningStageDriver!.IsPlayerTagSkill(name), _nativeGlobals,
                 (source, bindings, command, arguments) => _nativeOpeningStageDriver!.ApplyNativeSourceCommand(source, bindings, command, arguments),
                 actor => _nativeOpeningStageDriver!.IsInCombat(actor),
-                (caller, target) => _nativeOpeningStageDriver!.IsInSameCell(caller, target)),
+                (caller, target) => _nativeOpeningStageDriver!.IsInSameCell(caller, target), _nativeQuestScripts?.Scripts.Events),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

@@ -12,6 +12,7 @@ internal sealed class FalloutScriptBindings
     private readonly Dictionary<FalloutFormKey, IReadOnlyDictionary<string, uint>> _variables = [];
     private readonly Dictionary<string, (FalloutFormKey Owner, uint Index)> _slots = new(StringComparer.OrdinalIgnoreCase);
     internal bool HasPlayerReference { get; }
+    internal FalloutFormKey Source { get; }
     private readonly FalloutFormKey? _playerReference;
 
     internal FalloutScriptBindings(FalloutPluginStack records, FalloutPluginRecord quest,
@@ -19,6 +20,7 @@ internal sealed class FalloutScriptBindings
     {
         _records = records;
         _owner = quest;
+        Source = source.FormKey;
         foreach (var field in fields.Where(field => field.Signature == "SCRO"))
         {
             if (field.Data.Length != 4) throw new InvalidDataException("Script reference extent is invalid.");
@@ -41,12 +43,15 @@ internal sealed class FalloutScriptBindings
 
     internal FalloutFormKey Reference(string name)
     {
-        if (name.Equals("player", StringComparison.OrdinalIgnoreCase))
+        if (IsPlayer(name))
             return _playerReference ?? throw new NotSupportedException("Player reference has no compiled binding.");
         var record = Form(name);
         return record.Signature is "REFR" or "ACHR" or "ACRE" ? record.FormKey :
             throw new NotSupportedException($"Script target {name} is not an admitted placed reference.");
     }
+
+    internal static bool IsPlayer(string name) => name.Equals("player", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("playerref", StringComparison.OrdinalIgnoreCase);
 
     internal (FalloutFormKey Owner, uint Index) Variable(string name)
     {

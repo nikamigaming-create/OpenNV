@@ -12,9 +12,16 @@ internal static class FalloutNvseNumericExpression
     internal static bool IsAssignment(string token) => token is "=" or ":=" or "+=" or "-=" or "*=" or "/=";
 
     internal static double Evaluate(IReadOnlyList<string> tokens, Func<string, double> variable,
-        Action<string, double> assign, Func<string, FalloutScriptFunction?>? function = null)
+        Action<string, double> assign, Func<string, FalloutScriptFunction?>? function = null,
+        Func<string, string, FalloutScriptFunction>? userFunction = null)
     {
         var at = 0;
+        FalloutScriptFunction? Resolve(string token)
+        {
+            if (!token.Split('.')[^1].Equals("call", StringComparison.OrdinalIgnoreCase)) return function?.Invoke(token);
+            if (at >= tokens.Count || !Identifier(tokens[at])) throw new NotSupportedException("Call needs a bound function identity.");
+            return (userFunction ?? throw new NotSupportedException("Call has no user-function owner."))(token, tokens[at++]);
+        }
         Operand Read(int precedence)
         {
             if (at >= tokens.Count) throw new InvalidDataException("Missing NVSE numeric operand.");
@@ -41,7 +48,7 @@ internal static class FalloutNvseNumericExpression
             }
             else if (!Identifier(token))
                 throw new NotSupportedException($"NVSE operand {token} is not a supported numeric value.");
-            else if (function?.Invoke(token) is { } command)
+            else if (Resolve(token) is { } command)
             {
                 var arguments = new List<Func<FalloutScriptArgument>>();
                 foreach (var kind in command.Arguments)

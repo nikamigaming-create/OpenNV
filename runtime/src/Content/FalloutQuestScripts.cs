@@ -116,7 +116,8 @@ internal sealed class FalloutScriptSession
 
 internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action> PrepareSetStage,
     Func<string, double> PlayerActorValue,
-    Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null);
+    Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null,
+    FalloutUserFunctionInvoker? InvokeFunction = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -147,6 +148,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
     internal FalloutScriptSession Session { get; } = new();
+    internal FalloutScriptEvents Events { get; }
     internal HashSet<FalloutFormKey> SaidInfos { get; } = [];
     internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
     internal void SetVariable(FalloutFormKey owner, uint index, double value)
@@ -165,6 +167,7 @@ internal sealed class FalloutQuestScripts
         messageResults = MessageResults.Capture(),
         notifications = _inventory.Notifications.Capture(),
         session = Session.Capture(),
+        events = Events.State,
         objectives = _quests.ObjectiveState,
         variables = _quests.VariableState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
@@ -245,13 +248,14 @@ internal sealed class FalloutQuestScripts
 
     internal FalloutQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimedQuests,
         FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, float? defaultProcessingDelay = null,
-        FalloutReferenceWorld? references = null)
+        FalloutReferenceWorld? references = null, FalloutScriptEvents? events = null)
     {
         _records = records;
         _quests = quests;
         _inventory = inventory;
         _globals = globals;
         References = references;
+        Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
             .Number("MAIN", "fQuestScriptDelayTime");
@@ -379,6 +383,8 @@ internal sealed class FalloutQuestScripts
         }
         FalloutScriptFunction? Function(string name) => name.ToLowerInvariant() switch
         {
+            "getgameloaded" => new([], _ => Events.GetGameLoaded(instance.Script.FormKey) ? 1 : 0),
+            "getgamerestarted" => new([], _ => Events.GetGameRestarted(instance.Script.FormKey) ? 1 : 0),
             "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments =>
             {
                 var quest = Quest(arguments[0].Identifier!).FormKey;

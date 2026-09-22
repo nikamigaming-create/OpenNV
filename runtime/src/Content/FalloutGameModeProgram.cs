@@ -8,20 +8,40 @@ internal enum FalloutScriptArgumentKind { Number, Identifier }
 internal readonly record struct FalloutScriptArgument(double Number, string? Identifier = null);
 internal sealed record FalloutScriptFunction(IReadOnlyList<FalloutScriptArgumentKind> Arguments,
     Func<IReadOnlyList<FalloutScriptArgument>, double> Invoke);
-internal sealed record FalloutScriptEventProgram(string Event, string? Filter, FalloutGameModeProgram Program);
+internal sealed record FalloutScriptEventProgram(string Event, string? Filter, FalloutGameModeProgram Program,
+    IReadOnlyList<string>? Parameters = null);
+
+internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
+{
+    private int _remaining = maximum;
+    internal void Spend()
+    {
+        if (--_remaining < 0) throw new NotSupportedException("Script execution exceeded the runtime instruction budget.");
+    }
+}
 
 // A source-script owner, independent of menus, locations and quest identities.
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 2;
+    internal const int ParserVersion = 3;
     private readonly IReadOnlyList<string[]> _lines;
-    private FalloutGameModeProgram(IReadOnlyList<string[]> lines) => _lines = lines;
+    private readonly Dictionary<int, int> _loopEnds = [];
+    private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
+    {
+        _lines = lines;
+        var loops = new Stack<int>();
+        for (var index = 0; index < lines.Count; ++index)
+        {
+            if (lines[index][0].Equals("while", StringComparison.OrdinalIgnoreCase)) loops.Push(index);
+            if (lines[index][0].Equals("loop", StringComparison.OrdinalIgnoreCase)) _loopEnds.Add(loops.Pop(), index);
+        }
+    }
 
     internal IEnumerable<string> CommandNames => _lines
         .Where(tokens => tokens.Length < 2 || !FalloutNvseNumericExpression.IsAssignment(tokens[1]))
         .Select(tokens => tokens[0].ToLowerInvariant())
-        .Where(command => command is not ("if" or "elseif" or "else" or "endif" or "set" or "let" or "eval" or "return"))
+        .Where(command => command is not ("if" or "elseif" or "else" or "endif" or "while" or "loop" or "break" or "continue" or "set" or "let" or "eval" or "return"))
         .Select(command => command[(command.LastIndexOf('.') + 1)..]);
 
     internal static FalloutGameModeProgram Read(ReadOnlySpan<byte> source, string blockName = "GameMode", uint? argument = null)
@@ -38,17 +58,33 @@ internal sealed class FalloutGameModeProgram
         var events = new List<FalloutScriptEventProgram>();
         List<string[]>? lines = null;
         string? eventName = null, filter = null;
-        var depth = 0;
+        IReadOnlyList<string>? parameters = null;
+        var nesting = new Stack<(string Kind, bool Else)>();
+        var lineNumber = 0;
         foreach (var raw in source.Split('\n'))
         {
+            ++lineNumber;
             var line = StripComment(raw).Trim();
             if (line.Length == 0) continue;
-            var tokens = Tokens(line);
+            string[] tokens;
+            try { tokens = Tokens(line); }
+            catch (NotSupportedException error) { throw new NotSupportedException($"Script line {lineNumber}: {error.Message}", error); }
+            if (tokens.Length == 0) throw new InvalidDataException($"Script line {lineNumber} has no statement.");
             var command = tokens[0].ToLowerInvariant();
             if (command == "begin")
             {
                 if (lines is not null || tokens.Length < 2) throw new InvalidDataException("Invalid script block start.");
-                if (tokens.Length > 3) throw new NotSupportedException("Script event header arguments are unbound.");
+                parameters = null;
+                if (tokens[1].Equals("Function", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (tokens.Length < 4 || tokens[2] != "{" || tokens[^1] != "}")
+                        throw new InvalidDataException("Function header needs a parameter list in braces.");
+                    parameters = tokens[3..^1];
+                    if (parameters.Count > 15 || parameters.Distinct(StringComparer.OrdinalIgnoreCase).Count() != parameters.Count ||
+                        parameters.Any(name => !Regex.IsMatch(name, @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)))
+                        throw new InvalidDataException("Function parameter list is invalid.");
+                }
+                else if (tokens.Length > 3) throw new NotSupportedException("Script event header arguments are unbound.");
                 lines = [];
                 eventName = tokens[1];
                 filter = tokens.Length == 3 ? tokens[2] : null;
@@ -56,18 +92,29 @@ internal sealed class FalloutGameModeProgram
             }
             if (command == "end")
             {
-                if (lines is null || tokens.Length != 1 || depth != 0) throw new InvalidDataException("Invalid script block end.");
-                events.Add(new(eventName!, filter, new(lines)));
+                if (lines is null || tokens.Length != 1 || nesting.Count != 0) throw new InvalidDataException("Invalid script block end.");
+                events.Add(new(eventName!, filter, new(lines), parameters));
                 lines = null;
                 continue;
             }
             if (lines is null) continue;
-            if (command == "if") ++depth;
-            if (command == "endif" && --depth < 0) throw new InvalidDataException("Unmatched script endif.");
-            if (command is "else" or "elseif" && depth == 0) throw new InvalidDataException("Unmatched script branch.");
+            if (command is "if" or "while") nesting.Push((command, false));
+            if (command is "endif" or "loop")
+            {
+                if (!nesting.TryPop(out var parent) || parent.Kind != (command == "endif" ? "if" : "while") || tokens.Length != 1)
+                    throw new InvalidDataException("Unmatched script branch or loop end.");
+            }
+            if (command is "else" or "elseif")
+            {
+                if (!nesting.TryPop(out var parent) || parent.Kind != "if" || parent.Else || command == "else" && tokens.Length != 1)
+                    throw new InvalidDataException("Unmatched or repeated script branch.");
+                nesting.Push(("if", command == "else"));
+            }
+            if (command is "break" or "continue" && (tokens.Length != 1 || !nesting.Any(frame => frame.Kind == "while")))
+                throw new InvalidDataException("Script loop control has no enclosing loop.");
             lines.Add(tokens);
         }
-        if (lines is not null || depth != 0) throw new InvalidDataException("Unterminated source script block.");
+        if (lines is not null || nesting.Count != 0) throw new InvalidDataException("Unterminated source script block.");
         return events;
     }
 
@@ -83,21 +130,27 @@ internal sealed class FalloutGameModeProgram
         return blocks.Length == 0 ? new([]) : blocks[0].Program;
     }
     internal void Execute(Func<string, double> variable, Action<string, double> assign,
-        Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null)
+        Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null,
+        Func<string, string, FalloutScriptFunction>? userFunction = null, FalloutScriptExecutionBudget? budget = null)
     {
-        foreach (var _ in Steps(variable, assign, call, function)) { }
+        foreach (var _ in Steps(variable, assign, call, function, userFunction, budget)) { }
     }
 
     internal IEnumerable<bool> Steps(Func<string, double> variable, Action<string, double> assign,
-        Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null)
+        Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null,
+        Func<string, string, FalloutScriptFunction>? userFunction = null, FalloutScriptExecutionBudget? budget = null)
     {
+        budget ??= new();
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
+        var loops = new Stack<(int Start, int End, int Branches)>();
         var active = true;
         double Condition(string[] tokens) => tokens.Length > 1 && tokens[1].Equals("eval", StringComparison.OrdinalIgnoreCase)
-            ? FalloutNvseNumericExpression.Evaluate(tokens[2..], variable, assign, function)
+            ? FalloutNvseNumericExpression.Evaluate(tokens[2..], variable, assign, function, userFunction)
             : Evaluate(tokens[1..], variable, function);
-        foreach (var tokens in _lines)
+        for (var line = 0; line < _lines.Count; ++line)
         {
+            budget.Spend();
+            var tokens = _lines[line];
             switch (tokens[0].ToLowerInvariant())
             {
                 case "if":
@@ -118,19 +171,30 @@ internal sealed class FalloutGameModeProgram
                     branches.Push((other.Parent, true, true));
                     break;
                 case "endif": active = branches.Pop().Parent; break;
+                case "while":
+                    if (!active || FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function, userFunction) == 0)
+                        line = _loopEnds[line];
+                    else loops.Push((line, _loopEnds[line], branches.Count));
+                    break;
+                case "loop": line = loops.Pop().Start - 1; break;
+                case "break" or "continue" when active:
+                    var loop = loops.Pop();
+                    while (branches.Count > loop.Branches) branches.Pop();
+                    line = tokens[0].Equals("break", StringComparison.OrdinalIgnoreCase) ? loop.End : loop.Start - 1;
+                    break;
                 case "set" when active:
                     if (tokens.Length < 4 || !tokens[2].Equals("to", StringComparison.OrdinalIgnoreCase))
                         throw new NotSupportedException("Script assignment syntax is unbound.");
                     assign(tokens[1], Evaluate(tokens[3..], variable, function));
                     break;
                 case "let" or "eval" when active:
-                    _ = FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function);
+                    _ = FalloutNvseNumericExpression.Evaluate(tokens[1..], variable, assign, function, userFunction);
                     break;
                 case "return" when active: yield break;
                 default:
                     if (!active) break;
                     if (tokens.Length > 1 && FalloutNvseNumericExpression.IsAssignment(tokens[1]))
-                        _ = FalloutNvseNumericExpression.Evaluate(tokens, variable, assign, function);
+                        _ = FalloutNvseNumericExpression.Evaluate(tokens, variable, assign, function, userFunction);
                     else call(tokens[0], tokens[1..]);
                     break;
             }
@@ -212,7 +276,7 @@ internal sealed class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||:=|[+*/-]=|[=()+*/!<>-]", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||:=|[+*/-]=|[{}=()+*/!<>-]", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {
@@ -232,7 +296,7 @@ internal sealed class FalloutGameModeProgram
         }
     }
 
-    private static string StripComment(string line)
+    internal static string StripComment(string line)
     {
         var quoted = false;
         for (var index = 0; index < line.Length; ++index)
@@ -249,6 +313,8 @@ internal sealed class FalloutGameModeProgram
     internal static bool WasRejectedByParser(string source, int version)
     {
         if (version == 0 && HasArgumentSeparator(source)) return true;
+        if (version < 3 && source.Split('\n').Select(line => StripComment(line).Trim())
+            .Where(line => line.Length != 0).Any(line => Tokens(line).Any(token => token is "{" or "}"))) return true;
         if (version >= 2) return false;
         return source.Split('\n').Select(line => StripComment(line).Trim())
             .Where(line => line.Length != 0).Any(line => Tokens(line).Any(FalloutNvseNumericExpression.IsAssignment));
