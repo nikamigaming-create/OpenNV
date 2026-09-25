@@ -191,13 +191,59 @@ internal partial class RuntimeNativePlayer
                     muzzle = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * muzzle;
                 var from = muzzle.Origin;
                 var direction = -muzzle.Basis.Z.Normalized();
-                var medianSpreadDegrees = ResolvePlayerShotSpread(_shot);
+                var shotRange = _shot.Projectile.Range * UnitsToMeters;
+                var autoAimMaxDist = 1800f * UnitsToMeters;
+                var autoAimMaxDeg = 3.0f;
+                if (_presentationRecords is not null)
+                {
+                    try
+                    {
+                        autoAimMaxDist = FalloutGameSettingFloats.Read(_presentationRecords, "fAutoAimMaxDistance") * UnitsToMeters;
+                        autoAimMaxDeg = FalloutGameSettingFloats.Read(_presentationRecords, "fAutoAimMaxDegrees");
+                    }
+                    catch
+                    {
+                        // Fall back to default auto-aim parameters if GMST records are absent
+                    }
+                }
+                var autoAimRange = MathF.Min(shotRange, autoAimMaxDist);
+
                 if (_xr is null)
                 {
-                    var aim = CastShotRay(_camera.GlobalPosition, _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters));
-                    var target = aim.TryGetValue("position", out var hit) ? hit.AsVector3() : _camera.GlobalPosition - _camera.GlobalBasis.Z * (_shot.Projectile.Range * UnitsToMeters);
+                    var camPos = _camera.GlobalPosition;
+                    var camForward = -_camera.GlobalBasis.Z.Normalized();
+                    var aim = CastShotRay(camPos, camPos + camForward * shotRange);
+                    var hitCollider = aim.TryGetValue("collider", out var c) ? c.AsGodotObject() as Node : null;
+                    var directCombat = hitCollider is not null ? RuntimeNativeActorCombat.Find(hitCollider) : null;
+                    Vector3 target;
+                    if (directCombat is not null && !directCombat.Dead && aim.TryGetValue("position", out var hitPos))
+                    {
+                        target = hitPos.AsVector3();
+                    }
+                    else if (ResolveAutoAimTarget(camPos, camForward, autoAimRange, autoAimMaxDeg) is { } autoAimTarget)
+                    {
+                        target = autoAimTarget;
+                    }
+                    else
+                    {
+                        target = aim.TryGetValue("position", out var hit) ? hit.AsVector3() : camPos + camForward * shotRange;
+                    }
                     direction = (target - from).Normalized();
                 }
+                else
+                {
+                    var aim = CastShotRay(from, from + direction * shotRange);
+                    var hitCollider = aim.TryGetValue("collider", out var c) ? c.AsGodotObject() as Node : null;
+                    var directCombat = hitCollider is not null ? RuntimeNativeActorCombat.Find(hitCollider) : null;
+                    if (directCombat is null || directCombat.Dead)
+                    {
+                        if (ResolveAutoAimTarget(from, direction, autoAimRange, autoAimMaxDeg) is { } autoAimTarget)
+                        {
+                            direction = (autoAimTarget - from).Normalized();
+                        }
+                    }
+                }
+                var medianSpreadDegrees = ResolvePlayerShotSpread(_shot);
                 if (!from.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f)
                     throw new InvalidDataException("Source projectile transform is invalid.");
                 // Collision resolution is independent of later damage/effect lanes.
@@ -334,5 +380,80 @@ internal partial class RuntimeNativePlayer
             if (node.HasMeta("opennv_reference_form_key")) return node.GetMeta("opennv_reference_form_key").AsString();
         }
         return null;
+    }
+
+    private Vector3? ResolveAutoAimTarget(Vector3 origin, Vector3 direction, float maxRange, float maxDegrees)
+    {
+        if (maxDegrees <= 0f || maxRange <= 0f) return null;
+        var halfAngleRad = Mathf.DegToRad(Math.Clamp(maxDegrees, 0.5f, 45f));
+        const int sides = 16;
+        var startRadius = 0.2f;
+        var tanHalf = MathF.Tan(halfAngleRad);
+        var endRadius = startRadius + maxRange * tanHalf / MathF.Cos(MathF.PI / sides);
+        using var shape = new ConvexPolygonShape3D
+        {
+            Points = Enumerable.Range(0, sides).Select(index => new Vector3(
+                    startRadius * MathF.Cos(index * MathF.Tau / sides),
+                    startRadius * MathF.Sin(index * MathF.Tau / sides),
+                    0f))
+                .Concat(Enumerable.Range(0, sides).Select(index => new Vector3(
+                    endRadius * MathF.Cos(index * MathF.Tau / sides),
+                    endRadius * MathF.Sin(index * MathF.Tau / sides),
+                    -maxRange)))
+                .ToArray()
+        };
+        var up = MathF.Abs(direction.Dot(Vector3.Up)) < .99f ? Vector3.Up : Vector3.Right;
+        using var query = new PhysicsShapeQueryParameters3D
+        {
+            Shape = shape,
+            Transform = new(Basis.LookingAt(direction, up), origin),
+            CollisionMask = CollisionLayer,
+            CollideWithAreas = true,
+            Exclude = SelfQueryBodies
+        };
+        var contacts = GetWorld3D().DirectSpaceState.IntersectShape(query, 64);
+        Vector3? bestTarget = null;
+        var bestScore = float.NegativeInfinity;
+        foreach (var hitDict in contacts)
+        {
+            if (!hitDict.TryGetValue("collider", out var hitObj) || hitObj.AsGodotObject() is not Node candidateCollider)
+                continue;
+            var combat = RuntimeNativeActorCombat.Find(candidateCollider);
+            if (combat is null || combat.Dead) continue;
+            var candidatePos = candidateCollider switch
+            {
+                CollisionShape3D colShape => colShape.GlobalPosition,
+                Node3D n3d when n3d.GetChildren().OfType<CollisionShape3D>().FirstOrDefault() is { } childShape => childShape.GlobalPosition,
+                Node3D n3d => n3d.GlobalPosition,
+                _ => origin
+            };
+            var toCandidate = candidatePos - origin;
+            var candidateDist = toCandidate.Length();
+            if (candidateDist <= 0.001f || candidateDist > maxRange) continue;
+            var candidateDir = toCandidate / candidateDist;
+            var dot = direction.Dot(candidateDir);
+            var forwardDist = candidateDist * dot;
+            if (forwardDist <= 0f) continue;
+            var lateralDist = MathF.Sqrt(MathF.Max(0f, candidateDist * candidateDist - forwardDist * forwardDist));
+            if (lateralDist > startRadius + forwardDist * tanHalf) continue;
+
+            var sightCheck = CastShotRay(origin, candidatePos);
+            if (sightCheck.TryGetValue("collider", out var sightObj) && sightObj.AsGodotObject() is Node sightCollider)
+            {
+                var sightCombat = RuntimeNativeActorCombat.Find(sightCollider);
+                if (sightCombat != combat && sightCombat is null)
+                {
+                    if (sightCheck.TryGetValue("position", out var sightPos) && origin.DistanceTo(sightPos.AsVector3()) < candidateDist - 0.05f)
+                        continue;
+                }
+            }
+            var score = dot * 10f - candidateDist * 0.1f;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = candidatePos;
+            }
+        }
+        return bestTarget;
     }
 }

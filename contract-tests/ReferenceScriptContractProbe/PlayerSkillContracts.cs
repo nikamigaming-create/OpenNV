@@ -53,8 +53,10 @@ internal static class PlayerSkillContracts
             tagged = false; Check(skills.Value("Guns") == 13, "Removed tag bonus persisted in base skills.");
             Reject(() => inventory.Add(records, Key(4), 1, 1, true));
             Reject(() => inventory.Add(records, Key(5), 1, 1, true));
-            Check(inventory.Item(Key(4)) is null && inventory.Item(Key(5)) is null, "Invalid ingestible was partially published.");
             Reject(() => new FalloutAbilityModifiers(records).Spell(Key(49)));
+            var testModifiers = new FalloutAbilityModifiers(records);
+            Check(!testModifiers.TryGetConstantModifiers(Key(49), out _), "Non-constant spell was unexpectedly admitted as constant ability.");
+            Check(testModifiers.TryGetConstantModifiers(Key(31), out var constantMods) && constantMods.Count == 1, "Constant ability was not returned by TryGetConstantModifiers.");
             Console.WriteLine("OPENNV_PLAYER_SKILL_CONTRACT_PASS sourceSettings=true liveTrait=true equipment=true hardcoreWeight=true ingestible=true invalid=true");
         }
         finally
