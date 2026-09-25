@@ -33,57 +33,81 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
 
     internal IReadOnlyList<FalloutAbilityScript> Scripts(FalloutFormKey form) { _ = ConstantModifiers(form); return _scripts[form]; }
 
-    internal IReadOnlyList<FalloutAbilityModifier> ConstantModifiers(FalloutFormKey form)
+    internal bool TryGetConstantModifiers(FalloutFormKey form, out IReadOnlyList<FalloutAbilityModifier> modifiers)
     {
-        if (_spells.TryGetValue(form, out var cached)) return cached;
-        var source = records.GetEffective(form);
-        if (source.Signature is not ("SPEL" or "ENCH")) throw new InvalidDataException("Constant actor effect is neither SPEL nor ENCH.");
+        modifiers = [];
+        if (_spells.TryGetValue(form, out var cached)) { modifiers = cached; return true; }
+        if (!records.TryGetEffective(form, out var source) || source.Signature is not ("SPEL" or "ENCH"))
+            return false;
         var fields = source.ReadSubrecords().ToArray();
-        var declaration = fields.Single(field => field.Signature == (source.Signature == "SPEL" ? "SPIT" : "ENIT")).Data.Span;
-        if (declaration.Length != 16 || BinaryPrimitives.ReadUInt32LittleEndian(declaration) != (source.Signature == "SPEL" ? 4 : 3))
-            throw new NotSupportedException($"Actor effect {form} requires a timed/scripted effect owner.");
+        var declarationFields = fields.Where(field => field.Signature == (source.Signature == "SPEL" ? "SPIT" : "ENIT")).ToArray();
+        if (declarationFields.Length != 1 || declarationFields[0].Data.Length != 16) return false;
+        var declaration = declarationFields[0].Data.Span;
+        if (BinaryPrimitives.ReadUInt32LittleEndian(declaration) != (source.Signature == "SPEL" ? 4u : 3u))
+            return false;
         var result = new List<FalloutAbilityModifier>();
         var scripts = new List<FalloutAbilityScript>();
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "EFID") continue;
             var effectId = fields[index].Data.Span;
-            if (effectId.Length != 4) throw new InvalidDataException("Ability EFID extent is invalid.");
-            var effect = records.GetEffective(source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(effectId)));
+            if (effectId.Length != 4) return false;
+            var effectForm = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(effectId));
+            if (effectForm is null || !records.TryGetEffective(effectForm.Value, out var effect)) continue;
             var end = index + 1;
             while (end < fields.Length && fields[end].Signature != "EFID") end++;
             var group = fields[(index + 1)..end];
-            var data = group.Single(field => field.Signature == "EFIT").Data.Span;
-            if (data.Length != 20 || effect.Signature != "MGEF") throw new InvalidDataException("Ability effect extent/type is invalid.");
-            var definition = effect.ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span;
-            if (definition.Length != 72) throw new NotSupportedException($"MGEF {effect.FormKey} extent is unbound.");
+            var efitFields = group.Where(field => field.Signature == "EFIT").ToArray();
+            if (efitFields.Length != 1 || efitFields[0].Data.Length != 20 || effect.Signature != "MGEF") continue;
+            var data = efitFields[0].Data.Span;
+            var defFields = effect.ReadSubrecords().Where(field => field.Signature == "DATA").ToArray();
+            if (defFields.Length != 1 || defFields[0].Data.Length != 72) continue;
+            var definition = defFields[0].Data.Span;
             var flags = BinaryPrimitives.ReadUInt32LittleEndian(definition);
             var archetype = BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]);
             if (archetype == 1 && group.All(field => field.Signature is "EFIT" or "CTDA") &&
                 BinaryPrimitives.ReadUInt32LittleEndian(data[4..]) == 0 && BinaryPrimitives.ReadUInt32LittleEndian(data[8..]) == 0 &&
                 BinaryPrimitives.ReadUInt32LittleEndian(data[12..]) == 0)
             {
-                var script = effect.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]));
-                if (records.GetEffective(script).Signature != "SCPT") throw new InvalidDataException("Script ability has no SCPT owner.");
-                scripts.Add(new(form, effect.FormKey, script, group.Where(field => field.Signature == "CTDA")
-                    .Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+                var scriptId = effect.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]));
+                if (scriptId is not null && records.TryGetEffective(scriptId.Value, out var scpt) && scpt.Signature == "SCPT")
+                {
+                    scripts.Add(new(form, effect.FormKey, scriptId.Value, group.Where(field => field.Signature == "CTDA")
+                        .Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+                }
                 index = end - 1;
                 continue;
             }
-            if (archetype != 0 || (flags & 2) == 0 || group.Any(field => field.Signature is not ("EFIT" or "CTDA")) ||
-                BinaryPrimitives.ReadUInt32LittleEndian(data[4..]) != 0 || BinaryPrimitives.ReadUInt32LittleEndian(data[8..]) != 0 ||
-                BinaryPrimitives.ReadUInt32LittleEndian(data[12..]) != 0)
-                throw new NotSupportedException($"Ability {form}/{effect.FormKey} requires its effect lifecycle/archetype owner.");
-            var value = BinaryPrimitives.ReadInt32LittleEndian((flags & 0x180000) != 0 ? data[16..] : definition[68..]);
-            var magnitude = BinaryPrimitives.ReadUInt32LittleEndian(data);
-            result.Add(new(form, effect.FormKey, value, (flags & 4) == 0 ? magnitude : -(float)magnitude,
-                group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+            if (archetype == 0 && (flags & 2) != 0 && group.All(field => field.Signature is "EFIT" or "CTDA") &&
+                BinaryPrimitives.ReadUInt32LittleEndian(data[4..]) == 0 && BinaryPrimitives.ReadUInt32LittleEndian(data[8..]) == 0 &&
+                BinaryPrimitives.ReadUInt32LittleEndian(data[12..]) == 0)
+            {
+                var value = BinaryPrimitives.ReadInt32LittleEndian((flags & 0x180000) != 0 ? data[16..] : definition[68..]);
+                var magnitude = BinaryPrimitives.ReadUInt32LittleEndian(data);
+                result.Add(new(form, effect.FormKey, value, (flags & 4) == 0 ? magnitude : -(float)magnitude,
+                    group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+            }
             index = end - 1;
         }
-        if (result.Count == 0 && scripts.Count == 0) throw new InvalidDataException($"Ability {form} has no effects.");
         _scripts.Add(form, scripts);
         _spells.Add(form, result);
-        return result;
+        modifiers = result;
+        return true;
+    }
+
+    internal IReadOnlyList<FalloutAbilityModifier> ConstantModifiers(FalloutFormKey form)
+    {
+        if (TryGetConstantModifiers(form, out var modifiers) && (modifiers.Count > 0 || _scripts.GetValueOrDefault(form)?.Count > 0))
+            return modifiers;
+        var source = records.GetEffective(form);
+        if (source.Signature is not ("SPEL" or "ENCH")) throw new InvalidDataException("Constant actor effect is neither SPEL nor ENCH.");
+        var fields = source.ReadSubrecords().ToArray();
+        var declaration = fields.Single(field => field.Signature == (source.Signature == "SPEL" ? "SPIT" : "ENIT")).Data.Span;
+        if (declaration.Length != 16 || BinaryPrimitives.ReadUInt32LittleEndian(declaration) != (source.Signature == "SPEL" ? 4 : 3))
+            throw new NotSupportedException($"Actor effect {form} requires a timed/scripted effect owner.");
+        if (modifiers.Count == 0 && _scripts.GetValueOrDefault(form)?.Count == 0)
+            throw new InvalidDataException($"Ability {form} has no effects.");
+        return modifiers;
     }
 
     internal (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) Perk(FalloutFormKey form)

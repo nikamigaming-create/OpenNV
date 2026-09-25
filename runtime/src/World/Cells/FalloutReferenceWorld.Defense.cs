@@ -58,7 +58,8 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                 if (field.Data.Length != 4) throw new InvalidDataException("Actor ability identity extent is invalid.");
                 var spell = effects.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
                 if (spell is null) continue;
-                foreach (var effect in _defenseAbilities.ConstantModifiers(spell.Value))
+                if (!_defenseAbilities.TryGetConstantModifiers(spell.Value, out var modifiers)) continue;
+                foreach (var effect in modifiers)
                 {
                     if (effect.ActorValue is not (12 or 76)) continue;
                     if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional actor resistance requires its condition owner.");
@@ -87,7 +88,8 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                     if (field.Data.Length != 4) throw new InvalidDataException("Armor effect identity extent is invalid.");
                     var form = armorRecord.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
                     if (form is null) continue;
-                    foreach (var effect in _defenseAbilities.Spell(form.Value))
+                    if (!_defenseAbilities.TryGetConstantModifiers(form.Value, out var armorModifiers)) continue;
+                    foreach (var effect in armorModifiers)
                     {
                         if (effect.ActorValue is not (12 or 76)) continue;
                         if (effect.Conditions.Count != 0) throw new NotSupportedException("Conditional armor resistance requires its condition owner.");

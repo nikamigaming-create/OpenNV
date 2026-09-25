@@ -88,8 +88,11 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     internal byte HitPart(Node collider)
     {
-        if (!collider.HasMeta("opennv_nif_collision_bone")) throw new NotSupportedException("Actor hit lacks a source collision bone.");
-        var name = collider.GetMeta("opennv_nif_collision_bone").AsString();
+        var nodeWithBone = collider.HasMeta("opennv_nif_collision_bone")
+            ? collider
+            : (collider.GetParent()?.HasMeta("opennv_nif_collision_bone") == true ? collider.GetParent() : null);
+        if (nodeWithBone is null) throw new NotSupportedException("Actor hit lacks a source collision bone.");
+        var name = nodeWithBone.GetMeta("opennv_nif_collision_bone").AsString();
         if (_parts.TryGetValue(name, out var cached)) return cached;
         var parts = _world.BodyParts(_state.Reference).Parts;
         for (var bone = _skeleton.BoneIndex(name); bone >= 0; bone = _skeleton.Node.GetBoneParent(bone))
