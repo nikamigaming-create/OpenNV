@@ -210,8 +210,10 @@ input takes use normal speed, flat audio and Elliott Tate's left projection eye;
 both eyes were separately inspected. The adjacent edit manifest identifies
 sources/cuts/hashes. The reel predates the latest indoor placement/curb changes.
 New inspected pictures and results are in the adjacent `PLAYTEST-STATUS.md`.
-Player melee, VR crafting and an uninterrupted paired Goodsprings-to-Primm trip
-remain unproved.
+Player melee weapon actions now resolve attack clip suffixes with alternation,
+extend reach beyond the player capsule radius, evaluate combat hit cone contacts
+with line-of-sight checks, and land authoritative damage and condition wear.
+VR crafting and an uninterrupted paired Goodsprings-to-Primm trip remain unproved.
 
 The current publication checks cover Release/Debug builds, formatting/analyzers,
 contracts, launcher tests and native loading; all pass. Owned NPC preparation

@@ -43,6 +43,11 @@ internal static class WeaponFiringContracts
             var thrownWeapon = (byte[])weaponData.Clone(); UInt(thrownWeapon, 0, 13); thrownWeapon[41] = 114; UInt(thrownWeapon, 36, 13);
             var mineWeapon = (byte[])weaponData.Clone(); UInt(mineWeapon, 0, 11); mineWeapon[41] = 102;
             var lunchboxMine = (byte[])weaponData.Clone(); UInt(lunchboxMine, 0, 12); lunchboxMine[41] = 108;
+            var melee1hmWeapon = (byte[])weaponData.Clone(); UInt(melee1hmWeapon, 0, 1); Float(melee1hmWeapon, 8, 0.6f);
+            melee1hmWeapon[41] = 26; UInt(melee1hmWeapon, 36, 0); melee1hmWeapon[42] = 0;
+            var melee2hmWeapon = (byte[])weaponData.Clone(); UInt(melee2hmWeapon, 0, 2); Float(melee2hmWeapon, 8, 1.2f);
+            melee2hmWeapon[41] = 32; UInt(melee2hmWeapon, 36, 0); melee2hmWeapon[42] = 0;
+            var meleeEconomics = (byte[])economics.Clone(); BinaryPrimitives.WriteInt16LittleEndian(meleeEconomics.AsSpan(12), 25);
             var impacts = new byte[48]; UInt(impacts, 4 * 4, 7); UInt(impacts, 4, 1);
             var impactData = new byte[24]; Float(impactData, 0, .25f); UInt(impactData, 4, 2); Float(impactData, 8, 90); Float(impactData, 12, 16);
             var shortDnamWeaponRecords = new[] { 164, 172, 180, 196 }.Select((extent, index) =>
@@ -82,6 +87,10 @@ internal static class WeaponFiringContracts
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(3)), Field("DNAM", mineWeapon)))
                 .Concat(Record("WEAP", 16, Field("EDID", Text("TestLunchboxMine")), Field("MODL", Text("test-lunchbox-mine.nif")),
                     Field("DATA", economics), Field("ETYP", BitConverter.GetBytes(6)), Field("DNAM", lunchboxMine)))
+                .Concat(Record("WEAP", 50, Field("EDID", Text("Test1hmKnife")), Field("MODL", Text("test-knife.nif")),
+                    Field("DATA", meleeEconomics), Field("ETYP", BitConverter.GetBytes(3)), Field("DNAM", melee1hmWeapon)))
+                .Concat(Record("WEAP", 51, Field("EDID", Text("Test2hmHammer")), Field("MODL", Text("test-hammer.nif")),
+                    Field("DATA", meleeEconomics), Field("ETYP", BitConverter.GetBytes(4)), Field("DNAM", melee2hmWeapon)))
                 .Concat(Record("MISC", 5, Field("EDID", Text("TestCasing")), Field("DATA", new byte[8])))
                 .Concat(Record("IPDS", 6, Field("DATA", impacts)))
                 .Concat(Record("IPCT", 7, Field("DATA", impactData), Field("MODL", Text("Effects/test-metal.nif"))))
@@ -89,6 +98,8 @@ internal static class WeaponFiringContracts
                 .Concat(Record("GMST", 9, Field("EDID", Text("fDamageWeaponMult")), Field("DATA", BitConverter.GetBytes(2f))))
                 .Concat(Record("GMST", 10, Field("EDID", Text("fDamageSkillBase")), Field("DATA", BitConverter.GetBytes(.25f))))
                 .Concat(Record("GMST", 11, Field("EDID", Text("fDamageSkillMult")), Field("DATA", BitConverter.GetBytes(.75f))))
+                .Concat(Record("GMST", 52, Field("EDID", Text("fCombatDistance")), Field("DATA", BitConverter.GetBytes(128.0f))))
+                .Concat(Record("GMST", 53, Field("EDID", Text("fCombatHitConeAngle")), Field("DATA", BitConverter.GetBytes(35.0f))))
                 .Concat(shortDnamWeaponRecords.SelectMany(record => record)).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
@@ -232,7 +243,28 @@ internal static class WeaponFiringContracts
             Reject(() => (flameShot with { Projectile = flameShot.Projectile with { Flags = (ushort)(flameShot.Projectile.Flags | 0x0100) } }).RequireRuntimeAttackOwner());
             Reject(() => (shot with { Projectiles = 0 }).RequireInstantRay());
             Reject(() => (shot with { AmmoEffects = [new FalloutAmmoEffect(Key(5), FalloutAmmoEffect.Fatigue + 1, 0, 0)] }).RequireInstantRay());
-            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true flameActorPassThrough=true hitscanDelay=true unsupported=true");
+            var knife = FalloutWeaponPresentation.Read(records, Key(50));
+            var hammer = FalloutWeaponPresentation.Read(records, Key(51));
+            Require(knife.IsMeleeWeapon && knife.AnimationGroup == "1hm" && knife.AttackGroup == "attackleft" && MathF.Abs(knife.Reach - 0.6f) < 0.001f,
+                "1HM melee presentation layout failed.");
+            Require(hammer.IsMeleeWeapon && hammer.AnimationGroup == "2hm" && hammer.AttackGroup == "attackright" && MathF.Abs(hammer.Reach - 1.2f) < 0.001f,
+                "2HM melee presentation layout failed.");
+            var reachDistance = knife.Reach * FalloutGameSettingFloats.Read(records, "fCombatDistance");
+            Require(MathF.Abs(reachDistance - 76.8f) < 0.001f, "Melee reach distance calculation failed.");
+            var hitConeAngle = FalloutGameSettingFloats.Read(records, "fCombatHitConeAngle");
+            Require(MathF.Abs(hitConeAngle - 35.0f) < 0.001f, "Melee combat hit cone angle setting failed.");
+            var meleeInventory = new FalloutPlayerInventory();
+            meleeInventory.Add(records, Key(50), 1, 1, true);
+            meleeInventory.Equip(records, Key(50));
+            var meleeDamageResolver = new FalloutWeaponDamageResolver(records, meleeInventory, _ => 40, () => []);
+            var meleeDamage = meleeDamageResolver.Resolve(knife.Form, 25);
+            Require(meleeDamage.Amount > 0 && meleeDamage.LimbMultiplier == 1.5f, "Melee damage resolution failed.");
+            var meleeHandling = new FalloutWeaponHandling(meleeInventory);
+            Require(meleeHandling.CanUse(knife), "Melee weapon was not usable when equipped.");
+            meleeHandling.ApplyMeleeConditionWear(knife, records);
+            var wornKnife = meleeInventory.Item(Key(50))!;
+            Require((wornKnife.Variants?.Single().Condition ?? 0) < 1.0f, "Melee strike did not apply weapon condition wear.");
+            Console.WriteLine("OPENNV_WEAPON_FIRING_CONTRACT_PASS ammoUse=true recovery=true coldRandom=true emptyHolsteredUnequipped=true sourceOverride=true flameActorPassThrough=true hitscanDelay=true melee=true unsupported=true");
         }
         finally { Directory.Delete(directory, true); }
     }

@@ -167,7 +167,16 @@ internal partial class RuntimeNativePlayer
         if (_shot is null || _shot.Weapon != weapon.Form)
         {
             if (!IsMeleeWeapon(weapon)) return;
-            for (var strike = 0; strike < pending; strike++) PublishPendingMeleeStrike(weapon);
+            for (var strike = 0; strike < pending; strike++)
+            {
+                try { PublishPendingMeleeStrike(weapon); }
+                catch (Exception error)
+                {
+                    _weaponActionError = error.Message;
+                    _damageError = error.Message;
+                    GD.PushError("OPENNV_MELEE_STRIKE_UNBOUND " + error.Message);
+                }
+            }
             return;
         }
         for (var pendingIndex = 0; pendingIndex < pending; pendingIndex++)
