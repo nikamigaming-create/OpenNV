@@ -132,6 +132,12 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         var candidate = path[..^4] + "1st.nif";
         return _content.TryRead(candidate, null, out _, out _) ? part with { ModelPath = candidate } : part;
     }
+    internal bool ClipExists(string name)
+    {
+        if (!_availableClips.TryGetValue(name, out var exists))
+        { exists = _content.TryRead(_directory + "/" + name + ".kf", null, out _, out _); _availableClips.Add(name, exists); }
+        return exists;
+    }
     private RuntimeNativeNifAnimation Clip(string name) => ClipPath(_directory + "/" + name + ".kf");
     private RuntimeNativeNifAnimation ClipPath(string path)
     {
@@ -211,14 +217,8 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         var direction = MathF.Abs(velocity.Z) >= MathF.Abs(velocity.X) ? velocity.Z < 0 ? "forward" : "backward" : velocity.X < 0 ? "left" : "right";
         var prefix = !_first && family == "mt" ? $"{(Actor.Appearance.Female ? "female" : "male")}/mt" : family;
         var requested = grounded ? $"locomotion/{prefix}{direction}" : family + "jumploop";
-        bool Exists(string name)
-        {
-            if (!_availableClips.TryGetValue(name, out var exists))
-            { exists = _content.TryRead(_directory + "/" + name + ".kf", null, out _, out _); _availableClips.Add(name, exists); }
-            return exists;
-        }
         _movementFallback = null;
-        if (!Exists(requested))
+        if (!ClipExists(requested))
         {
             var common = grounded ? $"locomotion/{(_first ? "" : Actor.Appearance.Female ? "female/" : "male/")}mt{direction}" : "mtjumploop";
             _movementFallback = requested + " -> " + common + "; retail-group-inheritance-unverified";
@@ -228,7 +228,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         if (grounded)
         {
             var fastPath = requested.Replace(direction, "fast" + direction, StringComparison.Ordinal);
-            if (Exists(fastPath))
+            if (ClipExists(fastPath))
             {
                 var fast = Clip(fastPath);
                 var walkSpeed = MovementSpeed(selected); var fastSpeed = MovementSpeed(fast);

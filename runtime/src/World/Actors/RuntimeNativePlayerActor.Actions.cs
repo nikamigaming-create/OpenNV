@@ -10,18 +10,57 @@ internal sealed partial class RuntimeNativePlayerActor
     private Node3D? _weaponRoot;
     private Transform3D _weaponRest;
     private RuntimeNativeNifAnimation? _actionClip;
+    private string? _actionGroup;
+    private int _attackVariant;
     private double _actionSeconds;
     private bool _drawn = true;
 
     internal RuntimeNativeNifAnimation PrepareAction(string group)
     {
         if (Weapon is null) throw new InvalidOperationException("Weapon action has no equipped weapon.");
-        return Clip(Weapon.AnimationGroup + group);
+        var baseName = Weapon.AnimationGroup + group;
+        if (group.StartsWith("attack", StringComparison.Ordinal))
+        {
+            var primarySuffix = _attackVariant == 0 ? "_a" : "_b";
+            var secondarySuffix = _attackVariant == 0 ? "_b" : "_a";
+            if (ClipExists(baseName)) return Clip(baseName);
+            if (ClipExists(baseName + primarySuffix)) return Clip(baseName + primarySuffix);
+            if (ClipExists(baseName + secondarySuffix)) return Clip(baseName + secondarySuffix);
+            var opposite = group.Contains("attackleft", StringComparison.Ordinal)
+                ? group.Replace("attackleft", "attackright", StringComparison.Ordinal)
+                : group.Contains("attackright", StringComparison.Ordinal)
+                    ? group.Replace("attackright", "attackleft", StringComparison.Ordinal)
+                    : null;
+            if (opposite is not null)
+            {
+                var oppositeBase = Weapon.AnimationGroup + opposite;
+                if (ClipExists(oppositeBase)) return Clip(oppositeBase);
+                if (ClipExists(oppositeBase + primarySuffix)) return Clip(oppositeBase + primarySuffix);
+                if (ClipExists(oppositeBase + secondarySuffix)) return Clip(oppositeBase + secondarySuffix);
+            }
+        }
+        return Clip(baseName);
     }
 
     internal void SetAction(string? group, double seconds)
     {
-        _actionClip = group is null ? null : PrepareAction(group);
+        if (group is null)
+        {
+            if (_actionClip is not null)
+            {
+                _actionClip = null;
+                _actionGroup = null;
+                _attackVariant = 1 - _attackVariant;
+            }
+        }
+        else
+        {
+            if (_actionGroup != group || _actionClip is null)
+            {
+                _actionClip = PrepareAction(group);
+                _actionGroup = group;
+            }
+        }
         _actionSeconds = seconds;
     }
 
