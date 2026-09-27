@@ -45,6 +45,14 @@ remaining faults captioned. Experimental package 20260927.5 cold-Continues and
 completes the corrected throw in an exported build on a copied checkpoint.
 All-weapon and all-mod gameplay remain incomplete.
 
+Saved clock/random read failures now resume only when static inspection proves
+that no earlier mutation can repeat. The shared script random stream survives
+cold saves; interior queries and package condition 300 read current CELL state.
+The genuine checkpoint's 37 selected failures pass the owned recovery audit,
+and an ordinary copied Continue resumes 23 resident instances. Their later
+animation and package failures remain open; complete script execution is not
+established by recovery. See [reference events](reference-events.md).
+
 ## New Vegas
 
 | System | Current implementation | Evidence and remaining work |

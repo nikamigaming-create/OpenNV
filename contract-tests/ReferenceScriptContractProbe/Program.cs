@@ -20,6 +20,12 @@ try
         .Concat(Record("SCPT", 0x509, Local(1, "1stFloor"), Local(2, "enabled"), Field("SCTX", Text(
             "int 1stFloor\nshort enabled // trailing author note [unparsed]"))))
         .Concat(Record("SCPT", 0x503, Field("SCTX", Text("begin OnActivate\nend"))))
+        .Concat(Record("SCPT", 0x520, Local(1, "count"), Local(2, "timer"), Field("SCTX", Text(
+            "begin GameMode\nif GetDisabled == 0\nset count to GetCurrentTime\nset timer to timer + 1\nendif\nend"))))
+        .Concat(Record("SCPT", 0x521, Local(1, "count"), Local(2, "timer"), Field("SCTX", Text(
+            "begin GameMode\nset timer to timer + 1\nset count to GetCurrentTime\nend"))))
+        .Concat(Record("SCPT", 0x522, Local(1, "count"), Local(2, "timer"), Field("SCTX", Text(
+            "begin OnLoad\nset count to GetRandomPercent\nset timer to timer + 1\nend"))))
         .Concat(Explosion(0xA00, flags: 0x12, damage: 28, radius: 256))
         .Concat(Explosion(0xA01, flags: 0x80, damage: 4, radius: 32))
         .Concat(Explosion(0xA02, flags: 0, damage: 4, radius: 32, force: 5))
@@ -33,8 +39,14 @@ try
         .Concat(Record("ACTI", 0x700, Field("EDID", Text("ModelLessActivator")), Field("SCRI", BitConverter.GetBytes(0x500u))))
         .Concat(Record("ACTI", 0x701, Field("SCRI", BitConverter.GetBytes(0x503u))))
         .Concat(Record("DOOR", 0x702))
+        .Concat(Record("ACTI", 0x720, Field("SCRI", BitConverter.GetBytes(0x520u))))
+        .Concat(Record("ACTI", 0x721, Field("SCRI", BitConverter.GetBytes(0x521u))))
+        .Concat(Record("ACTI", 0x722, Field("SCRI", BitConverter.GetBytes(0x522u))))
+        .Concat(Cell(0x803, Reference(0x920, "ReadBeforeMutation", 0x720), Reference(0x921, "EffectBeforeRead", 0x721),
+            Reference(0x922, "RandomRead", 0x722)))
         .Concat(Cell(0x800, Reference(0x900, "FirstREF"), Reference(0x901, "SecondREF")))
         .Concat(Cell(0x801, Reference(0x902, "PeerREF")))
+        .Concat(Record("CELL", 0x804, Field("DATA", [0]), Field("XCLC", new byte[8])))
         .Concat(Cell(0x802, Reference(0x903, "EmptyActivationREF", 0x701), Reference(0x904, "PlainDoorREF", 0x702),
             EnableChild(0x905, 0x904, 1), EnableChild(0x906, 0x905, 2), EnableChild(0x907, 0x908, 0), EnableChild(0x908, 0x907, 0))).ToArray());
     File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Header("Base.esm").Concat(Script(2)).ToArray());
@@ -78,8 +90,10 @@ try
         Query();
         Require(queryWorld.Get(Key(0x900)).Read(1) == 0, "Distance ignored live actor motion or converted the source axes twice.");
         Reject(() => queryWorld.Distance(Key(0x900), Key(0x902), null, .5f));
+        InteriorQueryContracts.Verify(records, queryWorld);
     }
     using var world = new FalloutReferenceWorld(records);
+    ScriptRecoveryContracts.Verify(records);
     var first = world.LoadCell(firstCell);
     var peer = world.LoadCell(secondCell).Single();
     Require(world.InstanceCount == 3 && firstCell.BaseObjects.Values.All(value => value.ModelPath is null), "Model-less reference lifetime failed.");
@@ -287,6 +301,8 @@ else if (args is [var companionGameplayRoot, "--companion-gameplay"]) OwnedCompa
 else if (args is [var zoneRoot, "--encounter-zones", var zoneCell, var zoneSave, var zoneOutput])
     OwnedEncounterZoneProbe.Run(zoneRoot, zoneCell, zoneSave, zoneOutput);
 else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolProbe.Run(patrolRoot, patrolOutput);
+else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var recoveryOutput])
+    OwnedScriptRecoveryProbe.Run(recoveryRoot, recoverySave, recoveryOutput);
 StageAndInventoryContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();

@@ -532,6 +532,11 @@ internal sealed class FalloutQuestScripts
                     return _quests.Stage(quest);
                 }),
                 "getsecondspassed" => new([], _ => instance.Clock.Elapsed),
+                "getrandompercent" => new([], _ => ScriptValues.RandomPercent()),
+                "getcurrenttime" => new([], _ => (_globals ??
+                    throw new NotSupportedException("GetCurrentTime has no simulation clock."))
+                    .Get(FalloutGameTimeBindings.Read(_records).Hour))
+                { ReadOnly = true },
                 "getbuttonpressed" => new([], _ => MessageResults.Take(instance.Script.FormKey)),
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
                 "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>

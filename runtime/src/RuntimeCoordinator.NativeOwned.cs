@@ -712,7 +712,7 @@ public partial class RuntimeCoordinator
                         .SingleOrDefault(value => value.Appearance.Reference == target)?.HeadTargetPoint;
                 });
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
-                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals);
+                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences);
                 root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,

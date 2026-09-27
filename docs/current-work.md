@@ -72,7 +72,22 @@ verified gameplay; it also does not certify every referenced projectile effect.
 
 ## Next owners
 
-Implement the general source strip-particle decoder and renderer used by
+The current source work repairs saved read failures and world queries. A
+conservative recovery inspection resumes only missing reads before mutations;
+it preserves saved locals and rejects earlier effects. GetRandomPercent now
+uses one saved script stream, and IsInInterior/condition 300 reads the reference's
+current CELL. Synthetic and owned-data checks pass: 37 clock/random failures
+recover across the genuine checkpoint, with 23 resident recoveries observed in
+an ordinary copied flat Continue. Subsequent unsupported operations remain
+visible. NPC interior conditions now reach the next selected procedure failure.
+
+Continue source object animation ownership: PlayGroup and IsAnimPlaying remain
+unbound; scripted window NIFs also fail because the controller player treats
+multiple selectable loops as simultaneous automatic loops. Preserve authored
+selection, clocks and cold state. Then repair the reached NPC/creature package
+procedures and events through their existing movement and script owners.
+
+The weapon work still needs the general source strip-particle decoder used by
 `FlamerFlame01.NIF`: BSStripParticleSystem, BSStripPSysData and
 BSPSysStripUpdateModifier are currently undecoded. Connect its effect lifetime
 to the authoritative weapon/projectile owner; do not substitute a generic flame.
@@ -83,7 +98,7 @@ failures and exercise actual damage, reaction, death and cold state in both mode
 
 Broader combat gaps include blast attenuation, player knockdown, explosion
 placed objects/enchantments, hit events, essential recovery and death XP.
-Resident routines still expose creature wander, condition 300, package event
+Resident routines still expose creature wander/patrol, package event
 scripts/topics and sandbox/eat/sleep gaps. All ten requested mod packages are
 available; selection/ordering is not runtime mod support. Continue the
 [JAM/MCM plan](jam-luna-max-plan.md) without dropping the campaign/mod objectives.

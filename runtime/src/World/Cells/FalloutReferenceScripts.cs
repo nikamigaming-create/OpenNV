@@ -20,8 +20,10 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>>? Command = null,
     Func<FalloutFormKey, bool>? IsInCombat = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null, FalloutScriptEvents? Events = null,
-    Func<FalloutFormKey, FalloutFormKey, float>? Distance = null);
-internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error);
+    Func<FalloutFormKey, FalloutFormKey, float>? Distance = null,
+    Func<FalloutFormKey, bool>? IsInInterior = null);
+internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
+    string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
     IReadOnlySet<FalloutFormKey>? TriggerReferences = null);
 
@@ -58,6 +60,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (item is null || string.IsNullOrWhiteSpace(item.Name) || !admitted.TryAdd(item.Name, item))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
         var instance = world.Get(reference);
+        var recovered = RecoverMissingRead(instance, events);
         // A failed attempt cannot run again on its GameMode clock. A new
         // activation or contact entry is an explicit new event and may retry
         // the source program, including its guards and already-applied prefix.
@@ -68,7 +71,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         var counts = admitted.Keys.ToDictionary(name => name, _ => 0, StringComparer.OrdinalIgnoreCase);
         var failure = instance.ScriptError;
         IReadOnlyList<FalloutReferenceScriptEventResult> Results() => events.Select(item =>
-            new FalloutReferenceScriptEventResult(reference, item.Name, counts[item.Name], failure)).ToArray();
+            new FalloutReferenceScriptEventResult(reference, item.Name, counts[item.Name], failure,
+                recovered?.StartsWith(item.Name + ":", StringComparison.OrdinalIgnoreCase) == true ? recovered : null)).ToArray();
         if (instance.ScriptError is not null || instance.DeletePending || instance.Deleted || events.Count == 0) return Results();
         var runningEvent = "Parse";
         try
@@ -169,7 +173,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     }
 
     private IEnumerable<bool> Steps(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
-        FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null)
+        FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null,
+        Action<Func<string, FalloutScriptFunction?>>? inspectFunctions = null)
     {
         budget ??= new();
         var valueStore = world.ScriptValues;
@@ -356,6 +361,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.Distance ?? throw new NotSupportedException("GetDistance has no spatial owner."))
                     (Target(), Reference(arguments[0].Identifier!)));
+            if (parts.Length <= 2 && operation == "isininterior")
+                return new([], _ => (host.IsInInterior?.Invoke(Target()) ?? world.IsInInterior(Target())) ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreCrime", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IgnoresCrime(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreFriendlyHits", StringComparison.OrdinalIgnoreCase))
@@ -372,7 +379,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     host.IsCurrentFurniture(Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDisabled", StringComparison.OrdinalIgnoreCase))
-                return new([], _ => world.IsEnabled(Target()) ? 0 : 1);
+                return new([], _ => world.IsEnabled(Target()) ? 0 : 1) { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetUnconscious", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsUnconscious(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
@@ -405,9 +412,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     throw new NotSupportedException("GetButtonPressed has no message result owner."))(
                         CallingReference() is { } caller && records.RuntimeFormId(caller) != 0x14 ? caller : bindings.Source)),
                 "getsecondspassed" => new([], _ => seconds),
+                "getrandompercent" => new([], _ => valueStore.RandomPercent()),
                 "getcurrenttime" => new([], _ => (host.Globals ??
                     throw new NotSupportedException("GetCurrentTime has no simulation clock."))
-                    .Get(FalloutGameTimeBindings.Read(records).Hour)),
+                    .Get(FalloutGameTimeBindings.Read(records).Hour))
+                { ReadOnly = true },
                 "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!) ? 1 : 0),
                 "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.Stage(Quest(arguments[0].Identifier!))),
@@ -729,6 +738,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
             }
         }
+        if (inspectFunctions is not null) { inspectFunctions(Function); return []; }
         return program.Steps(Read, Write, Call, Function, UserFunction, budget, values);
     }
 
