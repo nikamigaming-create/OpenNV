@@ -86,7 +86,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     var filter = program!.Bindings.Reference(block.Filter);
                     if (trigger && item.TriggerReferences is { } contacts ? !contacts.Contains(filter) : filter != item.ActionReference) continue;
                 }
-                Execute(instance.Reference, program!.Bindings, block.Program, trigger ? null : item.ActionReference, elapsedSeconds);
+                var actionReference = trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
+                    ? null : item.ActionReference;
+                Execute(instance.Reference, program!.Bindings, block.Program, actionReference, elapsedSeconds);
                 ++counts[block.Event];
             }
             if (admitted.TryGetValue("OnActivate", out var activationEvent) && counts["OnActivate"] == 0)
@@ -384,6 +386,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))
                     (Target(), arguments[0].Identifier!));
+            if (parts.Length <= 2 && operation == "getkiller")
+                return new([], _ => world.Get(Target()).Injury?.Killer is { } killer ? records.RuntimeFormId(killer) : 0);
             return name.ToLowerInvariant() switch
             {
                 "getgameloaded" => new([], _ => Events().GetGameLoaded(bindings.Source) ? 1 : 0),

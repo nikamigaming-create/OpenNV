@@ -1,5 +1,12 @@
 # Gameplay, playtest and release plan
 
+September 27 direction: prioritize ordinary flat gameplay, including NPC and
+creature combat, quest progression, looting and crafting. Execute
+[the flat gameplay work order](flat-gameplay-plan.md) before returning to
+mod-only implementation or detailed VR presentation. Preserve the complete
+campaign/mod objectives below; no whole-game completion date or percentage is
+established by the existing component work.
+
 Release priority: a workable playtest candidate and functional flat/OpenXR
 side-by-side first. Fix broken interactions; leave visual polish for later.
 The user's own flat and physical-headset playtests are required before calling

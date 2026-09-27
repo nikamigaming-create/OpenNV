@@ -30,8 +30,10 @@ public partial class NativeReferenceEventsAudit : Node
             root.AddChild(activator);
             var effects = new List<FalloutReferenceScriptEffect>();
             var reported = new List<string>();
+            var quests = new FalloutQuestState(records);
+            var speaking = false;
             var events = new RuntimeNativeReferenceEvents { ReportDivergence = reported.Add };
-            events.Configure(records, world, new(records), cell, root, new((_, _) => false, effects.Add),
+            events.Configure(records, world, quests, cell, root, new((_, _) => false, effects.Add, IsTalking: _ => speaking),
                 _ => Transform3D.Identity, 1, 1);
             root.AddChild(events);
             var area = root.GetChildren().OfType<Area3D>().Single();
@@ -87,13 +89,25 @@ public partial class NativeReferenceEventsAudit : Node
                 "Fresh native activation did not retry its source block.");
             Require(reported.Count == 1 && reported[0].EndsWith("OnTriggerEnter: audit capability was unavailable.", StringComparison.Ordinal),
                 "Native fault reporting lost the expected divergence or reported an unexpected one.");
+            world.DamageActor(Key(0x902), Key(0x14), 0, 100, 1, 1);
+            events._Process(.75);
+            var dead = world.Get(Key(0x902));
+            Require(dead.Read(2) == 0, "Native death event ran before the source delay.");
+            speaking = true; events._Process(2);
+            Require(dead.Read(2) == 0, "Native death event interrupted active speech.");
+            speaking = false; events._Process(0);
+            Require(dead.ScriptError is null && dead.Read(1) == 0x14 && dead.Read(2) == 1 && dead.Read(3) == 0 &&
+                quests.Variable(Key(0x600), 1) == 1,
+                "Native death did not execute its killer-filtered source quest update exactly once: " + dead.ScriptError);
+            events._Process(10);
+            Require(dead.Read(2) == 1 && quests.Variable(Key(0x600), 1) == 1, "Native corpse repeated its quest death result.");
             events.SetProcess(false);
             var state = System.Text.Json.JsonSerializer.Serialize(world.Capture());
             world.UnloadCell(cell.Cell.FormKey);
             world.LoadCell(cell);
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
             await ScriptEvents(records, world, root);
-            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true parity=unverified");
+            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true parity=unverified");
         }
         catch (Exception error)
         {
@@ -167,7 +181,8 @@ public partial class NativeReferenceEventsAudit : Node
             Field("EDID", Encoding.ASCII.GetBytes(id == 0x901 ? "AuditRef\0" : "TriggerRef\0")),
             Field("NAME", BitConverter.GetBytes(0x700u)), Field("DATA", new byte[24]), fields.SelectMany(field => field).ToArray());
         var children = Reference(0x900, Field("XPRM", primitive), Field("XTRI", BitConverter.GetBytes(12u)))
-            .Concat(Reference(0x901)).ToArray();
+            .Concat(Reference(0x901)).Concat(Record("ACRE", 0x902,
+                Field("NAME", BitConverter.GetBytes(0x701u)), Field("DATA", new byte[24]))).ToArray();
         var group = new byte[24 + children.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
@@ -180,8 +195,28 @@ public partial class NativeReferenceEventsAudit : Node
             .Concat(Function(0x521, "AuditRef.keyDown += key", true))
             .Concat(Function(0x522, "AuditRef.keyUp += key", true))
             .Concat(Function(0x523, "AuditRef.menus += 1"))
+            .Concat(DeathFixture())
             .Concat(Record("ACTI", 0x700, Field("SCRI", BitConverter.GetBytes(0x500u))))
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray();
+    }
+    private static byte[] DeathFixture()
+    {
+        var stats = new byte[17]; BinaryPrimitives.WriteInt16LittleEndian(stats.AsSpan(4), 50);
+        var acbs = new byte[24]; acbs[8] = 1;
+        var body = new byte[84]; BinaryPrimitives.WriteSingleLittleEndian(body, 1); body[6] = 100;
+        byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
+        return Record("CREA", 0x701, Field("ACBS", acbs), Field("DATA", stats),
+                Field("PNAM", BitConverter.GetBytes(0x702u)), Field("NAM4", new byte[4]), Field("SCRI", BitConverter.GetBytes(0x511u)))
+            .Concat(Record("BPTD", 0x702, Field("BPNN", Text("Root")), Field("BPNT", Text("Root")), Field("BPND", body)))
+            .Concat(Record("GMST", 0x703, Field("EDID", Text("fDyingTimer")), Field("DATA", BitConverter.GetBytes(2f))))
+            .Concat(Record("QUST", 0x600, Field("EDID", Text("DeathQuest")), Field("SCRI", BitConverter.GetBytes(0x510u))))
+            .Concat(Record("SCPT", 0x510, Local(1, "kills")))
+            .Concat(Record("SCPT", 0x511, Local(1, "killer"), Local(2, "deaths"), Local(3, "action"),
+                Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCRO", BitConverter.GetBytes(0x600u)),
+                Field("SCRO", BitConverter.GetBytes(0x901u)), Field("SCTX", Text(
+                    "ref killer\nshort deaths\nshort action\nbegin OnDeath player\nset killer to GetKiller\n" +
+                    "set deaths to deaths + GetDead\nset action to GetActionRef\nset DeathQuest.kills to DeathQuest.kills + 1\nend\n" +
+                    "begin OnDeath AuditRef\nset deaths to 1000\nend")))).ToArray();
     }
     private static byte[] Local(uint index, string name)
     {

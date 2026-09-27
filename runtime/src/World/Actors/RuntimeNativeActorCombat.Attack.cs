@@ -33,6 +33,22 @@ internal sealed partial class RuntimeNativeActorCombat
         var statsData = stats.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
         if (SelectCombatWeapon() is { } item)
             PrepareWeapon(item, stats, directory);
+        else if (stats.Signature == "NPC_")
+        {
+            var skills = stats.ReadSubrecords().Single(field => field.Signature == "DNAM").Data;
+            if (statsData.Length != 11 || skills.Length != 28)
+                throw new NotSupportedException("NPC unarmed stat/skill extent is unbound.");
+            _naturalDamage = FalloutGameSettingFloats.Read(_records, "fAVDUnarmedDamageBase") +
+                FalloutGameSettingFloats.Read(_records, "fAVDUnarmedDamageMult") * skills.Span[45 - 32];
+            _attackRange = FalloutGameSettingFloats.Read(_records, "fCombatDistance") * _skeleton.UnitsToMetres;
+            var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
+            _movementPath = SelectPath(directory, "locomotion/h2hfastforward", "locomotion/h2hforward",
+                $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward", "locomotion/mtforward");
+            _attackPath = SelectPath(directory, "h2hattackleft", "h2hattackleft_a", "h2hattackleft_b",
+                "h2hattackright", "h2hattackright_a", "h2hattackright_b");
+            _combatIdle = Clip(SelectPath(directory, "locomotion/mtidle", "mtidle"), true);
+            _combatAim = Clip(SelectPath(directory, "h2haim"), true);
+        }
         else
         {
             if (statsData.Length != 17) throw new NotSupportedException("Creature attack data extent is unbound.");
@@ -42,10 +58,12 @@ internal sealed partial class RuntimeNativeActorCombat
             if (reach.Length != 1) throw new InvalidDataException("Creature reach extent is invalid.");
             _attackRange = reach[0] * _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;
             _movementPath = SelectPath(directory, "locomotion/mtfastforward", "locomotion/mtforward", "mtforward");
-            _attackPath = SelectPath(directory, "h2hattackleft", "h2hattackright");
+            _attackPath = SelectPath(directory, "h2hattackleft", "h2hattackleft_a", "h2hattackleft_b",
+                "h2hattackright", "h2hattackright_a", "h2hattackright_b");
             _combatIdle = Clip(SelectPath(directory, "mtidle", "locomotion/mtidle"), true);
         }
-        if (_attackRange <= 0 || _naturalDamage < 0) throw new InvalidDataException("Actor attack range/damage is invalid.");
+        if (!float.IsFinite(_attackRange) || !float.IsFinite(_naturalDamage) || _attackRange <= 0 || _naturalDamage < 0)
+            throw new InvalidDataException("Actor attack range/damage is invalid.");
         var attackClip = Clip(_attackPath, _enemyWeapon?.Automatic == true);
         _attackHitCount = attackClip.Animation.TextKeys
             .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
@@ -71,7 +89,7 @@ internal sealed partial class RuntimeNativeActorCombat
         return clip;
     }
 
-    private void AdvanceEngagement(RuntimeNativePlayer player, double delta)
+    private void AdvanceEngagement(RuntimeNativePlayer? player, double delta)
     {
         var state = _state.Engagement!;
         var offset = TargetPosition(player) - _actor.GlobalPosition;
@@ -138,7 +156,7 @@ internal sealed partial class RuntimeNativeActorCombat
             PublishCombatPose(clip, key.SourceSeconds, next);
             foreach (var text in key.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
             {
-                if (state.Action == "attack" && text.Equals("Hit", StringComparison.OrdinalIgnoreCase)) AttackPlayer(player);
+                if (state.Action == "attack" && text.Equals("Hit", StringComparison.OrdinalIgnoreCase)) AttackTarget(player);
                 else _enemySounds!.Dispatch(key with { Text = text });
             }
         }
@@ -188,25 +206,26 @@ internal sealed partial class RuntimeNativeActorCombat
         RuntimeNativeNifAnimation.ApplyLayers(_combatLayers.AsSpan(0, count));
     }
 
-    private void AttackPlayer(RuntimeNativePlayer player)
+    private void AttackTarget(RuntimeNativePlayer? player)
     {
         ++_attacks;
         if (TargetHealth(player) <= 0) return;
-        if (Ranged) { ShootPlayer(player); return; }
+        if (Ranged) { ShootTarget(player); return; }
         var distance = _actor.GlobalPosition.DistanceTo(TargetPosition(player));
         var allowed = _attackRange + _radius + TargetRadius(player);
         var before = TargetHealth(player);
         var resolvedDamage = _enemyWeapon is null ? new FalloutWeaponDamage(_naturalDamage, 1, 0, 1) :
             _enemyDamage!.Resolve(_enemyWeapon.Form, _baseWeaponDamage);
-        var strikeBone = _enemyWeapon is null
-            ? _world.BodyParts(_state.Reference).Parts.Single(part => part.Type == 1).Node
-            : "Bip01 R Hand";
+        var strikeBone = _actor is RuntimeNativeNpc
+            ? _enemyWeapon is null && _attackPath.Contains("attackleft", StringComparison.OrdinalIgnoreCase) ? "Bip01 L Hand" : "Bip01 R Hand"
+            : (_world.BodyParts(_state.Reference).Parts.SingleOrDefault(part => part.Type == 1) ??
+                _world.BodyParts(_state.Reference).Parts.Single(part => part.Type == 0)).Node;
         var bone = _skeleton.BoneIndex(strikeBone);
         var origin = bone >= 0
             ? (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Origin
             : _actor.GlobalPosition + Vector3.Up * _radius;
         byte? part = null;
-        if (distance <= allowed && CanSeeTarget(player) && _opponent is null && player.CombatHitPartFrom(origin, _actor) is { } selectedPart)
+        if (distance <= allowed && CanSeeTarget(player) && _opponent is null && player!.CombatHitPartFrom(origin, _actor) is { } selectedPart)
         {
             part = selectedPart;
             _context!.DamagePlayer(resolvedDamage, selectedPart);

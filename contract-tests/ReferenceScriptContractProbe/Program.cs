@@ -14,6 +14,11 @@ try
         .Concat(Record("SCPT", 0x504, Local(7, "counter", 1, 0xA5), Local(7, "counter", 1, 0x5A)))
         .Concat(Record("SCPT", 0x505, Local(7, "counter", 1), Local(7, "counter", 0)))
         .Concat(Record("SCPT", 0x506, Local(7, "counter"), Local(8, "counter")))
+        .Concat(Record("SCPT", 0x507, Local(1, "owner"), Field("SCTX", Text(
+            "ref owner\nreference Owner\nbegin GameMode\nset owner to unsupported[index]\nend"))))
+        .Concat(Record("SCPT", 0x508, Local(1, "owner"), Field("SCTX", Text("ref owner\nshort owner"))))
+        .Concat(Record("SCPT", 0x509, Local(1, "1stFloor"), Local(2, "enabled"), Field("SCTX", Text(
+            "int 1stFloor\nshort enabled // trailing author note [unparsed]"))))
         .Concat(Record("SCPT", 0x503, Field("SCTX", Text("begin OnActivate\nend"))))
         .Concat(Explosion(0xA00, flags: 9, damage: 28, radius: 256))
         .Concat(Explosion(0xA01, flags: 0x40, damage: 4, radius: 32))
@@ -41,6 +46,12 @@ try
     Require(paddedLocals.Count == 1 && paddedLocals["COUNTER"] == 7, "Unused compiler padding changed local slot identity.");
     Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x505))));
     Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x506))));
+    Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x508))));
+    Require(FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x509))).Count == 2,
+        "Compiled numeric local admission rejected source name spelling or trailing author notes.");
+    Require(FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x507)))["owner"].Kind == FalloutScriptLocalKind.Form,
+        "Unsupported executable syntax prevented compiled reference-local admission.");
+    Reject(() => FalloutGameModeProgram.Read("ref owner\nbegin GameMode\nset owner to unsupported[index]\nend"));
     var firstCell = FalloutCellSceneReader.Read(records, Key(0x800));
     var secondCell = FalloutCellSceneReader.Read(records, Key(0x801));
     using var world = new FalloutReferenceWorld(records);

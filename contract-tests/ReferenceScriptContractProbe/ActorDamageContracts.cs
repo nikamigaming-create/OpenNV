@@ -134,6 +134,9 @@ internal static class ActorDamageContracts
             var killed = world.DamageActor(Key(0x91), Key(0x92), 1, 25, 1, 1);
             Check(killed is { Died: true, Dead: true, HealthAfter: -10 } && world.Inventory(Key(0x91), 1).Contents.Item(Key(3))!.Count == 2,
                 "Head multiplier, death transition or source death loot failed.");
+            Check(!world.AdvanceDeathEvent(Key(0x91), .75, 2, false) &&
+                world.Get(Key(0x91)).Injury is { DeathEventPending: true, DeathEventElapsed: .75 },
+                "Death event ignored its delay or was not retained in world state.");
             var player = new FalloutPlayerInventory();
             world.Inventory(Key(0x91), 1).Contents.TransferTo(player, Key(3), 1);
             var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
@@ -147,6 +150,13 @@ internal static class ActorDamageContracts
             Reject(() => invalidSever.Restore(saved.Select(value => value.Reference == Key(0x92) ?
                 value with { Injury = value.Injury! with { SeveredParts = [1] } } : value).ToArray()));
             using var cold = new FalloutReferenceWorld(records); cold.Restore(saved); cold.LoadCell(cell);
+            Check(cold.Get(Key(0x91)).Injury is { DeathEventPending: true, DeathEventElapsed: .75 } &&
+                !cold.AdvanceDeathEvent(Key(0x91), 1, 2, false) && !cold.AdvanceDeathEvent(Key(0x91), .25, 2, true) &&
+                cold.AdvanceDeathEvent(Key(0x91), 0, 2, false) && !cold.AdvanceDeathEvent(Key(0x91), 10, 2, false),
+                "Cold death lost its remaining delay, interrupted speech or dispatched twice.");
+            using var coldDispatched = new FalloutReferenceWorld(records);
+            coldDispatched.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(cold.Capture()))!);
+            Check(!coldDispatched.AdvanceDeathEvent(Key(0x91), 10, 2, false), "Cold corpse repeated an already delivered death event.");
             var corpse = cold.DamageActor(Key(0x91), Key(0x92), 1, 25, 1, 1);
             Check(corpse is { Died: false, Dead: true, HealthDamage: 0, HealthAfter: -10 } &&
                 cold.Get(Key(0x91)).Injury!.LimbDamage[1] == 50 && cold.Inventory(Key(0x91), 1).Contents.Item(Key(3))!.Count == 1,

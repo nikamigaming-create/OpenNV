@@ -5,7 +5,8 @@ using OpenNV.Runtime.World.Actors;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutActorInjury(bool Dead, FalloutFormKey? Killer,
-    IReadOnlyDictionary<byte, float> LimbDamage, bool DeathInventoryGranted = false, IReadOnlyList<byte>? SeveredParts = null);
+    IReadOnlyDictionary<byte, float> LimbDamage, bool DeathInventoryGranted = false, IReadOnlyList<byte>? SeveredParts = null,
+    bool DeathEventPending = false, double DeathEventElapsed = 0);
 
 internal sealed record FalloutActorHit(FalloutFormKey Reference, byte Part, float HealthBefore, float HealthAfter,
     float HealthDamage, float LimbDamage, bool Died, bool Dead, uint ImpactMaterial);
@@ -83,15 +84,32 @@ internal sealed partial class FalloutReferenceWorld
             Dead = injury.Dead || died,
             Killer = died ? attacker : injury.Killer,
             LimbDamage = limbs,
-            DeathInventoryGranted = injury.DeathInventoryGranted || died
+            DeathInventoryGranted = injury.DeathInventoryGranted || died,
+            DeathEventPending = injury.DeathEventPending || died
         };
         return new(reference, partType, health.Current, changed.Current, healthDamage, limbDamage, died, actor.Injury.Dead, source.ImpactMaterial);
+    }
+
+    internal bool AdvanceDeathEvent(FalloutFormKey reference, double seconds, double delay, bool speaking)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0 || !double.IsFinite(delay) || delay < 0)
+            throw new ArgumentOutOfRangeException(nameof(seconds));
+        var actor = Actor(reference);
+        if (actor.Injury is not { DeathEventPending: true } injury) return false;
+        var elapsed = Math.Min(delay, injury.DeathEventElapsed + seconds);
+        var ready = elapsed >= delay && !speaking;
+        // Consume before dispatch: a failing source block retains its prefix
+        // and error, and a saved corpse must never execute that prefix again.
+        actor.Injury = injury with { DeathEventElapsed = elapsed, DeathEventPending = !ready };
+        return ready;
     }
 
     private void RestoreInjury(FalloutReferenceInstance actor, FalloutActorInjury injury)
     {
         if (injury.LimbDamage is null || injury.LimbDamage.Any(pair => pair.Key > 14 || !float.IsFinite(pair.Value) || pair.Value < 0) ||
-            !injury.Dead && (injury.Killer is not null || injury.DeathInventoryGranted) ||
+            !injury.Dead && (injury.Killer is not null || injury.DeathInventoryGranted || injury.DeathEventPending || injury.DeathEventElapsed != 0) ||
+            !double.IsFinite(injury.DeathEventElapsed) || injury.DeathEventElapsed < 0 ||
+            injury.DeathEventPending && injury.Killer is null ||
             !actor.ActorValues.TryGetValue("health", out var health) || !health.IsFinite || injury.Dead != (health.Current <= 0))
             throw new InvalidDataException("Saved actor injury is inconsistent with its health.");
         var body = BodyParts(actor.Reference);

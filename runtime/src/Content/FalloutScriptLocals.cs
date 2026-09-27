@@ -81,9 +81,12 @@ internal static class FalloutScriptLocals
         {
             var line = FalloutGameModeProgram.StripComment(raw).Trim();
             if (line.Length == 0) continue;
-            var tokens = FalloutGameModeProgram.Tokens(line);
-            if (tokens.Length == 0) continue;
-            var kind = tokens[0].ToLowerInvariant() switch
+            // Reading compiled local slots admits world state, not execution.
+            // An unsupported expression elsewhere in the program must fault
+            // that script when parsed, rather than prevent the entire cell
+            // from loading before any reference can own its state.
+            var keyword = Regex.Match(line, @"^[A-Za-z_][A-Za-z0-9_]*", RegexOptions.CultureInvariant).Value;
+            var kind = keyword.ToLowerInvariant() switch
             {
                 "short" or "int" or "long" or "float" => FalloutScriptLocalKind.Number,
                 "ref" or "reference" => FalloutScriptLocalKind.Form,
@@ -92,10 +95,14 @@ internal static class FalloutScriptLocals
                 _ => (FalloutScriptLocalKind?)null,
             };
             if (kind is not { } localKind) continue;
-            if (tokens.Length != 2 || !Regex.IsMatch(tokens[1],
-                    @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant) ||
-                !result.TryAdd(tokens[1], localKind))
-                throw new InvalidDataException("Script source variable declaration is ambiguous.");
+            // Retail source contains digit-leading local names and trailing
+            // author notes without comment delimiters. SLSD/SCVR owns the
+            // slot; only its declared value kind is needed at admission.
+            var declaration = Regex.Match(line, @"^[A-Za-z_][A-Za-z0-9_]*\s+([A-Za-z0-9_]+)(?=\s|$)", RegexOptions.CultureInvariant);
+            var name = declaration.Groups[1].Value;
+            if (!declaration.Success || result.TryGetValue(name, out var previous) && previous != localKind)
+                throw new InvalidDataException($"Script {script.FormKey} source variable declaration is ambiguous: {line}");
+            result[name] = localKind;
         }
         return result;
     }
