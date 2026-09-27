@@ -56,6 +56,7 @@ internal sealed partial class FalloutReferenceWorld
         instance.Placement = placement.Copy();
         instance.PackageMotion = null;
         instance.Engagement = null;
+        instance.HitReaction = null;
         instance.PlacementRevision = ++PlacementRevision;
     }
 

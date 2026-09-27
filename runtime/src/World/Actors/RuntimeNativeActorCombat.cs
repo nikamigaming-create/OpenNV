@@ -42,7 +42,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         muzzlePresentationError = _muzzlePresentationError,
         casingPresentationError = _casingPresentationError,
         engagement = EngagementObservation,
-        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs"
+        hitReaction = HitReactionObservation,
+        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,forced-hit-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs"
     };
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
@@ -109,7 +110,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     internal FalloutActorHit Hit(Node collider, FalloutWeaponDamage damage, FalloutFormKey attacker,
         int level, FalloutGlobalState globals, uint? weaponOnHitBehavior = null,
-        Func<float>? nextWeaponRandomUnit = null)
+        Func<float>? nextWeaponRandomUnit = null, bool explosionDamage = false)
     {
         try
         {
@@ -125,7 +126,11 @@ internal sealed partial class RuntimeNativeActorCombat : Node
                 BeginDeath();
                 ApplyLethalWeaponLimbEffect(bodyPart, weaponOnHitBehavior, nextWeaponRandomUnit);
             }
-            else if (hit.HealthDamage > 0) Provoke(attacker);
+            else if (hit.HealthDamage > 0)
+            {
+                Provoke(attacker);
+                RequestHitReaction(hit, explosionDamage ? -1 : hit.Part);
+            }
             Error = null;
             GD.Print($"OPENNV_ACTOR_HIT reference={hit.Reference} part={hit.Part} health={hit.HealthBefore:R}->{hit.HealthAfter:R} died={hit.Died}");
             return hit;
@@ -197,6 +202,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     private void BeginDeath()
     {
+        _state.HitReaction = null;
+        _hitReactionClip = null;
         foreach (var area in _actor.FindChildren("*", "Area3D", true, false).OfType<Area3D>())
             if (area.HasMeta("opennv_nif_collision_bone")) GamebryoReferenceEnableRuntime.SetCollisionFilter(area, 0, 0);
         _ragdoll!.Activate();

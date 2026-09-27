@@ -131,7 +131,10 @@ internal static class ActorDamageContracts
             var first = world.DamageActor(Key(0x91), Key(0x92), 0, 10, 1.5f, 1);
             Check(first is { HealthBefore: 50, HealthAfter: 40, LimbDamage: 15, Died: false } && world.Health(Key(0x92)).Current == 50,
                 "Damage pools, limb multiplier or per-reference isolation failed.");
+            world.Get(Key(0x91)).HitReaction = new(Key(0x99), new string('a', 64), 0,
+                new("source.kf", new string('b', 64), .25, false), [0, 0, 0], [0, 0, 0, 1]);
             var killed = world.DamageActor(Key(0x91), Key(0x92), 1, 25, 1, 1);
+            Check(world.Get(Key(0x91)).HitReaction is null, "Death retained a living hit-reaction pose owner.");
             Check(killed is { Died: true, Dead: true, HealthAfter: -10 } && world.Inventory(Key(0x91), 1).Contents.Item(Key(3))!.Count == 2,
                 "Head multiplier, death transition or source death loot failed.");
             Check(!world.AdvanceDeathEvent(Key(0x91), .75, 2, false) &&

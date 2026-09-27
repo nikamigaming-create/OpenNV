@@ -287,7 +287,7 @@ internal partial class RuntimeNativeNpc
         }
     }
 
-    private float EvaluateAiCondition(FalloutCondition condition) => condition.Function switch
+    internal float EvaluateAiCondition(FalloutCondition condition) => condition.Function switch
     {
         18 => (_aiClock ?? throw new NotSupportedException("AI time query has no simulation clock.")).Hour,
         74 => (_aiGlobals ?? throw new NotSupportedException("AI global query has no state owner.")).Get(condition.FormArgument1),

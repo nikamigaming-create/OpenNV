@@ -29,7 +29,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object? _lastHitscanImpact;
     private object? _lastExplosion;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
-    internal bool OwnsPose => _context is not null && _state.Engagement is not null;
+    internal bool OwnsPose => _context is not null && (_state.Engagement is not null || ReactingToHit);
     internal bool Restrained => _state.Restrained;
     private object EngagementObservation => new
     {
@@ -130,9 +130,19 @@ internal sealed partial class RuntimeNativeActorCombat
     public override void _PhysicsProcess(double delta)
     {
         _enemyMuzzle?.Advance(delta);
-        if (_context is null || Dead || !_state.Enabled || _state.Unconscious || _state.Restrained || _engagementError is not null) return;
+        if (_context is null || Dead || !_state.Enabled || _state.Unconscious) return;
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
+        if (ReactingToHit && !_engagementPrepared && _state.Engagement is not null)
+        {
+            try { PrepareCombatPresentation(); }
+            catch (Exception error)
+            {
+                if (_engagementError != error.Message) GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error.Message}");
+                _engagementError = error.Message;
+            }
+        }
+        if (AdvanceHitReaction(delta) || _state.Restrained || _engagementError is not null) return;
         try
         {
             if (_state.Engagement is null && !TryCompanionCombat())
@@ -154,21 +164,11 @@ internal sealed partial class RuntimeNativeActorCombat
             if (!float.IsFinite(_detectRange) || _detectRange <= 0) throw new InvalidDataException("Actor threat radius is invalid.");
             if (_threat.Confidence == 0)
             {
-                if (!_engagementPrepared)
-                {
-                    PrepareFlee(); _engagementPrepared = true;
-                    _state.CaptureEngagement = CaptureEngagement;
-                    Activity.SetAlerted(true); Activity.SetCombat(true); Activity.SetWeaponDrawn(false);
-                }
+                PrepareCombatPresentation();
                 AdvanceFlee(player, delta);
                 return;
             }
-            if (!_engagementPrepared)
-            {
-                PrepareEngagement(); _engagementPrepared = true;
-                _state.CaptureEngagement = CaptureEngagement;
-                Activity.SetAlerted(true); Activity.SetCombat(true); Activity.SetWeaponDrawn(_enemyWeapon is not null);
-            }
+            PrepareCombatPresentation();
             AdvanceEngagement(player, delta);
         }
         catch (Exception error)
@@ -177,6 +177,18 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
             GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error}");
         }
+    }
+
+    private void PrepareCombatPresentation()
+    {
+        if (_engagementPrepared || _engagementError is not null) return;
+        _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+        if (_threat.Confidence == 0) PrepareFlee();
+        else PrepareEngagement();
+        _engagementPrepared = true;
+        _state.CaptureEngagement = CaptureEngagement;
+        Activity.SetAlerted(true); Activity.SetCombat(true);
+        Activity.SetWeaponDrawn(_enemyWeapon is not null);
     }
 
     private void PrepareFlee()
