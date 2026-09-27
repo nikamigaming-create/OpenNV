@@ -10,7 +10,8 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorCombatAudit
 {
     private async Task ExerciseRetaliation(FalloutPluginStack records, RuntimeLiveContentSource content,
-        FalloutGlobalState globals, string actorHex, string targetHex, bool unarmed, bool ambient, bool packageMotion = false)
+        FalloutGlobalState globals, string actorHex, string targetHex, bool unarmed, bool ambient, bool packageMotion = false,
+        bool hitReaction = false)
     {
         using var world = new FalloutReferenceWorld(records);
         var key = records.RuntimeFormKey(Convert.ToUInt32(actorHex, 16));
@@ -65,7 +66,11 @@ public partial class NativeActorCombatAudit
                 return;
             }
             var before = world.Health(targetKey).Current;
-            if (ambient)
+            if (hitReaction)
+            {
+                await ExerciseHitReaction(records, world, globals, attacker, actors[0], key, targetKey);
+            }
+            else if (ambient)
             {
                 var state = world.Get(key);
                 var threat = FalloutActorThreat.Read(records, state.Base, state.Templates);

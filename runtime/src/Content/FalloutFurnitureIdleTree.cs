@@ -52,7 +52,7 @@ internal sealed class FalloutFurnitureIdleTree
             if (!ancestors.Add(branch.Record.FormKey)) throw new InvalidDataException("IDLE parent cycle.");
             if (branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase)) return branch.Record;
             foreach (var child in Order(_branches.Where(value => value.Parent == branch.Record.FormKey)
-                .OrderBy(value => _pluginOrder[value.Record.Plugin.Name]).ToArray()))
+                .OrderBy(value => _pluginOrder[value.Record.FormKey.OwnerPlugin]).ToArray()))
             {
                 if (!FalloutCondition.AllPass(child.Conditions, evaluate)) continue;
                 var result = Visit(child, new(ancestors));
@@ -66,7 +66,9 @@ internal sealed class FalloutFurnitureIdleTree
     internal static IReadOnlyList<FalloutIdleBranch> Order(IReadOnlyList<FalloutIdleBranch> branches)
     {
         var result = new List<FalloutIdleBranch>();
-        foreach (var plugin in branches.GroupBy(value => value.Record.Plugin.Name, StringComparer.OrdinalIgnoreCase))
+        // An override replaces a node at its original plugin's insertion point;
+        // it does not make original siblings depend on a not-yet-inserted node.
+        foreach (var plugin in branches.GroupBy(value => value.Record.FormKey.OwnerPlugin, StringComparer.OrdinalIgnoreCase))
         {
             var remaining = plugin.ToDictionary(value => value.Record.FormKey);
             if (remaining.Values.GroupBy(value => value.Previous).Any(group => group.Count() != 1))

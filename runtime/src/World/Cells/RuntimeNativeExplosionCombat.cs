@@ -87,7 +87,7 @@ internal static class RuntimeNativeExplosionCombat
             if (!explosion.IgnoresLineOfSight && !ClearLineOfSight(space, point,
                 ((Node3D)collider).GlobalPosition, collisionMask, shooter, combat)) continue;
             var hit = combat.Hit(collider, damage, attacker, level, globals,
-                weaponOnHitBehavior, nextWeaponRandomUnit);
+                weaponOnHitBehavior, nextWeaponRandomUnit, explosionDamage: true);
             actorHits.Add(new
             {
                 reference = hit.Reference,

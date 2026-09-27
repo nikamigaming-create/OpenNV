@@ -65,7 +65,7 @@ internal sealed partial class RuntimeNativeCreature
         _evaluateRequested = true;
     }
 
-    private float PackageCondition(FalloutCondition condition) => condition.Function switch
+    internal float PackageCondition(FalloutCondition condition) => condition.Function switch
     {
         18 => (_aiClock ?? throw new NotSupportedException("Creature time query has no simulation clock.")).Hour,
         74 => (_aiGlobals ?? throw new NotSupportedException("Creature global query has no state owner.")).Get(condition.FormArgument1),

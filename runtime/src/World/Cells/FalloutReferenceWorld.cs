@@ -15,7 +15,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutMapMarkerState? MapMarker = null, FalloutActorInjury? Injury = null, FalloutActorRagdollState? Ragdoll = null,
     FalloutActorEngagement? Engagement = null, FalloutActorTemplateSnapshot? Templates = null,
     FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false,
-    bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null)
+    bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null,
+    FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -38,6 +39,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
+            snapshot.HitReaction?.Validate();
+            if (snapshot.HitReaction is not null && snapshot.Injury is not { Dead: false })
+                throw new InvalidDataException("Hit reaction requires a living injured actor.");
             if (snapshot.Ragdoll is { } ragdoll)
             {
                 ragdoll.Validate();
@@ -82,6 +86,10 @@ internal sealed class FalloutReferenceInstance
     internal FalloutSoundRandomState SoundRandom => _soundRandom ??= new(
         BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
     internal FalloutActorAnimationState Animation { get; } = new();
+    private FalloutSoundRandomState? _hitReactionRandom;
+    internal FalloutSoundRandomState HitReactionRandom => _hitReactionRandom ??= new(
+        BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
+    internal FalloutActorHitReaction? HitReaction { get; set; }
     internal FalloutMapMarkerState? MapMarker { get; set; }
     internal FalloutActorInjury? Injury { get; set; }
     internal FalloutActorRagdollState? Ragdoll { get; set; }
@@ -129,7 +137,7 @@ internal sealed class FalloutReferenceInstance
         _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
         CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-        TalkedToPlayer, PackageMotion);
+        TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -317,7 +325,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
                 instance.Placement = placement.Copy();
             }
-            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer || snapshot.PackageMotion is not null)
+            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer || snapshot.PackageMotion is not null ||
+                snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null)
                 _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
@@ -354,6 +363,16 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             else if (instance.ActorValues.ContainsKey("health")) throw new InvalidDataException("Saved health has no actor injury state.");
             instance.Ragdoll = snapshot.Ragdoll;
             instance.Engagement = snapshot.Engagement;
+            if (snapshot.HitReaction is { } reaction)
+            {
+                var idle = records.GetEffective(reaction.Idle);
+                if (idle.Signature != "IDLE" || !Convert.ToHexString(SHA256.HashData(idle.ReadData()))
+                    .Equals(reaction.IdleSha256, StringComparison.OrdinalIgnoreCase) ||
+                    !validated.BodyParts(snapshot.Reference).Parts.Any(part => part.Type == reaction.Part))
+                    throw new InvalidDataException("Saved hit reaction differs from its source idle or anatomy.");
+                instance.HitReaction = reaction.Copy();
+            }
+            if (snapshot.HitReactionRandomState is { } reactionRandom) instance.HitReactionRandom.Restore(reactionRandom);
             if (instance.EnableRequest is not null && instance.EnableParent is not null)
                 throw new InvalidDataException("Saved child reference has an independent enable request.");
         }

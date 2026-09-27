@@ -2,7 +2,29 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
+if (args is ["--inspect-idle-tree", var treeRoot, var modelPrefix])
+{
+    RuntimeLiveContentSource.Configure(treeRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
+    using var content = RuntimeLiveContentSource.Current!;
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    foreach (var record in records.EffectiveRecords("IDLE"))
+    {
+        var model = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "MODL");
+        if (model.Signature != "MODL" || !FalloutDialogueTopic.Text(model.Data.Span).Replace('\\', '/').Contains(modelPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+        var branch = FalloutFurnitureIdleTree.Read(record);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            record.FormKey, editorId = record.ReadSubrecords().Where(field => field.Signature == "EDID")
+                .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).SingleOrDefault(),
+            branch.Model, branch.Parent, branch.Previous, branch.Group,
+            conditions = branch.Conditions.Select(c => new { c.Function, c.Flags, c.Comparison, c.Argument1, c.Argument2, c.RunOn, c.Reference }),
+        }));
+    }
+    return;
+}
+
 IdleAnimationProbe.Run();
+HitReactionProbe.Run();
 
 ActorPackageCommandProbe.Exercise();
 IdleCollectionProbe.Run();

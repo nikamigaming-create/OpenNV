@@ -79,6 +79,7 @@ internal sealed partial class FalloutReferenceWorld
         if (died && !injury.DeathInventoryGranted && source.DeathItem is { } item)
             Inventory(reference, level, globals).Contents.Add(records, item, 1, level, true, globals);
         actor.ActorValues["health"] = changed;
+        if (died) actor.HitReaction = null;
         actor.Injury = injury with
         {
             Dead = injury.Dead || died,

@@ -138,3 +138,14 @@ owners. They now retain their saved state; ambiguous trailing Else syntax still
 fails if reached. Cold restoration preserves all 446 original script owners.
 The existing corpus audit reports 57 remaining source-body parse failures;
 these counts do not certify execution or campaign support.
+
+## Nonfatal combat response
+
+Qualifying NPC and creature hits now evaluate the source hit-reaction IDLE tree,
+interrupt the active attack/reload and publish its KF before combat resumes.
+An ordinary flat Primm run exercised the arm response through mouse firing and
+saved the active animation phase. NPC and gecko component checks also exercise
+fresh-skin resumption, repeated hits and subsequent attacks without a player.
+Healthy limbs and radial explosions do not invent anatomical stagger reactions.
+Forced reactions, blend timing, hit scripts and broader combat tactics remain
+open; see [the implemented contract and limits](combat-hit-reactions.md).

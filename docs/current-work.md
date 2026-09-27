@@ -2,136 +2,101 @@
 
 ## Active implementation
 
-The current user direction is to finish ordinary flat gameplay, with NPC and
-creature response, source quest progression, looting and crafting first. Detailed
-VR presentation is deferred from this immediate work order; flat/OpenXR retain
-one authoritative state. Follow [flat gameplay work](flat-gameplay-plan.md) and
+Finish ordinary flat gameplay with autonomous NPC/creature response, source
+quest progression, looting and crafting. The latest direction prioritizes every
+weapon family across player/NPC use, firing, reloading, hits and persistence.
+Add separate combat weapon and consumable wheels with shared flat/VR inventory
+actions. Real throwing weapons, including grenades, must own release, travel,
+contact, fuse and explosion behavior; a throwing animation is insufficient.
+Detailed VR presentation is
+outside this immediate work order; flat/OpenXR share authoritative state.
+Follow [flat gameplay work](flat-gameplay-plan.md) and
 [implementation plan](implementation-plan.md). Work without subagents.
 
-The current candidate adds resident package schedules and Continue recovery to
-the actor and interaction repairs merged through PRs #52 and #53. Those repair
-compiled local admission, unarmed NPC attacks, squat creature motion,
-source-body detection and player-only acquisition/assistance. New deaths reach delayed, killer-filtered OnDeath
-script blocks with pending time in v19 saves. Existing v18 and earlier supported
-saves remain readable; historical quest outcomes are not fabricated on restore.
+The completed repair is nonfatal combat response. Player hits already changed
+health and enemies fired back in the latest user play log, but no owner selected
+or played the source hit-reaction IDLE tree. The repair evaluates winning IDLE
+conditions against hit location, actual limb damage and actor activity; qualifying
+hits interrupt the attack and publish the source KF before combat resumes.
+Healthy limbs do not receive an invented stagger on every bullet. NPCs and
+creatures use the same owner. Source sibling ordering retains a node's original
+plugin identity when a later plugin overrides it.
 
-Native component runs pass hostile NPC acquisition/firing, turning and wall
-refusal, unarmed NPC retaliation and gecko retaliation through actual source Hit
-keys/anatomical contacts. A three-actor native encounter, with no player object
-or injected hit, passes NPC initiation, creature retaliation and faction ally
-assistance. Source-unaggressive actors and opaque walls prevent initiation;
-telemetry records candidate eligibility and visibility. Native event checks update a source quest
-variable once after the dying delay and speech completion. Synthetic cold-state
-checks retain the remaining delay and prevent duplicate death dispatch. These
-are integration fixes, not a completed encounter/campaign or retail-parity claim.
-The full repository checks and CI passed for that actor block.
+Reaction identity, KF hash, elapsed phase, pose and selection randomness are
+retained in v20 saves. Supported earlier schemas remain readable. Death clears
+the living reaction owner. Telemetry exposes selection, rejected conditions,
+active phase, completion, sound events and failures. Repeated hits retain an
+active reaction instead of restarting it; that interruption policy, blend timing
+and special forced power-attack triggers are not matched retail behavior.
 
-The merged interaction changes reject missing crafting ingredients atomically, evaluate
-player-targeted recipe note/perk/equipment conditions, and provide source-based
-quantity selection for container transfers. The native interaction check passes
-all 127 selected source note/perk conditions, modal cancellation, partial counts,
-stale choices and cold inventory restoration. The quantity dialog was rendered
-and inspected; its temporary image was deleted. Reference scripts now read live
-three-dimensional game-unit distance and the shared clock. Synthetic checks
-pass movement, fractional time, unrelated-space rejection and crafting rollback.
-The full repository checks pass for both merged blocks, including Release/Debug,
-formatting, contract probes, launcher tests and native Godot loading.
+Synthetic checks pass winning overrides, sibling ordering, absent hit context,
+unknown predicate rejection and saved-state validation. Native source NPC and
+gecko checks pass qualifying limb reactions, changed bone poses, fresh-skin cold
+resumption, repeated-hit handling and subsequent attacks without a player.
+An ordinary flat run from the genuine Primm checkpoint used mouse firing to
+trigger the authored arm response, saved its active phase with F5 and observed
+the hostile resume shooting. The final Release export cold-continued that save
+at exactly 1.3111111111111085 seconds, completed the reaction and resumed firing.
+Release/Debug builds, formatting/analyzers, contracts, launcher checks and native
+Godot checks pass. The final NPC/gecko checks also reject a radial explosion's
+anatomical reaction without an unresolved condition.
+Selected diagnostics are `tmp/combat-hit-contracts.log`,
+`tmp/combat-hit-npc.log`, `tmp/combat-hit-creature.log` and
+`tmp/combat-hit-flat`. Keep frame recording off; temporary inspection frames
+must be removed immediately after viewing.
 
-The active block evaluates source package schedules against the saved calendar,
-before conditions, and reevaluates resident actors when the hour changes.
-NPCs also poll changing conditions every ten seconds; that cadence is an explicit
-OpenNV policy, not measured retail timing. A failed procedure cannot freeze a
-different later package, while event-prefix failure latches remain intact.
-Resident movement and actor-to-actor cell queries no longer require a player.
-Creature following uses the actual target's running state.
+## Verified gameplay baseline
 
-Synthetic checks pass hour boundaries, overnight/weekday/date transitions,
-multi-day windows and authored selection order. All 4,885 selected PACK schedules
-admit and evaluate across seven sampled days; this is not procedure coverage.
-Native NPC and creature checks move through source root animation and collision
-without any player object; disabled actors and unloaded collision remain blocked.
-Ordinary flat Continue from a copy of the genuine playtest save reaches the
-Primm exterior. A hostile acquires/fires at the player without provocation,
-ED-E attacks that hostile, and two patrol actors advance their source routes.
-The startup collision-readiness race is repaired; temporarily absent follow or
-dialogue targets wait for residency instead of permanently faulting a creature.
+Resident acquisition and faction assistance consider NPCs and creatures without
+a player dependency. Natural/unarmed attacks, source-body contact, squat-creature
+movement and delayed killer-filtered OnDeath dispatch have shared owners. Source
+package schedules use the saved clock; patrol and follow can move without a
+player. The genuine Primm checkpoint continues with an unprovoked hostile firing,
+ED-E responding and two patrols advancing. These are selected encounters, not
+campaign or retail parity.
 
-The same Continue exposed a previous parser regression: four saved quest owners
-were rejected because their source contains trailing text on Else. Admission
-now retains those owners; unsupported reached syntax still fails visibly and
-does not acquire invented semantics. All 446 original quest owners restore
-with unchanged clocks, execution counts, errors and quest progress, then survive
-a current-version cold round trip. Parser v5 also migrates the exact admission
-omissions from v3/v4 saves. The full repository checks pass, including
-Release/Debug, formatting/analyzers, all contract probes, launcher checks and
-native Godot loading. `tmp/package-schedules-checks-final.log` is the final run.
-
-Private selected diagnostics are `tmp/actor-detection-after.log`,
-`tmp/unarmed-retaliation.log`, `tmp/creature-retaliation.log`,
-`tmp/actor-death-events.log`, `tmp/actor-recovery-contracts.log`,
-`tmp/ambient-creature-combat.log` and `tmp/ambient-unarmed-combat.log`.
-The current selected graph inventory is `tmp/flat-world-corpus-20260927`:
-628,395 winning records, with no remaining compiled-local admission failures.
-The 57 source-body parse failures remain visible and are not execution coverage.
-Runtime script failures remain explicit, including playGroup and other reached
-commands. Sandbox, eat/sleep/guard procedures, complete event scripts/topics and
-package flags/lifecycle still have missing owners. Schedules alone do not supply
-those behaviors.
-Parsing and record counts are not execution coverage. Active interaction
-diagnostics are `tmp/world-interactions-contracts.log`,
-`tmp/world-interactions-ui.log`, and `tmp/quantity-visual.log`.
-Schedule/movement diagnostics are `tmp/package-schedules-owned.log`,
-`tmp/package-schedules-selection.log`, `tmp/playerless-package-motion.log` and
-`tmp/playerless-creature-package-motion.log`.
-The copied-save run is `tmp/world-recovery-walk/retry-input`, with selected
-state and source event logs beside it; its temporary images were inspected and
-deleted. `tmp/owned-quest-save.log` records the unchanged cold quest/script state.
+Loot transfers support source quantity selection. Crafting rejects missing
+ingredients and evaluates player note/perk/equipment conditions. Reference scripts
+read live spatial distance and shared game time. A parser admission repair retains
+all 446 quest owners in the genuine older save, including existing clocks, errors
+and quest progress. It does not silently replay failed scripts. The selected
+owned graph has 628,395 winning records and 57 visible source-body parse failures;
+counts are not execution coverage.
 
 ## Next executable work
 
-The next resident-world owners are creature patrol and wander procedures,
-package conditions, source package event scripts/topics and ordinary
-sandbox/eat/sleep procedures, including their saved lifecycle. The live Primm
-run reaches unsupported creature Patrol on seven references, Wander on three,
-and missing condition 300 on two NPCs. These are source-linked failures, not
-missing hand-placed actors. Continue the flat work
-order through weapon exhaustion/reselection, essential recovery, hit events and
-XP, source quest/package failures, all tutorial branches and connected travel.
-Use the existing lab and bot for reproduction; do not add a second framework.
-Keep recording off during development. Preserve user saves and owned files.
+Complete publication of the hit-response export, then audit all loaded weapon
+records and ammunition pairs through their actual runtime owners. Fix reached
+weapon-family restrictions and exercise both player and NPC input paths, including
+reload/empty/broken states, projectile contact, melee, thrown weapons and mines.
+Current code restricts player hand grips to three variants and lacks mine
+placement/detonation; projectile-effect and actor weapon-exhaustion restrictions
+also remain. Source coverage must precede an all-weapons claim.
+Other combat owners include hit events, essential recovery, death XP, source
+tactics and forced reactions. Resident-world owners still
+include creature patrol/wander, condition 300, package event scripts/topics and
+sandbox/eat/sleep behavior. The current Primm run exposes those source-linked
+failures. Continue the shared flat work order; do not add location-specific
+success paths or a second testing framework.
+
+All 36 recovery requirements remain open at full scope. OpenNV is experimental;
+full campaign, all mods and physical-headset acceptance are not complete.
 
 ## Mod state
 
 All ten requested targets in [mod compatibility](mod-compatibility.md) have local
 packages. Twenty-six archives are under `D:\OpenNV-Mods`; TTW is under
-`D:\TTW\Installed`. Private package/source inventories remain under `tmp`.
-Launcher folder selection, additive checkboxes, source precedence and automatic
-load ordering work. All ten selected stacks open; working mod gameplay is still
-incomplete. JAM has numeric/typed expressions, scalar functions, loops, frame/key
-callbacks, INI/auxiliary storage and source-owned UI component state. Full MCM
-registration/options/presentation, arrays, effect/perk/render-event behavior and
-ordinary mod play remain open. Resume [the JAM/MCM plan](jam-luna-max-plan.md)
-after the immediate flat gameplay blockers, then TTW and the remaining targets.
+`D:\TTW\Installed`. Launcher selection, source precedence and load ordering work.
+All ten selected stacks open; this does not establish mod gameplay. JAM/MCM,
+arrays, effect/perk/render events and reached script commands remain open. Resume
+[the JAM/MCM plan](jam-luna-max-plan.md) after immediate flat gameplay blockers.
 
-## Playtest and continuation
+## Private saves and deliverables
 
-OpenNV remains experimental. Prior selected flat/Elliott Tate runs cover ED-E
-repair/recruitment, follow/door transfer, a Fiend encounter, corpse loot and Aid.
-Selected Primm actors/interiors, linked patrols, pause/save/load/death menus and
-cold saves have existing checks. These do not establish broader population,
-campaign, combat, all mods or physical-headset acceptance. See [status](status.md)
-and its owner documents. All 36 recovery requirements remain open at full scope.
-
-Preserve genuine private checkpoints:
-- `tmp/development-lab/ede-ready-to-repair-20260920.json`
-- `tmp/development-lab/ede-outside-before-combat-20260920.json`
-- `tmp/development-lab/ede-flat-companion-kill-looted-20260920.json`
-- `tmp/development-lab/ede-xr-companion-kill-looted-20260920.json`
-
-The September 27 flat candidate uses `local/playtest-20260927-world`, with a
-separate copy of the genuine checkpoint. The previous playtest directory is
-`local/playtest-20260920-companion` and remains unchanged.
-The requested comparison reel is under `local/recordings/playtest-20260920`.
-Neither is replaced by component fixtures. Private assets, saves and captures
-stay outside Git/releases. Keep only requested deliverables and diagnostics for
-active defects; temporary frames require cleanup even on failed runs.
+Preserve `local/playtest-20260927-world/save.json` and the original
+`local/playtest-20260920-companion` checkpoint. The previous playable export is
+`local/releases/OpenNV-0.1.0-experimental.20260927.1-windows-x64`.
+Keep the genuine ED-E checkpoints under `tmp/development-lab` and the requested
+comparison reel under `local/recordings/playtest-20260920` unchanged.
+Assets, saves and captures remain private and outside Git/releases. Retain only
+requested deliverables and diagnostics for active defects.

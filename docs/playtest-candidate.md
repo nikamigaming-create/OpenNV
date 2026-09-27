@@ -36,6 +36,11 @@ provocation, ED-E responds and two patrols advance. This remains a bounded
 playtest; sandbox routines, several creature procedures and reached quest/mod
 commands still need implementation.
 
+The combat-response update adds source-conditioned NPC and creature hit
+animations, attack interruption and saved reaction progress. A healthy-limb hit
+does not automatically stagger an actor. Forced reactions, blending, general
+hit scripts and broader combat behavior remain incomplete.
+
 ## What to test
 
 - Continue or complete the opening; talk to Doc and check that he turns toward
