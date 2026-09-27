@@ -23,7 +23,9 @@ internal static class StageAndInventoryContracts
         {
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
             File.WriteAllBytes(path, Record("TES4", 0, Field("HEDR", header))
-                .Concat(Record("MISC", 1)).Concat(Record("MISC", 2))
+                .Concat(Record("MISC", 1, Field("EDID", Text("Ingredient")), Field("DATA", new byte[8])))
+                .Concat(Record("MISC", 2, Field("EDID", Text("Output")), Field("DATA", new byte[8])))
+                .Concat(Record("NOTE", 3, Field("EDID", Text("RecipeNote"))))
                 .Concat(List(10, 0, 0, Entry(1, 1, 2), Entry(5, 2, 3)))
                 .Concat(List(11, 5, 0, Entry(1, 1, 2), Entry(5, 2, 3)))
                 .Concat(List(12, 2, 50, Entry(1, 1, 1)))
@@ -35,6 +37,36 @@ internal static class StageAndInventoryContracts
                 .Concat(Script(30)).Concat(Script(31)).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Base.esm"]);
             var conditionOwner = records.GetEffective(Key(0x20));
+            var inventory = new OpenNV.Runtime.Gameplay.State.FalloutPlayerInventory();
+            var recipe = new FalloutRecipe(conditionOwner, "SyntheticRecipe", "Recipe", -1, 0, null, null, [],
+                [new(Key(1), 2), new(Key(1), 3)], [new(Key(2), 2)]);
+            var emptyInventory = JsonSerializer.Serialize(inventory.Capture());
+            Require(!inventory.CanCraft(recipe), "Missing ingredients offered crafting.");
+            Reject(() => inventory.Craft(records, recipe, 1, null));
+            Require(JsonSerializer.Serialize(inventory.Capture()) == emptyInventory, "Missing ingredients created free outputs or mutated inventory.");
+            inventory.Add(records, Key(1), 4, 1, silent: true);
+            Require(!inventory.CanCraft(recipe), "Repeated ingredient entries were not combined.");
+            Reject(() => inventory.Craft(records, recipe, 1, null));
+            Require(inventory.Item(Key(1))?.Count == 4 && inventory.Item(Key(2)) is null, "Insufficient crafting consumed items.");
+            inventory.Add(records, Key(1), 1, 1, silent: true);
+            var beforeFailedOutput = JsonSerializer.Serialize(inventory.Capture());
+            Reject(() => inventory.Craft(records, recipe with { Outputs = [new(Key(2), 2), new(Key(15), 1)] }, 1, null));
+            Require(JsonSerializer.Serialize(inventory.Capture()) == beforeFailedOutput, "Failed recipe output did not restore inventory and random state.");
+            inventory.Craft(records, recipe, 1, null);
+            Require(inventory.Item(Key(1)) is null && inventory.Item(Key(2))?.Count == 2, "Crafting did not conserve exact aggregated ingredients/output.");
+            Reject(() => inventory.Craft(records, recipe, 1, null));
+            Require(inventory.Item(Key(2))?.Count == 2, "Stale crafting repeated a consumed transaction.");
+            float? InventoryCondition(ushort function, uint argument, uint runOn = 0, uint reference = 0) =>
+                OpenNV.Runtime.Gameplay.State.FalloutInventoryConditions.Evaluate(records, inventory, form => form == Key(4),
+                    new(conditionOwner, 0, 1, function, argument, 0, runOn, reference));
+            Require(InventoryCondition(449, 4) == 1 && InventoryCondition(449, 5) == 0 &&
+                InventoryCondition(449, 4, 2, 0x14) == 1 && InventoryCondition(449, 4, 2, 0x99) is null,
+                "Recipe perk queries ignored live ownership or selected another actor.");
+            Require(InventoryCondition(382, 3) == 0, "An absent recipe note was owned.");
+            inventory.Add(records, Key(3), 1, 1, silent: true);
+            Require(InventoryCondition(382, 3, 2, 0x14) == 1 && InventoryCondition(47, 2, 2, 0x14) == 2,
+                "Explicit-player recipe queries lost note or item ownership.");
+            Reject(() => InventoryCondition(382, 1));
             foreach (var (function, expected) in new (ushort, float)[] { (309, 0), (523, 0), (524, 1) })
                 Require(FalloutPlatformConditions.Evaluate(new(conditionOwner, 0, expected, function, 0, 0, 0, 0)) == expected,
                     "PC platform predicates used process width or selected a console platform.");
@@ -78,7 +110,7 @@ internal static class StageAndInventoryContracts
             Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(quests.Capture()), "Cold stage flags or variables diverged.");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
-        Console.WriteLine("OPENNV_STAGE_INVENTORY_CONTRACT_PASS levelSelection=true nestedCounts=true perItemChance=true cyclesRejected=true suspension=true sourceOrder=true nestedFailure=true coldQuestState=true");
+        Console.WriteLine("OPENNV_STAGE_INVENTORY_CONTRACT_PASS levelSelection=true nestedCounts=true perItemChance=true cyclesRejected=true suspension=true sourceOrder=true nestedFailure=true coldQuestState=true craftingAtomic=true recipeNotesAndPerks=true explicitPlayer=true");
     }
 
     private static FalloutFormKey Key(uint id) => new("Base.esm", id);
@@ -86,7 +118,7 @@ internal static class StageAndInventoryContracts
     private static void Reject(Action action)
     {
         try { action(); }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException) { return; }
+        catch (Exception error) when (error is NotSupportedException or InvalidDataException or InvalidOperationException) { return; }
         throw new InvalidDataException("Invalid input or reached failure was accepted.");
     }
     private static byte[] Quest(uint id, uint script, string name, byte flags, string body, uint other) => Record("QUST", id,

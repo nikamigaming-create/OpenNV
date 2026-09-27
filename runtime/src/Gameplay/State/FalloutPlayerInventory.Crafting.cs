@@ -13,7 +13,7 @@ internal sealed partial class FalloutPlayerInventory
         ArgumentNullException.ThrowIfNull(recipe);
         if (level < 1) throw new ArgumentOutOfRangeException(nameof(level));
         var ingredients = Requirements(recipe);
-        if (ingredients.Any(requirement => Item(requirement.Key)?.Count < requirement.Value))
+        if (ingredients.Any(requirement => (Item(requirement.Key)?.Count ?? 0) < requirement.Value))
             throw new InvalidOperationException($"Recipe {recipe.Record.FormKey} ingredients are no longer available.");
         var priorItems = new Dictionary<FalloutFormKey, FalloutCampaignItem>(_items);
         var priorEquipped = _equipped.ToArray();

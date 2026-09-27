@@ -18,6 +18,8 @@ internal partial class NativeOwnedContainerMenu : Control
     private readonly int[] _offsets = [0, 0];
     private int _side = 1;
     private bool _closed;
+    private NativeOwnedQuantityMenu? _quantity;
+    private readonly uint _askQuantityAt;
     internal string? Error { get; private set; }
     private const int RowsPerPage = 6;
 
@@ -26,6 +28,7 @@ internal partial class NativeOwnedContainerMenu : Control
     {
         Name = "OwnedContainerMenu"; ProcessMode = ProcessModeEnum.Always;
         _records = records; _inventories = [player, container]; _close = close; _changed = changed;
+        _askQuantityAt = Math.Max(1, FalloutGameSettingIntegers.Read(records, "iInventoryAskQuantityAt"));
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/container_menu.xml")).Elements("menu").Single();
         _tiles = new(menu, name => FalloutGameSettingStrings.Read(records, name));
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);
@@ -41,7 +44,7 @@ internal partial class NativeOwnedContainerMenu : Control
         AddTarget(Named("CM_TakeAllButton"), FalloutGameSettingStrings.Read(records, "sTakeAll"), TakeAll);
         AddTarget(Named("CM_ExitButton"), FalloutGameSettingStrings.Read(records, "sExit"), Close);
         SetMeta("opennv_ui_source", "menus/container_menu.xml; source-fonts-and-atlas");
-        SetMeta("opennv_ui_unverified", "quantity-dialog,item-preview,filters,matched-pixels");
+        SetMeta("opennv_ui_unverified", "item-preview,filters,theft,retail-transfer-policy,matched-pixels");
     }
     public override void _Ready()
     {
@@ -60,13 +63,31 @@ internal partial class NativeOwnedContainerMenu : Control
     private void Close() { if (_closed) return; _closed = true; _close(); }
     private void Move(int side, FalloutCampaignItem item)
     {
+        if (_closed || _quantity is not null) return;
         if (!FalloutInventoryAccess.CanTransfer(_records.GetEffective(item.FormKey), side == 0)) return;
-        _inventories[side].TransferTo(_inventories[1 - side], item.FormKey, item.Count);
-        _inventories[0].Notifications.Publish([new(side == 1 ? FalloutHudEventKind.ItemAdded : FalloutHudEventKind.ItemRemoved, item.FormKey, item.Count)]);
+        var available = _inventories[side].Item(item.FormKey)?.Count ?? 0;
+        if (available == 0) { Refresh(); return; }
+        if (available < _askQuantityAt || available == 1) { Transfer(side, item.FormKey, 1); return; }
+        _quantity = new(_records, available, count =>
+        {
+            var menu = _quantity!; _quantity = null;
+            RemoveChild(menu); menu.QueueFree();
+            if (count is { } selected) Transfer(side, item.FormKey, selected);
+        });
+        AddChild(_quantity);
+    }
+    private void Transfer(int side, FalloutFormKey form, int count)
+    {
+        // Recheck after the modal choice; another authoritative action may
+        // have changed this inventory while the quantity menu was open.
+        if ((_inventories[side].Item(form)?.Count ?? 0) < count) { Refresh(); return; }
+        _inventories[side].TransferTo(_inventories[1 - side], form, count);
+        _inventories[0].Notifications.Publish([new(side == 1 ? FalloutHudEventKind.ItemAdded : FalloutHudEventKind.ItemRemoved, form, count)]);
         _changed(); Refresh();
     }
     private void TakeAll()
     {
+        if (_closed || _quantity is not null) return;
         foreach (var item in TransferableItems(1))
         {
             _inventories[1].TransferTo(_inventories[0], item.FormKey, item.Count);
@@ -126,6 +147,7 @@ internal partial class NativeOwnedContainerMenu : Control
     }
     public override void _Input(InputEvent inputEvent)
     {
+        if (_quantity is not null || _closed) return;
         if (inputEvent is InputEventKey { Pressed: true, Echo: false } key)
         {
             if (key.PhysicalKeycode is Key.E or Key.Escape) { Close(); GetViewport().SetInputAsHandled(); }

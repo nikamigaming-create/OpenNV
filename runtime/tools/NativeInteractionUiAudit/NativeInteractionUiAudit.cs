@@ -11,7 +11,8 @@ public partial class NativeInteractionUiAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args is not [var root, var cellId]) throw new ArgumentException("Expected owned root and CELL editor ID.");
+            if (args.Length is not (2 or 3)) throw new ArgumentException("Expected owned root, CELL editor ID, and optional diagnostic PNG path.");
+            var root = args[0]; var cellId = args[1];
             RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
@@ -44,6 +45,28 @@ public partial class NativeInteractionUiAudit : Node
             NativeHudTarget? target = null;
             var playerRecord = FalloutDialogueTopic.Find(records, "NPC_", "Player").FormKey;
             var vigor = FalloutNativeVigorResolver.Resolve(records, cell);
+            var recipeInventory = new FalloutPlayerInventory();
+            var perks = new List<FalloutFormKey>();
+            var recipeSkills = new FalloutPlayerSkills(records, () => vigor.Initial, _ => false, () => [], globals,
+                recipeInventory, playerRecord, () => FalloutDialogueSpeaker.Read(records, playerRecord).Race!.Value,
+                () => false, () => perks);
+            var sourceRecipeQueries = 0;
+            foreach (var condition in records.EffectiveRecords("RCPE").SelectMany(FalloutCondition.Read)
+                         .Where(condition => condition.Function is 382 or 449))
+            {
+                if (!FalloutInventoryConditions.TargetsPlayer(records, condition))
+                    throw new NotSupportedException("Owned recipe fixture reached another actor's inventory condition.");
+                float? Evaluate() => FalloutInventoryConditions.Evaluate(records, recipeInventory, recipeSkills.HasPerk, condition);
+                if (Evaluate() != 0) throw new InvalidDataException("Absent recipe note/perk was accepted.");
+                if (condition.Function == 449) perks.Add(condition.FormArgument1);
+                else recipeInventory.Add(records, condition.FormArgument1, 1, 1, silent: true, globals);
+                if (Evaluate() != 1) throw new InvalidDataException("Acquired recipe note/perk remained unavailable.");
+                perks.Clear();
+                if (condition.Function == 382) recipeInventory.Remove(condition.FormArgument1, 1, silent: true);
+                if (Evaluate() != 0) throw new InvalidDataException("Removed recipe note/perk remained owned.");
+                sourceRecipeQueries++;
+            }
+            GD.Print($"OPENNV_NATIVE_RECIPE_QUERIES_PASS sourceConditions={sourceRecipeQueries} livePerks=true liveNotes=true explicitPlayer=true");
             var vitals = new FalloutPlayerVitals(records, playerRecord, vigor.Initial);
             var damaged = vitals.State with { HitPoints = vitals.State.HitPoints - 10, ActionPoints = vitals.State.ActionPoints - 7 };
             var restoredVitals = new FalloutPlayerVitals(records, playerRecord, vigor.Initial,
@@ -60,6 +83,55 @@ public partial class NativeInteractionUiAudit : Node
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (menu.Error is not null) throw new InvalidDataException(menu.Error);
+            var quantityTransfers = new FalloutPlayerInventory();
+            quantityTransfers.Add(records, item.Base, 12, 1, silent: true, globals);
+            var changed = 0; var closed = false;
+            menu.Free();
+            menu = new(records, player, quantityTransfers, "Player", "Quantity fixture", () => closed = true, () => changed++);
+            AddChild(menu);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var beforeQuantity = player.Item(item.Base)!.Count;
+            BaseButton ContainerRow() => menu.GetChildren().OfType<BaseButton>().Last();
+            ContainerRow().EmitSignal(BaseButton.SignalName.Pressed);
+            var quantityMenu = menu.GetChildren().OfType<NativeOwnedQuantityMenu>().Single();
+            if (quantityMenu.Error is not null) throw new InvalidDataException(quantityMenu.Error);
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Home });
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Right });
+            if (quantityMenu.Quantity != 2) throw new InvalidDataException("Quantity controls did not select two.");
+            if (args.Length == 3)
+            {
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var screenshot = GetViewport().GetTexture().GetImage();
+                if (screenshot.SavePng(args[2]) != Error.Ok) throw new IOException("Quantity diagnostic PNG could not be written.");
+            }
+            // A container hotkey cannot bypass the active modal choice.
+            menu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.A });
+            if (quantityTransfers.Item(item.Base)!.Count != 12 || changed != 0) throw new InvalidDataException("Take All bypassed quantity modal.");
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Escape });
+            if (closed || changed != 0 || quantityTransfers.Item(item.Base)!.Count != 12)
+                throw new InvalidDataException("Quantity cancellation changed inventory or closed the container.");
+            ContainerRow().EmitSignal(BaseButton.SignalName.Pressed);
+            quantityMenu = menu.GetChildren().OfType<NativeOwnedQuantityMenu>().Single();
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Home });
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Right });
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Enter });
+            if (changed != 1 || quantityTransfers.Item(item.Base)!.Count != 10 || player.Item(item.Base)!.Count != beforeQuantity + 2)
+                throw new InvalidDataException("Quantity confirmation did not conserve selected counts.");
+            var coldInventory = new FalloutPlayerInventory();
+            var quantitySaved = quantityTransfers.Capture();
+            coldInventory.Restore(quantitySaved.Inventory, quantitySaved.EquippedRuntimeFormIds, quantitySaved.InventoryRandomState);
+            if (coldInventory.Item(item.Base)!.Count != 10) throw new InvalidDataException("Cold inventory lost partial transfer.");
+            ContainerRow().EmitSignal(BaseButton.SignalName.Pressed);
+            quantityMenu = menu.GetChildren().OfType<NativeOwnedQuantityMenu>().Single();
+            quantityTransfers.Remove(item.Base, 8, silent: true);
+            quantityMenu._Input(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Enter });
+            if (changed != 1 || quantityTransfers.Item(item.Base)!.Count != 2 || player.Item(item.Base)!.Count != beforeQuantity + 2)
+                throw new InvalidDataException("A stale quantity choice transferred unavailable items.");
+            ContainerRow().EmitSignal(BaseButton.SignalName.Pressed);
+            if (changed != 2 || quantityTransfers.Item(item.Base)!.Count != 1 || player.Item(item.Base)!.Count != beforeQuantity + 3 ||
+                menu.GetChildren().OfType<NativeOwnedQuantityMenu>().Any())
+                throw new InvalidDataException("A stack below the source threshold did not transfer one item.");
+            GD.Print("OPENNV_NATIVE_QUANTITY_UI_PASS sourceTemplates=true cancel=true modal=true partialTransfer=true staleChoice=true smallStack=true coldCounts=true");
             GD.Print("OPENNV_NATIVE_INTERACTION_UI_PASS sourceTemplates=true targetActions=true containerLists=true pickupState=true ordinaryInput=unverified pixels=unverified");
             menu.Free(); hud.Free(); GetTree().Quit();
         }
