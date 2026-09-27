@@ -27,6 +27,9 @@ public partial class NativePlayerPresentationAudit
             var context = new NativeActorCombatContext(() => player, () => vitals.State, (_, _) => { }, (_, _) => [], _ => true,
                 () => 1, FalloutGlobalState.Read(records), .3f, 9.8f);
             var destructible = RuntimeNativeDestructible.Attach(car, state, records, content, .0142875f, uint.MaxValue, context)!;
+            CheckDestructionOwner(car, destructible);
+            if (RuntimeNativeDestructible.Find(player) is not null)
+                throw new InvalidOperationException("A neighboring source object claimed the player's collision.");
             var fatman = FalloutWeaponPresentation.Read(records, records.RuntimeFormKey(0x432c));
             inventory.Add(records, fatman.Form, 1, 1, true);
             inventory.Add(records, fatman.Ammunition[0], 3, 1, true);
@@ -53,6 +56,7 @@ public partial class NativePlayerPresentationAudit
                 throw new InvalidOperationException("Fat Man shot did not complete source reload, flight, nuclear explosion, effects and ammo consumption.");
             if (!state.Destroyed || state.Destruction is not { Stage: >= 4, Error: null })
                 throw new InvalidOperationException("Nuclear blast did not damage, explode and replace the source car.");
+            CheckDestructionOwner(car, destructible);
             var snapshot = world.Capture();
             using var cold = new FalloutReferenceWorld(records); cold.Restore(snapshot);
             if (cold.Get(reference.FormKey).Destruction != state.Destruction)
@@ -60,5 +64,12 @@ public partial class NativePlayerPresentationAudit
             GD.Print("OPENNV_NUCLEAR_DESTRUCTION_PASS fatman=true ammo=true carBlast=true wreckage=true coldState=true fixture=true");
         }
         finally { car.Free(); }
+    }
+
+    private static void CheckDestructionOwner(Node3D car, RuntimeNativeDestructible owner)
+    {
+        var contacts = car.FindChildren("*", "", true, false).OfType<CollisionObject3D>().ToArray();
+        if (contacts.Length == 0 || contacts.Any(contact => RuntimeNativeDestructible.Find(contact) != owner))
+            throw new InvalidOperationException("Source car or replacement collision lost its destruction owner.");
     }
 }

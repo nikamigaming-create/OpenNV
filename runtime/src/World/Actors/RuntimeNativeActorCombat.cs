@@ -41,6 +41,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         error = Error,
         muzzlePresentationError = _muzzlePresentationError,
         casingPresentationError = _casingPresentationError,
+        beamPresentationError = _beamPresentationError,
         engagement = EngagementObservation,
         hitReaction = HitReactionObservation,
         unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,forced-hit-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs"

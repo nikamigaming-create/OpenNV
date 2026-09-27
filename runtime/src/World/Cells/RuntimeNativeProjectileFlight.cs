@@ -18,6 +18,8 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     private readonly uint _collisionMask;
     private readonly Node3D _model;
     private double _elapsed;
+    private long _started;
+    private double _contactMilliseconds, _detonationMilliseconds;
     private bool _resting;
     private bool Timed => _source.ExplosionSource is not null && _source.HasAlternateTrigger &&
         !_source.Detonates && _source.ExplosionAltTriggerProximity == 0;
@@ -51,6 +53,9 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         detonations = _detonations,
         bounces = _bounces,
         elapsedSeconds = _elapsed,
+        wallSeconds = _started == 0 ? 0 : System.Diagnostics.Stopwatch.GetElapsedTime(_started).TotalSeconds,
+        contactMilliseconds = _contactMilliseconds,
+        detonationMilliseconds = _detonationMilliseconds,
         fuseRemainingSeconds = Timed ? Math.Max(0, _source.ExplosionAltTriggerTimer - _elapsed) : (double?)null,
         transparentLayerPassThroughs = _transparentLayerPassThroughs,
         transparentLayerUnresolvedContacts = _transparentLayerUnresolvedContacts,
@@ -105,6 +110,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         GlobalPosition = _origin;
         _velocity = _initialVelocity;
         _active = true;
+        _started = System.Diagnostics.Stopwatch.GetTimestamp();
         _status = "in-flight";
         OrientToVelocity();
     }
@@ -330,6 +336,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
 
     private bool NotifyDetonation(Vector3 point)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         _detonations++;
         try
         {
@@ -342,10 +349,12 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             GD.PushError($"OPENNV_PROJECTILE_DETONATION_UNBOUND projectile={_source.Form} {Error}");
             return false;
         }
+        finally { _detonationMilliseconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
     }
 
     private bool NotifyContact(RuntimeNativeProjectileContact contact)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         _contacts++;
         try
         {
@@ -358,6 +367,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             GD.PushError($"OPENNV_PROJECTILE_CONTACT_UNBOUND projectile={_source.Form} {Error}");
             return false;
         }
+        finally { _contactMilliseconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
     }
 
     private void OrientToVelocity()

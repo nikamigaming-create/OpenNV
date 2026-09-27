@@ -17,6 +17,7 @@ internal sealed partial class RuntimeNativePlayerActor
         ? _equippedObject!.ReleaseTransform(Skeleton) : _equippedObject!.Socket(Skeleton, "ProjectileNode");
     private Transform3D ProjectileTransformInSkeleton() => Skeleton.Node.GlobalTransform.AffineInverse() * ProjectileTransform();
     internal Transform3D ShellTransform() => _equippedObject!.Socket(Skeleton, "ShellCasingNode");
+    internal bool HasShellSocket => _equippedObject?.HasSocket("ShellCasingNode") == true;
 
     private Transform3D WeaponNodeInSkeleton(Node3D source)
     {

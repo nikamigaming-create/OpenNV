@@ -10,6 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // contacts and explosion overlaps both call Hit; self DPS uses the same stages.
 internal sealed partial class RuntimeNativeDestructible : Node
 {
+    private const string OwnerMeta = "opennv_destruction_owner";
     private Node3D _root = null!;
     private Node3D[] _model = [];
     private FalloutDestructible _source = null!;
@@ -28,9 +29,18 @@ internal sealed partial class RuntimeNativeDestructible : Node
     internal static RuntimeNativeDestructible? Find(Node node)
     {
         for (Node? parent = node; parent is not null; parent = parent.GetParent())
-            if (parent.GetChildren().OfType<RuntimeNativeDestructible>().SingleOrDefault() is { } owner) return owner;
+            if (parent.HasMeta(OwnerMeta))
+            {
+                var owner = parent.GetMeta(OwnerMeta).AsGodotObject() as RuntimeNativeDestructible;
+                if (!IsInstanceValid(owner) || owner!.GetParent() != parent)
+                    throw new InvalidOperationException("Destruction owner left its reference root.");
+                return owner;
+            }
         return null;
     }
+
+    public override void _EnterTree() => _root.SetMeta(OwnerMeta, this);
+    public override void _ExitTree() => _root.RemoveMeta(OwnerMeta);
 
     internal static RuntimeNativeDestructible? Attach(Node3D root, FalloutReferenceInstance state,
         FalloutPluginStack records, RuntimeLiveContentSource content, float units, uint mask, NativeActorCombatContext context)

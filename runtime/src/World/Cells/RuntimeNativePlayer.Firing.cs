@@ -278,7 +278,10 @@ internal partial class RuntimeNativePlayer
                 var audioDone = System.Diagnostics.Stopwatch.GetTimestamp();
                 var damage = isInstantRay ? ApplyProjectileTraces(traces) : new PlayerProjectileDamageSummary(0, 0, 0, 0, 0, null);
                 var damageDone = System.Diagnostics.Stopwatch.GetTimestamp();
-                if (!weapon.IsThrownWeapon && !weapon.IsMine && weapon.ShellModel is not null && !_shotEffectErrors.ContainsKey("casing-prepare"))
+                if (_shot.Projectile.Type == 4)
+                    foreach (var trace in traces)
+                        TryShotEffect("beam", () => _shotEffects!.Beam(_shot.Projectile, from, trace.Point));
+                if (!weapon.IsThrownWeapon && !weapon.IsMine && weapon.ShellModel is not null && actor.HasShellSocket && !_shotEffectErrors.ContainsKey("casing-prepare"))
                     TryShotEffect("casing", () =>
                     {
                         var shell = actor.ShellTransform();
@@ -319,6 +322,7 @@ internal partial class RuntimeNativePlayer
                     projectileFlights = preparedFlights.Count,
                     flightState = !isInstantRay ? "in-flight" : damage.PendingEvents != 0 ? "hitscan-impact-pending" : "instant-ray-complete",
                     loaded = _weaponHandling.Loaded(weapon.Form),
+                    casingSocket = actor.HasShellSocket ? "source-socket" : "absent-in-source-model",
                     damage = damage.LastDamage,
                     damageError = _damageError,
                     timing = new

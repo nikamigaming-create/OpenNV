@@ -95,6 +95,9 @@ internal sealed class NativeActorWeaponAttachment
             var visibility = new FalloutNifBoolAnimation(source, link.Interpolator);
             return time => nodes[0].Visible = visibility.Sample(time);
         }
+        if (link.PropertyType.Length == 0 && nodes[0] is RuntimeNifParticleSystem particle &&
+            link.ControllerType is "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr")
+            return particle.Bind(source, link).Apply;
         if (link.ControllerType != "NiTransformController") return null;
         var sampler = new FalloutNifAnimationSampler(source, link.Interpolator);
         return time =>
@@ -118,6 +121,9 @@ internal sealed class NativeActorWeaponAttachment
         }
         return skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex("Weapon")) * local;
     }
+
+    internal bool HasSocket(string name) => Nodes.Any(node =>
+        node.GetMeta("opennv_nif_source_name", "").AsString().Equals(name, StringComparison.OrdinalIgnoreCase));
 
     internal Transform3D ReleaseTransform(RuntimeNativeNifSkeleton skeleton) =>
         skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex("Weapon")) * Root.Transform;

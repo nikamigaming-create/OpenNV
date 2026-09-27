@@ -34,7 +34,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private readonly HashSet<RuntimeNativeProjectileFlight> _projectiles = [];
     private long _projectileLaunches, _projectileHits, _projectileMisses, _projectileErrors;
     private long _casings, _impacts;
-    private object? _lastCasing, _lastImpact;
+    private object? _lastCasing, _lastImpact, _lastProjectile;
     private string? _decalError;
     internal object State => new
     {
@@ -49,6 +49,10 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         projectileMisses = _projectileMisses,
         projectileErrors = _projectileErrors,
         projectileFlights = _projectiles.Select(projectile => projectile.Observation).ToArray(),
+        lastProjectile = _lastProjectile,
+        lastExplosionEffect = _lastExplosionEffect,
+        beams = _beams,
+        lastBeam = _lastBeam,
         lastCasing = _lastCasing,
         lastImpact = _lastImpact,
         decals = _decals?.Observation,
@@ -246,10 +250,12 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     {
         _shellPrototype?.Scene.Root.Free(); _shellPrototype = null;
         _projectilePrototype?.Scene.Root.Free(); _projectilePrototype = null;
+        _beamPrototype?.Scene.Root.Free(); _beamPrototype = null;
     }
 
     private void ProjectileFinished(RuntimeNativeProjectileFlight projectile)
     {
+        _lastProjectile = projectile.Observation;
         _projectiles.Remove(projectile);
         if (projectile.Error is not null || projectile.Status is not ("hit" or "range-ended" or "stopped" or "detonated"))
             _projectileErrors++;

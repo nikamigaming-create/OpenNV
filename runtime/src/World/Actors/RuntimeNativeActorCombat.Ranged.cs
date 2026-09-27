@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private Godot.Collections.Array<Rid>? _enemyRayExclusions;
     private string? _muzzlePresentationError;
     private string? _casingPresentationError;
+    private string? _beamPresentationError;
     private string? _impactMaterialError;
 
     private void ShootTarget(RuntimeNativePlayer? player)
@@ -104,6 +105,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var exclusions = new Godot.Collections.Array<Rid>();
             foreach (var body in _enemyRayExclusions!) exclusions.Add(body);
             var end = from + pelletDirection * (_enemyShot.Projectile.Range * _skeleton.UnitsToMetres);
+            var visualEnd = end;
             var start = from;
             var contacts = new List<object>();
             var contactIndex = 0;
@@ -139,6 +141,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 }
 
                 var point = collision.TryGetValue("position", out var pointValue) ? pointValue.AsVector3() : end;
+                visualEnd = point;
                 var normal = collision.TryGetValue("normal", out var normalValue) ? normalValue.AsVector3() : Vector3.Zero;
                 byte? part = null;
                 float? healthBefore = null;
@@ -238,8 +241,17 @@ internal sealed partial class RuntimeNativeActorCombat
                 start = point + pelletDirection * .001f;
             }
             pellets.Add(new { index = pellet, contacts, direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z } });
+            if (_enemyShot.Projectile.Type == 4)
+            {
+                try { _enemyShotEffects.Beam(_enemyShot.Projectile, from, visualEnd); _beamPresentationError = null; }
+                catch (Exception error)
+                {
+                    _beamPresentationError = error.Message;
+                    GD.PushError($"OPENNV_ACTOR_BEAM_UNBOUND reference={_state.Reference} {error.Message}");
+                }
+            }
         }
-        if (!weapon.IsThrownWeapon && !weapon.IsMine && _casingPresentationError is null && weapon.ShellModel is not null && GetViewport().GetCamera3D() is { } camera)
+        if (!weapon.IsThrownWeapon && !weapon.IsMine && _enemyObject?.HasSocket("ShellCasingNode") == true && _casingPresentationError is null && weapon.ShellModel is not null && GetViewport().GetCamera3D() is { } camera)
         {
             try { _enemyShotEffects.EjectCasing((_enemyObject ?? throw new NotSupportedException("Embedded weapon casing socket is unbound.")).Socket(_skeleton, "ShellCasingNode"), camera.GlobalPosition); }
             catch (Exception error)
@@ -461,7 +473,7 @@ internal sealed partial class RuntimeNativeActorCombat
             foreach (var flight in flights) effects.LaunchProjectile(flight);
             _enemyMuzzle?.Flash();
             if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
-            if (!weapon.IsThrownWeapon && !weapon.IsMine && weapon.ShellModel is not null && _casingPresentationError is null && GetViewport().GetCamera3D() is { } camera)
+            if (!weapon.IsThrownWeapon && !weapon.IsMine && _enemyObject?.HasSocket("ShellCasingNode") == true && weapon.ShellModel is not null && _casingPresentationError is null && GetViewport().GetCamera3D() is { } camera)
             {
                 try { _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), camera.GlobalPosition); }
                 catch (Exception error)

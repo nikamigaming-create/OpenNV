@@ -32,7 +32,20 @@ subtrees to their source bones. Held XR fingers retain the source grip when
 controller touches are released. Owned grip/contact and Flamer assembly checks
 pass; both final eyes were inspected after the repairs.
 
-The requested selected-weapon reel is
+The reported Fat Man delay was a synchronous impact stall. Destruction-owner
+lookup scanned ancestor child lists for each overlapping collision shape.
+Reference roots now publish their owner, and blast classification deduplicates
+colliders before resolving targets. A repeated ordinary flat shot fell from
+1,730 to 128 ms inside detonation processing, with 3,028 overlapping shapes and
+65 distinct colliders. Its roughly two-second flight has no added fuse. Native
+car checks cover owner lookup before and after wreck replacement. Effect
+construction and recording stalls remain; this is not retail timing parity.
+An ordinary Elliott Tate shot completes one impact/detonation without a fuse
+or bounce, spending 198 ms in detonation processing. The complete runtime
+checks and selected native weapon checks pass. Two flat diagnostic runs still
+report a native heap-corruption crash on ordinary Quit Game.
+
+The earlier selected-weapon reel is
 `local/recordings/weapon-showcase-20260927/OpenNV-weapons-flat-VR.mp4`.
 It pairs ordinary flat and Elliott Tate simulator input on copied checkpoints
 with diagnostic inventory additions: automatic fire, Aid, laser pistol, Fat Man,
@@ -41,6 +54,22 @@ independently of capture-driver annotations. Car destruction is a separate
 native fixture and is not shown. The main raw takes contain about 19.7 and 12.9
 distinct captured frames/sec respectively; repeats remain visible. This is not
 all-weapon, smooth-performance, matched-retail or physical-headset acceptance.
+The user rejected this reel: it omits dynamite and proper two-hand support and
+does not establish every weapon. A replacement remains in progress.
+
+The latest source/native-animation sweep covers 496 winning WEAP records,
+including 302 playable inventory weapons. It reports 167 records with failures
+(145 playable inventory weapons); rows without those failures are not verified
+gameplay. The next fixes connect external KF particle channels on dynamite and
+source BeamEnd models for instant laser rays. Fresh native input checks pass
+laser model endpoints and normal/long-fuse dynamite hold, release, one-item
+consumption, physical flight and timed detonation. A fresh simulator take shows
+laser damage, a source hit reaction and death in the nearby hostile encounter;
+two-hand support is engaged for the laser, Fat Man and Flamer. The take also
+exposes an unbound VR lighter attachment and thrown-contact decal/material
+errors. Both laser eyes were inspected; this does not close physical acceptance.
+The paired replacement edit is still in progress. These checks also exposed sound voices surviving their emitter
+in bookkeeping; tree-exit cleanup now removes them.
 
 ## Verified shipped baseline
 
@@ -56,13 +85,14 @@ not establish all quests, world routines or mod execution.
 
 ## Next work
 
-Publish the locally checked weapon/rig block, verify the exported candidate on
-a copied checkpoint, and point the playtest launcher at that package. Then
-finish weapon effects and families against the winning inventory: flame/beam
-visuals and tracers, remaining projectile/ammunition effects, mines and unarmed
-input. Repeat the selected corpus capability audit after those changes; its
-earlier 496-weapon/179-failure snapshot predates the AttackLoop cadence repair
-and is not a current all-weapon result.
+Complete ordinary flat/XR captures of the newly repaired beams, dynamite and
+reachable two-hand support, with visible combat results. Finish weapon effects
+and families against the winning inventory: flame visuals and tracers,
+remaining projectile/ammunition effects, mines and unarmed input. Keep each
+weapon's source/assembly failures distinct from untested gameplay/presentation.
+Publish the checked block, verify an exported candidate on a copied checkpoint
+and update the playtest launcher. The existing narrow reel cannot close this
+work or the full gameplay/mod requirements.
 
 Remaining combat owners include mines/remote triggers, some weapon/ammunition
 combinations, bare player fists, player knockdown, complete blast attenuation,

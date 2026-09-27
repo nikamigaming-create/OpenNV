@@ -24,6 +24,20 @@ These are bounded runtime improvements; complete resident routines, quests,
 mod gameplay and matched retail behavior remain open. Follow the
 [flat gameplay work order](flat-gameplay-plan.md).
 
+Fat Man impact no longer scans whole ancestor child lists for every overlapping
+shape. Direct destruction ownership and collider deduplication reduce one
+repeated flat shot's detonation processing from 1,730 to 128 ms. Flight, contact,
+effect construction and blast phases now expose separate timings. Rendering and
+capture stalls remain; this is a selected measurement, not retail timing parity.
+
+Source laser BeamEnd geometry now follows the resolved ray endpoint and PROJ
+visibility duration. Normal and long-fuse dynamite bind their external KF
+emitter channels; native input checks pass hold/release, one-item consumption,
+physical flight and one timed detonation. The new simulator take shows the
+laser hostile encounter and reachable two-hand support. Dynamite's separate
+lighter attachment in VR and some thrown-contact material/decal effects remain
+broken; all-weapon and all-mod gameplay remain incomplete.
+
 ## New Vegas
 
 | System | Current implementation | Evidence and remaining work |

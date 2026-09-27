@@ -57,6 +57,14 @@ destruction state. The reel does not establish every weapon or natural car
 encounter; mines, beam/flame/tracer completeness, special ammunition, blast
 attenuation and player knockdown remain unfinished.
 
+The Fat Man impact update removes repeated scene-child scans during a large
+blast. One repeated flat shot's detonation processing falls from 1.73 seconds
+to 0.13 seconds without adding a fuse or changing projectile speed. Explosion
+construction and rendering can still hitch, especially while recording.
+The simulator also completes the corrected shot, spending about 0.20 seconds
+in detonation processing. Two flat diagnostic runs reported a native crash
+after Quit Game; shutdown stability remains unfinished.
+
 ## What to test
 
 - Continue or complete the opening; talk to Doc and check that he turns toward

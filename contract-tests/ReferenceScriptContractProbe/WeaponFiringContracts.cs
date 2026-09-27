@@ -31,6 +31,7 @@ internal static class WeaponFiringContracts
             var timedMineProjectile = (byte[])mineProjectile.Clone(); timedMineProjectile[0] = 0x06; timedMineProjectile[1] = 0x08;
             Float(timedMineProjectile, 28, 0); Float(timedMineProjectile, 32, 15);
             var beamProjectile = new byte[84]; beamProjectile[2] = 4; Float(beamProjectile, 8, 1500); Float(beamProjectile, 12, 1200);
+            Float(beamProjectile, 48, .14f);
             var alternateBeamProjectile = (byte[])beamProjectile.Clone(); alternateBeamProjectile[0] = 4;
             var timedBeamProjectile = (byte[])alternateBeamProjectile.Clone(); Float(timedBeamProjectile, 28, 1);
             var alternateFlightProjectile = new byte[84]; alternateFlightProjectile[0] = 0x8c; alternateFlightProjectile[1] = 0x02; alternateFlightProjectile[2] = 1;
@@ -135,6 +136,7 @@ internal static class WeaponFiringContracts
             var beam = (shot with { Projectile = FalloutProjectile.Read(records, Key(17)) });
             Require(!beam.Projectile.Hitscan && beam.Projectile.IsInstantRayAttack,
                 "Beam type did not select the direct-ray path without the Hitscan flag.");
+            Require(beam.Projectile.FadeSeconds == .14f, "Beam lifetime was not read from source DATA.");
             beam.RequireRuntimeAttackOwner();
             var alternateBeam = shot with { Projectile = FalloutProjectile.Read(records, Key(18)) };
             Require(alternateBeam.Projectile.HasAlternateTrigger && !alternateBeam.Projectile.HasAlternateTriggerParameters,

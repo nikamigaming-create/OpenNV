@@ -16,10 +16,12 @@ internal static class RuntimeNativeExplosionCombat
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(shooter);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         explosion.RequireRuntimeDamageOwner();
         if (!point.IsFinite() || !float.IsFinite(unitsToMeters) || unitsToMeters <= 0 || collisionMask == 0)
             throw new InvalidDataException("Explosion query inputs are invalid.");
         player?.ReceiveExplosionExposure(explosion, point);
+        var exposureDone = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var radius = explosion.Radius * unitsToMeters;
         if (!float.IsFinite(radius)) throw new InvalidDataException("Explosion radius is not finite.");
@@ -54,28 +56,33 @@ internal static class RuntimeNativeExplosionCombat
             capacity = checked(capacity * 2);
             collisions = space.IntersectShape(parameters, capacity);
         }
+        var queryDone = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var actorTargets = new Dictionary<RuntimeNativeActorCombat, (Node Collider, float Distance)>();
         var playerTargets = new List<(Node Collider, float Distance)>();
         var rigidTargets = new HashSet<RigidBody3D>();
         var destructibleTargets = new Dictionary<RuntimeNativeDestructible, Node3D>();
+        var uniqueColliders = new HashSet<Node3D>();
         foreach (var collision in collisions)
         {
-            if (!collision.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node collider || collider is not Node3D target)
+            if (!collision.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node3D target || !uniqueColliders.Add(target))
                 continue;
+            Node collider = target;
             var distance = target.GlobalPosition.DistanceTo(point);
             if (RuntimeNativeDestructible.Find(collider) is { } destructible)
                 destructibleTargets.TryAdd(destructible, target);
-            if (RuntimeNativeActorCombat.Find(collider) is { CanReceiveExplosionDamage: true } combat)
+            var actor = RuntimeNativeActorCombat.Find(collider);
+            if (actor is { CanReceiveExplosionDamage: true } combat)
             {
                 if (!actorTargets.TryGetValue(combat, out var prior) || distance < prior.Distance)
                     actorTargets[combat] = (collider, distance);
             }
             else if (player is not null && (collider == player || player.IsAncestorOf(collider)))
                 playerTargets.Add((collider, distance));
-            if (collider is RigidBody3D { Freeze: false } rigid && RuntimeNativeActorCombat.Find(collider) is null or { Dead: true })
+            if (collider is RigidBody3D { Freeze: false } rigid && actor is null or { Dead: true })
                 rigidTargets.Add(rigid);
         }
+        var targetsDone = System.Diagnostics.Stopwatch.GetTimestamp();
 
         byte? playerPart = null;
         if (player is not null && playerTargets.Count != 0)
@@ -154,6 +161,15 @@ internal static class RuntimeNativeExplosionCombat
             appliedDamage = damage.Amount,
             damageDistanceScale = "full inside radius;source attenuation not yet admitted",
             candidates = collisions.Count,
+            uniqueColliders = uniqueColliders.Count,
+            timing = new
+            {
+                exposureMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started, exposureDone).TotalMilliseconds,
+                queryMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(exposureDone, queryDone).TotalMilliseconds,
+                classifyMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(queryDone, targetsDone).TotalMilliseconds,
+                applyMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(targetsDone).TotalMilliseconds,
+                totalMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            },
             actorHits,
             objectHits,
             pushedBodies,

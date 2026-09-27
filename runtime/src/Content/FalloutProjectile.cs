@@ -21,6 +21,7 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
     internal bool HasExplicitRotation { get; private init; }
     internal System.Numerics.Vector3 Rotation { get; private init; }
     internal float BouncyMultiplier { get; private init; }
+    internal float FadeSeconds { get; private init; }
     internal float ExplosionAltTriggerProximity { get; private init; }
     internal float ExplosionAltTriggerTimer { get; private init; }
     internal bool HasAlternateTriggerParameters => ExplosionAltTriggerProximity > 0 || ExplosionAltTriggerTimer > 0;
@@ -60,13 +61,14 @@ internal sealed record FalloutProjectile(FalloutFormKey Form, ushort Flags, usho
             HasExplicitRotation = explicitRotation,
             Rotation = data.Length >= 80 ? new(Number(data, 68), Number(data, 72), Number(data, 76)) : default,
             BouncyMultiplier = bouncy,
+            FadeSeconds = Number(data, 48),
             ExplosionAltTriggerProximity = Number(data, 28),
             ExplosionAltTriggerTimer = Number(data, 32),
             ExplosionSource = (flags & 2) != 0 ? FalloutExplosion.Read(records,
                 explosion ?? throw new InvalidDataException("Explosive projectile has no EXPL reference.")) : null,
         };
         if (result.Range <= 0 || result.Speed < 0 || result.Gravity < 0 || result.TracerChance is < 0 or > 1 ||
-            result.MuzzleSeconds < 0 || result.BouncyMultiplier < 0 || result.ExplosionAltTriggerProximity < 0 ||
+            result.MuzzleSeconds < 0 || result.FadeSeconds < 0 || result.BouncyMultiplier < 0 || result.ExplosionAltTriggerProximity < 0 ||
             result.ExplosionAltTriggerTimer < 0)
             throw new InvalidDataException("Projectile motion/appearance values are invalid.");
         return result;

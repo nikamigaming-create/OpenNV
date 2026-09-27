@@ -74,6 +74,7 @@ public partial class NativePlayerPresentationAudit
                 "Grenade emission clock skipped a source burst.");
             await AuditNuclearDestruction(records, content, saved, player, inventory, vitals);
             await AuditAutomaticControls(records, player, inventory);
+            await AuditBeamAndDynamiteControls(records, player, inventory);
             GD.Print("OPENNV_GRENADE_CONTROL_PASS hold=true release=true flight=true fuse=true explosion=true consumption=true fixture=true");
         }
         finally { player.Free(); floor.Free(); }
