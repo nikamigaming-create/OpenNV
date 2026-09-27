@@ -38,8 +38,11 @@ laser hostile encounter and reachable two-hand support. Dynamite's separate
 lighter attachment in VR remains broken. Enabling Jolt ray face indices and
 preserving reserved decal bits repairs the two thrown-impact failures in native
 checks. Ordinary flat knife, hatchet and spear throws each discharge once and
-finish after real contacts without those errors. The new 44-second paired reel
-includes dynamite, knife, hatchet and two-hand support, with faults captioned.
+finish after real contacts without those errors; simulator rechecks also pass.
+The new 47-second paired reel
+includes dynamite, knife, hatchet, repaired impacts and two-hand support, with
+remaining faults captioned. Experimental package 20260927.5 cold-Continues and
+completes the corrected throw in an exported build on a copied checkpoint.
 All-weapon and all-mod gameplay remain incomplete.
 
 ## New Vegas
