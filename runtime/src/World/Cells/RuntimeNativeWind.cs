@@ -7,6 +7,16 @@ namespace OpenNV.Runtime.World.Cells;
 // include streamed additions; a disabled/warm reference cannot receive force.
 internal partial class RuntimeNativeWind : Node
 {
+    private const string WindGroup = "OpenNVSourceWind";
+    internal static Vector3 SampleFor(Node node)
+    {
+        if (!node.IsInsideTree()) return Vector3.Zero;
+        var wind = node.GetTree().GetNodesInGroup(WindGroup).OfType<RuntimeNativeWind>()
+            .SingleOrDefault(owner => owner.GetViewport() == node.GetViewport() && owner.CanProcess());
+        if (wind is null) return Vector3.Zero; // Interior and menu worlds have no weather wind.
+        var (speed, heading) = wind._sample();
+        return new Vector3(-MathF.Sin(heading), 0, -MathF.Cos(heading)) * speed;
+    }
     private readonly HashSet<RuntimeNifRigidBody> _bodies = [];
     private Func<(float Speed, float Heading)> _sample = null!;
     private Node _scene = null!;
@@ -44,6 +54,7 @@ internal partial class RuntimeNativeWind : Node
 
     public override void _EnterTree()
     {
+        AddToGroup(WindGroup);
         _scene = GetParent(); _tree = GetTree();
         foreach (var body in _scene.FindChildren("*", "", true, false).OfType<RuntimeNifRigidBody>()) Added(body);
         _tree.NodeAdded += Added; _tree.NodeRemoved += Removed;

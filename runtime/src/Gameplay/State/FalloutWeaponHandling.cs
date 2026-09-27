@@ -71,11 +71,18 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
             shot.Ammunition is null && weapon.HasAmmunitionSource)
             throw new InvalidDataException("Shot does not belong to its selected weapon/ammunition.");
         if (!CanFire(weapon)) return false;
+        var consumedWeapon = weapon.IsThrownWeapon || weapon.IsMine;
+        if (consumedWeapon && !weapon.HasAmmunitionSource)
+        {
+            inventory.Remove(weapon.Form, 1, silent: true);
+            return true;
+        }
         if (!weapon.HasAmmunitionSource || weapon.AmmoUse == 0)
         {
             if (weapon.HasAmmunitionSource && Ammunition(weapon) != shot.Ammunition)
                 throw new InvalidOperationException("Ammunition changed before its ammo-free shot event.");
-            inventory.Publish([FalloutWeaponCondition.AfterShot(records, weapon, shot, inventory.Item(weapon.Form)!)]);
+            if (consumedWeapon) inventory.Remove(weapon.Form, 1, silent: true);
+            else inventory.Publish([FalloutWeaponCondition.AfterShot(records, weapon, shot, inventory.Item(weapon.Form)!)]);
             return true;
         }
         var previous = _magazines[weapon.Form];
@@ -85,6 +92,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
         {
             if (!nativeNpc || weapon.NpcsUseAmmo) throw new InvalidDataException("Actor ammunition policy changed before its shot.");
             _magazines[weapon.Form] = previous with { Loaded = loaded - weapon.AmmoUse };
+            if (consumedWeapon) inventory.Remove(weapon.Form, 1, silent: true);
             return true;
         }
         var random = new FalloutSoundRandomState(_shotRandom.State);
@@ -100,10 +108,11 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
             addition = FalloutCampaignInventoryResolver.Resolve(records,
                 [new(records.RuntimeFormId(key), FalloutDialogueTopic.Text(source.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span), source.Signature, recovered)], null).Items.Single();
         }
-        var wornWeapon = FalloutWeaponCondition.AfterShot(records, weapon, shot, inventory.Item(weapon.Form)!);
+        var wornWeapon = consumedWeapon ? inventory.Item(weapon.Form)! : FalloutWeaponCondition.AfterShot(records, weapon, shot, inventory.Item(weapon.Form)!);
         inventory.ConsumeAmmunition(shot.Ammunition!.Value, weapon.AmmoUse, addition, wornWeapon);
         _magazines[weapon.Form] = previous with { Loaded = loaded - weapon.AmmoUse };
         _shotRandom.Restore(random.State);
+        if (consumedWeapon) inventory.Remove(weapon.Form, 1, silent: true);
         return true;
     }
 

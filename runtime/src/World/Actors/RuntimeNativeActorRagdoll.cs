@@ -26,6 +26,35 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private bool _active;
     private Vector3 _lastSeparationVelocity;
     internal bool Active => _active;
+    internal bool Settled => _active && _bodies.All(body => body.Node.Sleeping);
+    internal Transform3D TorsoTransform
+    {
+        get
+        {
+            var torso = _skeleton.BoneIndex(_parts.Single(part => part.Type == 0).Node);
+            var body = _bodies.FirstOrDefault(value => value.Bone == torso) ?? _bodies[0];
+            return body.Node.GlobalTransform * body.Attachment.AffineInverse();
+        }
+    }
+
+    internal void ApplyBlast(Vector3 center, float impulse)
+    {
+        if (!_active || !float.IsFinite(impulse) || impulse < 0) throw new InvalidOperationException("Blast requires an active source ragdoll.");
+        var totalMass = _bodies.Sum(body => body.Node.Mass);
+        foreach (var body in _bodies)
+        {
+            var offset = body.Node.GlobalPosition - center;
+            body.Node.Sleeping = false;
+            body.Node.ApplyCentralImpulse((offset.IsZeroApprox() ? Vector3.Up : offset.Normalized()) * impulse * (body.Node.Mass / totalMass));
+        }
+    }
+
+    internal void EndLivingSimulation()
+    {
+        if (_state.Injury?.Dead == true) throw new InvalidOperationException("A dead actor cannot recover from knockdown.");
+        _active = false; _state.CaptureRagdoll = null; _state.Ragdoll = null;
+        foreach (var body in _bodies) { body.Node.Freeze = true; body.Node.CollisionLayer = 0; body.Node.CollisionMask = 0; }
+    }
     internal IEnumerable<Vector3> AimPoints => _bodies.Select(body => body.Node.GlobalTransform * body.Center);
     internal object Observation => new
     {
@@ -176,7 +205,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     internal void Activate()
     {
         if (_active) return;
-        if (_state.Injury?.Dead != true) throw new InvalidOperationException("A living actor cannot activate a death ragdoll.");
+        if (_state.Injury?.Dead != true && !_state.KnockedDown) throw new InvalidOperationException("A living actor needs a knockdown owner to activate a ragdoll.");
         var saved = _state.Ragdoll;
         if (saved is not null)
         {

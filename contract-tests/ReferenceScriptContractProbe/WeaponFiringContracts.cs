@@ -178,6 +178,16 @@ internal static class WeaponFiringContracts
                 !thrownWeaponPresentation.IsMine && thrownShot.Projectile.ExplosionSource?.Form == Key(12),
                 "Thrown explosive lost its authored animation or EXPL source.");
             thrownShot.RequireRuntimeAttackOwner();
+            var thrownInventory = new FalloutPlayerInventory();
+            thrownInventory.Add(records, Key(14), 2, 1, true); thrownInventory.Equip(records, Key(14));
+            var thrownHandling = new FalloutWeaponHandling(thrownInventory);
+            Require(thrownHandling.CanFire(thrownWeaponPresentation) && thrownInventory.Item(Key(14))!.Count == 2,
+                "Preparing a throw consumed its source weapon.");
+            Require(thrownHandling.ConsumeShot(thrownWeaponPresentation, thrownShot, records) && thrownInventory.Item(Key(14))!.Count == 1,
+                "An accepted throw did not consume exactly one source weapon.");
+            Require(thrownHandling.ConsumeShot(thrownWeaponPresentation, thrownShot, records) && thrownInventory.Item(Key(14)) is null &&
+                !thrownInventory.Equipped.Contains(14u) && !thrownHandling.ConsumeShot(thrownWeaponPresentation, thrownShot, records),
+                "Last thrown weapon remained equipped or could be thrown again.");
             var mine = FalloutWeaponPresentation.Read(records, Key(15));
             var lunchbox = FalloutWeaponPresentation.Read(records, Key(16));
             Require(mine.IsMine && !mine.IsMeleeWeapon && mine.WeaponAnimationType == 11 && mine.AttackGroup == "placemine" &&

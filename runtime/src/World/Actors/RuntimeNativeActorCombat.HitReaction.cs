@@ -28,7 +28,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void RequestHitReaction(FalloutActorHit hit, int hitLocation)
     {
-        if (hit.Dead || hit.HealthDamage <= 0 || _state.Unconscious) return;
+        if (hit.Dead || hit.HealthDamage <= 0 || _state.Unconscious || _state.KnockedDown) return;
         // Repeated pellets retain the active response and its random state.
         // They cannot rewind text keys or postpone combat forever. Retail
         // interruption priorities remain an explicit boundary.
@@ -78,7 +78,7 @@ internal sealed partial class RuntimeNativeActorCombat
         49 => 0, // No sleeping procedure is currently owned by a resident actor.
         72 => _state.Base == condition.FormArgument1 ? 1 : 0,
         77 => _state.HitReactionRandom.NextBounded(100),
-        107 => 0, // Only living conscious actors reach selection; knockdown forces are unowned.
+        107 => _state.KnockedDown ? 2 : 0,
         159 => _actor is RuntimeNativeNpc npc ? npc.SittingState : 0,
         286 => Activity.Sneaking ? 1 : 0,
         391 => hitLocation,
@@ -131,6 +131,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (next >= clip.Duration)
             {
                 _state.HitReaction = null; _hitReactionClip = null; _hitReactionsCompleted++;
+                _state.KnockedDown = false;
                 GD.Print($"OPENNV_ACTOR_HIT_REACTION_END reference={_state.Reference} idle={state.Idle}");
             }
         }

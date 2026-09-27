@@ -10,13 +10,13 @@ internal sealed class NativeActorCombatAnimation
     internal string Path { get; }
     internal string Hash { get; }
     internal RuntimeNativeNifAnimation Animation { get; }
-    internal FalloutNifTextKeyTimeline Events { get; }
+    internal FalloutWeaponAnimationTimeline Events { get; }
     private readonly FalloutNifAnimationSampler? _root;
     private readonly bool _loop;
     internal double Duration { get; }
 
     internal NativeActorCombatAnimation(string path, RuntimeLiveContentSource content, RuntimeNativeNifSkeleton skeleton,
-        NativeActorWeaponAttachment? weapon, bool loop)
+        NativeActorWeaponAttachment? weapon, bool loop, bool weaponCadence = false)
     {
         Path = path; _loop = loop;
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Actor combat animation is absent.", path);
@@ -33,14 +33,15 @@ internal sealed class NativeActorCombatAnimation
             externalObjectTargets: weapon?.Targets ?? new HashSet<string>(StringComparer.Ordinal));
         if (Animation.UnboundChannels.Count != 0) throw new NotSupportedException("Actor combat channels are unbound: " +
             string.Join("; ", Animation.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
-        Events = new(Animation.TextKeys, selected.StartTime, selected.StopTime, loop ? 0u : 2u, selected.Frequency);
+        Events = new(Animation.TextKeys, selected.StartTime, selected.StopTime, selected.Frequency, loop,
+            weaponCadence && selected.CycleType == 0);
         Duration = (selected.StopTime - selected.StartTime) / selected.Frequency;
     }
 
     internal float Time(double elapsed)
     {
         var sequence = Animation.Sequence;
-        return sequence.StartTime + (float)((_loop ? elapsed % Duration : Math.Min(elapsed, Duration)) * sequence.Frequency);
+        return sequence.StartTime + (float)(Events.SampleSeconds(elapsed, _loop) * sequence.Frequency);
     }
 
     internal Vector3 RootDisplacement(double from, double to)

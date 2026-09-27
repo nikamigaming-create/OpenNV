@@ -7,6 +7,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     private readonly Dictionary<string, RuntimeNifControllerSequence> _sequences =
         new(StringComparer.Ordinal);
     private RuntimeNifControllerSequence? _active;
+    private float[] _boundaries = [];
     private double _elapsedSeconds;
     private bool _includeStart;
     private long _generation;
@@ -24,7 +25,29 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
 
     internal IReadOnlyCollection<string> SequenceNames => _sequences.Keys;
     internal string? ActiveSequence => _active?.Name;
+    internal double FiniteEffectDuration
+    {
+        get
+        {
+            var sequence = _active ?? (_sequences.Count == 1 ? _sequences.Values.Single() :
+                throw new NotSupportedException("Effect has no unique active source sequence."));
+            var duration = (double)(sequence.StopTime - sequence.StartTime) / sequence.Frequency;
+            return double.IsFinite(duration) && duration >= 0 ? duration :
+                throw new InvalidDataException("Source effect duration is not finite.");
+        }
+    }
     internal double SourceTimeSeconds { get; private set; }
+    internal double SecondsToBoundary
+    {
+        get
+        {
+            if (_active is null) return double.PositiveInfinity;
+            foreach (var boundary in _boundaries)
+                if (boundary > SourceTimeSeconds + 1e-10)
+                    return (boundary - SourceTimeSeconds) / _active.Frequency;
+            return _active.CycleType == 0 ? (_active.StopTime - SourceTimeSeconds) / _active.Frequency : double.PositiveInfinity;
+        }
+    }
     internal object Observation => new
     {
         active = ActiveSequence,
@@ -75,6 +98,8 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         if (!_sequences.TryGetValue(name, out var sequence))
             throw new KeyNotFoundException($"NIF source sequence is not registered: {name}");
         _active = sequence;
+        _boundaries = sequence.Channels.SelectMany(channel => channel.BoundaryTimes)
+            .Where(time => time >= sequence.StartTime && time <= sequence.StopTime).Distinct().Order().ToArray();
         _textKeys = new(sequence.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
         _elapsedSeconds = 0.0;
         _includeStart = true;
@@ -172,8 +197,10 @@ internal sealed record RuntimeNifControllerSequence(
 internal sealed class RuntimeNifControllerChannel
 {
     private readonly Action<float> _apply;
+    internal IReadOnlyList<float> BoundaryTimes { get; }
 
-    internal RuntimeNifControllerChannel(Action<float> apply) => _apply = apply;
+    internal RuntimeNifControllerChannel(Action<float> apply, IReadOnlyList<float>? boundaryTimes = null)
+    { _apply = apply; BoundaryTimes = boundaryTimes ?? []; }
 
     internal void Apply(float sourceTime) => _apply(sourceTime);
 }

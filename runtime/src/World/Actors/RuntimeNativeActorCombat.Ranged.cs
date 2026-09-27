@@ -26,9 +26,15 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             _enemyShot = FalloutWeaponShot.Read(_records, weapon.Form, ammo, weapon.HasAmmunitionSource);
             _enemyShot.RequireRuntimeAttackOwner();
-            var socket = MuzzleNode();
-            _enemyMuzzle ??= new(_records, _content, socket, _skeleton.UnitsToMetres);
-            try { _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false); _muzzlePresentationError = _enemyMuzzle.LightError; }
+            try
+            {
+                if (_enemyShot.Projectile.HasMuzzleFlash || _enemyShot.Projectile.MuzzleLight is not null)
+                {
+                    _enemyMuzzle ??= new(_records, _content, MuzzleNode(), _skeleton.UnitsToMetres);
+                    _enemyMuzzle.Prepare(_enemyShot.Projectile, encoded: false);
+                    _muzzlePresentationError = _enemyMuzzle.LightError;
+                }
+            }
             catch (Exception error)
             {
                 _muzzlePresentationError = error.Message;
@@ -75,7 +81,7 @@ internal sealed partial class RuntimeNativeActorCombat
             return;
         }
         if (!handling.ConsumeShot(weapon, _enemyShot, _records)) return;
-        (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
+        _enemyMuzzle?.Flash();
         if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
         var before = TargetHealth(player);
         Node? lastCollider = null;
@@ -233,7 +239,7 @@ internal sealed partial class RuntimeNativeActorCombat
             }
             pellets.Add(new { index = pellet, contacts, direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z } });
         }
-        if (_casingPresentationError is null && weapon.ShellModel is not null && GetViewport().GetCamera3D() is { } camera)
+        if (!weapon.IsThrownWeapon && !weapon.IsMine && _casingPresentationError is null && weapon.ShellModel is not null && GetViewport().GetCamera3D() is { } camera)
         {
             try { _enemyShotEffects.EjectCasing((_enemyObject ?? throw new NotSupportedException("Embedded weapon casing socket is unbound.")).Socket(_skeleton, "ShellCasingNode"), camera.GlobalPosition); }
             catch (Exception error)
@@ -352,6 +358,16 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
 
+        if (collider is not null && RuntimeNativeDestructible.Find(collider) is { } destructible)
+        {
+            try { destructible.Hit(damage.Amount, _state.Reference); }
+            catch (Exception error)
+            {
+                damageError = error.Message;
+                GD.PushError($"OPENNV_NPC_OBJECT_DAMAGE_UNBOUND reference={_state.Reference} {error.Message}");
+            }
+        }
+
         string? impactError = null;
         if (collider is not null && impactMaterial is { } material && shot.ImpactDataSet is { } impactSet)
         {
@@ -443,9 +459,9 @@ internal sealed partial class RuntimeNativeActorCombat
                 return;
             }
             foreach (var flight in flights) effects.LaunchProjectile(flight);
-            (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
+            _enemyMuzzle?.Flash();
             if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
-            if (weapon.ShellModel is not null && _casingPresentationError is null && GetViewport().GetCamera3D() is { } camera)
+            if (!weapon.IsThrownWeapon && !weapon.IsMine && weapon.ShellModel is not null && _casingPresentationError is null && GetViewport().GetCamera3D() is { } camera)
             {
                 try { _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), camera.GlobalPosition); }
                 catch (Exception error)
@@ -508,6 +524,9 @@ internal sealed partial class RuntimeNativeActorCombat
     private void ApplyProjectileTargetContact(RuntimeNativePlayer? player, FalloutWeaponShot shot,
         FalloutWeaponDamage damage, RuntimeNativeProjectileContact contact)
     {
+        if (shot.Projectile.ExplosionSource is not null) return;
+        if (contact.Collider is { } objectCollider && RuntimeNativeDestructible.Find(objectCollider) is { } destructible)
+            destructible.Hit(damage.Amount, _state.Reference);
         byte? part = null;
         float? healthBefore = null;
         float? healthAfter = null;
@@ -564,6 +583,8 @@ internal sealed partial class RuntimeNativeActorCombat
         FalloutWeaponDamage blastDamage, Vector3 point)
     {
         if (shot.Projectile.ExplosionSource is not { } explosion) return;
+        try { _enemyShotEffects!.Explosion(explosion, point); }
+        catch (Exception error) { GD.PushError($"OPENNV_EXPLOSION_EFFECT_UNBOUND reference={_state.Reference} {error.Message}"); }
         _lastExplosion = RuntimeNativeExplosionCombat.Detonate(_actor, _actor, _records, explosion, blastDamage,
             point, _mask, _skeleton.UnitsToMetres, _state.Reference, _context!.Level(), _context.Globals,
             player, _context.DamagePlayer, shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit);

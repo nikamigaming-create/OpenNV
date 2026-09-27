@@ -207,9 +207,12 @@ internal sealed class NativeXrArm
         }
         foreach (var finger in _fingers)
         {
-            var closed = weaponHeld ? finger.Held : finger.Closed;
-            var amount = weaponHeld && finger.Input == 0 ? 1 : _amounts[finger.Input];
-            _skeleton.SetBonePose(finger.Bone, finger.Open.InterpolateWith(closed, amount));
+            // A held weapon supplies the entire authored grip. Zero trigger
+            // or thumb touch must not restore those fingers to the skeleton's
+            // open bind pose and lift them off the handle. Independent analog
+            // finger motion belongs to the free hand.
+            _skeleton.SetBonePose(finger.Bone, weaponHeld ? finger.Held :
+                finger.Open.InterpolateWith(finger.Closed, _amounts[finger.Input]));
         }
     }
 

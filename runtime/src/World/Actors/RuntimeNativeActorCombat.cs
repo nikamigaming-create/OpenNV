@@ -77,13 +77,13 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         // A cold cell enters the tree with this owner already attached. Its
         // parent is still visiting children during Ready, so adding the death
         // rig there would be rejected by Godot.
-        if (Dead) Callable.From(RestoreDeath).CallDeferred();
+        if (Dead || _state.KnockedDown && _state.Ragdoll is not null) Callable.From(RestoreDeath).CallDeferred();
     }
 
     private void RestoreDeath()
     {
         if (!IsInsideTree() || IsQueuedForDeletion()) return;
-        try { PrepareDeath(); BeginDeath(); }
+        try { PrepareDeath(); if (Dead) BeginDeath(); else BeginKnockdown(); }
         catch (Exception error) { Error = error.Message; GD.PushError($"OPENNV_ACTOR_DEATH_UNBOUND reference={_state.Reference} {Error}"); }
     }
 
@@ -202,6 +202,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     private void BeginDeath()
     {
+        _state.KnockedDown = false;
         _state.HitReaction = null;
         _hitReactionClip = null;
         foreach (var area in _actor.FindChildren("*", "Area3D", true, false).OfType<Area3D>())

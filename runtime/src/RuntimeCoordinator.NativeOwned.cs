@@ -65,6 +65,7 @@ public partial class RuntimeCoordinator
         return new
         {
             paused = GetTree().Paused,
+            combatWheel = _nativeCombatWheel?.State,
             xr = _nativeXr?.State,
             detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-reference-and-controller-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
@@ -800,6 +801,8 @@ public partial class RuntimeCoordinator
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);
         instance.SetMeta("opennv_source_form", baseObject.FormKey.ToString());
         root.AddChild(instance);
+        RuntimeNativeDestructible.Attach(instance, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
+            _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
         if (cell.Cell.Worldspace is not null && baseObject.Signature is "STAT" or "SCOL" or "TREE")
             NativeExteriorDetailBlend.Bind(instance);
         AddNativeReferenceEmittance(instance, reference);

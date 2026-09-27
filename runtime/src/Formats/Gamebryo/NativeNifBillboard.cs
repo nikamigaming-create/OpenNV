@@ -34,13 +34,18 @@ internal sealed partial class NativeNifBillboard : Node
 
     internal void Configure(Node3D root, ushort mode)
     {
-        if (mode is not (1 or 4)) throw new NotSupportedException($"NIF billboard mode {mode} is unbound.");
+        mode &= 7;
+        if (mode is not (1 or 2 or 4)) throw new NotSupportedException($"NIF billboard mode {mode} is unbound.");
         _root = root; Name = "SourceBillboard"; ProcessPriority = 2;
         foreach (var mesh in root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
             for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
             {
-                if (mesh.GetActiveMaterial(surface) is not ShaderMaterial { ResourceName: NativeNifEffectMaterial.ResourceIdentity } material)
-                    throw new NotSupportedException("Billboard surface has no source no-lighting shader owner.");
+                if (mesh.GetActiveMaterial(surface) is not ShaderMaterial
+                    {
+                        ResourceName:
+                        NativeNifEffectMaterial.ResourceIdentity or NativeNifRefractionMaterial.ResourceIdentity
+                    } material)
+                    throw new NotSupportedException("Billboard surface has no source shader owner.");
                 var local = Local(mesh);
                 material.SetShaderParameter(ModeParameter, (int)mode); material.SetShaderParameter(LocalParameter, local);
                 mesh.ExtraCullMargin = Math.Max(mesh.ExtraCullMargin, mesh.GetAabb().Size.Length() * 2);

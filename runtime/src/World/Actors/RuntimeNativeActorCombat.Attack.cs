@@ -65,10 +65,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (!float.IsFinite(_attackRange) || !float.IsFinite(_naturalDamage) || _attackRange <= 0 || _naturalDamage < 0)
             throw new InvalidDataException("Actor attack range/damage is invalid.");
         var attackClip = Clip(_attackPath, _enemyWeapon?.Automatic == true);
-        _attackHitCount = attackClip.Animation.TextKeys
-            .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-            .Count(text => text.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase));
-        if (_attackHitCount == 0) throw new NotSupportedException("Actor attack requires a source Hit event.");
+        _attackHitCount = attackClip.Events.Discharges;
+        if (_attackHitCount == 0) throw new NotSupportedException("Actor attack requires a source Hit, Fire or Release event.");
         _ = Clip(_movementPath, true);
     }
 
@@ -85,7 +83,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeActorCombatAnimation Clip(string path, bool loop)
     {
         if (!_combatClips.TryGetValue(path, out var clip))
-            _combatClips.Add(path, clip = new(path, _content, _skeleton, _enemyObject, loop));
+            _combatClips.Add(path, clip = new(path, _content, _skeleton, _enemyObject, loop,
+                path == _attackPath && _enemyWeapon is { Automatic: true, AttackAnimation: 74 }));
         return clip;
     }
 
@@ -138,7 +137,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (!float.IsFinite(rate) || rate <= 0 || !float.IsFinite(sequence.Frequency) || sequence.Frequency <= 0 ||
                 duration <= 0 || _attackHitCount <= 0)
                 throw new InvalidDataException("Actor automatic attack cadence is invalid.");
-            factor = duration * rate / (sequence.Frequency * _attackHitCount);
+            factor = clip.Events.Period * rate / clip.Events.Discharges;
         }
         else if (state.Action == "attack") factor *= _enemyWeapon?.AttackMultiplier ?? 1;
         if (!double.IsFinite(factor) || factor <= 0) throw new InvalidDataException("Actor attack animation rate is invalid.");
@@ -156,7 +155,7 @@ internal sealed partial class RuntimeNativeActorCombat
             PublishCombatPose(clip, key.SourceSeconds, next);
             foreach (var text in key.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
             {
-                if (state.Action == "attack" && text.Equals("Hit", StringComparison.OrdinalIgnoreCase)) AttackTarget(player);
+                if (state.Action == "attack" && FalloutWeaponAnimationTimeline.DischargesWeapon(text)) AttackTarget(player);
                 else _enemySounds!.Dispatch(key with { Text = text });
             }
         }

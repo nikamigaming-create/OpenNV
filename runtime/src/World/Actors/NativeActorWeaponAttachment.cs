@@ -13,6 +13,8 @@ internal sealed class NativeActorWeaponAttachment
     internal Node3D Root { get; }
     internal Node3D[] Nodes { get; }
     internal IReadOnlySet<string> Targets { get; }
+    internal IReadOnlyList<BoneAttachment3D> BodyAttachments => _bodyAttachments;
+    private readonly List<BoneAttachment3D> _bodyAttachments = [];
     private readonly float _units;
 
     internal NativeActorWeaponAttachment(FalloutWeaponPresentation weapon, RuntimeNativeNifSkeleton skeleton,
@@ -33,6 +35,13 @@ internal sealed class NativeActorWeaponAttachment
             skeleton.Node.AddChild(Attachment); Attachment.AddChild(Root);
             Nodes = Root.FindChildren("*", "", true, false).OfType<Node3D>().ToArray();
             Targets = Nodes.Select(node => node.GetMeta("opennv_nif_source_name", "").AsString()).ToHashSet(StringComparer.Ordinal);
+            BindBodyAttachments(source, skeleton);
+            Root.VisibilityChanged += () =>
+            {
+                // Combat and package owners alternate their weapon models.
+                // Reparented packs must follow that same model lifetime.
+                foreach (var part in _bodyAttachments) part.Visible = Root.Visible;
+            };
             foreach (var mesh in Nodes.OfType<MeshInstance3D>())
             {
                 if (!mesh.HasMeta("opennv_nif_geometry_block")) continue;
@@ -43,7 +52,33 @@ internal sealed class NativeActorWeaponAttachment
                     skeleton.MaterialChannels.Add(geometry.Name, source, property, [mesh.MaterialOverride]);
             }
         }
-        catch { Root.Free(); throw; }
+        catch
+        {
+            foreach (var part in _bodyAttachments) part.Free();
+            Root.Free(); Attachment?.Free(); throw;
+        }
+    }
+
+    private void BindBodyAttachments(FalloutNifFile source, RuntimeNativeNifSkeleton skeleton)
+    {
+        // Equipped NIF subtrees can name a different anatomical parent in
+        // their export metadata (heavy-weapon packs, for example). Keep their
+        // authored local transforms, but bind them to that bone rather than
+        // carrying the entire model on the primary hand.
+        foreach (var node in Nodes.Where(node => node.HasMeta("opennv_nif_block")))
+        {
+            if (source.ReadObject(node.GetMeta("opennv_nif_block").AsInt32()) is not FalloutNifNode authored) continue;
+            var parents = authored.ExtraData.Where(index => index >= 0).Select(source.ReadObject)
+                .OfType<FalloutNifStringExtraData>().Where(extra => extra.Name is "Prn" or "UPB" &&
+                    skeleton.TryBoneIndex(extra.Value.Trim(), out _)).Select(extra => extra.Value.Trim()).Distinct().ToArray();
+            if (parents.Length == 0 || parents is ["Weapon"]) continue;
+            if (parents.Length != 1) throw new InvalidDataException("Equipped model has ambiguous anatomical parents.");
+            var attachment = new BoneAttachment3D { Name = "EquippedBodyPart", BoneName = parents[0] };
+            skeleton.Node.AddChild(attachment); _bodyAttachments.Add(attachment);
+            node.Reparent(attachment, keepGlobalTransform: false);
+            foreach (var mesh in node.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
+                mesh.SetMeta("opennv_weapon_body_attachment", parents[0]);
+        }
     }
 
     internal Action<float>? Bind(FalloutNifFile source, FalloutNifControllerLink link)
@@ -83,4 +118,7 @@ internal sealed class NativeActorWeaponAttachment
         }
         return skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex("Weapon")) * local;
     }
+
+    internal Transform3D ReleaseTransform(RuntimeNativeNifSkeleton skeleton) =>
+        skeleton.Node.GlobalTransform * skeleton.Node.GetBoneGlobalPose(skeleton.BoneIndex("Weapon")) * Root.Transform;
 }

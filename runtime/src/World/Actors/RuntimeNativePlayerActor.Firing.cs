@@ -13,7 +13,8 @@ internal sealed partial class RuntimeNativePlayerActor
         node.GetMeta("opennv_nif_source_name", "").AsString().Equals("ProjectileNode", StringComparison.OrdinalIgnoreCase)) ??
         throw new NotSupportedException("Held source weapon has no unique ProjectileNode.");
 
-    internal Transform3D ProjectileTransform() => _equippedObject!.Socket(Skeleton, "ProjectileNode");
+    internal Transform3D ProjectileTransform() => Weapon is { IsThrownWeapon: true } or { IsMine: true }
+        ? _equippedObject!.ReleaseTransform(Skeleton) : _equippedObject!.Socket(Skeleton, "ProjectileNode");
     private Transform3D ProjectileTransformInSkeleton() => Skeleton.Node.GlobalTransform.AffineInverse() * ProjectileTransform();
     internal Transform3D ShellTransform() => _equippedObject!.Socket(Skeleton, "ShellCasingNode");
 
@@ -30,6 +31,7 @@ internal sealed partial class RuntimeNativePlayerActor
 
     internal void PrepareMuzzle(FalloutProjectile projectile)
     {
+        if (!projectile.HasMuzzleFlash && projectile.MuzzleLight is null) return;
         _muzzle ??= new(_records, _content, ProjectileNode(), Skeleton.UnitsToMetres);
         _muzzle.Prepare(projectile, _first && _xrLeftArm is null);
     }

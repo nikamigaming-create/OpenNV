@@ -43,7 +43,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         active = _effects.Count,
         retainedImpacts = _spareImpact is null ? 0 : 1,
         particles = _effects.Where(effect => effect.Playback is not null).SelectMany(effect => effect.Playback!.Particles)
-            .Select(particle => new { particle.BirthCount, particle.ActiveCount, particle.EmissionEnabled }).ToArray(),
+            .Select(particle => new { particle.BirthCount, particle.ActiveCount, particle.EmissionEnabled, particle.SimulatedSeconds }).ToArray(),
         projectileLaunches = _projectileLaunches,
         projectileHits = _projectileHits,
         projectileMisses = _projectileMisses,
@@ -54,7 +54,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         decals = _decals?.Observation,
         decalError = _decalError,
         sounds = _sounds.State,
-        unbound = "explosion-visuals-and-force,decal-projection-parity,casing-contact-audio,retail-physics-and-pixel-match"
+        unbound = "explosion-IPDS-projection,refraction-kernel,particle-motion-and-random-parity,decal-projection-parity,casing-contact-audio,retail-physics-and-pixel-match"
     };
 
     internal RuntimeNativeShotEffects(FalloutPluginStack records, RuntimeLiveContentSource content, float units,
@@ -69,6 +69,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
 
     internal void PrepareShell(FalloutWeaponPresentation weapon)
     {
+        if (weapon.IsThrownWeapon || weapon.IsMine) return;
         if (_shellPath == weapon.ShellModel) return;
         _shell ??= FalloutShellCasing.Read(_records);
         var prototype = weapon.ShellModel is { } path ? new RuntimeNativeNifPrototype(ReadBytes(path), _units) : null;
@@ -127,7 +128,15 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
             _projectilePrototype = new(ReadModel(path), _units);
             _projectilePath = path;
         }
-        return new(source, _projectilePrototype!.Instantiate(), _units, gravity, origin, direction, collisionMask, exclusions);
+        var flight = new RuntimeNativeProjectileFlight(source, _projectilePrototype!.Instantiate(), _units, gravity, origin, direction, collisionMask, exclusions);
+        if (source.Type == 2)
+        {
+            flight.ContactFriction = FalloutGameSettingFloats.Read(_records, "fGrenadeFriction");
+            flight.ContactRestitution = FalloutGameSettingFloats.Read(_records, "fGrenadeRestitution");
+            if (flight.ContactFriction < 0 || flight.ContactRestitution < 0)
+            { flight.Free(); throw new InvalidDataException("Source grenade contact settings are negative."); }
+        }
+        return flight;
     }
 
     internal void LaunchProjectile(RuntimeNativeProjectileFlight projectile)
@@ -242,7 +251,7 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private void ProjectileFinished(RuntimeNativeProjectileFlight projectile)
     {
         _projectiles.Remove(projectile);
-        if (projectile.Error is not null || projectile.Status is not ("hit" or "range-ended" or "stopped"))
+        if (projectile.Error is not null || projectile.Status is not ("hit" or "range-ended" or "stopped" or "detonated"))
             _projectileErrors++;
         else if (projectile.Contacts != 0) _projectileHits++;
         else _projectileMisses++;

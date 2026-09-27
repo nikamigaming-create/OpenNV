@@ -89,7 +89,8 @@ internal sealed partial class RuntimeNativeActorCombat
         _attackPath = SelectPath(directory, attack, attack + "_a", attack + "_b");
     }
 
-    private Transform3D MuzzlePose() => _enemyObject is not null ? _enemyObject.Socket(_skeleton, "ProjectileNode") :
+    private Transform3D MuzzlePose() => _enemyObject is not null ?
+        _enemyWeapon is { IsThrownWeapon: true } or { IsMine: true } ? _enemyObject.ReleaseTransform(_skeleton) : _enemyObject.Socket(_skeleton, "ProjectileNode") :
         _skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(_skeleton.BoneIndex(_embeddedMuzzle!.BoneName.ToString()));
 
     private Node3D MuzzleNode() => _embeddedMuzzle is not null ? _embeddedMuzzle :

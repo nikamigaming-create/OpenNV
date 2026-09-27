@@ -177,6 +177,12 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
         if (restore?.State.Ingestibles is { } ingestibles) _ingestibles.Restore(ingestibles);
+        _player.ConfigureExplosionExposure(() => _activeCell, amount =>
+        {
+            var resistance = Math.Min(_playerSkills.Value(20), FalloutGameSettingFloats.Read(pluginStack, "fPlayerMaxResistance"));
+            var absorbed = amount * (1 - resistance / 100f) * FalloutGameSettingFloats.Read(pluginStack, "fRadiationAccumulationRate");
+            _vitals.Publish(Vitals with { RadiationRads = Vitals.RadiationRads + absorbed });
+        }, _imageSpaceState, restore?.State.ExplosionExposure);
         _gameTime = gameTime;
         _skyLighting = skyLighting;
         _restoringEnteredStage = restore is not null;

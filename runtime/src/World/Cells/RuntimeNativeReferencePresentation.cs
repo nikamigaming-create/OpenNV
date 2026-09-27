@@ -73,10 +73,19 @@ internal partial class RuntimeNativeReferencePresentation : Node
     internal void Register(FalloutFormKey key, Node3D node)
     {
         _nodes.Add(key, node);
-        _fadeGeometry.Add(key, NodeTraversal.SelfAndDescendants<Node3D>(node)
-            .Where(child => child.GetMeta("opennv_nif_fade_node", false).AsBool())
-            .SelectMany(NodeTraversal.SelfAndDescendants<GeometryInstance3D>).Distinct().ToArray());
+        RefreshGeometry(key, node);
+        if (node.GetChildren().OfType<RuntimeNativeDestructible>().SingleOrDefault() is { } destruction)
+            destruction.ModelChanged = () => RefreshGeometry(key, node);
         GamebryoReferenceEnableRuntime.Apply(node, _world.IsEnabled(key));
+        PublishOpacity(key);
+    }
+
+    private void RefreshGeometry(FalloutFormKey key, Node3D node)
+    {
+        _fadeGeometry[key] = NodeTraversal.SelfAndDescendants<Node3D>(node)
+            .Where(child => child.GetMeta("opennv_nif_fade_node", false).AsBool())
+            .SelectMany(NodeTraversal.SelfAndDescendants<GeometryInstance3D>).Distinct().ToArray();
+        _publishedOpacity.Remove(key);
         PublishOpacity(key);
     }
 

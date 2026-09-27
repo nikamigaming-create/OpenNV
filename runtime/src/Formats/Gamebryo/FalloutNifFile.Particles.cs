@@ -112,6 +112,8 @@ internal sealed partial class FalloutNifFile
                 return header;
             case "BSParentVelocityModifier":
                 return new FalloutNifParticleParentVelocity(header, cursor.ReadFiniteSingle("parent velocity damping"));
+            case "BSWindModifier":
+                return new FalloutNifParticleWind(header, cursor.ReadFiniteSingle("wind strength"));
             default: throw new NotSupportedException($"Particle modifier {block.TypeName} is unbound.");
         }
     }
@@ -151,6 +153,8 @@ internal sealed record FalloutNifParticleData(FalloutNifBlock Block, ushort Maxi
     ushort Consistency, int Additional, bool HasRadii, ushort Active, bool HasSizes, bool HasRotations,
     bool HasAngles, bool HasAxes, bool HasTextureIndices, FalloutNifVector4[] Subtextures, bool HasRotationSpeeds) : FalloutNifObject(Block);
 internal record FalloutNifParticleModifier(FalloutNifBlock Block, string Name, uint Order, int Target, bool Active) : FalloutNifObject(Block);
+internal sealed record FalloutNifParticleWind(FalloutNifParticleModifier Header, float Strength)
+    : FalloutNifParticleModifier(Header.Block, Header.Name, Header.Order, Header.Target, Header.Active);
 internal record FalloutNifParticleEmitter(FalloutNifParticleModifier Header, float Speed, float SpeedVariation,
     float Declination, float DeclinationVariation, float PlanarAngle, float PlanarVariation, FalloutNifVector4 Color,
     float Radius, float RadiusVariation, float Life, float LifeVariation)
@@ -207,4 +211,7 @@ internal sealed record FalloutNifPathInterpolator(FalloutNifBlock Block, ushort 
 internal sealed record FalloutNifAlphaController(FalloutNifBlock Block, FalloutNifTimeController Time,
     int Interpolator) : FalloutNifObject(Block);
 internal sealed record FalloutNifEmittanceController(FalloutNifBlock Block, FalloutNifTimeController Time,
+    int Interpolator) : FalloutNifObject(Block);
+
+internal sealed record FalloutNifRefractionController(FalloutNifBlock Block, FalloutNifTimeController Time,
     int Interpolator) : FalloutNifObject(Block);

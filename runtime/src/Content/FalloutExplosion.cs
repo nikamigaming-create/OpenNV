@@ -10,14 +10,15 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     FalloutFormKey? PlacedImpactObject, FalloutFormKey? ObjectEffect, FalloutFormKey? ImageSpace,
     string? Model)
 {
-    // GECK flag IDs 1..6 are stored as bits 0..5 in EXPL DATA.
-    private const uint AlwaysWorldOrientation = 1;
-    private const uint KnockDownAlways = 1 << 1;
-    private const uint KnockDownByFormula = 1 << 2;
-    private const uint IgnoreLineOfSight = 1 << 3;
-    private const uint PushSourceReferenceOnly = 1 << 4;
-    private const uint IgnoreImageSpaceSwap = 1 << 5;
-    private const uint KnownFlags = AlwaysWorldOrientation | KnockDownAlways | KnockDownByFormula |
+    // Flag IDs are bit indices, not one-based positions. Bit zero is retained
+    // as the source's opaque flag; it must not shift the six declared flags.
+    private const uint AlwaysWorldOrientation = 1 << 1;
+    private const uint KnockDownAlways = 1 << 2;
+    private const uint KnockDownByFormula = 1 << 3;
+    private const uint IgnoreLineOfSight = 1 << 4;
+    private const uint PushSourceReferenceOnly = 1 << 5;
+    private const uint IgnoreImageSpaceSwap = 1 << 6;
+    private const uint KnownFlags = 1 | AlwaysWorldOrientation | KnockDownAlways | KnockDownByFormula |
         IgnoreLineOfSight | PushSourceReferenceOnly | IgnoreImageSpaceSwap;
 
     internal bool IgnoresLineOfSight => (Flags & IgnoreLineOfSight) != 0;
@@ -25,8 +26,8 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     internal bool KnocksDownAlways => (Flags & KnockDownAlways) != 0;
     internal bool KnocksDownByFormula => (Flags & KnockDownByFormula) != 0;
     internal bool IgnoresImageSpaceSwap => (Flags & IgnoreImageSpaceSwap) != 0;
-    internal bool HasUnpresentedVisuals => Light is not null || FirstSound is not null || SecondSound is not null ||
-        ImageSpace is not null || ImageSpaceRadius > 0 || Model is not null || ImpactDataSet is not null;
+    internal bool PushesSourceOnly => (Flags & PushSourceReferenceOnly) != 0;
+    internal bool HasUnpresentedVisuals => Light is not null || ImpactDataSet is not null;
 
     internal static FalloutExplosion Read(FalloutPluginStack records, FalloutFormKey key)
     {
@@ -89,12 +90,7 @@ internal sealed record FalloutExplosion(FalloutFormKey Form, float Force, float 
     {
         if ((Flags & ~KnownFlags) != 0)
             throw new NotSupportedException($"Explosion {Form} flags 0x{Flags:x8} need their source effect owner.");
-        if ((Flags & (KnockDownAlways | KnockDownByFormula)) != 0)
-            throw new NotSupportedException($"Explosion {Form} needs its source knockdown owner.");
-        if ((Flags & PushSourceReferenceOnly) != 0)
-            throw new NotSupportedException($"Explosion {Form} pushes only its source reference.");
-        if (Force != 0 || RadiationLevel != 0 || RadiationDissipationSeconds != 0 || RadiationRadius != 0 ||
-            PlacedImpactObject is not null || ObjectEffect is not null)
-            throw new NotSupportedException($"Explosion {Form} needs its force, radiation, placed-object or object-effect owner.");
+        if (PlacedImpactObject is not null || ObjectEffect is not null)
+            throw new NotSupportedException($"Explosion {Form} needs its placed-object or object-effect owner.");
     }
 }

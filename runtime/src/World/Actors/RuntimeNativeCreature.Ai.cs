@@ -81,6 +81,7 @@ internal sealed partial class RuntimeNativeCreature
         72 => Appearance.Creature == condition.FormArgument1 ? 1 : 0,
         91 => Activity.Alerted ? 1 : 0,
         101 => Activity.WeaponDrawn ? 1 : 0,
+        107 => Combat?.KnockedDown == true ? 2 : 0,
         244 => _aiState!.Restrained ? 1 : 0,
         286 => Activity.Sneaking ? 1 : 0,
         287 => Activity.Running ? 1 : 0,

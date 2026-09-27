@@ -37,12 +37,8 @@ internal static class GamebryoReferenceEnableRuntime
                 collision.SetMeta(CollisionLayerMeta, collision.CollisionLayer);
             if (!collision.HasMeta(CollisionMaskMeta))
                 collision.SetMeta(CollisionMaskMeta, collision.CollisionMask);
-            collision.CollisionLayer = enabled
-                ? collision.GetMeta(CollisionLayerMeta).AsUInt32()
-                : 0u;
-            collision.CollisionMask = enabled
-                ? collision.GetMeta(CollisionMaskMeta).AsUInt32()
-                : 0u;
+            SetCollisionFilter(collision, collision.GetMeta(CollisionLayerMeta).AsUInt32(),
+                collision.GetMeta(CollisionMaskMeta).AsUInt32());
         }
     }
 }

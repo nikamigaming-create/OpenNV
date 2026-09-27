@@ -186,7 +186,9 @@ internal partial class RuntimeNativePlayer
     private void ApplyProjectileFlightContact(FalloutWeaponShot shot, FalloutWeaponDamage damage,
         RuntimeNativeProjectileContact contact)
     {
+        if (shot.Projectile.ExplosionSource is not null) return;
         _damageError = null;
+        var destructible = contact.Collider is { } objectCollider ? RuntimeNativeDestructible.Find(objectCollider) : null;
         FalloutActorHit? actorHit = null;
         if (contact.Collider is { } collider && RuntimeNativeActorCombat.Find(collider) is { } combat)
         {
@@ -203,8 +205,7 @@ internal partial class RuntimeNativePlayer
             }
         }
 
-        if (contact.Collider is null || shot.ImpactDataSet is not { } impactSet) return;
-        TryShotEffect("flight-impact", () =>
+        if (contact.Collider is not null && shot.ImpactDataSet is { } impactSet) TryShotEffect("flight-impact", () =>
         {
             var material = actorHit is { } hit
                 ? checked((int)hit.ImpactMaterial)
@@ -212,11 +213,19 @@ internal partial class RuntimeNativePlayer
             if (FalloutImpact.Resolve(_presentationRecords!, impactSet, material) is { } impact)
                 _shotEffects!.Impact(impact, contact.Point, contact.Normal, contact.Direction, contact.Collider as Node3D);
         });
+        // Replacing a destruction-stage model can free the contact collider.
+        // Resolve the impact's source material before advancing that stage.
+        if (destructible is not null)
+        {
+            try { destructible.Hit(damage.Amount, _presentationRecords!.RuntimeFormKey(0x14)); }
+            catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_OBJECT_DAMAGE_UNBOUND " + error.Message); }
+        }
     }
 
     private void ApplyProjectileFlightDetonation(FalloutWeaponShot shot, FalloutWeaponDamage blastDamage, Vector3 point)
     {
         if (shot.Projectile.ExplosionSource is not { } explosion) return;
+        TryShotEffect("explosion", () => _shotEffects!.Explosion(explosion, point));
         _lastExplosion = RuntimeNativeExplosionCombat.Detonate(this, this, _presentationRecords!, explosion,
             blastDamage, point, CollisionMask | CollisionLayer, _configuration.World.GameUnitsToMeters,
             _presentationRecords!.RuntimeFormKey(0x14), _combatLevel!(), _combatGlobals!, this,
@@ -245,7 +254,8 @@ internal partial class RuntimeNativePlayer
             if (trace.Collider is not { } collider) continue;
             hitCount++;
             var combat = RuntimeNativeActorCombat.Find(collider);
-            if (combat is not null && !damageResolved)
+            var destructible = RuntimeNativeDestructible.Find(collider);
+            if ((combat is not null || destructible is not null) && !damageResolved)
             {
                 damageResolved = true;
                 try
@@ -261,8 +271,9 @@ internal partial class RuntimeNativePlayer
             }
 
             var actorDamage = combat is not null && resolvedDamage is not null;
+            var objectDamage = destructible is not null && resolvedDamage is not null;
             if (impactSet is not null) impactRequests++;
-            if (!actorDamage && impactSet is null) continue;
+            if (!actorDamage && !objectDamage && impactSet is null) continue;
             int? level = actorDamage ? _combatLevel!() : null;
             var globals = actorDamage ? _combatGlobals : null;
             if (actorDamage && globals is null)
@@ -274,7 +285,7 @@ internal partial class RuntimeNativePlayer
 
             if (trace.DamageDelaySeconds > 0)
             {
-                _pendingProjectileImpacts.Add(new(records, shot, actorDamage ? resolvedDamage : null,
+                _pendingProjectileImpacts.Add(new(records, shot, actorDamage || objectDamage ? resolvedDamage : null,
                     actorDamage ? combat : null, attacker, level, globals, trace));
                 pendingEvents++;
                 if (actorDamage) pendingActorHits++;
@@ -282,7 +293,7 @@ internal partial class RuntimeNativePlayer
             }
 
             var applied = CompleteProjectileImpact(trace, actorDamage ? combat : null,
-                actorDamage ? resolvedDamage : null, impactSet, records, shot, attacker, level, globals);
+                actorDamage || objectDamage ? resolvedDamage : null, impactSet, records, shot, attacker, level, globals);
             if (applied is { } hit) { lastDamage = hit; actorHitCount++; }
         }
         return new(hitCount, actorHitCount, pendingActorHits, pendingEvents, impactRequests, lastDamage);
@@ -293,6 +304,7 @@ internal partial class RuntimeNativePlayer
         FalloutFormKey attacker, int? level, FalloutGlobalState? globals)
     {
         FalloutActorHit? actorHit = null;
+        var destructible = trace.Collider is { } objectCollider ? RuntimeNativeDestructible.Find(objectCollider) : null;
         if (trace.Collider is { } collider && combat is not null && damage is { } resolvedDamage)
         {
             try
@@ -323,6 +335,11 @@ internal partial class RuntimeNativePlayer
                         trace.Direction, hitCollider as Node3D);
             });
         }
+        if (destructible is not null && damage is { } objectDamage)
+        {
+            try { destructible.Hit(objectDamage.Amount, attacker); }
+            catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_OBJECT_DAMAGE_UNBOUND " + error.Message); }
+        }
         return actorHit;
     }
 
@@ -352,7 +369,7 @@ internal partial class RuntimeNativePlayer
             var combat = pending.Combat is { } target && IsInstanceValid(target) && !target.IsQueuedForDeletion()
                 ? target
                 : null;
-            if (pending.Damage is not null && combat is null)
+            if (pending.Damage is not null && combat is null && RuntimeNativeDestructible.Find(collider) is null)
             {
                 _damageError = "Hitscan actor combat owner left the scene before source impact time.";
                 GD.PushError($"OPENNV_HITSCAN_TARGET_UNBOUND projectile={pending.Shot.Projectile.Form} reference={pending.Trace.Reference} {_damageError}");

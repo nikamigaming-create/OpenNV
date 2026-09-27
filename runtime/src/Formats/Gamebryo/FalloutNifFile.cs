@@ -149,7 +149,7 @@ internal sealed partial class FalloutNifFile
         var cursor = BlockCursor(block);
         FalloutNifObject result = block.TypeName switch
         {
-            "NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode" or "BSRangeNode" or "BSBlastNode" or "BSDamageStage" or "NiBillboardNode" or "BSValueNode" or "BSMasterParticleSystem" => ReadNode(block, ref cursor),
+            "NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode" or "BSRangeNode" or "BSBlastNode" or "BSDamageStage" or "NiBillboardNode" or "BSValueNode" or "BSMasterParticleSystem" or "BSOrderedNode" => ReadNode(block, ref cursor),
             "NiAmbientLight" => ReadAmbientLight(block, ref cursor),
             "NiPointLight" => ReadPointLight(block, ref cursor),
             "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape" => ReadGeometry(block, ref cursor),
@@ -158,7 +158,7 @@ internal sealed partial class FalloutNifFile
             "NiPSysAgeDeathModifier" or "NiPSysMeshEmitter" or "NiPSysBoxEmitter" or "NiPSysCylinderEmitter" or "NiPSysSphereEmitter" or
                 "NiPSysSpawnModifier" or "NiPSysGrowFadeModifier" or "BSPSysSimpleColorModifier" or
                 "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
-                "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" => ReadParticleModifier(block, ref cursor),
+                "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" or "BSWindModifier" => ReadParticleModifier(block, ref cursor),
             "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
@@ -193,6 +193,8 @@ internal sealed partial class FalloutNifFile
             "NiAlphaController" => new FalloutNifAlphaController(block, ReadTimeController(ref cursor, "alpha controller"), ReadReference(ref cursor, "alpha interpolator")),
             "BSMaterialEmittanceMultController" => new FalloutNifEmittanceController(block,
                 ReadTimeController(ref cursor, "emittance controller"), ReadReference(ref cursor, "emittance interpolator")),
+            "BSRefractionStrengthController" => new FalloutNifRefractionController(block,
+                ReadTimeController(ref cursor, "refraction controller"), ReadReference(ref cursor, "refraction interpolator")),
             "NiTransformController" => ReadTransformController(block, ref cursor),
             "NiFloatExtraDataController" => new FalloutNifFloatExtraDataController(block,
                 ReadTimeController(ref cursor, "float extra-data controller"),
@@ -454,9 +456,12 @@ internal sealed partial class FalloutNifFile
             ? new FalloutNifNodeValue(cursor.ReadUInt32("node value"), cursor.ReadByte("value node flags")) : null;
         var master = block.TypeName == "BSMasterParticleSystem"
             ? new FalloutNifParticleMaster(cursor.ReadUInt16("master emitter capacity"), ReadReferences(ref cursor, "master particle systems")) : null;
+        var ordered = block.TypeName == "BSOrderedNode"
+            ? new FalloutNifSortBound(ReadVector(ref cursor, "alpha sort center"), cursor.ReadFiniteSingle("alpha sort radius"), cursor.ReadBoolean("static alpha sort bound")) : null;
+        if (ordered is { Radius: < 0 }) throw new InvalidDataException("Alpha sort radius is negative.");
         return new FalloutNifNode(block, av.Name, av.Transform, av.Flags, av.Controller,
             av.ExtraData, av.Properties, av.CollisionObject, children, effects)
-        { MultiBound = bound, Range = range, Billboard = billboard, Value = value, ParticleMaster = master };
+        { MultiBound = bound, Range = range, Billboard = billboard, Value = value, ParticleMaster = master, SortBound = ordered };
     }
 
     private FalloutNifAmbientLight ReadAmbientLight(FalloutNifBlock block, ref NifCursor cursor)
@@ -1777,8 +1782,10 @@ internal sealed record FalloutNifNode(
     public ushort? Billboard { get; init; }
     public FalloutNifNodeValue? Value { get; init; }
     public FalloutNifParticleMaster? ParticleMaster { get; init; }
+    public FalloutNifSortBound? SortBound { get; init; }
 }
 
+internal sealed record FalloutNifSortBound(FalloutNifVector3 Center, float Radius, bool Static);
 internal sealed record FalloutNifNodeRange(byte Minimum, byte Maximum, byte Current);
 internal sealed record FalloutNifNodeValue(uint Value, byte Flags);
 internal sealed record FalloutNifParticleMaster(ushort MaximumEmitters, int[] ParticleSystems);
