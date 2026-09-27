@@ -212,17 +212,21 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float EvaluateRecipeCondition(FalloutCondition condition)
     {
         if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
-        if (condition.RunOn != 0)
+        if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
+        if (condition.Function == 74)
+            return (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1);
+        if (condition.Function == 492 && condition.RunOn == 2)
+            return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
+        if (FalloutInventoryConditions.Evaluate(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory) return inventory;
+        if (!FalloutInventoryConditions.TargetsPlayer(_pluginStack, condition))
             throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} selects run-on actor {condition.RunOn}.");
         return condition.Function switch
         {
             14 => _playerSkills.Value(checked((int)condition.Argument1)),
-            47 => _inventory.Item(condition.FormArgument1)?.Count ?? 0,
-            56 or 58 or 59 or 79 or 420 or 421 or 546 => _quests.Evaluate(condition),
+            67 => FalloutDialogueConditions.InInteriorCell(_pluginStack, _activeCell, condition.FormArgument1),
             69 => condition.FormArgument1 == _pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId) ? 1 : 0,
             70 when condition.Argument1 <= 1 => _character.Female == (condition.Argument1 == 1) ? 1 : 0,
             72 => condition.FormArgument1 == _raceSexContract.Player ? 1 : 0,
-            74 => (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1),
             _ => throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} is unbound."),
         };
     }

@@ -188,6 +188,20 @@ BinaryPrimitives.WriteUInt32LittleEndian(integerInitializer.AsSpan(4), 0xff12a0e
 var integerDefaults = FalloutExecutableStringTable.ReadIntegerInitializers(integerInitializer,
     address => address == 0x100 ? "iArbitraryInteger" : null, address => address == 0x300);
 Require(integerDefaults["iArbitraryInteger"] == 0xff12a0e7, "Integer default lost its immediate source bits.");
+var smallInteger = new byte[20];
+new byte[] { 0x55, 0x8b, 0xec, 0x6a, 5, 0x68 }.CopyTo(smallInteger, 0);
+BinaryPrimitives.WriteUInt32LittleEndian(smallInteger.AsSpan(6), 0x100);
+smallInteger[10] = 0xb9;
+BinaryPrimitives.WriteUInt32LittleEndian(smallInteger.AsSpan(11), 0x300);
+smallInteger[15] = 0xe8;
+Require(FalloutExecutableStringTable.ReadIntegerInitializers(smallInteger, _ => "iSmall", _ => true)["iSmall"] == 5,
+    "Small integer constructor argument was omitted.");
+smallInteger[4] = 0xff;
+Require(FalloutExecutableStringTable.ReadIntegerInitializers(smallInteger, _ => "iSmall", _ => true)["iSmall"] == uint.MaxValue,
+    "Small integer constructor argument was not sign-extended.");
+Require(FalloutExecutableStringTable.ReadIntegerInitializers(smallInteger.AsSpan(0, 19), _ => "iSmall", _ => true).Count == 0 &&
+    FalloutExecutableStringTable.ReadIntegerInitializers(smallInteger, _ => "iSmall", _ => false).Count == 0,
+    "Truncated or non-object small integer initializers were admitted.");
 Require(FalloutExecutableStringTable.ReadIntegerInitializers(integerInitializer.AsSpan(0, 22), _ => "iProbe", _ => true).Count == 0 &&
     FalloutExecutableStringTable.ReadIntegerInitializers(integerInitializer, _ => "iProbe", _ => false).Count == 0,
     "Truncated or non-object integer initializers were admitted.");

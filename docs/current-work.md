@@ -8,8 +8,9 @@ VR presentation is deferred from this immediate work order; flat/OpenXR retain
 one authoritative state. Follow [flat gameplay work](flat-gameplay-plan.md) and
 [implementation plan](implementation-plan.md). Work without subagents.
 
-The current block is `codex/actor-combat-recovery`, based on main `ce50bff`.
-It repairs compiled local admission, unarmed NPC attacks, squat creature motion,
+The current block is `codex/world-script-interactions`, based on main `04101db`.
+The preceding actor work is merged through PR #52 with successful CI. It repairs
+compiled local admission, unarmed NPC attacks, squat creature motion,
 source-body detection and player-only acquisition/assistance. New deaths reach delayed, killer-filtered OnDeath
 script blocks with pending time in v19 saves. Existing v18 and earlier supported
 saves remain readable; historical quest outcomes are not fabricated on restore.
@@ -23,9 +24,19 @@ telemetry records candidate eligibility and visibility. Native event checks upda
 variable once after the dying delay and speech completion. Synthetic cold-state
 checks retain the remaining delay and prevent duplicate death dispatch. These
 are integration fixes, not a completed encounter/campaign or retail-parity claim.
-The updated full repository checks pass, including Release/Debug, formatting,
-contract probes, launcher tests and native Godot loading. Checked publication
-is the remaining step for this block.
+The full repository checks and CI passed for that actor block.
+
+The active changes reject missing crafting ingredients atomically, evaluate
+player-targeted recipe note/perk/equipment conditions, and provide source-based
+quantity selection for container transfers. The native interaction check passes
+all 127 selected source note/perk conditions, modal cancellation, partial counts,
+stale choices and cold inventory restoration. The quantity dialog was rendered
+and inspected; its temporary image was deleted. Reference scripts now read live
+three-dimensional game-unit distance and the shared clock. Synthetic checks
+pass movement, fractional time, unrelated-space rejection and crafting rollback.
+The full repository checks pass for this block, including Release/Debug,
+formatting, contract probes, launcher tests and native Godot loading.
+Checked publication remains.
 
 Private selected diagnostics are `tmp/actor-detection-after.log`,
 `tmp/unarmed-retaliation.log`, `tmp/creature-retaliation.log`,
@@ -34,14 +45,16 @@ Private selected diagnostics are `tmp/actor-detection-after.log`,
 The current selected graph inventory is `tmp/flat-gameplay-corpus-20260927-final`:
 628,395 winning records, with no remaining compiled-local admission failures.
 The 73 source-body parse failures remain visible and are not execution coverage.
-Runtime script failures remain explicit, including missing GetDistance,
-playGroup, GetCurrentTime and other reached commands. Parsing and record counts
-are not execution coverage.
+Runtime script failures remain explicit, including playGroup and other reached
+commands. Scheduled packages and several procedure/event owners remain absent.
+Parsing and record counts are not execution coverage. Active interaction
+diagnostics are `tmp/world-interactions-contracts.log`,
+`tmp/world-interactions-ui.log`, and `tmp/quantity-visual.log`.
 
 ## Next executable work
 
-Finish this block's publication. Then fix the reached source script/package
-failures and quantity-aware looting/recipe requirements through existing owners. Continue the flat work
+Finish this block's publication. Then fix source schedule selection, package
+execution and remaining player dependencies in resident movement. Continue the flat work
 order through weapon exhaustion/reselection, essential recovery, hit events and
 XP, source quest/package failures, all tutorial branches and connected travel.
 Use the existing lab and bot for reproduction; do not add a second framework.

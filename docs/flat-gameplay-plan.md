@@ -92,3 +92,21 @@ open. Native component runs exercise detection, wall refusal, unarmed NPC and
 creature retaliation, autonomous NPC/creature conflict and allied assistance
 without player input, delayed quest updates and cold event state. Complete
 ordinary encounters and campaign progression remain required work.
+
+## September 27 interaction corrections
+
+Container rows now transfer one item below the owned quantity threshold and
+open `quantity_menu.xml` for larger stacks. Cancel preserves state, confirmation
+rechecks availability, and shared inventory retains partial counts through
+restore. Native checks and a rendered dialog cover this bounded behavior;
+ammo/currency policy, theft and complete ordinary looting remain open.
+
+Crafting rejects absent as well as insufficient ingredients before any output.
+Duplicate requirements are aggregated and failed output resolution restores the
+entire transaction. Recipe note/perk/equipment queries accept the source's
+explicit player targets; map and interior-cell conditions use their existing
+world owners. All 127 selected source note/perk conditions respond to changing
+ownership in a native component check. GetDeadCount and complete recipe/quest
+chains remain open. Reference-script GetDistance uses live three-dimensional
+game-unit positions, and GetCurrentTime uses shared GameHour; these operations
+do not themselves complete scripts that reach another missing command.

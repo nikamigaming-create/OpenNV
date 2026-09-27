@@ -37,17 +37,25 @@ internal static partial class FalloutExecutableStringTable
         Func<uint, string?> literal, Func<uint, bool> writableObject)
     {
         var result = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
-        for (var at = 0; at <= code.Length - 23; ++at)
+        for (var at = 0; at <= code.Length - 20; ++at)
         {
             var candidate = code[at..];
             // Immediate DWORD, owned name, global receiver, constructor call.
             // The value is an integer payload, not a pointer to a literal.
-            if (!candidate[..4].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x68 }) ||
-                candidate[8] != 0x68 || candidate[13] != 0xb9 || candidate[18] != 0xe8 ||
-                !writableObject(U32(candidate, 14))) continue;
-            var name = literal(U32(candidate, 9));
+            if (!candidate[..3].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec })) continue;
+            uint value; int nameAt, objectAt;
+            if (candidate.Length >= 23 && candidate[3] == 0x68 && candidate[8] == 0x68 &&
+                candidate[13] == 0xb9 && candidate[18] == 0xe8)
+                (value, nameAt, objectAt) = (U32(candidate, 4), 9, 14);
+            // Small integer arguments use x86 PUSH imm8, sign-extended to the
+            // same DWORD constructor payload. Keep name and receiver checks.
+            else if (candidate[3] == 0x6a && candidate[5] == 0x68 && candidate[10] == 0xb9 && candidate[15] == 0xe8)
+                (value, nameAt, objectAt) = (unchecked((uint)(sbyte)candidate[4]), 6, 11);
+            else continue;
+            if (!writableObject(U32(candidate, objectAt))) continue;
+            var name = literal(U32(candidate, nameAt));
             if (name is null || !Regex.IsMatch(name, @"^i[A-Z][A-Za-z0-9_]+$", RegexOptions.CultureInvariant)) continue;
-            if (!result.TryAdd(name, U32(candidate, 4)))
+            if (!result.TryAdd(name, value))
                 throw new InvalidDataException($"Multiple source initializers declare {name}.");
         }
         return result;

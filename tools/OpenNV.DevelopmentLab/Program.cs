@@ -28,7 +28,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "classic-movement <Fallout 1 installation>\n" +
         "script <installation-or-source-stack> <SCPT editor ID> (or --contains <source text>)\n" +
         "record <installation-or-source-stack> <signature> <editor ID or runtime hex ID> [...] (or --contains <EDID text>)\n" +
-        "settings <installation-or-source-stack> <float-setting name fragment> [...]\n" +
+        "settings <installation-or-source-stack> <numeric-setting name fragment> [...]\n" +
         "dialogue <installation-or-source-stack> <quest editor ID>\n" +
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
@@ -223,11 +223,13 @@ if (args[0] == "dialogue")
 if (args[0] == "settings")
 {
     var defaults = FalloutExecutableStringTable.ReadFloatDefaults(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"));
-    var names = defaults.Keys.Concat(records.EffectiveRecords("GMST").SelectMany(record => record.ReadSubrecords()
+    var integers = FalloutExecutableStringTable.ReadIntegerDefaults(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"));
+    var names = defaults.Keys.Concat(integers.Keys).Concat(records.EffectiveRecords("GMST").SelectMany(record => record.ReadSubrecords()
         .Where(field => field.Signature == "EDID").Select(field => FalloutDialogueTopic.Text(field.Data.Span))))
-        .Where(name => name.StartsWith('f') && args[2..].Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
+        .Where(name => (name.StartsWith('f') || name.StartsWith('i')) && args[2..].Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
         .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase);
-    foreach (var name in names) Console.WriteLine(JsonSerializer.Serialize(new { name, value = FalloutGameSettingFloats.Read(records, name) }, json));
+    foreach (var name in names) Console.WriteLine(JsonSerializer.Serialize(new { name,
+        value = name.StartsWith('i') ? (double)FalloutGameSettingIntegers.Read(records, name) : FalloutGameSettingFloats.Read(records, name) }, json));
     return 0;
 }
 if (args[0] == "record")

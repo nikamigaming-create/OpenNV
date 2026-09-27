@@ -54,6 +54,29 @@ try
     Reject(() => FalloutGameModeProgram.Read("ref owner\nbegin GameMode\nset owner to unsupported[index]\nend"));
     var firstCell = FalloutCellSceneReader.Read(records, Key(0x800));
     var secondCell = FalloutCellSceneReader.Read(records, Key(0x801));
+    using (var queryWorld = new FalloutReferenceWorld(records))
+    {
+        queryWorld.LoadCell(firstCell); queryWorld.LoadCell(secondCell);
+        var clockGlobals = new OpenNV.Runtime.Gameplay.State.FalloutGlobalState(
+            [new(Key(0x38), "GameHour", (byte)'s', 12.5f, "synthetic")]);
+        var playerPlacement = new FalloutReferencePlacement(Key(0x800), [3, 4, 12], [0, 0, 0]);
+        var queryScripts = new FalloutReferenceScripts(records, queryWorld, new(records),
+            new((_, _) => false, _ => { }, Globals: clockGlobals,
+                Distance: (a, b) => queryWorld.Distance(a, b, playerPlacement, .5f)));
+        var queries = FalloutGameModeProgram.Read("begin GameMode\nset count to GetDistance player\nset timer to GetCurrentTime\nend");
+        void Query() => queryScripts.ExecuteProgram(records.GetEffective(Key(0x900)), records.GetEffective(Key(0x500)), queries, 0);
+        Query();
+        Require(queryWorld.Get(Key(0x900)).Read(1) == 13 && queryWorld.Get(Key(0x900)).Read(2) == 12.5,
+            "Source distance or time query ignored three-dimensional game units or fractional clock time.");
+        queryWorld.SetPlacement(Key(0x900), new(Key(0x800), [3, 4, 0], [0, 0, 0]));
+        clockGlobals.Set(Key(0x38), 6.75f); Query();
+        Require(queryWorld.Get(Key(0x900)).Read(1) == 12 && queryWorld.Get(Key(0x900)).Read(2) == 6.75,
+            "Script spatial/clock query retained stale state.");
+        queryWorld.Get(Key(0x900)).CaptureEngagement = () => new(Key(0x14), Position: [1.5f, 6, -2]);
+        Query();
+        Require(queryWorld.Get(Key(0x900)).Read(1) == 0, "Distance ignored live actor motion or converted the source axes twice.");
+        Reject(() => queryWorld.Distance(Key(0x900), Key(0x902), null, .5f));
+    }
     using var world = new FalloutReferenceWorld(records);
     var first = world.LoadCell(firstCell);
     var peer = world.LoadCell(secondCell).Single();

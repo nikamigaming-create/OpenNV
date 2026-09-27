@@ -19,7 +19,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<string, bool>? IsPlayerTagSkill = null, FalloutGlobalState? Globals = null,
     Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>>? Command = null,
     Func<FalloutFormKey, bool>? IsInCombat = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null, FalloutScriptEvents? Events = null);
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null, FalloutScriptEvents? Events = null,
+    Func<FalloutFormKey, FalloutFormKey, float>? Distance = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
     IReadOnlySet<FalloutFormKey>? TriggerReferences = null);
@@ -351,6 +352,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     return (host.IsInSameCell ?? throw new NotSupportedException("GetInSameCell has no spatial owner."))
                         (parts.Length == 1 ? source : Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0;
                 });
+            if (parts.Length <= 2 && operation == "getdistance")
+                return new([FalloutScriptArgumentKind.Identifier], arguments =>
+                    (host.Distance ?? throw new NotSupportedException("GetDistance has no spatial owner."))
+                    (Target(), Reference(arguments[0].Identifier!)));
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreCrime", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IgnoresCrime(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreFriendlyHits", StringComparison.OrdinalIgnoreCase))
@@ -400,6 +405,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     throw new NotSupportedException("GetButtonPressed has no message result owner."))(
                         CallingReference() is { } caller && records.RuntimeFormId(caller) != 0x14 ? caller : bindings.Source)),
                 "getsecondspassed" => new([], _ => seconds),
+                "getcurrenttime" => new([], _ => (host.Globals ??
+                    throw new NotSupportedException("GetCurrentTime has no simulation clock."))
+                    .Get(FalloutGameTimeBindings.Read(records).Hour)),
                 "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!) ? 1 : 0),
                 "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.Stage(Quest(arguments[0].Identifier!))),
