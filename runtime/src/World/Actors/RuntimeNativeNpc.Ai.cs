@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -10,6 +11,11 @@ internal partial class RuntimeNativeNpc
     private FalloutPluginStack? _aiStack;
     private FalloutActorTemplateSelection? _templates;
     private FalloutQuestState? _questState;
+    private FalloutGameTime? _aiClock;
+    private FalloutGlobalState? _aiGlobals;
+    private FalloutScheduleTime? _aiScheduleTime;
+    private double _aiPollRemaining;
+    private FalloutFormKey? _failedPackage;
     private FalloutCellScene? _aiCell;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
@@ -118,18 +124,22 @@ internal partial class RuntimeNativeNpc
             error = _packageIdleError,
         },
         error = _aiError,
+        scheduleTime = _aiScheduleTime,
+        evaluationPolicy = "quest-activity-hour-changes-and-ten-second-poll;retail-cadence-unmatched",
         unbound = new[] { "retail-navigation-timing", "furniture-entry-script-procedure-code", "furniture-idle-variations", "idle-internal-loop-counts", "head-eye-aiming", "actor-save-restoration", "combat-event-dispatch" },
     };
 
     internal void ConfigureAi(FalloutPluginStack stack, FalloutQuestState quests, FalloutCellScene cell,
         Func<FalloutPlacedReference, Transform3D> referenceTransform,
-        Func<IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null)
+        Func<IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null,
+        FalloutGameTime? clock = null, FalloutGlobalState? globals = null)
     {
         _aiStack = stack;
         _idleConditions = new(stack);
         _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc, _templates);
         _liveFactions = factions;
         _questState = quests;
+        _aiClock = clock; _aiGlobals = globals;
         _aiCell = cell;
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
@@ -195,15 +205,26 @@ internal partial class RuntimeNativeNpc
         return remaining;
     }
 
-    private void AdvanceAi(bool initializing = false)
+    private void AdvanceAi(bool initializing = false, double delta = 0)
     {
-        if (_aiStack is null || _questState is null || _aiError is not null ||
-            _aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision) return;
+        if (_aiStack is null || _questState is null) return;
+        _aiPollRemaining -= delta;
+        var scheduleTime = _aiClock?.ScheduleTime();
+        if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
+        if (_aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision &&
+            _aiScheduleTime == scheduleTime && _aiPollRemaining > 0) return;
         _aiQuestRevision = _questState.Revision;
         _aiActivityRevision = Activity.Revision;
+        _aiScheduleTime = scheduleTime;
+        _aiPollRemaining = 10;
+        FalloutPluginRecord? selected = null;
         try
         {
-            var selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates);
+            selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock);
+            if (_aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
+            // A failed procedure cannot freeze a later eligible package. Event
+            // errors retain their separate exactly-once failure latch.
+            _aiError = null; _failedPackage = null;
             if (_aiPackage?.FormKey == selected?.FormKey) return;
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
             if (_aiPackage is not null)
@@ -259,13 +280,17 @@ internal partial class RuntimeNativeNpc
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
+            var changed = _aiError != error.Message;
             _aiError = error.Message;
-            GD.PushError($"OPENNV_NATIVE_AI_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
+            _failedPackage = selected?.FormKey;
+            if (changed) GD.PushError($"OPENNV_NATIVE_AI_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
         }
     }
 
     private float EvaluateAiCondition(FalloutCondition condition) => condition.Function switch
     {
+        18 => (_aiClock ?? throw new NotSupportedException("AI time query has no simulation clock.")).Hour,
+        74 => (_aiGlobals ?? throw new NotSupportedException("AI global query has no state owner.")).Get(condition.FormArgument1),
         25 => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
         58 or 59 or 79 or 546 => _questState!.Evaluate(condition),
         63 => Activity.Attacked ? 1 : 0,

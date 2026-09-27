@@ -4,6 +4,7 @@
     <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutPackageSchedule.cs" Link="FalloutPackageSchedule.cs" />
     <Compile Include="../../runtime/src/Gameplay/State/FalloutGlobalState.cs" Link="FalloutGlobalState.cs" />
     <Compile Include="../../runtime/src/Gameplay/State/FalloutGameTime.cs" Link="FalloutGameTime.cs" />
     <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />

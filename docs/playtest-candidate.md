@@ -27,6 +27,15 @@ A loading message appears before scene construction. Zero health pauses play
 and offers an earlier save; it cannot silently resume or consume healing items.
 Existing saved choices remain intact when the new encounter-zone state is added.
 
+The September 27 candidate adds autonomous actor acquisition/assistance, unarmed
+NPC attacks, squat-creature movement, saved-clock package schedules, delayed
+quest death events, partial-stack loot selection and recipe ownership checks.
+It repairs Continue for older saves affected by a quest-script admission
+regression. In the genuine copied Primm save, a hostile fires without player
+provocation, ED-E responds and two patrols advance. This remains a bounded
+playtest; sandbox routines, several creature procedures and reached quest/mod
+commands still need implementation.
+
 ## What to test
 
 - Continue or complete the opening; talk to Doc and check that he turns toward

@@ -86,6 +86,7 @@ internal static class QuestScriptExecutionProbe
             Require(JsonSerializer.Serialize(commaCold.Capture()) == JsonSerializer.Serialize(commaScripts.Capture()),
                 "Migrated script owners did not survive a current-version cold restore.");
             NumericColdState(directory);
+            BranchAdmissionColdState(directory);
             File.WriteAllBytes(Path.Combine(directory, "Bad.esm"), Header().Concat(Quest())
                 .Concat(Script("set result to 99\nUnknownReachedCommand", [1, 2, 3])).ToArray());
             using var bad = FalloutPluginStack.Load(directory, ["Bad.esm"]);
@@ -102,10 +103,42 @@ internal static class QuestScriptExecutionProbe
         }
         finally
         {
-            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Numeric.esm", "Strings.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
+            foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Numeric.esm", "Strings.esm", "Branches.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
             Directory.Delete(directory);
         }
         Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true");
+    }
+
+    private static void BranchAdmissionColdState(string directory)
+    {
+        File.WriteAllBytes(Path.Combine(directory, "Branches.esm"), Header().Concat(Quest())
+            .Concat(Script("if active == 0\nset result to 7\nelse UnboundTrailingText\nset result to 9\nendif", [1, 2, 3])).ToArray());
+        using var records = FalloutPluginStack.Load(directory, ["Branches.esm"]);
+        var quest = new FalloutFormKey("Branches.esm", 0x100);
+        var state = new FalloutQuestState(records);
+        state.SetVariable(quest, 2, 123.5);
+        state.SetRunning(quest, true);
+        FalloutQuestScripts Scripts() => new(records, state, new HashSet<FalloutFormKey>(),
+            new FalloutPlayerInventory(), defaultProcessingDelay: 1);
+        var initial = Scripts().Capture();
+        var legacy = initial with { ParserVersion = 1 };
+        var restored = Scripts(); restored.Restore(legacy);
+        Require(restored.Capture().Instances.SequenceEqual(legacy.Instances) && state.Variable(quest, 2) == 123.5,
+            "Branch parser changes rejected or reset an existing quest script owner.");
+        foreach (var version in new[] { 3, 4 })
+        {
+            var newlyAdmitted = Scripts();
+            newlyAdmitted.Restore(initial with { ParserVersion = version, Instances = [] });
+            Require(newlyAdmitted.Capture().Instances.SequenceEqual(initial.Instances),
+                "Strict branch parser migration fabricated prior execution.");
+        }
+        Reject(() => Scripts().Restore(initial with { Instances = [] }));
+        restored.Advance(1);
+        Require(state.Variable(quest, 3) == 7 && restored.Capture().Instances.Single().Error is not null,
+            "Unbound trailing branch text silently executed or discarded the preceding effects.");
+        var cold = Scripts(); cold.Restore(restored.Capture()); cold.Advance(10);
+        Require(cold.Capture().Instances.SequenceEqual(restored.Capture().Instances) && state.Variable(quest, 3) == 7,
+            "Failed branch syntax replayed its prefix after cold restoration.");
     }
 
     private static void NumericColdState(string directory)

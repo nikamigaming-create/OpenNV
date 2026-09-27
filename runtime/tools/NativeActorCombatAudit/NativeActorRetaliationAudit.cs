@@ -10,7 +10,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorCombatAudit
 {
     private async Task ExerciseRetaliation(FalloutPluginStack records, RuntimeLiveContentSource content,
-        FalloutGlobalState globals, string actorHex, string targetHex, bool unarmed, bool ambient)
+        FalloutGlobalState globals, string actorHex, string targetHex, bool unarmed, bool ambient, bool packageMotion = false)
     {
         using var world = new FalloutReferenceWorld(records);
         var key = records.RuntimeFormKey(Convert.ToUInt32(actorHex, 16));
@@ -29,14 +29,41 @@ public partial class NativeActorCombatAudit
         var floorShape = new CollisionShape3D { Shape = new BoxShape3D { Size = new(40, .1f, 40) } };
         floorShape.SetMeta("opennv_havok_material", 0u);
         floor.AddChild(floorShape); AddChild(floor);
+        var collisionResident = true;
         var context = new NativeActorCombatContext(() => player, () => new(1, 200, 200, 70, 70, 0, 100),
             (_, _) => throw new InvalidOperationException("Retaliation fixture attacked the uninvolved player."),
-            (_, to) => [to], _ => true, () => 1, globals, .4f, 9.81f);
+            (_, to) => [to], _ => collisionResident, () => 1, globals, .4f, 9.81f);
         try
         {
             var attacker = Create(key, Vector3.Zero);
             var target = Create(targetKey, new(0, 0, -1.5f));
             await Frames(3);
+            if (packageMotion)
+            {
+                if (player is not null || !attacker.PackageMovementReady)
+                    throw new InvalidOperationException("Resident package movement still requires a player object.");
+                collisionResident = false;
+                if (attacker.PackageMovementReady) throw new InvalidOperationException("Unloaded collision admitted package movement.");
+                collisionResident = true;
+                var state = world.Get(key);
+                state.Enabled = false;
+                if (attacker.PackageMovementReady) throw new InvalidOperationException("Disabled actor admitted package movement.");
+                state.Enabled = true;
+                var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(state.Base), 32, state.Templates);
+                var link = owner.ReadSubrecords().First(field => field.Signature == "PKID");
+                var package = records.GetEffective(owner.Plugin.AdjustFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(link.Data.Span)));
+                var start = actors[0].GlobalPosition;
+                var destination = start + new Vector3(-3, 0, 0);
+                for (var frame = 0; frame < 240; frame++)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    attacker.AdvancePackageMotion(package, destination, .25f, false, 1d / 60);
+                }
+                if (actors[0].GlobalPosition.DistanceTo(start) < .5f || attacker.PackageMotion is null)
+                    throw new InvalidOperationException("Playerless package motion did not advance source root motion and native collision.");
+                GD.Print($"OPENNV_NATIVE_PLAYERLESS_PACKAGE_PASS actor={key} package={package.FormKey} moved={actors[0].GlobalPosition.DistanceTo(start):R} sourceAnimation=true nativeCollision=true residencyGuard=true disabledGuard=true playerPresent=false fixture=synthetic-floor");
+                return;
+            }
             var before = world.Health(targetKey).Current;
             if (ambient)
             {

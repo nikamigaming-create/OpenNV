@@ -80,6 +80,7 @@ internal partial class RuntimeNativeNpc
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
         {
             Combat.StopPackageMotion(); _aiError = error.Message;
+            _failedPackage = _aiPackage?.FormKey;
             GD.PushError($"OPENNV_NATIVE_PATROL_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }
     }

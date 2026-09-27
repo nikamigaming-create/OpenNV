@@ -203,7 +203,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
     {
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true) return;
         RestoreAuthoredHeadPose();
-        if (_conversationTarget is null) AdvanceAi();
+        if (_conversationTarget is null) AdvanceAi(delta: delta);
         AdvanceConversationFacing((float)delta);
         if ((_animation is null && _baseAnimation is null && _headTargets is null) || AnimationError is not null) return;
         try

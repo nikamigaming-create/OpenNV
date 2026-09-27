@@ -63,7 +63,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 4;
+    internal const int ParserVersion = 5;
     private readonly IReadOnlyList<string[]> _lines;
     private readonly Dictionary<int, int> _loopEnds = [];
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
@@ -145,8 +145,11 @@ internal sealed class FalloutGameModeProgram
             }
             if (command is "else" or "elseif")
             {
-                if (!nesting.TryPop(out var parent) || parent.Kind != "if" || parent.Else || command == "else" && tokens.Length != 1)
+                if (!nesting.TryPop(out var parent) || parent.Kind != "if" || parent.Else)
                     throw new InvalidDataException("Unmatched or repeated script branch.");
+                // Owned scripts contain text after Else. Preserve the program
+                // and its saved owner; the executor still rejects that syntax
+                // when reached until its compiled behavior is understood.
                 nesting.Push(("if", command == "else"));
             }
             if (command is "break" or "continue" && (tokens.Length != 1 || !nesting.Any(frame => frame.Kind == "while")))
@@ -412,6 +415,9 @@ internal sealed class FalloutGameModeProgram
     internal static bool WasRejectedByParser(string source, int version)
     {
         if (version == 0 && HasArgumentSeparator(source)) return true;
+        if (version is 3 or 4 && source.Split('\n').Select(line => StripComment(line).Trim())
+            .Where(line => line.Length != 0).Select(Tokens)
+            .Any(tokens => tokens.Length > 1 && tokens[0].Equals("else", StringComparison.OrdinalIgnoreCase))) return true;
         if (version < 4 && source.Split('\n').Select(line => StripComment(line).Trim())
             .Where(line => line.Length != 0).Any(line => Tokens(line).Contains("$"))) return true;
         if (version < 3 && source.Split('\n').Select(line => StripComment(line).Trim())

@@ -6,6 +6,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
+if (args is ["--audit-quest-save", var saveRoot, var campaignSave])
+{
+    QuestScriptSaveProbe.Run(saveRoot, campaignSave);
+    return;
+}
+
 if (args is ["--audit-mod-stack", var stackGame, var stackFile])
 {
     ModStackContracts.Owned(stackGame, stackFile);

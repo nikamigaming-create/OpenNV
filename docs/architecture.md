@@ -86,6 +86,13 @@ Creature package movement and combat share the source envelope, root motion and
 native collision owner. Follow/Dialogue select their source target without an
 invented start location. Package position, animation identity/clock and talk
 history are reference-owned save state. Presentation eviction cannot reset them.
+Source schedule selection reads the shared game calendar before evaluating
+package conditions. Resident actors react to hour changes and periodic condition
+reevaluation; resident package motion does not require a player object. Complete
+package procedure/event lifecycle and retail evaluation cadence remain unbound.
+Collision readiness excludes initial scene construction and door handoffs;
+an absent follow/dialogue target is a visible residency wait, not a permanent
+procedure failure.
 Recruitment effects retain reference/base faction scope, perks, flags and combat
 style in the shared world. Creature weapons and teammate target selection reuse
 ordinary source contacts and damage. Door transfer composes destination residency
@@ -155,6 +162,8 @@ Numeric NVSE assignments and eval expressions use these same script state
 owners. Their logical operators retain numeric operand values independently
 of vanilla boolean expressions. Parser-version migration preserves admitted
 owners, locals and clocks; unknown functions and value families stay explicit.
+Script admission retains older saved owners with unsupported trailing Else text;
+the reached executor still refuses that syntax until its behavior is bound.
 See [NVSE script runtime](nvse-script-runtime.md) for the implemented boundary.
 
 Destroyed references reject ordinary activation. MarkForDelete retains a

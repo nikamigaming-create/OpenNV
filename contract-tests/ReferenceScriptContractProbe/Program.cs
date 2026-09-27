@@ -57,6 +57,8 @@ try
     using (var queryWorld = new FalloutReferenceWorld(records))
     {
         queryWorld.LoadCell(firstCell); queryWorld.LoadCell(secondCell);
+        Require(queryWorld.InSameCell(Key(0x900), Key(0x901), null, .5f) &&
+            !queryWorld.InSameCell(Key(0x900), Key(0x902), null, .5f), "Actor cell queries incorrectly required a player placement.");
         var clockGlobals = new OpenNV.Runtime.Gameplay.State.FalloutGlobalState(
             [new(Key(0x38), "GameHour", (byte)'s', 12.5f, "synthetic")]);
         var playerPlacement = new FalloutReferencePlacement(Key(0x800), [3, 4, 12], [0, 0, 0]);

@@ -359,10 +359,31 @@ try
         .Concat(Field("INAM", BitConverter.GetBytes(0xa00u))).ToArray());
     var stringSetting = Record("GMST", 0xc00, Field("EDID", Encoding.ASCII.GetBytes("sProbeChoice\0"))
         .Concat(Field("DATA", Encoding.ASCII.GetBytes("Plugin choice.\0"))).ToArray());
+    var nightSchedule = new byte[] { 255, 255, 0, 22, 8, 0, 0, 0 };
+    var scheduleCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(scheduleCondition.AsSpan(8), 999);
+    var scheduledPackage = Record("PACK", 0xb01, Field("PSDT", nightSchedule).Concat(Field("CTDA", scheduleCondition)).ToArray());
+    var fallbackPackage = Record("PACK", 0xb02, Field("PSDT", [255, 255, 0, 255, 24, 0, 0, 0]));
+    var scheduledActor = Record("NPC_", 0xb03, Field("ACBS", new byte[24])
+        .Concat(Field("PKID", BitConverter.GetBytes(0xb01u))).Concat(Field("PKID", BitConverter.GetBytes(0xb02u))).ToArray());
     var bytes = Record("TES4", 0, Field("HEDR", header)).Concat(topic).Concat(group)
-        .Concat(idleRecord).Concat(animationObject).Concat(packageRecord).Concat(stringSetting).Concat(Record("ANIO", 0xa02, [])).ToArray();
+        .Concat(idleRecord).Concat(animationObject).Concat(packageRecord).Concat(stringSetting).Concat(Record("ANIO", 0xa02, []))
+        .Concat(scheduledPackage).Concat(fallbackPackage).Concat(scheduledActor).ToArray();
     File.WriteAllBytes(Path.Combine(directory, "Synthetic.esm"), bytes);
     using var stack = FalloutPluginStack.Load(directory, ["Synthetic.esm"]);
+    var clockForms = OpenNV.Runtime.Gameplay.State.FalloutGameTimeBindings.Read(stack);
+    float[] clockValues = [2281, 8, 25, 12, 5.5f, 30];
+    var clockGlobals = new OpenNV.Runtime.Gameplay.State.FalloutGlobalState(new[]
+        { clockForms.Year, clockForms.Month, clockForms.Day, clockForms.Hour, clockForms.DaysPassed, clockForms.TimeScale }
+        .Select((form, index) => new FalloutGlobal(form, "Clock" + index, (byte)'f', clockValues[index], "synthetic")));
+    var clock = new OpenNV.Runtime.Gameplay.State.FalloutGameTime(clockGlobals, clockForms,
+        new([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], "synthetic"));
+    var evaluated = 0;
+    float ScheduleCondition(FalloutCondition condition) { evaluated++; return 0; }
+    Require(FalloutAiPackages.Select(stack, stack.RuntimeFormKey(0xb03), ScheduleCondition, clock: clock)?.FormKey == stack.RuntimeFormKey(0xb02) && evaluated == 0,
+        "Inactive schedule evaluated conditions or blocked the authored fallback package.");
+    clockGlobals.Set(clockForms.Hour, 22);
+    Require(FalloutAiPackages.Select(stack, stack.RuntimeFormKey(0xb03), ScheduleCondition, clock: clock)?.FormKey == stack.RuntimeFormKey(0xb01) && evaluated == 1,
+        "Clock changes did not select the first valid authored package.");
     Require(FalloutGameSettingStrings.Read(stack, "sProbeChoice") == "Plugin choice.", "A winning GMST did not override the engine default.");
     var package = FalloutScriptPackage.Read(FalloutDialogueTopic.Find(stack, "PACK", "ProbePackage"));
     Require(package.RunInSequence && package.DoOnce && package.IdleTimer == 0.75f &&

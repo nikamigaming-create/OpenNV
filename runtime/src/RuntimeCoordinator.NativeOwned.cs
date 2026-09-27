@@ -711,7 +711,7 @@ public partial class RuntimeCoordinator
                         .SingleOrDefault(value => value.Appearance.Reference == target)?.HeadTargetPoint;
                 });
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
-                    () => _nativeReferences!.ActorFactions(reference.FormKey));
+                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals);
                 root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
@@ -756,7 +756,7 @@ public partial class RuntimeCoordinator
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences.Get(reference.FormKey), _nativePluginStack!, source,
                     _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
-                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences);
+                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals);
                 actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
                     throw new InvalidOperationException("Creature dialogue has no gameplay owner."))
                     .RequestPackageDialogue(reference.FormKey, package, completed);

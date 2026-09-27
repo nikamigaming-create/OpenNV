@@ -13,7 +13,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private readonly Dictionary<FalloutFormKey, string> _packageHashes = [];
     internal bool PackageOwnsPose { get; private set; }
     internal bool PackageMoving { get; private set; }
-    internal bool PackageMovementReady => _context?.Player() is { CollisionResident: true } &&
+    internal bool PackageMovementReady => _context is not null &&
         _context.Resident(_actor.GlobalPosition) && _world.IsEnabled(_state.Reference) &&
         !Dead && !_state.Unconscious && !_state.Restrained;
     internal RuntimeNativePlayer? PackagePlayer => _context?.Player();
