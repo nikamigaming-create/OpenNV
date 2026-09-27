@@ -10,6 +10,21 @@ and the requested mods. Work without subagents. Follow the
 requirements remain open; no campaign, all-weapon, all-mod or retail-parity
 completion is established.
 
+## Reboot checkpoint
+
+Resume from [the durable restart checklist](reboot-handoff.md). Checked PR
+[#58](https://github.com/nikamigaming-create/OpenNV/pull/58) is merged;
+local `main` and `origin/main` are
+`ab2a6031bea412374970e340a52e17bfec2c0980`.
+The active branch is `codex/source-object-animation`. Its unfinished controller
+selection and animation snapshot work is saved in a local WIP commit. A Debug
+build passes with zero warnings/errors; script binding, world/save integration
+and the selected animation checks are still outstanding. Do not treat this WIP
+as a released runtime or replace the experimental candidate with it.
+
+At handoff, no OpenNV, Godot or ffmpeg process is running. Recording is off,
+both protected original saves are unchanged, and there are no open PRs.
+
 ## Current candidate and footage
 
 The experimental candidate is
@@ -72,7 +87,7 @@ verified gameplay; it also does not certify every referenced projectile effect.
 
 ## Next owners
 
-The current source work repairs saved read failures and world queries. A
+Merged PR #58 repairs selected saved read failures and world queries. A
 conservative recovery inspection resumes only missing reads before mutations;
 it preserves saved locals and rejects earlier effects. GetRandomPercent now
 uses one saved script stream, and IsInInterior/condition 300 reads the reference's
@@ -82,10 +97,13 @@ an ordinary copied flat Continue. Subsequent unsupported operations remain
 visible. NPC interior conditions now reach the next selected procedure failure.
 
 Continue source object animation ownership: PlayGroup and IsAnimPlaying remain
-unbound; scripted window NIFs also fail because the controller player treats
-multiple selectable loops as simultaneous automatic loops. Preserve authored
-selection, clocks and cold state. Then repair the reached NPC/creature package
-procedures and events through their existing movement and script owners.
+unbound. The WIP controller code allows multiple selectable loops and starts
+source selection/snapshots, but is not integrated or behaviorally verified.
+The merged runtime still rejects affected scripted window models. Connect the
+general owner to reference scripts, presentation and cold saves; safely recover
+the 51 saved plant PlayGroup failures without repeating inventory grants.
+Then repair the reached NPC/creature package procedures and events through
+their existing movement and script owners.
 
 The weapon work still needs the general source strip-particle decoder used by
 `FlamerFlame01.NIF`: BSStripParticleSystem, BSStripPSysData and

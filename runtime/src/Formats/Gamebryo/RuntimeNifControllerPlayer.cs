@@ -25,6 +25,9 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
 
     internal IReadOnlyCollection<string> SequenceNames => _sequences.Keys;
     internal string? ActiveSequence => _active?.Name;
+    internal int SourceController { get; init; } = -1;
+    internal string SourceSha256 { get; init; } = "";
+    internal bool Playing => _active is not null && (_active.CycleType == 0 || SourceTimeSeconds < _active.StopTime);
     internal double FiniteEffectDuration
     {
         get
@@ -51,6 +54,9 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     internal object Observation => new
     {
         active = ActiveSequence,
+        playing = Playing,
+        pending = _pendingSequence,
+        awaitingSelection = _active is null && _sequences.Count > 1,
         sourceTimeSeconds = SourceTimeSeconds,
         elapsedSeconds = _elapsedSeconds,
         textKeyCount = _textKeyCount,
@@ -84,9 +90,8 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
                     $"NIF controller manager has duplicate sequence name {sequence.Name}.");
         var looping = _sequences.Values.Where(sequence => sequence.CycleType == 0 &&
             (sequence.DirectClock is null || (sequence.DirectClock.Flags & 8) != 0)).ToArray();
-        if (looping.Length > 1)
-            throw new NotSupportedException(
-                "NIF controller manager has multiple automatic looping sequences.");
+        // A manager can expose several alternative loops. Their cycle types
+        // do not choose a group; a script/door/other source owner must do that.
         if (looping.Length == 1)
             PlaySourceSequence(looping[0].Name);
         else
@@ -98,6 +103,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         if (!_sequences.TryGetValue(name, out var sequence))
             throw new KeyNotFoundException($"NIF source sequence is not registered: {name}");
         _active = sequence;
+        _pendingSequence = null;
         _boundaries = sequence.Channels.SelectMany(channel => channel.BoundaryTimes)
             .Where(time => time >= sequence.StartTime && time <= sequence.StopTime).Distinct().Order().ToArray();
         _textKeys = new(sequence.TextKeys, sequence.StartTime, sequence.StopTime, sequence.CycleType, sequence.Frequency);
@@ -134,16 +140,36 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         if (_active is null)
             return;
         if (!double.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));
+        if (_pendingSequence is { } pending)
+        {
+            var duration = ((double)_active.StopTime - _active.StartTime) / _active.Frequency;
+            var boundary = _active.CycleType == 0 ? (Math.Floor(_elapsedSeconds / duration) + 1) * duration : duration;
+            var remaining = Math.Max(0, boundary - _elapsedSeconds);
+            if (delta >= remaining)
+            {
+                if (!Advance(remaining, finishCycle: true)) return;
+                PlaySourceSequence(pending);
+                _ = Advance(delta - remaining);
+                return;
+            }
+        }
+        _ = Advance(delta);
+    }
+
+    private bool Advance(double delta, bool finishCycle = false)
+    {
         var previous = _elapsedSeconds;
         _elapsedSeconds += delta;
-        Apply(ResolveSourceTime(_active, _elapsedSeconds));
-        var sequence = _active;
+        var sequence = _active!;
+        Apply(finishCycle ? sequence.StopTime : ResolveSourceTime(sequence, _elapsedSeconds));
         var generation = _generation;
         var includeStart = _includeStart;
         _includeStart = false;
         if (sequence.TextKeys.Count != 0)
             foreach (var key in _textKeys!.Crossed(previous, _elapsedSeconds, includeStart))
             {
+                if (finishCycle && key.SourceSeconds == sequence.StartTime &&
+                    key.Cycle > Math.Floor(previous * sequence.Frequency / ((double)sequence.StopTime - sequence.StartTime))) continue;
                 var disposition = TextKeyHandler?.Invoke(key) ?? "unbound-runtime-event";
                 if (disposition.Contains("unbound", StringComparison.Ordinal)) _unboundTextKeys.Add(key.Text);
                 _lastTextKey = new { ordinal = ++_textKeyCount, sequence = sequence.Name, key, disposition };
@@ -153,10 +179,11 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
                     controller = Name.ToString(),
                     observation = _lastTextKey
                 });
-                if (_generation != generation) return;
+                if (_generation != generation) return false;
             }
-        if (_active.CycleType == 2 && SourceTimeSeconds >= _active.StopTime)
+        if (sequence.CycleType == 2 && SourceTimeSeconds >= sequence.StopTime)
             SetProcess(false);
+        return true;
     }
 
     private void Apply(double sourceTime)

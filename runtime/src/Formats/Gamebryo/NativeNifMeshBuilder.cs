@@ -1122,6 +1122,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 var player = new RuntimeNifControllerPlayer
                 {
                     Name = $"NifControllerManager{manager.Block.Index}",
+                    SourceController = manager.Block.Index,
+                    SourceSha256 = _source.Sha256,
                 };
                 player.Configure(sequences);
                 player.SetMeta("opennv_nif_controller_manager", manager.Block.Index);

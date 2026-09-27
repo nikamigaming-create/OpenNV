@@ -35,6 +35,8 @@ internal sealed partial class FalloutNifFile
             AnimationVersion2Alternate, GeometryVersion2Current];
 
     private readonly ReadOnlyMemory<byte> _payload;
+    private string? _sha256;
+    internal string Sha256 => _sha256 ??= Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(_payload.Span)).ToLowerInvariant();
     // Declarations are immutable source data. Each instance/animation owns its
     // changing state; repeated geometry/controller queries reuse the decode.
     private readonly FalloutNifObject?[] _decodedObjects;
