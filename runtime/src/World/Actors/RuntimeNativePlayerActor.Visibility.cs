@@ -56,7 +56,8 @@ internal sealed partial class RuntimeNativePlayerActor
         }
         // The original first-person weapon/device retain their authored action
         // channels. The world weapon supplies the shadow, with no second eye draw.
-        foreach (var mesh in _weaponNodes.OfType<GeometryInstance3D>()) _selfExcludedMeshes.Add(mesh);
+        foreach (var mesh in _weaponNodes.OfType<GeometryInstance3D>())
+            if (!mesh.HasMeta("opennv_weapon_body_attachment")) _selfExcludedMeshes.Add(mesh);
         foreach (var part in firstPerson.Actor.Parts)
             if (firstPerson.WristDevice() is not { } device || part.Root != device.Root)
                 foreach (var mesh in part.Root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())

@@ -124,7 +124,13 @@ internal sealed partial class NativeXrRig : Node3D
         if (!right) _rightInputReady = false;
         else if (RightGrip.GetFloat(NativeXrActions.Fire) < _configuration.Xr.ActionThreshold && !RightGrip.IsButtonPressed(NativeXrActions.Reload) && !RightGrip.IsButtonPressed(NativeXrActions.Grab))
             _rightInputReady = true;
-        if (Edge("menu", LeftGrip.IsButtonPressed(NativeXrActions.Menu) || RightGrip.IsButtonPressed(NativeXrActions.Menu))) MenuRequested?.Invoke();
+        if (Edge("menu", LeftGrip.IsButtonPressed(NativeXrActions.Menu) || RightGrip.IsButtonPressed(NativeXrActions.Menu)))
+        {
+            if (CombatWheelOpen?.Invoke() == true)
+            { CloseCombatWheel?.Invoke(false); _heldWheel = null; _rightInputReady = false; _snapReady = false; }
+            else MenuRequested?.Invoke();
+        }
+        AdvanceCombatWheels(tracked, left, right, delta);
         var modal = Modal?.Invoke() ?? _player is null;
         var stick = left ? LeftGrip.GetVector2(NativeXrActions.Move) : Vector2.Zero;
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;
@@ -133,20 +139,19 @@ internal sealed partial class NativeXrRig : Node3D
         var pipboy = left && LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold;
         if (_buttons.GetValueOrDefault("pipboy") != pipboy) SetPipBoyHeld?.Invoke(pipboy);
         _buttons["pipboy"] = pipboy;
-        if (Edge("save", left && LeftGrip.IsButtonPressed(NativeXrActions.Save)) && !modal) _player?.SaveGame?.Invoke();
         WorldPointer = right && !modal && PointAtPipBoy is null && RightGrip.GetFloat(NativeXrActions.Activate) >= _configuration.Xr.ActionThreshold;
         var fire = right && _rightInputReady && RightGrip.GetFloat(NativeXrActions.Fire) >= _configuration.Xr.ActionThreshold;
         _pointerPressed = fire;
         var fireEdge = Edge("fire", fire);
         _player?.XrFire(fire && !modal && PointAtPipBoy is null && !WorldPointer);
-        if (PointAtPipBoy is null && modal) _canvas.Point(RightAim, right && RightAim.GetHasTrackingData(), fire);
+        if (PointAtPipBoy is null && modal) _canvas.Point(RightAim, CombatWheelOpen?.Invoke() != true && right && RightAim.GetHasTrackingData(), CombatWheelOpen?.Invoke() != true && fire);
         else if (PointAtPipBoy is null && fireEdge)
         {
             if (WorldPointer) _player?.XrActivate();
         }
         if (Edge("activate", right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Grab)) && !modal && PointAtPipBoy is null) _player?.XrActivate();
         var reload = right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Reload);
-        if (_buttons.GetValueOrDefault("reload") != reload && PointAtPipBoy is null) _player?.XrReload(reload);
+        if (_buttons.GetValueOrDefault("reload") != reload && PointAtPipBoy is null && !modal) _player?.XrReload(reload);
         _buttons["reload"] = reload;
         var turn = right && !modal && PointAtPipBoy is null ? RightGrip.GetVector2(NativeXrActions.Turn).X : 0;
         if (MathF.Abs(turn) <= _configuration.Xr.SnapTurnResetThreshold) _snapReady = true;
@@ -163,7 +168,7 @@ internal sealed partial class NativeXrRig : Node3D
         // User VR policy: no floating gameplay HUD. Menus remain stereo world
         // surfaces; the wrist device runs without pausing the world or headset.
         _canvas.Present(modal && PointAtPipBoy is null, modal && PointAtPipBoy is null);
-        _canvas.Scroll(right && PointAtPipBoy is null && modal ? RightGrip.GetVector2(NativeXrActions.Turn).Y : 0, delta);
+        _canvas.Scroll(right && PointAtPipBoy is null && modal && CombatWheelOpen?.Invoke() != true ? RightGrip.GetVector2(NativeXrActions.Turn).Y : 0, delta);
     }
     internal bool ConsumeJump() { var value = JumpRequested; JumpRequested = false; return value; }
     internal void PublishWristInput()

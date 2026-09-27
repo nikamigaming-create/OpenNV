@@ -163,3 +163,33 @@ reload without changing the saved file. Explicit saving persists the final
 12-round magazine. Cold Continue in the other mode verifies the magazine,
 carried ammunition and exact shot-random state. This is selected
 weapon/save evidence, not all-combat or physical-headset acceptance.
+
+## Explosion target lookup
+
+The reported Fat Man landing delay came from synchronous target classification.
+Destruction lookup enumerated every ancestor's children for each overlap shape;
+the large source blast returned 3,028 shapes belonging to 65 distinct colliders.
+Destructible reference roots now register their owner for their tree lifetime.
+The blast deduplicates colliders before classification and reuses actor lookup.
+Damage targets and the complete overlap query remain intact. Native source car
+checks verify lookup before and after wreck replacement and reject an adjacent
+player collider as a destruction owner.
+
+An ordinary flat shot from the same copied checkpoint, without recording, spent
+1,729.77 ms inside detonation processing before the repair and 128.01 ms after.
+The repaired sample spent 10.54 ms querying overlaps, 3.93 ms classifying them,
+and 4.03 ms applying blast damage. Explosion model construction still took
+91.32 ms. Projectile simulation elapsed 1.978 seconds in both samples; wall time
+through completed detonation fell from 3.656 to 2.011 seconds. This separates
+the impact stall from projectile travel and does not establish retail parity.
+
+The corresponding recorded flat shot spent 172.19 ms in detonation processing
+and 2.435 seconds through the 1.967-second simulated flight. Capture overhead
+and effect assembly remain visible; neither game speed nor video speed was
+changed to conceal them. Timing telemetry retains the completed projectile and
+separates contact, detonation, effect construction, playback and sound phases.
+
+Two exported flat diagnostic runs completed the shot but Windows reported
+native heap corruption after the ordinary Quit Game action. This occurred in
+both the instrumented baseline and repaired build. The shutdown failure remains
+unresolved; successful shots and captures do not establish session stability.

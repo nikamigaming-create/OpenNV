@@ -43,7 +43,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     if (_source.ReadObject(cursor) is FalloutNifVisibilityController visibility &&
                         visibility.Time.Target == source.Block.Index && visibility.Time.UnknownInteger == 0)
                     {
-                        BuildDirectVisibilityController(visibility, runtime);
+                        if ((visibility.Time.Flags & 0x20) == 0) BuildDirectVisibilityController(visibility, runtime);
                         cursor = visibility.Time.NextController; continue;
                     }
                     if (_source.ReadObject(cursor) is not FalloutNifParticleController controller ||

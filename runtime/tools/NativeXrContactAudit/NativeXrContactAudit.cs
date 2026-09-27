@@ -117,6 +117,7 @@ public partial class NativeXrContactAudit : Node3D
             try
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (weapon == records.RuntimeFormKey(0x432d)) CheckFlamerAssembly(first, body);
                 body.ConfigureBodyContacts(2); first.EnableTrackedArms();
 
                 using var left = new NativeXrHandContact(GetWorld3D().Space, [], 1);
@@ -135,6 +136,28 @@ public partial class NativeXrContactAudit : Node3D
             }
             finally { first.Free(); body.Free(); }
         }
+    }
+
+    private static void CheckFlamerAssembly(RuntimeNativePlayerActor first, RuntimeNativePlayerActor body)
+    {
+        foreach (var actor in new[] { first, body })
+        {
+            var meshes = actor.FindChildren("*", "", true, false).OfType<MeshInstance3D>().ToArray();
+            var gun = meshes.Single(mesh => mesh.GetMeta("opennv_nif_source_name", "").AsString() == "##FlamerGun:0");
+            var marker = meshes.Single(mesh => mesh.GetMeta("opennv_nif_source_name", "").AsString() == "Flamer:0");
+            var pack = meshes.Single(mesh => mesh.GetMeta("opennv_nif_source_name", "").AsString() == "Backpack:0");
+            if (!gun.IsVisibleInTree() || marker.Layers != 0)
+                throw new InvalidOperationException("Flamer preroll hid the barrel or a shaderless export marker gained a draw pass.");
+            if (pack.GetParent().GetParent() is not BoneAttachment3D { BoneName: var bone } || bone != "Bip01 Spine2" ||
+                actor == first && pack.Layers != 0 || actor == body && pack.Layers == 0)
+                throw new InvalidOperationException("Flamer fuel pack has no unique visible spine attachment.");
+            var weaponRoot = actor.FindChildren("EquippedWeapon", "", true, false).Single().GetChild<Node3D>(0);
+            weaponRoot.Hide();
+            if (pack.IsVisibleInTree()) throw new InvalidOperationException("A hidden weapon left its separate pack visible.");
+            weaponRoot.Show();
+            if (!pack.IsVisibleInTree()) throw new InvalidOperationException("A resumed weapon failed to restore its pack.");
+        }
+        GD.Print("OPENNV_FLAMER_ASSEMBLY_PASS gun=visible marker=no-source-shader pack=spine firstPersonPack=excluded");
     }
 
     private static void CheckSourceReach(RuntimeNativePlayerActor actor, Transform3D socket)
@@ -193,6 +216,12 @@ public partial class NativeXrContactAudit : Node3D
         var original = actor.Skeleton.Node.GetBonePose(bone);
         var head = new Transform3D(Basis.Identity, new(0, 1.68f, 0));
         var right = new Transform3D(Basis.Identity, new(.2f, 1.4f, -.3f));
+        actor.PoseTrackedArms(1, head, new(Basis.Identity, new(-.22f, 1.35f, -.3f)), right,
+            true, true, 1, 1, 1, 1, true, true, true, right.Basis);
+        var fingers = Enumerable.Range(0, actor.Skeleton.Node.GetBoneCount()).Where(index =>
+            actor.Skeleton.Node.GetBoneName(index).ToString().StartsWith("Bip01 R Finger", StringComparison.Ordinal) ||
+            actor.Skeleton.Node.GetBoneName(index).ToString().StartsWith("Bip01 R Thumb", StringComparison.Ordinal))
+            .Select(index => (Bone: index, Pose: actor.Skeleton.Node.GetBonePose(index))).ToArray();
         foreach (var group in new[] { actor.Weapon!.AttackGroup, actor.Weapon.ReloadGroup })
         {
             var clip = actor.PrepareAction(group);
@@ -204,6 +233,9 @@ public partial class NativeXrContactAudit : Node3D
                 actor.PoseTrackedArms(1.0 / 90, head, new(Basis.Identity, new(-.22f, 1.35f, -.3f)), right,
                     true, true, 0, 0, 0, 0, false, false, true, right.Basis);
                 var pose = actor.Skeleton.Node.GetBonePose(bone);
+                foreach (var finger in fingers)
+                    if (!actor.Skeleton.Node.GetBonePose(finger.Bone).IsEqualApprox(finger.Pose))
+                        throw new InvalidOperationException("An untouched controller opened the held weapon's source finger grip.");
                 // Compare physical displacement, not relative component error
                 // near zero in the exported Float32 rotation matrix.
                 var basisError = Math.Max((pose.Basis.X - original.Basis.X).Length(),

@@ -70,6 +70,11 @@ internal sealed class NativeNifEffectPlayback
             var emitting = _elapsed < _duration;
             var step = Math.Min(remaining, 1.0 / 120);
             if (emitting) step = Math.Min(step, _duration - _elapsed);
+            // Authored bursts can be only ten microseconds long. Split at
+            // controller edges so a render frame cannot skip their emission.
+            foreach (var controller in _controllers)
+                if (controller.SecondsToBoundary is > 1e-10 and var boundary)
+                    step = Math.Min(step, boundary);
             foreach (var controller in _controllers) controller._Process(step * .5);
             foreach (var particle in Particles) { particle.EmissionEnabled = emitting; particle.Advance((float)step); }
             foreach (var controller in _controllers) controller._Process(step * .5);

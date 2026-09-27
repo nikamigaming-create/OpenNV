@@ -38,10 +38,11 @@ internal sealed class RuntimeNativeNifAnimation
             try
             {
                 // Weapon groups contain channels for several alternative
-                // models. The current source model defines the ## palette;
-                // missing members are null slots, not missing player bones.
-                if (externalObjectTargets is not null && link.NodeName.StartsWith("##", StringComparison.Ordinal) &&
-                    !externalObjectTargets.Contains(link.NodeName))
+                // models, including targets without a ## prefix. A target
+                // absent from both source palettes is a null blend slot. A
+                // declared source target without a runtime binding still fails.
+                if (externalObjectTargets is not null && !skeleton.HasSourceTarget(link.NodeName) &&
+                    !skeleton.MaterialChannels.HasSourceTarget(link.NodeName) && !externalObjectTargets.Contains(link.NodeName))
                 {
                     if (link.Interpolator >= 0) _ = source.ReadObject(link.Interpolator);
                     _absentTargets.Add(link); continue;

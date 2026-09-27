@@ -1,5 +1,29 @@
 using Godot;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Formats.Gamebryo;
+
+var weaponClock = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.2f, "Fire"),
+    new(.8f, "Loop"), new(1.6f, "end")], 0, 1.6f, 1);
+var coarse = weaponClock.Crossed(0, 4, true, true).Select(key => (key.SourceOrdinal, key.Text)).ToArray();
+var fine = Enumerable.Range(0, 240).SelectMany(frame => weaponClock.Crossed(frame / 60d, (frame + 1) / 60d, frame == 0, true))
+    .Select(key => (key.SourceOrdinal, key.Text)).ToArray();
+if (!coarse.SequenceEqual(fine) || coarse.Count(key => key.Text == "Fire") != 7 ||
+    coarse.Any(key => key.Text == "end") || weaponClock.SampleSeconds(4, true) is < .2 or > .8)
+    throw new InvalidOperationException("Weapon internal Fire/Loop cadence lost events, replayed windup or advanced into winddown.");
+var released = weaponClock.SampleSeconds(4, true);
+if (weaponClock.Crossed(released, weaponClock.Duration, false, false).Any(key => key.Text == "Fire") ||
+    weaponClock.Crossed(released, weaponClock.Duration, false, false).Last().Text != "end")
+    throw new InvalidOperationException("Automatic weapon release did not exit through its finite source tail.");
+var throwClock = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.5f, "Hold"), new(.8f, "Release"), new(1.5f, "end")], 0, 1.5f, 1);
+if (throwClock.Hold != .5 || throwClock.Discharges != 1 ||
+    throwClock.Crossed(0, .5, true, false).Any(key => FalloutWeaponAnimationTimeline.DischargesWeapon(key.Text)) ||
+    throwClock.Crossed(.5, 1, false, false).Count(key => FalloutWeaponAnimationTimeline.DischargesWeapon(key.Text)) != 1)
+    throw new InvalidOperationException("Throw Hold/Release event ownership differs.");
+
+var sourceLoop = new FalloutWeaponAnimationTimeline([new(0, "start"), new(.2f, "end")], 0, .2f, 1, true, true);
+if (!sourceLoop.UsesWeaponCadence || sourceLoop.Discharges != 1 ||
+    sourceLoop.Crossed(0, .81, true).Count(key => FalloutWeaponAnimationTimeline.DischargesWeapon(key.Text)) != 5)
+    throw new InvalidOperationException("Continuous automatic pose did not use its explicit WEAP cadence owner.");
 
 if (ActorAnimationPlayback.LoopModeForCycleType(
         ActorAnimationPlayback.LoopCycleType) != Animation.LoopModeEnum.Linear ||

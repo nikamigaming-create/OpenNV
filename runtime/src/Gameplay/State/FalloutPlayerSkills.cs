@@ -47,6 +47,7 @@ internal sealed class FalloutPlayerSkills
 
     internal float Value(string name)
     {
+        if (name.Equals("RadResist", StringComparison.OrdinalIgnoreCase) || name.Equals("RadiationResist", StringComparison.OrdinalIgnoreCase)) return Value(20);
         var attribute = FalloutNativeVigorResolver.AttributeNames.ToList().FindIndex(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (attribute >= 0) return Value(attribute + 5);
         var skill = Skills.SingleOrDefault(skill => skill.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -70,6 +71,7 @@ internal sealed class FalloutPlayerSkills
             }
             float initial;
             if (value is >= 5 and <= 11) initial = _special().Values[value - 5];
+            else if (value == 20) initial = (Value(7) + Setting("fAVDRadResistEnduranceOffset")) * Setting("fAVDRadResistEnduranceMult");
             else
             {
                 var skill = Skills.SingleOrDefault(skill => skill.Value == value);

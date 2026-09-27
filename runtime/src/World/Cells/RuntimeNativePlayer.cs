@@ -211,6 +211,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
+        if (!_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
+            inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)
+        {
+            OpenCombatWheel?.Invoke(wheel.PhysicalKeycode == Key.H);
+            GetViewport().SetInputAsHandled(); return;
+        }
         if (PresentationInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() && inputEvent.IsActionPressed(input.PipBoy.Action))
         {
@@ -264,12 +270,14 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
 
     internal event Action? OpenPipBoy;
+    internal event Action<bool>? OpenCombatWheel;
     internal event Action? OpenPauseMenu;
 
     public override void _PhysicsProcess(double delta)
     {
         PublishXrPointer();
         if (_xr is not null && GetTree().Paused) return;
+        AdvanceExplosionExposure(delta);
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
         var alive = IsDefeated?.Invoke() != true;

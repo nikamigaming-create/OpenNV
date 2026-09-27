@@ -17,6 +17,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
     private readonly Random _random = new();
+    private FastNoiseLite? _turbulence;
     private Particle[] _particles = [];
     private float[] _drawBuffer = [];
     private MultiMesh _draw = null!;
@@ -167,8 +168,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                     throw new InvalidDataException("Particle growth contains a negative duration or scale.");
                 case FalloutNifParticleGravity gravity:
                     RequireNode(gravity.Object);
-                    if (gravity.ForceType != 0 || gravity.Decay != 0 || gravity.Turbulence != 0)
-                        throw new NotSupportedException("Particle gravity requires a declared directional force without turbulence.");
+                    if (gravity.ForceType > 1 || gravity.Decay < 0 || gravity.Turbulence < 0 || gravity.TurbulenceScale < 0)
+                        throw new NotSupportedException("Particle gravity has an invalid force, decay or turbulence declaration.");
+                    if (gravity.Turbulence > 0) _turbulence ??= new FastNoiseLite { Seed = _random.Next() };
                     break;
                 case FalloutNifParticleDrag drag:
                     RequireNode(drag.Object);
@@ -241,7 +243,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             link.ControllerType == "NiPSysModifierActiveCtlr" && link.Variable2.Length == 0)
         {
             var sampler = new FalloutNifBoolAnimation(file, link.Interpolator);
-            return new(time => _active[link.Variable1] = sampler.Sample(time));
+            return new(time => _active[link.Variable1] = sampler.Sample(time), sampler.BoundaryTimes);
         }
         throw new NotSupportedException($"Particle channel {link.Variable1}/{link.Variable2} is unsupported.");
     }
@@ -295,10 +297,32 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             }
             else if (modifier is FalloutNifParticleGravity gravity)
             {
+                var transform = TransformOf(gravity.Object);
                 var axis = Convert(gravity.Axis);
-                if (!gravity.WorldAligned) axis = TransformOf(gravity.Object).Basis * axis;
-                var acceleration = axis.Normalized() * gravity.Strength * _units;
-                for (var i = 0; i < ActiveCount; i++) _particles[i].Velocity += acceleration * delta;
+                if (!gravity.WorldAligned) axis = transform.Basis * axis;
+                for (var i = 0; i < ActiveCount; i++)
+                {
+                    var offset = transform.Origin - _particles[i].Position;
+                    var direction = gravity.ForceType == 1 ? offset.Normalized() : axis.Normalized();
+                    var decay = gravity.Decay == 0 ? 1 : MathF.Exp(-gravity.Decay * offset.Length() / _units);
+                    var acceleration = direction * gravity.Strength;
+                    if (gravity.Turbulence > 0)
+                    {
+                        var position = _particles[i].Position / _units;
+                        var time = (float)SimulatedSeconds;
+                        var noise = new Vector3(_turbulence!.GetNoise3D(position.X + time, position.Y, position.Z),
+                            _turbulence.GetNoise3D(position.Y + time, position.Z + 137, position.X),
+                            _turbulence.GetNoise3D(position.Z + time, position.X + 271, position.Y));
+                        acceleration += noise * (gravity.Strength * gravity.Turbulence * gravity.TurbulenceScale);
+                    }
+                    _particles[i].Velocity += acceleration * (decay * _units * delta);
+                }
+            }
+            else if (modifier is FalloutNifParticleWind wind)
+            {
+                var velocity = OpenNV.Runtime.World.Cells.RuntimeNativeWind.SampleFor(this) * (wind.Strength * _units);
+                if (!_source.WorldSpace) velocity = _parentInverse.Basis * velocity;
+                for (var i = 0; i < ActiveCount; i++) _particles[i].Velocity += velocity * delta;
             }
             else if (modifier is FalloutNifParticleBomb bomb)
             {

@@ -26,6 +26,7 @@ public partial class RuntimeCoordinator
             () => _nativeXr is null && _nativePlayer is { ModalInput: false, RolloverTextEnabled: true } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState);
         layer.AddChild(_nativeHudMessages); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;
+        _nativePlayer.OpenCombatWheel += OpenNativeCombatWheel;
         if (_nativeXr is not null)
         {
             _nativePlayer.ResolveXrTarget = collider =>
@@ -39,6 +40,11 @@ public partial class RuntimeCoordinator
             };
             _nativeXr.Modal = () => _nativePlayer.ModalInput || GetTree().Paused || _nativeDoorLoading;
             _nativeXr.SetPipBoyHeld = FocusNativeXrPipBoy;
+            _nativeXr.OpenCombatWheel = OpenNativeCombatWheel;
+            _nativeXr.CombatWheelOpen = () => _nativeCombatWheel is not null;
+            _nativeXr.CloseCombatWheel = accept => _nativeCombatWheel?.Finish(accept);
+            _nativeXr.SelectCombatWheel = direction => _nativeCombatWheel?.SelectDirection(direction);
+            _nativeXr.PageCombatWheel = delta => _nativeCombatWheel?.ChangePage(delta);
             _nativePlayer.PresentationChanged += RebuildNativeXrPipBoy;
         }
     }

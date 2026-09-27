@@ -50,6 +50,9 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         {
             name = mesh.GetMeta("opennv_nif_source_name", "").AsString(),
             visible = mesh.IsVisibleInTree(),
+            layers = mesh.Layers,
+            shaderless = mesh.GetActiveMaterial(0)?.HasMeta("opennv_nif_no_render_shader") == true,
+            bodyAttachment = mesh.GetMeta("opennv_weapon_body_attachment", "").AsString(),
             position = new[] { mesh.GlobalPosition.X, mesh.GlobalPosition.Y, mesh.GlobalPosition.Z }
         }).ToArray(),
         unbound = "transition-blending,attack-damage,animation-audio-acceptance,cold-animation-phase"
@@ -110,12 +113,16 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
                 _equippedObject = new(Weapon, Skeleton, _content);
                 _weaponAttachment = _equippedObject.Attachment; _weaponRoot = _equippedObject.Root; _weaponRest = _weaponRoot.Transform;
                 _weaponNodes.AddRange(_equippedObject.Nodes);
+                if (firstPerson)
+                    foreach (var part in _equippedObject.BodyAttachments)
+                        foreach (var mesh in part.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
+                        { mesh.Layers = 0; mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off; }
             }
             SetAmbient(ambient);
             _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
             if (Weapon?.Grip is { } grip && grip != 255)
             {
-                var suffix = grip switch { 230 => 1, 231 => 2, 232 => 3, _ => throw new NotSupportedException($"WEAP grip {grip} is unbound.") };
+                var suffix = grip is >= 230 and <= 235 ? grip - 229 : throw new NotSupportedException($"WEAP grip {grip} is unbound.");
                 _grip = Clip(Weapon.AnimationGroup + "handgrip" + suffix);
             }
             Advance(0, Vector3.Zero, true, false);

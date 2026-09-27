@@ -75,6 +75,9 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         var stream = voice is AudioStreamPlayer3D spatial ? spatial.Stream : ((AudioStreamPlayer)voice).Stream;
         _voices.Add(voice, new(emitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream));
+        // An effect or weapon can leave the tree before its sound completes.
+        // Finished is not emitted when its emitter frees the child voice.
+        voice.TreeExiting += () => ForgetVoice(voice);
         voice.SetMeta("opennv_sound_emitter", emitter.GetPath().ToString());
         voice.SetMeta("opennv_sound_loop_mode", loop.Mode.ToString());
     }
@@ -110,6 +113,13 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
 
     private void FinishVoice(Node node)
     {
+        ForgetVoice(node);
+        node.QueueFree();
+    }
+
+    private void ForgetVoice(Node node)
+    {
+        if (node is AudioStreamPlayer3D spatialVoice) _spatial.Remove(spatialVoice);
         if (!_voices.Remove(node, out var voice)) return;
         if (voice.OwnedStream is { } stream)
         {
@@ -117,7 +127,6 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             else ((AudioStreamPlayer)node).Stream = null;
             stream.Dispose();
         }
-        node.QueueFree();
     }
 
     public override void _ExitTree()

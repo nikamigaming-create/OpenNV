@@ -110,9 +110,9 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
         if (!Projectile.IsInstantRayAttack || Projectile.Type is not (1 or 4 or 8) ||
             (Projectile.Flags & ~supportedHitscanFlags) != 0 ||
-            Projectile.HasAlternateTriggerParameters ||
+            Projectile.HasAlternateTrigger && Projectile.HasAlternateTriggerParameters ||
             Projectile.Type == 8 && Projectile.ExplosionSource is not null ||
-            Projectile.Explosion is not null || Projectile.HasExplicitRotation)
+            Projectile.ExplosionSource is not null || Projectile.HasExplicitRotation)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs flight, explosion, alternate-trigger or flag simulation.");
         RequireSupportedAmmoEffects();
     }
@@ -125,13 +125,12 @@ internal sealed record FalloutWeaponShot(FalloutFormKey Weapon, FalloutFormKey? 
             return;
         }
         RequireSupportedAmmoEffects();
-        if (Projectile.Type is not (1 or 2 or 8) || Projectile.Speed <= 0 || Projectile.Model is null ||
-            (Projectile.Flags & 0x0800) != 0 || Projectile.HasExplicitRotation)
+        if (Projectile.Type is not (1 or 2 or 8) || Projectile.Speed <= 0 || Projectile.Model is null)
             throw new NotSupportedException($"Projectile {Projectile.Form} needs its source flight, orientation or ammo-effect owner.");
         if (((Projectile.Flags & 2) != 0) != (Projectile.ExplosionSource is not null))
             throw new InvalidDataException($"Projectile {Projectile.Form} explosion flag and reference disagree.");
-        if (Projectile.HasAlternateTrigger && (Projectile.HasAlternateTriggerParameters || Projectile.ExplosionSource is not null))
-            throw new NotSupportedException($"Projectile {Projectile.Form} needs its alternative-trigger owner.");
+        if (Projectile.Detonates || Projectile.HasAlternateTrigger && Projectile.ExplosionAltTriggerProximity > 0)
+            throw new NotSupportedException($"Projectile {Projectile.Form} needs its proximity or remote-trigger owner.");
         Projectile.ExplosionSource?.RequireRuntimeDamageOwner();
     }
 

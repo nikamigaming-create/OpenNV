@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 
@@ -31,7 +32,7 @@ internal partial class RuntimeNativePlayer
         var clip = _firstPerson!.PrepareAction(weapon.AttackGroup);
         var hitEvents = clip.TextKeys
             .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-            .Count(text => text.Trim().Equals("Hit", StringComparison.OrdinalIgnoreCase));
+            .Count(FalloutWeaponAnimationTimeline.DischargesWeapon);
         if (hitEvents == 0) throw new NotSupportedException("Melee attack has no source Hit event.");
         _shot = null;
         _firePreparationError = null;
@@ -140,6 +141,11 @@ internal partial class RuntimeNativePlayer
         _damageError = null;
         try
         {
+            if (collider is not null && RuntimeNativeDestructible.Find(collider) is { } destructible)
+            {
+                var baseDamage = BinaryPrimitives.ReadInt16LittleEndian(itemData[12..]);
+                destructible.Hit(_damage!.Resolve(weapon.Form, baseDamage).Amount, _presentationRecords.RuntimeFormKey(0x14));
+            }
             if (collider is not null && RuntimeNativeActorCombat.Find(collider) is { } combat)
             {
                 var baseDamage = BinaryPrimitives.ReadInt16LittleEndian(itemData[12..]);

@@ -5,6 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
+if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
 
 if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "settings" or "dialogue" or "replay" or "lifecycle" or "corpus" or "resources" or "resource" or "nif" or "menu"))
 {
@@ -12,6 +13,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
         "route <installation-or-source-stack> <request.json: world runtime hex, start/end game units>\n" +
         "cell-review <installation-or-source-stack> <native detailed state.json>\n" +
+        "weapon-loadout <installation-or-source-stack> <checkpoint> <new-private-output> <WEAP runtime hex> [...]\n" +
         "exterior <installation-or-source-stack> <CELL runtime hex ID> [grid diameter]\n" +
         "actors <installation-or-source-stack> <NPC name fragment> [...]\n" +
         "classic-player <Fallout 1 installation> <owned appearance Data root>\n" +

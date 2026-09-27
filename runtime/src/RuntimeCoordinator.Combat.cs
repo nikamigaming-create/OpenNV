@@ -13,7 +13,7 @@ public partial class RuntimeCoordinator
         (damage, part) => _nativeOpeningStageDriver!.DamagePlayer(damage, part),
         (from, to) => FindNativeNavigationRoute(new(from.X, from.Y, from.Z), new(to.X, to.Y, to.Z), false)
             .Select(point => new Vector3(point.X, point.Y, point.Z)).ToArray(),
-        NativeCollisionResident, () => _nativeOpeningStageDriver!.PlayerLevel, _nativeGlobals!,
+        NativeCollisionResident, () => _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals!,
         _configuration.Player.StepHeightMeters, _configuration.Simulation.GravityMetersPerSecondSquared,
         (actor, name) =>
         {

@@ -112,8 +112,9 @@ The free-hand grip frame uses the palmar normal: OpenXR +X points out of the
 left palm and into the right palm; -Z runs from little to index finger
 ([OpenXR pose conventions](https://registry.khronos.org/OpenXR/specs/1.1-khr/pdf/xrspec.pdf#page=110)). The
 source closing animations independently check that sign on both skeletons.
-Wrist-distance agreement alone cannot detect an inverted hand. Grip, index
-trigger and thumb touch retain independent source finger channels.
+Wrist-distance agreement alone cannot detect an inverted hand. Free hands retain
+independent grip, index trigger and thumb-touch source finger channels. A held
+weapon retains its complete authored grip regardless of untouched controls.
 The tracked holding frame and source grip palette stay fixed during source flat
 action clips; internal model animation and authoritative timing continue.
 Anatomical reach limits targets before contact publication; a retained contact
@@ -178,6 +179,11 @@ continuations still fail visibly instead of being discarded.
 RuntimeNativePlayerActor owns the player's equipped source skeleton, body, hand
 variants, weapon model and KF palette. First/third-person views share inventory
 and physics state. Animated equipment cannot also run dropped-object physics.
+Equipped NIF subtrees with an authored anatomical parent bind to that skeleton
+bone independently of the hand attachment. First-person duplicates have no eye
+draw; the world body owns the visible pack. Both subtrees follow model visibility
+when NPC combat and package presentation alternate. Shaderless export geometry
+retains its source identity without acquiring Godot's default material draw.
 Source accumulation is separate from local bone poses; third-person collision
 movement owns world translation. The first-person render target has an explicit
 output color conversion and source FOV. Pip-Boy presentation uses the source Hit

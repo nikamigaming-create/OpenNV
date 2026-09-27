@@ -72,10 +72,16 @@ internal static class NativeNpcMaterial
         }
         var selected = part.AlternateTextures.SingleOrDefault(entry => Target(entry).Block.Index == geometry.Block.Index);
         if (selected is null) return null;
-        var shader = geometry.Properties.Where(index => index >= 0).Select(nif.ReadObject).OfType<FalloutNifShaderProperty>().SingleOrDefault()
-            ?? throw new NotSupportedException($"Record alternate texture target {part.Source}/{geometry.Name} has no lighting texture-set shader.");
-        var original = (FalloutNifShaderTextureSet)nif.ReadObject(shader.TextureSet);
-        var paths = original.Textures.ToArray();
+        var properties = geometry.Properties.Where(index => index >= 0).Select(nif.ReadObject).ToArray();
+        var shader = properties.OfType<FalloutNifShaderProperty>().SingleOrDefault();
+        var noLighting = properties.OfType<FalloutNifNoLightingProperty>().SingleOrDefault();
+        // Some weapon NIFs retain a vertex-only placeholder with an alternate
+        // texture entry. Without a source sampler there is no texture to swap;
+        // retain that material rather than inventing a lighting shader for it.
+        if (shader is null && noLighting is null && !properties.OfType<FalloutNifTexturingProperty>().Any()) return null;
+        var paths = shader is not null ? ((FalloutNifShaderTextureSet)nif.ReadObject(shader.TextureSet)).Textures.ToArray() :
+            noLighting is not null ? new[] { noLighting.FileName, "", "", "", "", "" } :
+                throw new NotSupportedException($"Record alternate texture target {part.Source}/{geometry.Name} needs its legacy texturing binding.");
         foreach (var (field, path) in selected.Textures)
         {
             var slot = field switch

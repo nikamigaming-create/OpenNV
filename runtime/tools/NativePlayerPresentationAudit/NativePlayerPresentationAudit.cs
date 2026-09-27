@@ -12,11 +12,24 @@ public partial class NativePlayerPresentationAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args.Length != 2) throw new ArgumentException("Expected owned Data and a real native checkpoint.");
+            if (args.Length != 2 && !(args.Length == 4 && args[2] == "--weapon-coverage") &&
+                !(args.Length == 3 && args[2] == "--combat-controls"))
+                throw new ArgumentException("Expected owned Data, a real native checkpoint and optional --weapon-coverage output.jsonl.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(args[1]))!;
+            if (args.Length == 3)
+            {
+                await AuditCombatControls(records, content, saved);
+                GetTree().Quit(); return;
+            }
+            if (args.Length == 4)
+            {
+                await AuditWeaponCoverage(records, content, saved, args[3]);
+                GetTree().Quit();
+                return;
+            }
             var player = records.RuntimeFormKey(7);
             var appearance = FalloutNpcAppearanceResolver.Resolve(records, player,
                 equippedArmor: saved.EquippedRuntimeFormIds.Select(records.RuntimeFormKey).Where(key => records.GetEffective(key).Signature == "ARMO").ToArray(),

@@ -16,9 +16,18 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     private readonly Vector3 _gravity;
     private readonly float _rangeMeters;
     private readonly uint _collisionMask;
+    private readonly Node3D _model;
+    private double _elapsed;
+    private long _started;
+    private double _contactMilliseconds, _detonationMilliseconds;
+    private bool _resting;
+    private bool Timed => _source.ExplosionSource is not null && _source.HasAlternateTrigger &&
+        !_source.Detonates && _source.ExplosionAltTriggerProximity == 0;
     private readonly Godot.Collections.Array<Rid> _exclusions = [];
     private Vector3 _velocity;
     private float _travelledMeters;
+    internal float ContactFriction { get; set; }
+    internal float ContactRestitution { get; set; } = 1;
     private int _contacts, _detonations;
     private int _bounces;
     private int _transparentLayerPassThroughs;
@@ -31,7 +40,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     internal string? Error { get; private set; }
     internal string Status => _status;
     internal int Contacts => _contacts;
-    internal bool IsFinished => _status is not ("prepared" or "in-flight");
+    internal bool IsFinished => _status is not ("prepared" or "in-flight" or "resting");
     internal object Observation => new
     {
         projectile = _source.Form.ToString(),
@@ -43,6 +52,11 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         contacts = _contacts,
         detonations = _detonations,
         bounces = _bounces,
+        elapsedSeconds = _elapsed,
+        wallSeconds = _started == 0 ? 0 : System.Diagnostics.Stopwatch.GetElapsedTime(_started).TotalSeconds,
+        contactMilliseconds = _contactMilliseconds,
+        detonationMilliseconds = _detonationMilliseconds,
+        fuseRemainingSeconds = Timed ? Math.Max(0, _source.ExplosionAltTriggerTimer - _elapsed) : (double?)null,
         transparentLayerPassThroughs = _transparentLayerPassThroughs,
         transparentLayerUnresolvedContacts = _transparentLayerUnresolvedContacts,
         error = Error,
@@ -56,8 +70,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(exclusions);
-        if (source.Hitscan || source.Type is not (1 or 2 or 8) || source.Speed <= 0 || source.Model is null ||
-            (source.Flags & 0x0800) != 0 || source.HasExplicitRotation)
+        if (source.Hitscan || source.Type is not (1 or 2 or 8) || source.Speed <= 0 || source.Model is null)
             throw new NotSupportedException($"Projectile {source.Form} is outside the missile/lobber owner or needs an explosion owner.");
         if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0 ||
             !float.IsFinite(gravityMetersPerSecondSquared) || gravityMetersPerSecondSquared <= 0 ||
@@ -66,6 +79,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             throw new InvalidDataException("Projectile flight inputs are invalid.");
 
         _source = source;
+        _model = model;
         _origin = origin;
         _rangeMeters = source.Range * unitsToMeters;
         _initialVelocity = direction.Normalized() * (source.Speed * unitsToMeters);
@@ -81,6 +95,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         {
             collider.CollisionLayer = 0;
             collider.CollisionMask = 0;
+            if (collider is RigidBody3D body) body.Freeze = true;
         }
         AddChild(model);
     }
@@ -95,6 +110,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         GlobalPosition = _origin;
         _velocity = _initialVelocity;
         _active = true;
+        _started = System.Diagnostics.Stopwatch.GetTimestamp();
         _status = "in-flight";
         OrientToVelocity();
     }
@@ -108,14 +124,31 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             return;
         }
 
-        var seconds = (float)delta;
+        var seconds = (float)(Timed ? Math.Min(delta, Math.Max(0, _source.ExplosionAltTriggerTimer - _elapsed)) : delta);
+        _elapsed += seconds;
+        if (Timed && _elapsed >= _source.ExplosionAltTriggerTimer && (seconds <= 0 || _resting))
+        { Detonate(); return; }
+        if (_resting) return;
+        AdvanceFlight(seconds);
+        if (!IsFinished && Timed && _elapsed >= _source.ExplosionAltTriggerTimer) Detonate();
+    }
+
+    private void AdvanceFlight(float seconds)
+    {
+        if (_source.HasExplicitRotation)
+        {
+            var spin = _source.Rotation;
+            _model.RotateObjectLocal(Vector3.Right, spin.X * seconds);
+            _model.RotateObjectLocal(Vector3.Up, spin.Z * seconds);
+            _model.RotateObjectLocal(Vector3.Back, -spin.Y * seconds);
+        }
         var start = GlobalPosition;
         var displacement = _velocity * seconds + _gravity * (.5f * seconds * seconds);
         var length = displacement.Length();
         var remaining = _rangeMeters - _travelledMeters;
         if (!float.IsFinite(length) || remaining <= 0)
         {
-            Finish("range-ended");
+            StopOrFinish("range-ended");
             return;
         }
         if (length <= .000001f)
@@ -214,6 +247,12 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
                 if (_travelledMeters >= _rangeMeters - .0001f) Finish("range-ended");
                 return;
             }
+            if (_source.ExplosionSource is not null && !_source.HasAlternateTrigger)
+            {
+                GlobalPosition = point;
+                Finish("hit", contact);
+                return;
+            }
             if (_source.BouncyMultiplier > 0)
             {
                 if (normal.LengthSquared() < .99f)
@@ -225,7 +264,14 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
                 var fraction = segmentLength > .000001f
                     ? Mathf.Clamp(start.DistanceTo(point) / segmentLength, 0, 1)
                     : 1;
-                _velocity = (_velocity + _gravity * (seconds * fraction)).Bounce(normal.Normalized()) * _source.BouncyMultiplier;
+                var incoming = _velocity + _gravity * (seconds * fraction);
+                var unitNormal = normal.Normalized();
+                var normalSpeed = Math.Min(0, incoming.Dot(unitNormal));
+                var tangent = incoming - normalSpeed * unitNormal;
+                var tangentSpeed = tangent.Length();
+                var frictionLoss = ContactFriction * -normalSpeed * (1 + ContactRestitution);
+                if (tangentSpeed > 0) tangent *= Math.Max(0, tangentSpeed - frictionLoss) / tangentSpeed;
+                _velocity = (tangent - normalSpeed * ContactRestitution * unitNormal) * _source.BouncyMultiplier;
                 if (!_velocity.IsFinite())
                 {
                     Finish("invalid-bounce");
@@ -239,13 +285,14 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
                     Finish("contact-error");
                     return;
                 }
-                if (_velocity.LengthSquared() < .0004f) Finish("stopped");
+                if (_velocity.LengthSquared() < .0004f) StopOrFinish("stopped");
             }
             else
             {
                 GlobalPosition = point;
                 OrientTo(direction);
-                Finish("hit", contact);
+                if (Timed) { NotifyContact(contact); StopOrFinish("hit"); }
+                else Finish("hit", contact);
             }
             return;
         }
@@ -254,7 +301,20 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         GlobalPosition = destination;
         _velocity += _gravity * seconds;
         OrientToVelocity();
-        if (_travelledMeters >= _rangeMeters - .0001f) Finish("range-ended");
+        if (_travelledMeters >= _rangeMeters - .0001f) StopOrFinish("range-ended");
+    }
+
+    private void StopOrFinish(string reason)
+    {
+        if (!Timed) { Finish(reason); return; }
+        _resting = true; _velocity = Vector3.Zero; _status = "resting";
+    }
+
+    private void Detonate()
+    {
+        if (IsFinished) return;
+        var okay = NotifyDetonation(GlobalPosition);
+        Finish(okay ? "detonated" : "detonation-error");
     }
 
     private void Finish(string status, RuntimeNativeProjectileContact? contact = null)
@@ -263,7 +323,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
         _active = false;
         _status = status;
         if (contact is { } hit && !NotifyContact(hit)) _status = "contact-error";
-        if (_source.ExplosionSource is not null && contact is { } impact && !NotifyDetonation(impact.Point))
+        if (_source.ExplosionSource is not null && !_source.HasAlternateTrigger && contact is { } impact && !NotifyDetonation(impact.Point))
             _status = "detonation-error";
         try { OnFinished?.Invoke(this); }
         catch (Exception error)
@@ -276,6 +336,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
 
     private bool NotifyDetonation(Vector3 point)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         _detonations++;
         try
         {
@@ -288,10 +349,12 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             GD.PushError($"OPENNV_PROJECTILE_DETONATION_UNBOUND projectile={_source.Form} {Error}");
             return false;
         }
+        finally { _detonationMilliseconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
     }
 
     private bool NotifyContact(RuntimeNativeProjectileContact contact)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         _contacts++;
         try
         {
@@ -304,6 +367,7 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
             GD.PushError($"OPENNV_PROJECTILE_CONTACT_UNBOUND projectile={_source.Form} {Error}");
             return false;
         }
+        finally { _contactMilliseconds += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
     }
 
     private void OrientToVelocity()

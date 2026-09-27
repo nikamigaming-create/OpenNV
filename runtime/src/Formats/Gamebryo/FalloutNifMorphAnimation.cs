@@ -71,6 +71,7 @@ internal sealed class FalloutNifBoolAnimation
 {
     private readonly bool _constant;
     private readonly FalloutNifBoolKey[] _keys;
+    internal IReadOnlyList<float> BoundaryTimes => _keys.Select(key => key.Time).Distinct().ToArray();
     internal bool? ConstantValue => _keys.Length == 0 ? _constant :
         _keys.All(key => key.Value == _keys[0].Value) ? _keys[0].Value : null;
     internal FalloutNifBoolAnimation(FalloutNifFile source, int interpolator)

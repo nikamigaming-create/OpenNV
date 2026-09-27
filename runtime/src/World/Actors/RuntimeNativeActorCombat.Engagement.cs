@@ -29,7 +29,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object? _lastHitscanImpact;
     private object? _lastExplosion;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
-    internal bool OwnsPose => _context is not null && (_state.Engagement is not null || ReactingToHit);
+    internal bool OwnsPose => _state.KnockedDown || _context is not null && (_state.Engagement is not null || ReactingToHit);
     internal bool Restrained => _state.Restrained;
     private object EngagementObservation => new
     {
@@ -142,7 +142,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _engagementError = error.Message;
             }
         }
-        if (AdvanceHitReaction(delta) || _state.Restrained || _engagementError is not null) return;
+        if (AdvanceKnockdown() || AdvanceHitReaction(delta) || _state.Restrained || _engagementError is not null) return;
         try
         {
             if (_state.Engagement is null && !TryCompanionCombat())

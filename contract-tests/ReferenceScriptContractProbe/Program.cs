@@ -20,15 +20,15 @@ try
         .Concat(Record("SCPT", 0x509, Local(1, "1stFloor"), Local(2, "enabled"), Field("SCTX", Text(
             "int 1stFloor\nshort enabled // trailing author note [unparsed]"))))
         .Concat(Record("SCPT", 0x503, Field("SCTX", Text("begin OnActivate\nend"))))
-        .Concat(Explosion(0xA00, flags: 9, damage: 28, radius: 256))
-        .Concat(Explosion(0xA01, flags: 0x40, damage: 4, radius: 32))
+        .Concat(Explosion(0xA00, flags: 0x12, damage: 28, radius: 256))
+        .Concat(Explosion(0xA01, flags: 0x80, damage: 4, radius: 32))
         .Concat(Explosion(0xA02, flags: 0, damage: 4, radius: 32, force: 5))
         .Concat(Record("EXPL", 0xA03, Field("DATA", new byte[48])))
-        .Concat(Explosion(0xA04, flags: 0x02, damage: 4, radius: 32))
-        .Concat(Explosion(0xA05, flags: 0x04, damage: 4, radius: 32))
-        .Concat(Explosion(0xA06, flags: 0x10, damage: 4, radius: 32))
-        .Concat(Explosion(0xA07, flags: 0x20, damage: 4, radius: 32))
-        .Concat(Explosion(0xA08, flags: 0x01, damage: 4, radius: 32))
+        .Concat(Explosion(0xA04, flags: 0x04, damage: 4, radius: 32))
+        .Concat(Explosion(0xA05, flags: 0x08, damage: 4, radius: 32))
+        .Concat(Explosion(0xA06, flags: 0x20, damage: 4, radius: 32))
+        .Concat(Explosion(0xA07, flags: 0x40, damage: 4, radius: 32))
+        .Concat(Explosion(0xA08, flags: 0x02, damage: 4, radius: 32))
         .Concat(Record("QUST", 0x600, Field("EDID", Text("TestQuest")), Field("SCRI", BitConverter.GetBytes(0x501u))))
         .Concat(Record("ACTI", 0x700, Field("EDID", Text("ModelLessActivator")), Field("SCRI", BitConverter.GetBytes(0x500u))))
         .Concat(Record("ACTI", 0x701, Field("SCRI", BitConverter.GetBytes(0x503u))))
@@ -290,6 +290,7 @@ else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolPro
 StageAndInventoryContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();
+DestructionContracts.Run();
 var disabledControls = new FalloutPlayerControlState(false, false, false, false, false, false, false);
 Require(new FalloutPlayerControlCommand(true, []).Apply(disabledControls) == FalloutPlayerControlState.AllEnabled,
     "EnablePlayerControls without arguments did not enable all controls.");

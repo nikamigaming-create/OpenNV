@@ -10,7 +10,7 @@ internal sealed class FalloutHitReactionTree
     internal IReadOnlyList<FalloutFormKey> Roots => _roots.Select(value => value.Record.FormKey).ToArray();
     internal IReadOnlyList<FalloutFormKey> LastVisited { get; private set; } = [];
 
-    internal FalloutHitReactionTree(FalloutPluginStack records, string skeletonPath)
+    internal FalloutHitReactionTree(FalloutPluginStack records, string skeletonPath, ushort contextFunction = 391)
     {
         var directory = skeletonPath[..skeletonPath.LastIndexOf('/')];
         _pluginOrder = records.Plugins.ToDictionary(value => value.Plugin.Name, value => value.LoadOrderIndex, StringComparer.OrdinalIgnoreCase);
@@ -19,7 +19,7 @@ internal sealed class FalloutHitReactionTree
                 ("meshes/" + FalloutDialogueTopic.Text(field.Data.Span).Replace('\\', '/')).StartsWith(directory + "/", StringComparison.OrdinalIgnoreCase)))
             .Select(FalloutFurnitureIdleTree.Read).ToDictionary(branch => branch.Record.FormKey);
         var roots = new HashSet<FalloutFormKey>();
-        foreach (var branch in _branches.Values.Where(branch => branch.Conditions.Any(condition => condition.Function == 391)))
+        foreach (var branch in _branches.Values.Where(branch => branch.Conditions.Any(condition => condition.Function == contextFunction)))
         {
             var current = branch;
             var seen = new HashSet<FalloutFormKey>();

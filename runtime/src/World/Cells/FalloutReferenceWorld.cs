@@ -16,7 +16,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorEngagement? Engagement = null, FalloutActorTemplateSnapshot? Templates = null,
     FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false,
     bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null,
-    FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null)
+    FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null, bool KnockedDown = false,
+    FalloutDestructionState? Destruction = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -40,13 +41,15 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
             snapshot.HitReaction?.Validate();
+            if (snapshot.KnockedDown && (snapshot.Injury is not { Dead: false } || snapshot.Ragdoll is null && snapshot.HitReaction is null))
+                throw new InvalidDataException("Knockdown requires a living actor and a retained physical or recovery pose.");
             if (snapshot.HitReaction is not null && snapshot.Injury is not { Dead: false })
                 throw new InvalidDataException("Hit reaction requires a living injured actor.");
             if (snapshot.Ragdoll is { } ragdoll)
             {
                 ragdoll.Validate();
-                if (snapshot.Injury?.Dead != true) throw new InvalidDataException("Living reference has a saved death ragdoll.");
-                if (!(ragdoll.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual((snapshot.Injury.SeveredParts ?? []).Order()))
+                if (snapshot.Injury?.Dead != true && !snapshot.KnockedDown) throw new InvalidDataException("Living reference has a saved ragdoll without knockdown.");
+                if (!(ragdoll.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual((snapshot.Injury?.SeveredParts ?? []).Order()))
                     throw new InvalidDataException("Saved cut poses disagree with the severed source limbs.");
             }
         }
@@ -67,12 +70,14 @@ internal sealed class FalloutReferenceInstance
     internal float Opacity { get; set; } = 1;
     internal bool NoFade { get; set; }
     internal bool Destroyed { get; set; }
+    internal FalloutDestructionState? Destruction { get; set; }
     internal bool DeletePending { get; set; }
     internal bool Deleted { get; set; }
     internal bool Taken { get; set; }
     internal bool DoorOpen { get; set; }
     internal bool Unlocked { get; set; }
     internal bool Unconscious { get; set; }
+    internal bool KnockedDown { get; set; }
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
     internal bool TalkedToPlayer { get; set; }
@@ -137,7 +142,7 @@ internal sealed class FalloutReferenceInstance
         _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
         CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-        TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State);
+        TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -315,6 +320,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Opacity = snapshot.Opacity;
             instance.NoFade = snapshot.NoFade ?? instance.NoFade;
             instance.Destroyed = snapshot.Destroyed;
+            if (snapshot.Destruction is { } destruction)
+            {
+                destruction.Validate(FalloutDestructible.Read(records, instance.Base) ??
+                    throw new InvalidDataException("Saved destruction has no source DEST."));
+                instance.Destruction = destruction;
+            }
             instance.DeletePending = snapshot.DeletePending;
             instance.Deleted = snapshot.Deleted;
             instance.Taken = snapshot.Taken;
@@ -362,6 +373,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot.Injury is { } injury) validated.RestoreInjury(instance, injury);
             else if (instance.ActorValues.ContainsKey("health")) throw new InvalidDataException("Saved health has no actor injury state.");
             instance.Ragdoll = snapshot.Ragdoll;
+            instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;
             if (snapshot.HitReaction is { } reaction)
             {

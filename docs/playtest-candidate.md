@@ -17,6 +17,12 @@ the right stick. Use **Save / Load** to create a new save, select an earlier
 save, or return to the main menu. F5 in flat and the left controller's primary
 button in VR create separate manual saves. Earlier slots remain available;
 loading another slot also preserves the previous Continue save.
+Hold Q for the weapon wheel or H for the consumable wheel in flat. Aim with
+the mouse or press 1-8, release to confirm, and use the center or Escape to
+cancel. Scroll or Page Up/Down changes pages. In VR, hold the left primary
+button for the weapon wheel (a short tap still saves), or hold the left trigger
+for consumables. The right stick selects, right A/B changes pages, release
+confirms, and Menu cancels. Gameplay pauses while a wheel is open.
 In VR use the thumbsticks for movement/turning and the controller pointer/trigger
 for menus and interaction. The wrist device shares inventory and gameplay state.
 Close the game before switching modes. Preserve a copy of your OpenNV save
@@ -40,6 +46,24 @@ The combat-response update adds source-conditioned NPC and creature hit
 animations, attack interruption and saved reaction progress. A healthy-limb hit
 does not automatically stagger an actor. Forced reactions, blending, general
 hit scripts and broader combat behavior remain incomplete.
+
+The weapon update adds shared automatic and throw clocks, rotating grenades,
+source fuses/contact response, explosion models and destructible stages. It
+repairs the Flamer's hidden gun, visible purple helper, hand-mounted backpack
+and XR fingers opening on untouched controls. Selected flat/simulator footage
+shows carbine, laser pistol, Fat Man, frag, Flamer, spear and cleaver actions.
+Native checks separately exercise a source car's explosion/wreckage and saved
+destruction state. The reel does not establish every weapon or natural car
+encounter; mines, beam/flame/tracer completeness, special ammunition, blast
+attenuation and player knockdown remain unfinished.
+
+The Fat Man impact update removes repeated scene-child scans during a large
+blast. One repeated flat shot's detonation processing falls from 1.73 seconds
+to 0.13 seconds without adding a fuse or changing projectile speed. Explosion
+construction and rendering can still hitch, especially while recording.
+The simulator also completes the corrected shot, spending about 0.20 seconds
+in detonation processing. Two flat diagnostic runs reported a native crash
+after Quit Game; shutdown stability remains unfinished.
 
 ## What to test
 
@@ -76,8 +100,9 @@ combat. Fresh checks also cross the curb during a second hostile encounter.
 Mobile actor placement now uses the authored navigation floor; ordinary repair
 in both modes keeps ED-E off the counter. Enhanced Sensors acquisition is saved, but its detection effect and
 the NPC radio remain unbound. Muzzle-light flicker and some impact particles are
-missing. Ordinary post-damage Stimpak use now passes in both modes. Player melee,
-VR crafting and an uninterrupted paired route still need gameplay proof.
+missing. Ordinary post-damage Stimpak use now passes in both modes. Selected
+cleaver swings are recorded; broader melee contacts, VR crafting and an
+uninterrupted paired route still need gameplay proof.
 
 Background content preparation adapts to process CPU/memory availability and
 uses at most four workers. The tested safe renderer reaches 60 FPS flat and
@@ -96,6 +121,9 @@ Native actor route searches now share a two-millisecond physics-frame budget;
 one node expansion can overrun it. A selected route request fell from earlier
 52–142 ms samples to 2.71 ms after source-projection and search changes.
 These are selected Windows measurements, not headset or cross-platform acceptance.
+The newer paired weapon capture is substantially slower: about 19.7 distinct
+recorded frames/sec flat and 12.9 in the simulator. It retains repeated frames
+and cannot establish smooth combat performance.
 
 The user's flat and physical headset playtests are required before considering
 a golden release. Record the mode, location, action, visible result, and build

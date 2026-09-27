@@ -518,7 +518,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 var block = _source.Blocks[blockIndex];
                 return block.TypeName switch
                 {
-                    "NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode" or "BSRangeNode" or "BSBlastNode" or "BSDamageStage" or "NiBillboardNode" or "BSValueNode" or "BSMasterParticleSystem" => BuildNode(_source.ReadNode(blockIndex)),
+                    "NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode" or "BSRangeNode" or "BSBlastNode" or "BSDamageStage" or "NiBillboardNode" or "BSValueNode" or "BSMasterParticleSystem" or "BSOrderedNode" => BuildNode(_source.ReadNode(blockIndex)),
                     "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape" => BuildGeometry(_source.ReadGeometry(blockIndex)),
                     "NiParticleSystem" => BuildParticleSystem((FalloutNifParticleSystem)_source.ReadObject(blockIndex)),
                     "NiAmbientLight" => BuildAmbientLight(
@@ -537,10 +537,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
         private Node3D BuildNode(FalloutNifNode source)
         {
-            // Empty source damage/range markers have no draw to select. Keep
-            // their fields; actual staged descendants need a gameplay owner.
-            if (source.Range is not null && source.Children.Any(child => child >= 0))
-                throw new NotSupportedException("NIF damage/range descendants require a source damage-stage owner.");
             if (source.MultiBound >= 0)
             {
                 var bound = _source.ReadObject(source.MultiBound) as FalloutNifMultiBound ??
@@ -559,7 +555,13 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var result = CreateNode(source.Name, source.Block.Index, source.Transform, source.Flags);
             if (source.Block.TypeName == "BSFadeNode") result.SetMeta("opennv_nif_fade_node", true);
             if (source.Range is { } range)
+            {
                 result.SetMeta("opennv_nif_range", new int[] { range.Minimum, range.Maximum, range.Current });
+                result.SetMeta("opennv_nif_range_type", source.Block.TypeName);
+                if (range.Minimum > range.Maximum) throw new InvalidDataException("NIF damage range is inverted.");
+                result.Visible = range.Current >= range.Minimum && range.Current <= range.Maximum;
+                result.ProcessMode = result.Visible ? Node.ProcessModeEnum.Inherit : Node.ProcessModeEnum.Disabled;
+            }
             var inheritedEditorMarkers = _omitInheritedEditorMarkers;
             try
             {
@@ -613,6 +615,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     result.SetMeta("opennv_particle_master_capacity", master.MaximumEmitters);
                 }
                 if (source.Value is { } addon) BindAddon(result, addon);
+                if (source.SortBound is { } sort)
+                {
+                    var sorting = new NativeNifAlphaSortBound();
+                    sorting.SetMeta("center", ConvertVector(sort.Center) * _unitsToMetres);
+                    sorting.SetMeta("radius", sort.Radius * _unitsToMetres);
+                    sorting.SetMeta("static", sort.Static);
+                    result.AddChild(sorting);
+                }
                 if (source.Billboard is { } mode)
                 {
                     var billboard = new NativeNifBillboard();
@@ -738,7 +748,12 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (controller is FalloutNifVisibilityController visibility && ExternalTransformTargets?.Contains(owner.Name) == true &&
                 (visibility.Time.Flags & 0x0040) != 0 && visibility.Time.Target == owner.Block.Index)
             {
-                node.Visible = new FalloutNifBoolAnimation(_source, visibility.Interpolator).Sample(visibility.Time.StartTime);
+                // The controller range can include an export preroll (for
+                // example -1/30s hidden, 0s visible). Its initial clock is zero
+                // plus phase, not the first authored key. The selected KF may
+                // subsequently override this node's visibility.
+                node.Visible = new FalloutNifBoolAnimation(_source, visibility.Interpolator)
+                    .Sample((float)FalloutNifControllerClock.Resolve(visibility.Time, 0));
                 node.SetMeta("opennv_nif_external_visibility_controller", visibility.Block.Index);
                 if (visibility.Time.NextController == -1) return;
                 controller = _source.ReadObject(visibility.Time.NextController);
@@ -746,7 +761,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (controller is FalloutNifVisibilityController directVisibility &&
                 directVisibility.Time.Target == owner.Block.Index && directVisibility.Time.UnknownInteger == 0)
             {
-                BuildDirectVisibilityController(directVisibility, node);
+                if ((directVisibility.Time.Flags & 0x20) == 0)
+                    BuildDirectVisibilityController(directVisibility, node);
                 if (directVisibility.Time.NextController == -1) return;
                 controller = _source.ReadObject(directVisibility.Time.NextController);
             }
@@ -802,7 +818,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 multi.Time.StartTime != float.MaxValue || multi.Time.StopTime != float.MinValue ||
                 multi.Time.Target != owner.Block.Index || multi.Time.UnknownInteger != 0 ||
                 multi.ExtraTargets.Any(reference => reference != -1 &&
-                    _source.Blocks[reference].TypeName is not ("NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode")))
+                    _source.ReadObject(reference) is not (FalloutNifNode or FalloutNifGeometry or FalloutNifParticleSystem)))
                 throw new NotSupportedException(
                     $"NIF controller manager {manager.Block.Index} has an unsupported target chain.");
             if (_source.ReadObject(manager.ObjectPalette) is not FalloutNifDefaultAvObjectPalette palette ||
@@ -818,8 +834,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     sequence.CycleType is not (0U or 2U) ||
                     sequence.ControlledBlocks.Any(link => link.Interpolator == -1 ||
                         link.Controller == -1 || link.Priority != 0 ||
-                        link.ControllerType is not ("NiTransformController" or
+                        link.ControllerType is not ("NiTransformController" or "NiVisController" or
                             "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
+                            "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or
                             "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr")))
                     throw new NotSupportedException(
                         $"NIF controller manager {manager.Block.Index} has an unsupported sequence chain.");
@@ -1146,12 +1163,12 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 {
                     "NiTransformController" => BuildTransformChannel(
                         sequence, link, multi, targetBlock, targetNode),
-                    "NiMaterialColorController" => BuildMaterialColorChannel(
+                    "NiVisController" => BuildManagedVisibilityChannel(sequence, link, targetBlock, targetNode),
+                    "NiMaterialColorController" or "NiTextureTransformController" or
+                        "NiAlphaController" or "BSMaterialEmittanceMultController" => BuildManagedMaterialChannel(
                         sequence, link, targetBlock),
-                    "NiTextureTransformController" => BuildTextureTransformChannel(
-                        sequence, link, targetBlock),
+                    "BSRefractionStrengthController" => BuildRefractionChannel(sequence, link, targetBlock),
                     "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
-                    "NiAlphaController" => BuildAlphaChannel(sequence, link, targetBlock),
                     _ => throw new NotSupportedException(
                         $"NIF sequence {sequence.Block.Index} controller {link.ControllerType} is unsupported."),
                 });
@@ -1180,6 +1197,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             {
                 FalloutNifNode node => node.Transform,
                 FalloutNifGeometry geometry => geometry.Transform,
+                FalloutNifParticleSystem particle => particle.Geometry.Transform,
                 _ => throw new NotSupportedException("Managed transform target has no source-local transform."),
             };
             // Managed NIFs use the same keyed/constant/spline interpolator
@@ -1511,13 +1529,18 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays,
                 BuildMorphArrays(mesh, source, data, arrays, Enumerable.Range(0, data.Vertices.Length).ToArray()));
-            mesh.SurfaceSetMaterial(0, BuildMaterial(source));
+            var material = BuildMaterial(source);
+            mesh.SurfaceSetMaterial(0, material);
             var result = new MeshInstance3D
             {
                 Name = SourceName(source.Name, source.Block.Index),
                 Transform = ConvertTransform(source.Transform),
                 Visible = (source.Flags & HiddenFlag) == 0,
                 Mesh = mesh,
+                // A retained export shape without a shader has no runtime
+                // draw pass. Keep its source geometry and identity; Godot's
+                // default material must not turn it into a visible solid.
+                Layers = material.HasMeta("opennv_nif_no_render_shader") ? 0u : 1u,
             };
             result.SetMeta("opennv_nif_geometry_block", source.Block.Index);
             if (morph is not null) result.SetMeta("opennv_landscape_morph_targets", morph.Heights.Length);
@@ -1813,12 +1836,12 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 return overridden;
             var result = BuildMaterialCore(geometry, hairColor, texturePaths);
             if (result is not StandardMaterial3D && result.ResourceName is not
-                (NativeNifLightingMaterial.ResourceIdentity or NativeNifEffectMaterial.ResourceIdentity))
+                (NativeNifLightingMaterial.ResourceIdentity or NativeNifEffectMaterial.ResourceIdentity or NativeNifRefractionMaterial.ResourceIdentity))
                 return result;
             foreach (var reference in geometry.Properties.Where(reference => reference != -1))
             {
                 if (_source.ReadObject(reference) is not (FalloutNifMaterialProperty or
-                    FalloutNifTexturingProperty))
+                    FalloutNifTexturingProperty or FalloutNifShaderProperty))
                     continue;
                 if (!_materials.TryGetValue(reference, out var values))
                 {
@@ -1894,14 +1917,21 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException(
                     $"NIF geometry {geometry.Block.Index} must have exactly one supported shader.");
             if (noLighting is not null)
+            {
+                if (texturePaths is not null)
+                {
+                    if (texturePaths.Count != FalloutTextureSlots) throw new InvalidDataException("Record texture override requires six source slots.");
+                    noLighting = noLighting with { FileName = texturePaths[0] };
+                }
                 return BuildNoLightingMaterial(noLighting, material, alpha, texturing, stencil, geometry.SkinInstance >= 0);
+            }
             if (texturing is not null)
                 throw new NotSupportedException(
                     $"NIF geometry {geometry.Block.Index} combines legacy texturing with a lighting shader.");
             if (shader is null)
                 throw new InvalidDataException(
                     $"NIF geometry {geometry.Block.Index} lost its validated lighting shader.");
-            var supportedLightingFlags = SupportedShaderFlags |
+            var supportedLightingFlags = SupportedShaderFlags | NativeNifRefractionMaterial.Flags |
                 (geometry.SkinInstance == -1 ? 0U : ShaderFlagSkinned) |
                 (hairColor.HasValue ? FalloutNpcAppearanceHairColor.ShaderFlag : 0U);
             if (material is not null && HasConstantAlpha(material)) supportedLightingFlags |= ShaderFlagDynamicAlpha;
@@ -1909,7 +1939,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             // UVs and NiAlphaProperty. They use the same single lighting pass;
             // these flags do not request a projected Godot decal or new geometry.
             // Preserve their source depth and alpha states with the other draws.
-            if (shader.Controller != -1 || shader.ExtraData.Any(reference => reference != -1) ||
+            if (shader.Controller != -1 && !IsManagedRefractionController(shader) || shader.ExtraData.Any(reference => reference != -1) ||
                 shader.ShaderType != SupportedShaderType ||
                 (shader.ShaderFlags & ~supportedLightingFlags) != 0 ||
                 (shader.ShaderFlags2 & ~SupportedShaderFlags2) != 0)
@@ -1918,10 +1948,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     $"type={shader.ShaderType} flags1=0x{shader.ShaderFlags:x8} " +
                     $"flags2=0x{shader.ShaderFlags2:x8} clamp={shader.TextureClampMode} " +
                     $"refraction={shader.RefractionStrength}/{shader.RefractionFirePeriod}.");
-            // Refraction/Fire_Refraction are flag-selected shader variants
-            // (bits 15/16), still rejected above. Bottles retain nonzero export
-            // parameters with both flags clear; those dormant values do not
-            // enable a different shader or invalidate the ordinary glass draw.
+            // Only the flags select refraction; ordinary glass can retain dormant values.
             var windowEnvironment = (shader.ShaderFlags & ShaderFlagWindowEnvironmentMapping) != 0;
             var parallax = (shader.ShaderFlags & FalloutNifSurfaceInputs.ParallaxFlag) != 0;
             var eyeEnvironment = (shader.ShaderFlags & ShaderFlagEyeEnvironmentMapping) != 0;
@@ -2037,6 +2064,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             }
             var vertexColors = FalloutNifVertexColorState.Resolve(shader.ShaderFlags2,
                 meshData.Vertices.Length, meshData.Colors.Length);
+            if ((shader.ShaderFlags & NativeNifRefractionMaterial.Flags) != 0)
+                return NativeNifRefractionMaterial.Build(result, shader, material, alpha);
             return NativeNifLightingMaterial.Build(result, shader, material, alpha, vertexColors, height);
         }
 
@@ -2058,7 +2087,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 mesh.TextureCoordinates.Length != 0)
                 throw new NotSupportedException(
                     $"NIF geometry {geometry.Block.Index} lacks complete source vertex material inputs.");
-            return new StandardMaterial3D
+            var result = new StandardMaterial3D
             {
                 VertexColorUseAsAlbedo = mesh.Colors.Length != 0,
                 AlbedoColor = new Color(1.0f, 1.0f, 1.0f, material.Alpha),
@@ -2066,6 +2095,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 Roughness = GlossToRoughness(material.Glossiness),
                 ResourceName = $"NIF vertex material {material.Block.Index}",
             };
+            result.SetMeta("opennv_nif_no_render_shader", true);
+            return result;
         }
 
         private Material BuildNoLightingMaterial(
@@ -2191,7 +2222,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         controller.TargetColor == 2 && controller.Time.StartTime == controller.Time.StopTime &&
                         (controller.Time.Flags & 0x20) == 0 => controller.Time,
                     FalloutNifAlphaController controller => controller.Time,
-                    FalloutNifEmittanceController controller when (controller.Time.Flags & 0x20) == 0 => controller.Time,
+                    FalloutNifEmittanceController controller => controller.Time,
                     _ => null,
                 };
                 if (time is null || time.Target != target || (time.Flags & 0x40) == 0) return false;

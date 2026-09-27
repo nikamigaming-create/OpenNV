@@ -19,6 +19,9 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal uint OnHitBehavior { get; init; }
     internal bool IsMeleeWeapon => EquipmentType is 3 or 4 && WeaponAnimationType is not (11 or 12);
     internal bool IsMine => EquipmentType == 6 || WeaponAnimationType is 11 or 12;
+    internal bool IsThrownWeapon => WeaponAnimationType is 10 or 13;
+    internal bool Playable { get; init; }
+    internal bool Embedded { get; init; }
     internal float Reach { get; init; }
     internal float MaximumRange { get; init; }
     internal string? ShellModel { get; init; }
@@ -48,6 +51,7 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         150 => "attackthrow6",
         156 => "attackthrow7",
         162 => "attackthrow8",
+        255 when WeaponAnimationType is 0 or 1 or 2 => "attackleft",
         _ => throw new NotSupportedException($"WEAP attack group {AttackAnimation} has no selection owner.")
     };
     internal IReadOnlyList<FalloutFormKey> Ammunition { get; init; } = [];
@@ -156,6 +160,8 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             AttackAnimation = data[41],
             AttackMultiplier = BinaryPrimitives.ReadSingleLittleEndian(data[60..]),
             Automatic = (data[12] & 2) != 0,
+            Playable = (data[12] & 0x80) == 0,
+            Embedded = (data[12] & 0x20) != 0,
             AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
             NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
             EquipmentType = equipmentType,
