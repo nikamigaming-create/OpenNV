@@ -11,11 +11,11 @@ internal sealed partial class RuntimeNativeActorCombat
         .OfType<RuntimeNativeActorCombat>().Where(actor => ReferenceEquals(actor._world, _world) &&
             ReferenceEquals(actor._context, _context) && !actor.IsQueuedForDeletion());
 
-    private Vector3 TargetPosition(RuntimeNativePlayer player) => _opponent?._actor.GlobalPosition ?? player.GlobalPosition;
-    private float TargetRadius(RuntimeNativePlayer player) => _opponent?._radius ?? player.CombatRadius;
-    private float TargetHealth(RuntimeNativePlayer player) => _opponent is { } actor
+    private Vector3 TargetPosition(RuntimeNativePlayer? player) => _opponent?._actor.GlobalPosition ?? player!.GlobalPosition;
+    private float TargetRadius(RuntimeNativePlayer? player) => _opponent?._radius ?? player!.CombatRadius;
+    private float TargetHealth(RuntimeNativePlayer? player) => _opponent is { } actor
         ? _world.Health(actor._state.Reference).Current : _context!.Vitals().ExactHitPoints;
-    private Vector3 TargetPoint(RuntimeNativePlayer player) => _opponent?.BodyTargetPoint() ?? player.CombatTargetPoint;
+    private Vector3 TargetPoint(RuntimeNativePlayer? player) => _opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint;
 
     private Vector3 BodyTargetPoint()
     {
@@ -27,12 +27,14 @@ internal sealed partial class RuntimeNativeActorCombat
         return (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Origin;
     }
 
-    private bool ResolveTarget(RuntimeNativePlayer player)
+    private bool ResolveTarget(RuntimeNativePlayer? player)
     {
         var target = _state.Engagement!.Target;
         _opponent = target == _records.RuntimeFormKey(0x14) ? null :
             CombatActors.SingleOrDefault(actor => actor._state.Reference == target);
         if (_opponent is null && target != _records.RuntimeFormKey(0x14)) return false;
+        if (_opponent is null && player is not { CollisionResident: true }) return false;
+        if (_opponent is { } resident && !_context!.Resident(resident._actor.GlobalPosition)) return false;
         if ((_opponent is { } actor && (actor.Dead || !_world.IsEnabled(target))) || TargetHealth(player) <= 0)
         {
             EndEngagement();
@@ -52,7 +54,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_actor is RuntimeNativeCreature creature) creature.EvaluatePackages(false);
     }
 
-    private bool TryCompanionCombat(RuntimeNativePlayer player)
+    private bool TryCompanionCombat()
     {
         if (!_state.PlayerTeammate) return false;
         var playerKey = _records.RuntimeFormKey(0x14);
@@ -69,7 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
         return true;
     }
 
-    private bool CanSeeTarget(RuntimeNativePlayer player) => CanSeePoint(TargetPoint(player), _opponent);
+    private bool CanSeeTarget(RuntimeNativePlayer? player) => CanSeePoint(TargetPoint(player), _opponent);
 
     private int SightBone()
     {
@@ -105,7 +107,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private string? _friendlySpreadBlocker;
 
-    private bool FriendlyInsideSpread(RuntimeNativePlayer player, Vector3 origin, Vector3 target, float medianDegrees)
+    private bool FriendlyInsideSpread(RuntimeNativePlayer? player, Vector3 origin, Vector3 target, float medianDegrees)
     {
         _friendlySpreadBlocker = null;
         if (medianDegrees <= 0) return false;
@@ -132,7 +134,7 @@ internal sealed partial class RuntimeNativeActorCombat
             // World geometry has its own muzzle-line test. Including it in
             // this bounded actor query can fill every result with scenery
             // and incorrectly hold all shots in a densely built cell.
-            CollisionMask = _layer | player.CollisionLayer,
+            CollisionMask = _layer | (player?.CollisionLayer ?? 0),
             CollideWithAreas = true,
             Exclude = new(CollisionRids)
         };
@@ -141,7 +143,7 @@ internal sealed partial class RuntimeNativeActorCombat
         foreach (var hit in contacts)
         {
             if (hit["collider"].AsGodotObject() is not Node collider) continue;
-            if ((collider == player || player.IsAncestorOf(collider)) && _state.PlayerTeammate)
+            if (player is not null && (collider == player || player.IsAncestorOf(collider)) && _state.PlayerTeammate)
             { _friendlySpreadBlocker = "player"; return true; }
             var other = Find(collider);
             if (other is null || other == this || other == _opponent || other.Dead || !_world.IsEnabled(other._state.Reference)) continue;

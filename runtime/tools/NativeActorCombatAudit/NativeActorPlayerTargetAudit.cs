@@ -55,11 +55,19 @@ public partial class NativeActorCombatAudit
             actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                 world, state, records, content, 2, 3, context);
             actor.Combat.SetPhysicsProcess(false);
-            state.Engagement = new(records.RuntimeFormKey(0x14));
+            // The player body remains visible when a displaced view camera
+            // is occluded. Detection and combat must use the same target body.
+            var cameraPosition = player.Camera.Position;
+            player.Camera.Position += Vector3.Right * 8;
+            wall.Position = new(4, 2, -3);
+            AddChild(wall);
             await Step();
+            if (state.Engagement?.Target != records.RuntimeFormKey(0x14))
+                throw new InvalidOperationException("Source NPC did not acquire a visible hostile player through ordinary detection.");
             if (state.Engagement?.Action != "idle" || state.Engagement.Animation?.Contains("mtidle", StringComparison.OrdinalIgnoreCase) != true)
                 throw new InvalidOperationException("Turning toward a visible in-range player did not use the stationary idle.");
-            AddChild(wall);
+            player.Camera.Position = cameraPosition;
+            wall.Position = new(0, 2, -3);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var before = actor.GlobalPosition;
             for (var frame = 0; frame < 12; frame++) await Step();
@@ -70,7 +78,7 @@ public partial class NativeActorCombatAudit
             if (hits == 0 || health >= 200)
                 throw new InvalidOperationException("Source NPC did not attack and damage its visible player target.");
             GD.Print($"OPENNV_NATIVE_PLAYER_TARGET_PASS reference={key} hits={hits} health=200->{health:R} " +
-                "playerCapsuleVisible=true turningIdle=true occludedPursuit=true wallRefused=true denseWorldContacts=160 fixture=synthetic-floor-and-wall ordinaryGameplay=separate");
+                "initialDetection=true playerCapsuleVisible=true turningIdle=true occludedPursuit=true wallRefused=true denseWorldContacts=160 fixture=synthetic-floor-and-wall ordinaryGameplay=separate");
         }
         finally
         {

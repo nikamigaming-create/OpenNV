@@ -30,7 +30,7 @@ internal sealed class NativeActorCombatAnimation
         var root = selected.ControlledBlocks.SingleOrDefault(link => link.NodeName == selected.TargetName && link.ControllerType == "NiTransformController");
         _root = root is null ? null : new(source, root.Interpolator);
         Animation = new(source, selected, skeleton, link => weapon?.Bind(source, link), accumulationRoot: _ => { },
-            externalObjectTargets: weapon?.Targets);
+            externalObjectTargets: weapon?.Targets ?? new HashSet<string>(StringComparer.Ordinal));
         if (Animation.UnboundChannels.Count != 0) throw new NotSupportedException("Actor combat channels are unbound: " +
             string.Join("; ", Animation.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
         Events = new(Animation.TextKeys, selected.StartTime, selected.StopTime, loop ? 0u : 2u, selected.Frequency);

@@ -36,7 +36,7 @@ internal sealed partial class RuntimeNativeActorCombat
         crippledLegs = _crippledLegCount,
         crippledLegSpeedMultiplier = _crippledLegSpeedMultiplier,
         limbMovementError = _crippledLegMovementError,
-        source = "source-BBX-envelope,KF-accumulation,NAVM,BPTD-limb-thresholds;Godot-capsule-and-step-resolver"
+        source = "source-BBX-envelope,KF-accumulation,NAVM,BPTD-limb-thresholds;Godot-capsule-or-cylinder-and-step-resolver"
     };
 
     private void PrepareMovement()
@@ -50,7 +50,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var scale = _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;
         var radius = Math.Max(bound.Dimensions.X, bound.Dimensions.Y) * scale;
         var height = bound.Dimensions.Z * scale * 2;
-        if (radius <= 0 || height < radius * 2) throw new NotSupportedException("Source BBX cannot define an upright movement capsule.");
+        if (!float.IsFinite(radius) || !float.IsFinite(height) || radius <= 0 || height <= 0)
+            throw new InvalidDataException("Source BBX movement dimensions are invalid.");
         _radius = radius * _actor.Scale.X;
         var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var acbs = stats.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span;
@@ -72,7 +73,12 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             Name = "SourceActorMovementEnvelope",
             Position = Vector3.Up * height / 2,
-            Shape = new CapsuleShape3D { Radius = radius, Height = height }
+            // Squat creatures cannot fit a vertical capsule without either
+            // narrowing their footprint or inflating their authored height.
+            // Native sweeps/stepping already query the body's actual shape.
+            Shape = height >= radius * 2
+                ? new CapsuleShape3D { Radius = radius, Height = height }
+                : new CylinderShape3D { Radius = radius, Height = height }
         });
         _mover = mover;
     }

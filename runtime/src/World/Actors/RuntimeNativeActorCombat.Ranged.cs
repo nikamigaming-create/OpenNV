@@ -17,7 +17,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private string? _casingPresentationError;
     private string? _impactMaterialError;
 
-    private void ShootPlayer(RuntimeNativePlayer player)
+    private void ShootTarget(RuntimeNativePlayer? player)
     {
         var weapon = _enemyWeapon!;
         var handling = _enemyWeaponHandling ?? throw new InvalidOperationException("Actor weapon handling is absent.");
@@ -54,7 +54,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             var obstruction = line.Count == 0 ? null : line["collider"].AsGodotObject() as Node;
             var isTarget = obstruction is not null && (_opponent is null
-                ? obstruction == player || player.IsAncestorOf(obstruction)
+                ? player is not null && (obstruction == player || player.IsAncestorOf(obstruction))
                 : Find(obstruction) == _opponent);
             if (obstruction is not null && !isTarget)
             {
@@ -71,7 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (!_enemyShot.Projectile.IsInstantRayAttack)
         {
-            ShootProjectilePlayer(player, weapon, handling, from, direction, resolvedDamage, spreadDegrees);
+            ShootProjectileTarget(player, weapon, handling, from, direction, resolvedDamage, spreadDegrees);
             return;
         }
         if (!handling.ConsumeShot(weapon, _enemyShot, _records)) return;
@@ -137,10 +137,10 @@ internal sealed partial class RuntimeNativeActorCombat
                 byte? part = null;
                 float? healthBefore = null;
                 float? healthAfter = null;
-                var playerHit = collider == player || player.IsAncestorOf(collider);
+                var playerHit = player is not null && (collider == player || player.IsAncestorOf(collider));
                 var actorCombat = playerHit ? null : RuntimeNativeActorCombat.Find(collider);
                 var actorTarget = actorCombat is not null && actorCombat != this;
-                if (playerHit) part = collider == player ? (byte)0 : player.CombatHitPart(collider);
+                if (playerHit) part = collider == player ? (byte)0 : player!.CombatHitPart(collider);
 
                 var delay = _enemyShot.Projectile.HitscanImpactDelaySeconds(from.DistanceTo(point), _skeleton.UnitsToMetres);
                 var hasImpact = _enemyShot.ImpactDataSet is not null;
@@ -219,7 +219,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (part is not null) lastPart = part;
 
                 if (!_enemyShot.Projectile.PassesThroughActors || !(playerHit || actorTarget)) break;
-                var actorBodies = playerHit ? player.CombatCollisionRids : actorCombat!.CollisionRids;
+                var actorBodies = playerHit ? player!.CombatCollisionRids : actorCombat!.CollisionRids;
                 var added = 0;
                 foreach (var body in actorBodies)
                 {
@@ -233,9 +233,9 @@ internal sealed partial class RuntimeNativeActorCombat
             }
             pellets.Add(new { index = pellet, contacts, direction = new[] { pelletDirection.X, pelletDirection.Y, pelletDirection.Z } });
         }
-        if (_casingPresentationError is null && weapon.ShellModel is not null)
+        if (_casingPresentationError is null && weapon.ShellModel is not null && GetViewport().GetCamera3D() is { } camera)
         {
-            try { _enemyShotEffects.EjectCasing((_enemyObject ?? throw new NotSupportedException("Embedded weapon casing socket is unbound.")).Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
+            try { _enemyShotEffects.EjectCasing((_enemyObject ?? throw new NotSupportedException("Embedded weapon casing socket is unbound.")).Socket(_skeleton, "ShellCasingNode"), camera.GlobalPosition); }
             catch (Exception error)
             {
                 _casingPresentationError = error.Message;
@@ -273,7 +273,7 @@ internal sealed partial class RuntimeNativeActorCombat
         GD.Print($"OPENNV_ACTOR_ATTACK reference={_state.Reference} target={_state.Engagement!.Target} kind=ranged projectiles={_enemyShot.Projectiles} playerHits={hits} actorHits={actorHits} targetHealth={before:R}->{after:R}");
     }
 
-    private void ScheduleHitscanContact(RuntimeNativePlayer player, FalloutWeaponShot shot,
+    private void ScheduleHitscanContact(RuntimeNativePlayer? player, FalloutWeaponShot shot,
         FalloutWeaponDamage damage, Node collider, byte? part, int? impactMaterial, Vector3 point,
         Vector3 normal, Vector3 direction, float delaySeconds)
     {
@@ -284,7 +284,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             if (!GodotObject.IsInstanceValid(this)) return;
             _pendingHitscanImpacts = Math.Max(0, _pendingHitscanImpacts - 1);
-            if (!GodotObject.IsInstanceValid(player) || player.IsQueuedForDeletion() || !player.IsInsideTree())
+            if (player is null || !GodotObject.IsInstanceValid(player) || player.IsQueuedForDeletion() || !player.IsInsideTree())
             {
                 if (part is not null)
                 {
@@ -308,7 +308,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private (float? HealthBefore, float? HealthAfter, bool PlayerHit, FalloutActorHit? ActorHit,
         string? DamageError, string? ImpactError)
-        CompleteHitscanContact(RuntimeNativePlayer player, FalloutWeaponShot shot, FalloutWeaponDamage damage,
+        CompleteHitscanContact(RuntimeNativePlayer? player, FalloutWeaponShot shot, FalloutWeaponDamage damage,
             Node? collider, byte? part, int? impactMaterial, Vector3 point, Vector3 normal, Vector3 direction,
             float delaySeconds, string? targetPath = null)
     {
@@ -414,7 +414,7 @@ internal sealed partial class RuntimeNativeActorCombat
         GD.PushError($"OPENNV_NPC_HITSCAN_TARGET_UNBOUND reference={_state.Reference} projectile={shot.Projectile.Form} target={targetPath} {error}");
     }
 
-    private void ShootProjectilePlayer(RuntimeNativePlayer player, FalloutWeaponPresentation weapon,
+    private void ShootProjectileTarget(RuntimeNativePlayer? player, FalloutWeaponPresentation weapon,
         FalloutWeaponHandling handling, Vector3 origin, Vector3 direction, FalloutWeaponDamage damage,
         float spreadDegrees)
     {
@@ -432,7 +432,7 @@ internal sealed partial class RuntimeNativeActorCombat
                     direction, spreadDegrees, handling.NextShotRandomUnit);
                 var flight = effects.PrepareProjectile(shot.Projectile, _context!.Gravity,
                     origin, projectileDirection, _mask, _enemyRayExclusions!);
-                flight.OnContact = contact => ApplyProjectilePlayerContact(player, shot, damage, contact);
+                flight.OnContact = contact => ApplyProjectileTargetContact(player, shot, damage, contact);
                 if (shot.Projectile.ExplosionSource is not null)
                     flight.OnDetonate = point => ApplyEnemyProjectileDetonation(player, shot, explosionDamage!.Value, point);
                 flights.Add(flight);
@@ -445,9 +445,9 @@ internal sealed partial class RuntimeNativeActorCombat
             foreach (var flight in flights) effects.LaunchProjectile(flight);
             (_enemyMuzzle ?? throw new InvalidOperationException("Actor muzzle is absent.")).Flash();
             if (weapon.Sounds.TryGetValue("shoot", out var sound)) _enemySounds!.DispatchSound(sound);
-            if (weapon.ShellModel is not null && _casingPresentationError is null)
+            if (weapon.ShellModel is not null && _casingPresentationError is null && GetViewport().GetCamera3D() is { } camera)
             {
-                try { _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), player.Camera.GlobalPosition); }
+                try { _enemyShotEffects!.EjectCasing(_enemyObject!.Socket(_skeleton, "ShellCasingNode"), camera.GlobalPosition); }
                 catch (Exception error)
                 {
                     _casingPresentationError = error.Message;
@@ -505,14 +505,14 @@ internal sealed partial class RuntimeNativeActorCombat
             leftArmCrippled: Crippled(leftArms), rightArmCrippled: Crippled(rightArms));
     }
 
-    private void ApplyProjectilePlayerContact(RuntimeNativePlayer player, FalloutWeaponShot shot,
+    private void ApplyProjectileTargetContact(RuntimeNativePlayer? player, FalloutWeaponShot shot,
         FalloutWeaponDamage damage, RuntimeNativeProjectileContact contact)
     {
         byte? part = null;
         float? healthBefore = null;
         float? healthAfter = null;
         FalloutActorHit? actorHit = null;
-        if (contact.Collider == player || contact.Collider is not null && player.IsAncestorOf(contact.Collider))
+        if (player is not null && (contact.Collider == player || contact.Collider is not null && player.IsAncestorOf(contact.Collider)))
         {
             part = contact.Collider == player ? (byte)0 : player.CombatHitPart(contact.Collider!);
             healthBefore = _context!.Vitals().ExactHitPoints;
@@ -560,7 +560,7 @@ internal sealed partial class RuntimeNativeActorCombat
         };
     }
 
-    private void ApplyEnemyProjectileDetonation(RuntimeNativePlayer player, FalloutWeaponShot shot,
+    private void ApplyEnemyProjectileDetonation(RuntimeNativePlayer? player, FalloutWeaponShot shot,
         FalloutWeaponDamage blastDamage, Vector3 point)
     {
         if (shot.Projectile.ExplosionSource is not { } explosion) return;

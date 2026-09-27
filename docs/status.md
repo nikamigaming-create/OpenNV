@@ -1,9 +1,17 @@
 # Product status
 
-Updated September 21, 2026 from current code and fresh tests. OpenNV is
+Updated September 27, 2026 from current code and fresh tests. OpenNV is
 experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
+
+The immediate direction is a functioning flat world, including autonomous
+NPC/creature interactions and source routines. The September 27 work repairs
+player-only combat acquisition/assistance, weaponless NPC attacks, squat
+creature motion, compiled script-local admission and delayed quest death events.
+These are bounded runtime improvements; complete resident routines, quests,
+mod gameplay and matched retail behavior remain open. Follow the
+[flat gameplay work order](flat-gameplay-plan.md).
 
 ## New Vegas
 
@@ -19,8 +27,8 @@ simulator presentation and physical acceptance are separate evidence levels.
 | Barter | Merchant-container resolution, staged item/cap exchange and source pricing inputs are connected to ShowBarterMenu. | Fresh ordinary flat and Elliott Tate simulator dialogue/barter takes exist. Complete price modifiers, restocking and physical controller acceptance remain open. |
 | Crafting | RCCT/RCPE readers, recipe gates and rollback-safe ingredient/output transactions connect to ShowRecipeMenu. | A normal flat reloading-bench activation and 9mm breakdown transaction were recorded and inspected. HasPerk conditions, controller use and cold restoration need further proof. |
 | Weapons | Hitscan, automatic/multi-pellet, missile/lobber, beam/flame, attack events, spread/ammo/condition paths exist within explicit admission rules. Weapon animation completion no longer triggers a full campaign save. | A selected gun fires/reloads without per-shot save writes in ordinary flat and Elliott Tate input. Explicit saving and cross-mode cold Continue retain magazines, ammunition and shot random state. All-weapon gameplay, mines, timed/rotated throws, several explosion effects, condition-wear calibration and complete damage rules remain open. |
-| NPC combat | Aggression/assistance, ranged/melee attacks and player/actor limb damage have shared owners. Player sight contacts, stationary turning, occluded pursuit and scenery-saturated friendly queries are corrected. | The source Fiend passes native blocked-route/dense-world checks and fires, reloads and damages the player in ordinary flat and Elliott Tate simulator gameplay; ED-E kills him and resumes Follow. Tactics, reactions, critical/sneak modifiers, hit/death script events and death XP remain unbound. |
-| Death and loot | Source ragdolls, corpse inventories, saved severed limbs and lethal weapon limb selection exist. | Gecko combat/sever fixtures pass with Jolt. Damaged ED-E now initializes from authored XRGD and rests on the counter in flat and simulator views; cold-pose checks pass. XRGB root rotation and broad stability/combat remain open. |
+| NPC/creature combat | Aggression/assistance, ranged/melee/natural attacks and player/actor limb damage have shared owners. Acquisition and faction assistance consider resident actors without a player dependency. | Native source encounters pass NPC initiation, creature retaliation and allied assistance with no player or injected hit. Unaggressive actors and opaque walls prevent initiation. Prior Fiend/ED-E flat and simulator encounters exist. Target weighting, tactics, reactions, critical/sneak modifiers, hit events and death XP remain unbound. |
+| Death and loot | Source ragdolls, corpse inventories, saved severed limbs, lethal weapon limb selection and delayed killer-filtered OnDeath script dispatch exist. Pending death timing survives v19 saves. | Native delayed death updates a quest once; synthetic cold continuation retains the delay and consumed event. Gecko combat/sever fixtures pass with Jolt. ED-E initializes from XRGD; cold-pose checks pass. Essential recovery, hit events, XP, XRGB root rotation and broad stability remain open. |
 | Travel | Source doors, a moving exterior grid, LAND/LOD and retained reference state are connected. Source-portal A* uses native player-capsule clearance and bounded replanning. | The flat bot completed the Primm approach and entered Nash Residence. Both modes repaired/recruited ED-E and completed the follower door exit and outdoor kill/loot sequence. Complete routes and streaming spikes remain open. |
 | Actor admission | Persistent encounter-zone levels and per-reference leveled-template choices feed appearance, inventory, scripts, voice, factions and combat. Missing female ARMO models use the corresponding male model and materials. Linked Patrol routes support the two elevated Primm riflemen. | The selected Primm grid plus 12 interiors passes admission/resource checks for 54 enabled actors; 48 disabled actors in that saved state remain disabled, including prior combat deaths. All 14 enabled hotel NPCs prepare. Both elevated riflemen reach their first markers, wait and proceed in native gameplay. Entire routes, missing resources, scripts/packages and broader population remain open. |
 | OpenXR | Tracked body/hands/weapons, contacts, support grip, wrist device and shared stereo menu surfaces exist. | Fresh headless player/contact checks pass. They are not simulator gameplay or physical acceptance. Room-scale fit, comfort and integrated controls remain open. |

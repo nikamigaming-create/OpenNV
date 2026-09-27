@@ -183,7 +183,10 @@ reference owner. Winning skill settings, NV weapon condition and unconditional
 abilities supply the bounded damage calculation. NPC health, selected armor
 condition, aggression/assistance and bounded ranged/melee attacks now use the
 shared world and damage owners. Critical/sneak modifiers, complete resistance
-ordering, reactions, AI tactics, hit/death scripts and XP remain unbound.
+ordering, reactions, AI tactics, hit scripts and XP remain unbound. Pending death
+events and elapsed gameplay time belong to reference injury state. The native
+event adapter dispatches source OnDeath blocks after the winning dying delay and
+speech completion, once per new death, with the actual killer as its filter.
 Death switches that actor from its idle clock to its source skeleton's
 rigid bodies and joints; corpse activation uses the existing container owner.
 Saved injury, death inventory and physical bone poses share reference persistence.

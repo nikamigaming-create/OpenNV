@@ -46,6 +46,7 @@ internal sealed partial class RuntimeNativeActorCombat
         lastExplosion = _lastExplosion,
         error = _engagementError,
         assistanceError = _assistanceError,
+        acquisition = _lastAcquisition,
         motion = MotionObservation,
         boundary = "source-aggression-confidence-0-flee-and-faction-assistance;confidence-threat-ratios-stealth-avoidance-cover-and-retail-tactics-unmatched"
     };
@@ -81,7 +82,11 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void NotifyAssistance(FalloutFormKey attacker)
     {
-        if (attacker != _records.RuntimeFormKey(0x14) || _context?.Player() is not { } player) return;
+        if (_context is null) return;
+        var player = _context.Player();
+        var opponent = attacker == _records.RuntimeFormKey(0x14) ? null :
+            CombatActors.SingleOrDefault(actor => actor._state.Reference == attacker);
+        if (opponent is null && (attacker != _records.RuntimeFormKey(0x14) || player is not { CollisionResident: true })) return;
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
         if (threat.Aggression == 3) return;
         foreach (var candidate in _actor.GetTree().GetNodesInGroup(CombatActorsGroup).OfType<RuntimeNativeActorCombat>())
@@ -90,7 +95,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 !ReferenceEquals(candidate._context, _context)) continue;
             try
             {
-                candidate.TryAssist(_state, _actor.GlobalPosition, attacker, player);
+                candidate.TryAssist(_state, _actor.GlobalPosition, attacker, player, opponent);
             }
             catch (Exception error)
             {
@@ -100,16 +105,18 @@ internal sealed partial class RuntimeNativeActorCombat
         }
     }
 
-    private bool TryAssist(FalloutReferenceInstance victim, Vector3 origin, FalloutFormKey attacker, RuntimeNativePlayer player)
+    private bool TryAssist(FalloutReferenceInstance victim, Vector3 origin, FalloutFormKey attacker,
+        RuntimeNativePlayer? player, RuntimeNativeActorCombat? opponent)
     {
-        if (Dead || !_state.Enabled || _state.Unconscious || _state.Engagement is not null ||
-            _engagementError is not null || !player.CollisionResident || !_context!.Resident(_actor.GlobalPosition)) return false;
+        if (attacker == _state.Reference || Dead || !_state.Enabled || _state.Unconscious || _state.Restrained || _state.Engagement is not null ||
+            _engagementError is not null || !_context!.Resident(_actor.GlobalPosition)) return false;
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
         if (threat.Aggression == 3 || threat.Assistance == 0) return false;
         var relation = _world.ActorRelation(_state.Reference, victim.Reference);
         if (relation != 2 && !(threat.Assistance == 2 && relation == 3)) return false;
         var radius = ThreatRadius(threat);
-        if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius || !CanSee(player)) return false;
+        if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius ||
+            !CanSeePoint(opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint, opponent)) return false;
         _state.Engagement = new(attacker);
         _assistsReceived++;
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
@@ -125,10 +132,10 @@ internal sealed partial class RuntimeNativeActorCombat
         _enemyMuzzle?.Advance(delta);
         if (_context is null || Dead || !_state.Enabled || _state.Unconscious || _state.Restrained || _engagementError is not null) return;
         var player = _context.Player();
-        if (player is null || !player.CollisionResident || !_context.Resident(_actor.GlobalPosition)) return;
+        if (!_context.Resident(_actor.GlobalPosition)) return;
         try
         {
-            if (_state.Engagement is null && !TryCompanionCombat(player))
+            if (_state.Engagement is null && !TryCompanionCombat())
             {
                 _detectionClock -= delta;
                 if (_detectionClock > 0) return;
@@ -137,12 +144,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 var aggression = _world.ActorValue(_state.Reference, "aggression");
                 if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3) throw new InvalidDataException("Actor aggression is invalid.");
                 _threat = _threat with { Aggression = (byte)aggression };
-                if (_state.PlayerTeammate || _threat.Aggression == 0 || _threat.Confidence == 0 || _context.Vitals().HitPoints == 0) return;
-                _relation = _world.ActorRelation(_state.Reference, _records.RuntimeFormKey(0x14));
-                if (!_threat.Initiates(_relation.Value)) return;
-                _detectRange = ThreatRadius(_threat);
-                if (_actor.GlobalPosition.DistanceTo(player.GlobalPosition) > _detectRange || !CanSee(player)) return;
-                _state.Engagement = new(_records.RuntimeFormKey(0x14));
+                if (_state.PlayerTeammate || _threat.Aggression == 0 || _threat.Confidence == 0 || !TryAcquireThreat(player)) return;
+                NotifyAssistance(_state.Engagement!.Target);
             }
             if (!ResolveTarget(player)) return;
             StopPackageMotion(); _enemyObject?.Root.Show();
@@ -189,7 +192,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _ = Clip(_movementPath, true);
     }
 
-    private void AdvanceFlee(RuntimeNativePlayer player, double delta)
+    private void AdvanceFlee(RuntimeNativePlayer? player, double delta)
     {
         var state = _state.Engagement!;
         var offset = _actor.GlobalPosition - TargetPosition(player);
@@ -225,15 +228,6 @@ internal sealed partial class RuntimeNativeActorCombat
             _enemySounds!.Dispatch(key);
         PublishCombatPose(clip, clip.Time(next), next);
         _state.Engagement = state with { Seconds = next, StartPending = false };
-    }
-
-    private bool CanSee(RuntimeNativePlayer player)
-    {
-        var head = SightBone();
-        if (head < 0) throw new NotSupportedException("Actor sight requires its source head bone.");
-        var eye = (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(head)).Origin;
-        using var query = PhysicsRayQueryParameters3D.Create(eye, player.Camera.GlobalPosition, player.CollisionMask);
-        return _actor.GetWorld3D().DirectSpaceState.IntersectRay(query).Count == 0;
     }
 
     public override void _ExitTree()

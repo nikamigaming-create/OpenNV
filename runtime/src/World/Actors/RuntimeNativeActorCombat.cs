@@ -42,7 +42,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         muzzlePresentationError = _muzzlePresentationError,
         casingPresentationError = _casingPresentationError,
         engagement = EngagementObservation,
-        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI-tactics,confidence-threat-ratios,hit-and-death-script-events,death-XP,exploded-limbs"
+        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,damage-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs"
     };
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
