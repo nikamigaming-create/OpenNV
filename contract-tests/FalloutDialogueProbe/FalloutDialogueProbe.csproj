@@ -14,6 +14,11 @@
     <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
     <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
     <Compile Include="../../runtime/src/Content/FalloutAiPackages.cs" Link="FalloutAiPackages.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutPackageSchedule.cs" Link="FalloutPackageSchedule.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutGlobalState.cs" Link="FalloutGlobalState.cs" />
+    <Compile Include="../../runtime/src/Gameplay/State/FalloutGameTime.cs" Link="FalloutGameTime.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorTemplateOwner.cs" Link="FalloutActorTemplateOwner.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorTemplateSelection.cs" Link="FalloutActorTemplateSelection.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />

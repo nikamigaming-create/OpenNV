@@ -36,7 +36,8 @@ public partial class RuntimeCoordinator
     private ulong _nativeGridGeneration;
     private bool NativeCollisionResident(Vector3 position)
     {
-        if (_nativeActiveCell?.Cell.Worldspace is null) return true;
+        if (_nativeDoorLoading || _nativeActiveCell is null || _nativeCurrentCellRoot is null) return false;
+        if (_nativeActiveCell.Cell.Worldspace is null) return true;
         var width = 4096 * _configuration.World.GameUnitsToMeters;
         var radius = _configuration.Player.CapsuleRadiusMeters;
         for (var x = (int)MathF.Floor((position.X - radius) / width); x <= (int)MathF.Floor((position.X + radius) / width); x++)

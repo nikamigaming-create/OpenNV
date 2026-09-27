@@ -40,6 +40,38 @@ internal static class GameTimeProbe
         Require(unchanged.Values.SequenceEqual(restoredGlobals.Capture().Values), "Rejected global restore partially mutated gameplay state.");
         Reject<InvalidDataException>(() => globals.Set(forms[0], float.NaN));
         Reject<ArgumentOutOfRangeException>(() => clock.AdvanceSimulation(-1));
+        var night = new FalloutPackageSchedule(-1, 5, 0, 22, 8);
+        void SetTime(int month, int date, int weekday, float hour)
+        {
+            globals.Set(bindings.Month, month); globals.Set(bindings.Day, date);
+            globals.Set(bindings.Hour, hour); globals.Set(bindings.DaysPassed, weekday + hour / 24);
+        }
+        SetTime(8, 25, 5, 21.999f);
+        Require(!night.IsActive(clock), "Night package began before its authored hour.");
+        SetTime(8, 25, 5, 22);
+        Require(night.IsActive(clock), "Night package did not begin at its source hour.");
+        SetTime(8, 26, 6, 5.999f);
+        Require(night.IsActive(clock) && !(night with { Weekday = 8 }).IsActive(clock),
+            "Overnight window lost its starting weekday or acquired a weekend start.");
+        SetTime(8, 26, 6, 6);
+        Require(!night.IsActive(clock), "Night package remained valid after its end.");
+        SetTime(0, 1, 6, 2);
+        Require((night with { Month = 11, Date = 31 }).IsActive(clock), "Overnight year boundary lost the previous date.");
+        SetTime(2, 1, 6, 2);
+        Require((night with { Month = 1, Date = 28 }).IsActive(clock), "Package calendar invented a leap day.");
+        SetTime(8, 25, 5, 12);
+        Require(new FalloutPackageSchedule(-1, 9, 0, -1, 0).IsActive(clock) &&
+            !new FalloutPackageSchedule(-1, 10, 0, -1, 0).IsActive(clock), "Alternating weekday groups differ.");
+        Require(new FalloutPackageSchedule(-1, -1, 0, 12, 0).IsActive(clock), "Zero duration did not select its start-hour block.");
+        SetTime(8, 25, 5, 13);
+        Require(!new FalloutPackageSchedule(-1, -1, 0, 12, 0).IsActive(clock), "Zero duration escaped its one-hour block.");
+        Require(new FalloutPackageSchedule(-1, -1, 0, -1, 9999).IsActive(null), "An unrestricted schedule required a clock.");
+        Reject<NotSupportedException>(() => night.IsActive(null));
+        SetTime(8, 26, 6, 22);
+        Require(new FalloutPackageSchedule(-1, 4, 0, 22, 49).IsActive(clock), "A multi-day window lost its original starting day.");
+        SetTime(8, 26, 6, 23);
+        Require(!new FalloutPackageSchedule(-1, 4, 0, 22, 49).IsActive(clock), "A multi-day window missed its exclusive end.");
+        Console.WriteLine("OPENNV_PACKAGE_SCHEDULE_CONTRACT_PASS hourBoundaries=true overnight=true weekdays=true sourceCalendar=true multiDay=true missingClockRejected=true");
         Console.WriteLine("OPENNV_GAME_TIME_CONTRACT_PASS sourceGlobals=true float32=true sourceCalendar=true coldRestore=true simulationClockOnly=true");
     }
 
@@ -63,6 +95,16 @@ internal static class GameTimeProbe
         var restoredClock = new FalloutGameTime(restoredGlobals, bindings, calendar); restoredClock.Restore(savedTime);
         clock.AdvanceSimulation(1f / 60); restoredClock.AdvanceSimulation(1f / 60);
         Require(globals.Capture().Values.SequenceEqual(restoredGlobals.Capture().Values), "Owned cold global restoration changed the next simulation tick.");
+        var schedules = records.EffectiveRecords("PACK").Select(FalloutPackageSchedule.Read).ToArray();
+        var active = schedules.Count(schedule => schedule.IsActive(clock));
+        Require(active == schedules.Count(schedule => schedule.IsActive(restoredClock)), "Cold clocks selected different package schedules.");
+        foreach (var weekday in Enumerable.Range(0, 7))
+            foreach (var hour in new[] { 0, 6, 12, 22 })
+            {
+                globals.Set(bindings.Hour, hour); globals.Set(bindings.DaysPassed, weekday + hour / 24f);
+                foreach (var schedule in schedules) _ = schedule.IsActive(clock);
+            }
+        Console.WriteLine($"OPENNV_OWNED_PACKAGE_SCHEDULE_PASS declarations={schedules.Length} coldSelection=true sevenDaySampling=true proceduresAndRetailTiming=separate");
         Console.WriteLine($"OPENNV_OWNED_GAME_TIME_PASS globals={globals.Sources.Count} calendarSha256={calendar.SourceSha256} initialHour={saved.Values.Single(value => value.Form == bindings.Hour).Value:R} matchedClock=unverified");
     }
 

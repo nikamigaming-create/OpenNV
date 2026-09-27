@@ -9,6 +9,13 @@ The immediate direction is a functioning flat world, including autonomous
 NPC/creature interactions and source routines. The September 27 work repairs
 player-only combat acquisition/assistance, weaponless NPC attacks, squat
 creature motion, compiled script-local admission and delayed quest death events.
+It also adds partial-stack quantity selection, recipe ownership conditions,
+live script distance/time queries and saved-clock package schedule selection.
+Resident NPC/creature movement no longer requires a player object.
+Fresh ordinary flat Continue restores the genuine Primm checkpoint, where an
+unprovoked hostile fires at the player, ED-E responds and two patrols advance.
+A prior parser regression no longer rejects four saved quest-script owners;
+all 446 original owners retain their clocks, failures and quest progress.
 These are bounded runtime improvements; complete resident routines, quests,
 mod gameplay and matched retail behavior remain open. Follow the
 [flat gameplay work order](flat-gameplay-plan.md).

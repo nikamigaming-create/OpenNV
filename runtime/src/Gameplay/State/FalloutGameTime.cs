@@ -12,6 +12,7 @@ internal sealed record FalloutGameTimeBindings(FalloutFormKey Year, FalloutFormK
         records.RuntimeFormKey(0x39), records.RuntimeFormKey(0x3a));
 }
 internal sealed record FalloutGameTimeSnapshot(float PreviousHour, bool ReconcileDaysPassed, string CalendarSha256);
+internal readonly record struct FalloutScheduleTime(int Month, int Date, int Weekday, float Hour);
 
 /// <summary>Simulation-owned calendar/time advance. Presentation only reads this owner.</summary>
 internal sealed class FalloutGameTime
@@ -24,6 +25,23 @@ internal sealed class FalloutGameTime
     internal float Hour => _globals.Get(_forms.Hour);
     internal float TimeScale => _globals.Get(_forms.TimeScale);
     internal float DaysPassed => _globals.Get(_forms.DaysPassed);
+    internal int CalendarDays => _calendar.MonthDays.Sum(value => value);
+
+    internal FalloutScheduleTime ScheduleTime(int daysBefore = 0)
+    {
+        Validate();
+        if (daysBefore < 0) throw new ArgumentOutOfRangeException(nameof(daysBefore));
+        var carry = checked((int)MathF.Floor(Hour / 24));
+        var offset = carry - daysBefore;
+        var month = checked((int)_globals.Get(_forms.Month));
+        var date = checked((int)_globals.Get(_forms.Day));
+        var dayOfYear = _calendar.MonthDays.Take(month).Sum(value => value) + date - 1;
+        dayOfYear = (int)(((long)dayOfYear + offset) % CalendarDays + CalendarDays) % CalendarDays;
+        month = 0;
+        while (dayOfYear >= _calendar.MonthDays[month]) dayOfYear -= _calendar.MonthDays[month++];
+        var weekday = (int)((Math.Floor(DaysPassed) - daysBefore) % 7 + 7) % 7;
+        return new(month, dayOfYear + 1, weekday, Hour % 24);
+    }
 
     internal FalloutGameTime(FalloutGlobalState globals, FalloutGameTimeBindings forms, FalloutCalendar calendar)
     {

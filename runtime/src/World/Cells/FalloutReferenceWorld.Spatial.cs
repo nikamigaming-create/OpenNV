@@ -40,11 +40,11 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     internal bool InSameCell(FalloutFormKey first, FalloutFormKey second,
-        FalloutReferencePlacement player, float unitsToMetres)
+        FalloutReferencePlacement? player, float unitsToMetres)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
             throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
-        player.Validate();
+        player?.Validate();
         (FalloutFormKey? World, FalloutFormKey? Interior, int X, int Y) Location(FalloutFormKey key)
         {
             var placement = SpatialPlacement(key, player, unitsToMetres);

@@ -17,9 +17,10 @@ public partial class NativeActorCombatAudit : Node3D
             using var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var globals = FalloutGlobalState.Read(records);
-            if (args.Length is 4 or 5 && args[1] is "--retaliation" or "--ambient")
+            if (args.Length is 4 or 5 && args[1] is "--retaliation" or "--ambient" or "--package-motion")
             {
-                await ExerciseRetaliation(records, content, globals, args[2], args[3], args.Length == 5 && args[4] == "--unarmed", args[1] == "--ambient");
+                await ExerciseRetaliation(records, content, globals, args[2], args[3], args.Length == 5 && args[4] == "--unarmed",
+                    args[1] != "--retaliation", args[1] == "--package-motion");
                 GetTree().Quit();
                 return;
             }

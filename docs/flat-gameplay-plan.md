@@ -110,3 +110,31 @@ ownership in a native component check. GetDeadCount and complete recipe/quest
 chains remain open. Reference-script GetDistance uses live three-dimensional
 game-unit positions, and GetCurrentTime uses shared GameHour; these operations
 do not themselves complete scripts that reach another missing command.
+
+## September 27 resident schedules
+
+Package selection evaluates PSDT time/calendar windows before CTDA conditions,
+in authored priority order. It handles overnight starts, weekday groups and the
+owned fixed calendar. NPCs and creatures receive the shared saved clock and
+reevaluate at hour changes. The ten-second condition poll is an explicit OpenNV
+policy; retail evaluation cadence and full package flags remain unmatched.
+Schedule layouts follow the [PACK format documentation](https://tes5edit.github.io/fopdoc/FalloutNV/Records/PACK.html);
+the [GECK package contract](https://geckwiki.com/index.php?title=AI_Package)
+defines whole-hour schedule blocks and schedule-before-condition selection.
+
+Playerless native NPC and creature motion checks use source root animation and
+the actual collision owner. Non-player spatial queries and creature follow
+speed use the actual actor/target state. These changes remove player dependencies
+but do not implement sandbox choice, sleep/eat/guard procedures, package event
+scripts/topics, off-residency simulation, complete saved package lifecycle or
+retail behavior weighting. Those are required for the requested living world.
+
+The ordinary flat copied-save run now loads the Primm exterior, observes hostile
+acquisition and gunfire against an idle player, ED-E's response, and two active
+patrol routes. Initial collision publication and temporary follower-target
+absence no longer cause permanent startup AI failures. A prior strict-parser
+change had also prevented Continue by rejecting four stored quest-script
+owners. They now retain their saved state; ambiguous trailing Else syntax still
+fails if reached. Cold restoration preserves all 446 original script owners.
+The existing corpus audit reports 57 remaining source-body parse failures;
+these counts do not certify execution or campaign support.

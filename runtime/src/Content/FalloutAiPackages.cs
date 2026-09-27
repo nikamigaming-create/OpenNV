@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Content;
 
@@ -25,7 +26,7 @@ internal static class FalloutAiPackages
         => FalloutActorTemplateOwner.Resolve(stack, record, flag);
 
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
-        Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null)
+        Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null, FalloutGameTime? clock = null)
     {
         var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(npc), 32, selection);
         foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
@@ -33,16 +34,10 @@ internal static class FalloutAiPackages
             if (field.Data.Length != 4) throw new InvalidDataException("NPC package identity has an invalid extent.");
             var package = stack.GetEffective(owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)));
             if (package.Signature != "PACK") throw new InvalidDataException("NPC package identity is not PACK.");
-            // Evaluate priority in file order. A false candidate need not load its
-            // target, animation or event scripts to reject it.
+            // Schedules precede conditions, in authored priority order. An
+            // inactive candidate cannot run condition queries or side effects.
+            if (!FalloutPackageSchedule.Read(package).IsActive(clock)) continue;
             if (!FalloutCondition.AllPass(FalloutCondition.Read(package), evaluate)) continue;
-            var schedules = package.ReadSubrecords().Where(row => row.Signature == "PSDT").ToArray();
-            if (schedules.Length != 1 || schedules[0].Data.Length != 8)
-                throw new InvalidDataException("Package schedule has an invalid extent.");
-            var schedule = schedules[0].Data.Span;
-            if (schedule[0] != 255 || schedule[1] != 255 || schedule[2] != 0 || schedule[3] != 255 ||
-                BinaryPrimitives.ReadInt32LittleEndian(schedule[4..]) != 0)
-                throw new NotSupportedException($"PACK {package.FormKey} requires calendar/schedule evaluation.");
             return package;
         }
         return null;

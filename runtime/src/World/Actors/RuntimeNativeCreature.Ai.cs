@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -8,6 +9,10 @@ internal sealed partial class RuntimeNativeCreature
 {
     private FalloutPluginStack? _aiRecords;
     private FalloutQuestState? _aiQuests;
+    private FalloutGameTime? _aiClock;
+    private FalloutGlobalState? _aiGlobals;
+    private FalloutFormKey? _failedPackage;
+    private FalloutScheduleTime? _aiScheduleTime;
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiState;
     private FalloutPluginRecord? _aiPackage;
@@ -18,6 +23,7 @@ internal sealed partial class RuntimeNativeCreature
     private bool _evaluateRequested = true;
     private double _packageClock;
     private string? _aiError;
+    private FalloutFormKey? _waitingForTarget;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
     internal bool FollowingPlayer => _aiState?.PlayerTeammate == true && _aiError is null &&
         _followPackage?.Target == _aiRecords?.RuntimeFormKey(0x14) && Combat?.Dead == false && !_aiState.Restrained;
@@ -28,12 +34,17 @@ internal sealed partial class RuntimeNativeCreature
         dialogue = _dialoguePackage,
         dialogueRequested = _dialogueRequested,
         motion = _aiState?.PackageMotion,
-        error = _aiError
+        waitingForTarget = _waitingForTarget?.ToString(),
+        error = _aiError,
+        scheduleTime = _aiScheduleTime,
+        evaluationPolicy = "hour-changes-and-ten-second-poll;retail-cadence-unmatched"
     };
 
-    internal void ConfigureAi(FalloutPluginStack records, FalloutQuestState quests, FalloutReferenceWorld world)
+    internal void ConfigureAi(FalloutPluginStack records, FalloutQuestState quests, FalloutReferenceWorld world,
+        FalloutGameTime? clock = null, FalloutGlobalState? globals = null)
     {
         _aiRecords = records; _aiQuests = quests; _aiWorld = world;
+        _aiClock = clock; _aiGlobals = globals;
         _aiState = world.Get(Appearance.Reference!.Value);
         _packageEvents = new((package, kind) =>
         {
@@ -56,6 +67,10 @@ internal sealed partial class RuntimeNativeCreature
 
     private float PackageCondition(FalloutCondition condition) => condition.Function switch
     {
+        18 => (_aiClock ?? throw new NotSupportedException("Creature time query has no simulation clock.")).Hour,
+        74 => (_aiGlobals ?? throw new NotSupportedException("Creature global query has no state owner.")).Get(condition.FormArgument1),
+        71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
+        73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
         58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
         32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
         35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
@@ -75,17 +90,27 @@ internal sealed partial class RuntimeNativeCreature
 
     private bool InSameCell(FalloutFormKey target)
     {
-        var player = Combat!.PackagePlayer ?? throw new NotSupportedException("Creature cell query has no player.");
-        var position = player.GlobalPosition / Skeleton.UnitsToMetres;
-        return _aiWorld!.InSameCell(Appearance.Reference!.Value, target,
-            new(Combat.PackagePlayerCell ?? throw new NotSupportedException("Creature cell query has no active cell."),
-                [position.X, -position.Z, position.Y], [0, 0, 0]), Skeleton.UnitsToMetres);
+        FalloutReferencePlacement? placement = null;
+        if (target == _aiRecords!.RuntimeFormKey(0x14))
+        {
+            var player = Combat!.PackagePlayer ?? throw new NotSupportedException("Player cell query has no resident player.");
+            var position = player.GlobalPosition / Skeleton.UnitsToMetres;
+            placement = new(Combat.PackagePlayerCell ?? throw new NotSupportedException("Player cell query has no active cell."),
+                [position.X, -position.Z, position.Y], [0, 0, 0]);
+        }
+        return _aiWorld!.InSameCell(Appearance.Reference!.Value, target, placement, Skeleton.UnitsToMetres);
     }
 
     private void SelectPackage()
     {
-        var selected = FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates);
+        var previousFailure = _failedPackage;
+        _failedPackage = null;
+        var selected = FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock);
+        if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
+        { _failedPackage = previousFailure; return; }
+        _aiError = null;
         if (_aiPackage?.FormKey == selected?.FormKey) return;
+        _failedPackage = selected?.FormKey;
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
         FalloutDialoguePackage? dialogue = null;
@@ -102,38 +127,62 @@ internal sealed partial class RuntimeNativeCreature
         }
         _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = false;
+        _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
     }
 
-    private Vector3 TargetPosition(FalloutFormKey target)
+    private Node3D? TargetNode(FalloutFormKey target)
     {
         if (target == _aiRecords!.RuntimeFormKey(0x14))
-            return (Combat!.PackagePlayer ?? throw new InvalidOperationException("Package player is not resident.")).GlobalPosition;
+            return Combat!.PackagePlayer is { CollisionResident: true } player ? player : null;
+        if (_aiRecords.GetEffective(target).Signature is not ("ACHR" or "ACRE"))
+            throw new NotSupportedException($"Package target {target} has no actor target owner.");
+        if (!_aiWorld!.IsEnabled(target)) return null;
         var node = GetParent().GetChildren().OfType<Node3D>().SingleOrDefault(node =>
             node is RuntimeNativeCreature creature && creature.Appearance.Reference == target ||
             node is RuntimeNativeNpc npc && npc.Appearance.Reference == target);
-        return node?.GlobalPosition ?? throw new NotSupportedException($"Package target {target} is not resident.");
+        return node;
     }
 
     public override void _PhysicsProcess(double delta)
     {
         Combat?.StopPackageMotion();
-        if (_aiRecords is null || _aiError is not null || Combat is null || Combat.OwnsPose ||
+        _waitingForTarget = null;
+        if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
+        var selecting = false;
         try
         {
             _packageClock -= delta;
-            if (_evaluateRequested || _packageClock <= 0)
+            var scheduleTime = _aiClock?.ScheduleTime();
+            if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
+            if (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime)
             {
                 _evaluateRequested = false; _packageClock = 10;
+                _aiScheduleTime = scheduleTime;
+                selecting = true;
                 SelectPackage();
+                selecting = false;
             }
+            if (_aiError is not null) return;
             if (_followPackage is { } follow)
-                Combat.AdvancePackageMotion(_aiPackage!, TargetPosition(follow.Target), follow.Distance * Skeleton.UnitsToMetres,
-                    Combat.PackagePlayer?.Activity.Running == true, delta);
+            {
+                var target = TargetNode(follow.Target);
+                if (target is null) { _waitingForTarget = follow.Target; return; }
+                var running = target switch
+                {
+                    RuntimeNativePlayer player => player.Activity.Running,
+                    RuntimeNativeNpc npc => npc.Activity.Running,
+                    RuntimeNativeCreature creature => creature.Activity.Running,
+                    _ => false,
+                };
+                Combat.AdvancePackageMotion(_aiPackage!, target.GlobalPosition, follow.Distance * Skeleton.UnitsToMetres, running, delta);
+            }
             else if (_dialoguePackage is { } dialogue && !_dialogueRequested)
             {
-                var target = TargetPosition(dialogue.Target);
+                var targetNode = TargetNode(dialogue.Target);
+                if (targetNode is null) { _waitingForTarget = dialogue.Target; return; }
+                var target = targetNode.GlobalPosition;
                 var distance = dialogue.ActivationDistance * Skeleton.UnitsToMetres;
                 Combat.AdvancePackageMotion(_aiPackage!, target, distance, false, delta);
                 if (GlobalPosition.DistanceTo(target) <= distance && IsOnFloor() && Combat.PackagePlayer?.ModalInput != true)
@@ -146,8 +195,10 @@ internal sealed partial class RuntimeNativeCreature
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
         {
+            var changed = _aiError != error.Message;
             _aiError = error.Message;
-            GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
+            if (!selecting) _failedPackage = _aiPackage?.FormKey;
+            if (changed) GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }
     }
 }
