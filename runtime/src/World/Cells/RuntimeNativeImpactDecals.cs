@@ -14,12 +14,14 @@ internal sealed partial class RuntimeNativeImpactDecals : Node
     private readonly float _units, _lifetime;
     private double _seconds;
     private long _created;
+    private object? _last;
     internal int Count => _entries.Count;
     internal object Observation => new
     {
         created = _created,
         active = Count,
         lifetime = _lifetime,
+        last = _last,
         boundary = "projected-Godot-decal;source-parallax-specular-and-skinned-clipping-unmatched"
     };
 
@@ -54,6 +56,16 @@ internal sealed partial class RuntimeNativeImpactDecals : Node
         };
         AddChild(decal); decal.GlobalTransform = pose;
         _entries.Add(new(decal, target, target is null ? pose : target.GlobalTransform.AffineInverse() * pose, _seconds));
+        _last = new
+        {
+            impact = impact.Form.ToString(),
+            source.Flags,
+            source.KnownFlags,
+            source.ReservedFlags,
+            widthMeters = width,
+            heightMeters = height,
+            depthMeters = source.Depth * _units
+        };
     }
 
     public override void _Process(double delta)

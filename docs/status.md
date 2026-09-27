@@ -35,8 +35,12 @@ visibility duration. Normal and long-fuse dynamite bind their external KF
 emitter channels; native input checks pass hold/release, one-item consumption,
 physical flight and one timed detonation. The new simulator take shows the
 laser hostile encounter and reachable two-hand support. Dynamite's separate
-lighter attachment in VR and some thrown-contact material/decal effects remain
-broken; all-weapon and all-mod gameplay remain incomplete.
+lighter attachment in VR remains broken. Enabling Jolt ray face indices and
+preserving reserved decal bits repairs the two thrown-impact failures in native
+checks. Ordinary flat knife, hatchet and spear throws each discharge once and
+finish after real contacts without those errors. The new 44-second paired reel
+includes dynamite, knife, hatchet and two-hand support, with faults captioned.
+All-weapon and all-mod gameplay remain incomplete.
 
 ## New Vegas
 

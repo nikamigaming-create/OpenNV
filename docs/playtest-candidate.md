@@ -50,8 +50,10 @@ hit scripts and broader combat behavior remain incomplete.
 The weapon update adds shared automatic and throw clocks, rotating grenades,
 source fuses/contact response, explosion models and destructible stages. It
 repairs the Flamer's hidden gun, visible purple helper, hand-mounted backpack
-and XR fingers opening on untouched controls. Selected flat/simulator footage
-shows carbine, laser pistol, Fat Man, frag, Flamer, spear and cleaver actions.
+and XR fingers opening on untouched controls. The expanded flat/simulator footage
+shows 9mm, laser rifle, dynamite, knife, hatchet, spear, Fat Man, Flamer and cleaver
+actions. Source laser beam geometry and external dynamite emitter channels are
+connected. The laser, Fat Man and Flamer take uses reachable two-hand support.
 Native checks separately exercise a source car's explosion/wreckage and saved
 destruction state. The reel does not establish every weapon or natural car
 encounter; mines, beam/flame/tracer completeness, special ammunition, blast
@@ -121,8 +123,8 @@ Native actor route searches now share a two-millisecond physics-frame budget;
 one node expansion can overrun it. A selected route request fell from earlier
 52–142 ms samples to 2.71 ms after source-projection and search changes.
 These are selected Windows measurements, not headset or cross-platform acceptance.
-The newer paired weapon capture is substantially slower: about 19.7 distinct
-recorded frames/sec flat and 12.9 in the simulator. It retains repeated frames
+The expanded paired weapon capture is substantially slower: about 23.4 distinct
+recorded frames/sec flat and 15.6 in the simulator. It retains repeated frames
 and cannot establish smooth combat performance.
 
 The user's flat and physical headset playtests are required before considering

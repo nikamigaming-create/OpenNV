@@ -45,17 +45,16 @@ or bounce, spending 198 ms in detonation processing. The complete runtime
 checks and selected native weapon checks pass. Two flat diagnostic runs still
 report a native heap-corruption crash on ordinary Quit Game.
 
-The earlier selected-weapon reel is
-`local/recordings/weapon-showcase-20260927/OpenNV-weapons-flat-VR.mp4`.
-It pairs ordinary flat and Elliott Tate simulator input on copied checkpoints
-with diagnostic inventory additions: automatic fire, Aid, laser pistol, Fat Man,
-frag grenade, Flamer, spear and cleaver. Actual detonation state was checked
-independently of capture-driver annotations. Car destruction is a separate
-native fixture and is not shown. The main raw takes contain about 19.7 and 12.9
-distinct captured frames/sec respectively; repeats remain visible. This is not
-all-weapon, smooth-performance, matched-retail or physical-headset acceptance.
-The user rejected this reel: it omits dynamite and proper two-hand support and
-does not establish every weapon. A replacement remains in progress.
+The replacement 44-second reel has been delivered:
+`local/recordings/weapon-showcase-20260927/OpenNV-weapons-flat-VR-expanded.mp4`.
+It pairs new ordinary flat and Elliott Tate simulator input on copied Primm
+checkpoints with inventory-only diagnostic additions: 9mm, laser rifle,
+dynamite, knife, hatchet, spear, Fat Man, Flamer and cleaver. Two-hand support
+is engaged for laser, Fat Man and Flamer. Car destruction remains a separate
+native fixture and is not shown. Raw takes contain about 23.4 and 15.6 distinct
+captured frames/sec; repeats remain visible. The lighter, flame and impact
+faults are captioned. This is not all-weapon, smooth-performance, matched-retail
+or physical-headset acceptance. The earlier rejected reel is retained privately.
 
 The latest source/native-animation sweep covers 496 winning WEAP records,
 including 302 playable inventory weapons. It reports 167 records with failures
@@ -68,13 +67,29 @@ laser damage, a source hit reaction and death in the nearby hostile encounter;
 two-hand support is engaged for the laser, Fat Man and Flamer. The take also
 exposes an unbound VR lighter attachment and thrown-contact decal/material
 errors. Both laser eyes were inspected; this does not close physical acceptance.
-The paired replacement edit is still in progress. These checks also exposed sound voices surviving their emitter
-in bookkeeping; tree-exit cleanup now removes them.
+These checks also exposed sound voices surviving their emitter in bookkeeping;
+tree-exit cleanup now removes them.
+
+The next impact repair enables Jolt's actual ray face index for mixed-material
+NIF collision. The existing owned windmill check failed with face -1 before
+the setting and now resolves source materials 5 and 9. Decal DODT readers retain
+reserved high bits present in owned thrown/melee impacts instead of rejecting
+the whole impact. Native effect/decal assembly passes all ten populated IPDS
+entries for each throwing knife, hatchet and spear. Reserved bits remain in
+telemetry; pixel/alpha/parallax equivalence is not established. Fresh ordinary
+flat knife, hatchet and spear throws each discharge once, finish their source
+flight after contacts and report no impact/decal error. The full runtime checks
+pass. Simulator rechecks and publication of this new block are in progress.
 
 ## Verified shipped baseline
 
-The previous playable baseline is
-`local/releases/OpenNV-0.1.0-experimental.20260927.2-windows-x64` (PRs 52-55).
+The checked experimental candidate is
+`local/releases/OpenNV-0.1.0-experimental.20260927.4-windows-x64` (PRs 52-56).
+PR 56 is merged and its merge commit was synchronized with local main before
+the next branch. The asset-free package was built from clean commit
+`f81edc9096d53980c1b64a39aa8ccb9204493dfd`; a copied genuine save cold-Continues
+into the native Primm world. `local/playtest-20260927-world/Play Flat.cmd`
+now points to this candidate. Both original saves retain their prior hash.
 Its ordinary flat Primm checkpoint restores hostile fire, ED-E assistance,
 source patrol motion and nonfatal IDLE hit reactions. Source NPC/gecko checks
 also cover player-independent combat, reactions and cold resumption. Looting
@@ -85,13 +100,12 @@ not establish all quests, world routines or mod execution.
 
 ## Next work
 
-Complete ordinary flat/XR captures of the newly repaired beams, dynamite and
-reachable two-hand support, with visible combat results. Finish weapon effects
+Finish ordinary impact rechecks and publish the mixed-material/decal repair.
+Finish weapon effects
 and families against the winning inventory: flame visuals and tracers,
 remaining projectile/ammunition effects, mines and unarmed input. Keep each
 weapon's source/assembly failures distinct from untested gameplay/presentation.
-Publish the checked block, verify an exported candidate on a copied checkpoint
-and update the playtest launcher. The existing narrow reel cannot close this
+The expanded selected-weapon reel cannot close this
 work or the full gameplay/mod requirements.
 
 Remaining combat owners include mines/remote triggers, some weapon/ammunition
