@@ -78,7 +78,8 @@ public partial class RuntimeCoordinator
                 (source, bindings, command, arguments) => _nativeOpeningStageDriver!.ApplyNativeSourceCommand(source, bindings, command, arguments),
                 actor => _nativeOpeningStageDriver!.IsInCombat(actor),
                 (caller, target) => _nativeOpeningStageDriver!.IsInSameCell(caller, target), _nativeQuestScripts?.Scripts.Events,
-                (caller, target) => _nativeOpeningStageDriver!.ReferenceDistance(caller, target)),
+                (caller, target) => _nativeOpeningStageDriver!.ReferenceDistance(caller, target),
+                actor => _nativeOpeningStageDriver!.IsInInterior(actor)),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

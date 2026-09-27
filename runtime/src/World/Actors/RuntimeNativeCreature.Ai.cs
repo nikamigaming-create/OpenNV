@@ -86,6 +86,7 @@ internal sealed partial class RuntimeNativeCreature
         286 => Activity.Sneaking ? 1 : 0,
         287 => Activity.Running ? 1 : 0,
         289 => Activity.InCombat ? 1 : 0,
+        300 when condition.RunOn == 0 => _aiWorld!.IsInInterior(Appearance.Reference!.Value) ? 1 : 0,
         _ => throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
     };
 

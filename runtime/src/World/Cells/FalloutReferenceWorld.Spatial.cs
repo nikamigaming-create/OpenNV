@@ -4,6 +4,14 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    internal bool IsInInterior(FalloutFormKey reference, FalloutFormKey? playerCell = null)
+    {
+        var cell = reference == records.RuntimeFormKey(0x14)
+            ? playerCell ?? throw new NotSupportedException("Player interior query has no live cell owner.")
+            : Placement(reference).Cell;
+        return (FalloutCellSceneReader.ReadDefinition(records, cell).Flags & FalloutCellSceneReader.InteriorCellFlag) != 0;
+    }
+
     internal float Distance(FalloutFormKey first, FalloutFormKey second,
         FalloutReferencePlacement? player, float unitsToMetres)
     {

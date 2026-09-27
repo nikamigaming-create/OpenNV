@@ -86,7 +86,7 @@ internal sealed record FalloutScriptValueContext(
 internal sealed record FalloutScriptStringSnapshot(uint Id, string Plugin, string Text);
 internal sealed record FalloutScriptValueStoreSnapshot(
     uint LastStringId,
-    IReadOnlyList<FalloutScriptStringSnapshot> Strings);
+    IReadOnlyList<FalloutScriptStringSnapshot> Strings, ulong? RandomState = null);
 
 // Compiled string_var locals retain numeric handles for compatibility with
 // the source format. Text ownership lives here, so a typed assignment can
@@ -95,6 +95,11 @@ internal sealed class FalloutScriptValueStore
 {
     private readonly Dictionary<uint, FalloutScriptStringSnapshot> _strings = [];
     private uint _lastStringId;
+    private FalloutSoundRandomState? _random;
+
+    // Shared reference/quest/result stream; its sequence is not retail parity.
+    internal uint RandomPercent() => (_random ??= new(BitConverter.ToUInt64(
+        System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))))).NextBounded(100);
 
     internal FalloutScriptValue Read(FalloutScriptLocalKind kind, double raw)
     {
@@ -138,7 +143,7 @@ internal sealed class FalloutScriptValueStore
     }
 
     internal FalloutScriptValueStoreSnapshot Capture() =>
-        new(_lastStringId, _strings.Values.OrderBy(value => value.Id).ToArray());
+        new(_lastStringId, _strings.Values.OrderBy(value => value.Id).ToArray(), _random?.State);
 
     internal void Restore(FalloutScriptValueStoreSnapshot? snapshot)
     {
@@ -146,6 +151,7 @@ internal sealed class FalloutScriptValueStore
         {
             _strings.Clear();
             _lastStringId = 0;
+            _random = null;
             return;
         }
         if (snapshot.LastStringId == uint.MaxValue || snapshot.Strings is null)
@@ -162,6 +168,7 @@ internal sealed class FalloutScriptValueStore
         _strings.Clear();
         foreach (var (id, value) in values) _strings.Add(id, value);
         _lastStringId = snapshot.LastStringId;
+        _random = snapshot.RandomState is { } random ? new(random) : null;
     }
 
     internal void ValidateHandle(double raw)

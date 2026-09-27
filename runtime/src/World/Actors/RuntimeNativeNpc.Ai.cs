@@ -3,6 +3,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -17,6 +18,7 @@ internal partial class RuntimeNativeNpc
     private double _aiPollRemaining;
     private FalloutFormKey? _failedPackage;
     private FalloutCellScene? _aiCell;
+    private FalloutReferenceWorld? _aiWorld;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
     private FalloutPluginRecord? _aiPackage;
@@ -132,7 +134,7 @@ internal partial class RuntimeNativeNpc
     internal void ConfigureAi(FalloutPluginStack stack, FalloutQuestState quests, FalloutCellScene cell,
         Func<FalloutPlacedReference, Transform3D> referenceTransform,
         Func<IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null,
-        FalloutGameTime? clock = null, FalloutGlobalState? globals = null)
+        FalloutGameTime? clock = null, FalloutGlobalState? globals = null, FalloutReferenceWorld? world = null)
     {
         _aiStack = stack;
         _idleConditions = new(stack);
@@ -141,6 +143,7 @@ internal partial class RuntimeNativeNpc
         _questState = quests;
         _aiClock = clock; _aiGlobals = globals;
         _aiCell = cell;
+        _aiWorld = world;
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
         // A stationary, unarmed actor owns its source movement-group idle
@@ -314,6 +317,8 @@ internal partial class RuntimeNativeNpc
         286 => Activity.Sneaking ? 1 : 0,
         287 => Activity.Running ? 1 : 0,
         289 => Activity.InCombat ? 1 : 0,
+        300 when condition.RunOn == 0 => (_aiWorld ?? throw new NotSupportedException("AI interior query has no world owner."))
+            .IsInInterior(Appearance.Reference ?? throw new NotSupportedException("AI interior query has no placed reference.")) ? 1 : 0,
         365 => FalloutRaceProperties.IsChild(_aiStack!.GetEffective(Appearance.Race)) ? 1 : 0,
         392 => 0, // This owner is an NPC; the player's view cannot be its first-person view.
         247 => 0, // No acquired item is bound to this furniture procedure.

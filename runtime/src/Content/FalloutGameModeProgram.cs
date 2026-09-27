@@ -24,6 +24,7 @@ internal sealed class FalloutScriptFunction
     private readonly Func<IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue>? _invokeValue;
 
     internal IReadOnlyList<FalloutScriptArgumentKind> Arguments { get; }
+    internal bool ReadOnly { get; init; }
     internal Func<IReadOnlyList<FalloutScriptArgument>, double> Invoke =>
         arguments => InvokeValue(arguments).Number;
 
@@ -61,7 +62,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 
 // A source-script owner, independent of menus, locations and quest identities.
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
-internal sealed class FalloutGameModeProgram
+internal sealed partial class FalloutGameModeProgram
 {
     internal const int ParserVersion = 5;
     private readonly IReadOnlyList<string[]> _lines;

@@ -33,6 +33,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), _player.UnitsToMeters);
     }
 
+    internal bool IsInInterior(FalloutFormKey reference) => _scripts.References!.IsInInterior(reference, _activeCell);
+
     private void ConfigureConversation()
     {
         _pipBoy = new(_pluginStack, _inventory);
@@ -41,7 +43,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                     .Single(npc => npc.Appearance.Reference == actor).CurrentFurniture == furniture, ApplyReferenceEffect,
                 _scripts.MessageResults.Take, actor => _speech!.IsTalking(actor), ActorValue, IsPlayerTagSkill, _globals,
-                ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events, ReferenceDistance));
+                ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events, ReferenceDistance, IsInInterior));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);

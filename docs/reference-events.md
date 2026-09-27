@@ -37,6 +37,34 @@ These neutral contracts draw on the published
 [xEdit FNV format declarations](https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.5/Core/wbDefinitionsFNV.pas).
 No external implementation or retail script body is incorporated into OpenNV.
 
+## Saved read failures and world queries
+
+Legacy reference saves retain reached script errors. A missing-read error can
+now retry when the same event is admitted and its unchanged source establishes
+that the read preceded every mutation. Inspection never invokes a query. Earlier
+assignments, rewards, consumptive queries, ambiguous repeated occurrences and
+multiple matching blocks prevent recovery. Other failures retain their executed
+prefix; they are not globally cleared. Recovery and the next reached failure
+are separately reported by the native event owner.
+
+`GetCurrentTime` reads the shared fractional game hour. `GetRandomPercent` uses
+one saved stream shared by reference, result and quest scripts, with integer
+results from 0 through 99. Its random sequence is an OpenNV policy, not matched
+retail randomness. `IsInInterior` and NPC/creature package condition 300 read the
+calling reference's current CELL flags. Moved references use their retained
+placement; the player supplies the current gameplay cell. A missing player-cell
+owner is an error, not an exterior answer. These queries follow the published
+[random-percent](https://geckwiki.com/index.php/GetRandomPercent) and
+[interior-query](https://geckwiki.com/index.php/IsInInterior) contracts.
+
+Synthetic checks cover pure-read recovery, rejected repeated effects, retained
+locals, cold random continuation and distinct moved/player cell state. The
+selected genuine checkpoint contains 37 recoverable clock/random failures;
+all 37 pass the owned-data recovery audit. A copied ordinary flat Continue
+resumes 23 resident instances. Source animation commands/queries and several
+actor package procedures still stop execution afterward. Recovery does not
+establish that those complete scripts or routines work.
+
 ## Executable checks and limits
 
 `ReferenceScriptContractProbe` checks synthetic overrides, activation suppression,
