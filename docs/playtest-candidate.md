@@ -50,8 +50,16 @@ hit scripts and broader combat behavior remain incomplete.
 The weapon update adds shared automatic and throw clocks, rotating grenades,
 source fuses/contact response, explosion models and destructible stages. It
 repairs the Flamer's hidden gun, visible purple helper, hand-mounted backpack
-and XR fingers opening on untouched controls. Selected flat/simulator footage
-shows carbine, laser pistol, Fat Man, frag, Flamer, spear and cleaver actions.
+and XR fingers opening on untouched controls. The expanded flat/simulator footage
+shows 9mm, laser rifle, dynamite, knife, hatchet, spear, Fat Man, Flamer and cleaver
+actions. Source laser beam geometry and external dynamite emitter channels are
+connected. The laser, Fat Man and Flamer take uses reachable two-hand support.
+Mixed-material collision now publishes the triangle needed to select its source
+impact, and decal decoding preserves reserved flag bits in owned thrown/melee
+records. Ordinary knife, hatchet and spear throws pass the reached impact paths
+in flat and the simulator. Thrown recovery and tracked hand-velocity launching
+remain unfinished. The Flamer projectile's strip-particle renderer and the VR
+dynamite lighter's offhand attachment also remain unimplemented.
 Native checks separately exercise a source car's explosion/wreckage and saved
 destruction state. The reel does not establish every weapon or natural car
 encounter; mines, beam/flame/tracer completeness, special ammunition, blast
@@ -62,7 +70,7 @@ blast. One repeated flat shot's detonation processing falls from 1.73 seconds
 to 0.13 seconds without adding a fuse or changing projectile speed. Explosion
 construction and rendering can still hitch, especially while recording.
 The simulator also completes the corrected shot, spending about 0.20 seconds
-in detonation processing. Two flat diagnostic runs reported a native crash
+in detonation processing. Several flat diagnostic runs reported a native crash
 after Quit Game; shutdown stability remains unfinished.
 
 ## What to test
@@ -121,9 +129,10 @@ Native actor route searches now share a two-millisecond physics-frame budget;
 one node expansion can overrun it. A selected route request fell from earlier
 52–142 ms samples to 2.71 ms after source-projection and search changes.
 These are selected Windows measurements, not headset or cross-platform acceptance.
-The newer paired weapon capture is substantially slower: about 19.7 distinct
-recorded frames/sec flat and 12.9 in the simulator. It retains repeated frames
-and cannot establish smooth combat performance.
+The expanded paired weapon capture is substantially slower: about 23.4 distinct
+recorded frames/sec flat and 15.6 in the simulator. Later Debug impact captures
+reach only 12.1 and 10.4 respectively. They retain repeated frames and cannot
+establish smooth combat performance.
 
 The user's flat and physical headset playtests are required before considering
 a golden release. Record the mode, location, action, visible result, and build

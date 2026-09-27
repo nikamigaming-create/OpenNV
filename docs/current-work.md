@@ -1,123 +1,98 @@
 # Current work
 
-## Active implementation
+## Active objective
 
-Finish ordinary flat/OpenXR gameplay with source NPC and creature combat,
-quest progression, looting, crafting and every weapon family. The immediate
-work is shared weapon timing, separate weapon/consumable wheels, real throws,
-explosions and destructible cars. The user requests a flat/VR side-by-side
-showcase as soon as a stable candidate exists. Work without subagents.
-Follow [the flat gameplay plan](flat-gameplay-plan.md) and
-[implementation plan](implementation-plan.md).
+Finish ordinary flat/OpenXR New Vegas gameplay, including every weapon,
+autonomous NPC/creature combat, source routines and quests, looting, crafting
+and the requested mods. Work without subagents. Follow the
+[flat gameplay work order](flat-gameplay-plan.md) and
+[implementation plan](implementation-plan.md). All 36 broad recovery
+requirements remain open; no campaign, all-weapon, all-mod or retail-parity
+completion is established.
 
-Shared C# owners now consume source Fire/Loop/Hold/Release timing, additional
-hand grips, inventory throws, timed fuses, explicit projectile rotation,
-explosion effects and destruction stages. Flat and XR wheels call the same
-equipment and Aid transactions. The candidate also retains destruction,
-knockdown and explosion exposure in v21 saves; earlier schemas remain readable.
+## Current candidate and footage
 
-Selected native checks pass wheel equip/cancel/single consumption, held grenade
-release and fuse, Fat Man reload/ammo/impact, car explosion/wreckage and cold
-destruction state. Source grenade bursts last only ten microseconds; effect
-clocks now split at emitter keys and all four source systems emit. Nuclear
-models use managed transform, visibility, alpha, emittance and texture channels.
-Automatic held/released fire, source grenade friction/restitution and cold state
-also pass. These are diagnostic fixtures, not campaign or retail acceptance.
+The experimental candidate is
+`local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, built asset-free
+from clean runtime commit `06ffd2cadd1f0e0a180882a666489503bea4aa30`.
+The complete runtime checks, selected owned-data checks and PR checks pass.
+A copied genuine Primm checkpoint with inventory-only diagnostic additions
+cold-Continues in the exported build, retains all 446 saved quest owners and
+completes a knife throw with two contacts and no impact/decal error.
+`local/playtest-20260927-world/Play Flat.cmd` points to this candidate.
 
-The reported purple Flamer was a shaderless export helper. The same model's
-negative visibility preroll hid its gun, and source Spine2 metadata had not
-separated the fuel pack from the hand attachment. The runtime now suppresses
-that helper's draw, samples initial visibility at clock zero and binds body
-subtrees to their source bones. Held XR fingers retain the source grip when
-controller touches are released. Owned grip/contact and Flamer assembly checks
-pass; both final eyes were inspected after the repairs.
+The latest 47-second side-by-side is
+`local/recordings/weapon-showcase-20260927/OpenNV-weapons-flat-VR-updated.mp4`.
+It contains ordinary flat and Elliott Tate simulator input from copied Primm
+checkpoints: 9mm, laser rifle, dynamite, throwing knife/hatchet/spear, Fat Man,
+Flamer and cleaver. Reachable source support grips are engaged for the laser,
+Fat Man and Flamer takes. The laser encounter includes hostile return fire,
+a hit reaction and death. New throw footage includes the impact repair.
+Remaining faults are captioned. This selected footage is not all-weapon,
+matched-retail or physical-headset acceptance.
 
-The reported Fat Man delay was a synchronous impact stall. Destruction-owner
-lookup scanned ancestor child lists for each overlapping collision shape.
-Reference roots now publish their owner, and blast classification deduplicates
-colliders before resolving targets. A repeated ordinary flat shot fell from
-1,730 to 128 ms inside detonation processing, with 3,028 overlapping shapes and
-65 distinct colliders. Its roughly two-second flight has no added fuse. Native
-car checks cover owner lookup before and after wreck replacement. Effect
-construction and recording stalls remain; this is not retail timing parity.
-An ordinary Elliott Tate shot completes one impact/detonation without a fuse
-or bounce, spending 198 ms in detonation processing. The complete runtime
-checks and selected native weapon checks pass. Two flat diagnostic runs still
-report a native heap-corruption crash on ordinary Quit Game.
+Recording performance is poor. The main raw takes contain about 23.4 distinct
+frames/sec flat and 15.6 in the simulator; the later Debug impact takes contain
+12.1 and 10.4. The edit retains repeated frames and original playback speed.
+Car destruction remains a separate native fixture, not a filmed world encounter.
+Nearby Primm cars in this source inventory are static wrecks. Repeated exported
+flat sessions report native heap corruption after ordinary Quit Game; successful
+combat and exports do not establish shutdown stability.
 
-The earlier selected-weapon reel is
-`local/recordings/weapon-showcase-20260927/OpenNV-weapons-flat-VR.mp4`.
-It pairs ordinary flat and Elliott Tate simulator input on copied checkpoints
-with diagnostic inventory additions: automatic fire, Aid, laser pistol, Fat Man,
-frag grenade, Flamer, spear and cleaver. Actual detonation state was checked
-independently of capture-driver annotations. Car destruction is a separate
-native fixture and is not shown. The main raw takes contain about 19.7 and 12.9
-distinct captured frames/sec respectively; repeats remain visible. This is not
-all-weapon, smooth-performance, matched-retail or physical-headset acceptance.
-The user rejected this reel: it omits dynamite and proper two-hand support and
-does not establish every weapon. A replacement remains in progress.
+## Repairs and current boundary
 
-The latest source/native-animation sweep covers 496 winning WEAP records,
-including 302 playable inventory weapons. It reports 167 records with failures
-(145 playable inventory weapons); rows without those failures are not verified
-gameplay. The next fixes connect external KF particle channels on dynamite and
-source BeamEnd models for instant laser rays. Fresh native input checks pass
-laser model endpoints and normal/long-fuse dynamite hold, release, one-item
-consumption, physical flight and timed detonation. A fresh simulator take shows
-laser damage, a source hit reaction and death in the nearby hostile encounter;
-two-hand support is engaged for the laser, Fat Man and Flamer. The take also
-exposes an unbound VR lighter attachment and thrown-contact decal/material
-errors. Both laser eyes were inspected; this does not close physical acceptance.
-The paired replacement edit is still in progress. These checks also exposed sound voices surviving their emitter
-in bookkeeping; tree-exit cleanup now removes them.
+Shared C# owners consume source Fire/Loop/Hold/Release clocks, automatic cadence,
+inventory throws, grenade friction/restitution, explicit rotation and timed
+fuses. Weapon and Aid wheels use ordinary equipment/consumption transactions.
+Normal and long-fuse dynamite external emitter channels now bind; native input
+checks cover hold, release, single consumption, physical flight and detonation.
+Source laser BeamEnd geometry follows the authoritative ray endpoint and source
+visibility duration. The Flamer's shaderless helper, initial gun visibility,
+body-mounted tank and retained XR finger grip were repaired. Its flame stream
+is still absent.
 
-## Verified shipped baseline
+Fat Man target lookup now resolves registered destruction owners and deduplicates
+colliders. A repeated ordinary flat shot's detonation processing fell from 1,730
+to 128 ms, with unchanged source flight and no added fuse. A simulator sample
+spent 198 ms. Effect construction and recording stalls remain. Native checks
+cover source car explosion/wreck replacement and cold destruction state.
 
-The previous playable baseline is
-`local/releases/OpenNV-0.1.0-experimental.20260927.2-windows-x64` (PRs 52-55).
-Its ordinary flat Primm checkpoint restores hostile fire, ED-E assistance,
-source patrol motion and nonfatal IDLE hit reactions. Source NPC/gecko checks
-also cover player-independent combat, reactions and cold resumption. Looting
-supports quantity selection; crafting uses recipe requirements and ownership
-conditions. All 446 quest owners in the genuine older save retain their clocks,
-failures and progress after the parser recovery. These bounded improvements do
-not establish all quests, world routines or mod execution.
+Mixed-material NIF impacts now receive Jolt ray triangle indices; the existing
+owned windmill check resolves both source materials after reproducing face -1.
+DODT preserves reserved bits found in owned throwing/melee impacts. Native checks
+load all ten populated material entries for each knife, hatchet and spear.
+Ordinary flat and simulator throws reach contacts without the prior material
+or decal errors. Decal pixels, alpha/parallax behavior and recoverable thrown
+items remain incomplete.
 
-## Next work
+The earlier source/native-animation sweep covers 496 winning weapons, including
+302 playable inventory entries, with failures on 167 records (145 playable).
+It predates the latest dynamite/impact repairs. Rows without failures are not
+verified gameplay; it also does not certify every referenced projectile effect.
 
-Complete ordinary flat/XR captures of the newly repaired beams, dynamite and
-reachable two-hand support, with visible combat results. Finish weapon effects
-and families against the winning inventory: flame visuals and tracers,
-remaining projectile/ammunition effects, mines and unarmed input. Keep each
-weapon's source/assembly failures distinct from untested gameplay/presentation.
-Publish the checked block, verify an exported candidate on a copied checkpoint
-and update the playtest launcher. The existing narrow reel cannot close this
-work or the full gameplay/mod requirements.
+## Next owners
 
-Remaining combat owners include mines/remote triggers, some weapon/ammunition
-combinations, bare player fists, player knockdown, complete blast attenuation,
-explosion placed objects/enchantments, IPDS projection, hit events, essential
-recovery and death XP. Exact refraction, particle motion, blast force and
-radiation behavior are not matched retail results. Source addon sound remains
-visible as unbound. Resident routines still expose creature wander, condition
-300, package event scripts/topics and sandbox/eat/sleep gaps.
+Implement the general source strip-particle decoder and renderer used by
+`FlamerFlame01.NIF`: BSStripParticleSystem, BSStripPSysData and
+BSPSysStripUpdateModifier are currently undecoded. Connect its effect lifetime
+to the authoritative weapon/projectile owner; do not substitute a generic flame.
+Then repair offhand prop attachment for the VR dynamite lighter, tracked
+hand-velocity throws, thrown recovery, tracer/remaining projectile effects,
+mines/remote triggers and bare-player fists. Preserve per-weapon/ammunition
+failures and exercise actual damage, reaction, death and cold state in both modes.
 
-All 36 recovery requirements remain open at full scope. Campaigns, all mods and
-physical-headset acceptance are incomplete.
+Broader combat gaps include blast attenuation, player knockdown, explosion
+placed objects/enchantments, hit events, essential recovery and death XP.
+Resident routines still expose creature wander, condition 300, package event
+scripts/topics and sandbox/eat/sleep gaps. All ten requested mod packages are
+available; selection/ordering is not runtime mod support. Continue the
+[JAM/MCM plan](jam-luna-max-plan.md) without dropping the campaign/mod objectives.
 
-## Preserved private state
+## Private state
 
 Do not change `local/playtest-20260927-world/save.json` or the original
-`local/playtest-20260920-companion` checkpoint. Keep the requested prior reel in
-`local/recordings/playtest-20260920`. Diagnostics are in
-`tmp/combat-controls-audit.log` and `tmp/weapon-coverage-current.jsonl`.
-Frame recording remains off except during the requested capture; remove
-transient frames in cleanup paths.
-
-## Mods
-
-All ten requested targets in [mod compatibility](mod-compatibility.md) have local
-packages. Selection, precedence and ordering work; opened stacks are not mod
-gameplay support. JAM/MCM, arrays, event extensions and reached commands remain
-open. Continue [the JAM/MCM plan](jam-luna-max-plan.md) after immediate gameplay
-blockers without dropping the campaign/mod objectives.
+`local/playtest-20260920-companion/save.json`; both still hash to
+`800A37CC6C97C543393A544229C4E71ACB213B45C12FC4584EF3E70E94E2FBB7`.
+Retain the requested prior reels. Frame recording is off outside specific
+captures. Temporary review-image cleanup was rejected by automatic approval
+review; those images remain in `tmp`, with no recording session left enabled.

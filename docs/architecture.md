@@ -21,6 +21,12 @@ installation in place and publish authoritative state to Godot.
 - Godot's bundled Jolt backend owns native contact solving in both modes.
   Source NIF/Havok shapes, masses and constraints remain the inputs; no route
   bypass or replacement collision geometry is used to escape a contact.
+- Jolt ray face indices are enabled so a mixed-material NIF contact selects its
+  original triangle's Havok material. This adds roughly 25% to concave-shape
+  memory according to [Godot's setting contract](https://docs.godotengine.org/en/4.6/classes/class_projectsettings.html#class-projectsettings-property-physics-jolt-physics-3d-queries-enable-ray-cast-face-index).
+  DODT retains its raw flag byte while interpreting only the three declared
+  low bits; nonzero reserved bits in owned thrown/melee impacts are preserved
+  in decal telemetry. Unknown semantic fields still require explicit owners.
 
 ## Main owners
 

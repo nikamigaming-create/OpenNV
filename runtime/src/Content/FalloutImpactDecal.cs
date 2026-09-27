@@ -4,6 +4,11 @@ internal sealed record FalloutImpactDecal(float MinimumWidth, float MaximumWidth
     float MaximumHeight, float Depth, float Shininess, float ParallaxScale, byte ParallaxPasses, byte Flags,
     byte Red, byte Green, byte Blue, string Diffuse, string? Normal)
 {
+    // DODT defines three low flag bits. Owned thrown/melee impacts also retain
+    // nonzero reserved bits; preserve the byte without treating them as flags.
+    internal byte KnownFlags => (byte)(Flags & 7);
+    internal byte ReservedFlags => (byte)(Flags & 0xf8);
+
     internal static FalloutImpactDecal Read(FalloutPluginRecord impact, FalloutPluginRecord textures)
     {
         if (textures.Signature != "TXST") throw new InvalidDataException("Impact decal texture link is not TXST.");
@@ -23,8 +28,8 @@ internal sealed record FalloutImpactDecal(float MinimumWidth, float MaximumWidth
             FalloutProjectile.Number(data, 8), FalloutProjectile.Number(data, 12), FalloutProjectile.Number(data, 16),
             FalloutProjectile.Number(data, 20), FalloutProjectile.Number(data, 24), data[28], data[29], data[32], data[33], data[34], diffuse, normal);
         if (result.MinimumWidth <= 0 || result.MaximumWidth < result.MinimumWidth || result.MinimumHeight <= 0 ||
-            result.MaximumHeight < result.MinimumHeight || result.Depth <= 0 || result.Shininess < 0 || (result.Flags & ~7) != 0)
-            throw new InvalidDataException("Decal dimensions, shininess or flags are invalid.");
+            result.MaximumHeight < result.MinimumHeight || result.Depth <= 0 || result.Shininess < 0)
+            throw new InvalidDataException("Decal dimensions or shininess are invalid.");
         return result;
     }
 }

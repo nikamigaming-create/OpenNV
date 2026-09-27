@@ -121,6 +121,22 @@ public partial class NativeShotEffectsAudit : Node3D
                     effects.Impact(impact, new(0, 0, -2), Vector3.Up, Vector3.Down);
                     GD.Print($"OPENNV_IMPACT_ASSEMBLY_PASS material={material} form={impact.Form} model={impact.Model}");
                 }
+                foreach (var id in new uint[] { 0x161246, 0x14de1d, 0x14d2ac })
+                {
+                    var thrown = FalloutWeaponPresentation.Read(records, records.RuntimeFormKey(id));
+                    var thrownShot = FalloutWeaponShot.Read(records, thrown.Form, null, thrown.HasAmmunitionSource);
+                    var count = 0;
+                    for (var material = 0; material < 12; material++)
+                    {
+                        if (FalloutImpact.Resolve(records, thrownShot.ImpactDataSet!.Value, material) is not { } impact) continue;
+                        effects.Impact(impact, new(0, 0, -2), Vector3.Up, Vector3.Down);
+                        count++;
+                    }
+                    var state = JsonSerializer.SerializeToElement(effects.State);
+                    if (count == 0 || state.GetProperty("decalError").ValueKind != JsonValueKind.Null)
+                        throw new InvalidOperationException("Thrown impact did not reach its source effect/decal owner: " + state);
+                    GD.Print($"OPENNV_THROWN_IMPACTS_PASS weapon={thrown.Form} sourceMaterials={count} reservedFlags=retained pixels=separate");
+                }
                 for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var pool = new RuntimeNativeShotEffects(records, content, units, shooter, 1); AddChild(pool); pool.SetProcess(false);
                 try

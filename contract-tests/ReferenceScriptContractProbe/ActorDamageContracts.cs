@@ -27,7 +27,7 @@ internal static class ActorDamageContracts
             UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x80); UInt(group, 12, 6); references.CopyTo(group, 24);
             var decal = new byte[36];
             Float(decal, 0, 12); Float(decal, 4, 20); Float(decal, 8, 8); Float(decal, 12, 30); Float(decal, 16, 50);
-            Float(decal, 20, 100); decal[29] = 2; decal[32] = 170; decal[34] = 4;
+            Float(decal, 20, 100); decal[29] = 0xca; decal[32] = 170; decal[34] = 4;
             var impactData = new byte[24]; Float(impactData, 0, .08f);
             byte[] Dataset(uint id, int extent) { var data = new byte[extent]; UInt(data, 24, 0x77); return Record("IPDS", id, Field("DATA", data)); }
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
@@ -54,8 +54,9 @@ internal static class ActorDamageContracts
             foreach (var dataset in new uint[] { 0x73, 0x74, 0x75 })
                 Check(FalloutImpact.Resolve(records, Key(dataset), 6)?.Decal is
                     { MinimumWidth: 12, MaximumWidth: 20, MinimumHeight: 8, MaximumHeight: 30, Depth: 50,
-                        Red: 170, Blue: 4, Diffuse: "textures/Decals/source.dds", Normal: "textures/Decals/source_n.dds" },
-                    "Impact lost source decal dimensions, color, texture or a valid legacy material extent.");
+                        Red: 170, Blue: 4, Flags: 0xca, KnownFlags: 2, ReservedFlags: 0xc8,
+                        Diffuse: "textures/Decals/source.dds", Normal: "textures/Decals/source_n.dds" },
+                    "Impact lost decal dimensions, color, texture, retained reserved bits or a valid legacy material extent.");
             Check(FalloutImpact.Resolve(records, Key(0x73), 11) is null, "An absent late material selected a legacy impact.");
             Reject(() => FalloutImpact.Resolve(records, Key(0x76), 6));
             var invalidDecal = (byte[])decal.Clone(); Float(invalidDecal, 16, -1);
