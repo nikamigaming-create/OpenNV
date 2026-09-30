@@ -151,6 +151,25 @@ internal sealed partial class FalloutScriptArrayStore
     internal int Size(FalloutScriptValue array) => RequireReference(array).Number == 0 ? -1 : Data(array).Count;
     internal FalloutScriptArrayKind Kind(FalloutScriptValue array) => Data(array).Kind;
 
+    internal bool SurfaceEquals(FalloutScriptValue first, FalloutScriptValue second)
+    {
+        var firstId = RequireReference(first).Number;
+        var secondId = RequireReference(second).Number;
+        if (firstId == secondId) return true;
+        if (firstId == 0 || secondId == 0) return false;
+        var left = Data(first);
+        var right = Data(second);
+        if (left.Count != right.Count) return false;
+        return left.Entries.Zip(right.Entries).All(pair =>
+            EqualElement(pair.First.Key, pair.Second.Key) && EqualElement(pair.First.Value, pair.Second.Value));
+
+        // xNVSE 6.2.1+ compares surface entries, retaining the identities of
+        // nested arrays. It does not recursively compare their contents.
+        static bool EqualElement(FalloutScriptValue a, FalloutScriptValue b) => a.Kind == b.Kind &&
+            (a.Kind == FalloutScriptValueKind.String ? StringComparer.OrdinalIgnoreCase.Equals(a.Text, b.Text) :
+                a.Number == b.Number);
+    }
+
     private static void ValidateKey(ArrayData data, FalloutScriptValue key)
     {
         if (data.Kind == FalloutScriptArrayKind.StringMap)

@@ -22,6 +22,10 @@ internal static class ScriptArrayProbe
         Require(Evaluate("list[0]").Number == 7 && Evaluate("alias[0]").Number == 7 &&
             Evaluate("copy[0]").Number == 42 && Evaluate("list[1]").Text == "text" &&
             Evaluate("Ar_Size list").Number == 3, "Packed arrays lost alias identity, mixed values or shallow copy isolation.");
+        Require(!Evaluate("list == copy").Truth, "Different surface contents compared equal.");
+        Execute("copy[0] = 7");
+        Require(Evaluate("list == copy").Truth && locals["list"] != locals["copy"],
+            "Array equality used numeric identities instead of xNVSE 6.2.1+ surface contents.");
         Execute("map = Ar_Construct \"map\"\nmap[-1.5] = 6\nmap[200] = \"sparse\"\n" +
             "names = Ar_Construct \"stringmap\"\nnames[\"Index\"] = list\n" +
             "nested = Ar_List names\nnested[0][\"INDEX\"][0] += 1\n" +
@@ -30,6 +34,9 @@ internal static class ScriptArrayProbe
             Evaluate("names[\"index\"][0]").Number == 8 && Evaluate("deep[0][\"index\"][0]").Number == 90 &&
             Evaluate("TypeOf names").Text == "StringMap" && Evaluate("TypeOf map").Text == "Map" &&
             Evaluate("TypeOf list").Text == "Array", "Map keys, case-insensitive string keys, nested indexing or deep copies differ.");
+        Execute("alias = Ar_Copy nested\ncopy = Ar_DeepCopy nested");
+        Require(Evaluate("nested == alias").Truth && Evaluate("nested != copy").Truth,
+            "Surface equality recursively compared copied nested arrays instead of their identities.");
         Execute("Ar_Erase list 1\nAr_Resize list 4 \"padding\"");
         Require(Evaluate("list[1]").Number == 9 && Evaluate("list[3]").Text == "padding" &&
             Evaluate("Ar_HasKey list 4").Number == 0, "Packed erase or resize did not conserve and reindex the retained values.");

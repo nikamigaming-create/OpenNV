@@ -90,6 +90,8 @@ keys; numeric maps allow sparse, negative and fractional keys; string maps match
 keys case-insensitively. Elements preserve numbers, strings, forms and nested
 array identities. Local assignment aliases an array; `Ar_Copy` copies one level
 and `Ar_DeepCopy` retains the nested graph's relationships in a new graph.
+Following xNVSE 6.2.1 and later, equality compares keys and typed surface values;
+nested array elements compare by identity rather than recursively.
 
 Indexed reads, nested indexing and assignment reach that owner directly. An
 indexed compound assignment evaluates its container/key once. Complete syntax

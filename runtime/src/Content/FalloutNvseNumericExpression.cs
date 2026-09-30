@@ -159,7 +159,7 @@ internal static class FalloutNvseNumericExpression
                         var location = target();
                         var value = op is "=" or ":="
                             ? right.Value()
-                            : Apply(op[..1], location.Read(), right.Value());
+                            : Apply(op[..1], location.Read(), right.Value(), values.Arrays);
                         location.Write(value);
                         return value;
                     });
@@ -177,7 +177,7 @@ internal static class FalloutNvseNumericExpression
                             return nvseLogical
                                 ? value.Truth ? right.Value().Logical : 0
                                 : value.Truth && right.Value().Truth ? 1 : 0;
-                        return Apply(op, value, right.Value());
+                        return Apply(op, value, right.Value(), values.Arrays);
                     });
                 }
             }
@@ -227,13 +227,19 @@ internal static class FalloutNvseNumericExpression
         _ => -1,
     };
 
-    private static FalloutScriptValue Apply(string op, FalloutScriptValue left, FalloutScriptValue right)
+    private static FalloutScriptValue Apply(string op, FalloutScriptValue left, FalloutScriptValue right,
+        FalloutScriptArrayStore? arrays)
     {
         if (op == "+" && left.Kind == FalloutScriptValueKind.String &&
             right.Kind == FalloutScriptValueKind.String)
             return FalloutScriptValue.String(left.Text + right.Text);
         if (op is "==" or "!=" or "<" or ">" or "<=" or ">=")
         {
+            if (op is "==" or "!=" && left.Kind == FalloutScriptValueKind.Array && right.Kind == FalloutScriptValueKind.Array)
+            {
+                var equal = (arrays ?? throw new NotSupportedException("Array comparison has no shared value owner.")).SurfaceEquals(left, right);
+                return equal == (op == "==") ? 1 : 0;
+            }
             if ((left.Kind == FalloutScriptValueKind.Array || right.Kind == FalloutScriptValueKind.Array) &&
                 (op is not ("==" or "!=") ||
                  left.Kind != right.Kind && !(left.Kind == FalloutScriptValueKind.Number && left.Number == 0 ||
