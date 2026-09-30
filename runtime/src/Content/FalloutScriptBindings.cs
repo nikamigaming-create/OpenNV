@@ -8,6 +8,7 @@ internal sealed class FalloutScriptBindings
 {
     private readonly FalloutPluginStack _records;
     private readonly FalloutPluginRecord _owner;
+    private readonly Func<FalloutPluginRecord, FalloutPluginRecord?>? _attachedScript;
     private readonly Dictionary<string, FalloutPluginRecord> _forms = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<FalloutFormKey, IReadOnlyDictionary<string, FalloutScriptLocalDeclaration>> _variables = [];
     private readonly Dictionary<string, (FalloutFormKey Owner, uint Index, FalloutScriptLocalKind Kind)> _slots = new(StringComparer.OrdinalIgnoreCase);
@@ -16,10 +17,12 @@ internal sealed class FalloutScriptBindings
     private readonly FalloutFormKey? _playerReference;
 
     internal FalloutScriptBindings(FalloutPluginStack records, FalloutPluginRecord quest,
-        FalloutPluginRecord source, IEnumerable<FalloutPluginSubrecord> fields)
+        FalloutPluginRecord source, IEnumerable<FalloutPluginSubrecord> fields,
+        Func<FalloutPluginRecord, FalloutPluginRecord?>? attachedScript = null)
     {
         _records = records;
         _owner = quest;
+        _attachedScript = attachedScript;
         Source = source.FormKey;
         foreach (var field in fields.Where(field => field.Signature == "SCRO"))
         {
@@ -69,7 +72,7 @@ internal sealed class FalloutScriptBindings
             throw new NotSupportedException("Script variable path is unbound.");
         if (owner.Signature is not ("QUST" or "REFR" or "ACHR" or "ACRE"))
             throw new NotSupportedException("Script variables require a quest or placed reference instance.");
-        var script = FalloutScriptLocals.AttachedScript(_records, owner) ??
+        var script = (_attachedScript is null ? FalloutScriptLocals.AttachedScript(_records, owner) : _attachedScript(owner)) ??
             throw new NotSupportedException($"Script variable owner {owner.FormKey} has no attached script.");
         if (!_variables.TryGetValue(script.FormKey, out var variables))
         {

@@ -17,6 +17,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private string _skeletonPath = "";
     private uint _layer, _mask;
     private RuntimeNativeActorRagdoll? _ragdoll;
+    private bool _deathPresentationAttempted;
     private readonly Dictionary<string, byte> _parts = new(StringComparer.Ordinal);
     private object? _lastLimbEffect;
     internal bool Dead => _state.Injury?.Dead == true;
@@ -84,6 +85,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private void RestoreDeath()
     {
         if (!IsInsideTree() || IsQueuedForDeletion()) return;
+        if (Dead && _deathPresentationAttempted) return;
+        if (Dead) _deathPresentationAttempted = true;
         try { PrepareDeath(); if (Dead) BeginDeath(); else BeginKnockdown(); }
         catch (Exception error) { Error = error.Message; GD.PushError($"OPENNV_ACTOR_DEATH_UNBOUND reference={_state.Reference} {Error}"); }
     }
@@ -203,6 +206,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     private void BeginDeath()
     {
+        _deathPresentationAttempted = true;
         _state.KnockedDown = false;
         _state.HitReaction = null;
         _hitReactionClip = null;

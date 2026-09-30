@@ -28,22 +28,34 @@ activation, retain destroyed state and reject duplicate rewards across cold
 restoration. The selected window supplies the seventh tested source model.
 The complete runtime gate and reference-presentation regression check pass.
 
+Kill/KillActor with an optional killer now use the same health/death inventory
+transition as combat. An omitted killer remains unknown, including delayed
+OnDeath and cold saves. Repeated calls on a corpse add no loot or death event.
+Native presentation detects a scripted death and activates its source ragdoll.
+The owned native fixture recovers all 14 selected old Kill failures and checks
+source corpse scripts, a living creature's ragdoll and its cold continuation.
+Inherited actor script locals, including qualified reads, now resolve through
+the retained world template owner. Synthetic checks cover both ownership paths,
+filtered death events, conserved loot and rejected earlier mutations. Essential
+recovery, player script death and limb/cause parameters remain visible boundaries.
+
 An ordinary exported flat Continue on a copy of the genuine Primm checkpoint
 recovers ten resident plant faults and 23 prior read faults. Ordinary traversal,
 mouse aim and activation harvest reference FalloutNV.esm:157e35 once, adding one
 Coyote Tobacco Chew. Manual saving retains its destroyed flag, source local and
 completed Forward animation in v22. Cold exported Continue restores all three;
 another ordinary activation attempt leaves the inventory count at one.
+A later exported flat Continue also resumes 14 resident Kill faults; their
+corpse locals and destroyed flags complete, and Tobacco remains at one.
 The bot now observes destroyed state as an interaction outcome; some source
 contact aiming and final navigation segments still need work.
 
 ## Next owners
 
-Continue the actual flat run's earliest script and actor failures. Six source
-creature OnLoad blocks reach missing Kill; source script death must use shared
-health, inventory, delayed death events and persistence without inventing a
-killer. Essential recovery and additional command parameters need their own
-source-backed behavior. NPC radio, creature package condition 136 and further
+Continue the actual flat run's earliest script and actor failures. Essential
+recovery and additional death-command parameters need their own source-backed
+behavior. The reached GetReference Player compiled binding, NPC radio,
+creature package condition 136 and further
 patrol/sandbox/eat/sleep procedures remain visible failures. Preserve all quest,
 combat, mod and campaign objectives while fixing those owners.
 
@@ -71,6 +83,8 @@ Selected native audit logs are `tmp/object-animation-owned.log`,
 `tmp/object-animation-native-contract.log`,
 `tmp/object-animation-presentation-regression.log` and
 `tmp/object-animation-runtime-gate.log`. These are private diagnostics.
+Script death checks are in `tmp/scripted-death-owned.log`,
+`tmp/scripted-death-contract.log` and `tmp/scripted-death-runtime-gate.log`.
 
 Do not change `local/playtest-20260927-world/save.json` or
 `local/playtest-20260920-companion/save.json`. Both still hash to

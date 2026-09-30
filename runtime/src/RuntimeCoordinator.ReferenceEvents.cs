@@ -81,7 +81,8 @@ public partial class RuntimeCoordinator
                 (caller, target) => _nativeOpeningStageDriver!.ReferenceDistance(caller, target),
                 actor => _nativeOpeningStageDriver!.IsInInterior(actor),
                 (reference, group, initialization) => _nativeReferencePresentation!.PlayGroup(reference, group, initialization),
-                (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group)),
+                (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group),
+                () => _nativeOpeningStageDriver!.Vitals.Level),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

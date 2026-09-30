@@ -292,6 +292,7 @@ FollowPackageContracts.Run();
 PatrolContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
+ScriptDeathContracts.Run();
 PlayerSkillContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);

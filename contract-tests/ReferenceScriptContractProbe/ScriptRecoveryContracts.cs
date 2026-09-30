@@ -35,6 +35,14 @@ internal static class ScriptRecoveryContracts
         Require(!SafeCommand("if GetRandomPercent < 50\nPlayGroup Forward 1\nendif"), "Animation recovery could reroll a guard.");
         Require(!SafeCommand("if GetGameLoaded\nPlayGroup Forward 1\nendif"), "Animation recovery could consume a lifecycle edge.");
         Require(!SafeCommand("set count to 1\nPlayGroup Forward 1"), "Animation recovery could repeat an assignment.");
+        Require(!SafeCommand("PlayGroup Forward GetGameLoaded"), "Command recovery could consume its argument again.");
+        bool SafeDeath(string source) => FalloutGameModeProgram.Read("begin OnLoad\n" + source + "\nend", "OnLoad")
+            .CanRetryMissingCommand("Kill", Function, 0);
+        Require(SafeDeath("Kill\nset count to 1"), "Initial missing Kill cannot recover.");
+        Require(!SafeDeath("set count to 1\nKill") && !SafeDeath("if GetRandomPercent < 50\nKill\nendif") &&
+            !SafeDeath("Kill player"), "Death recovery admitted a prior mutation, consumptive guard or changed arguments.");
+        Require(!FalloutGameModeProgram.Read("begin OnLoad\nKill GetGameLoaded\nend", "OnLoad")
+            .CanRetryMissingCommand("Kill", Function, 1), "Death recovery could consume a lifecycle argument twice.");
         using var world = new FalloutReferenceWorld(records);
         var cell = FalloutCellSceneReader.Read(records, Key(0x803));
         world.LoadCell(cell);

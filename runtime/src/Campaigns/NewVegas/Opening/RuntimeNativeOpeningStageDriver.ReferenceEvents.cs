@@ -47,7 +47,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scripts.MessageResults.Take, actor => _speech!.IsTalking(actor), ActorValue, IsPlayerTagSkill, _globals,
                 ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events, ReferenceDistance, IsInInterior,
                 (reference, group, initialization) => ReferencePresentation().PlayGroup(reference, group, initialization),
-                (reference, group) => ReferencePresentation().IsAnimPlaying(reference, group)));
+                (reference, group) => ReferencePresentation().IsAnimPlaying(reference, group), () => Vitals.Level));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);

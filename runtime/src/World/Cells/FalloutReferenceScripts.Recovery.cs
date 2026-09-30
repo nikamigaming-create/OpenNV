@@ -4,12 +4,16 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceScripts
 {
-    private string? RecoverMissingPlayGroup(FalloutReferenceInstance instance, IReadOnlyList<FalloutReferenceScriptEvent> admitted)
+    private string? RecoverMissingCommand(FalloutReferenceInstance instance, IReadOnlyList<FalloutReferenceScriptEvent> admitted)
     {
-        if (host.PlayGroup is null || instance.Script is null || instance.ScriptError is not { } error) return null;
+        if (instance.Script is null || instance.ScriptError is not { } error) return null;
         var match = System.Text.RegularExpressions.Regex.Match(error,
-            @"^(?<event>[^:]+): Reached (?:native script|object-script) command (?<command>\S+) \(2 arguments\) has no owner\.$");
-        if (!match.Success || !match.Groups["command"].Value.Split('.')[^1].Equals("PlayGroup", StringComparison.OrdinalIgnoreCase)) return null;
+            @"^(?<event>[^:]+): Reached (?:native script|object-script) command (?<command>\S+) \((?<arguments>[0-3]) arguments\) has no owner\.$");
+        if (!match.Success) return null;
+        var operation = match.Groups["command"].Value.Split('.')[^1].ToLowerInvariant();
+        var argumentCount = int.Parse(match.Groups["arguments"].Value, System.Globalization.CultureInfo.InvariantCulture);
+        if (!(operation == "playgroup" && argumentCount == 2 && host.PlayGroup is not null ||
+            operation is "kill" or "killactor" && argumentCount <= 1 && host.PlayerLevel is not null)) return null;
         var eventName = match.Groups["event"].Value;
         if (!admitted.Any(item => item.Name.Equals(eventName, StringComparison.OrdinalIgnoreCase))) return null;
         try
@@ -19,7 +23,7 @@ internal sealed partial class FalloutReferenceScripts
             if (blocks.Length != 1 || blocks[0].Filter is not null) return null;
             var safe = false;
             _ = Steps(instance.Reference, source.Bindings, blocks[0].Program, null, 0,
-                inspectFunctions: functions => safe = blocks[0].Program.CanRetryMissingCommand(match.Groups["command"].Value, functions));
+                inspectFunctions: functions => safe = blocks[0].Program.CanRetryMissingCommand(match.Groups["command"].Value, functions, argumentCount));
             if (!safe) return null;
             instance.ScriptError = null;
             return error;

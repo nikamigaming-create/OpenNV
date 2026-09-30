@@ -11,7 +11,7 @@ internal sealed partial class FalloutReferenceScripts
     {
         if (_functions.TryGetValue(script, out var existing)) return existing.Function;
         var definition = FalloutUserFunction.Read(records.GetEffective(script));
-        _functions.Add(script, (definition, new(records, definition.Script, definition.Script, definition.Script.ReadSubrecords())));
+        _functions.Add(script, (definition, Bindings(definition.Script, definition.Script, definition.Script.ReadSubrecords())));
         return definition;
     }
 
