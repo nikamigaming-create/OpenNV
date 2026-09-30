@@ -32,6 +32,11 @@ internal partial class RuntimeNativeImageSpace : Node
     // state. Otherwise a fade applied on the menu-opening frame is never drawn.
     public override void _Process(double delta) => Publish(GetTree().Paused ? 0 : delta);
 
+    public override void _Notification(int what)
+    {
+        if (what == NotificationPredelete) _effect?.ReleaseRenderingResources();
+    }
+
     internal IDisposable BeginMenuBackground(FalloutPluginStack records, FalloutMenuBackgroundKind kind)
     {
         if (_menuBackground is not null) throw new InvalidOperationException("Another static menu background already owns the world capture.");

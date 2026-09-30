@@ -326,6 +326,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     private Rid _linearSampler;
     private int _operational;
     private int _failureReported;
+    private int _released;
 
     internal RetailHdrCompositorEffect(
         float targetLuminance,
@@ -444,7 +445,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
 
     public override void _RenderCallback(int effectCallbackType, RenderData renderData)
     {
-        if (effectCallbackType != (int)EffectCallbackTypeEnum.PostTransparent)
+        if (Volatile.Read(ref _released) != 0 || effectCallbackType != (int)EffectCallbackTypeEnum.PostTransparent)
             return;
 
         try
@@ -477,14 +478,28 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
 
     public override void _Notification(int what)
     {
-        if (what != NotificationPredelete || _renderingDevice is null)
-            return;
-        if (_shader.IsValid)
-            _renderingDevice.FreeRid(_shader);
-        if (_pointSampler.IsValid)
-            _renderingDevice.FreeRid(_pointSampler);
-        if (_linearSampler.IsValid)
-            _renderingDevice.FreeRid(_linearSampler);
+        if (what == NotificationPredelete) ReleaseRenderingResources();
+    }
+
+    internal void ReleaseRenderingResources()
+    {
+        if (Interlocked.Exchange(ref _released, 1) != 0) return;
+        Enabled = false;
+        Volatile.Write(ref _operational, 0);
+        // Serialize retirement with the final callback on the rendering thread.
+        // The cell owner releases this before RenderingServer shuts down, even
+        // if managed references still retain the compositor resource.
+        RenderingServer.CallOnRenderThread(Callable.From(() =>
+        {
+            Volatile.Write(ref _operational, 0);
+            if (_renderingDevice is null) return;
+            if (_pipeline.IsValid) _renderingDevice.FreeRid(_pipeline);
+            if (_shader.IsValid) _renderingDevice.FreeRid(_shader);
+            if (_pointSampler.IsValid) _renderingDevice.FreeRid(_pointSampler);
+            if (_linearSampler.IsValid) _renderingDevice.FreeRid(_linearSampler);
+            _pipeline = _shader = _pointSampler = _linearSampler = default;
+            _uniformSets.Clear(); _sceneCopies.Clear(); _postHdrScenes.Clear();
+        }));
     }
 
     private void EnsurePipeline()

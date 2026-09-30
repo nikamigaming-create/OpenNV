@@ -16,6 +16,8 @@ public partial class RuntimeCoordinator
     private static FalloutScriptEvents? _scriptEvents;
     private bool _continueAfterRestart;
     private bool _retiringNativeSession;
+    private bool _nativeSessionTransitioning;
+    private Task? _nativeMenuRead;
     private CanvasLayer? _nativeSessionLayer;
     private NativeGameSessionMenu? _nativeSessionMenu;
     private bool _sessionWasPaused;
@@ -80,6 +82,7 @@ public partial class RuntimeCoordinator
 
     private void ToggleNativeSessionMenu()
     {
+        if (_nativeSessionTransitioning) return;
         if (_nativeSessionMenu is not null) { _nativeSessionMenu.Back(); return; }
         if (_nativePlayer is null || _nativeDoorLoading || _nativeOpeningStageDriver is null) return;
         if (_nativeXr?.PointAtPipBoy is not null) { FocusNativeXrPipBoy(false); return; }
@@ -95,7 +98,7 @@ public partial class RuntimeCoordinator
         _nativeSessionLayer = new CanvasLayer { Name = "NativeSessionLayer", Layer = 150, ProcessMode = ProcessModeEnum.Always };
         _nativeSessionMenu = new(NativeSaveSlots(), _nativePlayer is not null, showSaves, _nativeOpeningStageDriver?.Vitals.HitPoints == 0,
             CloseNativeSessionMenu, SaveNativeManualSlot, LoadNativeSelectedSlot,
-            () => RestartNativeSession(false), () => GetTree().Quit(), DescribeNativeSave);
+            () => RestartNativeSession(false), () => QuitNativeSession(), DescribeNativeSave);
         AddChild(_nativeSessionLayer); _nativeSessionLayer.AddChild(_nativeSessionMenu);
         _nativePlayer?.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
         GetTree().Paused = true;
@@ -104,6 +107,7 @@ public partial class RuntimeCoordinator
 
     private void CloseNativeSessionMenu()
     {
+        if (_nativeSessionTransitioning) return;
         if (_nativeDeathPresented && !_retiringNativeSession) return;
         _nativeSessionLayer?.QueueFree(); _nativeSessionLayer = null; _nativeSessionMenu = null;
         _nativePlayer?.SetModalInput(false); GetTree().Paused = _sessionWasPaused; Input.MouseMode = _sessionMouseMode;
@@ -138,16 +142,11 @@ public partial class RuntimeCoordinator
 
     private async void RestartNativeSession(bool continueSave)
     {
+        if (_nativeSessionTransitioning) return;
+        _nativeSessionTransitioning = true;
         try
         {
-            // Finish source readers before replacing their world/record owners.
-            var pending = _nativeGridNpcPreparations.Select(item => item.ReadTask).ToList();
-            if (_nativeGridRead is { } gridRead) pending.Add(gridRead);
-            foreach (var lod in FindChildren("*", "", true, false).OfType<RuntimeNativeExteriorLod>())
-                pending.Add(lod.StopSourceReads());
-            CancelNativeGridRead();
-            try { await Task.WhenAll(pending); }
-            catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
+            await DrainNativeSourceReaders();
             _nextSessionOptions = new(_options, StringComparer.OrdinalIgnoreCase);
             _nextSessionOptions.Remove("launcher"); _nextSessionOptions.Remove("new-game");
             _nextSessionContinue = continueSave;
@@ -162,8 +161,44 @@ public partial class RuntimeCoordinator
         {
             _nextSessionOptions = null; _nextSessionContinue = false;
             _retiringNativeSession = false;
+            _nativeSessionTransitioning = false;
             GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");
             GetTree().Paused = true;
+            _nativeSessionMenu?.ShowFailure(error.Message);
+        }
+    }
+
+    private async Task DrainNativeSourceReaders()
+    {
+        GetTree().Paused = true;
+        var pending = _nativeGridNpcPreparations.Select(item => item.ReadTask).ToList();
+        if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
+        if (_nativeGridRead is { } gridRead) pending.Add(gridRead);
+        foreach (var lod in FindChildren("*", "", true, false).OfType<RuntimeNativeExteriorLod>())
+            pending.Add(lod.StopSourceReads());
+        CancelNativeGridRead();
+        try { await Task.WhenAll(pending); }
+        catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
+    }
+
+    private void OnNativeCloseRequested() => QuitNativeSession();
+
+    private async void QuitNativeSession()
+    {
+        if (_nativeSessionTransitioning) return;
+        _nativeSessionTransitioning = true;
+        try
+        {
+            await DrainNativeSourceReaders();
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            _retiringNativeSession = true;
+            GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
+            GetTree().Quit();
+        }
+        catch (Exception error)
+        {
+            _nativeSessionTransitioning = false;
+            GD.PushError($"OPENNV_NATIVE_SESSION_QUIT_FAILURE {error}");
             _nativeSessionMenu?.ShowFailure(error.Message);
         }
     }

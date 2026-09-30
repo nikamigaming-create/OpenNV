@@ -71,7 +71,16 @@ to 0.13 seconds without adding a fuse or changing projectile speed. Explosion
 construction and rendering can still hitch, especially while recording.
 The simulator also completes the corrected shot, spending about 0.20 seconds
 in detonation processing. Several flat diagnostic runs reported a native crash
-after Quit Game; shutdown stability remains unfinished.
+after Quit Game. The September 30 source update drains source readers and
+releases detached prototypes and compositor resources before shutdown; selected
+exported flat Quit and main-menu reload checks now exit cleanly. Broader session
+stability remains unfinished.
+
+The September 30 source updates also bind source object PlayGroup animation and
+persistent harvesting, and finish zero/one-argument Kill corpse scripts through
+shared death state. A selected flat harvest saves and cold-Continues without a
+second reward. These repairs are in the refreshed development export; the
+September 27 dated archive predates them.
 
 ## What to test
 

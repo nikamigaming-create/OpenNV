@@ -2,12 +2,16 @@
 
 ## Active objective
 
-Prioritize ordinary flat gameplay and polish across scripts, autonomous actors,
-combat, interactions, travel and saves. Preserve shared VR behavior and fix
-regressions there; detailed VR presentation is not the current focus. Work
-without subagents. Follow the [flat work order](flat-gameplay-plan.md) and
-[implementation plan](implementation-plan.md). All 36 broad recovery
-requirements remain open; no whole-game or retail-parity completion is claimed.
+Complete actual JAM/MCM gameplay first, then the combined TTW campaign from
+Fallout 3's opening through its authored connection to New Vegas. Folder
+registration and isolated scenes do not meet this objective. Prioritize flat
+play while preserving shared VR behavior; detailed VR presentation follows.
+Classic flat presentation must use winning Fallout/mod screens and controls;
+the optional Nikami experience adds enhancements to the same gameplay owners.
+Work without subagents. Follow the [mod implementation](mod-compatibility.md),
+[implementation plan](implementation-plan.md) and [flat work order](flat-gameplay-plan.md).
+All 36 broad recovery requirements remain open; no whole-game or retail-parity
+completion is claimed.
 
 ## Verified runtime
 
@@ -50,9 +54,32 @@ corpse locals and destroyed flags complete, and Tobacco remains at one.
 The bot now observes destroyed state as an interaction outcome; some source
 contact aiming and final navigation segments still need work.
 
+Session retirement now drains title indexing and exterior source readers before
+releasing the world, records and detached model prototypes. Ordinary exported
+flat Quit on the copied checkpoint exits with code 0 after releasing 349
+prototypes; the previous direct Quit reproduced native heap corruption.
+Main-menu return, another Continue, fresh-title Quit and native window close
+also exit cleanly, with the source checkpoint unchanged.
+Cell destruction releases its compositor pipeline, shader and samplers on the
+rendering thread even when managed references retain the effect. Four successive
+synthetic rendered replacements and repeated/unused release checks pass without
+GPU RID leaks. The full runtime gate and owned script-death regression pass.
+Two ObjectDB exit warnings remain visible in the selected owned runs; their
+owners still need diagnosis. One repeated exported reload also crashed during
+native triangle-mesh construction before gameplay resumed; a subsequent complete
+session audit passed. This intermittent construction failure remains open.
+
 ## Next owners
 
-Continue the actual flat run's earliest script and actor failures. Essential
+Reproduce JAM's reached execution failures on current main before extending the
+ordinary native script, UI, event and gameplay owners. Typed strings, INI and
+auxiliary state, UIO injection and UI component state already exist; they do not
+establish a working MCM menu or any complete JAM module. Implement the next
+reached missing owner, including ordinary input and persistent effects. Keep
+the complete TTW opening, campaign progression, travel and dependency semantics
+in scope; do not remove launch gates on the strength of source audits.
+
+Preserve the actual flat run's remaining script and actor failures. Essential
 recovery and additional death-command parameters need their own source-backed
 behavior. The reached GetReference Player compiled binding, NPC radio,
 creature package condition 136 and further
@@ -65,17 +92,19 @@ variants. Blast rules, hit events, death XP, leveling/perks, radiation/addiction
 crime, crafting/barter completeness, JAM/MCM and TTW remain open. Do not replace
 these requirements with selected component passes.
 
-Exported Quit Game has previously reported native heap corruption; shutdown
-stability remains unproven. Streaming spikes and broad rendering/audio fidelity
-also remain open. Recording stays off during development.
+Selected exported flat shutdown paths now pass; broader session stability,
+streaming spikes and rendering/audio fidelity remain open. Recording stays off
+during development except for a requested visual check.
 
 ## Candidate and private continuation
 
 The public-facing local experimental candidate remains
 `local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, from runtime
 commit `06ffd2cadd1f0e0a180882a666489503bea4aa30`. It predates these repairs.
-Update the export after stable publication. Retain the requested September 27
+Update the dated candidate after stable publication. Retain the requested September 27
 weapon and companion reels; they are selected simulator/flat footage.
+The refreshed Windows development executable is
+`tmp/development-runtime/windows/OpenNV.exe` and includes the September 30 repairs.
 
 Current private flat checks are in
 `tmp/development-lab/flat-polish-20260930-animation/` and its `-cold` continuation.
@@ -85,6 +114,10 @@ Selected native audit logs are `tmp/object-animation-owned.log`,
 `tmp/object-animation-runtime-gate.log`. These are private diagnostics.
 Script death checks are in `tmp/scripted-death-owned.log`,
 `tmp/scripted-death-contract.log` and `tmp/scripted-death-runtime-gate.log`.
+Session checks are in `tmp/native-shutdown-owned.log`,
+`tmp/native-shutdown-runtime-gate.log` and `tmp/native-session-retirement/`.
+The requested flat screenshot is extracted from the retained September 27
+companion clip; it does not show the new September 30 code.
 
 Do not change `local/playtest-20260927-world/save.json` or
 `local/playtest-20260920-companion/save.json`. Both still hash to
