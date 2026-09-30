@@ -99,8 +99,11 @@ MCM's full in-game configuration
 is required by the requested product scope and remains in implementation.
 11 of JAM's 52 source scripts still fail parsing. The reached initialization
 scripts retain specific UI, actor-effect, perk-mutation and hit-event gaps.
-JBT now registers its winning render function and reaches perk mutation;
-the native render-phase fixture does not establish working bullet time.
+JBT now registers its winning render function and applies its source perk
+parameter writes before reaching the control-query gap. JHB applies its parameter
+writes before reaching Dispel. Existing damage/spread readers see the shared
+values; remaining entry points and conditions are not complete perk behavior.
+The native render-phase fixture does not establish working bullet time.
 JHM now passes source UI interpolation and reaches hit-event registration.
 Its repeating trait advances in the shared UI owner; a separate owned-reticle
 fixture checks the native float-to-pixel bridge. Complete hit markers and MCM

@@ -55,6 +55,8 @@ public partial class NativeReferenceEventsAudit : Node
             var effects = new List<FalloutReferenceScriptEffect>();
             var reported = new List<string>();
             var quests = new FalloutQuestState(records);
+            var perkReader = new FalloutAbilityModifiers(records);
+            _ = perkReader.Perk(Key(0x705));
             var speaking = false;
             var events = new RuntimeNativeReferenceEvents { ReportDivergence = reported.Add };
             events.Configure(records, world, quests, cell, root, new((_, _) => false, effects.Add, IsTalking: _ => speaking),
@@ -95,6 +97,8 @@ public partial class NativeReferenceEventsAudit : Node
             await Frames();
             Require(world.Get(Key(0x901)).Read(4) == 1 && effects.Count == 0,
                 "Native activation did not reach the reference-local script or suppressed its default incorrectly.");
+            Require(records.PerkParameters.Get(Key(0x705), 0) == 1 && perkReader.Perk(Key(0x705)).Entries.Single().Value == 1,
+                "Native source activation changed a private perk parameter copy.");
             triggerState.ScriptError = "OnTriggerEnter: audit capability was unavailable.";
             var contactsBeforeFault = triggerState.Read(3);
             await Frames();
@@ -111,6 +115,8 @@ public partial class NativeReferenceEventsAudit : Node
             await Frames();
             Require(world.Get(Key(0x901)).ScriptError is null && world.Get(Key(0x901)).Read(4) == 2,
                 "Fresh native activation did not retry its source block.");
+            Require(perkReader.Perk(Key(0x705)).Entries.Single().Value == 2,
+                "Native reactivation left its cached perk reader unchanged.");
             Require(reported.Count == 1 && reported[0].EndsWith("OnTriggerEnter: audit capability was unavailable.", StringComparison.Ordinal),
                 "Native fault reporting lost the expected divergence or reported an unexpected one.");
             world.DamageActor(Key(0x902), Key(0x14), 0, 100, 1, 1);
@@ -131,7 +137,7 @@ public partial class NativeReferenceEventsAudit : Node
             world.LoadCell(cell);
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
             await ScriptEvents(records, world, root);
-            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true parity=unverified");
+            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)
         {
@@ -213,13 +219,14 @@ public partial class NativeReferenceEventsAudit : Node
         var source = "array_var shared\narray_var alias\nbegin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
             "begin OnTriggerLeave player\nset departed to departed + 1\nend\n" +
             "begin OnTrigger player\nset contacts to contacts + 1\nend\n" +
-            "begin OnActivate\nset activations to activations + 1\nif activations == 1\n" +
+            "begin OnActivate\nset activations to activations + 1\nSetNthPerkEntryValue1 NativePerk 0 activations\nif activations == 1\n" +
             "shared = Ar_List 10 \"native\"\nalias = shared\nendif\nalias[0] += 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
         var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),
             Local(7, "keyDown"), Local(8, "keyUp"), Local(9, "frames"), Local(10, "menus"),
             Local(11, "shared"), Local(12, "alias"),
             Local(13, "renderFrames"), Local(14, "renderCaller"), Local(15, "renderSeconds"),
             Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCRO", BitConverter.GetBytes(0x524u)),
+            Field("SCRO", BitConverter.GetBytes(0x705u)),
             Field("SCTX", Encoding.ASCII.GetBytes(source)));
         var primitive = new byte[32];
         BinaryPrimitives.WriteSingleLittleEndian(primitive, 4);
@@ -249,6 +256,9 @@ public partial class NativeReferenceEventsAudit : Node
                 Field("SCTX", Encoding.ASCII.GetBytes("begin Function {}\nAuditRef.renderFrames += (0b101 & 0x3)\n" +
                     "AuditRef.renderCaller = GetSelfAlt\nAuditRef.renderSeconds = GetSecondsPassed\nend"))))
             .Concat(DeathFixture())
+            .Concat(Record("PERK", 0x705, Field("EDID", Encoding.ASCII.GetBytes("NativePerk\0")),
+                Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),
+                Field("EPFD", BitConverter.GetBytes(3f)), Field("PRKF", [])))
             .Concat(Record("ACTI", 0x700, Field("SCRI", BitConverter.GetBytes(0x500u))))
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray();
     }

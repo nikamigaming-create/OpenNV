@@ -296,6 +296,7 @@ AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();
 PlayerSkillContracts.Run();
+PerkParameterContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);

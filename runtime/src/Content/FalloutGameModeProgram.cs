@@ -389,7 +389,7 @@ internal sealed partial class FalloutGameModeProgram
                 var end = tokens[index + 1] == "(" ? BracketEnd(index + 1, "(", ")") : index + 2;
                 while (end < tokens.Count && tokens[end] == "[") end = BracketEnd(end, "[", "]");
                 var value = FalloutNvseNumericExpression.EvaluateValue(tokens.Skip(index).Take(end - index).ToArray(), values, function, userFunction);
-                result.Add(CommandValue(value, values.FormName));
+                result.Add(CommandValue(value));
                 index = end;
                 continue;
 
@@ -418,7 +418,7 @@ internal sealed partial class FalloutGameModeProgram
                 if (depth != 0) throw new InvalidDataException("Script command argument has an unclosed expression.");
                 var value = FalloutNvseNumericExpression.EvaluateValue(
                     tokens.Skip(index + 1).Take(end - index - 2).ToArray(), values, function, userFunction);
-                result.Add(CommandValue(value, values.FormName));
+                result.Add(CommandValue(value));
                 index = end;
                 continue;
             }
@@ -426,7 +426,7 @@ internal sealed partial class FalloutGameModeProgram
             {
                 var value = FalloutNvseNumericExpression.EvaluateValue(
                     tokens.Skip(index).Take(2).ToArray(), values, function, userFunction);
-                result.Add(CommandValue(value, values.FormName));
+                result.Add(CommandValue(value));
                 index += 2;
                 continue;
             }
@@ -446,7 +446,7 @@ internal sealed partial class FalloutGameModeProgram
                 }
                 var value = FalloutNvseNumericExpression.EvaluateValue(tokens.Skip(index).Take(end - index).ToArray(),
                     values, function, userFunction);
-                result.Add(CommandValue(value, values.FormName));
+                result.Add(CommandValue(value));
                 index = end;
                 continue;
             }
@@ -454,10 +454,9 @@ internal sealed partial class FalloutGameModeProgram
         }
         return result;
 
-        static string CommandValue(FalloutScriptValue value, Func<uint, string>? formName) => value.Kind switch
+        static string CommandValue(FalloutScriptValue value) => value.Kind switch
         {
             FalloutScriptValueKind.String => $"\"{value.Text.Replace("\"", "\\\"")}\"",
-            FalloutScriptValueKind.Form => value.Stringize(formName),
             _ => value.Number.ToString("R", CultureInfo.InvariantCulture),
         };
     }

@@ -195,6 +195,24 @@ its descendants for `UnloadUIComponent`. `GetUIFloat`, `GetUIFloatAlt`,
 store is deliberately not part of campaign saves: menu components are recreated
 with the menu source and later presentation owner.
 
+Indexed perk parameter commands share the selected stack's C# owner.
+[SetNthPerkEntryValue1](https://geckwiki.com/index.php/SetNthPerkEntryValue1),
+`SetNthPerkEntryValue2`, matching value queries, type/entry-point queries and
+`GetPerkEntryCount` preserve winning PRKE list indices, including ability entries.
+One/two-float parameters and byte-sized quest stages have independent values;
+non-numeric/absent slots retain their defined failure values. Unknown layouts,
+non-finite values, fractional indices and undefined stage conversions stop before
+mutation. Cached ability readers project current values into existing damage and
+spread consumers. Parameter mutation does not supply missing entry-point
+consumers, ranks, quest-perk effects or weapon/target condition scopes.
+
+Loaded-form mutations live with the selected source stack, across world/reader
+replacement; they are not written to owned files or campaign snapshots. Reopening
+the stack reads its winning source defaults. Mod load/restart scripts still own
+their initialization and setting changes. Typed form arguments keep reference
+identity, including grouped statement operands; explicit `$` conversion retains
+its separate display-name behavior.
+
 [SetUIFloatGradual](https://geckwiki.com/index.php?title=SetUIFloatGradual) uses
 the same float owner for its four documented modes: one-way interpolation,
 ramp/hold/return, repeating oscillation and repeating one-way interpolation.

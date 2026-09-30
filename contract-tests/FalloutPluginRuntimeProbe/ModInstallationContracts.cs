@@ -47,6 +47,7 @@ internal static class ModInstallationContracts
                 plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256 }),
                 scripts = scripts.State,
                 ui = ui.State,
+                perks = records.PerkParameters.State,
                 boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
             }));
         }

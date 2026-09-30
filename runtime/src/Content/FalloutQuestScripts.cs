@@ -472,6 +472,22 @@ internal sealed class FalloutQuestScripts
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
+            if (parts.Length == 1 && operation is "getnthperkentryvalue1" or "getnthperkentryvalue2" or
+                "getnthperkentrytype" or "getnthperkentryfunction")
+                return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var form = arguments[0].Value.FormKey(_records);
+                    var index = FalloutPerkParameters.Index(arguments[1].Number);
+                    return operation switch
+                    {
+                        "getnthperkentrytype" => _records.PerkParameters.Type(form, index),
+                        "getnthperkentryfunction" => _records.PerkParameters.EntryPoint(form, index),
+                        _ => _records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
+                    };
+                });
+            if (parts.Length == 1 && operation == "getperkentrycount")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    _records.PerkParameters.Count(arguments[0].Value.FormKey(_records)));
             if (parts.Length <= 2 && operation is "auxiliaryvariablegetfloat" or "auxvargetflt" or
                 "auxiliaryvariablegettype" or "auxvartype" or "auxiliaryvariablegetref" or "auxvargetref" or
                 "auxiliaryvariablegetstring" or "auxvargetstr")
@@ -563,6 +579,16 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")
+            {
+                if (arguments.Count != 3) throw new InvalidDataException($"{command} has an invalid argument count.");
+                var form = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function);
+                if (form.Kind == FalloutScriptValueKind.Number) form = FalloutScriptValue.Form(form.Number);
+                _ = _records.PerkParameters.Set(form.FormKey(_records),
+                    FalloutPerkParameters.Index(NumberArgument(arguments[1])), (float)NumberArgument(arguments[2]),
+                    operation == "setnthperkentryvalue2" ? 1 : 0);
+                return;
+            }
             if (parts.Length <= 2 && operation is "setinifloat" or "setinistring")
             {
                 var ini = Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
