@@ -33,12 +33,6 @@ internal sealed record FalloutUserFunction(FalloutPluginRecord Script, FalloutGa
         return new(script, blocks[0].Program, parameters, slots, types);
     }
 
-    internal void RequireScalar(string name)
-    {
-        if (Types[name] is "array_var")
-            throw new NotSupportedException($"Function local {name} needs an array value owner.");
-    }
-
     internal FalloutScriptLocalKind Kind(string name) => Types[name] switch
     {
         "ref" => FalloutScriptLocalKind.Form,
@@ -48,45 +42,66 @@ internal sealed record FalloutUserFunction(FalloutPluginRecord Script, FalloutGa
     };
 }
 
-internal sealed class FalloutUserFunctionFrame(FalloutUserFunction definition)
+internal sealed class FalloutUserFunctionFrame(FalloutUserFunction definition, FalloutScriptArrayStore arrays) : IDisposable
 {
     internal FalloutUserFunction Definition { get; } = definition;
     private readonly Dictionary<uint, FalloutScriptValue> _values = [];
     private FalloutScriptValue _result;
+    private bool _disposed;
     internal double Result { get => ResultValue.Number; set => ResultValue = value; }
     internal FalloutScriptValue ResultValue
     {
         get => _result;
-        set => _result = value;
+        set
+        {
+            if (value.Kind == FalloutScriptValueKind.Array) arrays.Retain(value);
+            if (_result.Kind == FalloutScriptValueKind.Array) arrays.Release(_result);
+            _result = value;
+        }
     }
     internal bool Contains(string name) => Definition.Slots.ContainsKey(name);
     internal FalloutScriptValue ReadValue(string name)
     {
-        Definition.RequireScalar(name);
         return _values.GetValueOrDefault(Definition.Slots[name], Default(Definition.Kind(name)));
     }
     internal double Read(string name) => ReadValue(name).Number;
     internal void Write(string name, double value) => WriteValue(name, value);
     internal void WriteValue(string name, FalloutScriptValue value)
     {
-        Definition.RequireScalar(name);
         var kind = Definition.Kind(name);
-        _values[Definition.Slots[name]] = kind switch
+        if (value.Kind == FalloutScriptValueKind.Array && kind != FalloutScriptLocalKind.Array)
+            throw new InvalidDataException("Array identity cannot be stored in a scalar function local.");
+        var stored = kind switch
         {
             FalloutScriptLocalKind.Number => value.Number,
             FalloutScriptLocalKind.Form => FalloutScriptValue.Form(value.Number),
             FalloutScriptLocalKind.String when value.Kind == FalloutScriptValueKind.String => value,
             FalloutScriptLocalKind.String => throw new InvalidDataException("Function string local needs text."),
-            FalloutScriptLocalKind.Array => throw new NotSupportedException("Array local needs an array value owner."),
+            FalloutScriptLocalKind.Array => arrays.RequireReference(value),
             _ => throw new InvalidDataException("Function local kind is invalid."),
         };
+        if (kind == FalloutScriptLocalKind.Array)
+        {
+            arrays.Retain(stored);
+            arrays.Release(ReadValue(name));
+        }
+        _values[Definition.Slots[name]] = stored;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        foreach (var value in _values.Values)
+            if (value.Kind == FalloutScriptValueKind.Array) arrays.Release(value);
+        if (_result.Kind == FalloutScriptValueKind.Array) arrays.Release(_result);
     }
 
     private static FalloutScriptValue Default(FalloutScriptLocalKind kind) => kind switch
     {
         FalloutScriptLocalKind.Form => FalloutScriptValue.Form(0),
         FalloutScriptLocalKind.String => FalloutScriptValue.String(string.Empty),
-        FalloutScriptLocalKind.Array => throw new NotSupportedException("Array local needs an array value owner."),
+        FalloutScriptLocalKind.Array => FalloutScriptValue.Array(0),
         _ => 0,
     };
 }

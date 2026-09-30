@@ -30,7 +30,8 @@ internal sealed partial class FalloutReferenceScripts
         if (caller is { } reference && records.RuntimeFormId(reference) != 0x14 &&
             records.GetEffective(reference).Signature is not ("REFR" or "ACHR" or "ACRE"))
             throw new InvalidDataException("Function caller is not a reference.");
-        var frame = new FalloutUserFunctionFrame(definition);
+        using var execution = world.ScriptValues.Arrays.BeginExecution();
+        using var frame = new FalloutUserFunctionFrame(definition, world.ScriptValues.Arrays);
         for (var index = 0; index < arguments.Count; ++index)
             frame.WriteValue(definition.Parameters[index], arguments[index]);
         ++_functionDepth;

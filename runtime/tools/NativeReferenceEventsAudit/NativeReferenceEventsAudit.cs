@@ -166,10 +166,31 @@ public partial class NativeReferenceEventsAudit : Node
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(instance.Read(7) == 42 && instance.Read(8) == 42 && !callbacks.IsKeyPressed(42),
                 "Native physical key events lost their DirectInput IDs, duplicated echo or failed in MenuMode.");
+            var array = world.ScriptValues.Read(FalloutScriptLocalKind.Array, instance.Read(11));
+            var activatedValue = 10 + instance.Read(4);
+            Require(array.Number == instance.Read(12) && world.ScriptValues.Arrays.Size(array) == 3 &&
+                world.ScriptValues.Arrays.Get(array, 0).Number == activatedValue && world.ScriptValues.Arrays.Get(array, 2).Number == 42,
+                "Native activation and key callbacks did not share aliased arrays through the ordinary script owner.");
+            var values = new FalloutScriptValueStore();
+            values.Restore(System.Text.Json.JsonSerializer.Deserialize<FalloutScriptValueStoreSnapshot>(
+                System.Text.Json.JsonSerializer.Serialize(world.ScriptValues.Capture()))!);
+            using var cold = new FalloutReferenceWorld(records, values);
+            cold.Restore(System.Text.Json.JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(
+                System.Text.Json.JsonSerializer.Serialize(world.Capture()))!);
+            cold.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
+            cold.ValidateValueHandles();
+            values.Arrays.ValidateRestoredRoots();
+            var coldExecutor = new FalloutReferenceScripts(records, cold, new(records), new((_, _) => false,
+                _ => throw new InvalidDataException("Unexpected restored array effect.")));
+            Require(coldExecutor.Dispatch(Key(0x901), "OnActivate", player).Error is null &&
+                values.Arrays.Get(values.Read(FalloutScriptLocalKind.Array, cold.Get(Key(0x901)).Read(12)), 0).Number == activatedValue + 1 &&
+                world.ScriptValues.Arrays.Get(array, 0).Number == activatedValue,
+                "Cold reference arrays retained a stale value owner or lost their aliased mutation.");
             Require(NativeScriptKeys.Code(Godot.Key.Shift, KeyLocation.Right) == 54 &&
                 NativeScriptKeys.Code(Godot.Key.Ctrl, KeyLocation.Right) == 157,
                 "Left and right physical modifiers shared source key IDs.");
             GD.Print("OPENNV_NATIVE_SCRIPT_EVENTS_PASS frameCallbacks=true pausedMenuCallbacks=true physicalKeyEdges=true sourceVariables=true parity=unverified");
+            GD.Print("OPENNV_NATIVE_SCRIPT_ARRAYS_PASS activation=true keyCallback=true aliases=true coldReference=true staleOwner=false parity=unverified");
         }
         finally { GetTree().Paused = false; adapter.Free(); }
     }
@@ -177,12 +198,14 @@ public partial class NativeReferenceEventsAudit : Node
     private static byte[] Fixture()
     {
         var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
-        var source = "begin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
+        var source = "array_var shared\narray_var alias\nbegin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
             "begin OnTriggerLeave player\nset departed to departed + 1\nend\n" +
             "begin OnTrigger player\nset contacts to contacts + 1\nend\n" +
-            "begin OnActivate\nset activations to activations + 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
+            "begin OnActivate\nset activations to activations + 1\nif activations == 1\n" +
+            "shared = Ar_List 10 \"native\"\nalias = shared\nendif\nalias[0] += 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
         var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),
             Local(7, "keyDown"), Local(8, "keyUp"), Local(9, "frames"), Local(10, "menus"),
+            Local(11, "shared"), Local(12, "alias"),
             Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Encoding.ASCII.GetBytes(source)));
         var primitive = new byte[32];
         BinaryPrimitives.WriteSingleLittleEndian(primitive, 4);
@@ -204,7 +227,7 @@ public partial class NativeReferenceEventsAudit : Node
             Field("SCTX", Encoding.ASCII.GetBytes((key ? "int key\n" : "") + "begin Function {" + (key ? "key" : "") + "}\n" + body + "\nend")));
         return Record("TES4", 0, Field("HEDR", header)).Concat(script)
             .Concat(Function(0x520, "AuditRef.frames += 1"))
-            .Concat(Function(0x521, "AuditRef.keyDown += key", true))
+            .Concat(Function(0x521, "AuditRef.keyDown += key\nAr_Append AuditRef.shared key", true))
             .Concat(Function(0x522, "AuditRef.keyUp += key", true))
             .Concat(Function(0x523, "AuditRef.menus += 1"))
             .Concat(DeathFixture())

@@ -25,6 +25,7 @@ internal sealed class FalloutScriptFunction
 
     internal IReadOnlyList<FalloutScriptArgumentKind> Arguments { get; }
     internal bool ReadOnly { get; init; }
+    internal FalloutScriptArgumentKind? Variadic { get; init; }
     internal Func<IReadOnlyList<FalloutScriptArgument>, double> Invoke =>
         arguments => InvokeValue(arguments).Number;
 
@@ -43,7 +44,9 @@ internal sealed class FalloutScriptFunction
     }
 
     internal static FalloutScriptFunction Typed(IReadOnlyList<FalloutScriptArgumentKind> arguments,
-        Func<IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue> invoke) => new(arguments, invoke);
+        Func<IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue> invoke,
+        bool readOnly = false, FalloutScriptArgumentKind? variadic = null) =>
+        new(arguments, invoke) { ReadOnly = readOnly, Variadic = variadic };
 
     internal FalloutScriptValue InvokeValue(IReadOnlyList<FalloutScriptArgument> arguments) =>
         _invokeValue is not null ? _invokeValue(arguments) : _invoke!(arguments);
@@ -64,7 +67,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 5;
+    internal const int ParserVersion = 6;
     private readonly IReadOnlyList<string[]> _lines;
     private readonly Dictionary<int, int> _loopEnds = [];
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
@@ -79,7 +82,7 @@ internal sealed partial class FalloutGameModeProgram
     }
 
     internal IEnumerable<string> CommandNames => _lines
-        .Where(tokens => tokens.Length < 2 || !FalloutNvseNumericExpression.IsAssignment(tokens[1]))
+        .Where(tokens => !IsExpressionStatement(tokens))
         .Select(tokens => tokens[0].ToLowerInvariant())
         .Where(command => command is not ("if" or "elseif" or "else" or "endif" or "while" or "loop" or "break" or "continue" or "set" or "let" or "eval" or "return"))
         .Select(command => command[(command.LastIndexOf('.') + 1)..]);
@@ -188,6 +191,7 @@ internal sealed partial class FalloutGameModeProgram
         budget ??= new();
         var typed = values is not null;
         values ??= new(name => variable(name), (name, value) => assign(name, value.Number));
+        using var execution = values.Arrays?.BeginExecution();
         FalloutScriptValue Expression(IReadOnlyList<string> tokens, bool nvseLogical = true) =>
             FalloutNvseNumericExpression.EvaluateValue(tokens, values, function, userFunction, nvseLogical);
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
@@ -246,7 +250,7 @@ internal sealed partial class FalloutGameModeProgram
                 case "return" when active: yield break;
                 default:
                     if (!active) break;
-                    if (tokens.Length > 1 && FalloutNvseNumericExpression.IsAssignment(tokens[1]))
+                    if (IsExpressionStatement(tokens) || values.Arrays?.Function(tokens[0]) is not null)
                         _ = typed ? Expression(tokens) :
                             FalloutNvseNumericExpression.Evaluate(tokens, variable, assign, function, userFunction);
                     else call(tokens[0], tokens[1..]);
@@ -255,6 +259,9 @@ internal sealed partial class FalloutGameModeProgram
             yield return true;
         }
     }
+
+    private static bool IsExpressionStatement(string[] tokens) => tokens.Length > 1 &&
+        (FalloutNvseNumericExpression.IsAssignment(tokens[1]) || tokens[1] == "[");
 
     internal static double Evaluate(IReadOnlyList<string> tokens, Func<string, double> variable,
         Func<string, FalloutScriptFunction?>? function = null)
@@ -330,7 +337,7 @@ internal sealed partial class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||:=|[+*/-]=|[{}$=()+*/!<>-]", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||:=|[+*/-]=|[\\[\\]{}$=()+*/!<>-]", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {
@@ -398,6 +405,26 @@ internal sealed partial class FalloutGameModeProgram
                 index += 2;
                 continue;
             }
+            if (index + 1 < tokens.Count && tokens[index + 1] == "[")
+            {
+                var end = index + 1;
+                while (end < tokens.Count && tokens[end] == "[")
+                {
+                    var depth = 1;
+                    ++end;
+                    for (; end < tokens.Count && depth != 0; ++end)
+                    {
+                        if (tokens[end] == "[") ++depth;
+                        else if (tokens[end] == "]") --depth;
+                    }
+                    if (depth != 0) throw new InvalidDataException("Script command argument has an unclosed array index.");
+                }
+                var value = FalloutNvseNumericExpression.EvaluateValue(tokens.Skip(index).Take(end - index).ToArray(),
+                    values, function, userFunction);
+                result.Add(CommandValue(value, values.FormName));
+                index = end;
+                continue;
+            }
             result.Add(tokens[index++]);
         }
         return result;
@@ -415,6 +442,8 @@ internal sealed partial class FalloutGameModeProgram
     // migration, and current-version saves must contain every admitted owner.
     internal static bool WasRejectedByParser(string source, int version)
     {
+        if (version < 6 && source.Split('\n').Select(line => StripComment(line).Trim())
+            .Where(line => line.Length != 0).Any(line => Tokens(line).Any(token => token is "[" or "]"))) return true;
         if (version == 0 && HasArgumentSeparator(source)) return true;
         if (version is 3 or 4 && source.Split('\n').Select(line => StripComment(line).Trim())
             .Where(line => line.Length != 0).Select(Tokens)

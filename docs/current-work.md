@@ -15,6 +15,23 @@ completion is claimed.
 
 ## Verified runtime
 
+Script arrays now belong to the shared C# value store. Packed lists, numeric
+maps and string maps preserve typed elements, alias identity and nested graphs.
+Indexed expressions, core construction/mutation/copy commands and array function
+arguments/returns execute through ordinary script owners. Recursive and failed
+function frames release temporary roots; cold restoration rejects malformed or
+unowned graphs. Save v23 retains array identities alongside v22 object-animation
+state; earlier supported saves still load. Focused scalar/array/function and
+native activation/key-callback/cold-reference checks pass, as does the complete
+required runtime gate. The genuine owned checkpoint retains all 446 quest
+script clocks, failures and progression through parser 1 to 6 and another cold
+restore; its file remains unchanged.
+The selected JAM source audit now has 13 parser failures among 52 scripts,
+down from 21 before indexed expressions. Its JHM initializer passes Ar_Null and
+reaches the missing SetUIFloatGradual owner. Complete JAM/MCM remains unverified.
+The TTW source audit admits all but nine of 1,263 entry-plugin scripts;
+its opening, campaign progression and travel remain unverified.
+
 Source object animation now binds PlayGroup and IsAnimPlaying to each resident
 reference's authored NIF manager. Queued and immediate selection, authored loop
 starts, source text-key order, callback changes and independent clocks have native
@@ -71,13 +88,18 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Reproduce JAM's reached execution failures on current main before extending the
-ordinary native script, UI, event and gameplay owners. Typed strings, INI and
-auxiliary state, UIO injection and UI component state already exist; they do not
+Implement JAM's reached render callbacks and source UI interpolation, then trace
+the remaining actor-effect, perk-mutation and hit-event failures through ordinary
+native owners. Chained reference expressions, lambdas, extended operators and
+remaining array operations still reject syntax/behavior. Typed strings/arrays,
+INI and auxiliary state, UIO injection and UI component state already exist; they do not
 establish a working MCM menu or any complete JAM module. Implement the next
 reached missing owner, including ordinary input and persistent effects. Keep
 the complete TTW opening, campaign progression, travel and dependency semantics
 in scope; do not remove launch gates on the strength of source audits.
+The current New Vegas startup assumes the Doc Mitchell opening, including its
+start CELL, quests and character creation. Replace that assumption with winning
+startup scripts before claiming a Fallout 3 start under TTW.
 
 Preserve the actual flat run's remaining script and actor failures. Essential
 recovery and additional death-command parameters need their own source-backed
@@ -116,6 +138,10 @@ Script death checks are in `tmp/scripted-death-owned.log`,
 `tmp/scripted-death-contract.log` and `tmp/scripted-death-runtime-gate.log`.
 Session checks are in `tmp/native-shutdown-owned.log`,
 `tmp/native-shutdown-runtime-gate.log` and `tmp/native-session-retirement/`.
+Array checks are in `tmp/jam-array-contract.log`,
+`tmp/jam-array-native-contract.log`, `tmp/jam-array-runtime-gate.log`,
+`tmp/jam-array-owned-save.log`,
+`tmp/jam-array-source.private.json` and `tmp/jam-array-execution.private.json`.
 The requested flat screenshot is extracted from the retained September 27
 companion clip; it does not show the new September 30 code.
 

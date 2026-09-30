@@ -63,7 +63,9 @@ try
         "Compiled numeric local admission rejected source name spelling or trailing author notes.");
     Require(FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x507)))["owner"].Kind == FalloutScriptLocalKind.Form,
         "Unsupported executable syntax prevented compiled reference-local admission.");
-    Reject(() => FalloutGameModeProgram.Read("ref owner\nbegin GameMode\nset owner to unsupported[index]\nend"));
+    var unownedArray = FalloutGameModeProgram.Read("ref owner\nbegin GameMode\nset owner to unsupported[index]\nend");
+    Reject(() => unownedArray.Execute(_ => 0, (_, _) => throw new InvalidOperationException("Unowned array wrote state."),
+        (_, _) => throw new InvalidOperationException("Unexpected array command."), values: new(_ => 0, (_, _) => { })));
     var firstCell = FalloutCellSceneReader.Read(records, Key(0x800));
     var secondCell = FalloutCellSceneReader.Read(records, Key(0x801));
     using (var queryWorld = new FalloutReferenceWorld(records))

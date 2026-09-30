@@ -93,11 +93,12 @@ The author's [JAM 4.6 requirements](https://www.nexusmods.com/newvegas/mods/6666
 include the four main New Vegas DLCs, xNVSE, JIP LN, JohnnyGuitar, kNVSE,
 Stewie Tweaks and UIO. The installed plugin's master declarations supply the
 actual ESM dependencies. The local sample now contains all of those packages.
-The shared interpreter now executes numeric expressions, scalar user functions,
+The shared interpreter now executes typed scalar/array expressions and user functions,
 loops and per-script lifecycle/frame/key events. MCM's full in-game configuration
 is required by the requested product scope and remains in implementation.
-34 of JAM's 52 source scripts still fail parsing. Its six admitted initialization
-scripts now reach specific UI, actor-effect, perk-mutation and render-event gaps.
+13 of JAM's 52 source scripts still fail parsing. The reached initialization
+scripts retain specific UI, actor-effect, perk-mutation, hit-event and render-event
+gaps. JHM now passes its prior null-array failure and reaches UI interpolation.
 See [NVSE script runtime](nvse-script-runtime.md).
 The earlier adapters only applied a speed multiplier and global time scale in
 the old CellPlayer path. They do not provide AP behavior, animations, callbacks,
@@ -126,8 +127,9 @@ dotnet run --project contract-tests/FalloutPluginRuntimeProbe --configuration Re
 ```
 
 Reports retain source plugin hashes, active load order, archives, resolved files,
-missing packages and script parser failures. JAM has 34 parser failures; TTW's
-last source audit had 61 among 1,263 entry-plugin scripts. The execution audit
+missing packages and script parser failures. JAM has 13 parser failures; TTW's
+current source audit has 9 among 1,263 entry-plugin scripts in its 18-plugin graph.
+These counts establish source admission only. The execution audit
 reports reached initialization state/errors through the ordinary script owners;
 its headless player and presentation boundaries remain explicit.
 Keep reports and all mod,

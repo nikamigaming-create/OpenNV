@@ -28,9 +28,9 @@ intermediate arithmetic that would otherwise be hidden by a comparison. Reached
 runtime failures remain visible and retain the executed statement prefix; they
 are not converted into successful no-ops.
 
-Parser version 4 also admits `$`/`ToString` string syntax in addition to named
+Parser version 6 admits indexed array expressions; version 4 added `$`/`ToString` string syntax in addition to named
 Function headers. Previously omitted quest owners require syntax that their saved
-parser version rejected: `$` before version 4, braces before version 3,
+parser version rejected: brackets before version 6, `$` before version 4, braces before version 3,
 assignments before version 2, or argument commas before version 1. Quotes and
 comments cannot authorize migration. Existing locals,
 quest progression and clocks are retained. Current-version saves still require
@@ -41,13 +41,14 @@ all admitted owners, and previously faulted executions are not silently retried.
 Named [user functions](https://geckwiki.com/index.php/User_Defined_Function)
 resolve through compiled SCRO bindings and winning SCPT records. Object-type
 Function blocks validate parameters against declared slots. Numeric, reference
-and string locals have independent typed invocation frames, including nested
+and string/array locals have independent typed invocation frames, including nested
 calls; shared quest, reference and global writes still reach the existing
 authoritative owners. `Call` works as a statement and inside expressions, with
-typed string arguments and results. `SetFunctionValue` retains the latest return
-value without ending execution. Calls support up to 30 nested frames. Arrays,
-dynamic function references and lambdas remain unsupported instead of becoming
-untyped numeric stand-ins.
+typed arguments and results. Array parameters and returns retain alias identity;
+temporary frame references release on successful return and failure.
+`SetFunctionValue` retains the latest return value without ending execution.
+Calls support up to 30 nested frames. Dynamic function references and lambdas
+remain unsupported instead of becoming untyped numeric stand-ins.
 
 `while`/`loop`, nested `break` and `continue` execute with branch-stack restoration.
 Malformed nesting is rejected before execution. A shared 100,000-statement
@@ -80,6 +81,41 @@ and mouse input independently of gameplay control consumption. The owned JAM
 source also removes all keys for a handler by omitting the key argument; that
 removal form is implemented. Failed callbacks retain a visible error and stop
 retrying their prefix. Explicit re-registration can replace the failed entry.
+
+## Shared array values
+
+[Array variables](https://geckwiki.com/index.php/Array_Variable) use distinct typed
+identities in the shared value store. Packed arrays require consecutive integer
+keys; numeric maps allow sparse, negative and fractional keys; string maps match
+keys case-insensitively. Elements preserve numbers, strings, forms and nested
+array identities. Local assignment aliases an array; `Ar_Copy` copies one level
+and `Ar_DeepCopy` retains the nested graph's relationships in a new graph.
+Following xNVSE 6.2.1 and later, equality compares keys and typed surface values;
+nested array elements compare by identity rather than recursively.
+
+Indexed reads, nested indexing and assignment reach that owner directly. An
+indexed compound assignment evaluates its container/key once. Complete syntax
+validation and short circuit behavior precede mutation. `Ar_Null`, `Ar_Construct`,
+`Ar_List`, `Ar_Size`, `Ar_HasKey`, `Ar_Append`, single-key/all-element `Ar_Erase`,
+`Ar_Resize`, copying and `TypeOf` share one implementation across quest, reference,
+result and user-function execution. See the source contracts for
+[construction](https://geckwiki.com/index.php/Ar_Construct),
+[resize](https://geckwiki.com/index.php/Ar_Resize) and
+[type queries](https://geckwiki.com/index.php/TypeOf).
+
+Declared quest/reference locals retain roots independently of presentation.
+Nested execution scopes protect intermediate results until caller assignments
+finish, then reclaim unreachable arrays, including cyclic graphs. Scalar-only
+invocations do not scan the array graph. Save v23 stores typed elements and
+identities; cold restoration rebuilds roots from winning declarations and rejects
+duplicate keys, invalid types, missing nested identities and unowned graphs.
+Earlier supported saves, including v22 object-animation state, still load.
+The store limits live allocation to 100,000 arrays and 1,000,000 total elements;
+resize preflights that budget before mutation. These are OpenNV execution policy,
+not a retail format-limit claim.
+Array iteration, slices, sorting, pair/range syntax and further extension commands
+remain visible missing capabilities. This is bounded runtime coverage, not full
+NVSE or mod compatibility.
 
 ## INI and auxiliary state
 
@@ -147,7 +183,8 @@ mutation during dispatch, failure retention and replacement with restored owners
 The native Godot audit dispatches physical key events into source functions and
 verifies GameMode/paused MenuMode callbacks mutating actual reference slots.
 
-The selected JAM source audit still has 21 parser rejections among 52 scripts.
+The selected JAM source audit has 13 parser rejections among 52 scripts, down
+from 21 before indexed expressions. Reached execution still fails visibly.
 Its reached configuration initializers now execute through the shared INI and
 auxiliary owners; the next failures are concrete render-event, actor-effect,
 perk-mutation and remaining parser gaps. The synthetic storage probe covers
@@ -161,7 +198,9 @@ selected MCM/UIO resources. Both are headless and have no substitute player or
 presentation host. These checks do not establish JAM gameplay or a working MCM
 menu.
 
-Arrays, extended operators and unbound extension calls still need owners.
+Remaining array operations, extended operators and unbound extension calls still
+need owners. The JHM initializer now passes its prior `Ar_Null` failure and reaches
+`SetUIFloatGradual`; this does not establish a working hit marker or menu.
 MCM's complete menu/settings behavior, render/hit/fire events, XR control mapping,
 focus-loss input handling and callbacks while no world is active remain open.
 Compiled scripts without source also need a bytecode execution path. Source

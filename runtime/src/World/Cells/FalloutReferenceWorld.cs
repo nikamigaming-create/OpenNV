@@ -212,15 +212,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         else Get(owner).Write(index, value);
     }
 
-    internal void ValidateStringHandles()
+    internal void ValidateValueHandles()
     {
         foreach (var instance in _instances.Values)
         {
             if (instance.Script is null) continue;
             foreach (var declaration in instance.Script.Declarations.Values)
             {
-                if (declaration.Kind != FalloutScriptLocalKind.String) continue;
-                ScriptValues.ValidateHandle(instance.Read(declaration.Index));
+                ScriptValues.ValidateLocal(declaration.Kind, instance.Read(declaration.Index),
+                    $"{instance.Reference}:{declaration.Index}");
             }
         }
     }

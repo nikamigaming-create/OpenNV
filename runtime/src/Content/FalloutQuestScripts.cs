@@ -219,8 +219,9 @@ internal sealed class FalloutQuestScripts
         snapshot.Validate();
         ScriptValues.Restore(snapshot.Values);
         Auxiliary.RestorePermanent(snapshot.Auxiliary);
-        ValidateStringHandles();
-        References?.ValidateStringHandles();
+        ValidateValueHandles();
+        References?.ValidateValueHandles();
+        ScriptValues.Arrays.ValidateRestoredRoots();
         var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
         var owners = _instances.Select(instance => instance.Quest.FormKey).ToHashSet();
         var newlyParsed = _instances.Where(instance => !states.ContainsKey(instance.Quest.FormKey)).ToArray();
@@ -260,14 +261,16 @@ internal sealed class FalloutQuestScripts
         foreach (var message in messages) _messages.Enqueue(message);
     }
 
-    private void ValidateStringHandles()
+    private void ValidateValueHandles()
     {
-        foreach (var instance in _instances)
+        foreach (var snapshot in _quests.Capture())
         {
-            foreach (var declaration in FalloutScriptLocals.ReadDeclarations(instance.Script).Values)
+            var script = FalloutScriptLocals.AttachedScript(_records, _records.GetEffective(snapshot.Quest));
+            if (script is null) continue;
+            foreach (var declaration in FalloutScriptLocals.ReadDeclarations(script).Values)
             {
-                if (declaration.Kind != FalloutScriptLocalKind.String) continue;
-                ScriptValues.ValidateHandle(Variable(instance.Quest.FormKey, declaration.Index));
+                ScriptValues.ValidateLocal(declaration.Kind, Variable(snapshot.Quest, declaration.Index),
+                    $"{snapshot.Quest}:{declaration.Index}");
             }
         }
     }
@@ -413,7 +416,7 @@ internal sealed class FalloutQuestScripts
             var key = Variable(name);
             var previous = this.Variable(key.Owner, key.Index);
             var raw = ScriptValues.Write(instance.Bindings.VariableKind(name), previous, value,
-                instance.Bindings.Source.OwnerPlugin);
+                instance.Bindings.Source.OwnerPlugin, $"{key.Owner}:{key.Index}");
             SetVariable(key.Owner, key.Index, raw);
         }
         void DestroyString(string name)
@@ -424,7 +427,7 @@ internal sealed class FalloutQuestScripts
             SetVariable(key.Owner, key.Index, cleared);
         }
         void Write(string name, double value) => WriteValue(name, value);
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName);
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays);
         FalloutPluginRecord Quest(string name)
         {
             var quest = Form(name);
@@ -468,6 +471,7 @@ internal sealed class FalloutQuestScripts
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             if (parts.Length <= 2 && operation is "auxiliaryvariablegetfloat" or "auxvargetflt" or
                 "auxiliaryvariablegettype" or "auxvartype" or "auxiliaryvariablegetref" or "auxvargetref" or
                 "auxiliaryvariablegetstring" or "auxvargetstr")

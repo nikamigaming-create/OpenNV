@@ -226,7 +226,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var key = bindings.Variable(name);
             var previous = records.GetEffective(key.Owner).Signature == "QUST" ? quests.Variable(key.Owner, key.Index) :
                 world.Get(key.Owner).Read(key.Index);
-            var raw = valueStore.Write(bindings.VariableKind(name), previous, value, bindings.Source.OwnerPlugin);
+            var raw = valueStore.Write(bindings.VariableKind(name), previous, value, bindings.Source.OwnerPlugin,
+                $"{key.Owner}:{key.Index}");
             if (records.GetEffective(key.Owner).Signature == "QUST") quests.SetVariable(key.Owner, key.Index, raw);
             else world.Get(key.Owner).Write(key.Index, raw);
         }
@@ -247,7 +248,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             else world.Get(key.Owner).Write(key.Index, cleared);
         }
         void Write(string name, double value) => WriteValue(name, value);
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName);
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, valueStore.Arrays);
         FalloutFormKey Reference(string name)
         {
             if (FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is not null) return bindings.Reference(name);
@@ -264,11 +265,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var parts = command.Split('.');
             if (parts.Length > 2) throw new NotSupportedException("Function caller path is unbound.");
             var definition = this.UserFunction(bindings.Form(name).FormKey);
-            foreach (var parameter in definition.Parameters) definition.RequireScalar(parameter);
             var kinds = definition.Parameters.Select(parameter => definition.Kind(parameter) switch
             {
                 FalloutScriptLocalKind.String => FalloutScriptArgumentKind.String,
-                FalloutScriptLocalKind.Form => FalloutScriptArgumentKind.Value,
+                FalloutScriptLocalKind.Form or FalloutScriptLocalKind.Array => FalloutScriptArgumentKind.Value,
                 _ => FalloutScriptArgumentKind.Number,
             }).ToArray();
             return FalloutScriptFunction.Typed(kinds, arguments => InvokeFunctionValue(
@@ -291,6 +291,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => parts.Length == 1 ? source : Reference(parts[0]);
             FalloutFormKey AuxiliaryTarget(IReadOnlyList<FalloutScriptArgument> arguments)
             {
