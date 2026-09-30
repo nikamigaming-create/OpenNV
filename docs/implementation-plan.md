@@ -1,12 +1,14 @@
 # Gameplay, playtest and release plan
 
-September 30 direction: prioritize ordinary flat gameplay and system polish,
-including NPC and creature combat, quest progression, looting and crafting.
-Preserve shared VR behavior; detailed VR presentation is not the current focus. Execute
-[the flat gameplay work order](flat-gameplay-plan.md) before returning to
-mod-only implementation or detailed VR presentation. Preserve the complete
-campaign/mod objectives below; no whole-game completion date or percentage is
-established by the existing component work.
+September 30 direction: complete actual JAM/MCM gameplay first, then the combined
+TTW campaign from Fallout 3's opening through its authored connection to New
+Vegas. Prioritize flat play and system polish while preserving shared VR state;
+detailed VR presentation follows. Use [the flat gameplay work order](flat-gameplay-plan.md)
+for the ordinary interaction failures reached while completing those mods.
+Classic flat presentation uses winning Fallout/mod screens and controls. An
+optional Nikami experience adds enhancements to the same gameplay owners.
+Preserve the complete campaign/mod objectives below; existing component checks
+do not establish a whole-game completion date or percentage.
 
 Release priority: a workable playtest candidate and functional flat/OpenXR
 side-by-side first. Fix broken interactions; leave visual polish for later.

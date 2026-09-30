@@ -7,6 +7,8 @@
     <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueVoice.cs" Link="FalloutDialogueVoice.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptValues.cs" Link="FalloutScriptValues.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptArrayStore.cs" Link="FalloutScriptArrayStore.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptArrayStore.Functions.cs" Link="FalloutScriptArrayStore.Functions.cs" />
     <Compile Include="../../runtime/src/Content/FalloutNvseNumericExpression.cs" Link="FalloutNvseNumericExpression.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />

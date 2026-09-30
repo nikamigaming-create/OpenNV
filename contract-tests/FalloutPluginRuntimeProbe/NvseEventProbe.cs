@@ -47,6 +47,7 @@ internal static class NvseEventProbe
             Reject(() => scripts.InvokeFunction(Form(0x220), player, [double.NaN], 0));
             Reject(() => scripts.InvokeFunction(Form(0x220), player, [35], 0));
             Require(scripts.InvokeFunction(Form(0x220), player, [2], 0) == 3, "Recursion failure retained a poisoned call stack.");
+            ArrayFunctions(records, world, quests, scripts, quest, definition);
 
             events.Advance(0.05, false, scripts.InvokeFunction);
             Require(Value(4) == 0, "GameMode-only callback ran while paused.");
@@ -218,9 +219,9 @@ internal static class NvseEventProbe
         var data = new byte[8]; data[0] = 1; BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(4), 0.01f);
         var fields = Field("EDID", Text("ProbeQuest")).Concat(Field("DATA", data)).Concat(Field("SCRI", BitConverter.GetBytes(0x200u))).ToArray();
         var bytes = Record("TES4", 0, Field("HEDR", header)).Concat(Record("QUST", 0x100, fields));
-        const string main = "begin GameMode\nif GetGameRestarted\nrestarts += 1\nendif\nif GetGameLoaded\nloads += 1\nendif\n" +
+        const string main = "array_var items\narray_var alias\nbegin GameMode\nif GetGameRestarted\nrestarts += 1\nendif\nif GetGameLoaded\nloads += 1\nendif\n" +
             "if initialized == 0\nSetGameMainLoopCallback Tick 1 2 1\nSetOnKeyDownEventHandler KeyDown 1 42\nSetOnKeyUpEventHandler KeyUp 1 42\ninitialized = 1\nendif\nend";
-        bytes = bytes.Concat(Script(0x200, "Main", main, ["restarts", "loads", "initialized", "total", "elapsed", "keyDown", "keyUp", "failed"], quest: true));
+        bytes = bytes.Concat(Script(0x200, "Main", main, ["restarts", "loads", "initialized", "total", "elapsed", "keyDown", "keyUp", "failed", "items", "alias"], quest: true));
         bytes = bytes.Concat(Script(0x210, "Tick", "int scratch\nbegin Function {}\nscratch += 1\nProbeQuest.total += scratch\nProbeQuest.elapsed = GetSecondsPassed\nend", ["scratch"]));
         bytes = bytes.Concat(Script(0x211, "KeyDown", "int key\nbegin Function {key}\nProbeQuest.keyDown += key\nend", ["key"]));
         bytes = bytes.Concat(Script(0x212, "KeyUp", "int key\nbegin Function {key}\nProbeQuest.keyUp += key\nend", ["key"]));
@@ -231,6 +232,10 @@ internal static class NvseEventProbe
         bytes = bytes.Concat(Script(0x228, "ShortCircuit", "int n\nbegin Function {}\nn = 1 || call Fault\nn = 0 && call Fault\nSetFunctionValue (call Sum 3)\nend", ["n"]));
         bytes = bytes.Concat(Script(0x229, "RemoveKeys", "begin Function {}\nSetOnKeyDownEventHandler KeyDown 0\nend", []));
         bytes = bytes.Concat(Script(0x233, "Fault", "begin Function {}\nProbeQuest.failed += 1\nMissingCommand\nProbeQuest.failed += 10\nend", []));
+        bytes = bytes.Concat(Script(0x240, "ArrayCreate", "array_var items\nbegin Function {}\nitems = Ar_List PlayerRef \"authored\"\nSetFunctionValue items\nend", ["items"]));
+        bytes = bytes.Concat(Script(0x241, "ArrayChange", "array_var items\nbegin Function {items}\nitems[1] = items[1] + \"/changed\"\nSetFunctionValue items\nend", ["items"]));
+        bytes = bytes.Concat(Script(0x242, "ArrayRecurse", "int n\narray_var scratch\nbegin Function {n}\nscratch = Ar_List n\nif n > 0\nscratch = call ArrayRecurse (n - 1)\nendif\nSetFunctionValue scratch\nend", ["n", "scratch"]));
+        bytes = bytes.Concat(Script(0x243, "ArrayFault", "array_var items\nbegin Function {}\nitems = Ar_Construct \"map\"\nitems[0] = items\nMissingCommand\nend", ["items"]));
         return bytes.ToArray();
     }
 
@@ -240,7 +245,7 @@ internal static class NvseEventProbe
         var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), (uint)locals.Length);
         if (quest) header[16] = 1;
         var fields = Field("EDID", Text(name)).Concat(Field("SCHR", header)).Concat(Field("SCTX", Text(source)));
-        foreach (var form in referenceForms ?? [0x14u, 0x100u, 0x210u, 0x211u, 0x212u, 0x220u, 0x233u])
+        foreach (var form in referenceForms ?? [0x14u, 0x100u, 0x210u, 0x211u, 0x212u, 0x220u, 0x233u, 0x240u, 0x241u, 0x242u, 0x243u])
             fields = fields.Concat(Field("SCRO", BitConverter.GetBytes(form)));
         for (var i = 0; i < locals.Length; ++i)
         {
@@ -248,6 +253,40 @@ internal static class NvseEventProbe
             fields = fields.Concat(Field("SLSD", slot)).Concat(Field("SCVR", Text(locals[i])));
         }
         return Record("SCPT", id, fields.ToArray());
+    }
+
+    private static void ArrayFunctions(FalloutPluginStack records, FalloutReferenceWorld world,
+        FalloutQuestState quests, FalloutReferenceScripts executor, FalloutPluginRecord quest, FalloutPluginRecord definition)
+    {
+        void Run(string body) => executor.ExecuteProgram(quest, definition,
+            FalloutGameModeProgram.Read("begin GameMode\n" + body + "\nend"), 0.1);
+        Run("items = call ArrayCreate\nalias = call ArrayChange items");
+        var array = world.ScriptValues.Read(FalloutScriptLocalKind.Array, quests.Variable(quest.FormKey, 9));
+        Require(array.Number == quests.Variable(quest.FormKey, 10) && world.ScriptValues.Arrays.Count == 1 &&
+            world.ScriptValues.Arrays.Get(array, 0).Kind == FalloutScriptValueKind.Form &&
+            world.ScriptValues.Arrays.Get(array, 0).Number == 0x14 && world.ScriptValues.Arrays.Get(array, 1).Text == "authored/changed",
+            "Array function arguments/results copied aliases, lost typed forms or expired before the caller assignment.");
+        Run("items = call ArrayRecurse 8\nalias = Ar_Null");
+        Require(world.ScriptValues.Arrays.Count == 1 && world.ScriptValues.Arrays.Get(
+            world.ScriptValues.Read(FalloutScriptLocalKind.Array, quests.Variable(quest.FormKey, 9)), 0).Number == 0,
+            "Recursive function frames retained their abandoned local arrays.");
+        Reject(() => executor.InvokeFunction(new("Events.esm", 0x243), null, [], 0));
+        Require(world.ScriptValues.Arrays.Count == 1, "A failed function leaked its cyclic temporary array.");
+        var owner = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(),
+            defaultProcessingDelay: 0.01f, references: world);
+        var snapshot = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(owner.Capture()))!;
+        var coldQuests = new FalloutQuestState(records);
+        coldQuests.Restore(JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(quests.Capture()))!);
+        using var coldWorld = new FalloutReferenceWorld(records);
+        var coldOwner = new FalloutQuestScripts(records, coldQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(),
+            defaultProcessingDelay: 0.01f, references: coldWorld);
+        coldOwner.Restore(snapshot);
+        Require(coldWorld.ScriptValues.Arrays.Count == 1 && coldWorld.ScriptValues.Arrays.Get(
+            coldWorld.ScriptValues.Read(FalloutScriptLocalKind.Array, coldQuests.Variable(quest.FormKey, 9)), 0).Number == 0,
+            "Cold quest restoration did not rebind array roots to its fresh value owner.");
+        Run("items = Ar_Null");
+        Require(world.ScriptValues.Arrays.Count == 0, "The last quest array local retained an unreachable graph.");
+        Console.WriteLine("OPENNV_SCRIPT_ARRAY_FUNCTIONS_PASS typedForms=true argumentAlias=true returnLifetime=true recursionCleanup=true faultCleanup=true coldQuest=true");
     }
     private static byte[] Text(string text) => Encoding.ASCII.GetBytes(text + '\0');
     private static byte[] Field(string name, byte[] data)

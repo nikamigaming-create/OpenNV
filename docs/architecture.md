@@ -70,6 +70,12 @@ remain owned separately and fail visibly until that binding exists.
 Reference, result and quest script local lookup resolves the retained world
 instance's attached script, including actor templates, rather than rereading
 only SCRI on its base. Qualified local reads use the same resolver.
+Typed string and array values have one C# store shared by those script owners.
+Array locals retain identities by instance/slot; nested elements and transient
+function frames retain the same graph. Execution scopes protect intermediate
+values and release unreachable graphs after calls finish. Save v23 retains
+typed arrays and rebuilds roots from winning quest/reference declarations on
+cold restoration; earlier supported snapshots remain readable.
 Weapon hits and scripted actor deaths share the health/death inventory owner;
 an unknown killer remains nullable through delayed events and saves. Native
 combat presentation observes that shared transition and activates source bodies.

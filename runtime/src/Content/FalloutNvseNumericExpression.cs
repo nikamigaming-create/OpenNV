@@ -7,7 +7,8 @@ namespace OpenNV.Runtime.Content;
 // set/if. Typed values still belong to the caller's real script state owner.
 internal static class FalloutNvseNumericExpression
 {
-    private sealed record Operand(Func<FalloutScriptValue> Value, string? Target = null);
+    private sealed record Operand(Func<FalloutScriptValue> Value,
+        Func<(Func<FalloutScriptValue> Read, Action<FalloutScriptValue> Write)>? Target = null);
 
     internal static bool IsAssignment(string token) => token is "=" or ":=" or "+=" or "-=" or "*=" or "/=";
 
@@ -26,7 +27,7 @@ internal static class FalloutNvseNumericExpression
         FalloutScriptFunction? Resolve(string token)
         {
             if (!token.Split('.')[^1].Equals("call", StringComparison.OrdinalIgnoreCase))
-                return function?.Invoke(token);
+                return function?.Invoke(token) ?? values.Arrays?.Function(token);
             if (at >= tokens.Count || !Identifier(tokens[at]))
                 throw new NotSupportedException("Call needs a bound function identity.");
             return (userFunction ?? throw new NotSupportedException("Call has no user-function owner."))(
@@ -52,6 +53,8 @@ internal static class FalloutNvseNumericExpression
                 left = new(() =>
                 {
                     var value = operand.Value();
+                    if (token is "-" or "+" && value.Kind == FalloutScriptValueKind.Array)
+                        throw new InvalidDataException("Script arithmetic cannot use an array identity.");
                     return token.ToLowerInvariant() switch
                     {
                         "-" => Finite(-value.Number),
@@ -78,8 +81,11 @@ internal static class FalloutNvseNumericExpression
             else if (Resolve(token) is { } command)
             {
                 var arguments = new List<Func<FalloutScriptArgument>>();
-                foreach (var kind in command.Arguments)
+                var argumentIndex = 0;
+                while (argumentIndex < command.Arguments.Count || command.Variadic is not null)
                 {
+                    var variadic = argumentIndex >= command.Arguments.Count;
+                    var kind = variadic ? command.Variadic!.Value : command.Arguments[argumentIndex++];
                     var optional = kind is FalloutScriptArgumentKind.OptionalNumber or
                         FalloutScriptArgumentKind.OptionalIdentifier or FalloutScriptArgumentKind.OptionalString or
                         FalloutScriptArgumentKind.OptionalValue;
@@ -91,7 +97,7 @@ internal static class FalloutNvseNumericExpression
                         FalloutScriptArgumentKind.OptionalValue => FalloutScriptArgumentKind.Value,
                         _ => kind,
                     };
-                    if (optional && (at >= tokens.Count || !CanStartOptionalArgument(tokens[at], required)))
+                    if ((optional || variadic) && (at >= tokens.Count || !CanStartOptionalArgument(tokens[at], required)))
                         break;
                     if (required == FalloutScriptArgumentKind.Identifier)
                     {
@@ -103,20 +109,42 @@ internal static class FalloutNvseNumericExpression
                     else
                     {
                         var argument = Read(14);
-                        arguments.Add(() => required == FalloutScriptArgumentKind.Number
-                            ? new(argument.Value().Number)
-                            : new(argument.Value(), null));
+                        arguments.Add(() =>
+                        {
+                            var value = argument.Value();
+                            if (required == FalloutScriptArgumentKind.Number && value.Kind == FalloutScriptValueKind.Array)
+                                throw new InvalidDataException("Numeric script argument cannot use an array identity.");
+                            return required == FalloutScriptArgumentKind.Number ? new(value.Number) : new(value, null);
+                        });
                     }
                 }
                 left = new(() => command.InvokeValue(arguments.Select(argument => argument()).ToArray()));
             }
             else
             {
-                left = new(() => values.Read(token), token);
+                left = new(() => values.Read(token), () => (() => values.Read(token), value => values.Write(token, value)));
             }
 
-            while (at < tokens.Count && Priority(tokens[at]) is var priority && priority > precedence)
+            while (at < tokens.Count)
             {
+                if (tokens[at] == "[")
+                {
+                    ++at;
+                    var container = left;
+                    var key = Read(-1);
+                    if (at >= tokens.Count || tokens[at++] != "]") throw new InvalidDataException("Unclosed script array index.");
+                    (Func<FalloutScriptValue> Read, Action<FalloutScriptValue> Write) Location()
+                    {
+                        var arrays = values.Arrays ?? throw new NotSupportedException("Indexed expression has no array owner.");
+                        var arrayValue = container.Value();
+                        var keyValue = key.Value();
+                        return (() => arrays.Get(arrayValue, keyValue), value => arrays.Set(arrayValue, keyValue, value));
+                    }
+                    left = new(() => Location().Read(), Location);
+                    continue;
+                }
+                var priority = Priority(tokens[at]);
+                if (priority <= precedence) break;
                 var op = tokens[at++];
                 var before = left;
                 // Plain assignment is right-associative; other admitted
@@ -125,13 +153,14 @@ internal static class FalloutNvseNumericExpression
                 if (IsAssignment(op))
                 {
                     var target = before.Target ?? throw new InvalidDataException(
-                        "NVSE assignment needs a variable target.");
+                        "NVSE assignment needs a variable or indexed target.");
                     left = new(() =>
                     {
+                        var location = target();
                         var value = op is "=" or ":="
                             ? right.Value()
-                            : Apply(op[..1], before.Value(), right.Value());
-                        values.Write(target, value);
+                            : Apply(op[..1], location.Read(), right.Value());
+                        location.Write(value);
                         return value;
                     });
                 }
@@ -205,6 +234,11 @@ internal static class FalloutNvseNumericExpression
             return FalloutScriptValue.String(left.Text + right.Text);
         if (op is "==" or "!=" or "<" or ">" or "<=" or ">=")
         {
+            if ((left.Kind == FalloutScriptValueKind.Array || right.Kind == FalloutScriptValueKind.Array) &&
+                (op is not ("==" or "!=") ||
+                 left.Kind != right.Kind && !(left.Kind == FalloutScriptValueKind.Number && left.Number == 0 ||
+                     right.Kind == FalloutScriptValueKind.Number && right.Number == 0)))
+                throw new InvalidDataException("Script array comparison requires array identities or null.");
             var comparison = left.Kind == FalloutScriptValueKind.String &&
                 right.Kind == FalloutScriptValueKind.String
                 ? StringComparer.OrdinalIgnoreCase.Compare(left.Text, right.Text)
@@ -221,6 +255,8 @@ internal static class FalloutNvseNumericExpression
                 _ => comparison >= 0,
             }) ? 1 : 0;
         }
+        if (left.Kind == FalloutScriptValueKind.Array || right.Kind == FalloutScriptValueKind.Array)
+            throw new InvalidDataException("Script arithmetic cannot use an array identity.");
         var first = left.Number;
         var second = right.Number;
         return op switch
