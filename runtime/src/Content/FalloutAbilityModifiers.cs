@@ -7,7 +7,7 @@ internal sealed record FalloutAbilityModifier(FalloutFormKey Spell, FalloutFormK
 internal sealed record FalloutAbilityScript(FalloutFormKey Spell, FalloutFormKey Effect, FalloutFormKey Script,
     IReadOnlyList<FalloutCondition> Conditions);
 internal sealed record FalloutPerkEntry(byte Entry, byte Function, float Value, IReadOnlyList<FalloutCondition> Conditions,
-    IReadOnlyDictionary<byte, IReadOnlyList<FalloutCondition>>? ConditionGroups = null)
+    IReadOnlyDictionary<byte, IReadOnlyList<FalloutCondition>>? ConditionGroups = null, int SourceIndex = -1)
 {
     internal void RequireActorConditionScope()
     {
@@ -112,11 +112,12 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
 
     internal (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) Perk(FalloutFormKey form)
     {
-        if (_perks.TryGetValue(form, out var cached)) return cached;
+        if (_perks.TryGetValue(form, out var cached)) return Project(cached);
         var source = records.GetEffective(form);
         if (source.Signature != "PERK") throw new InvalidDataException("Acquired perk is not PERK.");
         var fields = source.ReadSubrecords().ToArray();
         var spells = new List<FalloutFormKey>(); var entries = new List<FalloutPerkEntry>();
+        var sourceIndex = 0;
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "PRKE") continue;
@@ -156,13 +157,18 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                     }
                 }
                 entries.Add(new(data[0], data[1], value, conditions.GetValueOrDefault((byte)0) ?? [],
-                    conditions.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<FalloutCondition>)pair.Value.ToArray())));
+                    conditions.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<FalloutCondition>)pair.Value.ToArray()), sourceIndex));
             }
             else throw new NotSupportedException($"Perk {form} entry type {header[0]} is unbound.");
+            ++sourceIndex;
             index = end;
         }
         var result = (spells.ToArray(), entries.ToArray());
         _perks.Add(form, result);
-        return result;
+        return Project(result);
+
+        (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) Project((FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) source) =>
+            !records.PerkParameters.HasOverrides(form) ? source : (source.Spells, source.Entries.Select(entry => entry with
+            { Value = records.PerkParameters.Get(form, (uint)entry.SourceIndex) }).ToArray());
     }
 }

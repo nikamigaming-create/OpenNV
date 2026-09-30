@@ -197,6 +197,10 @@ store. A native monotonic clock advances menu animations before scripts, even
 under pause or zero gameplay time scale. Supported HUD tiles project those
 float overrides by source path and redraw on their revision; complete authored
 menu branches, dynamic components and string presentation remain unbound.
+Winning perk parameter changes belong to the selected C# source stack. Decoded
+ability readers project current indexed values rather than caching private
+mutations. Their lifetime crosses world replacement but does not write source
+files or campaign snapshots; missing entry-point consumers remain divergence.
 Script admission retains older saved owners with unsupported trailing Else text;
 the reached executor still refuses that syntax until its behavior is bound.
 See [NVSE script runtime](nvse-script-runtime.md) for the implemented boundary.

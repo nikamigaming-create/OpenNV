@@ -360,6 +360,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         arguments => FalloutScriptValue.String(ui.GetString(arguments[0].Text))),
                 };
             }
+            if (parts.Length == 1 && operation is "getnthperkentryvalue1" or "getnthperkentryvalue2" or
+                "getnthperkentrytype" or "getnthperkentryfunction")
+                return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var form = arguments[0].Value.FormKey(records);
+                    var index = FalloutPerkParameters.Index(arguments[1].Number);
+                    return operation switch
+                    {
+                        "getnthperkentrytype" => records.PerkParameters.Type(form, index),
+                        "getnthperkentryfunction" => records.PerkParameters.EntryPoint(form, index),
+                        _ => records.PerkParameters.Get(form, index, operation == "getnthperkentryvalue2" ? 1 : 0),
+                    };
+                });
+            if (parts.Length == 1 && operation == "getperkentrycount")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    records.PerkParameters.Count(arguments[0].Value.FormKey(records)));
             if (parts.Length <= 2 && parts[^1].Equals("GetInSameCell", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
@@ -479,6 +495,16 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             var callerPlugin = bindings.Source.OwnerPlugin;
+            if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")
+            {
+                if (arguments.Count != 3) throw new InvalidDataException($"{command} has an invalid argument count.");
+                var form = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function, UserFunction);
+                if (form.Kind == FalloutScriptValueKind.Number) form = FalloutScriptValue.Form(form.Number);
+                _ = records.PerkParameters.Set(form.FormKey(records),
+                    FalloutPerkParameters.Index(Number(arguments[1])), (float)Number(arguments[2]),
+                    operation == "setnthperkentryvalue2" ? 1 : 0);
+                return;
+            }
             if (parts.Length <= 2 && operation is "setinifloat" or "setinistring")
             {
                 var ini = world.Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");

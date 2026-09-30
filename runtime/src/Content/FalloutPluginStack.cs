@@ -87,11 +87,13 @@ internal sealed class FalloutPluginStack : IDisposable
                     group => (IReadOnlyList<FalloutFormKey>)group.Select(pair => pair.Key).ToArray(),
                     StringComparer.Ordinal));
         _effectiveRecordCount = _winnerKeysBySignature.Values.Sum(keys => keys.Count);
+        PerkParameters = new(this);
     }
 
     internal IReadOnlyList<FalloutPluginContext> Plugins => _plugins;
     internal int WinnerRecordCount => _winners.Count;
     internal int EffectiveRecordCount => _effectiveRecordCount;
+    internal FalloutPerkParameters PerkParameters { get; }
 
     internal static FalloutPluginStack Load(string dataRoot, IReadOnlyList<string> configuredNames)
     {

@@ -15,6 +15,21 @@ completion is claimed.
 
 ## Verified runtime
 
+Winning perk parameters now have a shared C# owner for indexed numeric reads and
+writes, including independent two-value slots and byte-sized quest stages.
+Mixed ability/entry-point lists retain their source indices. Cached ability
+readers, player traits/acquired perks and actor perk entries project live values;
+a synthetic winning-override check changes actual weapon damage through the
+ordinary resolver. Reference and fallback-quest commands accept typed form
+variables; grouped form arguments retain identity instead of display names.
+Invalid writes preserve existing values, and owned source files remain read-only.
+Changes live with the loaded source stack, outside campaign snapshots. The owned
+JAM initializer publishes all 16 bullet-time and two hit-marker parameter writes.
+JBT then reaches its missing control-query owner; JHB reaches Dispel. Native
+source activation updates the same cached perk reader, including reactivation.
+The complete runtime gate and unchanged cold-checkpoint audit pass. Complete
+entry-point consumers, conditions and JAM gameplay remain unverified.
+
 Source UI interpolation now owns the four documented SetUIFloatGradual modes,
 including stop/replacement forms and signed command arguments. Dependent XML
 traits read current script overrides. A monotonic native UI clock keeps animations
@@ -54,9 +69,10 @@ required runtime gate. The genuine owned checkpoint retains all 446 quest
 script clocks, failures and progression through parser 1 to 7 and another cold
 restore; its file remains unchanged.
 The selected JAM source audit now has 11 parser failures among 52 scripts.
-Its JBT initializer registers the winning render function and reaches the
-missing SetNthPerkEntryValue1 owner; the source execution audit does not establish
-a working bullet-time module. JHM reaches the missing hit-event owner.
+Its JBT initializer registers the winning render function and mutates its perk
+parameters before reaching the missing control-query owner; the source execution
+audit does not establish a working bullet-time module. JHM reaches the missing
+hit-event owner.
 Complete JAM/MCM remains unverified.
 The TTW source audit admits all but nine of 1,263 entry-plugin scripts;
 its opening, campaign progression and travel remain unverified.
@@ -117,7 +133,7 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Trace JAM's remaining actor-effect, perk-mutation and hit-event failures through ordinary
+Trace JAM's remaining actor-effect, input-control and hit-event failures through ordinary
 native owners. Chained reference expressions, lambdas, further operators and
 remaining array operations still reject syntax/behavior. Typed strings/arrays,
 INI and auxiliary state, UIO injection and UI component state already exist; they do not
@@ -126,6 +142,8 @@ reached missing owner, including ordinary input and persistent effects. Keep
 winning HUD/menu rendering, original crafting/barter/character-creation screens
 and Classic controls in scope; the float bridge covers existing supported HUD
 tiles and does not yet draw every mod component or bind string overrides.
+Bind remaining perk entry-point consumers, ranks and condition scopes rather
+than treating successful parameter mutation as complete perk behavior.
 Keep the complete TTW opening, campaign progression, travel and dependency
 semantics in scope; do not remove launch gates on the strength of source audits.
 The current New Vegas startup assumes the Doc Mitchell opening, including its
@@ -182,6 +200,9 @@ UI checks are in `tmp/jam-ui-contract.log`, `tmp/jam-ui-native-clock.log`,
 `tmp/jam-ui-native-pixels.stdout.log`, `tmp/jam-ui-native-pixels.stderr.log`,
 `tmp/jam-ui-owned-save.log`, `tmp/jam-ui-runtime-gate.log` and
 `tmp/jam-ui-execution.private.json`.
+Perk checks are in `tmp/jam-perk-contract.log`, `tmp/jam-perk-script-contract.log`,
+`tmp/jam-perk-owned-save.log`, `tmp/jam-perk-runtime-gate.log` and
+`tmp/jam-perk-execution.private.json`.
 The requested flat screenshot is extracted from the retained September 27
 companion clip; it does not show the new September 30 code.
 
