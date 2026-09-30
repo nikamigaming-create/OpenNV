@@ -2,130 +2,77 @@
 
 ## Active objective
 
-Finish ordinary flat/OpenXR New Vegas gameplay, including every weapon,
-autonomous NPC/creature combat, source routines and quests, looting, crafting
-and the requested mods. Work without subagents. Follow the
-[flat gameplay work order](flat-gameplay-plan.md) and
+Prioritize ordinary flat gameplay and polish across scripts, autonomous actors,
+combat, interactions, travel and saves. Preserve shared VR behavior and fix
+regressions there; detailed VR presentation is not the current focus. Work
+without subagents. Follow the [flat work order](flat-gameplay-plan.md) and
 [implementation plan](implementation-plan.md). All 36 broad recovery
-requirements remain open; no campaign, all-weapon, all-mod or retail-parity
-completion is established.
+requirements remain open; no whole-game or retail-parity completion is claimed.
 
-## Reboot checkpoint
+## Verified runtime
 
-Resume from [the durable restart checklist](reboot-handoff.md). Checked PR
-[#58](https://github.com/nikamigaming-create/OpenNV/pull/58) is merged;
-local `main` and `origin/main` are
-`ab2a6031bea412374970e340a52e17bfec2c0980`.
-The active branch is `codex/source-object-animation`. Its unfinished controller
-selection and animation snapshot work is saved in a local WIP commit. A Debug
-build passes with zero warnings/errors; script binding, world/save integration
-and the selected animation checks are still outstanding. Do not treat this WIP
-as a released runtime or replace the experimental candidate with it.
+Source object animation now binds PlayGroup and IsAnimPlaying to each resident
+reference's authored NIF manager. Queued and immediate selection, authored loop
+starts, source text-key order, callback changes and independent clocks have native
+checks. Alternative looping sequences no longer reject the selected window.
+Actor skeleton groups and ambiguous/absent object groups remain explicit failures.
+Save v22 retains selected object clocks, consumed start events and pending groups;
+v21 and earlier supported saves still load. Cold restoration, warm eviction,
+replacement presentation and source mismatch checks pass.
 
-At handoff, no OpenNV, Godot or ffmpeg process is running. Recording is off,
-both protected original saves are unchanged, and there are no open PRs.
+Conservative recovery resumes only exact legacy missing-PlayGroup faults whose
+unchanged block proves that the failed command preceded any other mutation.
+All 51 selected saved plant failures recover in the owned-data audit. All six
+source script/model families grant their authored rewards once through native
+activation, retain destroyed state and reject duplicate rewards across cold
+restoration. The selected window supplies the seventh tested source model.
+The complete runtime gate and reference-presentation regression check pass.
 
-## Current candidate and footage
-
-The experimental candidate is
-`local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, built asset-free
-from clean runtime commit `06ffd2cadd1f0e0a180882a666489503bea4aa30`.
-The complete runtime checks, selected owned-data checks and PR checks pass.
-A copied genuine Primm checkpoint with inventory-only diagnostic additions
-cold-Continues in the exported build, retains all 446 saved quest owners and
-completes a knife throw with two contacts and no impact/decal error.
-`local/playtest-20260927-world/Play Flat.cmd` points to this candidate.
-
-The latest 47-second side-by-side is
-`local/recordings/weapon-showcase-20260927/OpenNV-weapons-flat-VR-updated.mp4`.
-It contains ordinary flat and Elliott Tate simulator input from copied Primm
-checkpoints: 9mm, laser rifle, dynamite, throwing knife/hatchet/spear, Fat Man,
-Flamer and cleaver. Reachable source support grips are engaged for the laser,
-Fat Man and Flamer takes. The laser encounter includes hostile return fire,
-a hit reaction and death. New throw footage includes the impact repair.
-Remaining faults are captioned. This selected footage is not all-weapon,
-matched-retail or physical-headset acceptance.
-
-Recording performance is poor. The main raw takes contain about 23.4 distinct
-frames/sec flat and 15.6 in the simulator; the later Debug impact takes contain
-12.1 and 10.4. The edit retains repeated frames and original playback speed.
-Car destruction remains a separate native fixture, not a filmed world encounter.
-Nearby Primm cars in this source inventory are static wrecks. Repeated exported
-flat sessions report native heap corruption after ordinary Quit Game; successful
-combat and exports do not establish shutdown stability.
-
-## Repairs and current boundary
-
-Shared C# owners consume source Fire/Loop/Hold/Release clocks, automatic cadence,
-inventory throws, grenade friction/restitution, explicit rotation and timed
-fuses. Weapon and Aid wheels use ordinary equipment/consumption transactions.
-Normal and long-fuse dynamite external emitter channels now bind; native input
-checks cover hold, release, single consumption, physical flight and detonation.
-Source laser BeamEnd geometry follows the authoritative ray endpoint and source
-visibility duration. The Flamer's shaderless helper, initial gun visibility,
-body-mounted tank and retained XR finger grip were repaired. Its flame stream
-is still absent.
-
-Fat Man target lookup now resolves registered destruction owners and deduplicates
-colliders. A repeated ordinary flat shot's detonation processing fell from 1,730
-to 128 ms, with unchanged source flight and no added fuse. A simulator sample
-spent 198 ms. Effect construction and recording stalls remain. Native checks
-cover source car explosion/wreck replacement and cold destruction state.
-
-Mixed-material NIF impacts now receive Jolt ray triangle indices; the existing
-owned windmill check resolves both source materials after reproducing face -1.
-DODT preserves reserved bits found in owned throwing/melee impacts. Native checks
-load all ten populated material entries for each knife, hatchet and spear.
-Ordinary flat and simulator throws reach contacts without the prior material
-or decal errors. Decal pixels, alpha/parallax behavior and recoverable thrown
-items remain incomplete.
-
-The earlier source/native-animation sweep covers 496 winning weapons, including
-302 playable inventory entries, with failures on 167 records (145 playable).
-It predates the latest dynamite/impact repairs. Rows without failures are not
-verified gameplay; it also does not certify every referenced projectile effect.
+An ordinary exported flat Continue on a copy of the genuine Primm checkpoint
+recovers ten resident plant faults and 23 prior read faults. Ordinary traversal,
+mouse aim and activation harvest reference FalloutNV.esm:157e35 once, adding one
+Coyote Tobacco Chew. Manual saving retains its destroyed flag, source local and
+completed Forward animation in v22. Cold exported Continue restores all three;
+another ordinary activation attempt leaves the inventory count at one.
+The bot now observes destroyed state as an interaction outcome; some source
+contact aiming and final navigation segments still need work.
 
 ## Next owners
 
-Merged PR #58 repairs selected saved read failures and world queries. A
-conservative recovery inspection resumes only missing reads before mutations;
-it preserves saved locals and rejects earlier effects. GetRandomPercent now
-uses one saved script stream, and IsInInterior/condition 300 reads the reference's
-current CELL. Synthetic and owned-data checks pass: 37 clock/random failures
-recover across the genuine checkpoint, with 23 resident recoveries observed in
-an ordinary copied flat Continue. Subsequent unsupported operations remain
-visible. NPC interior conditions now reach the next selected procedure failure.
+Continue the actual flat run's earliest script and actor failures. Six source
+creature OnLoad blocks reach missing Kill; source script death must use shared
+health, inventory, delayed death events and persistence without inventing a
+killer. Essential recovery and additional command parameters need their own
+source-backed behavior. NPC radio, creature package condition 136 and further
+patrol/sandbox/eat/sleep procedures remain visible failures. Preserve all quest,
+combat, mod and campaign objectives while fixing those owners.
 
-Continue source object animation ownership: PlayGroup and IsAnimPlaying remain
-unbound. The WIP controller code allows multiple selectable loops and starts
-source selection/snapshots, but is not integrated or behaviorally verified.
-The merged runtime still rejects affected scripted window models. Connect the
-general owner to reference scripts, presentation and cold saves; safely recover
-the 51 saved plant PlayGroup failures without repeating inventory grants.
-Then repair the reached NPC/creature package procedures and events through
-their existing movement and script owners.
+Weapons still need the Flamer's source strip-particle decoder, thrown recovery,
+remaining projectile effects, mines/remote triggers, bare fists and ammunition
+variants. Blast rules, hit events, death XP, leveling/perks, radiation/addiction,
+crime, crafting/barter completeness, JAM/MCM and TTW remain open. Do not replace
+these requirements with selected component passes.
 
-The weapon work still needs the general source strip-particle decoder used by
-`FlamerFlame01.NIF`: BSStripParticleSystem, BSStripPSysData and
-BSPSysStripUpdateModifier are currently undecoded. Connect its effect lifetime
-to the authoritative weapon/projectile owner; do not substitute a generic flame.
-Then repair offhand prop attachment for the VR dynamite lighter, tracked
-hand-velocity throws, thrown recovery, tracer/remaining projectile effects,
-mines/remote triggers and bare-player fists. Preserve per-weapon/ammunition
-failures and exercise actual damage, reaction, death and cold state in both modes.
+Exported Quit Game has previously reported native heap corruption; shutdown
+stability remains unproven. Streaming spikes and broad rendering/audio fidelity
+also remain open. Recording stays off during development.
 
-Broader combat gaps include blast attenuation, player knockdown, explosion
-placed objects/enchantments, hit events, essential recovery and death XP.
-Resident routines still expose creature wander/patrol, package event
-scripts/topics and sandbox/eat/sleep gaps. All ten requested mod packages are
-available; selection/ordering is not runtime mod support. Continue the
-[JAM/MCM plan](jam-luna-max-plan.md) without dropping the campaign/mod objectives.
+## Candidate and private continuation
 
-## Private state
+The public-facing local experimental candidate remains
+`local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, from runtime
+commit `06ffd2cadd1f0e0a180882a666489503bea4aa30`. It predates these repairs.
+Update the export after stable publication. Retain the requested September 27
+weapon and companion reels; they are selected simulator/flat footage.
 
-Do not change `local/playtest-20260927-world/save.json` or the original
-`local/playtest-20260920-companion/save.json`; both still hash to
+Current private flat checks are in
+`tmp/development-lab/flat-polish-20260930-animation/` and its `-cold` continuation.
+Selected native audit logs are `tmp/object-animation-owned.log`,
+`tmp/object-animation-native-contract.log`,
+`tmp/object-animation-presentation-regression.log` and
+`tmp/object-animation-runtime-gate.log`. These are private diagnostics.
+
+Do not change `local/playtest-20260927-world/save.json` or
+`local/playtest-20260920-companion/save.json`. Both still hash to
 `800A37CC6C97C543393A544229C4E71ACB213B45C12FC4584EF3E70E94E2FBB7`.
-Retain the requested prior reels. Frame recording is off outside specific
-captures. Temporary review-image cleanup was rejected by automatic approval
-review; those images remain in `tmp`, with no recording session left enabled.
+Do not retry the previously rejected temporary-image deletions.

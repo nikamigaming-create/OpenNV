@@ -26,7 +26,7 @@ internal sealed partial class RuntimeNifControllerPlayer
         _scriptSelected = true;
         if (initialization == 0 && Playing)
         {
-            if (_pendingSequence != name) { _pendingSequence = name; _generation++; }
+            _pendingSequence = sequence.Name;
             return;
         }
         PlaySourceSequence(name);
@@ -43,9 +43,7 @@ internal sealed partial class RuntimeNifControllerPlayer
     internal void RestoreScriptState(FalloutObjectAnimationSnapshot state)
     {
         state.Validate();
-        if (state.Controller != SourceController || !state.Sha256.Equals(SourceSha256, StringComparison.OrdinalIgnoreCase) ||
-            !_sequences.ContainsKey(state.Sequence) || state.PendingSequence is { } pending && !_sequences.ContainsKey(pending))
-            throw new NotSupportedException("Saved object animation differs from the winning model.");
+        ValidateScriptState(state);
         PlaySourceSequence(state.Sequence);
         _scriptSelected = true;
         _elapsedSeconds = state.ElapsedSeconds;
@@ -53,5 +51,15 @@ internal sealed partial class RuntimeNifControllerPlayer
         _pendingSequence = state.PendingSequence;
         Apply(ResolveSourceTime(_active!, _elapsedSeconds));
         SetProcess(Playing || _includeStart || _pendingSequence is not null);
+    }
+
+    internal void ValidateScriptState(FalloutObjectAnimationSnapshot state)
+    {
+        state.Validate();
+        if (SourceController < 0 || state.Controller != SourceController ||
+            !state.Sha256.Equals(SourceSha256, StringComparison.OrdinalIgnoreCase) ||
+            !_sequences.TryGetValue(state.Sequence, out var sequence) || sequence.DirectClock is not null ||
+            state.PendingSequence is { } pending && (!_sequences.TryGetValue(pending, out var next) || next.DirectClock is not null))
+            throw new NotSupportedException("Saved object animation differs from the winning model.");
     }
 }

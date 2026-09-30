@@ -65,6 +65,31 @@ resumes 23 resident instances. Source animation commands/queries and several
 actor package procedures still stop execution afterward. Recovery does not
 establish that those complete scripts or routines work.
 
+## Managed object animation
+
+PlayGroup resolves a unique authored group in the target reference's NIF
+manager. Initialization 0 queues after the current cycle, 1 starts immediately
+and 2 starts at the authored loop key. Text keys and cycle boundaries advance
+in source order even when a callback selects another group within a long frame.
+IsAnimPlaying's optional group selects a manager/type, not an active clip name.
+Actor skeleton groups, absent groups and ambiguous managers remain explicit
+boundaries.
+
+Save v22 retains the source hash/controller identity, selected clock, consumed
+start event and pending group. Earlier supported schemas, including v21, still
+load. Cold restoration does not replay consumed keys. Warm eviction retains the
+clock, and retiring a presentation cannot detach its replacement's capture.
+
+Recovery clears only the exact old missing-PlayGroup fault when static
+inspection proves that the unchanged admitted block reached that command before
+any mutation. Pure guards and alternatives of the same failed first command are
+admitted; prior rewards, assignments and consumptive reads prevent recovery.
+The owned native fixture recovers all 51 selected saved failures, checks six
+source script/model families and one alternative-loop window model, and rejects
+duplicate rewards after cold continuation. Ordinary exported flat input also
+harvests one Coyote Tobacco Chew and saves the harvested source state. These
+checks do not establish retail animation or campaign parity.
+
 ## Executable checks and limits
 
 `ReferenceScriptContractProbe` checks synthetic overrides, activation suppression,

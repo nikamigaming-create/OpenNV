@@ -27,6 +27,14 @@ internal static class ScriptRecoveryContracts
         Require(!Safe("if count == 0\nset count to GetCurrentTime\nendif\nAddItem Reward 1\nset timer to GetCurrentTime"),
             "A later occurrence hid an already executed effect.");
         Require(!Safe("set count to Unsupported", "Unsupported"), "An absent function was declared recoverable.");
+        bool SafeCommand(string source) => FalloutGameModeProgram.Read("begin OnLoad\n" + source + "\nend", "OnLoad")
+            .CanRetryMissingCommand("PlayGroup", Function);
+        Require(SafeCommand("if count == 0\nPlayGroup Forward 1\nelseif count == 1\nPlayGroup Backward 1\nendif"),
+            "Alternative first-effect animation guards cannot recover.");
+        Require(!SafeCommand("AddItem Reward 1\nPlayGroup Forward 1"), "Animation recovery could repeat a reward.");
+        Require(!SafeCommand("if GetRandomPercent < 50\nPlayGroup Forward 1\nendif"), "Animation recovery could reroll a guard.");
+        Require(!SafeCommand("if GetGameLoaded\nPlayGroup Forward 1\nendif"), "Animation recovery could consume a lifecycle edge.");
+        Require(!SafeCommand("set count to 1\nPlayGroup Forward 1"), "Animation recovery could repeat an assignment.");
         using var world = new FalloutReferenceWorld(records);
         var cell = FalloutCellSceneReader.Read(records, Key(0x803));
         world.LoadCell(cell);

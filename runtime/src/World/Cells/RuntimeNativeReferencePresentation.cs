@@ -37,6 +37,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
         {
             if (_nodes.Remove(key, out var node))
             {
+                UnbindObjectAnimation(key);
                 GamebryoReferenceEnableRuntime.Apply(node, false);
                 if (retainWarm?.Invoke(previous[key]) == true) _warmNodes.Add(key, (previous[key], node));
                 else node.QueueFree();
@@ -72,8 +73,9 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     internal void Register(FalloutFormKey key, Node3D node)
     {
-        _nodes.Add(key, node);
+        if (_nodes.ContainsKey(key)) throw new InvalidOperationException($"Reference {key} is already registered.");
         RefreshGeometry(key, node);
+        _nodes.Add(key, node);
         if (node.GetChildren().OfType<RuntimeNativeDestructible>().SingleOrDefault() is { } destruction)
             destruction.ModelChanged = () => RefreshGeometry(key, node);
         GamebryoReferenceEnableRuntime.Apply(node, _world.IsEnabled(key));
@@ -82,6 +84,8 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     private void RefreshGeometry(FalloutFormKey key, Node3D node)
     {
+        UnbindObjectAnimation(key);
+        BindObjectAnimation(key, node);
         _fadeGeometry[key] = NodeTraversal.SelfAndDescendants<Node3D>(node)
             .Where(child => child.GetMeta("opennv_nif_fade_node", false).AsBool())
             .SelectMany(NodeTraversal.SelfAndDescendants<GeometryInstance3D>).Distinct().ToArray();

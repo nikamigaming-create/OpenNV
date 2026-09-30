@@ -2,6 +2,30 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed partial class FalloutGameModeProgram
 {
+    internal bool CanRetryMissingCommand(string command, Func<string, FalloutScriptFunction?> functions)
+    {
+        var found = false;
+        var priorMutation = false;
+        foreach (var tokens in _lines)
+        {
+            if (tokens[0].Equals(command, StringComparison.OrdinalIgnoreCase))
+            {
+                if (priorMutation || tokens.Length != 3) return false;
+                found = true;
+                // This exact command always failed in the legacy runtime. A
+                // later alternative cannot follow an executed earlier effect.
+                continue;
+            }
+            if (tokens[0].ToLowerInvariant() is not ("if" or "elseif" or "else" or "endif"))
+            { priorMutation = true; continue; }
+            foreach (var token in tokens.Skip(1))
+                if (token.Equals("eval", StringComparison.OrdinalIgnoreCase) || token.Equals("call", StringComparison.OrdinalIgnoreCase) ||
+                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--" || functions(token) is { ReadOnly: false })
+                    return false;
+        }
+        return found;
+    }
+
     // Legacy saves have no instruction cursor. Retry only a missing read that
     // necessarily preceded every mutation, without invoking any query here.
     internal bool CanRetryMissingRead(string operand, Func<string, FalloutScriptFunction?> functions)

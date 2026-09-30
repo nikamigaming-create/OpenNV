@@ -29,7 +29,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private FalloutReferenceScriptHost _host = null!;
     private readonly Dictionary<FalloutFormKey, Binding> _bindings = [];
     private readonly Dictionary<ulong, FalloutFormKey> _nodeReferences = [];
-    private long _frames, _executedBlocks, _recoveredReadFaults;
+    private long _frames, _executedBlocks, _recoveredReadFaults, _recoveredCommandFaults;
     private Func<FalloutPlacedReference, Transform3D> _transform = null!;
     private float _unitsToMeters;
     private uint _collisionMask;
@@ -45,6 +45,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
         frames = _frames,
         executedBlocks = _executedBlocks,
         recoveredReadFaults = _recoveredReadFaults,
+        recoveredCommandFaults = _recoveredCommandFaults,
         references = _bindings.Count,
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
         errors = _bindings.Values.Where(value => value.Instance.ScriptError is not null)
@@ -323,9 +324,10 @@ internal partial class RuntimeNativeReferenceEvents : Node
         _executedBlocks += results.Sum(result => result.Blocks);
         if (results.FirstOrDefault(result => result.RecoveredError is not null)?.RecoveredError is { } recovered)
         {
-            _recoveredReadFaults++;
+            var commandRecovery = recovered.Contains(" command ", StringComparison.Ordinal);
+            if (commandRecovery) _recoveredCommandFaults++; else _recoveredReadFaults++;
             binding.ReportedError = false;
-            GD.Print($"OPENNV_NATIVE_REFERENCE_SCRIPT_RECOVERED reference={binding.Reference.FormKey} previous={recovered} policy=read-before-mutation");
+            GD.Print($"OPENNV_NATIVE_REFERENCE_SCRIPT_RECOVERED reference={binding.Reference.FormKey} previous={recovered} policy={(commandRecovery ? "first-command-before-mutation" : "read-before-mutation")}");
         }
         var error = binding.Instance.ScriptError ?? results.FirstOrDefault(result => result.Error is not null)?.Error;
         if (error is null || binding.ReportedError) return;

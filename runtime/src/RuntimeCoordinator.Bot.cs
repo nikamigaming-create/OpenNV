@@ -103,6 +103,7 @@ public partial class RuntimeCoordinator
             referenceState.Taken,
             referenceState.DoorOpen,
             referenceState.Deleted,
+            referenceState.Destroyed,
             stage = _nativeOpeningStageDriver?.Stage,
             conversation = _nativeOpeningStageDriver?.ConversationState,
         });
