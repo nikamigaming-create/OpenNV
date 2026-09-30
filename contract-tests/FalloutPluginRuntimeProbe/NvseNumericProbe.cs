@@ -44,9 +44,26 @@ internal static class NvseNumericProbe
             "Eval conditions, assignment results or inactive branches differ.");
         Require(Evaluate("charge += 0 || 9") == 7 && state["charge"] == 7,
             "Compound assignment lost its documented precedence relative to logical OR.");
+        Require(Evaluate("0b101 & 0x3") == 1 && Evaluate("-7.9 % 3.8") == -1 &&
+            Evaluate("24 / 2 % 5 * 2") == 4 && Evaluate("1 == 3 & 1") == 1 &&
+            Evaluate("1 | 6 & 3 << 1 + 1") == 5,
+            "Integer truncation, literal bases or NVSE operator precedence differs.");
+        Require(Evaluate("1 << 40") == 1099511627776 && Evaluate("-8 >> 2") == -2 &&
+            Evaluate("(1 << 40) | 0b1") == 1099511627777 && Evaluate("0xffffffff") == uint.MaxValue,
+            "Integer operators used 32-bit arithmetic or unsigned right shift.");
+        Execute("other = 0b101\nother |= 0b10\nother &= 0x3\nother %= 2");
+        Require(state["other"] == 1 && Evaluate("0 && (1 % 0)") == 0 &&
+            Evaluate("1 || (1 << 64)") == 1, "Compound integer writes or inactive operands differ.");
+        foreach (var source in new[] { "other = 3 % 2", "other |= 2", "other &= 1", "if eval 3 & 1\nendif" })
+            Require(FalloutGameModeProgram.WasRejectedByParser(source, 6), "Parser migration lost a lexical integer operator rejection.");
+        Require(!FalloutGameModeProgram.WasRejectedByParser("Notify \"% & |\" ; other %= 1", 6) &&
+            !FalloutGameModeProgram.WasRejectedByParser("other = 0b1 << 2", 6) &&
+            !FalloutGameModeProgram.WasRejectedByParser("other %= 2", 7), "Integer migration admitted an unrelated missing owner.");
         writes.Clear(); calls = 0;
         foreach (var invalid in new[] { "result := Tick 3", "result := 1 +", "2 := Tick", "result := (3 + 4",
-            "result := 1 / 0", "result := 1e308 * 1e308 < 1", "result := Invalid", "result := \"text\"", "result := unknown" })
+            "result := 1 / 0", "result := 1e308 * 1e308 < 1", "result := Invalid", "result := \"text\"", "result := unknown",
+            "result := 1 % 0.9", "result := 1 << 64", "result := 1 >> -1", "result := 1e100 & 1",
+            "result := 0b102", "result := 0x100000000", "result := 0b", "result := \"3\" & 1" })
             Reject(() => Evaluate(invalid));
         Require(writes.Count == 0 && calls == 0, "An invalid expression committed state or ran a function before syntax validation.");
         foreach (var source in new[] { "charge = 1", "let charge := 1", "charge += 1", "charge /= 2" })
@@ -54,7 +71,7 @@ internal static class NvseNumericProbe
         Require(!FalloutGameModeProgram.WasRejectedByParser("Notify \"a=b\" ; charge += 1", 1) &&
             !FalloutGameModeProgram.WasRejectedByParser("if charge == 2\nendif", 1) &&
             !FalloutGameModeProgram.WasRejectedByParser("charge = 1", 2), "Migration admitted an unrelated missing owner.");
-        Console.WriteLine("OPENNV_NVSE_NUMERIC_PASS assignments=true eval=true numericLogic=true inactiveEffects=false vanillaPreserved=true");
+        Console.WriteLine("OPENNV_NVSE_NUMERIC_PASS assignments=true eval=true numericLogic=true integers=64-bit literals=32-bit inactiveEffects=false vanillaPreserved=true");
     }
 
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }

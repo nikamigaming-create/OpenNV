@@ -15,6 +15,20 @@ completion is claimed.
 
 ## Verified runtime
 
+Default JohnnyGuitar render callbacks now retain source identities in the shared
+C# event owner. The native adapter invokes them before drawing, including paused
+menus, once per global frame rather than per viewport. A rendered fixture with
+two additional viewports checks source expressions, inactive sessions, cold
+owner replacement and disconnection on retirement, with recording off.
+Registration is idempotent; removal takes effect during dispatch, and failures
+retain their executed prefix without frame-by-frame retries. Nonzero flags that
+select additional retail render phases remain visibly unbound.
+NVSE integer remainder, bitwise AND/OR, shifts and compound assignments now
+use signed 64-bit truncation; binary/hexadecimal literals retain their 32-bit
+contract. Focused execution, precedence, undefined-operation and migration
+checks pass. Parser 7 preserves all 446 owners in the genuine owned checkpoint
+through cold restoration, with both protected source saves unchanged.
+
 Script arrays now belong to the shared C# value store. Packed lists, numeric
 maps and string maps preserve typed elements, alias identity and nested graphs.
 Indexed expressions, core construction/mutation/copy commands and array function
@@ -24,11 +38,13 @@ unowned graphs. Save v23 retains array identities alongside v22 object-animation
 state; earlier supported saves still load. Focused scalar/array/function and
 native activation/key-callback/cold-reference checks pass, as does the complete
 required runtime gate. The genuine owned checkpoint retains all 446 quest
-script clocks, failures and progression through parser 1 to 6 and another cold
+script clocks, failures and progression through parser 1 to 7 and another cold
 restore; its file remains unchanged.
-The selected JAM source audit now has 13 parser failures among 52 scripts,
-down from 21 before indexed expressions. Its JHM initializer passes Ar_Null and
-reaches the missing SetUIFloatGradual owner. Complete JAM/MCM remains unverified.
+The selected JAM source audit now has 11 parser failures among 52 scripts.
+Its JBT initializer registers the winning render function and reaches the
+missing SetNthPerkEntryValue1 owner; the source execution audit does not establish
+a working bullet-time module. JHM reaches the missing SetUIFloatGradual owner.
+Complete JAM/MCM remains unverified.
 The TTW source audit admits all but nine of 1,263 entry-plugin scripts;
 its opening, campaign progression and travel remain unverified.
 
@@ -88,9 +104,9 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement JAM's reached render callbacks and source UI interpolation, then trace
+Implement JAM's reached source UI interpolation, then trace
 the remaining actor-effect, perk-mutation and hit-event failures through ordinary
-native owners. Chained reference expressions, lambdas, extended operators and
+native owners. Chained reference expressions, lambdas, further operators and
 remaining array operations still reject syntax/behavior. Typed strings/arrays,
 INI and auxiliary state, UIO injection and UI component state already exist; they do not
 establish a working MCM menu or any complete JAM module. Implement the next
@@ -126,7 +142,8 @@ commit `06ffd2cadd1f0e0a180882a666489503bea4aa30`. It predates these repairs.
 Update the dated candidate after stable publication. Retain the requested September 27
 weapon and companion reels; they are selected simulator/flat footage.
 The refreshed Windows development executable is
-`tmp/development-runtime/windows/OpenNV.exe` and includes the September 30 repairs.
+`tmp/development-runtime/windows/OpenNV.exe` and includes the September 30 session
+repairs; it predates the shared-array and render-callback changes.
 
 Current private flat checks are in
 `tmp/development-lab/flat-polish-20260930-animation/` and its `-cold` continuation.
@@ -142,6 +159,10 @@ Array checks are in `tmp/jam-array-contract.log`,
 `tmp/jam-array-native-contract.log`, `tmp/jam-array-runtime-gate.log`,
 `tmp/jam-array-owned-save.log`,
 `tmp/jam-array-source.private.json` and `tmp/jam-array-execution.private.json`.
+Render checks are in `tmp/jam-render-contract.log`,
+`tmp/jam-render-native.stdout.log`, `tmp/jam-render-native.stderr.log`,
+`tmp/jam-render-owned-save.log`, `tmp/jam-render-runtime-gate.log`,
+`tmp/jam-render-source.private.json` and `tmp/jam-render-execution.private.json`.
 The requested flat screenshot is extracted from the retained September 27
 companion clip; it does not show the new September 30 code.
 

@@ -10,7 +10,7 @@ internal static class FalloutNvseNumericExpression
     private sealed record Operand(Func<FalloutScriptValue> Value,
         Func<(Func<FalloutScriptValue> Read, Action<FalloutScriptValue> Write)>? Target = null);
 
-    internal static bool IsAssignment(string token) => token is "=" or ":=" or "+=" or "-=" or "*=" or "/=";
+    internal static bool IsAssignment(string token) => token is "=" or ":=" or "+=" or "-=" or "*=" or "/=" or "%=" or "&=" or "|=";
 
     internal static double Evaluate(IReadOnlyList<string> tokens, Func<string, double> variable,
         Action<string, double> assign, Func<string, FalloutScriptFunction?>? function = null,
@@ -69,7 +69,7 @@ internal static class FalloutNvseNumericExpression
                 var literal = FalloutScriptValue.String(token[1..^1]);
                 left = new(() => literal);
             }
-            else if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+            else if (TryLiteral(token, out var number))
             {
                 var literal = (FalloutScriptValue)Finite(number);
                 left = new(() => literal);
@@ -212,18 +212,21 @@ internal static class FalloutNvseNumericExpression
     private static bool CanStartOperand(string token) => token is "(" ||
         token.Equals("ToString", StringComparison.OrdinalIgnoreCase) ||
         token.Length >= 2 && token[0] == '"' && token[^1] == '"' ||
-        double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out _) ||
+        TryLiteral(token, out _) ||
         Identifier(token);
 
     private static int Priority(string op) => op switch
     {
         "=" or ":=" => 0,
         "||" => 1,
-        "&&" or "+=" or "-=" or "*=" or "/=" => 2,
+        "&&" or "+=" or "-=" or "*=" or "/=" or "%=" or "&=" or "|=" => 2,
         "==" or "!=" => 4,
         "<" or ">" or "<=" or ">=" => 5,
+        "|" => 6,
+        "&" => 7,
+        "<<" or ">>" => 8,
         "+" or "-" => 9,
-        "*" or "/" => 10,
+        "*" or "/" or "%" => 10,
         _ => -1,
     };
 
@@ -265,6 +268,22 @@ internal static class FalloutNvseNumericExpression
             throw new InvalidDataException("Script arithmetic cannot use an array identity.");
         var first = left.Number;
         var second = right.Number;
+        if (op is "%" or "&" or "|" or "<<" or ">>")
+        {
+            if (left.Kind != FalloutScriptValueKind.Number || right.Kind != FalloutScriptValueKind.Number)
+                throw new InvalidDataException("Script integer operators require numeric values.");
+            var integer = Integer(first);
+            var operand = Integer(second);
+            return op switch
+            {
+                "&" => integer & operand,
+                "|" => integer | operand,
+                "%" when operand != 0 && !(integer == long.MinValue && operand == -1) => integer % operand,
+                "<<" when operand is >= 0 and < 64 => unchecked(integer << (int)operand),
+                ">>" when operand is >= 0 and < 64 => integer >> (int)operand,
+                _ => throw new InvalidDataException("Script integer remainder or shift is undefined."),
+            };
+        }
         return op switch
         {
             "+" => Finite(first + second),
@@ -273,6 +292,35 @@ internal static class FalloutNvseNumericExpression
             "/" when second != 0 => Finite(first / second),
             _ => throw new NotSupportedException($"NVSE operator {op} is invalid or unbound."),
         };
+    }
+
+    private static long Integer(double value)
+    {
+        // NVSE 6.4.9 integer operators truncate numeric doubles to signed
+        // 64-bit values. Out-of-range conversions have no defined contract.
+        if (!double.IsFinite(value) || value is < -9223372036854775808d or >= 9223372036854775808d)
+            throw new InvalidDataException("Script integer operand is outside its defined range.");
+        return (long)value;
+    }
+
+    private static bool TryLiteral(string token, out double number)
+    {
+        if (!token.StartsWith("0b", StringComparison.Ordinal) && !token.StartsWith("0x", StringComparison.Ordinal))
+            return double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out number);
+        var radix = token[1] == 'b' ? 2u : 16u;
+        uint result = 0;
+        if (token.Length == 2) throw new InvalidDataException("Script based numeric literal has no digits.");
+        foreach (var digit in token.AsSpan(2))
+        {
+            var value = digit is >= '0' and <= '9' ? (uint)(digit - '0') :
+                digit is >= 'a' and <= 'f' ? (uint)(digit - 'a' + 10) :
+                digit is >= 'A' and <= 'F' ? (uint)(digit - 'A' + 10) : uint.MaxValue;
+            if (value >= radix || result > (uint.MaxValue - value) / radix)
+                throw new InvalidDataException("Script based numeric literal is invalid or exceeds 32 bits.");
+            result = result * radix + value;
+        }
+        number = result;
+        return true;
     }
 
     private static double Finite(double value) => double.IsFinite(value) ? value :

@@ -7,9 +7,10 @@ internal delegate double FalloutUserFunctionInvoker(FalloutFormKey script, Fallo
 // per-script restart query or capture delegates into retired world owners.
 internal sealed class FalloutScriptEvents
 {
-    private sealed class Callback(FalloutFormKey script, FalloutFormKey caller, int delay, int modes)
+    private sealed class Callback(FalloutFormKey script, FalloutFormKey? caller, int delay, int modes)
     {
-        internal readonly FalloutFormKey Script = script, Caller = caller;
+        internal readonly FalloutFormKey Script = script;
+        internal readonly FalloutFormKey? Caller = caller;
         internal readonly int Delay = delay, Modes = modes;
         internal int Remaining = delay;
         internal long Executions;
@@ -19,14 +20,18 @@ internal sealed class FalloutScriptEvents
     private readonly HashSet<FalloutFormKey> _restartConsumed = [], _loadConsumed = [];
     private readonly Dictionary<(FalloutFormKey Script, FalloutFormKey Caller), Callback> _mainLoop = [];
     private readonly Dictionary<(FalloutFormKey Script, int Key, bool Down), Callback> _keys = [];
+    private readonly Dictionary<FalloutFormKey, Callback> _render = [];
+    private readonly List<Callback> _renderOrder = [];
     private readonly HashSet<int> _pressed = [];
     private bool _loaded;
+    private bool _rendering;
     internal object State => new
     {
         restartConsumers = _restartConsumed.Count,
         loadConsumers = _loadConsumed.Count,
         mainLoop = _mainLoop.Values.Select(Describe).ToArray(),
         keys = _keys.Select(pair => new { pair.Key.Key, pair.Key.Down, callback = Describe(pair.Value) }).ToArray(),
+        render = _renderOrder.Select(Describe).ToArray(),
     };
     private static object Describe(Callback value) => new
     {
@@ -77,6 +82,41 @@ internal sealed class FalloutScriptEvents
     }
 
     internal bool IsKeyPressed(int key) { ValidateKey(key); return _pressed.Contains(key); }
+
+    internal void SetRender(FalloutFormKey script, bool register, int flags = 0, int phaseFlags = 0)
+    {
+        if (flags != 0 || phaseFlags != 0)
+            throw new NotSupportedException("Render callback flags require an unbound render-phase owner.");
+        if (!register)
+        {
+            if (_render.Remove(script, out var removed)) _renderOrder.Remove(removed);
+            return;
+        }
+        // The extension's unfiltered registration is idempotent. A failed
+        // handler remains visible until explicitly removed and registered again.
+        if (_render.ContainsKey(script)) return;
+        var callback = new Callback(script, null, 1, 3);
+        _render.Add(script, callback);
+        _renderOrder.Add(callback);
+    }
+
+    internal void Render(double seconds, FalloutUserFunctionInvoker invoke, Func<bool>? ready = null)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        if (_rendering) throw new InvalidOperationException("Render callback dispatch cannot be recursive.");
+        if (_render.Count == 0) return;
+        _rendering = true;
+        try
+        {
+            foreach (var callback in _renderOrder.ToArray())
+            {
+                if (ready?.Invoke() == false) break;
+                if (_render.TryGetValue(callback.Script, out var current) && ReferenceEquals(current, callback))
+                    Invoke(current, [], seconds, invoke);
+            }
+        }
+        finally { _rendering = false; }
+    }
 
     internal void Key(int key, bool down, FalloutUserFunctionInvoker invoke)
     {

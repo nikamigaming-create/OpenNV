@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class NvseEventProbe
+internal static partial class NvseEventProbe
 {
     internal static void Run()
     {
@@ -80,6 +80,7 @@ internal static class NvseEventProbe
 
             CallbackMutation(events, scripts, Form, player);
             Failure(events, scripts, quests, quest.FormKey, Form, player);
+            RenderCallbacks(records, scripts, quests, events, quest, definition);
             FallbackLifecycle(records);
             ReferenceTypedStrings(directory);
         }
@@ -236,6 +237,10 @@ internal static class NvseEventProbe
         bytes = bytes.Concat(Script(0x241, "ArrayChange", "array_var items\nbegin Function {items}\nitems[1] = items[1] + \"/changed\"\nSetFunctionValue items\nend", ["items"]));
         bytes = bytes.Concat(Script(0x242, "ArrayRecurse", "int n\narray_var scratch\nbegin Function {n}\nscratch = Ar_List n\nif n > 0\nscratch = call ArrayRecurse (n - 1)\nendif\nSetFunctionValue scratch\nend", ["n", "scratch"]));
         bytes = bytes.Concat(Script(0x243, "ArrayFault", "array_var items\nbegin Function {}\nitems = Ar_Construct \"map\"\nitems[0] = items\nMissingCommand\nend", ["items"]));
+        bytes = bytes.Concat(Script(0x250, "RenderTick", "begin Function {}\nif GetSelfAlt != 0\nMissingCaller\nendif\n" +
+            "ProbeQuest.total += ((0b101 & 0x3) % 3)\nProbeQuest.elapsed = GetSecondsPassed\nend", []));
+        bytes = bytes.Concat(Script(0x251, "RenderParameter", "int n\nbegin Function {n}\nend", ["n"]));
+        bytes = bytes.Concat(Script(0x252, "RenderUnsupported", "begin Function {}\nUnsupported @\nend", []));
         return bytes.ToArray();
     }
 
@@ -245,7 +250,7 @@ internal static class NvseEventProbe
         var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), (uint)locals.Length);
         if (quest) header[16] = 1;
         var fields = Field("EDID", Text(name)).Concat(Field("SCHR", header)).Concat(Field("SCTX", Text(source)));
-        foreach (var form in referenceForms ?? [0x14u, 0x100u, 0x210u, 0x211u, 0x212u, 0x220u, 0x233u, 0x240u, 0x241u, 0x242u, 0x243u])
+        foreach (var form in referenceForms ?? [0x14u, 0x100u, 0x210u, 0x211u, 0x212u, 0x220u, 0x233u, 0x240u, 0x241u, 0x242u, 0x243u, 0x250u, 0x251u, 0x252u])
             fields = fields.Concat(Field("SCRO", BitConverter.GetBytes(form)));
         for (var i = 0; i < locals.Length; ++i)
         {

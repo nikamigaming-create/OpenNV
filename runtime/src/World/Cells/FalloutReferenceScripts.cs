@@ -576,6 +576,18 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     Events().SetKey(keyScript.FormKey, records.RuntimeFormKey(0x14), addKey, operation == "setonkeydowneventhandler",
                         arguments.Count == 3 ? checked((int)Index(Number(arguments[2]))) : null);
                     break;
+                case "setjohnnyonrenderupdateeventhandler" or "setonrenderupdateeventhandler" when parts.Length == 1 && arguments.Count is >= 2 and <= 4:
+                    var addRender = Boolean(arguments[0]);
+                    var renderScript = bindings.Form(arguments[1]);
+                    if (renderScript.Signature != "SCPT") throw new InvalidDataException("Render handler is not SCPT.");
+                    // Removal only needs the compiled identity. An unsupported
+                    // function body must not prevent unregistering its old hook.
+                    if (addRender && this.UserFunction(renderScript.FormKey).Parameters.Count != 0)
+                        throw new InvalidDataException("Render callback must have no parameters.");
+                    Events().SetRender(renderScript.FormKey, addRender,
+                        arguments.Count >= 3 ? checked((int)Index(Number(arguments[2]))) : 0,
+                        arguments.Count == 4 ? checked((int)Index(Number(arguments[3]))) : 0);
+                    break;
                 case "resethealth" when arguments.Count == 0:
                     world.ResetHealth(target);
                     break;
