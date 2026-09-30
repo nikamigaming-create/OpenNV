@@ -190,6 +190,14 @@ changed to conceal them. Timing telemetry retains the completed projectile and
 separates contact, detonation, effect construction, playback and sound phases.
 
 Two exported flat diagnostic runs completed the shot but Windows reported
-native heap corruption after the ordinary Quit Game action. This occurred in
-both the instrumented baseline and repaired build. The shutdown failure remains
-unresolved; successful shots and captures do not establish session stability.
+native heap corruption after the ordinary Quit Game action. The September 30
+session repair drains source workers and releases detached model prototypes
+before native engine shutdown. Ordinary copied-checkpoint Quit now exits with
+code 0; main-menu return, another Continue and fresh-title Quit pass too.
+Cell owners retire compositor GPU resources before the engine's rendering
+device, and a four-replacement native fixture passes with retained effects.
+This addresses the selected shutdown paths; successful shots, captures and
+these checks do not establish broad session stability or retail parity. One
+repeated reload also crashed during native triangle-mesh construction before
+resuming gameplay; a later complete audit passed. The intermittent construction
+failure remains open.

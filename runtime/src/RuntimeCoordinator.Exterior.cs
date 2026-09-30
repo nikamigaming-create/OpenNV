@@ -193,9 +193,10 @@ public partial class RuntimeCoordinator
 
     public override void _ExitTree()
     {
+        GetWindow().CloseRequested -= OnNativeCloseRequested;
         CancelNativeGridRead();
         if (!_retiringNativeSession) return;
-        // Reload has drained source workers. Detached prototypes are outside
+        // Session retirement has drained source workers. Detached prototypes are outside
         // the scene tree and must be released with the retired record owners.
         foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();
         _nativeNifPrototypes.Clear();

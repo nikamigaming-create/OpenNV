@@ -10,8 +10,34 @@ Manual saves use separate GUID files beside the configured Continue file in
 Selecting a slot validates the source-bound save before promotion; a different
 previous Continue file is retained as another slot. Bad slots are reported
 without hiding the valid ones. Source workers finish before an in-process
-reload retires the world, plugin stack and detached prototypes. A diagnostic
+reload or ordinary Quit retires the world, plugin stack and detached prototypes.
+Title indexing is also drained, and repeated transition requests cannot start
+another retirement. The window close request uses the same native owner. A diagnostic
 harness reload resumes after acknowledged inputs rather than replaying them.
+
+The September 30 exported flat check continues a copied Primm checkpoint,
+returns to the main menu, continues again and quits with code 0. Fresh-title
+Quit also releases its unplaced prewarmed initial cell; native window close
+exits with code 0 while title readers retire. Detached prototypes
+previously survived ordinary Quit into native scene cleanup, where the same
+checkpoint reported heap corruption. Cell destruction now retires compositor
+GPU resources on the rendering thread; retained managed effects cannot keep a
+pipeline, shader or sampler alive until engine shutdown. A native synthetic
+fixture renders four replacement cells while retaining their old effects and
+checks repeated retirement and retirement before the first draw. These checks
+do not establish broad session stability or physical headset acceptance.
+One repeated exported reload also crashed in native triangle-mesh construction
+before gameplay resumed; a subsequent complete audit passed. That intermittent
+construction failure remains open independently of shutdown retirement.
+The selected owned runs still report two ObjectDB instances at exit; this
+resource-owner gap remains visible.
+
+Run `scripts/Test-NativeSessionRetirement.ps1` with an owned `-DataRoot` and
+`-Checkpoint` after the Release export. It uses ordinary menu/key input and a
+native window close request, keeps recording off, checks exit codes and GPU RID
+leaks, and removes its copied profiles in a guarded cleanup path. The rendering
+fixture is `runtime/tools/NativeSessionRetirementAudit/NativeSessionRetirementAudit.tscn`;
+it requires Forward+ and a native graphics driver.
 
 Zero health now enters a reload menu. There is no Resume or Create Save action
 in that state, and the world-state writer rejects post-death saves. This repairs

@@ -334,7 +334,9 @@ public partial class RuntimeCoordinator
     {
         try
         {
-            await Task.Run(() => IndexNativeLiveStack(sources));
+            _nativeMenuRead = Task.Run(() => IndexNativeLiveStack(sources));
+            await _nativeMenuRead;
+            if (_nativeSessionTransitioning) return;
             var initialCell = _nativeInitialCell ??
                 throw new InvalidOperationException("Native initial CELL was not decoded.");
             var stack = _nativePluginStack ??
@@ -363,11 +365,14 @@ public partial class RuntimeCoordinator
 
     private void ShowNativeLiveMenu(IReadOnlyList<FalloutPluginSource> sources)
     {
+        GetTree().AutoAcceptQuit = false;
+        GetWindow().CloseRequested += OnNativeCloseRequested;
         var layer = new CanvasLayer { Name = "NativeLiveMenu", Layer = NativeMenuCanvasLayer };
         var menu = new NativeGamebryoStartMenu(action =>
         {
+            if (_nativeSessionTransitioning) return;
             if (action == "sQuit")
-                GetTree().Quit();
+                QuitNativeSession();
             else if (action == "sLoad")
                 OpenNativeSessionMenu(showSaves: true, layer.GetChild<Control>(0));
             else if (action is "sNew" or "sContinue")
