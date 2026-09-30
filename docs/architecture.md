@@ -186,6 +186,12 @@ Numeric NVSE assignments and eval expressions use these same script state
 owners. Their logical operators retain numeric operand values independently
 of vanilla boolean expressions. Parser-version migration preserves admitted
 owners, locals and clocks; unknown functions and value families stay explicit.
+Integer operators truncate numeric operands to signed 64-bit values; based
+literals retain their unsigned 32-bit contract. Render registrations retain
+source identities in process-owned C# state. A shared native adapter dispatches
+default callbacks before drawing and resolves the current world executor rather
+than retaining retired delegates. Scene retirement disconnects the global draw
+subscription; separate retail render-phase flags remain unbound.
 Script admission retains older saved owners with unsupported trailing Else text;
 the reached executor still refuses that syntax until its behavior is bound.
 See [NVSE script runtime](nvse-script-runtime.md) for the implemented boundary.

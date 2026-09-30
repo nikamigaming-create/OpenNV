@@ -33,6 +33,12 @@ public partial class NativeReferenceEventsAudit : Node
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             world.LoadCell(cell);
+            if (OS.GetCmdlineUserArgs() is ["--render-events"])
+            {
+                await RenderEvents(records, world);
+                GetTree().Quit();
+                return;
+            }
             root = new Node3D();
             AddChild(root);
             var activator = new Node3D();
@@ -206,7 +212,9 @@ public partial class NativeReferenceEventsAudit : Node
         var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),
             Local(7, "keyDown"), Local(8, "keyUp"), Local(9, "frames"), Local(10, "menus"),
             Local(11, "shared"), Local(12, "alias"),
-            Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Encoding.ASCII.GetBytes(source)));
+            Local(13, "renderFrames"), Local(14, "renderCaller"), Local(15, "renderSeconds"),
+            Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCRO", BitConverter.GetBytes(0x524u)),
+            Field("SCTX", Encoding.ASCII.GetBytes(source)));
         var primitive = new byte[32];
         BinaryPrimitives.WriteSingleLittleEndian(primitive, 4);
         BinaryPrimitives.WriteSingleLittleEndian(primitive.AsSpan(4), 2);
@@ -230,6 +238,10 @@ public partial class NativeReferenceEventsAudit : Node
             .Concat(Function(0x521, "AuditRef.keyDown += key\nAr_Append AuditRef.shared key", true))
             .Concat(Function(0x522, "AuditRef.keyUp += key", true))
             .Concat(Function(0x523, "AuditRef.menus += 1"))
+            .Concat(Record("SCPT", 0x524, Field("SCHR", new byte[20]),
+                Field("EDID", Encoding.ASCII.GetBytes("NativeRender\0")), Field("SCRO", BitConverter.GetBytes(0x901u)),
+                Field("SCTX", Encoding.ASCII.GetBytes("begin Function {}\nAuditRef.renderFrames += (0b101 & 0x3)\n" +
+                    "AuditRef.renderCaller = GetSelfAlt\nAuditRef.renderSeconds = GetSecondsPassed\nend"))))
             .Concat(DeathFixture())
             .Concat(Record("ACTI", 0x700, Field("SCRI", BitConverter.GetBytes(0x500u))))
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray();

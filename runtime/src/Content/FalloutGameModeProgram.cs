@@ -67,7 +67,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 6;
+    internal const int ParserVersion = 7;
     private readonly IReadOnlyList<string[]> _lines;
     private readonly Dictionary<int, int> _loopEnds = [];
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
@@ -337,7 +337,7 @@ internal sealed partial class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||:=|[+*/-]=|[\\[\\]{}$=()+*/!<>-]", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||<<|>>|:=|[+*/%&|-]=|[\\[\\]{}$=()+*/%!<>&|-]", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {
@@ -442,6 +442,11 @@ internal sealed partial class FalloutGameModeProgram
     // migration, and current-version saves must contain every admitted owner.
     internal static bool WasRejectedByParser(string source, int version)
     {
+        // Only these newly admitted single-character operators were lexical
+        // rejections. Old parsers already tokenized shifts and based numbers;
+        // their reached execution failures must remain failures on restoration.
+        if (version < 7 && source.Split('\n').Select(line => StripComment(line).Trim())
+            .Where(line => line.Length != 0).Any(line => Tokens(line).Any(token => token is "%" or "&" or "|" or "%=" or "&=" or "|="))) return true;
         if (version < 6 && source.Split('\n').Select(line => StripComment(line).Trim())
             .Where(line => line.Length != 0).Any(line => Tokens(line).Any(token => token is "[" or "]"))) return true;
         if (version == 0 && HasArgumentSeparator(source)) return true;

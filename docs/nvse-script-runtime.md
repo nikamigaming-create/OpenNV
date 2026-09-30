@@ -14,6 +14,15 @@ conditions and parenthesized expressions use the same variable and registered
 function bindings as ordinary quest/reference scripts. There is no mod-specific
 state dictionary or second executor.
 
+Integer `%`, `&`, `|`, `<<`, `>>`, `%=`, `&=` and `|=` use signed 64-bit
+operands truncated toward zero. Modulo shares multiplication/division precedence;
+bitwise OR, AND and shifts bind above comparisons and below addition. Binary
+`0b` and hexadecimal `0x` literals accept unsigned 32-bit values. These contracts
+follow [the xNVSE 6.4.9 author implementation](https://github.com/xNVSE/NVSE/tree/6.4.9)
+and [binary notation](https://geckwiki.com/index.php?title=Binary_Notation).
+Undefined integer conversions, remainder and shift counts fail visibly; they
+cannot wrap accidentally through host-language conversion or shift masking.
+
 The contract follows the documented [NVSE expression precedence and numeric
 logical results](https://geckwiki.com/index.php/NVSE_Expressions),
 [Let](https://geckwiki.com/index.php/Let) and
@@ -28,9 +37,11 @@ intermediate arithmetic that would otherwise be hidden by a comparison. Reached
 runtime failures remain visible and retain the executed statement prefix; they
 are not converted into successful no-ops.
 
-Parser version 6 admits indexed array expressions; version 4 added `$`/`ToString` string syntax in addition to named
+Parser version 7 admits the additional integer operators; version 6 added indexed
+array expressions; version 4 added `$`/`ToString` string syntax in addition to named
 Function headers. Previously omitted quest owners require syntax that their saved
-parser version rejected: brackets before version 6, `$` before version 4, braces before version 3,
+parser version rejected: single `%`/`&`/`|` operators and their assignments before
+version 7, brackets before version 6, `$` before version 4, braces before version 3,
 assignments before version 2, or argument commas before version 1. Quotes and
 comments cannot authorize migration. Existing locals,
 quest progression and clocks are retained. Current-version saves still require
@@ -81,6 +92,24 @@ and mouse input independently of gameplay control consumption. The owned JAM
 source also removes all keys for a handler by omitting the key argument; that
 removal form is implemented. Failed callbacks retain a visible error and stop
 retrying their prefix. Explicit re-registration can replace the failed entry.
+
+[JohnnyGuitar render callbacks](https://geckwiki.com/index.php?title=SetJohnnyOnRenderUpdateEventHandler)
+and their alias accept zero-argument source functions with a null caller.
+Default registrations are process-owned and idempotent, survive menu/load
+transitions, and resolve the current executor on each invocation. Removal can
+unregister a function whose source body is still unsupported. Registration
+requires a valid Function block; faulted handlers retain errors until explicit
+removal and registration. Dispatch preserves admission order and applies
+removals before pending calls; newly registered handlers start on a later frame.
+The native adapter uses Godot's global pre-draw signal, including paused menus,
+and disconnects on scene retirement. Headless processing does not invent render
+events. A native rendered fixture checks source expressions, two extra viewports,
+pause, inactivity and cold world replacement without recording frames.
+The reserved flag remains zero. Nonzero fourth-argument flags in
+[JohnnyGuitar 5.28](https://github.com/carxt/JohnnyGuitarNVSE/tree/5.28) select
+distinct retail render phases; those phases remain unbound. Exact retail phase
+ordering and cadence, final-pixel synchronization and complete JAM gameplay
+still require their own evidence.
 
 ## Shared array values
 
