@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.Content;
 // later; scripts never mutate a presentation-only copy. The store intentionally
 // keeps UI state out of campaign saves because menu components are recreated by
 // the source menu lifetime.
-internal sealed class FalloutUiComponentStore
+internal sealed partial class FalloutUiComponentStore
 {
     private sealed class Tile
     {
@@ -51,6 +51,7 @@ internal sealed class FalloutUiComponentStore
     private readonly Dictionary<string, string> _stringOverrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _detachedPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Tile> _tiles = new(StringComparer.OrdinalIgnoreCase);
+    internal long Revision { get; private set; }
 
     private FalloutUiComponentStore(FalloutPluginStack? records, IEnumerable<XElement> roots)
     {
@@ -93,6 +94,18 @@ internal sealed class FalloutUiComponentStore
         detached = _detachedPaths.Count,
         floatOverrides = _floatOverrides.Count,
         stringOverrides = _stringOverrides.Count,
+        animations = _animations.Count,
+        animationStates = _animations.Select(pair => new
+        {
+            path = pair.Key,
+            pair.Value.Mode,
+            pair.Value.Start,
+            pair.Value.End,
+            pair.Value.Duration,
+            pair.Value.Elapsed,
+            value = _floatOverrides[pair.Key],
+        }).ToArray(),
+        revision = Revision,
         persistence = "menu-session-only",
     };
 
@@ -135,8 +148,17 @@ internal sealed class FalloutUiComponentStore
         if (!float.IsFinite(value) || !TrySplitTrait(path, out var segments, out var trait)) return false;
         var tile = ResolveTile(segments, alt);
         if (tile is null || IsDetached(tile)) return false;
-        _floatOverrides[Key(tile, trait)] = value;
+        WriteFloat(Key(tile, trait), value);
         return true;
+    }
+
+    internal bool TryFloatOverride(string path, out float value)
+    {
+        value = 0;
+        if (!TrySplitTrait(path, out var segments, out var trait)) return false;
+        var tile = ResolveTile(segments, alt: true);
+        if (tile is null) return false;
+        return IsDetached(tile) || _floatOverrides.TryGetValue(Key(tile, trait), out value);
     }
 
     internal bool SetString(string path, string value, bool alt = false, string? formatting = null)
@@ -144,7 +166,10 @@ internal sealed class FalloutUiComponentStore
         if (!TrySplitTrait(path, out var segments, out var trait)) return false;
         var tile = ResolveTile(segments, alt);
         if (tile is null || IsDetached(tile)) return false;
-        _stringOverrides[Key(tile, trait)] = Format(value, formatting);
+        var key = Key(tile, trait);
+        var text = Format(value, formatting);
+        if (!_stringOverrides.TryGetValue(key, out var previous) || text != previous)
+        { _stringOverrides[key] = text; ++Revision; }
         return true;
     }
 
@@ -154,6 +179,7 @@ internal sealed class FalloutUiComponentStore
         var tile = ResolveTile(segments, alt: true);
         var canonical = Normalize(path);
         _detachedPaths.Add(tile?.Path ?? canonical);
+        ++Revision;
         if (tile is not null)
         {
             foreach (var descendant in Descendants(tile)) _detachedPaths.Add(descendant.Path);
@@ -167,6 +193,8 @@ internal sealed class FalloutUiComponentStore
         _floatOverrides.Clear();
         _stringOverrides.Clear();
         _detachedPaths.Clear();
+        _animations.Clear();
+        ++Revision;
     }
 
     private static XElement MenuRoot(XElement document, string expected)
@@ -219,8 +247,10 @@ internal sealed class FalloutUiComponentStore
 
     private float EvaluateFloat(Tile tile, string trait, HashSet<string> visiting)
     {
+        if (IsDetached(tile)) return 0;
         if (trait.Equals("childcount", StringComparison.OrdinalIgnoreCase)) return tile.Children.Count;
         var key = Key(tile, trait);
+        if (_floatOverrides.TryGetValue(key, out var value)) return value;
         if (!visiting.Add(key)) throw new InvalidDataException($"Owned UI trait cycle: {key}");
         try
         {
@@ -292,6 +322,8 @@ internal sealed class FalloutUiComponentStore
     private void RemoveOverrides(Tile tile)
     {
         var prefix = tile.Path + "/";
+        foreach (var key in _animations.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToArray())
+            _animations.Remove(key);
         foreach (var key in _floatOverrides.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToArray())
             _floatOverrides.Remove(key);
         foreach (var key in _stringOverrides.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToArray())

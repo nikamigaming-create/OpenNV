@@ -17,6 +17,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private NativeOwnedHudMessages? _hud;
     private bool _worldActive;
     private readonly InputSystem.RuntimeNativeScriptEvents _events;
+    private readonly RuntimeNativeUiClock _uiClock;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal object State => new { scripts = Scripts.State, worldActive = _worldActive, message = _current, hud = _hud?.State, error = _error };
 
@@ -38,12 +39,14 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         _inventory = inventory;
         Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events, storage: storage);
         _events = new(Scripts.Events, () => Scripts.Host?.InvokeFunction);
+        _uiClock = new(() => Scripts.Ui);
         ProcessMode = ProcessModeEnum.Always;
         ProcessPriority = int.MinValue + 1;
     }
 
     public override void _Ready()
     {
+        AddChild(_uiClock);
         AddChild(_events);
         try
         {

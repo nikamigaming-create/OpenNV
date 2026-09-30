@@ -381,6 +381,31 @@ internal sealed partial class FalloutGameModeProgram
         var result = new List<string>();
         for (var index = 0; index < tokens.Count;)
         {
+            if (tokens[index] is "-" or "+" && index + 1 < tokens.Count)
+            {
+                // In a statement argument list this is a signed operand, not
+                // an outer infix expression. Keep complete indexed/grouped
+                // arguments under the same expression owner.
+                var end = tokens[index + 1] == "(" ? BracketEnd(index + 1, "(", ")") : index + 2;
+                while (end < tokens.Count && tokens[end] == "[") end = BracketEnd(end, "[", "]");
+                var value = FalloutNvseNumericExpression.EvaluateValue(tokens.Skip(index).Take(end - index).ToArray(), values, function, userFunction);
+                result.Add(CommandValue(value, values.FormName));
+                index = end;
+                continue;
+
+                int BracketEnd(int start, string open, string close)
+                {
+                    var depth = 1;
+                    var end = start + 1;
+                    for (; end < tokens.Count && depth != 0; ++end)
+                    {
+                        if (tokens[end] == open) ++depth;
+                        else if (tokens[end] == close) --depth;
+                    }
+                    if (depth != 0) throw new InvalidDataException("Signed script argument has an unclosed expression.");
+                    return end;
+                }
+            }
             if (tokens[index] == "(")
             {
                 var depth = 1;

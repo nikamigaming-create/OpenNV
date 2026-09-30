@@ -192,6 +192,11 @@ source identities in process-owned C# state. A shared native adapter dispatches
 default callbacks before drawing and resolves the current world executor rather
 than retaining retired delegates. Scene retirement disconnects the global draw
 subscription; separate retail render-phase flags remain unbound.
+Source UI interpolation and live trait dependencies share the C# component
+store. A native monotonic clock advances menu animations before scripts, even
+under pause or zero gameplay time scale. Supported HUD tiles project those
+float overrides by source path and redraw on their revision; complete authored
+menu branches, dynamic components and string presentation remain unbound.
 Script admission retains older saved owners with unsupported trailing Else text;
 the reached executor still refuses that syntax until its behavior is bound.
 See [NVSE script runtime](nvse-script-runtime.md) for the implemented boundary.

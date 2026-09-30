@@ -195,6 +195,26 @@ its descendants for `UnloadUIComponent`. `GetUIFloat`, `GetUIFloatAlt`,
 store is deliberately not part of campaign saves: menu components are recreated
 with the menu source and later presentation owner.
 
+[SetUIFloatGradual](https://geckwiki.com/index.php?title=SetUIFloatGradual) uses
+the same float owner for its four documented modes: one-way interpolation,
+ramp/hold/return, repeating oscillation and repeating one-way interpolation.
+Omitting the duration stops a previous animation; a supplied start value also
+sets the trait. Direct float writes do not stop an existing gradual clock.
+Signed bare, grouped and indexed statement arguments preserve their value and
+arity. Mode 4's additional engine behavior is not bound; undefined durations,
+endpoints and modes fail before changing existing state.
+
+The native UI clock uses monotonic elapsed time before this frame's scripts,
+independent of gameplay Time Mult and menu pause. Unload/reset removes affected
+animations; they are menu-session state and are not included in saves. XML
+copy expressions now read live float overrides, including animation values.
+Supported native HUD tiles read those same float overrides by canonical source
+path and redraw when their revision changes. A rendered owned-reticle fixture
+checks changed pixels under pause and zero time scale without retaining frames.
+It establishes that bounded float bridge, not full HUD/MCM rendering or retail
+timing/pixel parity. String/filename presentation, dynamic tiles and remaining
+authored HUD/menu branches still need their general owners.
+
 The current store is a source/state contract, not a complete UI implementation.
 MCM registration and option APIs, dynamic component creation, screen/global
 presentation bindings, rendering, ordinary flat/XR input, menu callbacks and

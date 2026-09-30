@@ -150,11 +150,15 @@ internal sealed class NativeOwnedMenuTree
     private readonly Dictionary<string, XElement> _named = new(StringComparer.Ordinal);
     private readonly FalloutInstallationSettings _settings;
     private readonly Func<string, string>? _stringSetting;
+    private readonly FalloutUiComponentStore? _scriptUi;
+    private readonly Dictionary<XElement, string?> _sourcePaths = [];
     private readonly XElement _globals = FalloutMenuXml.Read("menus/globals.xml").Elements().Single();
-    internal NativeOwnedMenuTree(XElement root, Func<string, string>? stringSetting = null)
+    internal NativeOwnedMenuTree(XElement root, Func<string, string>? stringSetting = null,
+        FalloutUiComponentStore? scriptUi = null)
     {
         Root = root;
         _stringSetting = stringSetting;
+        _scriptUi = scriptUi;
         _settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!);
         var backgroundOpacity = _settings.Number("Interface", "fMenuBackgroundOpacity");
         if (!float.IsFinite(backgroundOpacity) || backgroundOpacity is < 0 or > 1)
@@ -173,6 +177,7 @@ internal sealed class NativeOwnedMenuTree
         foreach (var key in _values.Keys.Where(key => removed.Contains(key.Item1)).ToArray()) _values.Remove(key);
         foreach (var key in _textValues.Keys.Where(key => removed.Contains(key.Item1)).ToArray()) _textValues.Remove(key);
         _named.Clear();
+        foreach (var key in _sourcePaths.Keys.Where(removed.Contains).ToArray()) _sourcePaths.Remove(key);
     }
     internal void SetFilename(XElement tile, string value)
     {
@@ -276,6 +281,11 @@ internal sealed class NativeOwnedMenuTree
     }
     internal float Number(XElement tile, string trait, bool bindings = true)
     {
+        if (bindings && _scriptUi is not null)
+        {
+            if (!_sourcePaths.TryGetValue(tile, out var path)) _sourcePaths[tile] = path = SourcePath(Root, tile);
+            if (path is not null && _scriptUi.TryFloatOverride(path + "/" + trait, out var scriptValue)) return scriptValue;
+        }
         if (bindings && _values.TryGetValue((tile, trait), out var bound)) return bound;
         if (trait is "string" or "_PCButtonText") return String(tile, trait).Length == 0 ? 0 : 1;
         if (trait is "filewidth" or "fileheight")
@@ -317,6 +327,20 @@ internal sealed class NativeOwnedMenuTree
             });
         }
         finally { _evaluating.Remove((tile, trait)); }
+    }
+
+    internal static string? SourcePath(XElement root, XElement tile)
+    {
+        var segments = new Stack<string>();
+        for (var current = tile; current is not null; current = current.Parent)
+        {
+            if (current.Attribute("name") is not { } name) return null;
+            var ordinal = current.ElementsBeforeSelf().Count(sibling =>
+                string.Equals((string?)sibling.Attribute("name"), name.Value, StringComparison.OrdinalIgnoreCase));
+            segments.Push(ordinal == 0 || current == root ? name.Value : $"{name.Value}:{ordinal}");
+            if (current == root) return string.Join('/', segments);
+        }
+        return null;
     }
     internal Vector2 Position(XElement tile)
     {

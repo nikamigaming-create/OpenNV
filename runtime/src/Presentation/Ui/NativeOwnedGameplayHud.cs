@@ -23,6 +23,8 @@ internal partial class NativeOwnedGameplayHud : Control
     private NativeHudAmmo? _lastAmmo;
     private string? _lastNotice;
     private NativeHudTarget? _last;
+    private readonly FalloutUiComponentStore? _scriptUi;
+    private long _uiRevision = -1;
     internal string? Error { get; private set; }
     internal object State => new
     {
@@ -32,14 +34,17 @@ internal partial class NativeOwnedGameplayHud : Control
         ammo = _lastAmmo,
         notice = _lastNotice,
         error = Error,
+        scriptUiRevision = _uiRevision,
         source = "HUDMainMenu/ReticleCenter/Info/HitPoints/ActionPoints"
     };
 
     internal NativeOwnedGameplayHud(FalloutPluginStack records, string activateKey, Func<NativeHudTarget?> target, Func<bool> shown,
-        Func<GameplayVitals>? vitals = null, Func<NativeHudAmmo?>? ammunition = null, Func<string?>? notice = null)
+        Func<GameplayVitals>? vitals = null, Func<NativeHudAmmo?>? ammunition = null, Func<string?>? notice = null,
+        FalloutUiComponentStore? scriptUi = null)
     {
         Name = "HUDMainMenuGameplay"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
+        _scriptUi = scriptUi;
         var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(source.Name, source.Attributes(),
             source.Elements().Where(element => element.Attribute("name") is null).Select(element => new XElement(element)));
@@ -57,7 +62,7 @@ internal partial class NativeOwnedGameplayHud : Control
         var crosshair = Template("template_reticle_center", _reticle);
         _prompt = _info.Elements().Single(element => (string?)element.Attribute("name") == "justify_center_hotrect");
         _name = Template("template_justify_center_text", _info);
-        _tiles = new(menu, setting => FalloutGameSettingStrings.Read(records, setting));
+        _tiles = new(menu, setting => FalloutGameSettingStrings.Read(records, setting), scriptUi);
         _tiles.Bind(menu, "visible", 1);
         _tiles.Bind(_reticle, "locus", 1); _tiles.Bind(_info, "locus", 1);
         _tiles.Bind(crosshair, "x", -32); _tiles.Bind(crosshair, "y", -32);
@@ -123,6 +128,12 @@ internal partial class NativeOwnedGameplayHud : Control
         {
             Visible = _shown();
             if (!Visible) return;
+            if (_scriptUi is not null && _uiRevision != _scriptUi.Revision)
+            {
+                _uiRevision = _scriptUi.Revision;
+                _tiles.ValidateDrawing();
+                QueueRedraw();
+            }
             var ammo = _ammunition?.Invoke();
             if (_ammo is not null && ammo != _lastAmmo)
             {
