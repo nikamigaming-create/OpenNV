@@ -15,6 +15,12 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--object-animation", var dataRoot, var savePath])
+            {
+                ExerciseOwnedObjectAnimation(dataRoot, savePath);
+                GetTree().Quit();
+                return;
+            }
             Directory.CreateDirectory(directory);
             File.WriteAllBytes(path, Fixture());
             using var records = FalloutPluginStack.Load(directory, ["Contact.esm"]);

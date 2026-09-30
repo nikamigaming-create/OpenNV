@@ -21,7 +21,9 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, bool>? IsInCombat = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInSameCell = null, FalloutScriptEvents? Events = null,
     Func<FalloutFormKey, FalloutFormKey, float>? Distance = null,
-    Func<FalloutFormKey, bool>? IsInInterior = null);
+    Func<FalloutFormKey, bool>? IsInInterior = null,
+    Action<FalloutFormKey, string, int>? PlayGroup = null,
+    Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -60,7 +62,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (item is null || string.IsNullOrWhiteSpace(item.Name) || !admitted.TryAdd(item.Name, item))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
         var instance = world.Get(reference);
-        var recovered = RecoverMissingRead(instance, events);
+        var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingPlayGroup(instance, events);
         // A failed attempt cannot run again on its GameMode clock. A new
         // activation or contact entry is an explicit new event and may retry
         // the source program, including its guards and already-applied prefix.
@@ -363,6 +365,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     (Target(), Reference(arguments[0].Identifier!)));
             if (parts.Length <= 2 && operation == "isininterior")
                 return new([], _ => (host.IsInInterior?.Invoke(Target()) ?? world.IsInInterior(Target())) ? 1 : 0) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "isanimplaying")
+                return new([FalloutScriptArgumentKind.OptionalIdentifier], arguments =>
+                    (host.IsAnimPlaying ?? throw new NotSupportedException("IsAnimPlaying has no animation owner."))
+                    (Target(), arguments.Count == 0 ? null : arguments[0].Identifier) ? 1 : 0)
+                { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreCrime", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IgnoresCrime(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreFriendlyHits", StringComparison.OrdinalIgnoreCase))
@@ -521,6 +528,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             switch (operation)
             {
+                case "playgroup" when arguments.Count == 2:
+                    var initialization = Number(arguments[1]);
+                    if (initialization != Math.Truncate(initialization) || initialization is < 0 or > 2)
+                        throw new InvalidDataException("PlayGroup initialization must be 0, 1 or 2.");
+                    (host.PlayGroup ?? throw new NotSupportedException("PlayGroup has no animation owner."))
+                        (target, arguments[0].Trim('"'), (int)initialization);
+                    break;
                 case "sv_destruct" when arguments.Count > 0:
                     foreach (var argument in arguments) DestroyString(argument);
                     break;

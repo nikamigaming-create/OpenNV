@@ -1042,7 +1042,11 @@ public partial class RuntimeCoordinator
                 restore.State.PlayerRotation, FalloutNativeCampaignSave.RestorePlayerViewPitch(restore.State));
         AddChild(_nativePlayer);
         if (_nativeXr is not null) _nativePlayer.AttachXr(_nativeXr);
-        _nativeOpeningStageDriver = new RuntimeNativeOpeningStageDriver();
+        _nativeOpeningStageDriver = new RuntimeNativeOpeningStageDriver
+        {
+            ReferencePresentation = () => _nativeReferencePresentation ??
+                throw new InvalidOperationException("Native reference presentation is absent."),
+        };
         _nativeOpeningStageDriver.Configure(
             _nativeOpeningTransitions ??
                 throw new InvalidOperationException("Native opening transition graph was not resolved."),

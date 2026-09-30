@@ -17,7 +17,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false,
     bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null,
     FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null, bool KnockedDown = false,
-    FalloutDestructionState? Destruction = null)
+    FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -37,6 +37,17 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
             if (snapshot.Animation is { } animation) FalloutActorAnimationState.Validate(animation);
+            if (snapshot.ObjectAnimations is { } objectAnimations)
+            {
+                var controllers = new HashSet<(string, int)>();
+                foreach (var state in objectAnimations)
+                {
+                    if (state is null) throw new InvalidDataException("Saved object animation is absent.");
+                    state.Validate();
+                    if (!controllers.Add((state.Sha256.ToLowerInvariant(), state.Controller)))
+                        throw new InvalidDataException("Saved object animation controller is duplicated.");
+                }
+            }
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
@@ -101,6 +112,18 @@ internal sealed class FalloutReferenceInstance
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
     internal FalloutActorEngagement? Engagement { get; set; }
     internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
+    internal IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations { get; set; }
+    private readonly List<Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>> _objectAnimationCaptures = [];
+    internal Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>? CaptureObjectAnimations => _objectAnimationCaptures.LastOrDefault();
+
+    internal void BindObjectAnimationCapture(Func<IReadOnlyList<FalloutObjectAnimationSnapshot>> capture) =>
+        _objectAnimationCaptures.Add(capture);
+
+    internal void UnbindObjectAnimationCapture(Func<IReadOnlyList<FalloutObjectAnimationSnapshot>> capture)
+    {
+        if (CaptureObjectAnimations == capture) ObjectAnimations = capture();
+        if (!_objectAnimationCaptures.Remove(capture)) throw new InvalidOperationException("Object animation capture was not bound.");
+    }
 
     internal FalloutReferenceInstance(FalloutPluginRecord reference, FalloutReferenceScriptDefinition? script)
     {
@@ -142,7 +165,8 @@ internal sealed class FalloutReferenceInstance
         _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
         CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-        TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction);
+        TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
+        CaptureObjectAnimations?.Invoke() ?? ObjectAnimations);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -375,6 +399,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;
+            instance.ObjectAnimations = snapshot.ObjectAnimations?.ToArray();
             if (snapshot.HitReaction is { } reaction)
             {
                 var idle = records.GetEffective(reaction.Idle);

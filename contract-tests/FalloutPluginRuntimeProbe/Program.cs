@@ -1335,6 +1335,12 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.DestructionSchema });
+    var legacyDestruction = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.WithWorldState(legacyDestruction.State, referenceSave.ActiveCell,
+        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The preceding destruction save no longer upgrades through the ordinary save owner.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.DeathEventSchema });
     var legacyDeath = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

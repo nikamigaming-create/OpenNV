@@ -67,6 +67,7 @@ public partial class NativeNifInstanceAudit : Node
                 return;
             }
             ExerciseReferenceAngles();
+            ExerciseObjectAnimation();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();

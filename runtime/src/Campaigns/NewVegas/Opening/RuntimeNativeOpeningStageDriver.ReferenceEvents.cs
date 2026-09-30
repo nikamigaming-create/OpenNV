@@ -12,6 +12,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutReferenceScripts? _resultScripts;
     private FalloutQuestStages? _stageResults;
     private OpenNV.Runtime.Gameplay.State.FalloutPipBoyState? _pipBoy;
+    internal Func<RuntimeNativeReferencePresentation> ReferencePresentation { get; set; } =
+        () => throw new InvalidOperationException("Reference presentation has no current cell owner.");
     internal object? ConversationState => _conversation?.State;
     internal OpenNV.Runtime.Gameplay.State.FalloutPipBoyState PipBoy => _pipBoy ?? throw new InvalidOperationException("Pip-Boy state is absent.");
     internal FalloutQuestState Quests => _quests;
@@ -43,7 +45,9 @@ internal partial class RuntimeNativeOpeningStageDriver
                 GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                     .Single(npc => npc.Appearance.Reference == actor).CurrentFurniture == furniture, ApplyReferenceEffect,
                 _scripts.MessageResults.Take, actor => _speech!.IsTalking(actor), ActorValue, IsPlayerTagSkill, _globals,
-                ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events, ReferenceDistance, IsInInterior));
+                ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events, ReferenceDistance, IsInInterior,
+                (reference, group, initialization) => ReferencePresentation().PlayGroup(reference, group, initialization),
+                (reference, group) => ReferencePresentation().IsAnimPlaying(reference, group)));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -198,7 +202,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case FalloutReferenceEffectKind.Texture or FalloutReferenceEffectKind.ReferenceEnable:
                 if (!_scripts.References!.IsResident(effect.Target!.Value)) break;
-                GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeReferencePresentation>().Single().Apply(effect);
+                ReferencePresentation().Apply(effect);
                 break;
             case FalloutReferenceEffectKind.Conversation:
                 (_conversation ?? throw new InvalidOperationException("Conversation owner is absent.")).Request(

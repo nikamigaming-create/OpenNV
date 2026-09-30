@@ -1,7 +1,8 @@
 # Gameplay, playtest and release plan
 
-September 27 direction: prioritize ordinary flat gameplay, including NPC and
-creature combat, quest progression, looting and crafting. Execute
+September 30 direction: prioritize ordinary flat gameplay and system polish,
+including NPC and creature combat, quest progression, looting and crafting.
+Preserve shared VR behavior; detailed VR presentation is not the current focus. Execute
 [the flat gameplay work order](flat-gameplay-plan.md) before returning to
 mod-only implementation or detailed VR presentation. Preserve the complete
 campaign/mod objectives below; no whole-game completion date or percentage is

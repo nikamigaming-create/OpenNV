@@ -62,6 +62,11 @@ and source primitive contacts now dispatch through FalloutReferenceScripts.
 Reference enable state and source enable-parent relationships share that world
 lifetime. Native models may be built on demand without creating a second source
 path. Per-instance texture changes remain transient with presentation lifetime.
+Managed object animation binds that same reference to its winning NIF hash and
+controller block. Shared script owners select source groups and query their
+manager; v22 snapshots retain selected clocks and pending groups through cold
+restoration, warm residency and presentation replacement. Actor skeleton groups
+remain owned separately and fail visibly until that binding exists.
 Leveled actor templates retain a reference-owned random choice, source hash and
 selection level in the same snapshot. Appearance, inventory, script attachment,
 voice, factions and combat consume that selection. Reentry cannot reroll a
