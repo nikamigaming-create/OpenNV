@@ -573,6 +573,19 @@ internal sealed class FalloutQuestScripts
                 else ini.SetString(key, StringArgument(arguments[1]), file, caller);
                 return;
             }
+            if (parts.Length == 1 && operation == "setuifloatgradual")
+            {
+                var ui = Ui ?? throw new NotSupportedException("UI commands have no menu-session owner.");
+                if (arguments.Count is < 1 or > 5) throw new InvalidDataException($"{command} has an invalid argument count.");
+                var mode = arguments.Count == 5 ? NumberArgument(arguments[4]) : 0;
+                if (mode != Math.Truncate(mode)) throw new InvalidDataException("UI animation mode is fractional.");
+                _ = ui.SetFloatGradual(StringArgument(arguments[0]),
+                    arguments.Count >= 2 ? (float)NumberArgument(arguments[1]) : null,
+                    arguments.Count >= 3 ? (float)NumberArgument(arguments[2]) : null,
+                    arguments.Count >= 4 ? (float)NumberArgument(arguments[3]) : null,
+                    checked((int)mode));
+                return;
+            }
             if (parts.Length == 1 && operation is "setuifloat" or "setuifloatalt" or "setuistring" or
                 "setuistringalt" or "setuistringex" or "unloaduicomponent")
             {

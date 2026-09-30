@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is [var uiRoot, "--script-ui"])
+            {
+                await ScriptUi(uiRoot);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length is < 2 or > 4 || args.Length >= 3 && args[2] is not ("--tiles" or "--screen" or "--portrait" or "--input") ||
                 args.Length == 4 && args[2] != "--portrait")
                 throw new ArgumentException("Owned data, private output and an admitted audit mode are required.");

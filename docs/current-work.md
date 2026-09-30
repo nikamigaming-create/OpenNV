@@ -15,6 +15,19 @@ completion is claimed.
 
 ## Verified runtime
 
+Source UI interpolation now owns the four documented SetUIFloatGradual modes,
+including stop/replacement forms and signed command arguments. Dependent XML
+traits read current script overrides. A monotonic native UI clock keeps animations
+running during menu pause and zero gameplay time scale; unload/reset clears them.
+The native HUD's supported source tiles read the same C# float values and redraw
+on their revisions. A rendered owned-reticle fixture changes actual pixels through
+that bridge while gameplay is paused, retaining no frames. Synthetic mode,
+dependency, lifetime and reference/fallback-quest checks and the complete runtime
+gate pass. The owned JAM audit advances its actual repeating HUD trait through
+the shared owner. JHM initialization now passes interpolation and reaches
+SetOnHitEventHandler. The rest
+of the authored HUD, complete hit markers and MCM remain unverified.
+
 Default JohnnyGuitar render callbacks now retain source identities in the shared
 C# event owner. The native adapter invokes them before drawing, including paused
 menus, once per global frame rather than per viewport. A rendered fixture with
@@ -43,7 +56,7 @@ restore; its file remains unchanged.
 The selected JAM source audit now has 11 parser failures among 52 scripts.
 Its JBT initializer registers the winning render function and reaches the
 missing SetNthPerkEntryValue1 owner; the source execution audit does not establish
-a working bullet-time module. JHM reaches the missing SetUIFloatGradual owner.
+a working bullet-time module. JHM reaches the missing hit-event owner.
 Complete JAM/MCM remains unverified.
 The TTW source audit admits all but nine of 1,263 entry-plugin scripts;
 its opening, campaign progression and travel remain unverified.
@@ -104,15 +117,17 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement JAM's reached source UI interpolation, then trace
-the remaining actor-effect, perk-mutation and hit-event failures through ordinary
+Trace JAM's remaining actor-effect, perk-mutation and hit-event failures through ordinary
 native owners. Chained reference expressions, lambdas, further operators and
 remaining array operations still reject syntax/behavior. Typed strings/arrays,
 INI and auxiliary state, UIO injection and UI component state already exist; they do not
 establish a working MCM menu or any complete JAM module. Implement the next
 reached missing owner, including ordinary input and persistent effects. Keep
-the complete TTW opening, campaign progression, travel and dependency semantics
-in scope; do not remove launch gates on the strength of source audits.
+winning HUD/menu rendering, original crafting/barter/character-creation screens
+and Classic controls in scope; the float bridge covers existing supported HUD
+tiles and does not yet draw every mod component or bind string overrides.
+Keep the complete TTW opening, campaign progression, travel and dependency
+semantics in scope; do not remove launch gates on the strength of source audits.
 The current New Vegas startup assumes the Doc Mitchell opening, including its
 start CELL, quests and character creation. Replace that assumption with winning
 startup scripts before claiming a Fallout 3 start under TTW.
@@ -163,6 +178,10 @@ Render checks are in `tmp/jam-render-contract.log`,
 `tmp/jam-render-native.stdout.log`, `tmp/jam-render-native.stderr.log`,
 `tmp/jam-render-owned-save.log`, `tmp/jam-render-runtime-gate.log`,
 `tmp/jam-render-source.private.json` and `tmp/jam-render-execution.private.json`.
+UI checks are in `tmp/jam-ui-contract.log`, `tmp/jam-ui-native-clock.log`,
+`tmp/jam-ui-native-pixels.stdout.log`, `tmp/jam-ui-native-pixels.stderr.log`,
+`tmp/jam-ui-owned-save.log`, `tmp/jam-ui-runtime-gate.log` and
+`tmp/jam-ui-execution.private.json`.
 The requested flat screenshot is extracted from the retained September 27
 companion clip; it does not show the new September 30 code.
 

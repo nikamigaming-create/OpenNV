@@ -20,7 +20,7 @@ public partial class RuntimeCoordinator
         _nativeGameplayHud = new(_nativePluginStack!, _configuration.Player.DesktopInput.Activate.PhysicalKey,
             NativeAimedTarget, () => _nativeXr is null && _nativePlayer is { ModalInput: false, RolloverTextEnabled: true } &&
                 !_nativeDoorLoading && !GetTree().Paused, () => _nativeOpeningStageDriver!.Vitals,
-            () => _nativePlayer?.AmmunitionHud, () => _nativePlayer?.WeaponActionNotice);
+            () => _nativePlayer?.AmmunitionHud, () => _nativePlayer?.WeaponActionNotice, _nativeUi);
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
             () => _nativeXr is null && _nativePlayer is { ModalInput: false, RolloverTextEnabled: true } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState);

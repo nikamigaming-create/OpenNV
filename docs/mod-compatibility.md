@@ -101,7 +101,10 @@ is required by the requested product scope and remains in implementation.
 scripts retain specific UI, actor-effect, perk-mutation and hit-event gaps.
 JBT now registers its winning render function and reaches perk mutation;
 the native render-phase fixture does not establish working bullet time.
-JHM reaches UI interpolation. Additional render-phase flags remain unbound.
+JHM now passes source UI interpolation and reaches hit-event registration.
+Its repeating trait advances in the shared UI owner; a separate owned-reticle
+fixture checks the native float-to-pixel bridge. Complete hit markers and MCM
+remain unverified. Additional render-phase flags remain unbound.
 See [NVSE script runtime](nvse-script-runtime.md).
 The earlier adapters only applied a speed multiplier and global time scale in
 the old CellPlayer path. They do not provide AP behavior, animations, callbacks,

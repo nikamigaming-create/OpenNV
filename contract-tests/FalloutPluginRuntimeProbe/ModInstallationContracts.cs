@@ -37,6 +37,7 @@ internal static class ModInstallationContracts
             events.LoadGame();
             for (var frame = 0; frame < 360; ++frame)
             {
+                ui.AdvanceAnimations(1.0 / 60);
                 scripts.Advance(1.0 / 60);
                 events.Advance(1.0 / 60, true, executor.InvokeFunction);
             }
@@ -45,6 +46,7 @@ internal static class ModInstallationContracts
                 schema = "opennv-mod-script-execution-audit/v1", setup.Id,
                 plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256 }),
                 scripts = scripts.State,
+                ui = ui.State,
                 boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
             }));
         }

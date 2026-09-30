@@ -489,6 +489,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 else ini.SetString(key, StringValue(arguments[1]), file, callerPlugin);
                 return;
             }
+            if (parts.Length == 1 && operation == "setuifloatgradual")
+            {
+                var ui = world.Ui ?? throw new NotSupportedException("UI commands have no menu-session owner.");
+                if (arguments.Count is < 1 or > 5) throw new InvalidDataException($"{command} has an invalid argument count.");
+                _ = ui.SetFloatGradual(StringValue(arguments[0]),
+                    arguments.Count >= 2 ? (float)Number(arguments[1]) : null,
+                    arguments.Count >= 3 ? (float)Number(arguments[2]) : null,
+                    arguments.Count >= 4 ? (float)Number(arguments[3]) : null,
+                    arguments.Count == 5 ? checked((int)Index(Number(arguments[4]))) : 0);
+                return;
+            }
             if (parts.Length == 1 && operation is "setuifloat" or "setuifloatalt" or "setuistring" or
                 "setuistringalt" or "setuistringex" or "unloaduicomponent")
             {

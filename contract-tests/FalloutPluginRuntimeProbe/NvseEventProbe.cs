@@ -81,6 +81,7 @@ internal static partial class NvseEventProbe
             CallbackMutation(events, scripts, Form, player);
             Failure(events, scripts, quests, quest.FormKey, Form, player);
             RenderCallbacks(records, scripts, quests, events, quest, definition);
+            UiCommands(records, quest, definition);
             FallbackLifecycle(records);
             ReferenceTypedStrings(directory);
         }
@@ -221,7 +222,8 @@ internal static partial class NvseEventProbe
         var fields = Field("EDID", Text("ProbeQuest")).Concat(Field("DATA", data)).Concat(Field("SCRI", BitConverter.GetBytes(0x200u))).ToArray();
         var bytes = Record("TES4", 0, Field("HEDR", header)).Concat(Record("QUST", 0x100, fields));
         const string main = "array_var items\narray_var alias\nbegin GameMode\nif GetGameRestarted\nrestarts += 1\nendif\nif GetGameLoaded\nloads += 1\nendif\n" +
-            "if initialized == 0\nSetGameMainLoopCallback Tick 1 2 1\nSetOnKeyDownEventHandler KeyDown 1 42\nSetOnKeyUpEventHandler KeyUp 1 42\ninitialized = 1\nendif\nend";
+            "if initialized == 0\nSetGameMainLoopCallback Tick 1 2 1\nSetOnKeyDownEventHandler KeyDown 1 42\nSetOnKeyUpEventHandler KeyUp 1 42\ninitialized = 1\nendif\n" +
+            "if initialized == 2\nSetUIFloatGradual \"StartMenu/Animator/value\" -0.025 0.025 0.15 2\ninitialized = 3\nendif\nend";
         bytes = bytes.Concat(Script(0x200, "Main", main, ["restarts", "loads", "initialized", "total", "elapsed", "keyDown", "keyUp", "failed", "items", "alias"], quest: true));
         bytes = bytes.Concat(Script(0x210, "Tick", "int scratch\nbegin Function {}\nscratch += 1\nProbeQuest.total += scratch\nProbeQuest.elapsed = GetSecondsPassed\nend", ["scratch"]));
         bytes = bytes.Concat(Script(0x211, "KeyDown", "int key\nbegin Function {key}\nProbeQuest.keyDown += key\nend", ["key"]));

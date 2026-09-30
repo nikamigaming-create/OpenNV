@@ -45,6 +45,7 @@ ScriptArrayProbe.Run();
 ScriptStorageProbe.Run();
 UiOrganizerProbe.Run();
 UiComponentProbe.Run();
+UiAnimationProbe.Run();
 NvseNumericProbe.Run();
 NvseEventProbe.Run();
 QuestScriptExecutionProbe.Run();

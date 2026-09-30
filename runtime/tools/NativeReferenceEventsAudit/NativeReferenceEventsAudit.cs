@@ -33,6 +33,12 @@ public partial class NativeReferenceEventsAudit : Node
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             world.LoadCell(cell);
+            if (OS.GetCmdlineUserArgs() is ["--ui-animation"])
+            {
+                await UiClock();
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--render-events"])
             {
                 await RenderEvents(records, world);
