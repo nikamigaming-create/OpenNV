@@ -23,7 +23,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, FalloutFormKey, float>? Distance = null,
     Func<FalloutFormKey, bool>? IsInInterior = null,
     Action<FalloutFormKey, string, int>? PlayGroup = null,
-    Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null);
+    Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null,
+    Func<int>? PlayerLevel = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -62,7 +63,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (item is null || string.IsNullOrWhiteSpace(item.Name) || !admitted.TryAdd(item.Name, item))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
         var instance = world.Get(reference);
-        var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingPlayGroup(instance, events);
+        var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events);
         // A failed attempt cannot run again on its GameMode clock. A new
         // activation or contact entry is an explicit new event and may retry
         // the source program, including its guards and already-applied prefix.
@@ -137,7 +138,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             events = FalloutGameModeProgram.ReadEvents(FalloutDialogueTopic.ScriptText(sources[0].Data.Span));
             _definitions.Add(script.FormKey, events);
         }
-        program = new(new(records, records.GetEffective(instance.Reference), script, script.ReadSubrecords()), events);
+        program = new(Bindings(records.GetEffective(instance.Reference), script, script.ReadSubrecords()), events);
         _programs.Add(instance.Reference, program);
         return program;
     }
@@ -147,7 +148,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         var fields = info.Record.ReadSubrecords().ToArray();
         var split = Array.FindIndex(fields, field => field.Signature == "NEXT");
         var selected = begin ? (split < 0 ? fields : fields[..split]) : (split < 0 ? [] : fields[(split + 1)..]);
-        var bindings = new FalloutScriptBindings(records, records.GetEffective(info.Quest), info.Record, selected);
+        var bindings = Bindings(records.GetEffective(info.Quest), info.Record, selected);
         var program = FalloutGameModeProgram.Read("begin Result\n" + (begin ? info.BeginScript : info.EndScript) + "\nend", "Result");
         Execute(speaker, bindings, program, null, 0);
     }
@@ -156,17 +157,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     {
         var key = (owner.FormKey, script.FormKey);
         if (!_questBindings.TryGetValue(key, out var bindings))
-            _questBindings.Add(key, bindings = new(records, owner, script, script.ReadSubrecords()));
+            _questBindings.Add(key, bindings = Bindings(owner, script, script.ReadSubrecords()));
         Execute(owner.FormKey, bindings, program, null, seconds);
     }
 
     internal void ExecuteStage(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source) =>
-        Execute(quest.FormKey, new(records, quest, quest, fields),
+        Execute(quest.FormKey, Bindings(quest, quest, fields),
             FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);
 
     internal IEnumerable<bool> StageSteps(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source) =>
-        Steps(quest.FormKey, new(records, quest, quest, fields),
+        Steps(quest.FormKey, Bindings(quest, quest, fields),
             FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);
+
+    private FalloutScriptBindings Bindings(FalloutPluginRecord owner, FalloutPluginRecord source,
+        IEnumerable<FalloutPluginSubrecord> fields) => new(records, owner, source, fields,
+        target => target.Signature is "REFR" or "ACHR" or "ACRE" ? world.Get(target.FormKey).Script?.Record :
+            FalloutScriptLocals.AttachedScript(records, target));
 
     private void Execute(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
         FalloutFormKey? actor, double seconds)
@@ -528,6 +534,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             switch (operation)
             {
+                case "kill" or "killactor":
+                    if (arguments.Count > 3) throw new InvalidDataException("KillActor has an invalid argument count.");
+                    if (arguments.Count > 1) throw new NotSupportedException("Script death limb/cause parameters have no source owner.");
+                    if (records.RuntimeFormId(target) == 0x14) throw new NotSupportedException("Script player death requires the player vitals owner.");
+                    var killer = arguments.Count == 0 || Number(arguments[0]) == 0 ? (FalloutFormKey?)null : Reference(arguments[0]);
+                    _ = world.KillActor(target, killer,
+                        (host.PlayerLevel ?? throw new NotSupportedException("Script death has no player-level owner."))(), host.Globals);
+                    break;
                 case "playgroup" when arguments.Count == 2:
                     var initialization = Number(arguments[1]);
                     if (initialization != Math.Truncate(initialization) || initialization is < 0 or > 2)

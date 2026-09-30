@@ -74,21 +74,51 @@ internal sealed partial class FalloutReferenceWorld
         limbs[partType] = limbs.GetValueOrDefault(partType) + limbDamage;
         if (!changed.IsFinite || !float.IsFinite(limbs[partType])) throw new InvalidDataException("Actor damage exceeds finite storage.");
         var died = !injury.Dead && changed.Current <= 0;
-        // Expand the source death list once, before publishing the transition.
-        // Inventory.Add is atomic and retains its own leveled-list random stream.
-        if (died && !injury.DeathInventoryGranted && source.DeathItem is { } item)
-            Inventory(reference, level, globals).Contents.Add(records, item, 1, level, true, globals);
+        if (died) injury = BeginActorDeath(actor, source, injury, attacker, level, globals);
         actor.ActorValues["health"] = changed;
-        if (died) actor.HitReaction = null;
         actor.Injury = injury with
         {
-            Dead = injury.Dead || died,
-            Killer = died ? attacker : injury.Killer,
-            LimbDamage = limbs,
-            DeathInventoryGranted = injury.DeathInventoryGranted || died,
-            DeathEventPending = injury.DeathEventPending || died
+            LimbDamage = limbs
         };
         return new(reference, partType, health.Current, changed.Current, healthDamage, limbDamage, died, actor.Injury.Dead, source.ImpactMaterial);
+    }
+
+    internal bool KillActor(FalloutFormKey reference, FalloutFormKey? killer, int level, FalloutGlobalState? globals = null)
+    {
+        if (level < 1) throw new ArgumentOutOfRangeException(nameof(level));
+        var actor = Actor(reference);
+        var source = HealthSource(reference);
+        if (source.Essential) throw new NotSupportedException("Essential actor knockdown/recovery is not bound.");
+        if (killer is { } known && records.RuntimeFormId(known) != 0x14) _ = Actor(known);
+        var health = Health(reference);
+        var injury = actor.Injury!;
+        if (injury.Dead) return false;
+        // Kill is a death transition, not a weapon hit. It preserves existing
+        // limb damage and does not generate hit effects or destruction damage.
+        var changed = health with { Damage = -(health.Base + health.Permanent + health.Temporary) };
+        if (!changed.IsFinite) throw new InvalidDataException("Script death exceeds finite health storage.");
+        injury = BeginActorDeath(actor, source, injury, killer, level, globals);
+        actor.ActorValues["health"] = changed;
+        actor.Injury = injury;
+        return true;
+    }
+
+    private FalloutActorInjury BeginActorDeath(FalloutReferenceInstance actor, FalloutActorHealthSource source,
+        FalloutActorInjury injury, FalloutFormKey? killer, int level, FalloutGlobalState? globals)
+    {
+        // Expand once before publishing health/death. Inventory.Add is atomic
+        // and uses the same retained leveled-list stream as weapon deaths.
+        if (!injury.DeathInventoryGranted && source.DeathItem is { } item)
+            Inventory(actor.Reference, level, globals).Contents.Add(records, item, 1, level, true, globals);
+        actor.HitReaction = null;
+        return injury with
+        {
+            Dead = true,
+            Killer = killer,
+            DeathInventoryGranted = true,
+            DeathEventPending = true,
+            DeathEventElapsed = 0
+        };
     }
 
     internal bool AdvanceDeathEvent(FalloutFormKey reference, double seconds, double delay, bool speaking)
@@ -110,7 +140,6 @@ internal sealed partial class FalloutReferenceWorld
         if (injury.LimbDamage is null || injury.LimbDamage.Any(pair => pair.Key > 14 || !float.IsFinite(pair.Value) || pair.Value < 0) ||
             !injury.Dead && (injury.Killer is not null || injury.DeathInventoryGranted || injury.DeathEventPending || injury.DeathEventElapsed != 0) ||
             !double.IsFinite(injury.DeathEventElapsed) || injury.DeathEventElapsed < 0 ||
-            injury.DeathEventPending && injury.Killer is null ||
             !actor.ActorValues.TryGetValue("health", out var health) || !health.IsFinite || injury.Dead != (health.Current <= 0))
             throw new InvalidDataException("Saved actor injury is inconsistent with its health.");
         var body = BodyParts(actor.Reference);

@@ -15,6 +15,12 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--script-death", var deathDataRoot, var deathSavePath])
+            {
+                await ExerciseOwnedScriptDeath(deathDataRoot, deathSavePath);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--object-animation", var dataRoot, var savePath])
             {
                 ExerciseOwnedObjectAnimation(dataRoot, savePath);

@@ -2,7 +2,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed partial class FalloutGameModeProgram
 {
-    internal bool CanRetryMissingCommand(string command, Func<string, FalloutScriptFunction?> functions)
+    internal bool CanRetryMissingCommand(string command, Func<string, FalloutScriptFunction?> functions, int argumentCount = 2)
     {
         var found = false;
         var priorMutation = false;
@@ -10,7 +10,10 @@ internal sealed partial class FalloutGameModeProgram
         {
             if (tokens[0].Equals(command, StringComparison.OrdinalIgnoreCase))
             {
-                if (priorMutation || tokens.Length != 3) return false;
+                if (priorMutation || tokens.Length != argumentCount + 1) return false;
+                if (tokens.Skip(1).Any(token => functions(token) is { ReadOnly: false } ||
+                    token.Equals("eval", StringComparison.OrdinalIgnoreCase) || token.Equals("call", StringComparison.OrdinalIgnoreCase) ||
+                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--")) return false;
                 found = true;
                 // This exact command always failed in the legacy runtime. A
                 // later alternative cannot follow an executed earlier effect.

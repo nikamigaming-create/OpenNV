@@ -90,6 +90,32 @@ duplicate rewards after cold continuation. Ordinary exported flat input also
 harvests one Coyote Tobacco Chew and saves the harvested source state. These
 checks do not establish retail animation or campaign parity.
 
+## Script death and inherited locals
+
+Kill and KillActor with zero or one killer argument use the shared reference
+health/death transition. They retain modifier pools and existing limb damage,
+grant the source death inventory once and queue the existing delayed OnDeath
+event. An omitted killer is unknown: unfiltered death blocks can run, and a
+player-filtered block does not acquire a fabricated player identity. Cold saves
+retain the delay, loot and consumed event. Calling Kill on an authored corpse
+does not create another death or reward. The native combat owner observes fresh
+script deaths and activates the same source ragdoll used by combat.
+
+The published [KillActor contract](https://geck.uesp.net/w/index.php?title=KillActor)
+also declares limb/cause parameters. Those, essential recovery and player script
+death remain explicit unsupported owners; this change does not approximate them.
+Exact old first-command Kill/KillActor errors can recover using the same
+before-mutation inspection as PlayGroup. Consumptive command arguments also
+prevent recovery.
+
+Script local lookup now consumes the world instance's retained script owner.
+This includes local and qualified reads on actors whose script comes from a
+template rather than direct base SCRI. The source script and save declarations
+remain the admission boundary. The owned fixture recovers all 14 selected saved
+Kill failures, completes their authored corpse flags/locals, and checks a living
+source creature's ragdoll and cold continuation. Synthetic tests cover inherited
+and qualified locals, optional killers, filtered death events and conserved loot.
+
 ## Executable checks and limits
 
 `ReferenceScriptContractProbe` checks synthetic overrides, activation suppression,

@@ -67,6 +67,12 @@ controller block. Shared script owners select source groups and query their
 manager; v22 snapshots retain selected clocks and pending groups through cold
 restoration, warm residency and presentation replacement. Actor skeleton groups
 remain owned separately and fail visibly until that binding exists.
+Reference, result and quest script local lookup resolves the retained world
+instance's attached script, including actor templates, rather than rereading
+only SCRI on its base. Qualified local reads use the same resolver.
+Weapon hits and scripted actor deaths share the health/death inventory owner;
+an unknown killer remains nullable through delayed events and saves. Native
+combat presentation observes that shared transition and activates source bodies.
 Leveled actor templates retain a reference-owned random choice, source hash and
 selection level in the same snapshot. Appearance, inventory, script attachment,
 voice, factions and combat consume that selection. Reentry cannot reroll a

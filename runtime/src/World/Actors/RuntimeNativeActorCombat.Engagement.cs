@@ -130,7 +130,8 @@ internal sealed partial class RuntimeNativeActorCombat
     public override void _PhysicsProcess(double delta)
     {
         _enemyMuzzle?.Advance(delta);
-        if (_context is null || Dead || !_state.Enabled || _state.Unconscious) return;
+        if (Dead) { RestoreDeath(); return; }
+        if (_context is null || !_state.Enabled || _state.Unconscious) return;
         var player = _context.Player();
         if (!_context.Resident(_actor.GlobalPosition)) return;
         if (ReactingToHit && !_engagementPrepared && _state.Engagement is not null)
