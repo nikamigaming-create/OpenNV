@@ -187,6 +187,14 @@ remain C# state. Inventory expands LVLI into real item variants and retains its
 random state in saves. Godot supplies playback, input and completion callbacks.
 The original source program now advances the ordinary opening; a predicted
 stage edge cannot replace its execution.
+Multiple GameMode blocks share the SCPT invocation, including source order,
+locals, instruction budget and Return. Quest MenuMode blocks use the same clock;
+filtered blocks evaluate their current integer argument when reached. Reference
+and fallback-quest queries share a C# menu frame published by the native adapter.
+Missing filtered-menu identity remains divergence. Supported paused panels and
+source messages publish their codes; transient menu frames are not saved. The
+claimed opening path retains its legacy acceptance handoff, and title scripts
+still need a bootstrap command/player host before menu execution can be enabled.
 
 Numeric NVSE assignments and eval expressions use these same script state
 owners. Their logical operators retain numeric operand values independently

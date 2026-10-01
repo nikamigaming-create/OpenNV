@@ -19,7 +19,16 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private readonly InputSystem.RuntimeNativeScriptEvents _events;
     private readonly RuntimeNativeUiClock _uiClock;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
-    internal object State => new { scripts = Scripts.State, worldActive = _worldActive, message = _current, hud = _hud?.State, error = _error };
+    internal Func<IEnumerable<uint>?>? ActiveMenus { get; set; }
+    internal object State => new
+    {
+        scripts = Scripts.State,
+        worldActive = _worldActive,
+        message = _current,
+        hud = _hud?.State,
+        error = _error,
+        startupMenuExecution = _worldActive ? "world-host" : "unbound-bootstrap-host"
+    };
 
     internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
     internal void ActivateWorld(bool loaded)
@@ -65,9 +74,18 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     public override void _Process(double delta)
     {
         if (_error is not null) return;
-        if (!_worldActive || _layer is not null || GetTree().Paused)
+        if (!_worldActive)
         {
-            Scripts.Advance(delta, gameMode: false);
+            // The current title path has no player/source-command host yet.
+            // Keep its clocks without pretending those menu blocks executed.
+            Scripts.Advance(delta, gameMode: false, menus: [4], execute: false);
+            return;
+        }
+        if (_layer is not null || GetTree().Paused)
+        {
+            var menus = ActiveMenus?.Invoke()?.ToList();
+            if (_layer is not null) { menus ??= []; menus.AddRange([1001, 2]); }
+            Scripts.Advance(delta, gameMode: false, menus: menus);
             if (_current?.Request is { } request && !Scripts.MessageResults.IsPending(request))
             {
                 CloseMessage();

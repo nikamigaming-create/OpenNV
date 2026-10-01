@@ -126,11 +126,12 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
 internal sealed class FalloutQuestScripts
 {
     // Engine-created player reference; it is not a placed record in an ESM.
-    private sealed class Instance(FalloutPluginRecord quest, FalloutPluginRecord script, FalloutGameModeProgram program,
+    private sealed class Instance(FalloutPluginRecord quest, FalloutPluginRecord script, FalloutGameModeProgram program, FalloutGameModeProgram menuProgram,
         FalloutQuestScriptClock clock, Func<FalloutScriptBindings> createBindings, bool claimed)
     {
         internal readonly FalloutPluginRecord Quest = quest, Script = script;
         internal readonly FalloutGameModeProgram Program = program;
+        internal readonly FalloutGameModeProgram MenuProgram = menuProgram;
         internal readonly FalloutQuestScriptClock Clock = clock;
         private readonly Lazy<FalloutScriptBindings> _bindings = new(createBindings);
         internal FalloutScriptBindings Bindings => _bindings.Value;
@@ -153,6 +154,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutAuxiliaryStore Auxiliary { get; }
     internal FalloutScriptIniStore? Ini { get; }
     internal FalloutInputControls? Controls { get; }
+    internal FalloutScriptMenus Menus { get; }
     internal FalloutUiComponentStore? Ui => References?.Ui;
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
@@ -182,6 +184,7 @@ internal sealed class FalloutQuestScripts
         objectives = _quests.ObjectiveState,
         variables = _quests.VariableState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
+        menus = Menus.State,
         scheduling = "shared SCPT clocks; running quest admission and retained stop/restart clocks; exact retail MenuMode scheduling unverified",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
@@ -290,6 +293,7 @@ internal sealed class FalloutQuestScripts
         Auxiliary = references?.Auxiliary ?? storage?.Auxiliary ?? auxiliary ?? new();
         Ini = references?.Ini ?? storage?.Ini;
         Controls = references?.Controls ?? storage?.Controls;
+        Menus = references?.Menus ?? new();
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
@@ -311,27 +315,30 @@ internal sealed class FalloutQuestScripts
                 var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
                 if (source.Length != 1) throw new NotSupportedException("Quest script source is absent or ambiguous.");
                 var program = FalloutGameModeProgram.Read(source[0].Data.Span);
+                var menuProgram = FalloutGameModeProgram.Read(source[0].Data.Span, "MenuMode");
                 if (!_initialization.Definitions.TryGetValue(script.FormKey, out var definition))
                     throw new NotSupportedException("Attached quest script has no quest-clock declaration.");
                 if (!clocks.TryGetValue(script.FormKey, out var clock))
                     clocks.Add(script.FormKey, clock = new(defaultDelay, definition.ProcessingDelay, definition.InitialPhase));
-                _instances.Add(new(quest, script, program, clock, () => new(records, quest, script, script.ReadSubrecords()), claimed));
+                _instances.Add(new(quest, script, program, menuProgram, clock, () => new(records, quest, script, script.ReadSubrecords()), claimed));
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException)
             { _unbound[quest.FormKey] = error.Message; }
         }
     }
 
-    internal void Advance(double seconds, bool gameMode = true)
+    internal void Advance(double seconds, bool gameMode = true, IEnumerable<uint>? menus = null, bool execute = true)
     {
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
+        Menus.Publish(gameMode, menus);
         foreach (var instance in _instances)
         {
             if (instance.Claimed || instance.Error is not null) continue;
             try
             {
                 if (!_quests.IsRunning(instance.Quest.FormKey) || !instance.Clock.Advance((float)seconds)) continue;
-                if (gameMode) { Execute(instance, Host); ++instance.Executions; }
+                var program = gameMode ? instance.Program : instance.MenuProgram;
+                if (execute && (gameMode || program.HasStatements)) { Execute(instance, Host, program); ++instance.Executions; }
                 instance.Clock.CompleteInvocation();
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
@@ -366,8 +373,15 @@ internal sealed class FalloutQuestScripts
         var instance = _instances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) ??
             throw new NotSupportedException($"Menu event has no claimed quest script owner: {quest}");
         if (instance.Error is not null) throw new NotSupportedException(instance.Error);
-        var source = instance.Script.ReadSubrecords().Single(field => field.Signature == "SCTX");
-        Execute(instance, host, FalloutGameModeProgram.Read(source.Data.Span, "MenuMode", menu));
+        if (!_quests.IsRunning(quest)) return;
+        using var context = Menus.Enter(menu);
+        try { Execute(instance, host, instance.MenuProgram); }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
+        {
+            instance.Error = error.Message;
+            _unbound[quest] = error.Message;
+            throw;
+        }
     }
 
     private void Execute(Instance instance, FalloutQuestScriptHost? host, FalloutGameModeProgram? program = null)
@@ -473,6 +487,8 @@ internal sealed class FalloutQuestScripts
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && operation == "menumode")
+                return new([FalloutScriptArgumentKind.OptionalNumber], arguments => Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             if (parts.Length == 1 && FalloutInputControlCommands.IsQuery(operation))
                 return FalloutInputControlCommands.Query(operation, Controls ?? throw new NotSupportedException("Control queries have no profile input owner."));

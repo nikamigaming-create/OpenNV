@@ -83,6 +83,16 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;
     internal object? VigorState => _vigorEntry?.State;
+    internal IEnumerable<uint> ActiveMenus()
+    {
+        if (_nameEntry is not null) yield return 1051;
+        if (_raceSexEntry is not null) yield return 1036;
+        if (_vigorEntry is not null) yield return 1074;
+        if (_tagSkillEntry is not null) yield return 1048;
+        if (_traitEntry is not null) yield return 1084;
+        if (_recipeMenu is not null) yield return 1077;
+        if (_barterMenu is not null) yield return 1053;
+    }
 
     internal void Configure(
         FalloutOpeningStageTransitionGraph transitions,

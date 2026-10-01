@@ -144,10 +144,14 @@ dotnet run --project contract-tests/FalloutPluginRuntimeProbe --configuration Re
 
 Reports retain source plugin hashes, active load order, archives, resolved files,
 missing packages and script parser failures. JAM has 11 parser failures; TTW's
-current source audit has 9 among 1,263 entry-plugin scripts in its 18-plugin graph.
+current source audit has five among 1,263 entry-plugin scripts in its 18-plugin graph.
 These counts establish source admission only. The execution audit
 reports reached initialization state/errors through the ordinary script owners;
 its headless player and presentation boundaries remain explicit.
+An explicit TTWStart fixture now executes its MenuMode and GameMode blocks through
+the shared quest clock, queues the authored holding-cell request and publishes
+the source campaign-choice message. Cold restoration retains the pending choice.
+Configured native startup, Fallout 3 progression and train travel remain unverified.
 Keep reports and all mod,
 retail and derived files out of Git. Synthetic contracts cover dependency
 resolution, transitive failures, cycles, mixed engine detection, malformed

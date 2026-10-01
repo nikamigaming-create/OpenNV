@@ -549,6 +549,7 @@ public partial class RuntimeCoordinator
             _nativeReferences, NativeScriptEvents(), _nativeScriptStorage);
         scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
             throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
+        scripts.ActiveMenus = NativeActiveMenus;
         if (restore is not null) scripts.Scripts.Restore(restore);
         if (_nativeQuestScripts is not null)
         {

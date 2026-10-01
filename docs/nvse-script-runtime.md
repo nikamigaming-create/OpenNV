@@ -8,6 +8,17 @@ their presence in a selected folder does not execute them.
 
 ## Numeric expressions
 
+Quest GameMode and MenuMode blocks share a source-ordered invocation and SCPT
+clock. Multiple blocks retain locals and one instruction budget; Return ends the
+remaining invocation. [MenuMode filters](https://geckwiki.com/index.php/MenuMode)
+may be literal codes or current integer locals. Queries read the same published
+menu frame as reference and fallback-quest execution. Supported native paused
+panels and source messages supply codes; missing filtered identity fails visibly.
+Transient frames retire with the world and are not campaign snapshots. The
+claimed opening's menu handoff, title bootstrap and exact retail cadence remain
+separate boundaries. Parser 8 migration admits only newly supported multi-block
+owners while retaining existing clocks, variables and faults.
+
 The source interpreter executes numeric `let` assignments, the direct `=` macro,
 right-associative `:=` chains, `+=`, `-=`, `*=` and `/=`. Numeric `eval`
 conditions and parenthesized expressions use the same variable and registered

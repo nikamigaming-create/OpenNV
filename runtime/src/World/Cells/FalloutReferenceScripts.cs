@@ -291,6 +291,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && operation == "menumode")
+                return new([FalloutScriptArgumentKind.OptionalNumber], arguments => world.Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => parts.Length == 1 ? source : Reference(parts[0]);
             FalloutFormKey AuxiliaryTarget(IReadOnlyList<FalloutScriptArgument> arguments)
