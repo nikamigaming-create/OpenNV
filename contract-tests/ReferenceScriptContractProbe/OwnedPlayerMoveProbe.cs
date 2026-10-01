@@ -19,25 +19,18 @@ internal static class OwnedPlayerMoveProbe
         var defaultDelay = FalloutInstallationSettings.Read(content).Number("MAIN", "fQuestScriptDelayTime");
         var scripts = new FalloutQuestScripts(records, quests, claimed, new FalloutPlayerInventory(), globals,
             defaultProcessingDelay: defaultDelay, references: world);
-        var effects = new List<FalloutReferenceScriptEffect>();
-        var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effect =>
-        {
-            if (effect.Kind == FalloutReferenceEffectKind.Message)
-                scripts.ShowMessage(effect.Target!.Value, script.FormKey);
-            else if (effect.Kind != FalloutReferenceEffectKind.ReferenceEnable)
-                throw new NotSupportedException($"Owned movement fixture has no presentation for {effect.Kind}.");
-            effects.Add(effect);
-        }, GetButtonPressed: caller => caller == script.FormKey ? scripts.MessageResults.Take(caller) :
-            throw new InvalidDataException("Owned startup fixture received a different message caller."), Globals: globals));
-        scripts.Host = new((_, _) => throw new NotSupportedException("Owned startup fixture does not run campaign stage results."), _ => 0, executor.ExecuteProgram);
-        quests.SetRunning(quest.FormKey, true);
-        scripts.Advance(1, gameMode: false, menus: [4]);
+        var bootstrap = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.Read(content), quests, scripts, world,
+            (_, _, command, _) => throw new NotSupportedException($"Owned startup fixture has no presentation for {command}."),
+            effect => throw new NotSupportedException($"Owned startup fixture has no presentation for {effect.Kind}."), () => true, globals);
+        if (bootstrap.Quest.FormKey != quest.FormKey) throw new InvalidDataException("Selected startup quest differs from the requested owned fixture.");
+        bootstrap.Start();
+        bootstrap.Advance(1, [4]);
         var move = world.PlayerMoves.Next ?? throw new InvalidDataException("Owned startup source queued no movement.");
         if (move.Source != quest.FormKey) throw new InvalidDataException("Owned move has a different source owner.");
         var origin = world.Placement(move.Destination);
         var destination = world.ResolvePlayerMove(move, origin, 1);
         var after = JsonSerializer.Serialize(quests.Capture());
-        scripts.Advance(1, gameMode: false, menus: [4]);
+        bootstrap.Advance(1, [4]);
         if (!ReferenceEquals(move, world.PlayerMoves.Next) || JsonSerializer.Serialize(quests.Capture()) != after)
             throw new InvalidDataException("Owned startup repeated its movement prefix.");
         world.PlayerMoves.Complete(move);
@@ -62,7 +55,7 @@ internal static class OwnedPlayerMoveProbe
         {
             schema = "opennv-owned-player-move-audit/v1", source = quest.FormKey, script = script.FormKey,
             winner = quest.Plugin.Name, setup.ActivePlugins, move, destination,
-            followingStatements = "executed-through-shared-quest-and-reference-owners", effects = effects.Select(effect => effect.Kind),
+            followingStatements = "executed-through-shared-quest-and-reference-owners", startup = bootstrap.State,
             menuScheduling = "shared-quest-clock-with-owned-default-and-authored-delay", campaignChoice = new { choice.Form, buttons = choice.Buttons.Count },
             prefixNotRepeated = true, cold = true, recording = false,
             boundary = "explicit-owned-MenuMode-fixture; ordinary-campaign-start-travel-and-presentation-unverified"

@@ -26,7 +26,29 @@ internal sealed class FalloutInstallationSettings
         settings.Add(Path.Combine(user, "Fallout.ini"), false);
         settings.Add(Path.Combine(user, "FalloutPrefs.ini"), false);
         settings.Add(Path.Combine(user, "FalloutCustom.ini"), false);
+        settings.Apply(source.Settings);
         return settings;
+    }
+
+    internal static FalloutInstallationSettings ReadLayers(IEnumerable<string> paths, IEnumerable<FalloutInstallationSetting>? profile = null)
+    {
+        var settings = new FalloutInstallationSettings();
+        foreach (var path in paths) settings.Add(path, true);
+        settings._floatDefaults = new(() => new Dictionary<string, float>());
+        settings.Apply(profile ?? []);
+        return settings;
+    }
+
+    private void Apply(IEnumerable<FalloutInstallationSetting> profile)
+    {
+        foreach (var setting in profile)
+        {
+            if (string.IsNullOrWhiteSpace(setting.Section) || string.IsNullOrWhiteSpace(setting.Key) || setting.Value is null ||
+                setting.Section.IndexOfAny(['/', '\r', '\n']) >= 0 || setting.Key.IndexOfAny(['/', '=', '\r', '\n']) >= 0 ||
+                setting.Value.IndexOfAny(['\r', '\n']) >= 0)
+                throw new InvalidDataException("Profile installation setting has an invalid identity or value.");
+            _values[setting.Section + "/" + setting.Key] = setting.Value;
+        }
     }
 
     internal string Require(string section, string key) => _values.TryGetValue(section + "/" + key, out var value)

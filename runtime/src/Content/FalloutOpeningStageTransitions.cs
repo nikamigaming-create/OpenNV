@@ -252,6 +252,16 @@ internal static partial class FalloutOpeningStageTransitionResolver
             foreach (var stage in quest.Value.Values.OrderBy(value => value.Stage))
             {
                 var code = CodeLines(stage.Source).ToArray();
+                if (executeGameMode)
+                {
+                    // Executed result programs choose their own conditional
+                    // destinations. The graph only retains presentation waits.
+                    var blockers = ReadBlockers(code);
+                    if (blockers.Count != 0)
+                        result.Add(new(blockers.Count == 1 && blockers[0] == "sayto" ? "dialogue-wait" : "script-wait",
+                            stage.QuestEditorId, stage.Stage, stage.QuestEditorId, stage.Stage, null, blockers));
+                    continue;
+                }
                 var direct = code.Select(line => ParseSetStage(line, stage.QuestEditorId))
                     .Where(value => value is not null)
                     .Select(value => value!.Value)
@@ -272,14 +282,6 @@ internal static partial class FalloutOpeningStageTransitionResolver
                         ReadBlockers(code)));
                 }
 
-                if (executeGameMode)
-                {
-                    var blockers = ReadBlockers(code);
-                    if (direct.Length == 0 && blockers.Count != 0)
-                        result.Add(new(blockers.Count == 1 && blockers[0] == "sayto" ? "dialogue-wait" : "script-wait",
-                            stage.QuestEditorId, stage.Stage, stage.QuestEditorId, stage.Stage, null, blockers));
-                    continue;
-                }
                 var timerTarget = ReadTimerTarget(scriptSource, stage.QuestEditorId, stage.Stage);
                 if (timerTarget is { } target)
                 {

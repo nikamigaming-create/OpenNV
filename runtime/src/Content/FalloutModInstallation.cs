@@ -41,7 +41,7 @@ internal sealed record FalloutModInstallation(
 
     internal RuntimeLiveContentSource OpenSource() => RuntimeLiveContentSource.Open(BaseInstallation.InstallRoot,
         RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(),
-        ActivePlugins);
+        ActivePlugins, settings: FalloutModCatalog.Get(Id).Settings);
 
     internal IReadOnlyList<FalloutModDependency> MissingDependencies =>
         Dependencies.Where(dependency => dependency.SourcePath is null).ToArray();

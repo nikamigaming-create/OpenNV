@@ -79,21 +79,21 @@ internal partial class RuntimeNativeOpeningStageDriver
                 EvaluateActorPackages(target, true);
                 break;
             case "getplayername" when parts.Length == 1 && arguments.Count == 0:
-                SynchronizeNameEntry();
+                SynchronizeNameEntry(sourceRequested: true);
                 if (_nameEntry is null) throw new NotSupportedException("Name input has no active menu owner.");
                 break;
             case "showracemenu" when parts.Length == 1 && arguments.Count == 0:
-                SynchronizeRaceSexEntry();
+                SynchronizeRaceSexEntry(sourceRequested: true);
                 if (_raceSexEntry is null) throw new NotSupportedException("Race input has no active menu owner.");
                 break;
             case "settagskills" when parts.Length == 1 && arguments.Count == 2:
                 if (arguments[0] != _tagSkillContract.RequiredCount.ToString(System.Globalization.CultureInfo.InvariantCulture) || arguments[1] != "1")
                     throw new NotSupportedException("Tag menu parameters have no owned creation contract.");
-                SynchronizeTagSkillEntry();
+                SynchronizeTagSkillEntry(sourceRequested: true);
                 if (_tagSkillEntry is null) throw new NotSupportedException("Tag input has no active menu owner.");
                 break;
             case "showtraitmenu" when parts.Length == 1 && arguments.Count == 0:
-                SynchronizeTraitEntry();
+                SynchronizeTraitEntry(sourceRequested: true);
                 if (_traitEntry is null) throw new NotSupportedException("Trait input has no active menu owner.");
                 break;
             case "showrecipemenu" when arguments.Count == 1 && (parts.Length == 1 || _pluginStack.RuntimeFormId(target) == 0x14):
@@ -166,7 +166,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var rotation = transform.Basis.GetRotationQuaternion().Normalized();
         var complete = _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
         var state = FalloutNativeCampaignSave.Capture(_saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
-            _vigorContract, _special, _tagSkillContract, _tagSkills, _traitFarewellContract, _traits, _machine.ControlState,
+            _vigorContract, _special, _tagSkillContract, _tagSkills, _traitFarewellContract, _traits, PlayerControls,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians);

@@ -73,6 +73,6 @@ public partial class RuntimeCoordinator
     private void ConfigureSelectedContent(string baseRoot, string campaign)
     {
         var mod = FalloutModStackSelection.ReadOptions(_options)?.Resolve(baseRoot);
-        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins);
+        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins, mod?.Settings);
     }
 }

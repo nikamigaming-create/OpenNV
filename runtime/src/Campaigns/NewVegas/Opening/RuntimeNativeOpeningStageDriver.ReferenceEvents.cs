@@ -127,11 +127,10 @@ internal partial class RuntimeNativeOpeningStageDriver
             .Request(speaker, package.Target, package.Topic, completed);
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?
         _scriptHost.PlayerActorValue(name) : _scripts.References!.ActorValue(actor, name);
-    internal bool IsPlayerTagSkill(string name) => _tagSkills.Any(skill => SkillName(skill.EditorId).Equals(name, StringComparison.OrdinalIgnoreCase));
+    internal bool IsPlayerTagSkill(string name) => _tagSkills.Any(skill => FalloutPlayerSkills.SkillName(_pluginStack, skill).Equals(name, StringComparison.OrdinalIgnoreCase));
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);
     internal float PlayerCombatValue(int value) => _playerSkills.Value(value);
     internal IReadOnlyList<FalloutPerkEntry> PlayerPerkEntries => _playerSkills.PerkEntries;
-    private static string SkillName(string editorId) => FalloutPlayerSkills.SkillName(editorId);
     private int SourcePlayerLevel
     {
         get
@@ -176,7 +175,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                     _inventory.Add(_pluginStack, effect.Target.Value, 1, SourcePlayerLevel, silent: true, _globals);
                 break;
             case FalloutReferenceEffectKind.SayTo:
-                _speechStage = $"{_machine.QuestEditorId}:{_machine.Stage}";
+                _speechStage = $"{QuestEditorId}:{Stage}";
                 _speech!.SayTo(effect.Target!.Value, effect.Argument!.Value, effect.Topic!.Value);
                 break;
             case FalloutReferenceEffectKind.HeadTracking:
@@ -213,8 +212,10 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scriptHost.PrepareSetStage(effect.Target ?? throw new InvalidDataException("SetStage target is absent."), effect.Stage)();
                 break;
             case FalloutReferenceEffectKind.PlayerControls:
-                _machine.ApplyControls(new(effect.Enable, effect.Controls ?? throw new InvalidDataException("Player controls are absent.")));
-                _player.ApplySourceControls(_machine.ControlState);
+                var controls = new FalloutPlayerControlCommand(effect.Enable, effect.Controls ?? throw new InvalidDataException("Player controls are absent."));
+                if (_machine is not null) _machine.ApplyControls(controls);
+                else _sourceControls = controls.Apply(_sourceControls);
+                _player.ApplySourceControls(PlayerControls);
                 break;
             case FalloutReferenceEffectKind.Message:
                 var messageOwner = _pluginStack.GetEffective(effect.Source);

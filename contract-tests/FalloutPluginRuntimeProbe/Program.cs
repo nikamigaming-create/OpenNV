@@ -1011,7 +1011,11 @@ try
                 Subrecord("BTXT", LayerHeader(0x160, 0, 0xffff)),
                 Subrecord("BTXT", LayerHeader(0x160, 1, 0xffff)),
                 Subrecord("BTXT", LayerHeader(0x160, 2, 0xffff)))))))));
-    using var cellStack = FalloutPluginStack.Load(fixtureRoot, ["Cell.esm"]);
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "SkillLabel.esp"), Combine(
+        Record("TES4", 0, 0, Subrecord("MAST", ZString("Cell.esm"))),
+        Record("AVIF", 0x19b, 0, Combine(Subrecord("EDID", ZString("RenamedSurvivalIdentity")),
+            Subrecord("FULL", ZString("Survival")), Subrecord("ANAM", ZString("Mod short name"))))));
+    using var cellStack = FalloutPluginStack.Load(fixtureRoot, ["Cell.esm", "SkillLabel.esp"]);
     var syntheticCellForVigor = FalloutCellSceneReader.Read(
         cellStack,
         new FalloutFormKey("Cell.esm", 0x100));
@@ -1057,7 +1061,8 @@ try
         syntheticTagSkills.Skills.Count == 13 &&
         syntheticTagSkills.RequiredCount == 3 &&
         syntheticTagSkills.Skills.Any(value =>
-            value.EditorId == "AVThrowing" && value.DisplayName == "Survival"),
+            value.EditorId == "RenamedSurvivalIdentity" && value.DisplayName == "Survival" &&
+            FalloutPlayerSkills.SkillName(cellStack, value) == "Survival"),
         "Live SetTagSkills/AVIF contract resolution failed.");
     var syntheticTraitFarewell = FalloutNativeTraitFarewellResolver.Resolve(
         cellStack,

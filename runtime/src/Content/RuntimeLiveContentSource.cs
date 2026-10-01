@@ -4,6 +4,8 @@ using System.Text;
 
 namespace OpenNV.Runtime.Content;
 
+internal sealed record FalloutInstallationSetting(string Section, string Key, string Value);
+
 /// <summary>
 /// Reads the selected installation directly. It never writes or restores a
 /// derived retail-content inventory.
@@ -34,10 +36,11 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         string edition,
         string engineBuild,
         string contentVersion,
-        FalloutContentLayers layers)
+        FalloutContentLayers layers, IReadOnlyList<FalloutInstallationSetting>? settings)
     {
         ContentRoot = contentRoot;
         _layers = layers;
+        Settings = settings?.ToArray() ?? [];
         PluginSources = pluginSources;
         _archivePaths = archivePaths;
         Game = game;
@@ -81,6 +84,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
     internal string Campaign { get; }
     internal string ContentRoot { get; }
     internal IReadOnlyList<string> ContentRoots => _layers.Roots;
+    internal IReadOnlyList<FalloutInstallationSetting> Settings { get; }
     internal Task ArchiveWarmup { get; }
     internal IReadOnlyList<string> ArchivePaths => _archivePaths;
     // Opt-in diagnostics. Ordinary reads do not hash, copy or journal payloads.
@@ -116,18 +120,19 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         return (file, extent.Offset, extent.Bytes, extent.Compressed);
     }
     internal static void Configure(string selectedRoot, string expectedCampaign,
-        IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null)
+        IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
+        IReadOnlyList<FalloutInstallationSetting>? settings = null)
     {
         Current?.Dispose();
         Current = null;
-        Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins);
+        Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, settings: settings);
     }
 
     // Donor libraries have their own lifetime. Opening another owned game must
     // not dispose the active campaign or change its texture resolution.
     internal static RuntimeLiveContentSource Open(string selectedRoot, string expectedCampaign,
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
-        string? archiveIniPath = null)
+        string? archiveIniPath = null, IReadOnlyList<FalloutInstallationSetting>? settings = null)
     {
         var installation = NativeGameInstallation.Detect(selectedRoot);
         if (installation.Game is not (NativeGame.FalloutNewVegas or NativeGame.Fallout3))
@@ -180,7 +185,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
             edition,
             build,
             build,
-            layers);
+            layers, settings);
     }
 
     internal static void Clear()

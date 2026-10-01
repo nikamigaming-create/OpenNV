@@ -20,6 +20,16 @@ internal static class PlayerMoveContracts
             File.WriteAllBytes(Path.Combine(directory, "Moves.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("ACTI", 0x700),
+                Record("QUST", 0x610, Field("EDID", Text("ConfiguredStartup")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x510u))),
+                Record("SCPT", 0x510, Field("SCHR", LocalHeader(1)), Local(1, "prefix"),
+                    Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCRO", BitConverter.GetBytes(0x901u)),
+                    Field("SCTX", Text("short prefix\nbegin MenuMode\nif prefix == 0\nDisablePlayerControls 1 0 0 0 0\nPlayer.MoveTo ArrivalREF\nset prefix to 1\nendif\nend"))),
+                Record("QUST", 0x620, Field("EDID", Text("StageStartup")), Field("DATA", new byte[8]),
+                    Field("INDX", new byte[2]), Field("QSDT", [0]), Field("SCRO", BitConverter.GetBytes(0x14u)),
+                    Field("SCRO", BitConverter.GetBytes(0x901u)), Field("SCTX", Text("BlockingPresentation\nPlayer.MoveTo ArrivalREF"))),
+                Record("QUST", 0x630, Field("EDID", Text("FailedStartup")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x530u))),
+                Record("SCPT", 0x530, Field("SCHR", LocalHeader(1)), Local(1, "prefix"),
+                    Field("SCTX", Text("short prefix\nbegin MenuMode\nset prefix to prefix + 1\nUnboundOperation\nend"))),
                 Record("QUST", 0x600, Field("EDID", Text("MoveQuest")), Field("DATA", [1, 0, 0, 0, 0, 0, 0, 0]),
                     Field("SCRI", BitConverter.GetBytes(0x500u))),
                 Record("SCPT", 0x500, Field("SCHR", header), Local(1, "target"), Local(2, "prefix"),
@@ -28,6 +38,7 @@ internal static class PlayerMoveContracts
                     Field("SCTX", Text(source))), Cell(0x800, 0x900, "OriginREF", [1, 2, 3, 0, 0, 0]),
                 Cell(0x801, 0x901, "ArrivalREF", [10, 20, 30, .1f, .2f, .3f])));
             using var records = FalloutPluginStack.Load(directory, ["Moves.esm"]);
+            BootstrapContracts(records, directory);
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
             var executor = new FalloutReferenceScripts(records, world, quests,
@@ -53,7 +64,7 @@ internal static class PlayerMoveContracts
                 defaultProcessingDelay: .01f, references: world)
             { Host = new((_, _) => throw new InvalidOperationException("Unexpected stage."), _ => 0, executor.ExecuteProgram) };
             fallback.Advance(1);
-            Require(fallback.Capture().Instances.Single().Error is null && quests.Variable(Key(0x600), 2) == 2 &&
+            Require(fallback.Capture().Instances.Single(instance => instance.Quest == Key(0x600)).Error is null && quests.Variable(Key(0x600), 2) == 2 &&
                 world.PlayerMoves.Next?.Destination == Key(0x901), "Quest execution did not use the shared player movement owner.");
             world.PlayerMoves.Complete(world.PlayerMoves.Next!);
             var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
@@ -85,6 +96,62 @@ internal static class PlayerMoveContracts
     }
 
     private static FalloutFormKey Key(uint id) => new("Moves.esm", id);
+    private static byte[] LocalHeader(uint count)
+    {
+        var header = new byte[20]; header[16] = 1; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), count); return header;
+    }
+
+    private static void BootstrapContracts(FalloutPluginStack records, string directory)
+    {
+        var ini = Path.Combine(directory, "owned.ini");
+        const string owned = "[General]\nSCharGenQuest=00000620\nSIntroMovie=owned-intro.bik\n";
+        File.WriteAllText(ini, owned);
+        var settings = FalloutInstallationSettings.ReadLayers([ini], [new("General", "SCharGenQuest", "00000610")]);
+        Require(FalloutNewGameBootstrap.StartingQuest(records, settings).FormKey == Key(0x610) &&
+            FalloutNewGameBootstrap.StartingQuest(records, FalloutInstallationSettings.ReadLayers([ini])).FormKey == Key(0x620) &&
+            settings.Require("General", "SIntroMovie") == "owned-intro.bik" && File.ReadAllText(ini) == owned,
+            "Selected startup settings changed another profile or the owned INI.");
+        Reject(() => FalloutNewGameBootstrap.StartingQuest(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000700")])));
+        Reject(() => FalloutNewGameBootstrap.StartingQuest(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "bad form")])));
+        using var world = new FalloutReferenceWorld(records);
+        var quests = new FalloutQuestState(records);
+        var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: world);
+        var bootstrap = new FalloutNewGameBootstrap(records, settings, quests, scripts, world,
+            (_, _, _, _) => throw new NotSupportedException("Unexpected startup command."),
+            _ => throw new NotSupportedException("Unexpected startup effect."), () => true);
+        Require(!quests.IsRunning(Key(0x610)), "Synthetic startup was already running.");
+        bootstrap.Start(); Require(quests.IsRunning(Key(0x610)) && bootstrap.Placement() is null, "Startup did not activate its configured source quest.");
+        bootstrap.Advance(0, [4]); var move = world.PlayerMoves.Next!;
+        Require(bootstrap.Placement()?.Cell == Key(0x801) && quests.Variable(Key(0x610), 1) == 1 &&
+            !bootstrap.Controls.Movement && bootstrap.Controls.Looking, "Startup lost source destination, following prefix or player controls.");
+        bootstrap.Advance(1, [4]); Require(ReferenceEquals(move, world.PlayerMoves.Next), "Startup repeated an entered source prefix.");
+        world.PlayerMoves.Complete(move);
+        using var stageWorld = new FalloutReferenceWorld(records);
+        var stageQuests = new FalloutQuestState(records);
+        var stageScripts = new FalloutQuestScripts(records, stageQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: stageWorld);
+        var blocked = false; var calls = 0;
+        var stage = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([ini]), stageQuests, stageScripts, stageWorld,
+            (_, _, command, _) => { if (command != "BlockingPresentation") throw new NotSupportedException(command); blocked = true; ++calls; },
+            _ => throw new NotSupportedException("Unexpected startup effect."), () => !blocked);
+        stage.Start(); Require(blocked && calls == 1 && stage.Placement() is null && stageQuests.StageDone(Key(0x620), 0), "Stage zero skipped its blocking source presentation.");
+        stage.Advance(0, [4]); Require(calls == 1 && stage.Placement() is null, "Blocked stage replayed or advanced its prefix.");
+        blocked = false; stage.Advance(0, [4]); Require(calls == 1 && stage.Placement()?.Cell == Key(0x801), "Stage zero did not resume its source continuation.");
+        stageWorld.PlayerMoves.Complete(stageWorld.PlayerMoves.Next!);
+        var failed = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000630")]),
+            stageQuests, stageScripts, stageWorld, (_, _, _, _) => throw new NotSupportedException("Reached startup command."), _ => { }, () => true);
+        failed.Start(); Reject(() => failed.Advance(0, [4])); Reject(() => failed.Advance(1, [4]));
+        Require(stageQuests.Variable(Key(0x630), 1) == 1 && !stageWorld.PlayerMoves.Pending, "Failed startup replayed its mutation or invented a destination.");
+        var controlGraph = new FalloutOpeningControlGraph(new Dictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>>
+        {
+            ["FailedStartup"] = new Dictionary<short, FalloutOpeningControlStage>
+            {
+                [0] = new(Key(0x630), "FailedStartup", 0, "if 1\nSetStage FailedStartup 1\nelse\nSetStage FailedStartup 2\nendif", [])
+            }
+        });
+        Require(FalloutOpeningStageTransitionResolver.Resolve(records, controlGraph, executeGameMode: true).Transitions.Count == 0,
+            "Executed source stages were rejected or predicted from competing conditional destinations.");
+        Console.WriteLine("OPENNV_NEW_GAME_BOOTSTRAP_CONTRACT_PASS configuredQuest=true profileIsolation=true ownedIniReadOnly=true sourcePlacement=true controls=true stageZeroContinuation=true failurePrefix=true parity=unverified");
+    }
     private static byte[] Cell(uint id, uint reference, string name, float[] transform)
     {
         var body = Record("REFR", reference, Field("EDID", Text(name)), Field("NAME", BitConverter.GetBytes(0x700u)),

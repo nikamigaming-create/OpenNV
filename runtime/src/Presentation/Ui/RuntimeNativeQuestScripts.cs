@@ -20,6 +20,8 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private readonly RuntimeNativeUiClock _uiClock;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal Func<IEnumerable<uint>?>? ActiveMenus { get; set; }
+    internal FalloutNewGameBootstrap? Bootstrap { get; set; }
+    internal string? StartupError => _error;
     internal object State => new
     {
         scripts = Scripts.State,
@@ -27,7 +29,8 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         message = _current,
         hud = _hud?.State,
         error = _error,
-        startupMenuExecution = _worldActive ? "world-host" : "unbound-bootstrap-host"
+        startupMenuExecution = _worldActive ? "world-host" : Bootstrap is null ? "unbound-bootstrap-host" : "source-bootstrap-host",
+        bootstrap = Bootstrap?.State
     };
 
     internal FalloutQuestScriptsSnapshot Capture() => Scripts.Capture(_current);
@@ -76,6 +79,16 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         if (_error is not null) return;
         if (!_worldActive)
         {
+            if (Bootstrap is not null)
+            {
+                try { Bootstrap.Advance(delta, [4, 1007, 2]); }
+                catch (Exception error)
+                {
+                    _error = error.Message;
+                    GD.PushError($"OPENNV_NEW_GAME_BOOTSTRAP_FAIL {error}");
+                }
+                return;
+            }
             // The current title path has no player/source-command host yet.
             // Keep its clocks without pretending those menu blocks executed.
             Scripts.Advance(delta, gameMode: false, menus: [4], execute: false);

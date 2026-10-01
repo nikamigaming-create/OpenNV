@@ -248,7 +248,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             if (_state.Selection == 2)
                 for (var index = 0; index < rows.Count; index++)
                 {
-                    var value = _actorValue?.Invoke(FalloutPlayerSkills.SkillName(_skills[index + _offset].EditorId));
+                    var value = _actorValue?.Invoke(FalloutPlayerSkills.SkillName(_records, _skills[index + _offset]));
                     if (value is { } total) _tiles.Bind(rows[index], "user1", total);
                     _tiles.BindText(rows[index], "user1", value?.ToString("0", CultureInfo.InvariantCulture) ?? "--");
                 }

@@ -11,7 +11,11 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver : Node
 {
     private RuntimeNativePlayer _player = null!;
-    private FalloutOpeningStageMachine _machine = null!;
+    private FalloutOpeningStageMachine? _machine;
+    private FalloutOpeningStageTransitionGraph _transitions = null!;
+    private string _sourceQuestEditorId = string.Empty;
+    private FalloutPlayerControlState _sourceControls = FalloutPlayerControlState.AllEnabled;
+    private bool _configured;
     private FalloutOpeningInventoryGrant _openingGrant = null!;
     private FalloutNativeRaceSexContract _raceSexContract = null!;
     private FalloutNativeVigorContract _vigorContract = null!;
@@ -57,10 +61,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
-    internal string QuestEditorId => _machine.QuestEditorId;
-    internal short Stage => _machine.Stage;
-    internal float? TimerSeconds => _machine.TimerSeconds;
-    internal IReadOnlyCollection<string> PendingBlockers => _machine.PendingBlockers;
+    internal string QuestEditorId => _machine?.QuestEditorId ?? _sourceQuestEditorId;
+    internal short Stage => _machine?.Stage ?? _quests.Stage(FalloutDialogueTopic.Find(_pluginStack, "QUST", _sourceQuestEditorId).FormKey);
+    internal float? TimerSeconds => _machine?.TimerSeconds;
+    internal IReadOnlyCollection<string> PendingBlockers => _machine?.PendingBlockers ?? [];
+    private FalloutPlayerControlState PlayerControls => _machine?.ControlState ?? _sourceControls;
     internal FalloutFormKey ActiveCell => _activeCell;
     internal void EnterWorldCell(FalloutFormKey cell) => _activeCell = cell;
     internal void RequestWorldSave() => _saveRequested = true;
@@ -119,10 +124,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutSkyLightingState? skyLighting,
         Func<RuntimeNativeImageSpace> imageSpacePresenter,
         string initialQuestEditorId,
-        short initialStage)
+        short initialStage, FalloutPlayerControlState? initialControls = null)
     {
-        if (_machine is not null)
+        if (_configured)
             throw new InvalidOperationException("Native opening stage driver was already configured.");
+        _configured = true;
         _player = player ?? throw new ArgumentNullException(nameof(player));
         _openingGrant = openingGrant ?? throw new ArgumentNullException(nameof(openingGrant));
         _raceSexContract = raceSexContract ?? throw new ArgumentNullException(nameof(raceSexContract));
@@ -132,6 +138,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new ArgumentNullException(nameof(traitFarewellContract));
         _pluginStack = pluginStack ?? throw new ArgumentNullException(nameof(pluginStack));
         _controls = controls;
+        _transitions = new(transitions.Transitions.Where(transition => transition.Kind != "stage-script" || transition.Blockers.Count != 0)
+            .Select(transition => transition.Kind == "stage-script" ? transition with { Kind = "script-wait" } : transition).ToArray());
+        _sourceQuestEditorId = restore?.State.QuestEditorId ?? initialQuestEditorId;
+        _sourceControls = restore is null ? initialControls ?? FalloutPlayerControlState.AllEnabled : FalloutNativeCampaignSave.RestorePlayerControls(restore.State);
         _savePath = Path.GetFullPath(savePath ?? throw new ArgumentNullException(nameof(savePath)));
         _saveCompatibilityId = string.IsNullOrWhiteSpace(saveCompatibilityId)
             ? throw new ArgumentException(
@@ -164,10 +174,19 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return () =>
             {
                 if (source is null)
+                {
+                    // Background quests may also enter stages. Keep the configured
+                    // startup identity; the shared quest state owns every stage.
                     (_stageResults ?? throw new InvalidOperationException("Quest stage result owner is absent.")).Enter(quest, stage);
+                }
                 else
                 {
-                    _machine!.EnterScriptStage(source.QuestEditorId, stage);
+                    if (_machine is null)
+                    {
+                        _restoringEnteredStage = false;
+                        _machine = new(_transitions, _controls, source.QuestEditorId, stage, _sourceControls);
+                    }
+                    else _machine.EnterScriptStage(source.QuestEditorId, stage);
                     Synchronize();
                 }
             };
@@ -199,21 +218,15 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _skyLighting = skyLighting;
         _restoringEnteredStage = restore is not null;
         _imageSpacePresenter = imageSpacePresenter;
-        _machine = new FalloutOpeningStageMachine(
-            new(transitions.Transitions.Where(transition => transition.Kind != "stage-script" || transition.Blockers.Count != 0)
-                .Select(transition => transition.Kind == "stage-script" ? transition with { Kind = "script-wait" } : transition).ToArray()),
-            controls,
-            restore?.State.QuestEditorId ?? initialQuestEditorId,
-            restore?.State.Stage ?? initialStage,
-            restore is null
-                ? null
-                : FalloutNativeCampaignSave.RestorePlayerControls(restore.State));
+        if (controls.Quests.TryGetValue(_sourceQuestEditorId, out var initialStages) && initialStages.ContainsKey(restore?.State.Stage ?? initialStage))
+            _machine = new(_transitions, controls, _sourceQuestEditorId, restore?.State.Stage ?? initialStage, _sourceControls);
         Name = "NativeOpeningStageDriver";
         Synchronize();
     }
 
     internal void CompleteBlocker(string blocker)
     {
+        if (_machine is null || !_machine.PendingBlockers.Contains(blocker, StringComparer.OrdinalIgnoreCase)) return;
         var beforeQuest = _machine.QuestEditorId;
         var beforeStage = _machine.Stage;
         var changed = _machine.CompleteBlocker(blocker);
@@ -235,7 +248,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _vigorEntry.Configure(_specialMenuContract, _special, _pluginStack, _imageSpacePresenter());
         _player.SetModalInput(true);
         GD.Print(
-            $"OPENNV_NATIVE_VIGOR_OPEN stage={_machine.Stage} total={total} " +
+            $"OPENNV_NATIVE_VIGOR_OPEN stage={Stage} total={total} " +
             $"reference={_vigorContract.TesterReference.FormKey} " +
             "source=live-player-vigor-scripts presentation=owned-love-tester-menu parity=unverified");
     }
@@ -259,7 +272,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             GD.PushError($"OPENNV_NATIVE_PLAYER_PACKAGE_DIVERGENCE: {error.Message}");
             return;
         }
-        if (!_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null &&
+        if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null &&
             _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
@@ -278,7 +291,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _speech = new RuntimeNativeSpeech();
         _speech.InfoCompleted += _ =>
         {
-            if (!_speech.Active && _speechStage == $"{_machine.QuestEditorId}:{_machine.Stage}" &&
+            if (_machine is not null && !_speech.Active && _speechStage == $"{_machine.QuestEditorId}:{_machine.Stage}" &&
                 _machine.PendingBlockers.Contains("sayto", StringComparer.OrdinalIgnoreCase))
             {
                 _machine.CompleteDialogueSpeech();
@@ -305,7 +318,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         ApplyEnteredActorCommands();
         if (ExecutionError is not null) return;
-        _player.ApplySourceControls(_machine.ControlState);
+        _player.ApplySourceControls(PlayerControls);
+        if (_machine is null) return;
         SynchronizeNameEntry();
         SynchronizeRaceSexEntry();
         SynchronizeTagSkillEntry();
@@ -327,7 +341,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void ApplyEnteredActorCommands()
     {
-        if (!IsInsideTree() || ExecutionError is not null) return;
+        if (!IsInsideTree() || ExecutionError is not null || _machine is null) return;
         try
         {
             while (_machine.TryTakeEnteredStage(out var stage))
@@ -380,10 +394,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         return state;
     }
 
-    private void SynchronizeNameEntry()
+    private void SynchronizeNameEntry(bool sourceRequested = false)
     {
-        var pending = _machine.PendingBlockers.Contains(
-            "getplayername", StringComparer.OrdinalIgnoreCase);
+        var pending = sourceRequested || PendingBlockers.Contains("getplayername", StringComparer.OrdinalIgnoreCase);
         if (!pending)
         {
             if (_nameEntry is not null)
@@ -400,7 +413,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _nameEntry.Accepted += AcceptPlayerName;
         _nameEntry.Configure(_playerName, _pluginStack);
         GD.Print(
-            $"OPENNV_NATIVE_NAME_ENTRY_OPEN quest={_machine.QuestEditorId} stage={_machine.Stage} " +
+            $"OPENNV_NATIVE_NAME_ENTRY_OPEN quest={QuestEditorId} stage={Stage} " +
             "source=getplayername presentation=owned-xml-font-texture-atlas parity=unmeasured");
     }
 
@@ -422,10 +435,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         CompleteBlocker("getplayername");
     }
 
-    private void SynchronizeRaceSexEntry()
+    private void SynchronizeRaceSexEntry(bool sourceRequested = false)
     {
-        var pending = _machine.PendingBlockers.Contains(
-            "showracemenu", StringComparer.OrdinalIgnoreCase);
+        var pending = sourceRequested || PendingBlockers.Contains("showracemenu", StringComparer.OrdinalIgnoreCase);
         if (!pending)
         {
             if (_raceSexEntry is not null)
@@ -443,7 +455,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _raceSexEntry.Failed += error => ExecutionError = error.Message;
         _raceSexEntry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter());
         GD.Print(
-            $"OPENNV_NATIVE_RACESEX_OPEN quest={_machine.QuestEditorId} stage={_machine.Stage} " +
+            $"OPENNV_NATIVE_RACESEX_OPEN quest={QuestEditorId} stage={Stage} " +
             $"race={_character.RaceEditorId}/{_character.RaceRuntimeFormId:x8} " +
             "source=player-race-hair-eyes-ctl presentation=owned-rendered-menu parity=unverified");
     }
@@ -470,7 +482,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         CompleteBlocker("showracemenu");
         // The existing modal handoff delivers the source MenuMode event here.
         // Exact scheduling while the menu is open remains a separate owner.
-        _scripts.ExecuteClaimedMenu(_controls.Stage(QuestEditorId, Stage).Quest, 1036, _scriptHost);
+        if (_machine is not null) _scripts.ExecuteClaimedMenu(_controls.Stage(QuestEditorId, Stage).Quest, 1036, _scriptHost);
     }
 
     private void AcceptSpecial(FalloutNativeSpecialState state)
@@ -499,15 +511,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             Input.MouseMode = Input.MouseModeEnum.Captured;
         GD.Print(
             $"OPENNV_NATIVE_SPECIAL_ACCEPTED total={_special.Values.Sum()} " +
-            $"values={string.Join(',', _special.Values)} stage={_machine.Stage} " +
+            $"values={string.Join(',', _special.Values)} stage={Stage} " +
             "source=configured-player-input-live-vigor-contract");
         Synchronize();
     }
 
-    private void SynchronizeTagSkillEntry()
+    private void SynchronizeTagSkillEntry(bool sourceRequested = false)
     {
-        var pending = _machine.PendingBlockers.Contains(
-            "settagskills", StringComparer.OrdinalIgnoreCase);
+        var pending = sourceRequested || PendingBlockers.Contains("settagskills", StringComparer.OrdinalIgnoreCase);
         if (!pending)
         {
             if (_tagSkillEntry is not null)
@@ -525,7 +536,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _tagSkillEntry.Configure(_tagSkillContract, _tagSkills);
         _player.SetModalInput(true);
         GD.Print(
-            $"OPENNV_NATIVE_TAG_SKILLS_OPEN stage={_machine.Stage} " +
+            $"OPENNV_NATIVE_TAG_SKILLS_OPEN stage={Stage} " +
             $"choices={_tagSkillContract.Skills.Count} required={_tagSkillContract.RequiredCount} " +
             "source=live-settagskills-avif presentation=first-party-functional");
     }
@@ -550,10 +561,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         CompleteBlocker("settagskills");
     }
 
-    private void SynchronizeTraitEntry()
+    private void SynchronizeTraitEntry(bool sourceRequested = false)
     {
-        var pending = _machine.PendingBlockers.Contains(
-            "showtraitmenu", StringComparer.OrdinalIgnoreCase);
+        var pending = sourceRequested || PendingBlockers.Contains("showtraitmenu", StringComparer.OrdinalIgnoreCase);
         if (!pending)
         {
             if (_traitEntry is not null)
@@ -571,7 +581,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _traitEntry.Configure(_traitFarewellContract, _traits);
         _player.SetModalInput(true);
         GD.Print(
-            $"OPENNV_NATIVE_TRAITS_OPEN stage={_machine.Stage} " +
+            $"OPENNV_NATIVE_TRAITS_OPEN stage={Stage} " +
             $"choices={_traitFarewellContract.Traits.Count} maximum=" +
             $"{_traitFarewellContract.MaximumTraits} " +
             "source=live-showtraitmenu-perk presentation=first-party-functional");
