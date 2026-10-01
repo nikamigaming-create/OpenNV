@@ -33,7 +33,11 @@ internal partial class RuntimeNativeNpc
         // revisions still invalidate it even when age-family matching selects
         // the same final race; exact same-race input never creates a revision.
         if (state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
-            _appearanceRevision < 0 && state is not null && Appearance.RuntimeFace && Appearance.Race == state.Race)
+            _appearanceRevision < 0 && state is not null && Appearance.RuntimeFace &&
+                (state.Race is null || Appearance.Race == state.Race) &&
+                (state.FaceGen is null || Appearance.FaceGen.SymmetricGeometry.AsSpan().SequenceEqual(state.FaceGen.SymmetricGeometry) &&
+                    Appearance.FaceGen.AsymmetricGeometry.AsSpan().SequenceEqual(state.FaceGen.AsymmetricGeometry) &&
+                    Appearance.FaceGen.SymmetricTexture.AsSpan().SequenceEqual(state.FaceGen.SymmetricTexture)))
         {
             _appearanceRevision = revision;
             _appearanceWorld = world;

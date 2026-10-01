@@ -54,7 +54,7 @@ winning model, XML, font, source surfaces and shared draft supply presentation a
 input. Acceptance closes the menu and retains ordinary source continuation.
 Source drift and unsupported overlapping requests fail visibly. Synthetic
 associations, native model/input/default restoration and ordinary TTW opening
-checks cover this bounded owner; MatchFaceGeometry, matched
+checks cover this bounded owner; matched
 portrait/effect/close timing and XR final-eye presentation remain unverified.
 
 GamebryoRootMotionTravel advances the winning NAVM corridor using owned KF
@@ -83,16 +83,27 @@ other branch rules and matched retail/XR presentation remain unbound.
 FalloutReferenceWorld owns NPC-base race overrides independently of resident 3D.
 MatchRace reads winning RNAM/YNAM/ONAM links, preserves the target's age tier in
 the source family and leaves an exact same-race request unchanged. Invalid typed
-links/cycles reject before committing. NPC/RACE source hashes retain in save v24;
-v23 and prior supported saves still load without inventing overrides. Existing,
+links/cycles reject before committing. NPC/RACE source hashes retain in saves;
+prior supported saves still load without inventing overrides. Existing,
 warm and newly assembled native bodies read the same state. Revision stamps avoid
 frame-by-frame source/template scans. RuntimeNativeNpc prepares actual source
 parts, FaceGen and material channels before replacing its body parts, preserving
 the shared skeleton, animation/face clocks and non-body objects. Changed material
 targets rebind on revision; bounds and reference fade geometry refresh. Dialogue
 race/child conditions query authoritative state. Player-target race transitions,
-different skeleton rebinding, complete actor cold clocks, MatchFaceGeometry and
+different skeleton rebinding, complete actor cold clocks and
 matched retail/XR pixels remain unbound.
+
+The same world owns NPC-base MatchFaceGeometry independently of resident 3D.
+Current source appearance, marked/fallback presets and native case-sensitive
+tie order supply a scaled source-minus-preset displacement. The owner preserves
+target affine age, subtracts the target race's male default and retains texture.
+It commits once after finite/extent validation, then invalidates native appearance
+without replacing actor/skeleton/animation state. Save v25 retains model/RACE/CTL
+hashes and independently owned coefficient arrays; v24 and earlier supported
+schemas remain readable. Scripted player targets and active template changes
+remain unbound. See [face geometry](actor-face-geometry.md) for the bounded proof
+and remaining dialogue/cold-load failures.
 
 [Say](https://geckwiki.com/index.php?title=Say) and
 [SayTo](https://geckwiki.com/index.php?title=SayTo) share RuntimeNativeSpeech's

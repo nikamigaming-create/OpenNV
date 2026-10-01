@@ -10,9 +10,9 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args.Length >= 7 && args[1] == "--actor-race")
+            if (args.Length >= 7 && args[1] is "--actor-race" or "--actor-face")
             {
-                await ActorRace(args[0], args[2], args[3], args[4], args[5], args[6], args[7..]);
+                await ActorRace(args[0], args[2], args[3], args[4], args[5], args[6], args[7..], args[1] == "--actor-face");
                 GetTree().Quit();
                 return;
             }

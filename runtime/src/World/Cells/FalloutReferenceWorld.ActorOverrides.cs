@@ -32,7 +32,10 @@ internal sealed partial class FalloutReferenceWorld
         return new(form, RecordHash(source), value);
     }
 
-    internal IReadOnlyList<FalloutActorOverrides> CaptureActorOverrides() => _actorOverrides.Values.ToArray();
+    internal IReadOnlyList<FalloutActorOverrides> CaptureActorOverrides() => _actorOverrides.Values.Select(CloneFace).ToArray();
+
+    private static FalloutActorOverrides CloneFace(FalloutActorOverrides source) => source.FaceGeometry is not { } face ? source :
+        source with { FaceGeometry = face with { SymmetricGeometry = face.SymmetricGeometry.ToArray(), AsymmetricGeometry = face.AsymmetricGeometry.ToArray() } };
 
     internal void RestoreActorOverrides(IReadOnlyList<FalloutActorOverrides>? snapshots)
     {
@@ -57,9 +60,11 @@ internal sealed partial class FalloutReferenceWorld
                 (ActorOverrideSource(snapshot.Target).Signature != "NPC_" || snapshot.Target == records.RuntimeFormKey(7) || race.Value != 0 ||
                 !FormOverride(race.Form, "RACE", 0).Sha256.Equals(race.Sha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Saved actor race differs from its winning NPC/RACE source.");
+            if (snapshot.FaceGeometry is { } face) ValidateFaceGeometry(snapshot, face);
+            admitted[snapshot.Target] = CloneFace(snapshot);
         }
-        var changedAppearance = _actorOverrides.Where(item => item.Value.Race is not null).Select(item => item.Key)
-            .Concat(admitted.Where(item => item.Value.Race is not null).Select(item => item.Key)).Distinct().ToArray();
+        var changedAppearance = _actorOverrides.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null).Select(item => item.Key)
+            .Concat(admitted.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null).Select(item => item.Key)).Distinct().ToArray();
         _actorOverrides.Clear();
         foreach (var (key, value) in admitted) _actorOverrides.Add(key, value);
         foreach (var key in changedAppearance) _appearanceRevisions[key] = ++_appearanceRevision;

@@ -38,14 +38,20 @@ question. Ordinary male selection completes its response. A fresh female run
 also completes Mom's Say and subsequent parent dialogue, reaches owned name
 entry and accepts a name. TTW_ShowGeneProjector now opens the source projector
 and race/sex screen; ordinary Next/Done/Yes accepts the selection and closes it.
-Dad's later MatchRace completes; a fresh ordinary Hispanic selection reaches
-unbound MatchFaceGeometry. That fault remains visible. That
+Dad's later MatchRace completes; a fresh ordinary Hispanic female selection also
+executes four MatchFaceGeometry commands, completes twelve speeches and reaches
+CG00 stage 80's trait menu. Ordinary trait confirmation accepts zero traits;
+the subsequent Dad/Dr. Li speech reports no eligible INFO. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first ordinary
-manual save now initializes a v24 campaign snapshot. Code-addressed checkpoint
+manual save now initializes a campaign snapshot. Current writes use v25 while
+retaining v24 compatibility. Code-addressed checkpoint
 creation/load uses the shared save owner and can resume directly into pause.
 A paused reload retains character, all quest state, inventory, controls,
 transform, globals, references and the player camera-package clock exactly.
+The post-face birth save also retains face overrides on paused reload. Its cold
+presentation reports an unbound authored ragdoll accumulation-root rotation, so
+the checkpoint is not fully reusable.
 Complete actor cold clocks, active continuations, source save eligibility and
 ordinary physical VR checkpoint acceptance remain unbound. Numeric settings retain within a running
 stack and reset to owned defaults on a fresh stack. Live skill/damage checks and
@@ -99,12 +105,17 @@ animation group interruption/blending, Must Complete end-idle waits and matched
 timing remain open. NPC MatchRace now preserves source race-family age and base
 scope, including unloaded references; live dialogue reads the changed race.
 Existing owned bodies/FaceGen refresh while retaining actor/skeleton identity and
-animation phase. Save v24 retains validated base/race source hashes and reads
+animation phase. Saves retain validated base/race source hashes and read
 prior supported saves. Synthetic state/order/failure/cold checks and an isolated
 owned native fixture pass changed/cold/restored pixels with no retained frames.
-Ordinary opening input reaches MatchFaceGeometry after accepting the changed race.
-Player-target changes, full actor cold clocks, MatchFaceGeometry and further
-chargen remain incomplete; this does not establish campaign or visual parity.
+NPC MatchFaceGeometry now owns shared source-minus-preset geometry, retained
+affine age, signed percentages and unchanged texture. It uses current player/NPC
+appearance and the native preset name/tie order; save v25 validates model/race/CTL
+hashes and clones coefficients. Synthetic contracts and an isolated owned native
+fixture pass changed/cold/restored pixels while retaining skeleton and phase.
+Ordinary input reaches CG00 stage 80. Player-target changes, active template
+changes, full actor cold clocks and further chargen remain incomplete; this does
+not establish campaign or visual parity. See [face geometry](actor-face-geometry.md).
 
 Activation-failure sound selection/reset share C# state across source execution
 paths and ordinary flat/XR input. The default identity comes from an admitted

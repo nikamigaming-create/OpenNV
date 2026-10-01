@@ -306,8 +306,20 @@ internal static class FalloutNpcAppearanceResolver
         return result;
     }
 
-    private static FalloutNpcFaceGen ReadFaceGen(FalloutPluginRecord record, IReadOnlyList<FalloutPluginSubrecord> fields) =>
+    internal static FalloutNpcFaceGen ReadFaceGen(FalloutPluginRecord record, IReadOnlyList<FalloutPluginSubrecord> fields) =>
         new(record.FormKey, Bytes(record, "FGGS", 200, fields), Bytes(record, "FGGA", 120, fields), Bytes(record, "FGTS", 200, fields));
+
+    internal static FalloutNpcFaceGen ReadRaceFaceGen(FalloutPluginRecord race, bool female)
+    {
+        if (race.Signature != "RACE") throw new InvalidDataException("Face geometry default is not RACE.");
+        bool? section = null; var faces = new List<FalloutPluginSubrecord>();
+        foreach (var field in race.ReadSubrecords())
+        {
+            if (field.Signature is "MNAM" or "FNAM") section = field.Signature == "FNAM";
+            if (section == female && field.Signature is "FGGS" or "FGGA" or "FGTS") faces.Add(field);
+        }
+        return ReadFaceGen(race, faces);
+    }
 
     private static FalloutPluginRecord Require(FalloutPluginStack stack, FalloutFormKey key, string signature)
     {

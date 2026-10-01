@@ -70,13 +70,7 @@ internal sealed class FalloutNativeCharacterCreation
     }
 
     internal IReadOnlyList<FalloutPluginRecord> Presets()
-    {
-        var candidates = _records.EffectiveRecords("NPC_").Where(row => row.FormKey != _contract.Player &&
-            Linked(row, "RNAM") == _records.RuntimeFormKey(Selection.RaceRuntimeFormId) &&
-            ((Flags(row) & 1) != 0) == Selection.Female).ToArray();
-        var marked = candidates.Where(row => (Flags(row) & 4) != 0).ToArray();
-        return (marked.Length == 0 ? candidates : marked).OrderBy(row => Text(row, "FULL"), StringComparer.OrdinalIgnoreCase).ToArray();
-    }
+        => FalloutNpcFacePresets.Resolve(_records, _contract.Player, _records.RuntimeFormKey(Selection.RaceRuntimeFormId), Selection.Female);
 
     internal void ChangeIdentity(uint race, bool female)
     {
@@ -226,8 +220,6 @@ internal sealed class FalloutNativeCharacterCreation
         source.FaceGen.SymmetricGeometry.ToArray(), source.FaceGen.AsymmetricGeometry.ToArray(), source.FaceGen.SymmetricTexture.ToArray(),
         source.HairColorBytes.ToArray(), source.HairLengthBytes.ToArray(), owner.ReadSubrecords().Where(row => row.Signature == "PNAM")
             .Select(row => _records.RuntimeFormId(owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(row.Data.Span)))).ToArray());
-    private static FalloutFormKey Linked(FalloutPluginRecord row, string signature) => row.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(Field(row, signature).Span));
-    private static uint Flags(FalloutPluginRecord row) => BinaryPrimitives.ReadUInt32LittleEndian(Field(row, "ACBS").Span);
     private static byte Byte(FalloutPluginRecord row, string signature) => Field(row, signature).Length == 1 ? Field(row, signature).Span[0] : throw new InvalidDataException("Head-part flags have an unsupported extent.");
     private static string Text(FalloutPluginRecord row, string signature) => FalloutDialogueTopic.Text(Field(row, signature).Span);
     private static ReadOnlyMemory<byte> Field(FalloutPluginRecord row, string signature) => row.ReadSubrecords().Single(value => value.Signature == signature).Data;

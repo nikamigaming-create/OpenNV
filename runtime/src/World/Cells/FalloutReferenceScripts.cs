@@ -700,6 +700,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "matchrace" when arguments.Count == 1:
                     world.MatchRace(target, Reference(arguments[0]));
                     break;
+                case "matchfacegeometry" when arguments.Count == 2:
+                    var facePercentage = Number(arguments[1]);
+                    if (!double.IsFinite(facePercentage) || Math.Truncate(facePercentage) is < int.MinValue or > int.MaxValue)
+                        throw new InvalidDataException("Face matching percentage is outside its signed-integer domain.");
+                    world.MatchFaceGeometry(target, Reference(arguments[0]), (int)Math.Truncate(facePercentage));
+                    break;
                 case "restoreav" or "restoreactorvalue" when arguments.Count == 2:
                     world.RestoreActorValue(target, arguments[0], (float)Number(arguments[1]));
                     break;

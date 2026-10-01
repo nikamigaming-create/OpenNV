@@ -51,6 +51,16 @@ missing checkpoint requests preserve Continue; ordinary Resume/Pause advances
 then holds the restored camera. Complete actor cold clocks, active interaction continuations,
 source save eligibility and physical VR checkpoint acceptance remain open.
 
+Save v25 additionally retains shared NPC-base face geometry with winning
+NPC/model/RACE and CTL hashes; v24 and earlier supported saves still load.
+The ordinary post-face TTW birth state reaches CG00 stage 80 and saves after
+trait confirmation. Code loading and a paused resave preserve face overrides,
+quest/reference state and the player camera-package clock. Cold presentation
+also reports an unbound authored ragdoll accumulation-root rotation, so completed
+checkpoint metadata alone does not make this new slot fully reusable. Dad/Dr. Li
+dialogue selection remains failed in the reached state. No later campaign stage
+is represented by this checkpoint.
+
 The September 30 exported flat check continues a copied Primm checkpoint,
 returns to the main menu, continues again and quits with code 0. Fresh-title
 Quit also releases its unplaced prewarmed initial cell; native window close
