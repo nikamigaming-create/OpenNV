@@ -86,6 +86,14 @@ public partial class NativeRenderedMenuAudit
                         $"{skeleton.Node.GetBoneName(bone)} {pose[bone]} -> {skeleton.Node.GetBonePose(bone)}")));
             var changed = await Pixels();
             if (original.SequenceEqual(changed)) throw new InvalidDataException("Changed owned race produced identical body pixels.");
+            var priorParts = actor.Parts.ToArray();
+            // Matching an adult to an older target can resolve back to the
+            // target's current race. Native invalidation still applies because
+            // the two input races differ; only exact same-race input is a no-op.
+            if (!world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
+                !actor.SynchronizeAppearance(world, records, content, Material) || actor.Appearance.Race != expected ||
+                priorParts.SequenceEqual(actor.Parts) || !changed.SequenceEqual(await Pixels()))
+                throw new InvalidDataException("A changed race-family request lost its native invalidation when the age tier resolved to the current race.");
             var parts = actor.Parts.ToArray(); var state = actor.AnimationState;
             player = player with { Race = expected };
             if (world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||

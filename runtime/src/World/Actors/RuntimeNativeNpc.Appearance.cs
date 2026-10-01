@@ -29,8 +29,11 @@ internal partial class RuntimeNativeNpc
             return false;
         }
         var state = world.ActorAppearanceOverride(reference);
+        // A newly assembled body can already contain this override. Later
+        // revisions still invalidate it even when age-family matching selects
+        // the same final race; exact same-race input never creates a revision.
         if (state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
-            state is not null && Appearance.RuntimeFace && Appearance.Race == state.Race)
+            _appearanceRevision < 0 && state is not null && Appearance.RuntimeFace && Appearance.Race == state.Race)
         {
             _appearanceRevision = revision;
             _appearanceWorld = world;
