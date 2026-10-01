@@ -54,6 +54,16 @@ try
     if (!catalog.ReadSlots(false, (_, _) => { }).Any(slot => File.ReadAllBytes(slot.Path).SequenceEqual(later)))
         throw new InvalidOperationException("Loading lost the previous Continue save.");
     var before = File.ReadAllBytes(canonical);
+    var slotBefore = File.ReadAllBytes(first.Path);
+    var duplicateCalled = false;
+    try { catalog.Create(firstId, () => { duplicateCalled = true; Write(1, "Duplicate"); }); throw new Exception("Duplicate checkpoint ID accepted."); }
+    catch (InvalidOperationException error) when (error.Message == "Save-slot identity already exists.") { }
+    if (duplicateCalled || !File.ReadAllBytes(canonical).SequenceEqual(before) || !File.ReadAllBytes(first.Path).SequenceEqual(slotBefore))
+        throw new Exception("Rejected duplicate checkpoint changed the current or retained save.");
+    if (catalog.ReadSlot(first.Id) != catalog.ReadSlots(false, (_, _) => { }).Single(slot => slot.Id == first.Id))
+        throw new Exception("Direct checkpoint lookup lost source-derived metadata or depended on unrelated malformed slots.");
+    try { catalog.ReadSlot("../authoritative"); throw new Exception("Unsafe checkpoint lookup accepted."); }
+    catch (InvalidOperationException) { }
     try { catalog.Activate("../authoritative"); throw new Exception("Unsafe slot ID accepted."); }
     catch (InvalidOperationException) { }
     if (!File.ReadAllBytes(canonical).SequenceEqual(before)) throw new Exception("Rejected load changed Continue.");

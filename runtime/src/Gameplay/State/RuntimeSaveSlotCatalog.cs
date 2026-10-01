@@ -54,14 +54,19 @@ internal sealed class RuntimeSaveSlotCatalog
     internal RuntimeSaveSlotMetadata Create(Guid slotId, Action writeAuthoritativeSave)
     {
         ArgumentNullException.ThrowIfNull(writeAuthoritativeSave);
+        var target = SlotPath(slotId);
+        if (File.Exists(target)) throw new InvalidOperationException("Save-slot identity already exists.");
         writeAuthoritativeSave();
         var bytes = File.ReadAllBytes(_canonicalSavePath);
         using var validated = Validate(bytes);
         Directory.CreateDirectory(_slotDirectory);
-        var target = SlotPath(slotId);
         AtomicWrite(target, bytes);
         return ReadMetadata(target);
     }
+
+    internal RuntimeSaveSlotMetadata ReadSlot(string slotId) => slotId == "current" ? ReadMetadata(_canonicalSavePath) :
+        Guid.TryParseExact(slotId, "N", out var id) ? ReadMetadata(SlotPath(id)) :
+        throw new InvalidOperationException("Save-slot identity is invalid.");
 
     internal RuntimeSaveSlotMetadata Activate(string slotId, bool preserveCurrent = false)
     {

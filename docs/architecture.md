@@ -30,6 +30,20 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+RuntimeNativeOpeningStageDriver captures the same authoritative campaign state
+for ordinary saves and code-addressed checkpoints, including the first settled
+Fallout 3 snapshot. Active movies, furniture, speech, creation/trade/crafting
+menus, unsettled transfers and death remain rejected. RuntimeSaveSlotCatalog
+protects existing GUID identities, derives metadata from saved state and looks
+up a selected slot independently of unrelated corrupt files. RuntimeCoordinator
+validates the complete selected save before preserving Continue and draining
+readers for an in-process scene reload. Diagnostic checkpoint loading may open
+the shared pause menu before world gameplay advances. The live harness reports
+the last completed restored slot separately from command delivery; checkpoint
+requests remain diagnostic preparation, followed by ordinary flat/XR input.
+Complete actor clocks, active continuation restoration and source save eligibility
+remain unbound. See [save recovery](patrol-session-recovery.md).
+
 TTW's race-menu device selection reads owned plugin registrations and bounded
 copy/import/shared-buffer/native-forward associations. The original executable
 model consumer and initialized buffer agree with the normal selector's default

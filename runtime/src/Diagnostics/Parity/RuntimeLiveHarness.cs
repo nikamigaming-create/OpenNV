@@ -130,7 +130,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         }
         foreach (var key in _held.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
             SetKey(key, false, 0);
-        for (var index = 0; index < 32; ++index)
+        for (var index = 0; index < 32 && _checkpointTransitioning?.Invoke() != true; ++index)
         {
             var path = Path.Combine(_directory, $"{_nextRequest:D10}.command");
             if (!File.Exists(path))
@@ -145,9 +145,11 @@ internal sealed partial class RuntimeLiveHarness : Node
             {
                 using var document = JsonDocument.Parse(command);
                 Dispatch(document.RootElement, request);
-                Receipt(request, true, "Delivered to Godot input; resulting gameplay state is observed separately.");
+                Receipt(request, true, document.RootElement.GetProperty("op").GetString()?.StartsWith("checkpoint.", StringComparison.Ordinal) == true
+                    ? "Handled by the shared save owner; cold loading and resulting gameplay state are observed separately."
+                    : "Delivered to Godot input; resulting gameplay state is observed separately.");
             }
-            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException or NotSupportedException)
+            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException or NotSupportedException or IOException or UnauthorizedAccessException)
             {
                 Receipt(request, false, exception.Message);
             }
@@ -165,6 +167,7 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private void Dispatch(JsonElement command, ulong request)
     {
+        if (DispatchCheckpoint(command, request)) return;
         if (command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text")
             _bot?.Stop();
         switch (command.GetProperty("op").GetString())
@@ -379,6 +382,8 @@ internal sealed partial class RuntimeLiveHarness : Node
             gameplay = _captureSummary(),
             bot = _bot?.State,
             physicsTest = _lastPhysicsTest,
+            checkpoint = _lastCheckpoint,
+            checkpointRestored = _restoredCheckpoint?.Invoke(),
             performance = new
             {
                 jitOptimizationDisabled = JitOptimizationDisabled,

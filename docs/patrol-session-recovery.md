@@ -15,6 +15,42 @@ Title indexing is also drained, and repeated transition requests cannot start
 another retirement. The window close request uses the same native owner. A diagnostic
 harness reload resumes after acknowledged inputs rather than replaying them.
 
+The first settled Fallout 3 state now saves without a pre-existing New Vegas
+snapshot. The same writer rejects active movies, furniture, speech, character
+creation, trade/crafting menus, unsettled player transfers and death, retaining
+the unsupported continuation instead of discarding it.
+
+With an absolute private `--live-harness` directory, code can submit these JSON
+commands using the existing numbered `.command`/receipt transport:
+
+```json
+{"op":"checkpoint.save","id":"0123456789abcdef0123456789abcdef"}
+{"op":"checkpoint.load","id":"0123456789abcdef0123456789abcdef","pauseAfterLoad":true}
+```
+
+Use a new GUID for each saved state; duplicate identities reject before invoking
+the writer or changing Continue. Loading works from the indexed title screen
+or an active session and validates the complete source-bound
+snapshot before promotion. A delivered load receipt acknowledges the request;
+it does not confirm a finished scene. Wait for a fresh `live-state.json` whose
+`checkpointRestored.id` matches the selected slot and whose player/CELL are
+ready. The new scene clears the previous `checkpoint` request. When requested,
+the ordinary pause menu opens before world gameplay advances, and normal
+Escape/Resume or controller input releases it. Recording remains off.
+
+These commands select actually reached saved states and are labelled diagnostic
+preparation. Subsequent movement, activation and menu actions still use ordinary
+flat/OpenXR adapters. They do not jump quest stages or establish traversal.
+An owned ordinary birth run saves after the accepted character choice and reloads
+through the native scene path. A paused resave retains the character, quest locals
+and progression, inventory, controls, transform, globals, tracked reference
+snapshots and player camera-package clock exactly. MenuMode script clocks continue
+normally while paused. The owned C# cold fixture separately retains all 641 saved
+quest-script owners, clocks and failure states before execution. Duplicate and
+missing checkpoint requests preserve Continue; ordinary Resume/Pause advances
+then holds the restored camera. Complete actor cold clocks, active interaction continuations,
+source save eligibility and physical VR checkpoint acceptance remain open.
+
 The September 30 exported flat check continues a copied Primm checkpoint,
 returns to the main menu, continues again and quits with code 0. Fresh-title
 Quit also releases its unplaced prewarmed initial cell; native window close

@@ -61,9 +61,17 @@ Dad's subsequent source MatchRace now completes. A fresh ordinary Hispanic
 selection reaches the next unbound command, MatchFaceGeometry. That fault remains visible.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
-non-camera targets. The first manual save attempt fails because world persistence
-requires a prior native save. Source save eligibility and the first Fallout 3
-campaign snapshot remain unbound. TTWStart
+non-camera targets. The first ordinary manual save now initializes a v24 campaign
+snapshot without requiring a prior New Vegas save. Code-addressed checkpoint
+creation and in-process loading use that same source-validated owner. A paused
+reload preserves the accepted character, all quest state, inventory, controls,
+transform, globals, tracked references and player camera-package clock exactly.
+The owned cold fixture retains all 641 saved quest-script owners, clocks and
+failure states before execution. Direct title loading publishes the completed
+slot; duplicate/missing requests preserve Continue, and ordinary Resume/Pause
+advances then holds the restored camera. Recording remains off.
+Source save eligibility, complete actor cold clocks and active interaction
+continuations remain unbound. TTWStart
 retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice and unfinished birth-room screenshots are
@@ -397,10 +405,9 @@ output routing without treating the audible birth voice as full audio support.
 Measure source voice/lip/output clocks and camera frame intervals; distinguish
 runtime hitches, telemetry overruns and recording readback/repeated frames before
 changing timing or claiming smooth playback.
-Trace source save eligibility and initialize the first source campaign snapshot
-without requiring a prior New Vegas save or bypassing character creation. Complete
-code-addressable reached-state checkpoint creation/load with whole-world source
-validation, then slow ordinary flat and VR input checks at those checkpoints. Keep
+Complete source save eligibility, actor cold clocks and remaining interaction
+continuations. Extend the reached-state checkpoints with those owners and run
+slow ordinary flat and VR input checks after source-validated loading. Keep
 unbound active continuations visible rather than saving incomplete states. Complete
 live refresh for the retained numeric-setting consumers exposed in telemetry.
 Preserve CG00's stage-5/package and birth-CELL movement prefixes. Trace and repair
