@@ -2,10 +2,18 @@
 
 ## Active objective
 
-Complete the combined TTW campaign from Fallout 3's opening through the authored
-train-station route into New Vegas and continued campaign play. This takes
-priority over the remaining JAM/MCM work. Complete TTW's reached dependency
-behavior as part of that route; preserve all ten requested mod targets. Folder
+Complete the combined TTW campaign from Fallout 3's opening through Vault 101,
+Megaton, the authored train-station route, New Vegas and Benny, then continued
+campaign play. Complete all nine JAM modules and compatible TTW desirables from
+the current Best of Times and Wasteland Survival Guide recommendations. Preserve
+the broader goal of Nexus mod script/dependency compatibility. Use the Fallout
+bot's ordinary movement and activation adapters
+for bounded traversal after Megaton, retaining source collision and door rules.
+Verify the selected Benny Humbles You and Steals Your Stuff configuration's
+deleveling, gear confiscation/recovery, progression and cold continuity. This takes
+priority alongside complete JAM/MCM support. Complete TTW's reached dependency
+behavior as part of that route; preserve the original ten mod targets and the
+additional Benny target. Folder
 registration and isolated scenes do not meet this objective. Prioritize flat
 play while preserving shared VR behavior; detailed VR presentation follows.
 Classic flat presentation must use winning Fallout/mod screens and controls;
@@ -55,7 +63,7 @@ the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice and unfinished birth-room screenshots are
 retained privately, along with a new 30-second flat parent-dialogue MP4 with
 process audio. The clip retains repeated source frames in its sidecar and does
-not establish audiovisual parity. The birth frame exposes lighting and HUD presentation gaps;
+not establish audiovisual parity. The birth frame exposes lighting gaps;
 it does not establish scene parity. Recording is off. Synthetic bootstrap,
 conditional stage execution, winning renamed skill
 identity and owned TTW/cold-save checks pass, as does the complete required
@@ -96,8 +104,15 @@ package changes with stationary bone motion. A fresh ordinary opening completes
 eight speech commands and retains the authored parent poses through character
 creation. Its requested 30-second audio clip has no sampled Forward or actor
 package errors. Actor cold restoration, group interruption/blending, Must Complete
-end-idle waits and matched event/pose timing remain unverified. HP/AP visibility
-during birth is incorrect and requires the source HUD control owner. MatchRace
+end-idle waits and matched event/pose timing remain unverified. The gameplay HUD
+now applies source movement controls to HP/AP and the reticle independently of
+rollover text, and suppresses target prompts while world activation is disabled;
+disabling rollover alone retains vitals and messages. Synthetic control
+mask cases through owned native XML/font/atlas pixels verify disable, enable,
+unrelated controls and identical pixel restoration. A fresh ordinary birth run
+and inspected requested screenshot verify hidden HP/AP/reticle with source
+movement disabled, no activation target/prompt and retained subtitles. HUD override extensions,
+broader branch presentation and matched retail/XR pixels remain unverified. MatchRace
 and further chargen remain unbound; neither actor nor campaign parity is claimed.
 
 Character-generation policy is shared by reference/results, fallback quest scripts
@@ -351,8 +366,8 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Repair source HUD visibility during the opening; HP/AP must follow its authored
-controls. Implement MatchRace through source-backed actor state. Preserve the ordinary gender,
+Implement MatchRace through source-backed actor state. Preserve the verified
+source HUD visibility, ordinary gender,
 parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
 screen-blood and activation-feedback behavior. Complete further source dialogue
 arbitration/arguments and matched INFO-result/SayToDone timing. Complete source screen-blood lighting/flare,
@@ -360,6 +375,9 @@ color transfer and XR final-eye presentation without hiding their telemetry gaps
 Complete the
 remaining script audio routes, loop/stop ownership, environment/submersion and
 output routing without treating the audible birth voice as full audio support.
+Measure source voice/lip/output clocks and camera frame intervals; distinguish
+runtime hitches, telemetry overruns and recording readback/repeated frames before
+changing timing or claiming smooth playback.
 Trace source save eligibility and initialize the first source campaign snapshot
 without requiring a prior New Vegas save or bypassing character creation. Complete
 live refresh for the retained numeric-setting consumers exposed in telemetry.
@@ -371,9 +389,17 @@ the deferred XP level-cap, allocation, LevelUpMenu and reward
 owners, plus TTW radio-worldspace dependency behavior, without discarding failed
 prefixes. TTW's source
 opening choice must lead into Fallout 3's authored character creation, exit,
-train-station route and ticketed travel into the Mojave opening. Continue through
+Megaton, bot traversal to Union Station and ticketed travel into the Mojave
+opening. Continue to Benny and verify the selected humbling mod's source reset,
+confiscation, recovery and persistence. The official Benny package 13.05 is now
+downloaded and extracted in a separate owned mod folder; it is not yet selected
+by the test profile, and source mounting and behavior remain open.
+Continue through
 ordinary input and persistent saves; queued source transfers alone do not prove
 that route. Implement each reached extension/effect/package/menu owner.
+Keep a continuous ordinary route/event log and cold-save checkpoints. Produce
+the requested edited journey video from verified footage, with labeled excerpts,
+side-by-side moments and wipes; editing cannot substitute for missing gameplay.
 
 Trace JAM's remaining actor-effect, input-control and hit-event failures through ordinary
 native owners. Chained reference expressions, lambdas, further operators and
@@ -466,7 +492,16 @@ identify the next source owners. The requested current-build screenshot is
 Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
-The fresh ordinary Capital run is `tmp/development-lab/ttw-birth-actors-20261001`.
+The fresh ordinary HUD run is `tmp/development-lab/ttw-birth-hud-20261001-final`.
+Its `hud.private.json` records movement disabled, HP/AP/reticle hidden, retained
+rollover control enabled, no activation prompt and active owned speech/subtitles.
+The inspected requested frame is
+`local/recordings/ttw-birth-20261001/TTW-birth-HUD-controls-flat.png`.
+Startup telemetry interval overruns remain visible; a subsequent successful
+publication clears its fault marker. Recording stays off, and temporary capture
+pixels/metadata are removed. Current checks are `tmp/hud-controls-build.log`,
+`tmp/hud-controls-owned.log` and `tmp/hud-controls-runtime-gate.log`.
+The earlier ordinary actor run is `tmp/development-lab/ttw-birth-actors-20261001`.
 It selects Girl and completes eight source speech commands. Source controls
 accept a name and the projector selection; Dad's continuation reports MatchRace.
 Gender-question samples retain owned Dad/Dr. Li poses and stationary Idle with
@@ -486,7 +521,8 @@ Recording is off and temporary inspection frames are removed. Current checks are
 `tmp/sayto-subtitles-owned.log` and `tmp/sayto-runtime-gate.log`.
 The selected unfinished birth frame is
 `local/recordings/ttw-birth-20261001/Vault-101-birth-incomplete-flat.png`; temporary
-frame data is removed. It exposes lighting and HUD gaps, not scene parity.
+frame data is removed. That earlier frame exposes lighting and the former HUD
+visibility gap; it does not establish scene parity.
 Current activation-feedback checks are `tmp/no-activation-contract.log`,
 `tmp/no-activation-owned-native.log` and `tmp/no-activation-runtime-gate.log`.
 The source descriptor/default/persistence investigation remains outside the

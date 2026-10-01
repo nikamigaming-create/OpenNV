@@ -6,7 +6,14 @@ simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
 The immediate priority is the complete TTW route from Fallout 3's opening through
-the train station into New Vegas, including dependencies and cold continuation.
+Vault 101, Megaton, ordinary Fallout-bot traversal to the train station, New Vegas
+and Benny, including dependencies and cold continuation. The original ten mod
+targets remain required, with Benny Humbles You and Steals Your Stuff added for
+its configured reset, confiscation/recovery and persistent outcomes. Its official
+13.05 package is downloaded/extracted; runtime selection and behavior remain
+unverified. All nine JAM modules and compatible TTW guide recommendations are
+immediate implementation targets; ordinary bot campaign proof and the requested
+edited journey video remain pending.
 Queued player MoveTo now shares C# world ownership and the native scene path.
 Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
 and the required movement runtime gate pass. Quest MenuMode and multiple GameMode
@@ -47,7 +54,7 @@ assignment/clock, pending change assignment and native cold-camera/remainder che
 pass as component evidence. PACK reads both owned byte and UInt32 idle counts.
 Package traversal, nonempty event programs, end/removal animations, change
 cancellation and matched interruption/blend/timing remain incomplete. A fresh
-unfinished birth-room screenshot exposes lighting and HUD gaps; it is not parity
+unfinished birth-room screenshot exposes lighting gaps; it is not parity
 evidence. A new private 30-second flat parent-dialogue MP4 contains process audio
 and retains repeated source frames in its sidecar; it is ordinary gameplay,
 not audiovisual parity evidence.
@@ -77,7 +84,12 @@ plays source change/begin IDLE poses. Synthetic corridor/arrival/cancel/invalid
 checks and an owned native Dad/Dr. Li fixture pass six zero-distance package
 changes with stationary animated bones. A fresh ordinary opening completes eight
 speech commands; its 30-second audio clip has no sampled Forward or actor-package
-errors. HP/AP still shows incorrectly during birth. Actor cold restoration,
+errors. Source movement controls now hide HP/AP and the reticle independently of
+rollover text and suppress target prompts while world activation is disabled.
+Owned native XML/font/atlas pixels verify disable/enable,
+unrelated controls and identical restoration; a fresh ordinary birth run and
+inspected requested screenshot verify the authored suppression. HUD override
+extensions, broader branch rules and matched retail/XR pixels remain open. Actor cold restoration,
 animation group interruption/blending, Must Complete end-idle waits and matched
 timing remain open. MatchRace and further chargen remain incomplete.
 

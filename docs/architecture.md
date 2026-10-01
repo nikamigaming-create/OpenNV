@@ -40,7 +40,7 @@ winning model, XML, font, source surfaces and shared draft supply presentation a
 input. Acceptance closes the menu and retains ordinary source continuation.
 Source drift and unsupported overlapping requests fail visibly. Synthetic
 associations, native model/input/default restoration and ordinary TTW opening
-checks cover this bounded owner; MatchRace, opening HUD visibility, matched
+checks cover this bounded owner; MatchRace, matched
 portrait/effect/close timing and XR final-eye presentation remain unverified.
 
 GamebryoRootMotionTravel advances the winning NAVM corridor using owned KF
@@ -54,6 +54,17 @@ events retain their executed prefix and failure latch. Synthetic travel contract
 owned Dad/Dr. Li package changes and ordinary birth input cover this bounded
 repair. Actor cold restoration, animation group interruption/blending, Must
 Complete end-idle waits and matched event/pose timing remain unbound.
+
+RuntimeNativePlayer retains the shared source control mask supplied by the
+opening/session owner. NativeOwnedGameplayHud applies its movement flag to the
+winning HP/AP/reticle tile visibility. Target text requires both rollover and
+ordinary world activation to be enabled; the source movement flag also disables
+activation, so a ray hit cannot advertise an unavailable Talk/Take/Open action.
+Rollover suppression no longer removes unrelated gameplay branches or messages.
+The same owned XML/font/atlas renderer supplies pixels; control re-enabling
+restores the existing branches. Synthetic mask cases through owned native pixels
+and ordinary birth input cover this bounded flat owner. HUD override extensions,
+other branch rules and matched retail/XR presentation remain unbound.
 
 [Say](https://geckwiki.com/index.php?title=Say) and
 [SayTo](https://geckwiki.com/index.php?title=SayTo) share RuntimeNativeSpeech's

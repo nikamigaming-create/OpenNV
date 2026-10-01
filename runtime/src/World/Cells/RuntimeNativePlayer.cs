@@ -78,6 +78,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal float ViewPitchRadians => _pitchRadians;
     internal FalloutActorActivityState Activity { get; } = new();
     internal bool RolloverTextEnabled { get; private set; } = true;
+    internal FalloutPlayerControlState SourceControls { get; private set; } = FalloutPlayerControlState.AllEnabled;
     internal float UnitsToMeters => _configuration.World.GameUnitsToMeters;
     internal Func<Node, bool>? ActivateReference { get; set; }
     internal Action? NoActivationFeedback { get; set; }
@@ -129,6 +130,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void ApplySourceControls(FalloutPlayerControlState state)
     {
+        SourceControls = state;
         _movementEnabled = state.Movement;
         _lookingEnabled = state.Looking;
         _activationEnabled = state.Movement;

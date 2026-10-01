@@ -19,12 +19,13 @@ public partial class RuntimeCoordinator
     {
         var layer = new CanvasLayer { Name = "NativeGameplayHud", Layer = 2 };
         _nativeGameplayHud = new(_nativePluginStack!, _configuration.Player.DesktopInput.Activate.PhysicalKey,
-            NativeAimedTarget, () => _nativeXr is null && _nativePlayer is { ModalInput: false, RolloverTextEnabled: true } &&
+            NativeAimedTarget, () => _nativeXr is null && _nativePlayer is { ModalInput: false } &&
                 !_nativeDoorLoading && !GetTree().Paused, () => _nativeOpeningStageDriver!.Vitals,
-            () => _nativePlayer?.AmmunitionHud, () => _nativePlayer?.WeaponActionNotice, _nativeUi);
+            () => _nativePlayer?.AmmunitionHud, () => _nativePlayer?.WeaponActionNotice, _nativeUi,
+            () => _nativePlayer!.SourceControls);
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
-            () => _nativeXr is null && _nativePlayer is { ModalInput: false, RolloverTextEnabled: true } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState);
+            () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState);
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;

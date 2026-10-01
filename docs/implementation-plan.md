@@ -1,9 +1,19 @@
 # Gameplay, playtest and release plan
 
-September 30 direction: complete the combined TTW campaign from Fallout 3's
-opening through its authored train-station connection to New Vegas and continued
-campaign play. TTW now takes priority over the remaining JAM/MCM work. Complete
-its reached dependencies and preserve all ten mod targets. Prioritize flat play
+October 1 direction: complete the combined TTW campaign from Fallout 3's
+opening through Vault 101 and Megaton, use the Fallout bot's ordinary
+movement/activation adapters to reach the authored train-station connection,
+then enter New Vegas and reach Benny with the selected Benny Humbles You and
+Steals Your Stuff reset/deleveling, gear confiscation/recovery and persistent
+outcomes. Continue
+campaign play. All nine JAM modules and the TTW route, dependencies and
+compatible desirables are immediate priorities. Use the current
+[Best of Times essentials](https://thebestoftimes.moddinglinked.com/essentials.html)
+and [Wasteland Survival Guide](https://wastelandsurvival.guide/docs/intro) to audit
+the recommended stack and its source winners. Preserve the long-term goal of
+general Nexus mod script/dependency compatibility. Complete
+its reached dependencies and preserve all ten original mod targets plus the
+added Benny target. Prioritize flat play
 and system polish while preserving shared VR state;
 detailed VR presentation follows. Use [the flat gameplay work order](flat-gameplay-plan.md)
 for the ordinary interaction failures reached while completing those mods.
@@ -20,8 +30,8 @@ OpenXR Simulator and is labelled accordingly.
 
 ## Immediate outcome
 
-Implement the ten authorized targets in [mod compatibility](mod-compatibility.md),
-starting with the complete TTW campaign and dependencies, followed by complete
+Implement the authorized targets in [mod compatibility](mod-compatibility.md),
+including the complete TTW/Benny campaign route and dependencies plus complete
 JAM support, exposed as launcher options.
 The user selects the owned base/mod/dependency folders; runtime source
 resolution, settings and persistent state must work without a generated profile
@@ -73,6 +83,9 @@ ordinary traversal or establish a complete campaign.
 6. Record short functional takes with audio and measured cadence. Inspect the
    complete takes, then compose comparable actions side by side with mode labels
    and honest timing. Remove temporary frames in finally/cleanup paths.
+   Retain the bot's continuous ordinary route/event log and cold-save checkpoints;
+   produce the requested journey video with labeled excerpts, side-by-side moments
+   and wipes from verified runs. Transitions cannot conceal unreached gameplay.
 7. Publish a checked PR, merge it, synchronize main, and publish the experimental
    package with hashes, notices and limitations. A test release is not campaign
    completion or retail/headset acceptance.
