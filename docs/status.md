@@ -16,8 +16,13 @@ also passes. Configured New Game now executes the selected startup quest and
 constructs its source-selected CELL/player. Ordinary flat input reaches TTW's
 actual Capital/Mojave message; selecting Capital plays Fallout 3's owned intro.
 Its post-movie continuation executes the shared loading-screen and character-generation
-policies, then reaches CG00 stage 5's missing player-package travel/location owner
-before the birth-CELL move. Chargen state retains cold; deferred XP survives vitals
+policies, installs CG00 stage 5's explicit-location player package and starts its
+owned birth camera clip. The queued source move loads the Vault 101 birth CELL,
+then SetNumericGameSetting stops continuation. That CELL reports 102 missing
+runtime references and the clip reports two unbound non-camera targets. Saved package
+assignment/clock and native cold-camera/remainder checks pass as component evidence;
+package traversal, event transitions and matched timing remain incomplete.
+Chargen state retains cold; deferred XP survives vitals
 derivation, and unsupported earned level-ups stop before clearing the flag. XP
 rewards, level caps, allocation and LevelUpMenu remain incomplete. Winning
 location-specific LSCR images and LSCT
