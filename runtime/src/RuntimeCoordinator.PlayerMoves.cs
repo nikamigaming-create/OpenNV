@@ -8,25 +8,36 @@ public partial class RuntimeCoordinator
 {
     private void AdvanceNativePlayerMoves()
     {
-        if (_nativeDoorLoading || _nativeReferences is not { } references || references.PlayerMoves.Next is not { } move ||
+        if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession ||
+            _nativeReferences is not { } references || references.PlayerMoves.Next is not { } move ||
             _nativePlayer is not { } player || _nativeOpeningStageDriver is not { } driver || _nativeActiveCell is not { } active)
             return;
+        _nativePlayerMoveRead = ConsumeNativePlayerMove(references, player, driver, active, move);
+    }
+
+    private async Task ConsumeNativePlayerMove(FalloutReferenceWorld references, RuntimeNativePlayer player,
+        OpenNV.Runtime.Campaigns.NewVegas.Opening.RuntimeNativeOpeningStageDriver driver, FalloutCellScene active, FalloutPlayerMove move)
+    {
         var previousModal = player.ModalInput;
         _nativeDoorLoading = true;
         player.SetModalInput(true);
         try
         {
+            var destination = _nativePluginStack!.RuntimeFormId(move.Destination) == 0x14 ? active.Cell.FormKey : references.Placement(move.Destination).Cell;
+            if (destination != active.Cell.FormKey) await ShowNativeLoadingScreens(destination);
             RuntimeNativePlayerMoves.ApplyNext(references, player, active.Cell.FormKey, StreamNativePlayerMove);
             GD.Print($"OPENNV_NATIVE_PLAYER_MOVETO source={move.Source} target={move.Destination} " +
                 $"from={active.Cell.FormKey} to={driver.ActiveCell} owner=queued-source-command parity=unverified");
         }
         catch (Exception error)
         {
+            if (references.PlayerMoves.Error is null) references.PlayerMoves.Fail(move, error);
             SetMeta("opennv_player_move_error", error.Message);
             GD.PushError($"OPENNV_NATIVE_PLAYER_MOVETO_FAIL source={move.Source} target={move.Destination} {error}");
         }
         finally
         {
+            CloseNativeLoadingScreens();
             _nativeDoorLoading = false;
             player.SetModalInput(previousModal);
         }

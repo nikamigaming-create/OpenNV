@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 5 && args[1] == "--loading-screens")
+            {
+                await LoadingScreens(args[0], args[2], args[3], args[4], args[5..]);
+                GetTree().Quit();
+                return;
+            }
             if (args is [var uiRoot, "--script-ui"])
             {
                 await ScriptUi(uiRoot);

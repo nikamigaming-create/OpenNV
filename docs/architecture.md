@@ -206,6 +206,17 @@ conditional destinations; a static opening graph cannot reject or select them.
 The generic save/diagnostic startup label remains stable across background quest
 stage changes; the shared quest owner retains all actual stage progression.
 
+Loading policy belongs to that shared script session, including pre-world source
+results and cold restoration. LSCR location filters resolve each winning record's
+direct CELL/WRLD identity or signed world-grid coordinates before native selection.
+Godot projects its owned images and LSCT tip bounds/font/color while cell transfers
+pause gameplay. Native door and player transfer tasks drain before source retirement;
+closing their loading scope preserves an existing pause or retirement. Source
+LoadingMenu ancillary animation/progress components and matched selection/fade/layout
+timing remain explicit divergence. Layout contracts follow the primary
+[LSCR](https://tes5edit.github.io/fopdoc/FalloutNV/Records/LSCR.html) and
+[LSCT](https://tes5edit.github.io/fopdoc/FalloutNV/Records/LSCT.html) definitions.
+
 Built-in tag-skill slots bind to their base-master record identities. Their
 winning AVIF editor IDs, labels and fields may change without renumbering those
 engine slots. Player skill queries and source menus use the same slot owner.

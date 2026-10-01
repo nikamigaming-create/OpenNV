@@ -25,14 +25,24 @@ handoff. Required TTW settings stay in the selected profile, leaving owned INIs
 unchanged. Ordinary flat New -> Yes reaches TTW's authored holding CELL and its
 actual Capital/Mojave message. Selecting Capital starts CG00's owned Fallout 3
 intro movie; ordinary Escape interrupts it and resumes the source result program.
-That continuation fails visibly at SetLocationSpecificLoadScreensOnly, while
-TTWStart retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
+That continuation now executes SetLocationSpecificLoadScreensOnly through shared
+session state and fails visibly at SetInCharGen. TTWStart retains a separate
+TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice screenshot is retained privately. Recording
 is off. Synthetic bootstrap, conditional stage execution, winning renamed skill
 identity and owned TTW/cold-save checks pass, as does the complete required
 runtime gate. The final flat build retains TTWStart's startup identity across
 background quest stage changes. Both protected saves remain unchanged.
+
+Loading-screen eligibility now resolves winning LSCR direct CELL/WRLD and signed
+world-grid identities, with the shared location-only policy retained cold. Native
+door and queued player transfers present eligible owned images and LSCT tips while
+paused, then restore the previous input/pause scope. Retirement drains both transfer
+tasks. Synthetic policy/override/deletion/layout checks, the owned Vault 101 pool
+and a rendered paused image/tip fixture pass with no retained frames. LoadingMenu's
+ancillary NIF, progress/statistics widgets and matched selection/fade/layout timing
+remain explicit gaps. This component evidence does not establish campaign travel.
 
 Quest scripts now execute unfiltered and filtered MenuMode blocks through the
 shared SCPT clock. Multiple GameMode blocks share source order, locals, budgets
@@ -199,7 +209,7 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached loading-screen policy, character-generation state and TTW
+Implement the reached character-generation state and TTW
 radio-worldspace dependency behavior without discarding failed prefixes. TTW's source
 opening choice must lead into Fallout 3's authored character creation, exit,
 train-station route and ticketed travel into the Mojave opening. Continue through
@@ -222,6 +232,8 @@ semantics in scope; do not remove launch gates on the strength of source audits.
 Startup placement now follows the winning configured quest. The native creation
 contracts still assume New Vegas's Doc Mitchell flow; replace those remaining
 assumptions with shared source owners before claiming playable Fallout 3 creation.
+Complete the remaining source LoadingMenu animation/progress components and
+verify its selection, placement and timing against matched retail evidence.
 
 Preserve the actual flat run's remaining script and actor failures. Essential
 recovery and additional death-command parameters need their own source-backed
@@ -292,6 +304,18 @@ Current startup checks are `tmp/source-quest-startup-contract.log`,
 check in `tmp/development-lab/ttw-startup-20260930-run4`. Their retained failures
 identify the next source owners. The requested current-build screenshot is
 `local/recordings/ttw-startup-20260930/TTW-starting-choice-flat.png`.
+Current loading checks are `tmp/loading-screen-owned.private.json`,
+`tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
+`tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
+The fresh ordinary Capital run is
+`tmp/development-lab/ttw-loading-policy-20260930`; its retained policy is true and
+the next reached stage command is SetInCharGen. Recording is off. The flat route
+check in `tmp/development-lab/loading-policy-door-20260930` retained a bot capsule
+route/segment failure near Nash before activation; it is not a successful transfer.
+The copied interior checkpoint check in
+`tmp/development-lab/loading-policy-interior-20260930` also stopped at navigation
+before activation. Both sessions quit through ordinary input with source readers
+drained. Broader transfer/loading acceptance remains open.
 
 Do not change `local/playtest-20260927-world/save.json` or
 `local/playtest-20260920-companion/save.json`. Both still hash to

@@ -16,13 +16,15 @@ internal sealed partial class NativeGamebryoLoadingBackground : Control
     private bool _transition;
     private double _fade;
     private const double CrossfadeSeconds = 2;
+    internal event Action<int, FalloutLoadingScreen>? ScreenChanged;
+    internal float SlideOpacity(int slide) => _slides[slide].Modulate.A;
 
-    internal NativeGamebryoLoadingBackground(FalloutInstallationSettings settings, Texture2D initial)
+    internal NativeGamebryoLoadingBackground(FalloutInstallationSettings settings, Texture2D initial, bool mainMenu = true)
     {
         Name = "LoadingBackground";
         MouseFilter = MouseFilterEnum.Ignore;
-        _interval = settings.Number("Loading", "fMainMenuBkgdUpdateInterval");
-        _capacity = checked((int)settings.Number("Loading", "iMaxScreens_MainMenu"));
+        _interval = settings.Number("Loading", mainMenu ? "fMainMenuBkgdUpdateInterval" : "fLoadingBkgdUpdateInterval");
+        _capacity = checked((int)settings.Number("Loading", mainMenu ? "iMaxScreens_MainMenu" : "iMaxScreens"));
         if (!double.IsFinite(_interval) || _interval <= 0 || _capacity <= 0)
             throw new InvalidDataException("Loading screen interval and resident screen count must be positive.");
         _slides = [Slide("loading_tile_slide_01", initial), Slide("loading_tile_slide_02", initial)];
@@ -75,6 +77,7 @@ internal sealed partial class NativeGamebryoLoadingBackground : Control
         _slides[slide].Texture = texture;
         _slides[slide].SetMeta("opennv_source_record", screen.Identity.ToString());
         _slides[slide].SetMeta("opennv_source_texture", screen.TexturePath);
+        ScreenChanged?.Invoke(slide, screen);
     }
 
     private static TextureRect Slide(string name, Texture2D texture) => new()

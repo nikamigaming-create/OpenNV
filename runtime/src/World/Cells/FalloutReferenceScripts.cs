@@ -7,7 +7,7 @@ internal enum FalloutReferenceEffectKind
 {
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
-    ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement
+    ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
@@ -24,7 +24,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, bool>? IsInInterior = null,
     Action<FalloutFormKey, string, int>? PlayGroup = null,
     Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null,
-    Func<int>? PlayerLevel = null);
+    Func<int>? PlayerLevel = null, Func<bool>? LocationSpecificLoadScreensOnly = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -293,6 +293,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => world.Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
+            if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
+                return new([], _ => (host.LocationSpecificLoadScreensOnly ??
+                    throw new NotSupportedException("Loading-screen policy query has no session owner."))() ? 1 : 0)
+                { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => parts.Length == 1 ? source : Reference(parts[0]);
             FalloutFormKey AuxiliaryTarget(IReadOnlyList<FalloutScriptArgument> arguments)
@@ -701,6 +705,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "sethardcore" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.Hardcore, source, Enable: Boolean(arguments[0])));
+                    break;
+                case "setlocationspecificloadscreensonly" when parts.Length == 1 && arguments.Count == 1:
+                    host.Apply(new(FalloutReferenceEffectKind.LoadingScreenPolicy, source, Enable: Boolean(arguments[0])));
                     break;
                 case "autodisplayobjectives" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.AutoDisplayObjectives, source, Enable: Boolean(arguments[0])));

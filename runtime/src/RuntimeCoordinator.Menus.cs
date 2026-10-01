@@ -9,6 +9,7 @@ public partial class RuntimeCoordinator
     private IEnumerable<uint>? NativeActiveMenus()
     {
         var codes = _nativeOpeningStageDriver?.ActiveMenus().ToHashSet() ?? [];
+        if (_nativeLoadingLayer is not null) codes.Add(1007);
         if (_nativeSessionMenu is not null) codes.Add(1013);
         if (_nativeContainerLayer is { } container)
         {

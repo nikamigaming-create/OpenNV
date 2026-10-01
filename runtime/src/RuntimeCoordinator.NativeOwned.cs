@@ -85,6 +85,7 @@ public partial class RuntimeCoordinator
             },
             ui = _nativeUi?.State,
             bootstrap = _nativeBootstrap?.State,
+            loading = _nativeLoadingScreens?.State,
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
             exteriorLod = cellNodes.OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State,
             exteriorStreaming = NativeStreamingState,
@@ -886,21 +887,31 @@ public partial class RuntimeCoordinator
     private bool _nativeDoorLoading;
     private void RequestNativeDoorTransition(FalloutPlacedReference reference)
     {
-        if (_nativeDoorLoading) return;
+        if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession) return;
         _nativeDoorLoading = true;
-        _nativePlayer!.SetModalInput(true);
+        var player = _nativePlayer!;
+        var previousModal = player.ModalInput;
+        player.SetModalInput(true);
         // Activation queues streaming. A presentation failure must not become a
         // permanent source-script fault or consume the reciprocal door's state.
-        Callable.From((Action)(async () =>
+        _nativeDoorRead = ConsumeNativeDoorTransition(reference, player, previousModal);
+    }
+
+    private async Task ConsumeNativeDoorTransition(FalloutPlacedReference reference,
+        RuntimeNativePlayer player, bool previousModal)
+    {
+        try
         {
-            try { await StreamNativeDoorTransition(reference); }
-            catch (Exception error)
-            {
-                SetMeta("opennv_door_stream_error", error.Message);
-                GD.PushError($"OPENNV_NATIVE_DOOR_STREAM_FAIL {error}");
-            }
-            finally { _nativeDoorLoading = false; _nativePlayer!.SetModalInput(false); }
-        })).CallDeferred();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (_nativeSessionTransitioning || _retiringNativeSession) throw new OperationCanceledException("Door session retired.");
+            await StreamNativeDoorTransition(reference);
+        }
+        catch (Exception error)
+        {
+            SetMeta("opennv_door_stream_error", error.Message);
+            GD.PushError($"OPENNV_NATIVE_DOOR_STREAM_FAIL {error}");
+        }
+        finally { _nativeDoorLoading = false; player.SetModalInput(previousModal); }
     }
 
     private async System.Threading.Tasks.Task StreamNativeDoorTransition(
@@ -926,6 +937,7 @@ public partial class RuntimeCoordinator
         (CollisionObject3D Body, CollisionObject3D.DisableModeEnum Mode)[] arrivalCollision = [];
         try
         {
+            await ShowNativeLoadingScreens(targetScene.Cell.FormKey);
             targetScene = _nativeReferences!.ComposeResidency(targetScene, grid?.Cells);
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
@@ -963,6 +975,7 @@ public partial class RuntimeCoordinator
             ObserveNativeResidentReferences(active);
             throw;
         }
+        finally { CloseNativeLoadingScreens(); }
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
         if (_nativeReferences!.PlayerMoves.Pending) _nativeOpeningStageDriver!.RequestWorldSave();
         else _nativeOpeningStageDriver!.PersistWorldState(targetScene.Cell.FormKey);
