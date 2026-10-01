@@ -31,6 +31,7 @@ IdleCollectionProbe.Run();
 IdleConditionProbe.Run();
 HudDeclarationsProbe.Run();
 SubtitleDeclarationsProbe.Run();
+RaceMenuDevicesProbe.Run();
 MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
 FloatInitializerContracts.Run();

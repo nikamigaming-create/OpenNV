@@ -42,8 +42,9 @@ plays its owned voice/lip data, renders forced owned HUD subtitles and delivers
 the typed SayToDone event. Ordinary input reaches the source Boy/Girl question;
 the male response completes. A fresh female run also completes Mom's Say and
 the subsequent parent dialogue, reaches owned name entry and accepts a name.
-The continuation stops at TTW_ShowGeneProjector; Dad's subsequent source stage
-also reports unbound MatchRace. Both faults remain visible.
+The continuation now opens TTW's owned gene-projector NIF and source race/sex
+screen. Ordinary Next/Done/Yes accepts the selection and closes the menu;
+Dad's subsequent source stage reports unbound MatchRace. That fault remains visible.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
@@ -74,6 +75,21 @@ restoration after completion, without retained frames. Text styling, queue/hold/
 fade timing, matched canvas scaling and XR final-eye presentation remain gaps.
 Ordinary source speech reaches character creation; it does not establish full
 dialogue, character creation or campaign support.
+
+TTW race-menu selectors read their owned plugin registration, bounded copy/import,
+shared buffer, native command forwarding and original model-consumer associations.
+The projector and default paths remain owned inputs; ordinary ShowRaceMenu restores
+the default selector. Synthetic malformed/foreign/ambiguous-association checks
+and an isolated owned native device/XML/font/pointer/keyboard fixture pass. The
+fixture renders both models and restores identical default pixels with no retained
+frames. Ordinary Capital input completes eight speech commands, reaches the
+projector, navigates its source pages and accepts the shared selection. The menu
+releases its pause and quits with readers drained. A requested private screenshot
+is retained. Overlapping menu replacement, portrait/effect parity, source close
+timing and XR final-eye presentation remain unverified. The user-observed walking
+during the gender question is reproduced: Dad has arrived at his source marker but
+retains Forward, and his package-change idle reports missing deferred replacement
+ownership. These faults remain visible; the projector does not complete chargen.
 
 Character-generation policy is shared by reference/results, fallback quest scripts
 and pre-world startup, and retains cold with a false legacy default. Deferred XP
@@ -326,9 +342,10 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached TTW_ShowGeneProjector dependency command and MatchRace
-through source-backed creation/actor owners. Preserve the ordinary gender,
-parent-dialogue and accepted-name prefix, source player packages, completed
+Repair the reproduced stationary actors retaining Forward and their reached
+package-change idle/deferred replacement owner. Implement MatchRace through
+source-backed actor state. Preserve the ordinary gender,
+parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
 screen-blood and activation-feedback behavior. Complete further source dialogue
 arbitration/arguments and matched INFO-result/SayToDone timing. Complete source screen-blood lighting/flare,
 color transfer and XR final-eye presentation without hiding their telemetry gaps.
@@ -441,15 +458,18 @@ identify the next source owners. The requested current-build screenshot is
 Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
-The fresh ordinary Capital runs are `tmp/development-lab/ttw-sayto-20261001`
-and `tmp/development-lab/ttw-scripted-speech-20261001`. The first completes Dad's
-opening line, reaches the owned gender question and completes the male response.
-The second selects Girl, completes both parents' subsequent source dialogue,
-reaches owned name entry and accepts Wanderer through ordinary input. The next
-speech end result reports TTW_ShowGeneProjector; Dad's stage continuation reports
-MatchRace. Startup telemetry reports interval overruns, and other reference
+The fresh ordinary Capital run is `tmp/development-lab/ttw-gene-projector-20261001`.
+It selects Girl, completes eight source speech commands, accepts Wanderer,
+opens the source gene projector and accepts its selection through Next/Done/Yes.
+The menu closes; Dad's stage continuation reports MatchRace. Its gender-question
+telemetry reproduces the stationary Forward/package-change fault. Startup
+telemetry reports interval overruns, and other reference
 GetLinkedRef faults, 83 missing runtime references and two camera-body targets
-remain visible. Both runs quit with source readers drained. The inspected private
+remain visible. The run quits with source readers drained. Current checks are
+`tmp/gene-declarations.log`, `tmp/gene-owned-audit.log` and `tmp/gene-runtime-gate.log`.
+The inspected private projector frame is
+`local/recordings/ttw-birth-20261001/TTW-gene-projector-flat.png`.
+The inspected private
 MP4 is `local/recordings/ttw-birth-20261001/flat-ttw-birth-dialogue-20261001.mp4`:
 30 seconds, 1280x720, 900 output frames, 839 distinct source draws and process
 audio. Its sidecar retains repeated frames; no audiovisual parity is claimed.

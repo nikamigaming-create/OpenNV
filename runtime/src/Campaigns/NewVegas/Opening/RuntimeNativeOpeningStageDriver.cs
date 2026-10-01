@@ -36,6 +36,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private IReadOnlyList<FalloutNativeTraitIdentity> _traits = [];
     private RuntimeNativePlayerNameEntry? _nameEntry;
     private RuntimeNativeRaceSexEntry? _raceSexEntry;
+    private FalloutRaceMenuDevices? _raceMenuDevices;
+    private bool _raceMenuDevicesRead;
+    private string _raceMenuCommand = "showracemenu";
     private RuntimeNativeVigorEntry? _vigorEntry;
     private RuntimeNativeTagSkillEntry? _tagSkillEntry;
     private RuntimeNativeTraitEntry? _traitEntry;
@@ -442,9 +445,25 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         CompleteBlocker("getplayername");
     }
 
-    private void SynchronizeRaceSexEntry(bool sourceRequested = false)
+    private string RaceMenuModel(string command)
     {
-        var pending = sourceRequested || PendingBlockers.Contains("showracemenu", StringComparer.OrdinalIgnoreCase);
+        if (!_raceMenuDevicesRead)
+        {
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Race menu has no owned source.");
+            if (source.TryRead("nvse/plugins/ttw_nvse.dll", null, out var plugin, out _))
+                _raceMenuDevices = FalloutExecutableStringTable.ReadTtwRaceMenuDevices(
+                    Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"), plugin);
+            _raceMenuDevicesRead = true;
+        }
+        return _raceMenuDevices?.ModelFor(command) ?? (command == "showracemenu" ? "meshes/terminals/nv_reflectron_ui.nif" :
+            throw new NotSupportedException("Gene projector has no selected owned TTW plugin declaration."));
+    }
+
+    private void SynchronizeRaceSexEntry(bool sourceRequested = false, string? sourceCommand = null)
+    {
+        var pendingCommand = PendingBlockers.FirstOrDefault(command => command.Equals("showracemenu", StringComparison.OrdinalIgnoreCase) ||
+            command.Equals("ttw_showgeneprojector", StringComparison.OrdinalIgnoreCase));
+        var pending = sourceRequested || pendingCommand is not null;
         if (!pending)
         {
             if (_raceSexEntry is not null)
@@ -455,15 +474,21 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return;
         }
         if (_raceSexEntry is not null)
+        {
+            if (sourceRequested) throw new NotSupportedException("Overlapping race-menu requests have no native replacement owner.");
             return;
+        }
+        _raceMenuCommand = sourceCommand ?? pendingCommand ?? "showracemenu";
+        var modelPath = RaceMenuModel(_raceMenuCommand);
         _raceSexEntry = new RuntimeNativeRaceSexEntry();
         AddChild(_raceSexEntry);
         _raceSexEntry.Accepted += AcceptCharacter;
         _raceSexEntry.Failed += error => ExecutionError = error.Message;
-        _raceSexEntry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter());
+        _raceSexEntry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter(), modelPath);
         GD.Print(
             $"OPENNV_NATIVE_RACESEX_OPEN quest={QuestEditorId} stage={Stage} " +
             $"race={_character.RaceEditorId}/{_character.RaceRuntimeFormId:x8} " +
+            $"command={_raceMenuCommand} model={modelPath} " +
             "source=player-race-hair-eyes-ctl presentation=owned-rendered-menu parity=unverified");
     }
 
@@ -486,7 +511,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             $"hair={_character.HairEditorId}/{_character.HairRuntimeFormId:x8} " +
             $"eyes={_character.EyesEditorId}/{_character.EyesRuntimeFormId:x8} " +
             "source=live-winning-records");
-        CompleteBlocker("showracemenu");
+        CompleteBlocker(_raceMenuCommand);
         // The existing modal handoff delivers the source MenuMode event here.
         // Exact scheduling while the menu is open remains a separate owner.
         if (_machine is not null) _scripts.ExecuteClaimedMenu(_controls.Stage(QuestEditorId, Stage).Quest, 1036, _scriptHost);

@@ -29,8 +29,9 @@ talking flag. Dad's three-argument SayTo now completes his owned voice/lip line,
 forced HUD subtitle and source completion event, opening the owned Boy/Girl
 question. Ordinary male selection completes its response. A fresh female run
 also completes Mom's Say and subsequent parent dialogue, reaches owned name
-entry and accepts a name. TTW_ShowGeneProjector then faults; Dad's later source
-stage reports unbound MatchRace. Those faults remain visible. That
+entry and accepts a name. TTW_ShowGeneProjector now opens the source projector
+and race/sex screen; ordinary Next/Done/Yes accepts the selection and closes it.
+Dad's later source stage reports unbound MatchRace. That fault remains visible. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first manual save
 fails at the existing prior-save requirement, so first-snapshot initialization and
@@ -61,6 +62,18 @@ Additional command arguments/listeners, concurrent voices, styling, queue/hold/
 fade, matched timing/scaling and XR final-eye presentation remain open. These
 checks and the ordinary parent dialogue do not establish full dialogue or
 character creation support.
+
+Owned plugin copy/import/registration/buffer/native-forward/model-consumer
+associations supply both race-menu device paths, including the normal selector's
+default restoration. Synthetic invalid-source checks and an isolated owned native
+device/XML/font/pointer/keyboard fixture pass, including identical restored default
+pixels with no retained frames. Ordinary Capital input reaches the projector and
+accepts the shared draft through its source controls, releases menu pause and quits
+cleanly. A requested private screenshot is retained. Overlapping replacement,
+portrait/effect/close-timing parity and XR final-eye presentation remain unverified.
+The walking reported during the gender question is reproduced: Dad's source travel
+has arrived while Forward remains active, and package-change idle/deferred
+replacement still faults. Actor animation and further chargen remain incomplete.
 
 Activation-failure sound selection/reset share C# state across source execution
 paths and ordinary flat/XR input. The default identity comes from an admitted

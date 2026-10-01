@@ -233,6 +233,7 @@ internal static partial class FalloutOpeningStageTransitionResolver
         "SayTo",
         "GetPlayerName",
         "ShowRaceMenu",
+        "TTW_ShowGeneProjector",
         "SetTagSkills",
         "ShowTraitMenu",
         "StartConversation",

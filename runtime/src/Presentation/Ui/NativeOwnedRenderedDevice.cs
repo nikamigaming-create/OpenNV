@@ -20,10 +20,12 @@ internal sealed partial class NativeOwnedRenderedDevice : Control
     internal Camera3D Camera { get; }
     internal Node3D Model => _model;
     internal FalloutNifFile Source => _source;
+    internal string SourceModel { get; }
 
     internal NativeOwnedRenderedDevice(string modelPath, FalloutInstallationSettings settings, bool pipBoy = false, RuntimeNativePlayerActor? player = null)
     {
         Name = "OwnedRenderedDevice";
+        SourceModel = modelPath;
         ProcessMode = ProcessModeEnum.Always;
         _settings = settings;
         _pipBoy = pipBoy;
