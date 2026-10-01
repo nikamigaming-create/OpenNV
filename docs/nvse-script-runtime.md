@@ -241,6 +241,28 @@ be reported as a working MCM menu or JAM gameplay.
 
 ## Evidence and remaining work
 
+Keyboard/mouse [GetControl](https://geckwiki.com/index.php/GetControl) and
+[SetControl](https://geckwiki.com/index.php/SetControl) share a C# profile table
+with reference and fallback-quest execution. Source INI keyboard/mouse bytes are
+read-only; -1 denotes an unassigned control, and mouse queries use the 256-based
+DirectInput domain. `GetAltControl` retains the raw mouse-byte result of the
+selected [xNVSE 6.4.9 input contract](https://github.com/xNVSE/NVSE/blob/6.4.9/nvse/nvse/Commands_Input.cpp).
+`SetAltControl` targets that lane. Remapping swaps the first occupied binding
+within the device lane. Invalid numeric arguments and unavailable device lanes
+fail before mutation. A native adapter updates the ordinary movement, activation,
+fire, reload, grab, jump, Pip-Boy, quick-save and aim/POV actions, releases affected
+held actions and disconnects on retirement. Unknown physical keys retain the
+previous owner/map. Source-bound flat input no longer intercepts Q/H for the
+diagnostic wheels; complete Classic/Nikami selection and stock action behavior
+remain separate work.
+
+Changes persist through an atomic `script-config/input-controls.json` profile
+overlay at session retirement, including load/title transitions and application
+exit. They do not belong to campaign saves or overwrite Fallout INIs. Missing
+executable defaults, joystick/gamepad adapters, GetController, additional stock
+actions and full mod/controller input remain unbound. The native fixture checks
+actual input-map state and events, not campaign playability or retail matching.
+
 Synthetic execution checks cover chained writes, operator precedence, numeric and
 typed string function arguments, concatenation, form naming, short-circuit effects,
 invalid expressions, winning compiled quest slots, migration and cold recurrence.
@@ -250,11 +272,11 @@ mutation during dispatch, failure retention and replacement with restored owners
 The native Godot audit dispatches physical key events into source functions and
 verifies GameMode/paused MenuMode callbacks mutating actual reference slots.
 
-The selected JAM source audit has 13 parser rejections among 52 scripts, down
-from 21 before indexed expressions. Reached execution still fails visibly.
+The selected JAM source audit has 11 parser rejections among 52 scripts.
+Reached execution still fails visibly.
 Its reached configuration initializers now execute through the shared INI and
-auxiliary owners; the next failures are concrete render-event, actor-effect,
-perk-mutation and remaining parser gaps. The synthetic storage probe covers
+auxiliary owners; the next failures are concrete hit-event, actor-effect,
+perk-consumer and remaining parser gaps. The synthetic storage probe covers
 source-script write/readback, source precedence, overlay atomicity,
 typed/public/private/indexed auxiliary values, save reload, cold restart and
 New Game clearing. The UI organizer/component probes cover source injection,
@@ -266,8 +288,9 @@ presentation host. These checks do not establish JAM gameplay or a working MCM
 menu.
 
 Remaining array operations, extended operators and unbound extension calls still
-need owners. The JHM initializer now passes its prior `Ar_Null` failure and reaches
-`SetUIFloatGradual`; this does not establish a working hit marker or menu.
+need owners. JBT passes its control query; JHM passes source UI interpolation.
+Both now reach `SetOnHitEventHandler`; this does not establish working bullet
+time, hit markers or menus.
 MCM's complete menu/settings behavior, render/hit/fire events, XR control mapping,
 focus-loss input handling and callbacks while no world is active remain open.
 Compiled scripts without source also need a bytecode execution path. Source

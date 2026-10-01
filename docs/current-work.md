@@ -15,6 +15,22 @@ completion is claimed.
 
 ## Verified runtime
 
+Keyboard/mouse control queries and remaps now share a profile-owned C# table.
+Winning installation INI bindings remain read-only; changes swap occupied keys
+within their device lane and persist in a separate profile overlay on session
+retirement. Reference and fallback-quest commands use the same owner. Native
+movement, activation, firing, reload, grab, jump, Pip-Boy, quick-save and aim/POV
+actions consume that table. Remapping clears affected held actions; rejected
+physical keys leave the owner and native map intact. A native input fixture and
+synthetic script/cold-profile checks pass with recording off. The full runtime
+gate and unchanged 446-owner cold-save audit also pass. Source-bound flat input
+no longer intercepts Q/H for the diagnostic wheels. The owned JAM
+initializer passes GetControl and now reaches SetOnHitEventHandler. Joystick/
+gamepad adapters, missing executable binding defaults, remaining stock actions,
+Classic/Nikami selection and complete mod input remain open. The next shared
+owners are hit-event context and actor-effect lifecycle, followed by remaining
+perk consumers, authored HUD/MCM and the FO3/TTW campaign.
+
 Winning perk parameters now have a shared C# owner for indexed numeric reads and
 writes, including independent two-value slots and byte-sized quest stages.
 Mixed ability/entry-point lists retain their source indices. Cached ability
@@ -25,7 +41,7 @@ variables; grouped form arguments retain identity instead of display names.
 Invalid writes preserve existing values, and owned source files remain read-only.
 Changes live with the loaded source stack, outside campaign snapshots. The owned
 JAM initializer publishes all 16 bullet-time and two hit-marker parameter writes.
-JBT then reaches its missing control-query owner; JHB reaches Dispel. Native
+JBT then reaches hit-event registration; JHB reaches Dispel. Native
 source activation updates the same cached perk reader, including reactivation.
 The complete runtime gate and unchanged cold-checkpoint audit pass. Complete
 entry-point consumers, conditions and JAM gameplay remain unverified.
@@ -70,7 +86,7 @@ script clocks, failures and progression through parser 1 to 7 and another cold
 restore; its file remains unchanged.
 The selected JAM source audit now has 11 parser failures among 52 scripts.
 Its JBT initializer registers the winning render function and mutates its perk
-parameters before reaching the missing control-query owner; the source execution
+parameters before reaching hit-event registration; the source execution
 audit does not establish a working bullet-time module. JHM reaches the missing
 hit-event owner.
 Complete JAM/MCM remains unverified.

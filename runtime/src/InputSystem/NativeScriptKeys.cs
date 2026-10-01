@@ -6,6 +6,30 @@ namespace OpenNV.Runtime.InputSystem;
 // source scripts. This observes input before gameplay controls consume it.
 internal static class NativeScriptKeys
 {
+    internal static InputEvent Create(int code)
+    {
+        if (code >= 256)
+            return new InputEventMouseButton
+            {
+                ButtonIndex = code switch
+                {
+                    256 => MouseButton.Left,
+                    257 => MouseButton.Right,
+                    258 => MouseButton.Middle,
+                    259 => MouseButton.Xbutton1,
+                    260 => MouseButton.Xbutton2,
+                    264 => MouseButton.WheelUp,
+                    265 => MouseButton.WheelDown,
+                    _ => throw new NotSupportedException($"DirectInput mouse binding {code} has no native button."),
+                }
+            };
+        foreach (var key in Enum.GetValues<Key>().Distinct())
+            foreach (var location in key is Key.Shift or Key.Ctrl or Key.Alt
+                ? new[] { KeyLocation.Left, KeyLocation.Right } : [KeyLocation.Unspecified])
+                if (Code(key, location) == code) return new InputEventKey { PhysicalKeycode = key, Location = location };
+        throw new NotSupportedException($"DirectInput keyboard binding {code} has no native physical key.");
+    }
+
     internal static IEnumerable<(int Key, bool Down)> Read(InputEvent input)
     {
         if (input is InputEventKey { Echo: false } keyboard && Code(keyboard.PhysicalKeycode, keyboard.Location) is { } key)

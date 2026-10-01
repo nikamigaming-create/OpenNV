@@ -98,9 +98,10 @@ integer operators, loops and per-script lifecycle/frame/key/render events.
 MCM's full in-game configuration
 is required by the requested product scope and remains in implementation.
 11 of JAM's 52 source scripts still fail parsing. The reached initialization
-scripts retain specific UI, actor-effect, perk-mutation and hit-event gaps.
+scripts retain specific UI, actor-effect, perk-consumer and hit-event gaps.
 JBT now registers its winning render function and applies its source perk
-parameter writes before reaching the control-query gap. JHB applies its parameter
+parameter writes and queries its source control binding before reaching hit-event
+registration. JHB applies its parameter
 writes before reaching Dispel. Existing damage/spread readers see the shared
 values; remaining entry points and conditions are not complete perk behavior.
 The native render-phase fixture does not establish working bullet time.
@@ -109,6 +110,11 @@ Its repeating trait advances in the shared UI owner; a separate owned-reticle
 fixture checks the native float-to-pixel bridge. Complete hit markers and MCM
 remain unverified. Additional render-phase flags remain unbound.
 See [NVSE script runtime](nvse-script-runtime.md).
+Keyboard/mouse GetControl/SetControl and legacy alternate-control commands share
+the actual native player action map and an atomic profile settings overlay.
+Synthetic checks cover source commands, swaps and cold settings; the native
+fixture checks live action state, held-button remapping and retired adapters.
+They do not prove full stock controls, JAM input or VR/controller compatibility.
 The earlier adapters only applied a speed multiplier and global time scale in
 the old CellPlayer path. They do not provide AP behavior, animations, callbacks,
 menus, complete module behavior or native-player integration.

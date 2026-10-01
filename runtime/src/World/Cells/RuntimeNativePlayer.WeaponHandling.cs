@@ -48,9 +48,10 @@ internal partial class RuntimeNativePlayer
     private bool WeaponInput(InputEvent input)
     {
         if (!GetMeta("opennv_source_fighting_enabled", true).AsBool() || _firstPerson?.Weapon is null || _weaponHandling is null) return false;
-        if (input is InputEventKey { PhysicalKeycode: Key.R, Echo: false } key)
+        var bindings = _configuration.Player.DesktopInput;
+        if (input.IsActionPressed(bindings.Reload.Action, allowEcho: false) || input.IsActionReleased(bindings.Reload.Action))
         {
-            if (key.Pressed) { _reloadPressed = true; _holdHandled = false; _reloadHeld = 0; }
+            if (input.IsActionPressed(bindings.Reload.Action, allowEcho: false)) { _reloadPressed = true; _holdHandled = false; _reloadHeld = 0; }
             else
             {
                 _reloadPressed = false;
@@ -62,12 +63,13 @@ internal partial class RuntimeNativePlayer
             }
             return true;
         }
-        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left } fire)
+        if (input.IsActionPressed(bindings.Fire.Action, allowEcho: false) || input.IsActionReleased(bindings.Fire.Action))
         {
-            if (fire.Pressed == _weaponTriggerHeld) return true;
-            _weaponTriggerHeld = fire.Pressed;
+            var pressed = input.IsActionPressed(bindings.Fire.Action, allowEcho: false);
+            if (pressed == _weaponTriggerHeld) return true;
+            _weaponTriggerHeld = pressed;
             _automaticFireStopped = false;
-            if (fire.Pressed)
+            if (pressed)
             {
                 if (!_weaponHandling.Drawn) RequestWeaponAction("equip");
                 else RequestWeaponFire();

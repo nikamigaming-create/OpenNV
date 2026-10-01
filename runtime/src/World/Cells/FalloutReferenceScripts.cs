@@ -360,6 +360,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         arguments => FalloutScriptValue.String(ui.GetString(arguments[0].Text))),
                 };
             }
+            if (parts.Length == 1 && FalloutInputControlCommands.IsQuery(operation))
+                return FalloutInputControlCommands.Query(operation, world.Controls ?? throw new NotSupportedException("Control queries have no profile input owner."));
             if (parts.Length == 1 && operation is "getnthperkentryvalue1" or "getnthperkentryvalue2" or
                 "getnthperkentrytype" or "getnthperkentryfunction")
                 return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
@@ -495,6 +497,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             var callerPlugin = bindings.Source.OwnerPlugin;
+            if (parts.Length == 1 && FalloutInputControlCommands.IsCommand(operation))
+            {
+                FalloutInputControlCommands.Execute(operation, world.Controls ?? throw new NotSupportedException("Control commands have no profile input owner."),
+                    arguments.Select(Number).ToArray());
+                return;
+            }
             if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")
             {
                 if (arguments.Count != 3) throw new InvalidDataException($"{command} has an invalid argument count.");

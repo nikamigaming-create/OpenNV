@@ -153,6 +153,7 @@ public partial class RuntimeCoordinator
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
+            _nativeScriptStorage?.Controls?.Flush();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
@@ -191,6 +192,7 @@ public partial class RuntimeCoordinator
         {
             await DrainNativeSourceReaders();
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();

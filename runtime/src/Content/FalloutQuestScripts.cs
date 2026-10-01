@@ -152,6 +152,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutScriptValueStore ScriptValues { get; }
     internal FalloutAuxiliaryStore Auxiliary { get; }
     internal FalloutScriptIniStore? Ini { get; }
+    internal FalloutInputControls? Controls { get; }
     internal FalloutUiComponentStore? Ui => References?.Ui;
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
@@ -288,6 +289,7 @@ internal sealed class FalloutQuestScripts
         ScriptValues = references?.ScriptValues ?? new();
         Auxiliary = references?.Auxiliary ?? storage?.Auxiliary ?? auxiliary ?? new();
         Ini = references?.Ini ?? storage?.Ini;
+        Controls = references?.Controls ?? storage?.Controls;
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
@@ -472,6 +474,8 @@ internal sealed class FalloutQuestScripts
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
+            if (parts.Length == 1 && FalloutInputControlCommands.IsQuery(operation))
+                return FalloutInputControlCommands.Query(operation, Controls ?? throw new NotSupportedException("Control queries have no profile input owner."));
             if (parts.Length == 1 && operation is "getnthperkentryvalue1" or "getnthperkentryvalue2" or
                 "getnthperkentrytype" or "getnthperkentryfunction")
                 return new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
@@ -579,6 +583,12 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && FalloutInputControlCommands.IsCommand(operation))
+            {
+                FalloutInputControlCommands.Execute(operation, Controls ?? throw new NotSupportedException("Control commands have no profile input owner."),
+                    arguments.Select(NumberArgument).ToArray());
+                return;
+            }
             if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")
             {
                 if (arguments.Count != 3) throw new InvalidDataException($"{command} has an invalid argument count.");

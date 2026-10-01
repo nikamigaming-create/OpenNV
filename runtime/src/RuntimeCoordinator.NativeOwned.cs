@@ -254,7 +254,7 @@ public partial class RuntimeCoordinator
         _nativeUi = FalloutUiComponentStore.Open(_nativePluginStack);
         _nativeReferences?.Dispose();
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
-            ini: _nativeScriptStorage.Ini, ui: _nativeUi);
+            ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
         var initialCell = content.Campaign == RuntimeLiveContentSource.Fallout3Game
             ? new FalloutFormKey(NativeFallout3InitialCellPlugin, NativeFallout3InitialCellObjectId)
             : new FalloutFormKey(NativeNewVegasInitialCellPlugin, 0x103df9);
@@ -439,7 +439,7 @@ public partial class RuntimeCoordinator
             _nativePrewarmedInitialCellRoot = null;
             _nativeReferences?.Dispose();
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
-                ini: _nativeScriptStorage?.Ini, ui: _nativeUi);
+                ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
@@ -1025,6 +1025,9 @@ public partial class RuntimeCoordinator
         _nativePlayer.SaveGame = SaveNativeManualSlot;
         _nativePlayer.OpenPauseMenu += ToggleNativeSessionMenu;
         _nativePlayer.Configure(_configuration, ReferenceTransform(marker));
+        _nativePlayer.ConfigureInputControls(_nativeScriptStorage?.Controls ??
+            throw new InvalidOperationException("Native input has no profile control owner."),
+            key => _nativeQuestScripts?.Scripts.Events.IsKeyPressed(key) == true);
         _nativePlayer.ConfigureLocomotion(_nativePluginStack!, () => _nativeOpeningStageDriver?.Vitals);
         _nativePlayer.ConfigurePresentation(_nativePluginStack!, _nativeInventory,
             () => _nativeOpeningStageDriver!.PlayerAppearance, () => NativeAmbient(_nativeActiveCell!.Cell),

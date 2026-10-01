@@ -137,6 +137,7 @@ public partial class NativeReferenceEventsAudit : Node
             world.LoadCell(cell);
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
             await ScriptEvents(records, world, root);
+            await InputControls(records);
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)

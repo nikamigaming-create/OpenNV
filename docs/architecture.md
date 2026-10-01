@@ -201,6 +201,12 @@ Winning perk parameter changes belong to the selected C# source stack. Decoded
 ability readers project current indexed values rather than caching private
 mutations. Their lifetime crosses world replacement but does not write source
 files or campaign snapshots; missing entry-point consumers remain divergence.
+Keyboard/mouse control bindings have a shared profile-owned C# table. Script
+queries and remaps read the installation's control settings and swap occupied
+bindings within a device lane. The native adapter updates the player action map
+and releases affected held actions. Retirement commits an atomic profile overlay;
+source INIs and campaign snapshots are unchanged. Missing executable defaults,
+joystick/gamepad mappings and remaining stock actions stay explicit gaps.
 Script admission retains older saved owners with unsupported trailing Else text;
 the reached executor still refuses that syntax until its behavior is bound.
 See [NVSE script runtime](nvse-script-runtime.md) for the implemented boundary.
