@@ -58,10 +58,13 @@ the subsequent parent dialogue, reaches owned name entry and accepts a name.
 The continuation now opens TTW's owned gene-projector NIF and source race/sex
 screen. Ordinary Next/Done/Yes accepts the selection and closes the menu;
 Dad's subsequent source MatchRace now completes. A fresh ordinary Hispanic
-selection reaches the next unbound command, MatchFaceGeometry. That fault remains visible.
+female selection also executes four MatchFaceGeometry commands, completes twelve
+speech commands and reaches CG00 stage 80's trait menu. Ordinary trait confirmation
+accepts zero selected traits; subsequent Dad/Dr. Li speech reports no eligible
+INFO in the next source topic. The active CG00 quest script remains running.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
-non-camera targets. The first ordinary manual save now initializes a v24 campaign
+non-camera targets. The first ordinary manual save now initializes a campaign
 snapshot without requiring a prior New Vegas save. Code-addressed checkpoint
 creation and in-process loading use that same source-validated owner. A paused
 reload preserves the accepted character, all quest state, inventory, controls,
@@ -70,6 +73,11 @@ The owned cold fixture retains all 641 saved quest-script owners, clocks and
 failure states before execution. Direct title loading publishes the completed
 slot; duplicate/missing requests preserve Continue, and ordinary Resume/Pause
 advances then holds the restored camera. Recording remains off.
+Current saves write v25 with source-validated face geometry and retain v24
+compatibility. The post-face birth checkpoint reloads through the native scene;
+a paused resave retains face overrides and the other listed root state exactly.
+Cold presentation exposes an unbound authored ragdoll accumulation-root rotation,
+so that checkpoint is not fully reusable.
 Source save eligibility, complete actor cold clocks and active interaction
 continuations remain unbound. TTWStart
 retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
@@ -131,15 +139,26 @@ MatchRace now changes the actual NPC base's race, preserves its age tier through
 winning younger/older-family links, and refreshes existing owned bodies and
 dynamic faces without replacing the actor, skeleton or animation clock. Unloaded
 references and other instances of the base share that state; active dialogue
-race/child conditions read the live owner. Save v24 retains validated NPC/RACE
-hashes, admits prior v23 state and rejects race overrides in legacy schemas.
+race/child conditions read the live owner. Saves retain validated NPC/RACE
+hashes, admit prior supported state and reject overrides in legacy schemas.
 Synthetic source-order, shared/unloaded scope, family/cycle, failure-prefix,
 dialogue and cold-drift checks pass. An isolated owned native actor fixture
 verifies changed pixels, stable pose/phase, identical cold geometry, exact
 same-race no-op and restored source pixels without retained frames. A fresh
-ordinary opening accepts Hispanic selection and reaches MatchFaceGeometry.
+ordinary opening accepts Hispanic selection and completes the reached race commands.
 Player-target race changes, complete actor cold clocks, matched timing and
 retail/XR presentation remain unbound; neither actor nor campaign parity is claimed.
+
+[MatchFaceGeometry](actor-face-geometry.md) now owns shared NPC-base geometry,
+current player/NPC source appearance, marked/fallback presets, case-sensitive
+native tie sorting, signed percentage, source-minus-preset displacement, retained
+affine age and unchanged texture. Existing owned actors refresh without replacing
+their skeleton or animation phase. Save v25 validates NPC/model/RACE/CTL hashes
+and clones coefficient arrays. Synthetic contracts and an isolated owned native
+fixture pass changed/cold/restored pixels at a matched idle time without retained
+frames. Ordinary birth input reaches stage 80 and the post-face checkpoint.
+Scripted player targets, active template changes, complete actor cold continuation
+and matched retail/XR timing/pixels remain unbound.
 
 Character-generation policy is shared by reference/results, fallback quest scripts
 and pre-world startup, and retains cold with a false legacy default. Deferred XP
@@ -392,8 +411,9 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement MatchFaceGeometry through source-backed NPC state and native face
-refresh. Preserve the verified MatchRace family/base/cold behavior and
+Resolve the reached Dad/Dr. Li dialogue selection failure after CG00 stage 80 and
+the authored ragdoll accumulation-root rotation failure on the post-face cold
+load. Preserve the verified face geometry and MatchRace family/base/cold behavior and
 source HUD visibility, ordinary gender,
 parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
 screen-blood and activation-feedback behavior. Complete further source dialogue
@@ -468,11 +488,17 @@ during development except for a requested visual check.
 
 ## Candidate and private continuation
 
-Current actor race checks are `tmp/actor-appearance-owned.log`,
-`tmp/actor-appearance-runtime-gate.log` and `tmp/actor-appearance-cold-save.log`.
-The ordinary flat run is `tmp/development-lab/ttw-actor-race-20261001/`;
-it accepts a Hispanic selection, reaches MatchFaceGeometry and quits with readers
-drained. Recording remains off. Both protected saves retain their recorded hash.
+Current face checks are `tmp/match-face-contract.log`, `tmp/match-face-owned.log`
+and `tmp/match-face-runtime-gate.log`; the cold audit is
+`tmp/match-face-checkpoint.log`. `tmp/match-face-preset-order.log` confirms all
+4,220 native NPC list entries against first registration in a matched vanilla/DLC
+graph; TTW ordering comes from its own reordered files. The ordinary flat run is
+`tmp/development-lab/ttw-face-20261001-r2/`; it accepts a Hispanic female selection,
+executes the four face commands, completes twelve speech commands and reaches
+CG00 stage 80. Its post-face checkpoint retains face/root state on paused reload
+but reports an authored ragdoll rotation gap, so full cold acceptance remains open.
+The run quits with readers drained. Recording remains off. Both protected saves
+retain their recorded hash.
 
 The public-facing local experimental candidate remains
 `local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, from runtime
@@ -538,7 +564,8 @@ pixels/metadata are removed. Current checks are `tmp/hud-controls-build.log`,
 `tmp/hud-controls-owned.log` and `tmp/hud-controls-runtime-gate.log`.
 The earlier ordinary actor run is `tmp/development-lab/ttw-birth-actors-20261001`.
 It selects Girl and completes eight source speech commands. Source controls
-accept a name and the projector selection; Dad's continuation reaches MatchFaceGeometry.
+accept a name and the projector selection. The current post-face run above
+extends this prefix through stage 80.
 Gender-question samples retain owned Dad/Dr. Li poses and stationary Idle with
 no actor package errors. Startup
 telemetry reports interval overruns, and other reference

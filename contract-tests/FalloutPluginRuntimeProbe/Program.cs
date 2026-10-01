@@ -1342,6 +1342,28 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.RaceOverridesSchema });
+    var legacyRaceState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(legacyRaceState.State.Schema == FalloutNativeCampaignSave.RaceOverridesSchema &&
+        FalloutNativeCampaignSave.WithWorldState(legacyRaceState.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The preceding race-override save no longer loads and upgrades through the ordinary save owner.");
+    var legacyFaceState = referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.RaceOverridesSchema,
+        ActorOverrides = [new(new("SyntheticNPC.esm", 0x100), new string('0', 64), [], [],
+            FaceGeometry: new(new("SyntheticNPC.esm", 0x100), new string('0', 64), new("SyntheticNPC.esm", 0x400),
+                new string('0', 64), new string('0', 64), new byte[200], new byte[120]))],
+    };
+    var legacyRaceBytes = File.ReadAllBytes(syntheticSavePath);
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, legacyFaceState), "Legacy save cannot contain actor face geometry");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(legacyRaceBytes), "Rejected legacy face state replaced a valid save.");
+    var legacyFacePath = Path.Combine(fixtureRoot, "legacy-face-save.json");
+    File.WriteAllText(legacyFacePath, JsonSerializer.Serialize(legacyFaceState));
+    ExpectFailure(() => FalloutNativeCampaignSave.Read(legacyFacePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell),
+        "Legacy save cannot contain actor face geometry");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ScriptValuesSchema });
     var legacyScriptValues = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

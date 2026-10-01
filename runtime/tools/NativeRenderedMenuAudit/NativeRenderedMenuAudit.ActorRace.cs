@@ -9,7 +9,7 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativeRenderedMenuAudit
 {
-    private async Task ActorRace(string baseRoot, string mod, string root, string referenceId, string raceId, string idleId, string[] dependencies)
+    private async Task ActorRace(string baseRoot, string mod, string root, string referenceId, string raceId, string idleId, string[] dependencies, bool matchFace = false)
     {
         SubViewport? view = null;
         RuntimeNativeNpc? actor = null;
@@ -28,6 +28,16 @@ public partial class NativeRenderedMenuAudit
             var placed = cell.References.Single(item => item.FormKey == reference.FormKey);
             var requestedRace = FalloutDialogueTopic.Find(records, "RACE", raceId).FormKey;
             FalloutActorAppearanceState player = new(null, requestedRace, null, null);
+            if (matchFace)
+            {
+                var contract = FalloutNativeRaceSexResolver.Resolve(records);
+                var creation = new FalloutNativeCharacterCreation(records, contract, contract.Initial, FalloutInstallationSettings.Read(content));
+                creation.ChangeIdentity(records.RuntimeFormId(requestedRace), true);
+                var control = creation.Controls.Controls.First(row => row.Group == 0);
+                var limits = creation.Limits(control);
+                creation.SetControl(control, limits.Minimum + (limits.Maximum - limits.Minimum) * 3 / 4);
+                player = creation.State(creation.Selection);
+            }
             world.BindPlayerAppearance(() => player);
             var sourceHash = SHA256.HashData(records.GetEffective(instance.Base).ReadData());
             var armor = world.EquippedArmor(reference.FormKey, 1);
@@ -72,7 +82,8 @@ public partial class NativeRenderedMenuAudit
             var camera = new Camera3D { Position = center + Vector3.Back * height, Fov = 35, Current = true };
             view.AddChild(camera); camera.LookAt(center);
             var original = await Pixels();
-            if (!world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)))
+            if (matchFace) world.MatchFaceGeometry(reference.FormKey, records.RuntimeFormKey(0x14), 50);
+            else if (!world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)))
                 throw new InvalidDataException("Owned actor/race fixture requires a changed race family.");
             var expected = world.ActorRace(reference.FormKey);
             if (!actor.SynchronizeAppearance(world, records, content, Material) || actor.Appearance.Race != expected ||
@@ -86,20 +97,26 @@ public partial class NativeRenderedMenuAudit
                         $"{skeleton.Node.GetBoneName(bone)} {pose[bone]} -> {skeleton.Node.GetBonePose(bone)}")));
             var changed = await Pixels();
             if (original.SequenceEqual(changed)) throw new InvalidDataException("Changed owned race produced identical body pixels.");
-            var priorParts = actor.Parts.ToArray();
-            // Matching an adult to an older target can resolve back to the
-            // target's current race. Native invalidation still applies because
-            // the two input races differ; only exact same-race input is a no-op.
-            if (!world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
-                !actor.SynchronizeAppearance(world, records, content, Material) || actor.Appearance.Race != expected ||
-                priorParts.SequenceEqual(actor.Parts) || !changed.SequenceEqual(await Pixels()))
-                throw new InvalidDataException("A changed race-family request lost its native invalidation when the age tier resolved to the current race.");
-            var parts = actor.Parts.ToArray(); var state = actor.AnimationState;
-            player = player with { Race = expected };
-            if (world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
-                actor.SynchronizeAppearance(world, records, content, Material) || !parts.SequenceEqual(actor.Parts) ||
-                !JsonSerializer.Serialize(state).Equals(JsonSerializer.Serialize(actor.AnimationState), StringComparison.Ordinal))
-                throw new InvalidDataException("Same-race command changed native body, face or animation state.");
+            if (matchFace && (!actor.Appearance.FaceGen.SymmetricGeometry.AsSpan().SequenceEqual(world.ActorFace(reference.FormKey).SymmetricGeometry) ||
+                !actor.Appearance.FaceGen.SymmetricTexture.AsSpan().SequenceEqual(appearance.FaceGen.SymmetricTexture)))
+                throw new InvalidDataException("Native face did not follow shared geometry while retaining texture coefficients.");
+            if (!matchFace)
+            {
+                var priorParts = actor.Parts.ToArray();
+                // Matching an adult to an older target can resolve back to the
+                // target's current race. Native invalidation still applies because
+                // the two input races differ; only exact same-race input is a no-op.
+                if (!world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
+                    !actor.SynchronizeAppearance(world, records, content, Material) || actor.Appearance.Race != expected ||
+                    priorParts.SequenceEqual(actor.Parts) || !changed.SequenceEqual(await Pixels()))
+                    throw new InvalidDataException("A changed race-family request lost its native invalidation when the age tier resolved to the current race.");
+                var parts = actor.Parts.ToArray(); var state = actor.AnimationState;
+                player = player with { Race = expected };
+                if (world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
+                    actor.SynchronizeAppearance(world, records, content, Material) || !parts.SequenceEqual(actor.Parts) ||
+                    !JsonSerializer.Serialize(state).Equals(JsonSerializer.Serialize(actor.AnimationState), StringComparison.Ordinal))
+                    throw new InvalidDataException("Same-race command changed native body, face or animation state.");
+            }
             var saved = JsonSerializer.Deserialize<FalloutActorOverrides[]>(JsonSerializer.Serialize(world.CaptureActorOverrides()))!;
             using var cold = new FalloutReferenceWorld(records);
             cold.Restore(world.Capture()); cold.RestoreActorOverrides(saved);
@@ -119,8 +136,8 @@ public partial class NativeRenderedMenuAudit
             if (!original.SequenceEqual(await Pixels())) throw new InvalidDataException("Source race restoration did not restore baseline pixels.");
             if (!SHA256.HashData(records.GetEffective(instance.Base).ReadData()).AsSpan().SequenceEqual(sourceHash))
                 throw new InvalidDataException("Appearance mutation wrote into owned source bytes.");
-            GD.Print($"OPENNV_NATIVE_ACTOR_RACE_PASS reference={reference.FormKey} race={expected} bodyIdentity=true animationPhase=true skeletonPoseOwner=true " +
-                "dynamicFace=true changedPixels=true sameRaceStable=true coldPixels=true sourceRestored=true sourceReadonly=true " +
+            GD.Print($"{(matchFace ? "OPENNV_NATIVE_ACTOR_FACE_PASS" : "OPENNV_NATIVE_ACTOR_RACE_PASS")} reference={reference.FormKey} race={expected} bodyIdentity=true animationPhase=true skeletonPoseOwner=true " +
+                $"dynamicFace=true changedPixels=true sameRaceStable={(matchFace ? "not-tested" : "true")} coldPixels=true sourceRestored=true sourceReadonly=true " +
                 "recording=false boundary=isolated-owned-actor-fixture playerTarget=unbound matchedTiming=unbound parity=unverified");
 
             async Task<byte[]> Pixels()

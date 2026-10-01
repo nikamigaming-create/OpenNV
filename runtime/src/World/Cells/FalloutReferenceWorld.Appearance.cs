@@ -24,7 +24,8 @@ internal sealed partial class FalloutReferenceWorld
     {
         var (source, traits) = NpcAppearanceSource(reference);
         var changed = _actorOverrides.GetValueOrDefault(source.FormKey)?.Race ?? _actorOverrides.GetValueOrDefault(traits.FormKey)?.Race;
-        return changed is null ? null : new(null, changed.Form, null, null);
+        var face = _actorOverrides.GetValueOrDefault(source.FormKey)?.FaceGeometry;
+        return changed is null && face is null ? null : new(null, changed?.Form, null, null, face is null ? null : ActorFace(reference));
     }
 
     internal long ActorAppearanceRevision(FalloutFormKey reference)
