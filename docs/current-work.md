@@ -30,8 +30,10 @@ through shared session state, then reaches CG00 stage 5's player script package.
 That package now accepts its winning explicit reference location, starts the owned
 birth camera clip and lets the subsequent source player move load Vault 101's
 birth CELL. Both reached SetNumericGameSetting commands now change the shared
-session settings, and the package camera advances. CG00 then stops at its stage-6
-PlaySound command. The loaded CELL reports 102 missing runtime references on entry
+session settings, and the package camera advances. CG00's stage-6 PlaySound now
+plays and completes its owned birth WAV. The subsequent source sequence stops
+when replacing the player package requires its deferred change-animation owner.
+The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
 requires a prior native save. Source save eligibility and the first Fallout 3
@@ -51,6 +53,19 @@ during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at th
 unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
 the result suffix. XP reward commands, modifiers and leveling remain incomplete;
 this policy and owned component audit do not establish player advancement support.
+
+PlaySound now shares transient C# voice ownership across reference/results,
+startup and fallback quest execution. Winning SOUN declarations supply WAV
+identity, gain, pitch, chance and variants; stream preparation fails before
+committing a request. Normal requests queue in MenuMode, while system sounds
+play through paused menus. Concurrent voices complete and retire independently.
+These transient voices are not save-baked and do not replay on cold restoration.
+Synthetic prefix/typed-form/random/cleanup checks, an isolated owned native
+mixer check and the complete required runtime gate pass. The ordinary Capital run also plays and completes the birth
+sound. Reverb, submersion and stereo/LFE presentation gaps remain explicit;
+loops, timed scheduling, 3D/reference-node playback, complete volume routing and
+matched voice timing remain unbound. This is partial audio presentation, not
+audio or campaign parity.
 
 Numeric GMST mutation now belongs to the loaded C# stack, shared by reference,
 result, startup and fallback quest commands/functions and all numeric readers.
@@ -249,8 +264,10 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached source PlaySound/PlaySound3D audio-voice owner, beginning
-with CG00's stage-6 birth sound; preserve source event order and clip/loop lifetime.
+Implement the reached player package replacement's deferred change animation;
+preserve source event order, clip lifetime and cold continuation. Complete the
+remaining script audio routes, loop/stop ownership, environment/submersion and
+output routing without treating the audible birth voice as full audio support.
 Trace source save eligibility and initialize the first source campaign snapshot
 without requiring a prior New Vegas save or bypassing character creation. Complete
 live refresh for the retained numeric-setting consumers exposed in telemetry.
@@ -358,12 +375,17 @@ Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
 The fresh ordinary Capital run is
-`tmp/development-lab/ttw-numeric-settings-20260930`; both session flags are true,
+`tmp/development-lab/ttw-script-sounds-20261001`; both session flags are true,
 CG00's package camera advances and its queued move enters Fallout3.esm:028138.
-Both authored karma-setting writes execute; CG00 then retains the missing PlaySound
-owner. CREATE NEW SAVE also retains the prior-save requirement failure. The session
+Both authored karma-setting writes execute, and the owned birth sound plays and
+completes. CG00 then retains the missing deferred player-package switch owner.
+The prior numeric-setting run's CREATE NEW SAVE attempt retains the prior-save
+requirement failure; saving was not retried in this audio check. The session
 quit through ordinary input with source readers drained. One transient native
-state-write loss remains retained; later state samples resumed. Numeric checks are
+state-write loss remains retained; later state samples resumed. Audio checks are
+`tmp/script-sounds-contract.log`, `tmp/script-sounds-owned-native.log` and
+`tmp/script-sounds-runtime-gate.log`; the mixer fixture retains no samples or frames
+and cannot establish endpoint audio or campaign parity. Numeric checks are
 `tmp/numeric-settings-contract.log`, `tmp/numeric-settings-owned.private.json` and
 `tmp/numeric-settings-runtime-gate.log`; cold setting checks are explicitly component
 evidence, not a continued Fallout 3 campaign. Package checks are

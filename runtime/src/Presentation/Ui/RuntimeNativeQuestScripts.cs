@@ -60,6 +60,8 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     {
         AddChild(_uiClock);
         AddChild(_events);
+        if (RuntimeLiveContentSource.Current is { } source)
+            AddChild(new NativeOwnedScriptSoundPlayer(Scripts.Sounds, source, Scripts.Menus));
         try
         {
             var hudLayer = new CanvasLayer { Name = "NativeHudLayer", Layer = 1, ProcessMode = ProcessModeEnum.Always };

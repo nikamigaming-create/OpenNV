@@ -509,6 +509,15 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             var callerPlugin = bindings.Source.OwnerPlugin;
+            if (parts.Length == 1 && operation == "playsound")
+            {
+                if (arguments.Count is < 1 or > 2) throw new InvalidDataException("PlaySound requires a sound and optional system flag.");
+                var sound = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function, UserFunction);
+                if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
+                world.Sounds.Play(source, sound.FormKey(records), arguments.Count == 2 &&
+                    FalloutScriptSounds.SystemFlag(Number(arguments[1])));
+                return;
+            }
             if (parts.Length == 1 && operation == "setnumericgamesetting")
             {
                 FalloutNumericGameSettingCommands.Set(records, arguments, Number,
