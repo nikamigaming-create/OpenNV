@@ -6,7 +6,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, float>? healthPercentage = null,
     Func<FalloutFormKey, int, float>? actorValue = null,
     Func<FalloutFormKey, bool>? talkedToPlayer = null,
-    Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null)
+    Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -16,6 +16,11 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 131 && playerFemale is not null)
+        {
+            if (condition.Argument1 > 1) throw new InvalidDataException("GetPCIsSex has an invalid sex argument.");
+            return playerFemale() == (condition.Argument1 == 1) ? 1 : 0;
+        }
         if ((condition.Function == 431 && healthPercentage is not null) ||
             (condition.Function == 14 && actorValue is not null))
         {

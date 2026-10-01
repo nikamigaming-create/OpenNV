@@ -30,6 +30,7 @@ ActorPackageCommandProbe.Exercise();
 IdleCollectionProbe.Run();
 IdleConditionProbe.Run();
 HudDeclarationsProbe.Run();
+SubtitleDeclarationsProbe.Run();
 MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
 FloatInitializerContracts.Run();

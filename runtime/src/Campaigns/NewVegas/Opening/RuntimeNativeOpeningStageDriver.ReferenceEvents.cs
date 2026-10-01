@@ -88,7 +88,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).TalkedToPlayer = true,
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
-            actor => _scripts.References!.ActorFactions(actor));
+            actor => _scripts.References!.ActorFactions(actor), () => _character.Female);
         AddChild(_conversation);
     }
 
@@ -183,7 +183,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case FalloutReferenceEffectKind.SayTo:
                 _speechStage = $"{QuestEditorId}:{Stage}";
-                _speech!.SayTo(effect.Target!.Value, effect.Argument!.Value, effect.Topic!.Value);
+                _speech!.SayTo(effect.Target!.Value, effect.Argument!.Value, effect.Topic!.Value, effect.ForceSubtitles);
+                break;
+            case FalloutReferenceEffectKind.Say:
+                _speechStage = $"{QuestEditorId}:{Stage}";
+                _speech!.Say(effect.Target!.Value, effect.Topic!.Value, effect.ForceSubtitles);
                 break;
             case FalloutReferenceEffectKind.HeadTracking:
                 ApplyLookCommand(new(0, effect.Target!.Value, effect.Argument));

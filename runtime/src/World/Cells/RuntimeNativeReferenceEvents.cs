@@ -263,10 +263,13 @@ internal partial class RuntimeNativeReferenceEvents : Node
         return null;
     }
 
-    internal bool DispatchActorEvent(FalloutFormKey actor, string name)
+    internal bool DispatchActorEvent(FalloutFormKey actor, string name, FalloutFormKey? topic = null)
     {
         if (!_bindings.TryGetValue(actor, out var binding)) return false;
-        Report(binding, [_scripts.Dispatch(actor, name)]);
+        var result = _scripts.Dispatch(actor, name, topic: topic);
+        Report(binding, [result]);
+        if (name.Equals("SayToDone", StringComparison.OrdinalIgnoreCase) && result.Error is not null)
+            throw new InvalidOperationException(result.Error);
         return true;
     }
 

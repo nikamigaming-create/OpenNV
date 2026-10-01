@@ -37,8 +37,13 @@ until that clip completes. The subsequent source sequence now renders its owned
 screen blood and plays/completes a selected owned baby-cry WAV. Its subsequent
 SetNoActivationSound now selects the winning SOUN; ordinary E input plays and
 completes that owned cry. CG00 advances to stage 10's player package and Dad's
-authored talking flag. Dad's GameMode script stops at the unbound three-argument
-SayTo command, preserving its prefix and leaving dialogue unstarted.
+authored talking flag. Dad's three-argument SayTo now selects his winning INFO,
+plays its owned voice/lip data, renders forced owned HUD subtitles and delivers
+the typed SayToDone event. Ordinary input reaches the source Boy/Girl question;
+the male response completes. A fresh female run also completes Mom's Say and
+the subsequent parent dialogue, reaches owned name entry and accepts a name.
+The continuation stops at TTW_ShowGeneProjector; Dad's subsequent source stage
+also reports unbound MatchRace. Both faults remain visible.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
@@ -47,12 +52,28 @@ campaign snapshot remain unbound. TTWStart
 retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice and unfinished birth-room screenshots are
-retained privately. The birth frame exposes lighting and HUD presentation gaps;
+retained privately, along with a new 30-second flat parent-dialogue MP4 with
+process audio. The clip retains repeated source frames in its sidecar and does
+not establish audiovisual parity. The birth frame exposes lighting and HUD presentation gaps;
 it does not establish scene parity. Recording is off. Synthetic bootstrap,
 conditional stage execution, winning renamed skill
 identity and owned TTW/cold-save checks pass, as does the complete required
 runtime gate. The final flat build retains TTWStart's startup identity across
 background quest stage changes. Both protected saves remain unchanged.
+
+Say/SayTo share winning actor-trait/quest selection, positive integer forced
+subtitle admission, response voices, INFO results and topic-filtered SayToDone
+events. GetPCIsSex reads the current shared player state. Say's extra actor/audio
+arguments, SayTo's fourth look argument, other listeners, competing voices and
+matched result/event timing remain unbound. Synthetic typed-topic/order/prefix/
+cold-local contracts and an isolated owned native subtitle pixel fixture pass.
+HUDMainMenu branch dimensions, text template/font and admitted executable
+placement relationships supply flat subtitles independently of rollover prompts.
+The fixture verifies forced display with general subtitles disabled and baseline
+restoration after completion, without retained frames. Text styling, queue/hold/
+fade timing, matched canvas scaling and XR final-eye presentation remain gaps.
+Ordinary source speech reaches character creation; it does not establish full
+dialogue, character creation or campaign support.
 
 Character-generation policy is shared by reference/results, fallback quest scripts
 and pre-world startup, and retains cold with a false legacy default. Deferred XP
@@ -305,10 +326,11 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached three-argument SayTo owner, source dialogue arbitration,
-INFO results and SayToDone event continuation through general actor/script owners.
-Preserve stage 10's player package and Dad's source talking flag, plus the
-completed screen-blood and ordinary activation-feedback prefixes. Complete source screen-blood lighting/flare,
+Implement the reached TTW_ShowGeneProjector dependency command and MatchRace
+through source-backed creation/actor owners. Preserve the ordinary gender,
+parent-dialogue and accepted-name prefix, source player packages, completed
+screen-blood and activation-feedback behavior. Complete further source dialogue
+arbitration/arguments and matched INFO-result/SayToDone timing. Complete source screen-blood lighting/flare,
 color transfer and XR final-eye presentation without hiding their telemetry gaps.
 Complete the
 remaining script audio routes, loop/stop ownership, environment/submersion and
@@ -419,16 +441,21 @@ identify the next source owners. The requested current-build screenshot is
 Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
-The fresh ordinary Capital run is
-`tmp/development-lab/ttw-activation-sound-20261001`; both session flags are true,
-CG00's package camera advances and its queued move enters Fallout3.esm:028138.
-Both authored karma-setting writes execute, and the owned birth sound plays and
-completes. CG00's stage-8 same-package request plays and completes the source
-OnChange clip, then draws ten owned blood drops and plays/completes the selected
-baby-cry WAV. SetNoActivationSound selects its winning SOUN, and ordinary E plays
-and completes a third voice through that override. Stage 10 installs the source
-player package and sets Dad's authored talking flag. Reference Fallout3.esm:0290a7
-then retains the missing three-argument SayTo owner; no Dad speech starts.
+The fresh ordinary Capital runs are `tmp/development-lab/ttw-sayto-20261001`
+and `tmp/development-lab/ttw-scripted-speech-20261001`. The first completes Dad's
+opening line, reaches the owned gender question and completes the male response.
+The second selects Girl, completes both parents' subsequent source dialogue,
+reaches owned name entry and accepts Wanderer through ordinary input. The next
+speech end result reports TTW_ShowGeneProjector; Dad's stage continuation reports
+MatchRace. Startup telemetry reports interval overruns, and other reference
+GetLinkedRef faults, 83 missing runtime references and two camera-body targets
+remain visible. Both runs quit with source readers drained. The inspected private
+MP4 is `local/recordings/ttw-birth-20261001/flat-ttw-birth-dialogue-20261001.mp4`:
+30 seconds, 1280x720, 900 output frames, 839 distinct source draws and process
+audio. Its sidecar retains repeated frames; no audiovisual parity is claimed.
+Recording is off and temporary inspection frames are removed. Current checks are
+`tmp/sayto-contract.log`, `tmp/sayto-declarations.log`,
+`tmp/sayto-subtitles-owned.log` and `tmp/sayto-runtime-gate.log`.
 The selected unfinished birth frame is
 `local/recordings/ttw-birth-20261001/Vault-101-birth-incomplete-flat.png`; temporary
 frame data is removed. It exposes lighting and HUD gaps, not scene parity.

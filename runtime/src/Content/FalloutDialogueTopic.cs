@@ -4,7 +4,15 @@ using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutSayToCommand(string SpeakerEditorId, string TargetEditorId, string TopicEditorId);
+internal sealed record FalloutSayToCommand(string SpeakerEditorId, string TargetEditorId, string TopicEditorId,
+    bool ForceSubtitles = false)
+{
+    internal static bool SubtitleFlag(double value) => double.IsFinite(value) && value == Math.Truncate(value) &&
+        value >= int.MinValue && value <= int.MaxValue ? value > 0 :
+        throw new InvalidDataException("SayTo subtitle flag must be a signed integer.");
+}
+internal sealed record FalloutSpeechSubtitle(FalloutFormKey Speaker, FalloutFormKey Info, FalloutFormKey Topic,
+    string Text, bool Forced);
 internal sealed record FalloutDialogueResponse(byte Number, string Text, uint Emotion, int EmotionValue,
     FalloutFormKey? Sound, FalloutFormKey? SpeakerAnimation, FalloutFormKey? ListenerAnimation, byte[] SourceBytes);
 internal sealed record FalloutDialogueInfo(FalloutPluginRecord Record, FalloutFormKey Quest, byte Type,
@@ -130,7 +138,8 @@ internal sealed partial class FalloutDialogueTopic
             var match = SayToPattern().Match(line);
             if (match.Success)
                 commands.Add(new FalloutSayToCommand(match.Groups["speaker"].Value,
-                    match.Groups["target"].Value, match.Groups["topic"].Value));
+                    match.Groups["target"].Value, match.Groups["topic"].Value,
+                    match.Groups["subtitles"].Success && SubtitleFlag(match.Groups["subtitles"].Value)));
             else if (line.Contains("sayto", StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException($"Unsupported source SayTo command: {line}");
         }
@@ -284,6 +293,8 @@ internal sealed partial class FalloutDialogueTopic
         }
         return true;
     }
-    [GeneratedRegex(@"^(?<speaker>[A-Za-z0-9_]+)\.sayto\s+(?<target>[A-Za-z0-9_]+)\s+(?<topic>[A-Za-z0-9_]+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static bool SubtitleFlag(string value) => FalloutSayToCommand.SubtitleFlag(
+        int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+    [GeneratedRegex(@"^(?<speaker>[A-Za-z0-9_]+)\.sayto\s+(?<target>[A-Za-z0-9_]+)\s+(?<topic>[A-Za-z0-9_]+)(?:\s+(?<subtitles>-?[0-9]+))?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SayToPattern();
 }

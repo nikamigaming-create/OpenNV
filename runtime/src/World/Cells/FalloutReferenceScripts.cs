@@ -7,12 +7,12 @@ internal enum FalloutReferenceEffectKind
 {
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
-    ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration
+    ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
     bool Enable = false, short Stage = 0, int Value = 0, FalloutFormKey? Topic = null,
-    bool Fade = false, string? NodeName = null, string? TexturePath = null);
+    bool Fade = false, string? NodeName = null, string? TexturePath = null, bool ForceSubtitles = false);
 internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFormKey, bool> IsCurrentFurniture,
     Action<FalloutReferenceScriptEffect> Apply, Func<FalloutFormKey, int>? GetButtonPressed = null,
     Func<FalloutFormKey, bool>? IsTalking = null, Func<FalloutFormKey, string, double>? ActorValue = null,
@@ -28,7 +28,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
-    IReadOnlySet<FalloutFormKey>? TriggerReferences = null);
+    IReadOnlySet<FalloutFormKey>? TriggerReferences = null, FalloutFormKey? Topic = null);
 
 // Dispatches authored object-script blocks against world-owned locals. Functions
 // and effects use the same authoritative owners in a lab or a presentation host.
@@ -43,8 +43,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     private readonly Dictionary<(FalloutFormKey Owner, FalloutFormKey Script), FalloutScriptBindings> _questBindings = [];
 
     internal FalloutReferenceScriptEventResult Dispatch(FalloutFormKey reference, string eventName,
-        FalloutFormKey? actor = null, double elapsedSeconds = 0) =>
-        DispatchFrame(reference, [new(eventName, actor)], elapsedSeconds).Single();
+        FalloutFormKey? actor = null, double elapsedSeconds = 0, FalloutFormKey? topic = null) =>
+        DispatchFrame(reference, [new(eventName, actor, Topic: topic)], elapsedSeconds).Single();
 
     internal FalloutReferenceScriptEventResult Activate(FalloutFormKey reference, FalloutFormKey actor) =>
         Dispatch(reference, "OnActivate", actor);
@@ -60,8 +60,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         if (!world.IsResident(reference)) throw new InvalidOperationException($"Reference {reference} cannot receive events while its cell is unloaded.");
         var admitted = new Dictionary<string, FalloutReferenceScriptEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in events)
+        {
             if (item is null || string.IsNullOrWhiteSpace(item.Name) || !admitted.TryAdd(item.Name, item))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
+            if (item.Name.Equals("SayToDone", StringComparison.OrdinalIgnoreCase) &&
+                (item.Topic is not { } topic || records.GetEffective(topic).Signature != "DIAL"))
+                throw new InvalidDataException("SayToDone has no typed source dialogue topic.");
+        }
         var instance = world.Get(reference);
         var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events);
         // A failed attempt cannot run again on its GameMode clock. A new
@@ -91,8 +96,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 var trigger = block.Event.Equals("OnTrigger", StringComparison.OrdinalIgnoreCase);
                 if (!activation && block.Filter is not null)
                 {
-                    var filter = program!.Bindings.Reference(block.Filter);
-                    if (trigger && item.TriggerReferences is { } contacts ? !contacts.Contains(filter) : filter != item.ActionReference) continue;
+                    if (block.Event.Equals("SayToDone", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var topic = program!.Bindings.Form(block.Filter);
+                        if (topic.Signature != "DIAL") throw new InvalidDataException("SayToDone source filter is not a DIAL form.");
+                        if (topic.FormKey != item.Topic) continue;
+                    }
+                    else
+                    {
+                        var filter = program!.Bindings.Reference(block.Filter);
+                        if (trigger && item.TriggerReferences is { } contacts ? !contacts.Contains(filter) : filter != item.ActionReference) continue;
+                    }
                 }
                 var actionReference = trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
                     ? null : item.ActionReference;
@@ -779,10 +793,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     if (note.Signature != "NOTE") throw new InvalidDataException("AddNote target is not NOTE.");
                     host.Apply(new(FalloutReferenceEffectKind.AddNote, source, note.FormKey));
                     break;
-                case "sayto" when arguments.Count == 2:
+                case "sayto" when arguments.Count is 2 or 3:
                     var sayTopic = bindings.Form(arguments[1]);
                     if (sayTopic.Signature != "DIAL") throw new InvalidDataException("SayTo topic is not DIAL.");
-                    host.Apply(new(FalloutReferenceEffectKind.SayTo, source, target, bindings.Reference(arguments[0]), Topic: sayTopic.FormKey));
+                    host.Apply(new(FalloutReferenceEffectKind.SayTo, source, target, bindings.Reference(arguments[0]), Topic: sayTopic.FormKey,
+                        ForceSubtitles: arguments.Count == 3 && FalloutSayToCommand.SubtitleFlag(Number(arguments[2]))));
+                    break;
+                case "say" when arguments.Count is 1 or 2:
+                    var speechTopic = bindings.Form(arguments[0]);
+                    if (speechTopic.Signature != "DIAL") throw new InvalidDataException("Say topic is not DIAL.");
+                    host.Apply(new(FalloutReferenceEffectKind.Say, source, target, Topic: speechTopic.FormKey,
+                        ForceSubtitles: arguments.Count == 2 && FalloutSayToCommand.SubtitleFlag(Number(arguments[1]))));
                     break;
                 case "look" when arguments.Count is 1 or 2:
                     if (arguments.Count == 2 && Number(arguments[1]) != 0) throw new NotSupportedException("Whole-body Look is unbound.");

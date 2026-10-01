@@ -30,6 +30,30 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+[Say](https://geckwiki.com/index.php?title=Say) and
+[SayTo](https://geckwiki.com/index.php?title=SayTo) share RuntimeNativeSpeech's
+winning INFO selection and owned voice/lip path with actual resident actors.
+FalloutDialogueConditions owns actor traits and shared quest predicates;
+GetPCIsSex reads current player state. The admitted optional forced-subtitle
+integer is true only when positive. INFO end results run before typed
+[SayToDone](https://geckwiki.com/index.php?title=SayToDone) delivery to the actor's
+source script. Header filters resolve DIAL identities independently of action
+references; actor locals retain cold and transient speech is not replayed.
+Missing actors, conditions, presentation or event bindings fail visibly.
+
+NativeOwnedSubtitles draws the winning HUDMainMenu Subtitles branch and its
+owned text template/font. Admitted executable child/global/placement/template
+associations supply numeric operands, integer screen centering and Info-relative
+safe-zone placement. General-subtitle settings and source forcing control
+admission independently of activation prompts. The presenter is prepared before
+initial stage execution and follows shared script-UI revisions. Synthetic
+association/command/event/cold-local checks and owned native pixels cover this
+bounded owner. Ordinary TTW birth input reaches gender selection, Mom's Say,
+continued parent dialogue and owned name entry. Additional Say actor/audio
+arguments, SayTo's look flag/other listeners, concurrent voices, styling, queue/
+hold/fade, matched timing/scaling and XR final-eye presentation remain unbound;
+neither dialogue nor campaign parity is claimed.
+
 [SetNoActivationSound](https://geckwiki.com/index.php?title=SetNoActivationSound)
 and [ClearNoActivationSound](https://geckwiki.com/index.php?title=ClearNoActivationSound)
 share FalloutNoActivationSound across reference/results, startup and fallback

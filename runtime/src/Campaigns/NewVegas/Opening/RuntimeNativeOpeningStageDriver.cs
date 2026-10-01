@@ -85,6 +85,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             part, damage.LimbMultiplier);
     }
     internal object? SpeechState => _speech?.State;
+    internal FalloutSpeechSubtitle? Subtitle => _speech?.Subtitle;
+    internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
+    internal Action<FalloutFormKey, FalloutFormKey>? SayToCompleted { get; set; }
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;
     internal object? VigorState => _vigorEntry?.State;
@@ -289,6 +292,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell);
         _speech = new RuntimeNativeSpeech();
+        _speech.PrepareSubtitle = subtitle => (PrepareSubtitle ??
+            throw new NotSupportedException("Source subtitle presentation is absent."))(subtitle);
+        _speech.SayToCompleted += (speaker, topic) => (SayToCompleted ??
+            throw new NotSupportedException("Source SayToDone event dispatch is absent."))(speaker, topic);
         _speech.InfoCompleted += _ =>
         {
             if (_machine is not null && !_speech.Active && _speechStage == $"{_machine.QuestEditorId}:{_machine.Stage}" &&
@@ -308,7 +315,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
         }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
-            actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters);
+            actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();
