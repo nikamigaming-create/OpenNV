@@ -45,7 +45,8 @@ After ordinary trait confirmation, code saves and reloads the reached birth stat
 A paused resave preserves face overrides, quests, references and player package
 clock exactly; MenuMode script clocks continue normally. Cold presentation also
 reports an unbound authored ragdoll accumulation-root rotation, so this checkpoint
-is not fully reusable. Dad/Dr. Li dialogue selection reports no eligible INFO in
-the next source topic. Complete actor cold clocks, active template changes,
+is not fully reusable. Deferred empty speech completion now admits the next Dad
+line, while Mom's overlapping actual voice remains a separate runtime failure.
+Complete actor cold clocks, active template changes,
 native floating-point/timing parity and matched retail/OpenXR presentation remain
 unverified. These checks do not establish character-creation or campaign completion.

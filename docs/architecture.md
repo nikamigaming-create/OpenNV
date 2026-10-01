@@ -115,6 +115,13 @@ integer is true only when positive. INFO end results run before typed
 source script. Header filters resolve DIAL identities independently of action
 references; actor locals retain cold and transient speech is not replayed.
 Missing actors, conditions, presentation or event bindings fail visibly.
+An empty eligible set registers deferred completion through the C#
+FalloutSpeechCompletionEvents owner. Actor/topic marks coalesce and admit one
+SayToDone event, retaining authored block order and the calling script suffix.
+Another actor's empty selection leaves the bound voice/subtitle/lip owner intact.
+Pending events block saving; failed delivery retains its prefix and fault.
+See [scripted speech completion](scripted-speech-completion.md) for proof and
+the remaining interruption and exact frame-scheduling boundaries.
 
 NativeOwnedSubtitles draws the winning HUDMainMenu Subtitles branch and its
 owned text template/font. Admitted executable child/global/placement/template

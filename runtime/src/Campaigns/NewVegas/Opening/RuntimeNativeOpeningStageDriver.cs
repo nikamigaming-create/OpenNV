@@ -90,7 +90,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal object? SpeechState => _speech?.State;
     internal FalloutSpeechSubtitle? Subtitle => _speech?.Subtitle;
     internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
-    internal Action<FalloutFormKey, FalloutFormKey>? SayToCompleted { get; set; }
+    internal Action<FalloutFormKey, IReadOnlySet<FalloutFormKey>>? SayToCompleted { get; set; }
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;
     internal object? VigorState => _vigorEntry?.State;
@@ -298,8 +298,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _speech = new RuntimeNativeSpeech();
         _speech.PrepareSubtitle = subtitle => (PrepareSubtitle ??
             throw new NotSupportedException("Source subtitle presentation is absent."))(subtitle);
-        _speech.SayToCompleted += (speaker, topic) => (SayToCompleted ??
-            throw new NotSupportedException("Source SayToDone event dispatch is absent."))(speaker, topic);
+        _speech.SayToCompleted += (speaker, topics) => (SayToCompleted ??
+            throw new NotSupportedException("Source SayToDone event dispatch is absent."))(speaker, topics);
         _speech.InfoCompleted += _ =>
         {
             if (_machine is not null && !_speech.Active && _speechStage == $"{_machine.QuestEditorId}:{_machine.Stage}" &&

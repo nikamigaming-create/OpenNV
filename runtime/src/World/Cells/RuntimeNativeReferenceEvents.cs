@@ -273,6 +273,15 @@ internal partial class RuntimeNativeReferenceEvents : Node
         return true;
     }
 
+    internal bool DispatchSpeechCompletion(FalloutFormKey actor, IReadOnlySet<FalloutFormKey> topics)
+    {
+        if (!_bindings.TryGetValue(actor, out var binding)) return false;
+        var results = _scripts.DispatchFrame(actor, [new("SayToDone", Topics: topics)], 0);
+        Report(binding, results);
+        if (results.Single().Error is { } error) throw new InvalidOperationException(error);
+        return true;
+    }
+
     public override void _Process(double delta)
     {
         ++_frames;

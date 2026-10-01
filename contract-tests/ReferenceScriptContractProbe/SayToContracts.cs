@@ -64,9 +64,62 @@ internal static class SayToContracts
             Reject(() => Execute("Say Topic 1 player\nset count to 99"));
             Reject(() => Execute("SayTo player 768 1\nset count to 99"));
             Require(effects.Count == count && world.Get(Key(0x900)).Read(1) == 11, "Rejected command applied an effect or ran its suffix.");
-            Console.WriteLine("OPENNV_SAYTO_CONTRACT_PASS optionalSubtitle=true typedTopicEvent=true authoredOrder=true prefix=true coldLocals=true fourthArgumentUnbound=true");
+            EmptyCompletions(records);
+            Console.WriteLine("OPENNV_SAYTO_CONTRACT_PASS optionalSubtitle=true typedTopicEvent=true authoredOrder=true prefix=true coldLocals=true emptyDeferred=true topicCoalescing=true failureLatch=true fourthArgumentUnbound=true");
         }
         finally { Directory.Delete(directory, true); }
+    }
+    private static void EmptyCompletions(FalloutPluginStack records)
+    {
+        using var world = new FalloutReferenceWorld(records);
+        world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
+        var completions = new FalloutSpeechCompletionEvents();
+        var scripts = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, effect =>
+        {
+            Require(effect.Kind == FalloutReferenceEffectKind.SayTo && effect.Topic is not null, "Empty fixture lost typed speech.");
+            completions.Mark(effect.Target!.Value, effect.Topic!.Value);
+        }));
+        var sent = scripts.Dispatch(Key(0x900), "GameMode");
+        Require(sent.Error is null && completions.Active && world.Get(Key(0x900)).Read(2) == 1 &&
+            world.Get(Key(0x900)).Read(1) == 0, "Empty completion ran inline before the calling script's suffix.");
+        completions.Mark(Key(0x900), Key(0x200));
+        completions.Mark(Key(0x900), Key(0x201));
+        var deliveries = 0;
+        completions.Drain((_, _) => ++deliveries, () => false);
+        Require(deliveries == 0 && completions.Active, "Paused completion retired pending source events.");
+        completions.Drain((actor, topics) =>
+        {
+            Require(topics.SetEquals([Key(0x200), Key(0x201)]), "Empty registrations lost or duplicated source topics.");
+            var result = scripts.DispatchFrame(actor, [new("SayToDone", Topics: topics)], 0).Single();
+            Require(result.Error is null && result.Blocks == 3, "Coalesced completion did not execute each authored matching block once.");
+            ++deliveries;
+            completions.Mark(actor, Key(0x200));
+        });
+        Require(deliveries == 1 && completions.Active && world.Get(Key(0x900)).Read(1) == 1011 &&
+            world.Get(Key(0x900)).Read(2) == 0, "Completion lost source order, ran an unfiltered block twice or delivered a new request recursively.");
+        completions.Drain((actor, topics) =>
+        {
+            var result = scripts.DispatchFrame(actor, [new("SayToDone", Topics: topics)], 0).Single();
+            Require(result.Error is null && result.Blocks == 2, "Deferred next-frame topic admitted another filter.");
+            ++deliveries;
+        });
+        completions.Drain((_, _) => ++deliveries);
+        Require(deliveries == 2 && !completions.Active && world.Get(Key(0x900)).Read(1) == 1022, "Empty completion replayed after successful delivery.");
+        void Invalid(FalloutReferenceScriptEvent admission) => Reject(() => scripts.DispatchFrame(Key(0x900), [admission], 0));
+        Invalid(new("SayToDone", Topics: new HashSet<FalloutFormKey>()));
+        Invalid(new("SayToDone", Topic: Key(0x200), Topics: new HashSet<FalloutFormKey> { Key(0x200) }));
+        Invalid(new("SayToDone", Topics: new HashSet<FalloutFormKey> { Key(0x300) }));
+        Invalid(new("GameMode", Topics: new HashSet<FalloutFormKey> { Key(0x200) }));
+        Require(world.Get(Key(0x900)).Read(1) == 1022, "Rejected topic registration mutated source locals.");
+        completions.Mark(Key(0x900), Key(0x200));
+        var prefix = 0;
+        Reject(() => completions.Drain((_, _) => { ++prefix; throw new NotSupportedException("Source completion prefix failed."); }));
+        Reject(() => completions.Drain((_, _) => ++prefix));
+        Reject(() => completions.Mark(Key(0x900), Key(0x201)));
+        Require(prefix == 1 && completions.Active && completions.Error == "Source completion prefix failed.", "Failed completion lost its pending prefix or replayed it.");
+        var recursive = new FalloutSpeechCompletionEvents(); recursive.Mark(Key(0x900), Key(0x200));
+        Reject(() => recursive.Drain((_, _) => recursive.Drain((_, _) => { })));
+        Require(recursive.Active && recursive.Error is not null, "Recursive completion dispatch was accepted or lost its failure.");
     }
     private static FalloutFormKey Key(uint id) => new("Dialogue.esm", id);
     private static byte[] Local(uint index, string name) { var data = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(data, index); return Join(Field("SLSD", data), Field("SCVR", Text(name))); }

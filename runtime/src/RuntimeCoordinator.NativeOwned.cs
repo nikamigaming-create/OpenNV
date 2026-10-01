@@ -1102,9 +1102,9 @@ public partial class RuntimeCoordinator
             PrepareSubtitle = _nativeSubtitles.Prepare,
             ReferencePresentation = () => _nativeReferencePresentation ??
                 throw new InvalidOperationException("Native reference presentation is absent."),
-            SayToCompleted = (speaker, topic) =>
+            SayToCompleted = (speaker, topics) =>
             {
-                if (_nativeReferenceEvents?.DispatchActorEvent(speaker, "SayToDone", topic) != true)
+                if (_nativeReferenceEvents?.DispatchSpeechCompletion(speaker, topics) != true)
                     throw new NotSupportedException($"Source SayToDone actor {speaker} has no resident event binding.");
             },
         };
