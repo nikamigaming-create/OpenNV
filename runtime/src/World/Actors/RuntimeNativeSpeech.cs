@@ -12,6 +12,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, float> _questStage = null!;
     private FalloutQuestState? _quests;
     private Func<bool>? _playerFemale;
+    private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
     private Func<FalloutCondition, float>? _conditionContext;
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private AudioStreamPlayer _voice = null!;
@@ -106,13 +107,14 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutCondition, float>? conditionContext = null, HashSet<FalloutFormKey>? saidInfos = null,
         Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null,
         Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0, FalloutQuestState? quests = null,
-        Func<bool>? playerFemale = null)
+        Func<bool>? playerFemale = null, Func<FalloutFormKey, FalloutFormKey>? actorRace = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _questStage = questStage;
         _quests = quests;
         _playerFemale = playerFemale;
+        _actorRace = actorRace;
         _conditionContext = conditionContext;
         _templates = templates;
         _soundRandom = soundRandom; _unitsToMetres = unitsToMetres;
@@ -174,7 +176,7 @@ internal partial class RuntimeNativeSpeech : Node
         BindSpeaker(speaker);
         var conditions = new FalloutDialogueConditions(_stack,
             _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), speaker.FormKey, _identity!,
-            _conditionContext, playerFemale: _playerFemale);
+            _conditionContext, playerFemale: _playerFemale, actorRace: _actorRace);
         var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate) ??
             throw new InvalidOperationException($"No eligible source INFO in {command.TopicEditorId}.");
         _command = command;

@@ -22,6 +22,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
     private readonly FalloutReferenceFadeSettings _fadeSettings;
     private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.OrdinalIgnoreCase);
     internal event Action<FalloutFormKey, Node3D>? Materialized;
+    internal Action<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>? SynchronizeActorAppearance { get; set; }
     internal string? Error { get; private set; }
     internal IEnumerable<OpenNV.Runtime.World.Actors.RuntimeNativeNpc> Actors => _nodes.Values.OfType<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>();
     internal IReadOnlyDictionary<FalloutFormKey, Node3D> Nodes => _nodes;
@@ -76,6 +77,8 @@ internal partial class RuntimeNativeReferencePresentation : Node
         if (_nodes.ContainsKey(key)) throw new InvalidOperationException($"Reference {key} is already registered.");
         RefreshGeometry(key, node);
         _nodes.Add(key, node);
+        if (node is OpenNV.Runtime.World.Actors.RuntimeNativeNpc actor)
+            actor.AppearanceChanged = () => RefreshGeometry(key, node);
         if (node.GetChildren().OfType<RuntimeNativeDestructible>().SingleOrDefault() is { } destruction)
             destruction.ModelChanged = () => RefreshGeometry(key, node);
         GamebryoReferenceEnableRuntime.Apply(node, _world.IsEnabled(key));
@@ -138,6 +141,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     private void Synchronize()
     {
+        foreach (var actor in Actors) SynchronizeActorAppearance?.Invoke(actor);
         foreach (var reference in _references)
         {
             var enabled = _world.IsEnabled(reference.FormKey);

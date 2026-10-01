@@ -323,6 +323,7 @@ InputControlContracts.Run();
     CharacterGenerationContracts.Run();
     PlayerScriptPackageContracts.Run();
     NumericGameSettingContracts.Run();
+    ActorAppearanceContracts.Run();
     ScriptSoundContracts.Run();
     NoActivationSoundContracts.Run();
     SayToContracts.Run();

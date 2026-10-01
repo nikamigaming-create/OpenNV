@@ -56,6 +56,7 @@ public partial class RuntimeCoordinator
                 throw new InvalidOperationException("Package dialogue has no gameplay owner."))
                 .RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);
         _nativeReferencePresentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().Single();
+        _nativeReferencePresentation.SynchronizeActorAppearance = actor => SynchronizeNativeNpcAppearance(actor, _nativeActiveCell!);
         if (root.GetChildren().OfType<RuntimeNativeReferenceEvents>().SingleOrDefault() is { } existing)
         {
             _nativeReferenceEvents = existing;

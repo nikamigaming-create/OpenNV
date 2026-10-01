@@ -9,6 +9,11 @@ the current Best of Times and Wasteland Survival Guide recommendations. Preserve
 the broader goal of Nexus mod script/dependency compatibility. Use the Fallout
 bot's ordinary movement and activation adapters
 for bounded traversal after Megaton, retaining source collision and door rules.
+Provide code-addressable checkpoints of actually reached states, with complete
+quest/script, actor, inventory, mod and source identity restoration. Load those
+states directly for focused, slow ordinary-input checks through both flat and VR
+adapters; validate cold continuation before treating a checkpoint as reusable.
+Complete every Vault 101 quest, including the G.O.A.T., through source gameplay.
 Verify the selected Benny Humbles You and Steals Your Stuff configuration's
 deleveling, gear confiscation/recovery, progression and cold continuity. This takes
 priority alongside complete JAM/MCM support. Complete TTW's reached dependency
@@ -52,7 +57,8 @@ the male response completes. A fresh female run also completes Mom's Say and
 the subsequent parent dialogue, reaches owned name entry and accepts a name.
 The continuation now opens TTW's owned gene-projector NIF and source race/sex
 screen. Ordinary Next/Done/Yes accepts the selection and closes the menu;
-Dad's subsequent source stage reports unbound MatchRace. That fault remains visible.
+Dad's subsequent source MatchRace now completes. A fresh ordinary Hispanic
+selection reaches the next unbound command, MatchFaceGeometry. That fault remains visible.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
@@ -112,8 +118,20 @@ mask cases through owned native XML/font/atlas pixels verify disable, enable,
 unrelated controls and identical pixel restoration. A fresh ordinary birth run
 and inspected requested screenshot verify hidden HP/AP/reticle with source
 movement disabled, no activation target/prompt and retained subtitles. HUD override extensions,
-broader branch presentation and matched retail/XR pixels remain unverified. MatchRace
-and further chargen remain unbound; neither actor nor campaign parity is claimed.
+broader branch presentation and matched retail/XR pixels remain unverified.
+MatchRace now changes the actual NPC base's race, preserves its age tier through
+winning younger/older-family links, and refreshes existing owned bodies and
+dynamic faces without replacing the actor, skeleton or animation clock. Unloaded
+references and other instances of the base share that state; active dialogue
+race/child conditions read the live owner. Save v24 retains validated NPC/RACE
+hashes, admits prior v23 state and rejects race overrides in legacy schemas.
+Synthetic source-order, shared/unloaded scope, family/cycle, failure-prefix,
+dialogue and cold-drift checks pass. An isolated owned native actor fixture
+verifies changed pixels, stable pose/phase, identical cold geometry, exact
+same-race no-op and restored source pixels without retained frames. A fresh
+ordinary opening accepts Hispanic selection and reaches MatchFaceGeometry.
+Player-target race changes, complete actor cold clocks, matched timing and
+retail/XR presentation remain unbound; neither actor nor campaign parity is claimed.
 
 Character-generation policy is shared by reference/results, fallback quest scripts
 and pre-world startup, and retains cold with a false legacy default. Deferred XP
@@ -366,7 +384,8 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement MatchRace through source-backed actor state. Preserve the verified
+Implement MatchFaceGeometry through source-backed NPC state and native face
+refresh. Preserve the verified MatchRace family/base/cold behavior and
 source HUD visibility, ordinary gender,
 parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
 screen-blood and activation-feedback behavior. Complete further source dialogue
@@ -380,6 +399,9 @@ runtime hitches, telemetry overruns and recording readback/repeated frames befor
 changing timing or claiming smooth playback.
 Trace source save eligibility and initialize the first source campaign snapshot
 without requiring a prior New Vegas save or bypassing character creation. Complete
+code-addressable reached-state checkpoint creation/load with whole-world source
+validation, then slow ordinary flat and VR input checks at those checkpoints. Keep
+unbound active continuations visible rather than saving incomplete states. Complete
 live refresh for the retained numeric-setting consumers exposed in telemetry.
 Preserve CG00's stage-5/package and birth-CELL movement prefixes. Trace and repair
 the loaded birth CELL's missing runtime references and two unbound non-camera clip
@@ -438,6 +460,12 @@ streaming spikes and rendering/audio fidelity remain open. Recording stays off
 during development except for a requested visual check.
 
 ## Candidate and private continuation
+
+Current actor race checks are `tmp/actor-appearance-owned.log`,
+`tmp/actor-appearance-runtime-gate.log` and `tmp/actor-appearance-cold-save.log`.
+The ordinary flat run is `tmp/development-lab/ttw-actor-race-20261001/`;
+it accepts a Hispanic selection, reaches MatchFaceGeometry and quits with readers
+drained. Recording remains off. Both protected saves retain their recorded hash.
 
 The public-facing local experimental candidate remains
 `local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, from runtime
@@ -503,7 +531,7 @@ pixels/metadata are removed. Current checks are `tmp/hud-controls-build.log`,
 `tmp/hud-controls-owned.log` and `tmp/hud-controls-runtime-gate.log`.
 The earlier ordinary actor run is `tmp/development-lab/ttw-birth-actors-20261001`.
 It selects Girl and completes eight source speech commands. Source controls
-accept a name and the projector selection; Dad's continuation reports MatchRace.
+accept a name and the projector selection; Dad's continuation reaches MatchFaceGeometry.
 Gender-question samples retain owned Dad/Dr. Li poses and stationary Idle with
 no actor package errors. Startup
 telemetry reports interval overruns, and other reference

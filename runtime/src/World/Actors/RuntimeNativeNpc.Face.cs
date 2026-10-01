@@ -73,16 +73,24 @@ internal partial class RuntimeNativeNpc
 
     private void BindFaceTargets()
     {
-        foreach (var surface in Parts.SelectMany(part => part.Root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()))
+        _faceTargets.Clear();
+        foreach (var (name, bindings) in FaceTargets(Parts)) _faceTargets.Add(name, bindings);
+    }
+
+    private static Dictionary<string, List<(MeshInstance3D Mesh, int Index)>> FaceTargets(IEnumerable<OpenNV.Runtime.Formats.Gamebryo.RuntimeNativeNifScene> parts)
+    {
+        var result = new Dictionary<string, List<(MeshInstance3D Mesh, int Index)>>(StringComparer.Ordinal);
+        foreach (var surface in parts.SelectMany(part => part.Root.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>()))
         {
             if (surface.Mesh is not ArrayMesh mesh) continue;
             for (var index = 0; index < mesh.GetBlendShapeCount(); index++)
             {
                 var name = mesh.GetBlendShapeName(index).ToString();
-                if (!_faceTargets.TryGetValue(name, out var bindings)) _faceTargets.Add(name, bindings = []);
+                if (!result.TryGetValue(name, out var bindings)) result.Add(name, bindings = []);
                 bindings.Add((surface, index));
             }
         }
+        return result;
     }
 
     internal void ValidateSpeechFace(FaceGenLipConfiguration configuration)

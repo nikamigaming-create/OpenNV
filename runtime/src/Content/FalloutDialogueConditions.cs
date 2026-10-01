@@ -6,13 +6,15 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, float>? healthPercentage = null,
     Func<FalloutFormKey, int, float>? actorValue = null,
     Func<FalloutFormKey, bool>? talkedToPlayer = null,
-    Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null)
+    Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
+    Func<FalloutFormKey, FalloutFormKey>? actorRace = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
         : this(records, quests, speaker, FalloutDialogueSpeaker.Read(records, appearance.Npc), runtime) { }
 
     private readonly IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = FalloutAiPackages.ReadFactions(records, identity.Actor, identity.Templates);
+    private FalloutFormKey? CurrentRace => identity.Race is null ? null : actorRace?.Invoke(speaker) ?? identity.Race;
 
     internal float Evaluate(FalloutCondition condition)
     {
@@ -47,12 +49,12 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
             return condition.Function switch
             {
                 50 when talkedToPlayer is not null => talkedToPlayer(speaker) ? 1 : 0,
-                69 => identity.Race == condition.FormArgument1 ? 1 : 0,
+                69 => CurrentRace == condition.FormArgument1 ? 1 : 0,
                 70 when condition.Argument1 <= 1 => identity.Female == (condition.Argument1 == 1) ? 1 : 0,
                 71 => (factions?.Invoke(speaker) ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
                 73 => (factions?.Invoke(speaker) ?? _factions).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
                 72 => identity.Actor == condition.FormArgument1 ? 1 : 0,
-                365 => identity.Race is { } race && FalloutRaceProperties.IsChild(records.GetEffective(race)) ? 1 : 0,
+                365 => CurrentRace is { } race && FalloutRaceProperties.IsChild(records.GetEffective(race)) ? 1 : 0,
                 427 => identity.VoiceType == condition.FormArgument1 ? 1 : 0,
                 _ => Unbound(condition),
             };

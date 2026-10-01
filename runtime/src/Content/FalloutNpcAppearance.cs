@@ -13,8 +13,8 @@ internal sealed record FalloutNpcAppearancePart(string Role, FalloutFormKey Sour
 internal sealed record FalloutNpcFaceGen(FalloutFormKey Source, byte[] SymmetricGeometry,
     byte[] AsymmetricGeometry, byte[] SymmetricTexture);
 
-internal sealed record FalloutActorAppearanceState(bool Female, FalloutFormKey Race,
-    FalloutFormKey Hair, FalloutFormKey Eyes, FalloutNpcFaceGen? FaceGen = null,
+internal sealed record FalloutActorAppearanceState(bool? Female, FalloutFormKey? Race,
+    FalloutFormKey? Hair, FalloutFormKey? Eyes, FalloutNpcFaceGen? FaceGen = null,
     byte[]? HairColor = null, byte[]? HairLength = null, IReadOnlyList<FalloutFormKey>? HeadParts = null);
 
 internal sealed record FalloutNpcInventoryItem(FalloutFormKey Source, FalloutFormKey Item, string Signature,

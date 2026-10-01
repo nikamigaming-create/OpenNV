@@ -81,7 +81,8 @@ public partial class RuntimeCoordinator
                 _nativeReferences.InstanceCount,
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
-                state = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.Capture() : null
+                state = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.Capture() : null,
+                actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },
             ui = _nativeUi?.State,
             bootstrap = _nativeBootstrap?.State,
@@ -723,8 +724,9 @@ public partial class RuntimeCoordinator
                 var actor = preparedNpc ?? RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
                     _configuration.World.GameUnitsToMeters, (appearance, part, nif, geometry) =>
                         NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
-                            NativeAmbient(cell.Cell)), equippedArmor, selection);
+                            NativeAmbient(cell.Cell)), equippedArmor, selection, _nativeReferences.ActorAppearanceOverride(reference.FormKey));
                 if (preparedNpc is not null) actor.BindSourceBehavior(_nativePluginStack!, selection);
+                SynchronizeNativeNpcAppearance(actor, cell);
                 actor.Transform = ReferenceTransform(reference);
                 try { actor.ConfigureContactShapes(_configuration.Player.CollisionLayer); }
                 catch (Exception error) when (error is InvalidDataException or NotSupportedException)

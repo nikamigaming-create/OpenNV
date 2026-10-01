@@ -56,6 +56,14 @@ Selecting mod settings must not replace the active game or disable other mods.
 
 ## Execution
 
+Provide code-addressable saves for actually reached campaign states. Capture the
+complete shared quests/scripts, actors, inventory, mod state and source identity;
+validate a cold load before marking a checkpoint reusable. Load a selected
+checkpoint directly for focused testing, then let the bot run slow, observable
+ordinary movement, dialogue, combat and menu input through flat and VR adapters.
+Script-stage jumps, teleportation and incomplete snapshots cannot establish
+campaign progress. Finish all Vault 101 quests, including the G.O.A.T.
+
 Use copies of genuine saves and ordinary runtime input:
 talk -> trade -> craft -> equip/reload -> fight -> loot -> save -> quit ->
 cold Continue. Exercise the same state changes in flat and OpenXR.

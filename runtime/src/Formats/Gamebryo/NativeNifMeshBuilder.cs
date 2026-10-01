@@ -221,9 +221,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
         IReadOnlyDictionary<string, FalloutNifTransform>? rigidFaceBinds,
         string? selectedGeometryName,
         Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? morphOwner,
-        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0) =>
+        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0,
+        RuntimeNativeNifMaterialChannels? materialChannels = null) =>
         AddActorPart(FalloutNifFile.Read(payload), skeleton, preferredTextureArchive, materialOverride, geometryOwner,
-            externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner, contentSource, bipedSlots);
+            externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner, contentSource, bipedSlots, materialChannels);
 
     internal static RuntimeNativeNifScene AddActorPart(
         FalloutNifFile source,
@@ -235,7 +236,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
         IReadOnlyDictionary<string, FalloutNifTransform>? rigidFaceBinds,
         string? selectedGeometryName,
         Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? morphOwner,
-        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0)
+        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0,
+        RuntimeNativeNifMaterialChannels? materialChannels = null)
     {
         var state = new BuildState(source, skeleton.UnitsToMetres, preferredTextureArchive,
             externalSkeleton: true, materialOverride, geometryOwner, contentSource)
@@ -295,7 +297,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 }
             }
             state.BuildControllerPlayers(result);
-            state.RegisterActorMaterialChannels(skeleton);
+            state.RegisterActorMaterialChannels(materialChannels ?? skeleton.MaterialChannels, result);
             if (state.SurfaceCount == 0)
                 throw new InvalidDataException("Actor part contains no presented source surfaces.");
             skeleton.Node.AddChild(result);
@@ -2640,8 +2642,9 @@ internal static class NativeNifMeshBuilder
         IReadOnlyDictionary<string, FalloutNifTransform>? rigidFaceBinds = null,
         string? selectedGeometryName = null,
         Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? morphOwner = null,
-        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0) =>
-        RuntimeNativeNifMeshBuilder.AddActorPart(payload, skeleton, preferredTextureArchive, materialOverride, geometryOwner, externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner, contentSource, bipedSlots);
+        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0,
+        RuntimeNativeNifMaterialChannels? materialChannels = null) =>
+        RuntimeNativeNifMeshBuilder.AddActorPart(payload, skeleton, preferredTextureArchive, materialOverride, geometryOwner, externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner, contentSource, bipedSlots, materialChannels);
 
     internal static RuntimeNativeNifScene AddActorPart(
         FalloutNifFile source,
@@ -2653,8 +2656,9 @@ internal static class NativeNifMeshBuilder
         IReadOnlyDictionary<string, FalloutNifTransform>? rigidFaceBinds = null,
         string? selectedGeometryName = null,
         Func<FalloutNifFile, FalloutNifGeometry, FalloutNifMeshData, IReadOnlyDictionary<string, System.Numerics.Vector3[]>>? morphOwner = null,
-        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0) =>
-        RuntimeNativeNifMeshBuilder.AddActorPart(source, skeleton, preferredTextureArchive, materialOverride, geometryOwner, externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner, contentSource, bipedSlots);
+        RuntimeLiveContentSource? contentSource = null, uint bipedSlots = 0,
+        RuntimeNativeNifMaterialChannels? materialChannels = null) =>
+        RuntimeNativeNifMeshBuilder.AddActorPart(source, skeleton, preferredTextureArchive, materialOverride, geometryOwner, externalTransformTargets, rigidFaceBinds, selectedGeometryName, morphOwner, contentSource, bipedSlots, materialChannels);
 
     internal static RuntimeNativeNifScene Build(
         ReadOnlyMemory<byte> payload,

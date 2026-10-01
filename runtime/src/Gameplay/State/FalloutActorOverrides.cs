@@ -9,4 +9,5 @@ internal sealed record FalloutActorFormOverride(FalloutFormKey Form, string Sha2
 internal sealed record FalloutActorOverrides(FalloutFormKey Target, string SourceSha256,
     IReadOnlyList<FalloutActorFormOverride> Perks,
     IReadOnlyList<FalloutActorFormOverride> Factions,
-    FalloutActorFormOverride? CombatStyle = null, bool IgnoreCrime = false, bool IgnoreFriendlyHits = false);
+    FalloutActorFormOverride? CombatStyle = null, bool IgnoreCrime = false, bool IgnoreFriendlyHits = false,
+    FalloutActorFormOverride? Race = null);
