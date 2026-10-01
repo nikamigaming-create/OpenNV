@@ -193,8 +193,22 @@ filtered blocks evaluate their current integer argument when reached. Reference
 and fallback-quest queries share a C# menu frame published by the native adapter.
 Missing filtered-menu identity remains divergence. Supported paused panels and
 source messages publish their codes; transient menu frames are not saved. The
-claimed opening path retains its legacy acceptance handoff, and title scripts
-still need a bootstrap command/player host before menu execution can be enabled.
+claimed opening path retains its legacy acceptance handoff. New Game resolves
+General/SCharGenQuest against the winning load order. A C# bootstrap activates
+that quest, executes authored stage-zero/menu programs and carries their state
+into the ordinary scene selected by the first queued player move. Selected mod
+settings overlay owned installation settings in memory; they never edit the
+installation. The TTW configuration follows its
+[installation guide](https://thebestoftimes.moddinglinked.com/essentials.html).
+Blocking native movies retain their continuation and expose playback failures;
+unbound pre-world commands remain visible. Runtime stage programs choose their
+conditional destinations; a static opening graph cannot reject or select them.
+The generic save/diagnostic startup label remains stable across background quest
+stage changes; the shared quest owner retains all actual stage progression.
+
+Built-in tag-skill slots bind to their base-master record identities. Their
+winning AVIF editor IDs, labels and fields may change without renumbering those
+engine slots. Player skill queries and source menus use the same slot owner.
 
 Numeric NVSE assignments and eval expressions use these same script state
 owners. Their logical operators retain numeric operand values independently

@@ -24,20 +24,34 @@ internal static partial class FalloutNativeTagSkillResolver
     private const short TagMenuStage = 90;
     private static readonly string[] SkillEditorIds =
     [
-        "AVBarter",
-        "AVEnergyWeapons",
-        "AVExplosives",
-        "AVLockpick",
-        "AVMedicine",
-        "AVMeleeWeapons",
-        "AVRepair",
-        "AVScience",
-        "AVSmallGuns",
-        "AVSneak",
-        "AVSpeech",
-        "AVThrowing",
-        "AVUnarmed",
+        "AVBarter", "AVEnergyWeapons", "AVExplosives", "AVLockpick", "AVMedicine",
+        "AVMeleeWeapons", "AVRepair", "AVScience", "AVSmallGuns", "AVSneak", "AVSpeech", "AVThrowing", "AVUnarmed",
     ];
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack, Dictionary<uint, string>> Slots = new();
+
+    // Built-in actor-value slots retain the base master's form identity. A later
+    // override can rename the AVIF; FULL and ANAM are presentation strings.
+    internal static string ActorValueName(FalloutPluginStack stack, FalloutNativeSkillIdentity skill) =>
+        SlotBindings(stack).TryGetValue(skill.RuntimeFormId, out var name) ? name :
+            throw new NotSupportedException("Skill AVIF has no built-in actor-value slot.");
+
+    private static Dictionary<uint, string> SlotBindings(FalloutPluginStack stack) => Slots.GetValue(stack, records =>
+    {
+        var definitions = records.Plugins[0].Plugin.Records.Where(record => record.Signature == "AVIF")
+            .Select(record => (Record: record, EditorId: ReadEditorId(record)))
+            .Where(value => SkillEditorIds.Contains(value.EditorId, StringComparer.OrdinalIgnoreCase))
+            .GroupBy(value => value.EditorId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Select(value => value.Record).ToArray(), StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<uint, string>();
+        foreach (var id in SkillEditorIds)
+        {
+            if (!definitions.TryGetValue(id, out var matching) || matching.Length != 1)
+                throw new InvalidDataException($"Base master actor-value slot {id} has no unique AVIF definition.");
+            var name = id switch { "AVSmallGuns" => "Guns", "AVThrowing" => "Survival", _ => id[2..] };
+            result.Add(records.RuntimeFormId(matching[0].FormKey), name);
+        }
+        return result;
+    });
 
     internal static FalloutNativeTagSkillContract Resolve(
         FalloutPluginStack stack,
@@ -74,26 +88,14 @@ internal static partial class FalloutNativeTagSkillResolver
             throw new InvalidDataException(
                 $"Native psych-test INFO graph has no {QuestEditorId}:{PsychCompletedStage} terminal result.");
 
-        var records = stack.EffectiveRecords("AVIF")
-            .Select(record => (Record: record, EditorId: ReadEditorId(record)))
-            .Where(value => SkillEditorIds.Contains(
-                value.EditorId, StringComparer.OrdinalIgnoreCase))
-            .GroupBy(value => value.EditorId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(value => value.Record).ToArray(),
-                StringComparer.OrdinalIgnoreCase);
         var skills = new List<FalloutNativeSkillIdentity>();
-        foreach (var editorId in SkillEditorIds)
+        foreach (var slot in SlotBindings(stack))
         {
-            if (!records.TryGetValue(editorId, out var matches) || matches.Length != 1)
-                throw new InvalidDataException(
-                    $"Native tag skill {editorId} must resolve to one winning AVIF; " +
-                    $"found {(matches?.Length ?? 0)}.");
-            var full = ReadText(matches[0], "FULL");
-            _ = ReadText(matches[0], "ANAM");
+            var record = stack.GetEffective(stack.RuntimeFormKey(slot.Key));
+            if (record.Signature != "AVIF") throw new InvalidDataException("Built-in skill winner is not AVIF.");
+            var full = ReadText(record, "FULL");
             skills.Add(new FalloutNativeSkillIdentity(
-                stack.RuntimeFormId(matches[0].FormKey), editorId, full));
+                slot.Key, ReadEditorId(record), full));
         }
         if (requiredCount <= 0 || requiredCount >= skills.Count)
             throw new InvalidDataException("Native tag-skill selection count is unsupported.");

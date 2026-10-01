@@ -4,13 +4,12 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed class FalloutPlayerSkills
 {
-    internal static string SkillName(string editorId) => editorId switch
+    internal static string SkillName(FalloutPluginStack records, FalloutNativeSkillIdentity skill)
     {
-        "AVSmallGuns" => "Guns",
-        "AVThrowing" => "Survival",
-        _ when editorId.StartsWith("AV", StringComparison.Ordinal) => editorId[2..],
-        _ => throw new InvalidDataException("Skill has no actor-value identity."),
-    };
+        var record = records.GetEffective(records.RuntimeFormKey(skill.RuntimeFormId));
+        if (record.Signature != "AVIF") throw new InvalidDataException("Skill identity is not AVIF.");
+        return FalloutNativeTagSkillResolver.ActorValueName(records, skill);
+    }
     private readonly FalloutPluginStack _records;
     private readonly Func<FalloutNativeSpecialState> _special;
     private readonly Func<string, bool> _tagged;

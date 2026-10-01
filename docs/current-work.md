@@ -17,13 +17,30 @@ completion is claimed.
 
 ## Verified runtime
 
+New Game now reads the winning configured starting QUST from selected-profile
+settings and executes its source stage/menu scripts before constructing a player.
+The first queued source move chooses the ordinary CELL builder and player
+placement; executed prefixes, control masks and shared quest state survive that
+handoff. Required TTW settings stay in the selected profile, leaving owned INIs
+unchanged. Ordinary flat New -> Yes reaches TTW's authored holding CELL and its
+actual Capital/Mojave message. Selecting Capital starts CG00's owned Fallout 3
+intro movie; ordinary Escape interrupts it and resumes the source result program.
+That continuation fails visibly at SetLocationSpecificLoadScreensOnly, while
+TTWStart retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
+the Vault exit, train station, travel and continued campaigns remain unverified.
+The requested current-build choice screenshot is retained privately. Recording
+is off. Synthetic bootstrap, conditional stage execution, winning renamed skill
+identity and owned TTW/cold-save checks pass, as does the complete required
+runtime gate. The final flat build retains TTWStart's startup identity across
+background quest stage changes. Both protected saves remain unchanged.
+
 Quest scripts now execute unfiltered and filtered MenuMode blocks through the
 shared SCPT clock. Multiple GameMode blocks share source order, locals, budgets
 and Return; menu filters read their current local value at execution. A shared
 C# menu frame owns queries and identity; absent filtered-menu identity fails
 visibly. Native message and supported paused panels publish their codes, retaining
 underlying panels when a source message opens. Claimed opening menus retain their
-existing handoff; exact open-menu scheduling and title bootstrap remain unbound.
+existing handoff; exact open-menu scheduling remains unverified.
 Synthetic reference/fallback-quest checks pass source order, filters, failure
 prefixes, stopped clocks, scoped handoff and cold faults. The winning TTWStart
 owned fixture now runs through the shared quest clock with owned/default cadence,
@@ -31,8 +48,8 @@ queues its holding-cell move once and publishes the actual two-choice message.
 Cold restoration retains its prefix and pending choice without a transient menu
 frame. The complete runtime gate passes with recording off. Parser 8 retains all 446 original saved owners and admits one previously
 rejected multi-block owner; both protected saves remain unchanged. The TTW source
-audit retains five parser failures among 1,263 entry-plugin scripts. Campaign,
-native startup, rendered choice and train travel remain unverified.
+audit retains five parser failures among 1,263 entry-plugin scripts. Campaign
+progression and train travel remain unverified.
 
 Player MoveTo now queues requests in the shared C# world owner, so the following
 source statements finish before native movement. Typed destinations and optional
@@ -45,9 +62,8 @@ fixtures check suffix execution, offsets, mixed rotations, residency, self moves
 failure retention and retirement. The winning TTWStart MenuMode block passes an
 explicit owned fixture: its holding-cell request and following statements execute
 once. The full runtime gate and unchanged 446-owner cold-save audit pass.
-Ordinary TTW startup, rendered transfer, opening choice, campaign and train travel
-remain unverified. The next owners are the configured starting quest and title/
-player bootstrap, followed by general character-creation and campaign state.
+These movement fixtures do not establish campaign or train travel. General
+character-creation and campaign state remain open.
 
 Keyboard/mouse control queries and remaps now share a profile-owned C# table.
 Winning installation INI bindings remain read-only; changes swap occupied keys
@@ -183,8 +199,8 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Replace the New Vegas startup assumptions with the winning configured starting
-quest, title bootstrap and shared player/campaign state. TTW's source
+Implement the reached loading-screen policy, character-generation state and TTW
+radio-worldspace dependency behavior without discarding failed prefixes. TTW's source
 opening choice must lead into Fallout 3's authored character creation, exit,
 train-station route and ticketed travel into the Mojave opening. Continue through
 ordinary input and persistent saves; queued source transfers alone do not prove
@@ -203,9 +219,9 @@ Bind remaining perk entry-point consumers, ranks and condition scopes rather
 than treating successful parameter mutation as complete perk behavior.
 Keep the complete TTW opening, campaign progression, travel and dependency
 semantics in scope; do not remove launch gates on the strength of source audits.
-The current New Vegas startup assumes the Doc Mitchell opening, including its
-start CELL, quests and character creation. Replace that assumption with winning
-startup scripts before claiming a Fallout 3 start under TTW.
+Startup placement now follows the winning configured quest. The native creation
+contracts still assume New Vegas's Doc Mitchell flow; replace those remaining
+assumptions with shared source owners before claiming playable Fallout 3 creation.
 
 Preserve the actual flat run's remaining script and actor failures. Essential
 recovery and additional death-command parameters need their own source-backed
@@ -267,8 +283,15 @@ These fixtures do not establish a campaign playthrough.
 Current menu checks are `tmp/ttw-menu-script-contract.log`,
 `tmp/ttw-menu-owned.private.json`, `tmp/ttw-menu-owned-save.log`,
 `tmp/ttw-menu-source.private.json` and `tmp/ttw-menu-runtime-gate.log`.
-The requested flat screenshot is extracted from the retained September 27
-companion clip; it does not show the new September 30 code.
+Current startup checks are `tmp/source-quest-startup-contract.log`,
+`tmp/source-quest-startup-plugin-contract.log`,
+`tmp/source-quest-startup-owned.private.json`,
+`tmp/source-quest-startup-cold-save.log` and
+`tmp/source-quest-startup-runtime-gate.log`. The ordinary flat session is
+`tmp/development-lab/ttw-startup-20260930-final`, with the selected movie/failure
+check in `tmp/development-lab/ttw-startup-20260930-run4`. Their retained failures
+identify the next source owners. The requested current-build screenshot is
+`local/recordings/ttw-startup-20260930/TTW-starting-choice-flat.png`.
 
 Do not change `local/playtest-20260927-world/save.json` or
 `local/playtest-20260920-companion/save.json`. Both still hash to

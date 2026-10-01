@@ -50,7 +50,9 @@ internal sealed record FalloutModStackInstallation(
         : "Missing package files: " + string.Join(", ", MissingDependencies.Select(row => row.LogicalPath));
 
     internal RuntimeLiveContentSource OpenSource() => RuntimeLiveContentSource.Open(BaseInstallation.InstallRoot,
-        RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(), ActivePlugins);
+        RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(), ActivePlugins, settings: Settings);
+
+    internal IReadOnlyList<FalloutInstallationSetting> Settings => Mods.SelectMany(mod => FalloutModCatalog.Get(mod.Id).Settings ?? []).ToArray();
 
     internal static FalloutModStackInstallation Detect(string baseRoot, IReadOnlyList<FalloutModSelection> mods, bool automaticOrder = true)
     {

@@ -29,6 +29,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
     private bool _pausedBeforeMovie;
     private bool _pauseOwned;
     private bool _failed;
+    internal string? Error { get; private set; }
 
     internal void Configure(FalloutMovieCommand command, Action<bool> completed)
     {
@@ -242,6 +243,7 @@ internal sealed partial class NativeGamebryoMovie : CanvasLayer
         if (_failed || _finished)
             return;
         _failed = true;
+        Error = error.Message;
         StopAudioPump();
         _decoder.Dispose();
         _audio?.Stop();
