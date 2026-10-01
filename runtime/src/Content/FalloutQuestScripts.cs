@@ -177,6 +177,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutScriptIniStore? Ini { get; }
     internal FalloutInputControls? Controls { get; }
     internal FalloutScriptMenus Menus { get; }
+    internal FalloutScriptSounds Sounds { get; }
     internal FalloutUiComponentStore? Ui => References?.Ui;
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
@@ -207,6 +208,7 @@ internal sealed class FalloutQuestScripts
         variables = _quests.VariableState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
         menus = Menus.State,
+        sounds = Sounds.State,
         scheduling = "shared SCPT clocks; running quest admission and retained stop/restart clocks; exact retail MenuMode scheduling unverified",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
@@ -316,6 +318,7 @@ internal sealed class FalloutQuestScripts
         Ini = references?.Ini ?? storage?.Ini;
         Controls = references?.Controls ?? storage?.Controls;
         Menus = references?.Menus ?? new();
+        Sounds = references?.Sounds ?? new(records, Menus);
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
@@ -632,6 +635,15 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && operation == "playsound")
+            {
+                if (arguments.Count is < 1 or > 2) throw new InvalidDataException("PlaySound requires a sound and optional system flag.");
+                var sound = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function);
+                if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
+                Sounds.Play(instance.Quest.FormKey, sound.FormKey(_records), arguments.Count == 2 &&
+                    FalloutScriptSounds.SystemFlag(NumberArgument(arguments[1])));
+                return;
+            }
             if (parts.Length == 1 && operation == "setnumericgamesetting")
             {
                 FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,

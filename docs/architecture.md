@@ -30,6 +30,20 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+Non-locational [PlaySound](https://geckwiki.com/index.php/PlaySound) requests
+belong to FalloutScriptSounds in the shared reference world; fallback quests use
+the same owner. Winning SOUN records and the shared source selector provide gain,
+pitch, chance and variant identity. NativeOwnedScriptSoundPlayer prepares a hashed
+owned WAV before request commitment, reports actual completion and releases each
+concurrent voice on retirement. Normal requests queue until GameMode; system
+sounds continue through paused menus. Active normal voices pause without replay.
+The pause timing remains unmatched against retail. Voice state is transient,
+outside campaign snapshots, with no cold replay of an executed script prefix.
+Environmental/submersion and stereo/LFE presentation gaps remain explicit in the
+request, while unsupported loop/timed/codec behavior fails before the source
+suffix. 3D/node routes, stop ownership and complete audio volume/output behavior
+remain unbound; a native mixer fixture does not establish endpoint audio parity.
+
 - `runtime/src/Content`: installation detection, plugin/archive readers,
   strings, media, records, and live source precedence.
 - `runtime/src/Formats`: NIF and engine-family binary interpretation.

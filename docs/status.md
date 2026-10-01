@@ -19,14 +19,19 @@ Its post-movie continuation executes the shared loading-screen and character-gen
 policies, installs CG00 stage 5's explicit-location player package and starts its
 owned birth camera clip. The queued source move loads the Vault 101 birth CELL,
 and both source numeric-setting writes execute through shared session ownership.
-The birth camera advances; CG00 then stops at its stage-6 PlaySound command. That
+The birth camera advances, and stage 6 now plays and completes the owned birth WAV.
+CG00 then stops at the missing deferred player-package change-animation owner. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first manual save
 fails at the existing prior-save requirement, so first-snapshot initialization and
 source save eligibility remain unbound. Numeric settings retain within a running
 stack and reset to owned defaults on a fresh stack. Live skill/damage checks and
 owned TTW command checks pass; retained-consumer refresh and complete karma behavior
-remain open. Saved package
+remain open. Script audio uses shared transient voice ownership; menu queuing,
+system sounds, concurrent completion, prefix failures and retirement pass
+synthetic and owned native-mixer checks. Reverb, submersion and stereo/LFE gaps
+remain visible; loop/3D playback, complete volume routing, endpoint audio and
+matched voice timing remain unverified. Saved package
 assignment/clock and native cold-camera/remainder checks pass as component evidence;
 package traversal, event transitions and matched timing remain incomplete.
 Chargen state retains cold; deferred XP survives vitals

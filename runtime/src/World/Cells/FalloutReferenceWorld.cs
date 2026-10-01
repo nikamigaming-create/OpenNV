@@ -192,6 +192,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutInputControls? Controls { get; } = controls;
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
     internal FalloutScriptMenus Menus { get; } = new();
+    private FalloutScriptSounds? _sounds;
+    internal FalloutScriptSounds Sounds => _sounds ??= new(records, Menus);
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _instances = [];
     private readonly Dictionary<FalloutFormKey, FalloutReferenceScriptDefinition> _definitions = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutReferenceInstance>> _residentCells = [];
@@ -424,6 +426,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     public void Dispose()
     {
+        _sounds?.Clear();
         PlayerMoves.Clear();
         Menus.Publish(true);
         _residentCells.Clear();
