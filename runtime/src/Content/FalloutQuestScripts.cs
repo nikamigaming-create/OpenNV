@@ -178,6 +178,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutInputControls? Controls { get; }
     internal FalloutScriptMenus Menus { get; }
     internal FalloutScriptSounds Sounds { get; }
+    internal FalloutScreenBlood ScreenBlood { get; }
     internal FalloutUiComponentStore? Ui => References?.Ui;
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
@@ -209,6 +210,7 @@ internal sealed class FalloutQuestScripts
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
         menus = Menus.State,
         sounds = Sounds.State,
+        screenBlood = ScreenBlood.State,
         scheduling = "shared SCPT clocks; running quest admission and retained stop/restart clocks; exact retail MenuMode scheduling unverified",
     };
     internal IReadOnlyList<FalloutCampaignItem> Inventory => _inventory.Items;
@@ -319,6 +321,7 @@ internal sealed class FalloutQuestScripts
         Controls = references?.Controls ?? storage?.Controls;
         Menus = references?.Menus ?? new();
         Sounds = references?.Sounds ?? new(records, Menus);
+        ScreenBlood = references?.ScreenBlood ?? new(records);
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
             RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Quest script timing needs owned installation settings."))
@@ -635,6 +638,12 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("TriggerScreenBlood requires one count.");
+                ScreenBlood.Trigger(instance.Quest.FormKey, FalloutScreenBlood.Count(NumberArgument(arguments[0])));
+                return;
+            }
             if (parts.Length == 1 && operation == "playsound")
             {
                 if (arguments.Count is < 1 or > 2) throw new InvalidDataException("PlaySound requires a sound and optional system flag.");

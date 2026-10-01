@@ -21,8 +21,9 @@ owned birth camera clip. The queued source move loads the Vault 101 birth CELL,
 and both source numeric-setting writes execute through shared session ownership.
 The birth camera advances, and stage 6 now plays and completes the owned birth WAV.
 CG00's stage-8 same-package request now plays its outgoing source OnChange camera
-clip and completes the deferred assignment. Its next command stops at the unbound
-TriggerScreenBlood owner, before the baby-cry sound request. That
+clip and completes the deferred assignment. Its subsequent source screen-blood
+request now renders ten owned drops; the following owned baby-cry sound plays and
+completes. Its next command stops at the unbound SetNoActivationSound owner. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first manual save
 fails at the existing prior-save requirement, so first-snapshot initialization and
@@ -40,6 +41,15 @@ Package traversal, nonempty event programs, end/removal animations, change
 cancellation and matched interruption/blend/timing remain incomplete. A fresh
 unfinished birth-room screenshot exposes lighting and HUD gaps; it is not parity
 evidence.
+
+Screen blood has shared transient C# request/cap/lifetime/fade ownership and a
+partial native flat presentation from winning owned DDS maps. Boolean installation
+defaults are read from the owned executable with INI/profile precedence. Synthetic
+override/prefix/random/clock/cleanup/cold checks and an owned native pixel audit
+pass; fade changes pixels and expiration restores the fixture baseline with no
+retained frames. Directional UV offsets, flares, color transfer, matched layering/
+timing/random stream and the XR final-eye adapter remain visible gaps. These checks
+and the ordinary opening prefix do not establish full effect or campaign parity.
 Chargen state retains cold; deferred XP survives vitals
 derivation, and unsupported earned level-ups stop before clearing the flag. XP
 rewards, level caps, allocation and LevelUpMenu remain incomplete. Winning

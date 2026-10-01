@@ -33,6 +33,7 @@ HudDeclarationsProbe.Run();
 MessageMenuDeclarationsProbe.Run();
 ActorFaceAnimationProbe.Run();
 FloatInitializerContracts.Run();
+BooleanInitializerContracts.Run();
 BodyPartLookProbe.Run();
 HeadTrackingProbe.Run();
 

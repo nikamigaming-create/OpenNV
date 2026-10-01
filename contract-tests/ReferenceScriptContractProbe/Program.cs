@@ -324,6 +324,7 @@ InputControlContracts.Run();
     PlayerScriptPackageContracts.Run();
     NumericGameSettingContracts.Run();
     ScriptSoundContracts.Run();
+    ScreenBloodContracts.Run();
     QuestMenuContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);

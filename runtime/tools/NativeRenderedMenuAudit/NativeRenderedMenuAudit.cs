@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 5 && args[1] == "--screen-blood")
+            {
+                await ScreenBlood(args[0], args[2], args[3], args[4], args[5..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 7 && args[1] == "--player-package-change")
             {
                 PlayerPackageChange(args[0], args[2], args[3], args[4], args[5], args[6], args[7..]);
