@@ -31,8 +31,10 @@ That package now accepts its winning explicit reference location, starts the own
 birth camera clip and lets the subsequent source player move load Vault 101's
 birth CELL. Both reached SetNumericGameSetting commands now change the shared
 session settings, and the package camera advances. CG00's stage-6 PlaySound now
-plays and completes its owned birth WAV. The subsequent source sequence stops
-when replacing the player package requires its deferred change-animation owner.
+plays and completes its owned birth WAV. Its stage-8 same-package request now
+plays the outgoing source OnChange camera clip and retains the pending assignment
+until that clip completes. The subsequent source sequence stops at the unbound
+TriggerScreenBlood command, before its baby-cry sound request.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
@@ -40,8 +42,10 @@ requires a prior native save. Source save eligibility and the first Fallout 3
 campaign snapshot remain unbound. TTWStart
 retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
-The requested current-build choice screenshot is retained privately. Recording
-is off. Synthetic bootstrap, conditional stage execution, winning renamed skill
+The requested current-build choice and unfinished birth-room screenshots are
+retained privately. The birth frame exposes lighting and HUD presentation gaps;
+it does not establish scene parity. Recording is off. Synthetic bootstrap,
+conditional stage execution, winning renamed skill
 identity and owned TTW/cold-save checks pass, as does the complete required
 runtime gate. The final flat build retains TTWStart's startup identity across
 background quest stage changes. Both protected saves remain unchanged.
@@ -83,12 +87,17 @@ writes. Complete karma behavior and other unimplemented setting consumers remain
 unbound; setting storage does not establish those gameplay systems.
 
 Player script-package assignment, source identity, idle phase/cursor and elapsed/wait
-clocks now retain in the saved shared session. Cold native component checks preserve
-the camera sample and subsequent event/idle remainder, reject changed owned clips,
-and pause package clocks while source player movement is pending. Explicit-location
-idles require the matching CELL and source radius; unreached traversal still fails
-visibly. Deferred change/end animations, nonempty package event scripts/topics,
-editor-location semantics, body targets and matched event timing remain unbound.
+clocks retain in the saved shared session. The outgoing OnChange camera event now
+owns deferred replacement; a later request replaces the pending assignment without
+restarting that event. Same-package completion returns to ordinary idles without
+replaying OnBegin. PACK accepts both owned byte and UInt32 idle-count declarations.
+Synthetic and isolated owned native checks preserve cold change clocks, camera
+samples and frame remainders, reject changed pending packages, and pause clocks
+while source movement is pending. The ordinary Capital run reaches and completes
+the stage-8 change clip. Explicit-location idles require the matching CELL and
+source radius; unreached traversal still fails visibly. End/removal animations,
+change cancellation, nonempty event scripts/topics, editor-location semantics,
+body targets and matched interruption/blend/event timing remain unbound.
 
 Loading-screen eligibility now resolves winning LSCR direct CELL/WRLD and signed
 world-grid identities, with the shared location-only policy retained cold. Native

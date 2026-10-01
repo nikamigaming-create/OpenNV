@@ -55,13 +55,22 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         }
         var idleFlags = fields.Any(field => field.Signature == "IDLF") ? Required("IDLF", 1).Span[0] : (byte)0;
         if ((idleFlags & ~5) != 0) throw new NotSupportedException($"PACK {record.FormKey} has unbound idle flags {idleFlags:x2}.");
-        var idleCount = fields.Any(field => field.Signature == "IDLC") ? Required("IDLC", 1).Span[0] : 0;
+        var counts = fields.Where(field => field.Signature == "IDLC").ToArray();
+        if (counts.Length > 1) throw new InvalidDataException("Package repeats its idle count.");
+        var count = counts.Length == 0 ? 0u : counts[0].Data.Length switch
+        {
+            1 => (uint)counts[0].Data.Span[0],
+            4 => BinaryPrimitives.ReadUInt32LittleEndian(counts[0].Data.Span),
+            _ => throw new InvalidDataException("Package idle count is neither byte nor UInt32."),
+        };
+        if (count > int.MaxValue / sizeof(uint)) throw new InvalidDataException("Package idle list exceeds its addressable record extent.");
+        var idleCount = (int)count;
         var timer = fields.Any(field => field.Signature == "IDLT") ? BinaryPrimitives.ReadSingleLittleEndian(Required("IDLT", 4).Span) : 0;
         if (!float.IsFinite(timer) || timer < 0) throw new InvalidDataException("Package idle timer is invalid.");
         var idles = new List<FalloutFormKey>();
         if (idleCount != 0 || fields.Any(field => field.Signature == "IDLA"))
         {
-            var list = Required("IDLA", idleCount * 4).Span;
+            var list = Required("IDLA", checked(idleCount * sizeof(uint))).Span;
             for (var index = 0; index < idleCount; index++)
                 idles.Add(record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(list[(index * 4)..])));
         }

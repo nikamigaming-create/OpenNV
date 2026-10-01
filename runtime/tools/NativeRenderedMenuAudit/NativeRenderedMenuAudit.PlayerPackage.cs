@@ -65,7 +65,7 @@ public partial class NativeRenderedMenuAudit
             forgedComplete.Restore(saved with
             {
                 PlayerPackage = saved.PlayerPackage! with
-                { Idle = null, AnimationSha256 = null, Elapsed = 0, PackageEvent = false, Complete = true }
+                { Idle = null, AnimationSha256 = null, Elapsed = 0, PackageEvent = false, EventKind = null, Complete = true }
             });
             rejected = false;
             try { _ = new RuntimeNativePlayerPackage(records, player, forgedComplete, world, () => marker.Cell); }

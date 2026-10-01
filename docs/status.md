@@ -20,7 +20,9 @@ policies, installs CG00 stage 5's explicit-location player package and starts it
 owned birth camera clip. The queued source move loads the Vault 101 birth CELL,
 and both source numeric-setting writes execute through shared session ownership.
 The birth camera advances, and stage 6 now plays and completes the owned birth WAV.
-CG00 then stops at the missing deferred player-package change-animation owner. That
+CG00's stage-8 same-package request now plays its outgoing source OnChange camera
+clip and completes the deferred assignment. Its next command stops at the unbound
+TriggerScreenBlood owner, before the baby-cry sound request. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first manual save
 fails at the existing prior-save requirement, so first-snapshot initialization and
@@ -32,8 +34,12 @@ system sounds, concurrent completion, prefix failures and retirement pass
 synthetic and owned native-mixer checks. Reverb, submersion and stereo/LFE gaps
 remain visible; loop/3D playback, complete volume routing, endpoint audio and
 matched voice timing remain unverified. Saved package
-assignment/clock and native cold-camera/remainder checks pass as component evidence;
-package traversal, event transitions and matched timing remain incomplete.
+assignment/clock, pending change assignment and native cold-camera/remainder checks
+pass as component evidence. PACK reads both owned byte and UInt32 idle counts.
+Package traversal, nonempty event programs, end/removal animations, change
+cancellation and matched interruption/blend/timing remain incomplete. A fresh
+unfinished birth-room screenshot exposes lighting and HUD gaps; it is not parity
+evidence.
 Chargen state retains cold; deferred XP survives vitals
 derivation, and unsupported earned level-ups stop before clearing the flag. XP
 rewards, level caps, allocation and LevelUpMenu remain incomplete. Winning

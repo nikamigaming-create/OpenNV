@@ -246,12 +246,18 @@ Default bool/unsigned initializer layouts and complete gameplay consumers remain
 unadmitted; numeric storage does not certify their behavior.
 
 Player script-package assignment and idle phase/cursor/elapsed/wait clocks live in
-the saved shared session. Native restoration validates winning package and clip
-hashes and samples the retained clock without replaying the begin event. Package
-clocks pause while a queued source player move is pending; ordinary idles require
-their explicit reference CELL/radius, while OnBegin camera playback may start at
-assignment. Unreached traversal, editor origins, nonempty event scripts/topics,
-deferred change/end animations and non-camera body channels remain explicit gaps.
+the saved shared session. Outgoing OnChange camera playback retains a pending
+assignment until its clip completes; subsequent requests replace that pending
+assignment without restarting the event. Same-package requests resume ordinary
+idles without another OnBegin event. Native restoration validates the current and
+pending winning package hashes, event kind and owned clip, then samples the retained
+clock without replay. Legacy event snapshots retain their OnBegin interpretation.
+PACK idle counts admit the owned byte and UInt32 layouts with exact list extents.
+Package clocks pause while queued source player movement is pending; ordinary idles
+require their explicit reference CELL/radius, while event camera playback may start
+at assignment. Unreached traversal, editor origins, nonempty event scripts/topics,
+end/removal animations, change cancellation and non-camera body channels remain
+explicit gaps. Interruption, blending and event timing remain unmatched with retail.
 This component boundary follows the primary [PACK layout](https://tes5edit.github.io/fopdoc/FalloutNV/Records/PACK.html)
 and [AddScriptPackage behavior](https://geckwiki.com/index.php?title=AddScriptPackage).
 
