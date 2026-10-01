@@ -415,7 +415,7 @@ public partial class RuntimeCoordinator
             if (windWeather != weather)
             {
                 windSpeed = FalloutWeatherMotion.Read(_nativePluginStack!.GetEffective(weather),
-                    FalloutGameSettingFloats.Read(_nativePluginStack, "fWeatherCloudSpeedMax")).WindSpeed;
+                    FalloutGameSettingFloats.ReadRetained(_nativePluginStack, "fWeatherCloudSpeedMax", nameof(RuntimeNativeWind))).WindSpeed;
                 windWeather = weather;
             }
             return (windSpeed, FalloutWindForce.InitialHeading);

@@ -6,28 +6,32 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed class FalloutWeaponSpread
 {
     private const float SourceSpreadDegreeScale = 5.955f;
-    private readonly float _runningPenalty, _standingPenalty, _unaimedPenalty, _walkingPenalty;
-    private readonly float _crippledArmOneHanded, _crippledArmTwoHanded;
-    private readonly float _crippledArmsOneHanded, _crippledArmsTwoHanded;
-    private readonly float _wobbleToSkill, _minimumGunSpread, _strengthRequirementPenalty;
-    private readonly float _npcMaxGunWobbleAngle;
+    private readonly FalloutPluginStack _records;
+    private float RunningPenalty => Setting("fRunningSpreadPenalty");
+    private float StandingPenalty => Setting("fStandingSpreadPenalty");
+    private float UnaimedPenalty => Setting("fUnaimedSpreadPenalty");
+    private float WalkingPenalty => Setting("fWalkingSpreadPenalty");
+    private float CrippledArmOneHanded => Setting("fCrippledArm1HSpreadPenalty");
+    private float CrippledArmTwoHanded => Setting("fCrippledArm2HSpreadPenalty");
+    private float CrippledArmsOneHanded => Setting("fCrippledArms1HSpreadPenalty");
+    private float CrippledArmsTwoHanded => Setting("fCrippledArms2HSpreadPenalty");
+    private float WobbleToSkill => Setting("fWobbleToSkillConversion");
+    private float MinimumGunSpread => Setting("fMinGunSpreadValue");
+    private float StrengthRequirementPenalty => Setting("fWeapStrengthReqPenalty");
+    private float Setting(string name) => FalloutGameSettingFloats.Read(_records, name);
 
     internal FalloutWeaponSpread(FalloutPluginStack records)
     {
-        _runningPenalty = FalloutGameSettingFloats.Read(records, "fRunningSpreadPenalty");
-        _standingPenalty = FalloutGameSettingFloats.Read(records, "fStandingSpreadPenalty");
-        _unaimedPenalty = FalloutGameSettingFloats.Read(records, "fUnaimedSpreadPenalty");
-        _walkingPenalty = FalloutGameSettingFloats.Read(records, "fWalkingSpreadPenalty");
-        _crippledArmOneHanded = FalloutGameSettingFloats.Read(records, "fCrippledArm1HSpreadPenalty");
-        _crippledArmTwoHanded = FalloutGameSettingFloats.Read(records, "fCrippledArm2HSpreadPenalty");
-        _crippledArmsOneHanded = FalloutGameSettingFloats.Read(records, "fCrippledArms1HSpreadPenalty");
-        _crippledArmsTwoHanded = FalloutGameSettingFloats.Read(records, "fCrippledArms2HSpreadPenalty");
-        _wobbleToSkill = FalloutGameSettingFloats.Read(records, "fWobbleToSkillConversion");
-        _minimumGunSpread = FalloutGameSettingFloats.Read(records, "fMinGunSpreadValue");
-        _strengthRequirementPenalty = FalloutGameSettingFloats.Read(records, "fWeapStrengthReqPenalty");
-        _npcMaxGunWobbleAngle = FalloutGameSettingFloats.Read(records, "fNPCMaxGunWobbleAngle");
-        if (!float.IsFinite(_npcMaxGunWobbleAngle) || _npcMaxGunWobbleAngle < 0)
-            throw new InvalidDataException("NPC maximum gun wobble angle is invalid.");
+        _records = records;
+        _ = new[] { RunningPenalty, StandingPenalty, UnaimedPenalty, WalkingPenalty, CrippledArmOneHanded,
+            CrippledArmTwoHanded, CrippledArmsOneHanded, CrippledArmsTwoHanded, WobbleToSkill, MinimumGunSpread, StrengthRequirementPenalty };
+        _ = NpcMaximumGunWobbleAngle();
+    }
+
+    private float NpcMaximumGunWobbleAngle()
+    {
+        var angle = Setting("fNPCMaxGunWobbleAngle");
+        return angle >= 0 ? angle : throw new InvalidDataException("NPC maximum gun wobble angle is invalid.");
     }
 
     internal float PlayerMedianDeviationDegrees(FalloutWeaponShot shot, float skill, float strength,
@@ -46,19 +50,19 @@ internal sealed class FalloutWeaponSpread
             throw new NotSupportedException($"Weapon animation type {shot.WeaponAnimationType} has no source spread hand rule.");
 
         var armPenalty = oneHanded
-            ? (rightArmCrippled ? _crippledArmOneHanded : 0) +
-                (leftArmCrippled && rightArmCrippled ? _crippledArmsOneHanded : 0)
-            : (leftArmCrippled || rightArmCrippled ? _crippledArmTwoHanded : 0) +
-                (leftArmCrippled && rightArmCrippled ? _crippledArmsTwoHanded : 0);
-        var movementPenalty = moving ? running ? _runningPenalty : _walkingPenalty : 0;
-        var skillMultiplier = 1 - _wobbleToSkill * Math.Min(skill, 100) / 100;
-        var strengthPenalty = Math.Max(0, shot.StrengthRequirement - Math.Min(strength, 10)) * _strengthRequirementPenalty;
+            ? (rightArmCrippled ? CrippledArmOneHanded : 0) +
+                (leftArmCrippled && rightArmCrippled ? CrippledArmsOneHanded : 0)
+            : (leftArmCrippled || rightArmCrippled ? CrippledArmTwoHanded : 0) +
+                (leftArmCrippled && rightArmCrippled ? CrippledArmsTwoHanded : 0);
+        var movementPenalty = moving ? running ? RunningPenalty : WalkingPenalty : 0;
+        var skillMultiplier = 1 - WobbleToSkill * Math.Min(skill, 100) / 100;
+        var strengthPenalty = Math.Max(0, shot.StrengthRequirement - Math.Min(strength, 10)) * StrengthRequirementPenalty;
         // New Vegas uses the strength-requirement setting here as well; the
         // separate skill-requirement setting is present but unused by the game.
         var skillRequirementPenalty = Math.Max(0, shot.SkillRequirement - Math.Min(skill, 100)) *
-            .1f * _strengthRequirementPenalty;
-        var playerSpread = Math.Max(_minimumGunSpread, skillMultiplier *
-            (_unaimedPenalty * (aiming ? 0 : 1) + movementPenalty + _standingPenalty * (sneaking ? 0 : 1) +
+            .1f * StrengthRequirementPenalty;
+        var playerSpread = Math.Max(MinimumGunSpread, skillMultiplier *
+            (UnaimedPenalty * (aiming ? 0 : 1) + movementPenalty + StandingPenalty * (sneaking ? 0 : 1) +
                 armPenalty + strengthPenalty + skillRequirementPenalty));
 
         foreach (var perk in perks.Where(perk => perk.Entry == 34))
@@ -88,7 +92,7 @@ internal sealed class FalloutWeaponSpread
             moving: moving, running: running, sneaking: sneaking, leftArmCrippled: leftArmCrippled,
             rightArmCrippled: rightArmCrippled, Array.Empty<FalloutPerkEntry>(),
             static _ => throw new InvalidOperationException("NPC weapon spread cannot evaluate player perk conditions."));
-        var median = playerBase * (1 + _npcMaxGunWobbleAngle);
+        var median = playerBase * (1 + NpcMaximumGunWobbleAngle());
         if (!float.IsFinite(median)) throw new InvalidDataException("Resolved NPC weapon spread is non-finite.");
         return median;
     }

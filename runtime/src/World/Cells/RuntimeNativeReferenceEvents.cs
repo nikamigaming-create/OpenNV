@@ -36,7 +36,6 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private readonly Dictionary<FalloutFormKey, string> _abilityErrors = [];
     private readonly HashSet<FalloutFormKey> _abilityActors = [];
     private FalloutAbilityModifiers? _abilities;
-    private float? _dyingDelay;
     internal IReadOnlyList<FalloutPlacedReference> BoundTriggers => _bindings.Values
         .Where(binding => binding.Trigger is { } trigger && GodotObject.IsInstanceValid(trigger) && trigger.IsInsideTree())
         .Select(binding => binding.Reference).ToArray();
@@ -301,7 +300,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (!binding.Loaded && enabled && (binding.Node is not null || binding.Trigger is not null)) { events.Add(new("OnLoad")); binding.Loaded = true; }
             if (binding.Instance.Injury is { DeathEventPending: true } injury &&
                 _world.AdvanceDeathEvent(binding.Reference.FormKey, delta,
-                    _dyingDelay ??= FalloutGameSettingFloats.Read(_records, "fDyingTimer"),
+                    FalloutGameSettingFloats.Read(_records, "fDyingTimer"),
                     _host.IsTalking?.Invoke(binding.Reference.FormKey) == true))
                 events.Add(new("OnDeath", injury.Killer));
             if (enabled && binding.Trigger is { } trigger)

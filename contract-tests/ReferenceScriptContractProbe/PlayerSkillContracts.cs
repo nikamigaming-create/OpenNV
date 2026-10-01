@@ -51,6 +51,8 @@ internal static class PlayerSkillContracts
             hardcore = false; inventory.Unequip(records, Key(42));
             Check(skills.Value("Guns") == 24, "Unequipped clothing kept its skill modifier.");
             tagged = false; Check(skills.Value("Guns") == 13, "Removed tag bonus persisted in base skills.");
+            Check(records.NumericSettings.Set("fAVDSkillSmallGunsBase", 4) && skills.Value("Guns") == 15,
+                "Numeric setting mutation left the existing skill owner with a stale base.");
             Reject(() => inventory.Add(records, Key(4), 1, 1, true));
             Reject(() => inventory.Add(records, Key(5), 1, 1, true));
             Reject(() => new FalloutAbilityModifiers(records).Spell(Key(49)));

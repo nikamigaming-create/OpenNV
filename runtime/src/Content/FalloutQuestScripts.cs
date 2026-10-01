@@ -571,6 +571,8 @@ internal sealed class FalloutQuestScripts
                             arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0))),
                 };
             }
+            if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(_records, operation) is { } settingFunction)
+                return settingFunction;
             if (parts.Length == 1 && operation is "getinifloat" or "getinistring")
             {
                 var ini = Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
@@ -630,6 +632,12 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            {
+                FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,
+                    token => token.StartsWith('"') || instance.Bindings.HasVariable(token) ? StringArgument(token) : token);
+                return;
+            }
             if (parts.Length == 1 && operation == "setinchargen")
             {
                 if (arguments.Count != 1) throw new InvalidDataException("Character-generation policy requires one flag.");

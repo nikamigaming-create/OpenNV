@@ -29,9 +29,13 @@ That continuation now executes SetLocationSpecificLoadScreensOnly and SetInCharG
 through shared session state, then reaches CG00 stage 5's player script package.
 That package now accepts its winning explicit reference location, starts the owned
 birth camera clip and lets the subsequent source player move load Vault 101's
-birth CELL. The result then stops at SetNumericGameSetting; package advancement
-and the birth sequence remain stalled. The loaded CELL reports 102 missing runtime
-references, and the camera clip reports two unbound non-camera targets. TTWStart
+birth CELL. Both reached SetNumericGameSetting commands now change the shared
+session settings, and the package camera advances. CG00 then stops at its stage-6
+PlaySound command. The loaded CELL reports 102 missing runtime references on entry
+and 83 after ordinary reference processing; the camera clip reports two unbound
+non-camera targets. The first manual save attempt fails because world persistence
+requires a prior native save. Source save eligibility and the first Fallout 3
+campaign snapshot remain unbound. TTWStart
 retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice screenshot is retained privately. Recording
@@ -47,6 +51,21 @@ during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at th
 unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
 the result suffix. XP reward commands, modifiers and leveling remain incomplete;
 this policy and owned component audit do not establish player advancement support.
+
+Numeric GMST mutation now belongs to the loaded C# stack, shared by reference,
+result, startup and fallback quest commands/functions and all numeric readers.
+Winning declarations and admitted owned executable defaults provide typed storage;
+unknown/non-numeric setters return failure, and undefined conversions fail before
+mutation. Existing skill, weapon damage/spread, ingestible and armor calculations
+read current values. Derived vitals/health, jump/limb/actor movement, blink/head
+clocks, HUD/quantity, casing and weather consumers still retain coefficients; mutations
+that would invalidate those copies fail visibly before writing. These remaining
+refresh boundaries are exposed in telemetry. Warm owner replacement retains
+settings; a new stack restores owned defaults rather than baking mutations into
+saves. Synthetic contracts, live skill/damage checks and isolated owned TTW
+commands pass. The ordinary Capital run also performs both authored karma-setting
+writes. Complete karma behavior and other unimplemented setting consumers remain
+unbound; setting storage does not establish those gameplay systems.
 
 Player script-package assignment, source identity, idle phase/cursor and elapsed/wait
 clocks now retain in the saved shared session. Cold native component checks preserve
@@ -230,10 +249,11 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement shared mutable numeric GMST ownership for the reached SetNumericGameSetting
-commands, including winning/default settings, every live consumer and cold-restart
-semantics. The primary SetNumericGameSetting contract makes these changes session
-scoped rather than save baked; do not serialize them as permanent player values.
+Implement the reached source PlaySound/PlaySound3D audio-voice owner, beginning
+with CG00's stage-6 birth sound; preserve source event order and clip/loop lifetime.
+Trace source save eligibility and initialize the first source campaign snapshot
+without requiring a prior New Vegas save or bypassing character creation. Complete
+live refresh for the retained numeric-setting consumers exposed in telemetry.
 Preserve CG00's stage-5/package and birth-CELL movement prefixes. Trace and repair
 the loaded birth CELL's missing runtime references and two unbound non-camera clip
 targets. Complete player package traversal, editor origins, event scripts/topics
@@ -338,11 +358,15 @@ Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
 The fresh ordinary Capital run is
-`tmp/development-lab/ttw-player-package-20260930`; both session flags are true, CG00's
-stage-5 package starts its owned clip and its queued move enters Fallout3.esm:028138.
-SetNumericGameSetting stops the result continuation. The session quit
-through ordinary input with source readers drained. A transient native state-write
-loss warning remains retained; later state samples resumed. Package checks are
+`tmp/development-lab/ttw-numeric-settings-20260930`; both session flags are true,
+CG00's package camera advances and its queued move enters Fallout3.esm:028138.
+Both authored karma-setting writes execute; CG00 then retains the missing PlaySound
+owner. CREATE NEW SAVE also retains the prior-save requirement failure. The session
+quit through ordinary input with source readers drained. One transient native
+state-write loss remains retained; later state samples resumed. Numeric checks are
+`tmp/numeric-settings-contract.log`, `tmp/numeric-settings-owned.private.json` and
+`tmp/numeric-settings-runtime-gate.log`; cold setting checks are explicitly component
+evidence, not a continued Fallout 3 campaign. Package checks are
 `tmp/player-package-contract.log`, `tmp/player-package-owned-native.log`,
 `tmp/player-package-cold-save.log` and `tmp/player-package-runtime-gate.log`.
 Native cold/camera checks are explicitly isolated owned component evidence, with

@@ -22,5 +22,7 @@
     <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />
     <Compile Include="../../runtime/src/Content/FalloutNpcFaceMaterial.cs" Link="FalloutNpcFaceMaterial.cs" />
     <Compile Include="../../runtime/src/Formats/FaceGen/*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
   </ItemGroup>
 </Project>

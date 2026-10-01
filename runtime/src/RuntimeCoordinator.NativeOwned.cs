@@ -152,6 +152,7 @@ public partial class RuntimeCoordinator
             speech = _nativeOpeningStageDriver?.SpeechState,
             conversation = _nativeOpeningStageDriver?.ConversationState,
             questScripts = _nativeQuestScripts?.State,
+            numericGameSettings = _nativePluginStack?.NumericSettings.State,
             gameTime = _nativeGameTimeAdapter?.State,
             gameTimeUnbound = _nativeGameTimeUnbound,
             skyLighting = _nativeSkyLighting?.Unbound is null ? _nativeSkyLighting?.Capture() : null,
@@ -278,7 +279,7 @@ public partial class RuntimeCoordinator
             _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
             _nativeGameTime = new(_nativeGlobals, FalloutGameTimeBindings.Read(_nativePluginStack),
                 FalloutCalendar.Read(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe")));
-            _nativeSkyLighting = new(_nativePluginStack, FalloutGameSettingFloats.Read(_nativePluginStack, "fDaytimeColorExtension"));
+            _nativeSkyLighting = new(_nativePluginStack, FalloutGameSettingFloats.ReadRetained(_nativePluginStack, "fDaytimeColorExtension", nameof(FalloutSkyLightingState)));
             _nativeOpeningControls = FalloutOpeningPlayerControlResolver.Resolve(
                 _nativePluginStack,
                 ["VCG00", "VCG01"]);

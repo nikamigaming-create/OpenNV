@@ -10,9 +10,9 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
     Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks,
     Func<FalloutCondition, float>? evaluateCondition = null)
 {
-    private readonly float _weaponScale = FalloutGameSettingFloats.Read(records, "fDamageWeaponMult");
-    private readonly float _skillBase = FalloutGameSettingFloats.Read(records, "fDamageSkillBase");
-    private readonly float _skillScale = FalloutGameSettingFloats.Read(records, "fDamageSkillMult");
+    private float WeaponScale => FalloutGameSettingFloats.Read(records, "fDamageWeaponMult");
+    private float SkillBase => FalloutGameSettingFloats.Read(records, "fDamageSkillBase");
+    private float SkillScale => FalloutGameSettingFloats.Read(records, "fDamageSkillMult");
 
     internal FalloutWeaponDamage Resolve(FalloutWeaponShot shot)
         => Resolve(shot.Weapon, shot.BaseDamage, shot.AmmoEffects);
@@ -32,7 +32,7 @@ internal sealed class FalloutWeaponDamageResolver(FalloutPluginStack records, Fa
         var limb = FalloutProjectile.Number(data, 116);
         var item = inventory.Item(form) ?? throw new InvalidOperationException("Used weapon is absent from inventory.");
         var condition = FalloutWeaponCondition.SelectedCondition(item);
-        var damage = baseDamage * _weaponScale * (_skillBase + _skillScale * skill / 100) * NewVegasConditionMultiplier(condition);
+        var damage = baseDamage * WeaponScale * (SkillBase + SkillScale * skill / 100) * NewVegasConditionMultiplier(condition);
         foreach (var effect in ammoEffects.Where(effect => effect.Type == FalloutAmmoEffect.Damage))
             damage = Math.Max(0, effect.Apply(damage));
         foreach (var perk in perks().Where(perk => perk.Entry == 0))

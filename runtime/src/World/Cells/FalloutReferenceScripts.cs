@@ -291,6 +291,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(records, operation) is { } settingFunction)
+                return settingFunction;
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => world.Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
@@ -507,6 +509,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             var callerPlugin = bindings.Source.OwnerPlugin;
+            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            {
+                FalloutNumericGameSettingCommands.Set(records, arguments, Number,
+                    token => token.StartsWith('"') || frame?.Contains(token) == true || bindings.HasVariable(token) ? StringValue(token) : token);
+                return;
+            }
             if (parts.Length == 1 && FalloutInputControlCommands.IsCommand(operation))
             {
                 FalloutInputControlCommands.Execute(operation, world.Controls ?? throw new NotSupportedException("Control commands have no profile input owner."),

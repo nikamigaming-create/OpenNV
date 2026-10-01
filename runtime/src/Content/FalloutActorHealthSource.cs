@@ -49,15 +49,15 @@ internal sealed record FalloutActorHealthSource(FalloutFormKey Actor, FalloutFor
             health = initial;
             if (initial != 0)
             {
-                var derived = (data.Span[6] + (double)FalloutGameSettingFloats.Read(records, "fAVDNPCHealthEnduranceOffset")) *
-                    FalloutGameSettingFloats.Read(records, "fAVDNPCHealthEnduranceMult");
+                var derived = (data.Span[6] + (double)FalloutGameSettingFloats.ReadRetained(records, "fAVDNPCHealthEnduranceOffset", nameof(FalloutActorHealthSource))) *
+                    FalloutGameSettingFloats.ReadRetained(records, "fAVDNPCHealthEnduranceMult", nameof(FalloutActorHealthSource));
                 // Only the autocalculated NPC path adds the level term. Its
                 // derived contribution is truncated and clamped independently
                 // of the authored base; manually configured NPCs retain the
                 // floating endurance contribution. See actor-damage.md.
                 if ((BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 0x10) != 0)
                 {
-                    derived += (level - 1d) * FalloutGameSettingFloats.Read(records, "fAVDNPCHealthLevelMult");
+                    derived += (level - 1d) * FalloutGameSettingFloats.ReadRetained(records, "fAVDNPCHealthLevelMult", nameof(FalloutActorHealthSource));
                     derived = Math.Max(0, Math.Truncate(derived));
                 }
                 health += (float)derived;

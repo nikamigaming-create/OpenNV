@@ -16,7 +16,6 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
 {
     private readonly Dictionary<FalloutFormKey, FalloutIngestible> _definitions = [];
     private readonly List<FalloutIngestibleActiveEffect> _active = [];
-    private readonly Dictionary<string, float> _settings = [];
     internal FalloutIngestiblesSnapshot Capture() => new(_active.ToArray());
     private FalloutIngestible Definition(FalloutFormKey form)
     {
@@ -128,8 +127,7 @@ internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, Fallo
         float Setting(string suffix)
         {
             var key = "fMagic" + name + "Skill" + suffix;
-            if (!_settings.TryGetValue(key, out var value)) _settings.Add(key, value = FalloutGameSettingFloats.Read(records, key));
-            return value;
+            return FalloutGameSettingFloats.Read(records, key);
         }
         var level = actorValue(skill);
         if (!float.IsFinite(level) || level < 0) throw new InvalidDataException("Ingestible skill magnitude is invalid.");

@@ -64,6 +64,18 @@ internal sealed class FalloutScriptBindings
 
     internal FalloutScriptLocalKind VariableKind(string name) => Local(name).Kind;
 
+    internal bool HasVariable(string name)
+    {
+        var parts = name.Split('.');
+        var owner = parts.Length == 1 ? _owner : parts.Length == 2 ? TryForm(parts[0]) : null;
+        if (owner?.Signature is not ("QUST" or "REFR" or "ACHR" or "ACRE")) return false;
+        var script = _attachedScript is null ? FalloutScriptLocals.AttachedScript(_records, owner) : _attachedScript(owner);
+        if (script is null) return false;
+        if (!_variables.TryGetValue(script.FormKey, out var variables))
+            _variables.Add(script.FormKey, variables = FalloutScriptLocals.ReadDeclarations(script));
+        return variables.ContainsKey(parts[^1]);
+    }
+
     private (FalloutFormKey Owner, uint Index, FalloutScriptLocalKind Kind) Local(string name)
     {
         if (_slots.TryGetValue(name, out var slot)) return slot;
