@@ -619,6 +619,7 @@ try
         Record("TES4", 0, 0, []),
         ClockGlobal(0x35, 2210), ClockGlobal(0x36, 11), ClockGlobal(0x37, 31),
         ClockGlobal(0x38, 23.99f), ClockGlobal(0x39, 10), ClockGlobal(0x3a, 60),
+        Record("GMST", 0x991, 0, Combine(Subrecord("EDID", ZString("iTraitMenuMaxNumTraits")), Subrecord("DATA", UInt32(2)))),
         Record("WTHR", 0x15e, 0, Subrecord("NAM0", weatherColors)),
         Record("CLMT", 0x15f, 0, Subrecord("TNAM", [24, 48, 96, 120, 0, 0])),
         Record("REGN", 0x990, 0, Subrecord("EDID", ZString("SyntheticRegion"))),
@@ -722,6 +723,8 @@ try
         Record("PERK", 0x19d, 0, Combine(
             Subrecord("EDID", ZString("SyntheticTraitOne")),
             Subrecord("FULL", ZString("Synthetic Trait One")),
+            Subrecord("DESC", ZString("A source description.")),
+            Subrecord("ICON", ZString("Interface/Icons/SyntheticTrait.dds")),
             Subrecord("DATA", new byte[] { 1, 1, 1, 1, 0 }))),
         Record("PERK", 0x19e, 0, Combine(
             Subrecord("EDID", ZString("SyntheticTraitTwo")),
@@ -1070,6 +1073,26 @@ try
         syntheticCellForVigor);
     var syntheticTraits = syntheticTraitFarewell.Traits.Take(2).ToArray();
     FalloutNativeTraitFarewellResolver.ValidateTraits(syntheticTraitFarewell, syntheticTraits);
+    var traitDraft = new FalloutTraitMenuSelection(cellStack, syntheticTraitFarewell with { MaximumTraits = 1 }, [syntheticTraits[0]]);
+    Require(traitDraft.Choices[0].Description == "A source description." &&
+        traitDraft.Choices[0].Icon == "Interface/Icons/SyntheticTrait.dds" && traitDraft.Choices[1].Description == "" &&
+        !traitDraft.Toggle(syntheticTraits[1]) && traitDraft.Submit().SequenceEqual([syntheticTraits[0]]),
+        "Source trait detail or capped selection was lost.");
+    traitDraft.Reset();
+    Require(traitDraft.Selected.Count == 0 && traitDraft.Toggle(syntheticTraits[1]) &&
+        traitDraft.Submit().SequenceEqual([syntheticTraits[1]]) && syntheticTraits[0] == syntheticTraitFarewell.Traits[0],
+        "Trait reset/acceptance changed committed input or restored the initial selection.");
+    ExpectFailure(() => traitDraft.Toggle(syntheticTraits[0] with { EditorId = "ForeignTrait" }), "outside its source contract");
+    ExpectFailure(() => new FalloutTraitMenuSelection(cellStack, syntheticTraitFarewell with
+        { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, []), "differs from its winning PERK");
+    Require(FalloutTraitMenuSelection.FormatCount("CHOOSE %d TRAITS", 1) == "CHOOSE 1 TRAITS", "Source trait count formatting failed.");
+    ExpectFailure(() => FalloutTraitMenuSelection.FormatCount("%d %d", 1), "another source format owner");
+    ExpectFailure(() => cellStack.NumericSettings.Set("iTraitMenuMaxNumTraits", 3), "trait selection contract");
+    File.WriteAllBytes(Path.Combine(fixtureRoot, "TraitLimit.esp"), Combine(
+        Record("TES4", 0, 0, Combine(Subrecord("MAST", ZString("Cell.esm")), Subrecord("DATA", new byte[8]))),
+        Record("GMST", 0x991, 0, Combine(Subrecord("EDID", ZString("iTraitMenuMaxNumTraits")), Subrecord("DATA", UInt32(1))))));
+    using (var traitOverride = FalloutPluginStack.Load(fixtureRoot, ["Cell.esm", "SkillLabel.esp", "TraitLimit.esp"]))
+        Require(FalloutTraitMenuSelection.ReadMaximum(traitOverride) == 1, "Trait limit ignored the winning GMST override.");
     Require(
         syntheticTraitFarewell.Traits.Count == 2 &&
         syntheticTraitFarewell.MaximumTraits == 2 &&

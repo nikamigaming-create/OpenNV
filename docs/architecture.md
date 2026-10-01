@@ -30,6 +30,15 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+FalloutTraitMenuSelection owns a separate draft and the source trait limit;
+RuntimeNativeOpeningStageDriver commits it through the shared character owner.
+NativeOwnedTraitMenu renders winning trait-menu XML, fonts, source PERK text/icons
+and selection/counter/action tiles. The general owned tile renderer handles
+relative-name casing, copied texture strings and inherited branch clipping.
+Ordinary pointer/keyboard input updates the draft; Reset clears and Done submits.
+Source timing and additional menu/perk/retail/XR boundaries remain separate. See
+[authored traits](authored-trait-menu.md) for bounded proof and remaining owners.
+
 RuntimeNativeOpeningStageDriver captures the same authoritative campaign state
 for ordinary saves and code-addressed checkpoints, including the first settled
 Fallout 3 snapshot. Active movies, furniture, speech, creation/trade/crafting

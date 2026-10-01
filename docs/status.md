@@ -43,8 +43,12 @@ executes four MatchFaceGeometry commands, completes twelve speeches and reaches
 CG00 stage 80's trait menu. Ordinary trait confirmation accepts zero traits;
 empty selections now deliver deferred, coalesced SayToDone without audio or an
 invented INFO. A fresh ordinary run starts Dad's stage-80 line, then Mom's
-overlapping voice exposes the remaining single-voice failure. The traits panel
-still needs its winning owned Fallout presentation. That
+overlapping voice exposes the remaining single-voice failure. The trait panel now
+uses [winning Fallout XML, fonts and artwork](authored-trait-menu.md), source
+descriptions/icons and Reset/Done controls. Synthetic drafts/settings and an owned
+native input/reset/pixel-restoration fixture pass. Fresh ordinary TTW input also
+reaches this screen and accepts Done. Perk eligibility/ranks, dragging, sound,
+timing and matched retail/XR presentation remain unbound. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first ordinary
 manual save now initializes a campaign snapshot. Current writes use v25 while

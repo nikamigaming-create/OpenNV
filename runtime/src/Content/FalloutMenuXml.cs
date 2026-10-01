@@ -100,6 +100,7 @@ internal static class FalloutMenuXml
                 "div" when operand != 0 => value / operand,
                 "floor" => MathF.Floor(value),
                 "ceil" => MathF.Ceiling(value),
+                "abs" => MathF.Abs(value),
                 "eq" => value == operand ? 1 : 0,
                 "neq" => value != operand ? 1 : 0,
                 "gt" => value > operand ? 1 : 0,
@@ -124,6 +125,19 @@ internal static class FalloutMenuXml
         var token = property.Value.Trim();
         if (!token.StartsWith("entity_-", StringComparison.Ordinal)) return token;
         return FalloutGameSettingStrings.Read(records, token[8..]);
+    }
+
+    // Relative tile names in owned resources can end at the attribute boundary;
+    // a missing closing parenthesis does not introduce another name character.
+    internal static string? RelativeName(string source, string kind)
+    {
+        var prefix = kind + "(";
+        if (!source.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+        var name = source[prefix.Length..];
+        if (name.EndsWith(')')) name = name[..^1];
+        if (name.Length == 0 || name.Contains('(') || name.Contains(')'))
+            throw new InvalidDataException("Owned relative tile name is empty or malformed.");
+        return name;
     }
 
     internal static XElement Expand(XElement source)

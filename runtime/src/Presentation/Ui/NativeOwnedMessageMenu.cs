@@ -147,7 +147,7 @@ internal sealed class NativeOwnedMenuTree
     private readonly HashSet<(XElement, string)> _evaluatingText = [];
     private readonly Dictionary<XElement, NativeOwnedUiArt> _art = [];
     private readonly Dictionary<int, NativeBitmapFontAsset> _fonts = [];
-    private readonly Dictionary<string, XElement> _named = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, XElement> _named = new(StringComparer.OrdinalIgnoreCase);
     private readonly FalloutInstallationSettings _settings;
     private readonly Func<string, string>? _stringSetting;
     private readonly FalloutUiComponentStore? _scriptUi;
@@ -213,15 +213,15 @@ internal sealed class NativeOwnedMenuTree
             ?? throw new NotSupportedException("Owned child() reference has no unique child tile."),
         "io()" => Root,
         "globals()" => _globals,
-        _ when source == (string?)Root.Attribute("name") => Root,
-        _ when source.StartsWith("sibling(", StringComparison.Ordinal) => tile.Parent!.Elements().Single(value => (string?)value.Attribute("name") == source[8..^1]),
-        _ when source.StartsWith("child(", StringComparison.Ordinal) => tile.Elements().Single(value => (string?)value.Attribute("name") == source[6..^1]),
+        _ when string.Equals(source, (string?)Root.Attribute("name"), StringComparison.OrdinalIgnoreCase) => Root,
+        _ when FalloutMenuXml.RelativeName(source, "sibling") is { } sibling => tile.Parent!.Elements().Single(value => string.Equals((string?)value.Attribute("name"), sibling, StringComparison.OrdinalIgnoreCase)),
+        _ when FalloutMenuXml.RelativeName(source, "child") is { } childName => tile.Elements().Single(value => string.Equals((string?)value.Attribute("name"), childName, StringComparison.OrdinalIgnoreCase)),
         _ => NamedOwner(source),
     };
     private XElement NamedOwner(string name)
     {
         if (_named.TryGetValue(name, out var found)) return found;
-        var matches = Root.DescendantsAndSelf().Where(tile => (string?)tile.Attribute("name") == name &&
+        var matches = Root.DescendantsAndSelf().Where(tile => string.Equals((string?)tile.Attribute("name"), name, StringComparison.OrdinalIgnoreCase) &&
             !tile.AncestorsAndSelf("template").Any()).ToArray();
         if (matches.Length != 1) throw new NotSupportedException($"Owned tile source {name} is absent or ambiguous ({matches.Length}).");
         _named.Add(name, matches[0]);
@@ -355,7 +355,8 @@ internal sealed class NativeOwnedMenuTree
         if (!property.HasElements) return property.Value.Trim();
         var index = 0f;
         string? value = null;
-        foreach (var operation in property.Elements())
+        var operations = property.Elements().ToArray();
+        foreach (var operation in operations)
         {
             if (operation.Name != "copy" || operation.Attribute("src") is not { } source)
                 throw new NotSupportedException("Owned texture expression operator is unbound.");
@@ -366,6 +367,7 @@ internal sealed class NativeOwnedMenuTree
                 if (index != MathF.Truncate(index)) throw new InvalidDataException("Texture trait index is not integral.");
                 value = Filename(owner, key + index.ToString(CultureInfo.InvariantCulture));
             }
+            else if (operation == operations[^1]) value = Filename(owner, key);
             else index = Number(owner, key);
         }
         return value ?? throw new NotSupportedException("Texture expression did not resolve a source filename.");
@@ -399,7 +401,7 @@ internal sealed class NativeOwnedMenuTree
     {
         Rect2? Clip(XElement tile)
         {
-            if (tile.Element("clips") is null || Number(tile, "clips") == 0) return null;
+            if (!tile.AncestorsAndSelf().Any(branch => branch.Element("clips") is not null && Number(branch, "clips") != 0)) return null;
             Rect2? result = null;
             foreach (var parent in tile.Ancestors().Where(parent => parent.Element("clipwindow") is not null && Number(parent, "clipwindow") != 0))
             {
