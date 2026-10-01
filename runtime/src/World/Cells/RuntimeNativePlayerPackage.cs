@@ -18,7 +18,9 @@ internal sealed class RuntimeNativePlayerPackage
     private FalloutNifAnimatedNodePath? _animation;
     private FalloutFormKey? _idle;
     private int _cursor;
-    private bool _packageEvent;
+    private string? _eventKind;
+    private FalloutScriptPackage? _pendingPackage;
+    private string? _pendingPackageHash;
     private bool _complete;
     private double _elapsed;
     private double _wait;
@@ -38,13 +40,16 @@ internal sealed class RuntimeNativePlayerPackage
         idle = _idle?.ToString(),
         sequence = _animation?.Sequence.Name,
         elapsedSeconds = _elapsed,
+        eventKind = _eventKind,
+        pendingPackage = _pendingPackage?.Form.ToString(),
         animatedPathNodes = _animation?.AnimatedPathNodes,
         unboundOtherTargets = _animation?.UnboundOtherTargets,
         complete = _complete,
         locationReference = _package?.LocationReference?.ToString(),
         locationRadius = _package?.LocationRadius,
         pendingPlayerMove = _world.PlayerMoves.Pending,
-        unbound = new[] { "unreached-destination-traversal", "editor-location-semantics", "body-animation-targets", "matched-event-timing" },
+        unbound = new[] { "unreached-destination-traversal", "editor-location-semantics", "nonempty-event-scripts-and-topics",
+            "end-animation-and-change-cancellation", "body-animation-targets", "matched-event-timing" },
         parity = "unmeasured"
     };
 
@@ -52,6 +57,8 @@ internal sealed class RuntimeNativePlayerPackage
     {
         if (form is null)
         {
+            if (_pendingPackage is not null)
+                throw new NotSupportedException("Removing a player package during its change animation requires cancellation ownership.");
             _package?.EventPrograms.GetValueOrDefault("POEA")?.RequireEmptyScript();
             if (_package?.Events.GetValueOrDefault("POEA") is not null)
                 throw new NotSupportedException("Player package exit animation requires deferred removal ownership.");
@@ -59,7 +66,7 @@ internal sealed class RuntimeNativePlayerPackage
             _packageHash = null;
             _animation = null;
             _idle = null;
-            _cursor = 0; _packageEvent = false; _complete = false; _elapsed = 0; _wait = 0;
+            _cursor = 0; _eventKind = null; _complete = false; _elapsed = 0; _wait = 0;
             _player.ReleaseSourceCamera();
             _session.PublishPlayerPackage(null);
             return;
@@ -67,18 +74,46 @@ internal sealed class RuntimeNativePlayerPackage
         var record = _stack.GetEffective(form.Value);
         var package = FalloutScriptPackage.Read(record);
         RequirePackage(package);
+        var hash = Convert.ToHexString(SHA256.HashData(record.ReadData()));
+        // A later request replaces the one pending script assignment without
+        // restarting the already reached outgoing change event.
+        if (_pendingPackage is not null)
+        {
+            if (_package!.Form != package.Form) PrepareEvent(package, "POBA");
+            _pendingPackage = package; _pendingPackageHash = hash; Publish();
+            return;
+        }
         if (_package is not null)
         {
             _package.EventPrograms.GetValueOrDefault("POCA")?.RequireEmptyScript();
-            if (_package.Events.GetValueOrDefault("POCA") is not null)
-                throw new NotSupportedException("Replacing a player package with a change animation requires its deferred switch owner.");
+            if (_package.Events.GetValueOrDefault("POCA") is { } change)
+            {
+                _ = Clip(change);
+                if (_package.Form != package.Form) PrepareEvent(package, "POBA");
+                _pendingPackage = package; _pendingPackageHash = hash;
+                _complete = false; _wait = 0;
+                Start(change, "POCA"); Publish();
+                GD.Print($"OPENNV_NATIVE_PLAYER_PACKAGE_CHANGE source={_package.Form} next={package.Form} idle={change} owner=source-poca-clock parity=unmeasured");
+                return;
+            }
         }
         var eventName = _package?.Form == package.Form ? "POCA" : "POBA";
+        Assign(package, hash, eventName);
+        Publish();
+    }
+
+    private void PrepareEvent(FalloutScriptPackage package, string eventName)
+    {
         package.EventPrograms.GetValueOrDefault(eventName)?.RequireEmptyScript();
         // Validate the reached event's owned resource before changing assignment.
         if (package.Events.GetValueOrDefault(eventName) is { } first) _ = Clip(first);
+    }
+
+    private void Assign(FalloutScriptPackage package, string hash, string eventName)
+    {
+        PrepareEvent(package, eventName);
         _package = package;
-        _packageHash = Convert.ToHexString(SHA256.HashData(record.ReadData()));
+        _packageHash = hash;
         _cursor = 0;
         _complete = false;
         _wait = 0;
@@ -86,10 +121,9 @@ internal sealed class RuntimeNativePlayerPackage
         {
             var listIndex = package.Idles.ToList().IndexOf(animation);
             if (listIndex >= 0) _cursor = listIndex + 1;
-            Start(animation, true);
+            Start(animation, eventName);
         }
-        else { _animation = null; _idle = null; _elapsed = 0; _packageEvent = false; }
-        Publish();
+        else { _animation = null; _idle = null; _elapsed = 0; _eventKind = null; }
         GD.Print($"OPENNV_NATIVE_PLAYER_PACKAGE source={package.Form} event={eventName} idles={package.Idles.Count} owner=source-pack-idle-kf");
     }
 
@@ -118,7 +152,8 @@ internal sealed class RuntimeNativePlayerPackage
 
     private void Publish() => _session.PublishPlayerPackage(_package is null ? null : new(_package.Form, _packageHash!,
         _animation is null ? null : _idle, _animation is null ? null : _clips[_idle!.Value].Hash, _cursor,
-        _animation is not null && _packageEvent, _complete, _animation is null ? 0 : _elapsed, _wait));
+        _animation is not null && _eventKind is not null, _complete, _animation is null ? 0 : _elapsed, _wait,
+        _eventKind, _pendingPackage?.Form, _pendingPackageHash));
 
     private void Restore(FalloutPlayerScriptPackageSnapshot saved)
     {
@@ -132,8 +167,9 @@ internal sealed class RuntimeNativePlayerPackage
             throw new InvalidDataException("Saved player package differs from its winning source.");
         if (saved.Idle is { } idle)
         {
-            if (!(saved.PackageEvent ? package.Events.GetValueOrDefault("POBA") == idle : package.Idles.Contains(idle)))
+            if (!(saved.Phase is { } phase ? package.Events.GetValueOrDefault(phase) == idle : package.Idles.Contains(idle)))
                 throw new InvalidDataException("Saved player idle does not belong to its source package phase.");
+            if (saved.Phase is { } eventKind) package.EventPrograms.GetValueOrDefault(eventKind)?.RequireEmptyScript();
             var clip = Clip(idle);
             var sequence = clip.Animation.Sequence;
             if (!clip.Hash.Equals(saved.AnimationSha256, StringComparison.OrdinalIgnoreCase) ||
@@ -141,8 +177,18 @@ internal sealed class RuntimeNativePlayerPackage
                 throw new InvalidDataException("Saved player package animation differs from its owned clip.");
             _animation = clip.Animation;
         }
+        FalloutScriptPackage? pending = null;
+        if (saved.PendingPackage is { } next)
+        {
+            var nextRecord = _stack.GetEffective(next);
+            pending = FalloutScriptPackage.Read(nextRecord); RequirePackage(pending);
+            if (!Convert.ToHexString(SHA256.HashData(nextRecord.ReadData())).Equals(saved.PendingPackageSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Saved pending player package differs from its winning source.");
+            if (pending.Form != package.Form) PrepareEvent(pending, "POBA");
+        }
         _package = package; _packageHash = hash; _idle = saved.Idle; _cursor = saved.Cursor;
-        _packageEvent = saved.PackageEvent; _complete = saved.Complete; _elapsed = saved.Elapsed; _wait = saved.Wait;
+        _eventKind = saved.Phase; _pendingPackage = pending; _pendingPackageHash = saved.PendingPackageSha256;
+        _complete = saved.Complete; _elapsed = saved.Elapsed; _wait = saved.Wait;
         if (_animation is not null) ApplySample(_animation.Sequence.StartTime + (float)(_elapsed * _animation.Sequence.Frequency));
     }
 
@@ -153,7 +199,7 @@ internal sealed class RuntimeNativePlayerPackage
         if (!_package.RunInSequence && _package.Idles.Count > 1)
             throw new NotSupportedException("Random package idle selection needs the authoritative RNG owner.");
         var cursor = _cursor >= _package.Idles.Count ? 0 : _cursor;
-        Start(_package.Idles[cursor], false);
+        Start(_package.Idles[cursor], null);
         _cursor = cursor + 1;
     }
 
@@ -180,14 +226,14 @@ internal sealed class RuntimeNativePlayerPackage
         return clip;
     }
 
-    private void Start(FalloutFormKey idle, bool packageEvent)
+    private void Start(FalloutFormKey idle, string? eventKind)
     {
         var animation = Clip(idle).Animation;
         var changed = _idle != idle;
         _animation = animation;
         _idle = idle;
         _elapsed = 0;
-        _packageEvent = packageEvent;
+        _eventKind = eventKind;
         ApplySample(_animation.Sequence.StartTime);
         if (changed) GD.Print($"OPENNV_NATIVE_PLAYER_CAMERA source={idle} sequence={_animation.Sequence.Name} " +
             $"seconds={_animation.Sequence.StartTime:R}..{_animation.Sequence.StopTime:R} " +
@@ -232,7 +278,16 @@ internal sealed class RuntimeNativePlayerPackage
             if (!ended) return;
             _animation = null;
             if (_package is null) return;
-            if (_packageEvent) { _packageEvent = false; NextIdle(); continue; }
+            if (_eventKind == "POCA")
+            {
+                var next = _pendingPackage ?? throw new InvalidDataException("Player change animation lost its pending assignment.");
+                var nextHash = _pendingPackageHash!;
+                _pendingPackage = null; _pendingPackageHash = null; _eventKind = null;
+                if (next.Form == _package.Form) { _cursor = 0; NextIdle(); }
+                else Assign(next, nextHash, "POBA");
+                continue;
+            }
+            if (_eventKind is not null) { _eventKind = null; NextIdle(); continue; }
             if (_package.RunInSequence && _cursor < _package.Idles.Count) { NextIdle(); continue; }
             if (_package.DoOnce)
             {
