@@ -206,6 +206,16 @@ conditional destinations; a static opening graph cannot reject or select them.
 The generic save/diagnostic startup label remains stable across background quest
 stage changes; the shared quest owner retains all actual stage progression.
 
+Character-generation policy belongs to the same saved script session. Reference
+and fallback quest commands/queries share it; pre-world startup may enter it but
+cannot leave without a player advancement owner. XP is authoritative vitals state,
+and may cross a level threshold during chargen without being discarded by validation
+or SPECIAL derivation. Leaving with earned levels fails before changing the flag
+until source level-cap, skill/perk allocation and LevelUpMenu behavior are owned.
+Reward commands and their modifiers remain unbound. This bounded policy follows
+the primary [SetInChargen contract](https://geckwiki.com/index.php/SetInChargen);
+it does not certify complete leveling behavior.
+
 Loading policy belongs to that shared script session, including pre-world source
 results and cold restoration. LSCR location filters resolve each winning record's
 direct CELL/WRLD identity or signed world-grid coordinates before native selection.

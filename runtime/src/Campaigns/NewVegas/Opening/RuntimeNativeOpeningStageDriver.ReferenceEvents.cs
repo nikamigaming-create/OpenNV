@@ -48,7 +48,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ApplyNativeSourceCommand, IsInCombat, IsInSameCell, _scripts.Events, ReferenceDistance, IsInInterior,
                 (reference, group, initialization) => ReferencePresentation().PlayGroup(reference, group, initialization),
                 (reference, group) => ReferencePresentation().IsAnimPlaying(reference, group), () => Vitals.Level,
-                () => _scripts.Session.LocationSpecificLoadScreensOnly));
+                () => _scripts.Session.LocationSpecificLoadScreensOnly, () => _scripts.Session.InCharGen));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -162,6 +162,9 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case FalloutReferenceEffectKind.LoadingScreenPolicy:
                 _scripts.Session.LocationSpecificLoadScreensOnly = effect.Enable;
+                break;
+            case FalloutReferenceEffectKind.CharacterGeneration:
+                _scripts.Session.SetInCharGen(effect.Enable, _vitals.RequireLevelUpOwner);
                 break;
             case FalloutReferenceEffectKind.Achievement:
                 _scripts.Session.AddAchievement(effect.Value);

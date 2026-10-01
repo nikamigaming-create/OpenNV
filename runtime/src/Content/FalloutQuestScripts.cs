@@ -98,25 +98,35 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
 }
 
 internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
-    bool LocationSpecificLoadScreensOnly = false);
+    bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false);
 internal sealed class FalloutScriptSession
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
     internal bool LocationSpecificLoadScreensOnly { get; set; }
+    internal bool InCharGen { get; private set; }
+    internal void SetInCharGen(bool enabled, Action? requireLevelUpOwner)
+    {
+        // Leaving chargen consumes earned XP immediately. Never clear the flag
+        // while skipping an unsupported level-up or lacking the player owner.
+        if (!enabled)
+            (requireLevelUpOwner ?? throw new NotSupportedException("Character-generation exit has no player advancement owner."))();
+        InCharGen = enabled;
+    }
     private readonly HashSet<int> _achievements = [];
     internal void AddAchievement(int id)
     {
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen);
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
             throw new InvalidDataException("Saved script session state is invalid.");
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
+        InCharGen = state.InCharGen;
         _achievements.Clear(); _achievements.UnionWith(state.Achievements);
     }
 }
@@ -124,7 +134,7 @@ internal sealed class FalloutScriptSession
 internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action> PrepareSetStage,
     Func<string, double> PlayerActorValue,
     Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null,
-    FalloutUserFunctionInvoker? InvokeFunction = null);
+    FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -499,6 +509,8 @@ internal sealed class FalloutQuestScripts
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
+            if (parts.Length == 1 && operation == "getinchargen")
+                return new([], _ => Session.InCharGen ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             if (parts.Length == 1 && FalloutInputControlCommands.IsQuery(operation))
                 return FalloutInputControlCommands.Query(operation, Controls ?? throw new NotSupportedException("Control queries have no profile input owner."));
@@ -609,6 +621,18 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && operation == "setinchargen")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("Character-generation policy requires one flag.");
+                var enabled = NumberArgument(arguments[0]) switch
+                {
+                    0 => false,
+                    1 => true,
+                    _ => throw new InvalidDataException("Character-generation flag must be zero or one."),
+                };
+                Session.SetInCharGen(enabled, host?.RequireLevelUpOwner);
+                return;
+            }
             if (parts.Length == 1 && operation == "setlocationspecificloadscreensonly")
             {
                 if (arguments.Count != 1) throw new InvalidDataException("Loading-screen policy requires one flag.");
