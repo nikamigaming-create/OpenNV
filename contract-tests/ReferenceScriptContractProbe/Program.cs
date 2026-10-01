@@ -10,6 +10,11 @@ if (args.Length >= 5 && args[0] == "--audit-player-moves")
     OwnedPlayerMoveProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
     return;
 }
+if (args.Length >= 5 && args[0] == "--audit-loading-screens")
+{
+    OwnedLoadingScreenProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
 Directory.CreateDirectory(directory);
 try
 {
@@ -304,6 +309,7 @@ PlayerSkillContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();
     PlayerMoveContracts.Run();
+    LoadingScreenContracts.Run();
     QuestMenuContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);

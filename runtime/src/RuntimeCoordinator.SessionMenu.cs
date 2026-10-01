@@ -174,6 +174,8 @@ public partial class RuntimeCoordinator
         GetTree().Paused = true;
         var pending = _nativeGridNpcPreparations.Select(item => item.ReadTask).ToList();
         if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
+        if (_nativePlayerMoveRead is { } moveRead) pending.Add(moveRead);
+        if (_nativeDoorRead is { } doorRead) pending.Add(doorRead);
         if (_nativeGridRead is { } gridRead) pending.Add(gridRead);
         foreach (var lod in FindChildren("*", "", true, false).OfType<RuntimeNativeExteriorLod>())
             pending.Add(lod.StopSourceReads());

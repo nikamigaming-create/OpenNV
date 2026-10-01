@@ -40,7 +40,8 @@ internal sealed class FalloutNewGameBootstrap
         Quest = StartingQuest(records, settings);
         var executor = new FalloutReferenceScripts(records, world, quests,
             new((_, _) => throw new NotSupportedException("Startup furniture query has no resident actor."), Apply,
-                scripts.MessageResults.Take, Globals: globals, Command: command, Events: scripts.Events));
+                scripts.MessageResults.Take, Globals: globals, Command: command, Events: scripts.Events,
+                LocationSpecificLoadScreensOnly: () => scripts.Session.LocationSpecificLoadScreensOnly));
         _stages = new(records, quests, executor.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? quests.Evaluate(condition), canContinue);
         Host = new((quest, stage) => () => _stages.Enter(quest, stage),
@@ -60,6 +61,9 @@ internal sealed class FalloutNewGameBootstrap
                 case FalloutReferenceEffectKind.PlayerControls:
                     Controls = new FalloutPlayerControlCommand(change.Enable, change.Controls ??
                         throw new InvalidDataException("Startup controls have no mask.")).Apply(Controls);
+                    break;
+                case FalloutReferenceEffectKind.LoadingScreenPolicy:
+                    scripts.Session.LocationSpecificLoadScreensOnly = change.Enable;
                     break;
                 case FalloutReferenceEffectKind.Message:
                     var owner = records.GetEffective(change.Source);

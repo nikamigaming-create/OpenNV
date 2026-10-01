@@ -97,23 +97,26 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
     }
 }
 
-internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements);
+internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
+    bool LocationSpecificLoadScreensOnly = false);
 internal sealed class FalloutScriptSession
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
+    internal bool LocationSpecificLoadScreensOnly { get; set; }
     private readonly HashSet<int> _achievements = [];
     internal void AddAchievement(int id)
     {
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray());
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly);
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
             throw new InvalidDataException("Saved script session state is invalid.");
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
+        LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         _achievements.Clear(); _achievements.UnionWith(state.Achievements);
     }
 }
@@ -494,6 +497,8 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
+            if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
+                return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             if (parts.Length == 1 && FalloutInputControlCommands.IsQuery(operation))
                 return FalloutInputControlCommands.Query(operation, Controls ?? throw new NotSupportedException("Control queries have no profile input owner."));
@@ -604,6 +609,18 @@ internal sealed class FalloutQuestScripts
             var operation = parts[^1].ToLowerInvariant();
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && operation == "setlocationspecificloadscreensonly")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("Loading-screen policy requires one flag.");
+                var flag = NumberArgument(arguments[0]);
+                Session.LocationSpecificLoadScreensOnly = flag switch
+                {
+                    0 => false,
+                    1 => true,
+                    _ => throw new InvalidDataException("Loading-screen policy flag must be zero or one."),
+                };
+                return;
+            }
             if (parts.Length == 1 && FalloutInputControlCommands.IsCommand(operation))
             {
                 FalloutInputControlCommands.Execute(operation, Controls ?? throw new NotSupportedException("Control commands have no profile input owner."),

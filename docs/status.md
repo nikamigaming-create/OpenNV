@@ -15,8 +15,11 @@ two-choice message and retains it cold. The complete menu-dispatch runtime gate
 also passes. Configured New Game now executes the selected startup quest and
 constructs its source-selected CELL/player. Ordinary flat input reaches TTW's
 actual Capital/Mojave message; selecting Capital plays Fallout 3's owned intro.
-Its post-movie source continuation reaches a missing loading-screen policy, and
-TTWStart reaches its missing radio-fix command. Playable Fallout 3 character
+Its post-movie continuation executes the shared loading-screen policy and reaches
+the missing SetInCharGen owner. Winning location-specific LSCR images and LSCT
+tips pass an owned Vault 101 pool check and a paused native pixel fixture; that
+policy retains cold. Ancillary loading animation/progress and matched UI timing
+remain unbound. TTWStart reaches its missing radio-fix command. Playable Fallout 3 character
 creation, campaign and train travel remain unverified. JAM/MCM and all other
 requested mod targets remain open.
 
