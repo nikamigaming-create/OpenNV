@@ -85,6 +85,7 @@ if (!Rejects(() => GamebryoPackageTravel.Start(
     !Rejects(() => travel.Advance(double.NaN)))
     throw new InvalidOperationException("Invalid package travel did not fail closed.");
 
+RootMotionTravelProbe.Exercise();
 Console.WriteLine("Gamebryo package travel probe passed.");
 
 static bool Rejects(Action action)

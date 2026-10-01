@@ -8,9 +8,8 @@ namespace OpenNV.Runtime.World.Actors;
 internal partial class RuntimeNativeNpc
 {
     private CellNavigationGraph? _navigation;
-    private Vector3[] _travelPath = [];
-    private int _travelCursor;
-    private bool _travelActive;
+    private GamebryoRootMotionTravel? _travelProgress;
+    private bool _travelActive => _travelProgress?.Active == true;
     private Transform3D _travelDestination;
     private double _baseElapsedSeconds;
     private float _travelPublishedDistance;
@@ -26,8 +25,9 @@ internal partial class RuntimeNativeNpc
         package = _travelPackage?.ToString(),
         reference = _travelTarget?.ToString(),
         purpose = _travelPurpose,
-        waypoints = _travelPath.Length,
-        cursor = _travelCursor,
+        waypoints = _travelProgress?.Waypoints ?? 0,
+        cursor = _travelProgress?.Cursor ?? 0,
+        arrivalPending = _travelProgress?.ArrivalPending == true,
         target = new[] { _travelDestination.Origin.X, _travelDestination.Origin.Y, _travelDestination.Origin.Z },
         rootCycleDistance = _travelCycleDistance,
         source = "winning-navm-and-kf-accumulation",
@@ -51,21 +51,21 @@ internal partial class RuntimeNativeNpc
         var units = Skeleton.UnitsToMetres;
         var sourceStart = new Vector3(Position.X, -Position.Z, Position.Y) / units;
         var sourceDestination = new Vector3(destination.Origin.X, -destination.Origin.Z, destination.Origin.Y) / units;
-        _travelPath = _navigation.FindPath(sourceStart, sourceDestination).Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
-        if (_travelPath.Length == 0) throw new InvalidDataException("Owned NAVM returned no travel corridor.");
-        if (exact && _travelPath[^1] != destination.Origin) _travelPath = [.. _travelPath, destination.Origin];
-        _travelDestination = exact ? destination : new(destination.Basis.Orthonormalized().Scaled(Scale), _travelPath[^1]);
+        var path = _navigation.FindPath(sourceStart, sourceDestination).Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
+        if (path.Length == 0) throw new InvalidDataException("Owned NAVM returned no travel corridor.");
+        if (exact && path[^1] != destination.Origin) path = [.. path, destination.Origin];
+        _travelDestination = exact ? destination : new(destination.Basis.Orthonormalized().Scaled(Scale), path[^1]);
         _travelPackage = package.FormKey;
         _travelTarget = target;
         _travelPurpose = purpose;
-        _travelCursor = 0;
+        _travelProgress?.Cancel();
+        _travelProgress = new(path);
         _travelPublishedDistance = 0;
-        _travelActive = true;
         // This locomotion owner publishes the ordinary walking group.
         Activity.SetMovement(running: false, sneaking: false);
         PlayLocomotion(true);
         GD.Print($"OPENNV_NATIVE_PACKAGE_TRAVEL reference={Appearance.Reference} package={package.FormKey} target={target} " +
-            $"navmeshes={_navigation.NavMeshes} waypoints={_travelPath.Length} distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
+            $"navmeshes={_navigation.NavMeshes} waypoints={_travelProgress.Waypoints} distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
     }
 
     private void PlayLocomotion(bool moving)
@@ -106,35 +106,28 @@ internal partial class RuntimeNativeNpc
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
         _baseAnimationSeconds = sequence.StartTime;
         _baseElapsedSeconds = 0;
-        _baseAnimation.ApplySourceTime(sequence.StartTime);
+        if (_animation is null) _baseAnimation.ApplySourceTime(sequence.StartTime);
+        else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, sequence.StartTime), (_animation, _animationSeconds));
         SetMeta("opennv_base_animation_source", identity);
     }
 
     private void AdvanceTravel(float distance)
     {
         if (!_travelActive || _conversationTarget is not null) return;
-        if (!float.IsFinite(distance) || distance < -0.00001f) throw new InvalidDataException("Locomotion accumulation moved backwards.");
-        distance = Math.Max(0, distance);
-        while (_travelCursor < _travelPath.Length)
+        var step = _travelProgress!.Advance(Position, distance);
+        Position = step.Position;
+        if (step.Direction is { } offset)
         {
-            var offset = _travelPath[_travelCursor] - Position;
-            var length = offset.Length();
-            if (length > 0)
-            {
-                var horizontal = new Vector3(offset.X, 0, offset.Z);
-                if (horizontal.LengthSquared() > 0)
-                    Basis = Basis.LookingAt(horizontal.Normalized(), Vector3.Up).Scaled(Scale);
-            }
-            if (length > distance)
-            {
-                Position += offset / length * distance;
-                return;
-            }
-            Position = _travelPath[_travelCursor++];
-            distance -= length;
+            var horizontal = new Vector3(offset.X, 0, offset.Z);
+            if (horizontal.LengthSquared() > 0)
+                Basis = Basis.LookingAt(horizontal.Normalized(), Vector3.Up).Scaled(Scale);
         }
-        _travelActive = false;
-        Transform = _travelDestination;
+        if (!_travelActive) Transform = _travelDestination;
+    }
+
+    private void CompletePendingTravel()
+    {
+        if (_travelProgress?.TakeArrival() == true) CompleteTravel();
     }
 
     private Vector3 SourceTranslation(FalloutNifAnimationSample sample)

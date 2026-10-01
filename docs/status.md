@@ -71,9 +71,15 @@ pixels with no retained frames. Ordinary Capital input reaches the projector and
 accepts the shared draft through its source controls, releases menu pause and quits
 cleanly. A requested private screenshot is retained. Overlapping replacement,
 portrait/effect/close-timing parity and XR final-eye presentation remain unverified.
-The walking reported during the gender question is reproduced: Dad's source travel
-has arrived while Forward remains active, and package-change idle/deferred
-replacement still faults. Actor animation and further chargen remain incomplete.
+The walking reported during the gender question is repaired: initial-sample
+root-motion arrival completes once after package binding, releases Forward and
+plays source change/begin IDLE poses. Synthetic corridor/arrival/cancel/invalid
+checks and an owned native Dad/Dr. Li fixture pass six zero-distance package
+changes with stationary animated bones. A fresh ordinary opening completes eight
+speech commands; its 30-second audio clip has no sampled Forward or actor-package
+errors. HP/AP still shows incorrectly during birth. Actor cold restoration,
+animation group interruption/blending, Must Complete end-idle waits and matched
+timing remain open. MatchRace and further chargen remain incomplete.
 
 Activation-failure sound selection/reset share C# state across source execution
 paths and ordinary flat/XR input. The default identity comes from an admitted

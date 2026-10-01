@@ -47,6 +47,7 @@ internal partial class RuntimeNativeNpc
         _furnitureApproaching = true;
         _sitting = 0;
         StartTravel(package, reference, motion.Sample(start));
+        CompletePendingTravel();
     }
 
     private FurnitureClip ReadFurnitureClip(int sitting)
