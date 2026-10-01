@@ -134,12 +134,14 @@ internal partial class RuntimeNativePlayer
     }
     internal void XrActivate()
     {
-        if (_modalInput || !_activationEnabled || _furniturePhase != 0 || AimedObject() is not { } collider) return;
+        if (_modalInput || _furniturePhase != 0) return;
+        if (!_activationEnabled || AimedObject() is not { } collider) { RejectActivation(); return; }
         var target = ResolveXrTarget?.Invoke(collider);
         // Comfort pickup reach is an OpenNV option. Doors, conversations and
         // furniture still require the ordinary source activation distance.
-        if (target?.RemotePickup != true && _xr!.RightAim.GlobalPosition.DistanceTo(_aimHit) > _configuration.Player.ActivationDistanceMeters) return;
-        ActivateReference?.Invoke(collider);
+        if (target?.RemotePickup != true && _xr!.RightAim.GlobalPosition.DistanceTo(_aimHit) > _configuration.Player.ActivationDistanceMeters)
+        { RejectActivation(); return; }
+        if (ActivateReference?.Invoke(collider) != true) RejectActivation();
     }
     internal void XrReload(bool pressed)
     {

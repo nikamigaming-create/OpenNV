@@ -80,6 +80,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal bool RolloverTextEnabled { get; private set; } = true;
     internal float UnitsToMeters => _configuration.World.GameUnitsToMeters;
     internal Func<Node, bool>? ActivateReference { get; set; }
+    internal Action? NoActivationFeedback { get; set; }
     internal Action? SaveGame { get; set; }
 
     internal void ApplySourceCamera(Transform3D transformFromFeet)
@@ -264,8 +265,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (!_modalInput && _activationEnabled && inputEvent.IsActionPressed(input.Activate.Action))
+        if (!_modalInput && inputEvent.IsActionPressed(input.Activate.Action))
         {
+            if (!_activationEnabled)
+            {
+                RejectActivation(); GetViewport().SetInputAsHandled(); return;
+            }
             if (_furniturePhase != 0)
             {
                 RequestFurnitureExit();
@@ -273,6 +278,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
                 return;
             }
             var accepted = TryActivateLiveObject();
+            if (!accepted) RejectActivation();
             GD.Print($"OPENNV_NATIVE_PLAYER_ACTION action=activate accepted={accepted}");
             GetViewport().SetInputAsHandled();
             return;
@@ -390,6 +396,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         var collider = AimedObject();
         return collider is not null && ActivateReference?.Invoke(collider) == true;
     }
+
+    private void RejectActivation() =>
+        (NoActivationFeedback ?? throw new NotSupportedException("Native activation feedback has no shared sound owner."))();
 
     internal bool ModalInput => _modalInput;
     internal Node? AimedObject()

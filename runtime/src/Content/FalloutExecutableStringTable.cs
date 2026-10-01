@@ -308,10 +308,19 @@ internal static partial class FalloutExecutableStringTable
     private sealed class Image(byte[] bytes, PEHeaders headers)
     {
         internal uint Base { get; } = checked((uint)headers.PEHeader!.ImageBase);
+        internal uint CodeBase => checked(Base + (uint)headers.SectionHeaders.Single(section => section.Name == ".text").VirtualAddress);
 
         internal ReadOnlySpan<byte> ScriptCommandBody(string name, byte[] code)
         {
-            var codeBase = checked(Base + (uint)headers.SectionHeaders.Single(section => section.Name == ".text").VirtualAddress);
+            var body = code.AsSpan(ScriptCommandStart(name, code));
+            var end = body.IndexOf(new byte[] { 0x8b, 0xe5, 0x5d, 0xc3 });
+            if (end < 0) throw new NotSupportedException("Owned script command return is unbound.");
+            return body[..(end + 4)];
+        }
+
+        internal int ScriptCommandStart(string name, byte[] code, ushort? parameterCount = null)
+        {
+            var codeBase = CodeBase;
             uint? execute = null;
             foreach (var section in headers.SectionHeaders.Where(section =>
                          (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0))
@@ -325,19 +334,20 @@ internal static partial class FalloutExecutableStringTable
                     if (Literal(U32(row, 0)) != name) continue;
                     var handler = U32(row, 24);
                     if (Literal(U32(row, 4)) is null || Literal(U32(row, 12)) is null ||
-                        U32(row, 8) is < 0x1000 or > 0xffff || handler < codeBase || handler - codeBase >= code.Length)
+                        U32(row, 8) is < 0x1000 or > 0xffff || handler < codeBase || handler - codeBase >= code.Length ||
+                        parameterCount is { } count && (BinaryPrimitives.ReadUInt16LittleEndian(row[18..]) != count ||
+                            BinaryPrimitives.ReadUInt16LittleEndian(row[16..]) != 0))
                         throw new NotSupportedException("Owned script command descriptor is unbound.");
                     if (execute is not null) throw new InvalidDataException("Owned script command declaration is ambiguous.");
                     execute = handler;
                 }
             }
             if (execute is null) throw new NotSupportedException($"Owned script command has no declaration: {name}.");
-            var body = code.AsSpan(checked((int)(execute.Value - codeBase)));
+            var offset = checked((int)(execute.Value - codeBase));
+            var body = code.AsSpan(offset);
             if (!body.StartsWith(new byte[] { 0x55, 0x8b, 0xec }))
                 throw new NotSupportedException("Owned script command entry is unbound.");
-            var end = body.IndexOf(new byte[] { 0x8b, 0xe5, 0x5d, 0xc3 });
-            if (end < 0) throw new NotSupportedException("Owned script command return is unbound.");
-            return body[..(end + 4)];
+            return offset;
         }
 
         internal byte[] Read(uint address, int count)

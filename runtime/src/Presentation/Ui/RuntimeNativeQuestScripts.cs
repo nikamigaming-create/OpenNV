@@ -18,6 +18,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private bool _worldActive;
     private readonly InputSystem.RuntimeNativeScriptEvents _events;
     private readonly RuntimeNativeUiClock _uiClock;
+    private IDisposable? _activationSoundDefault;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal Func<IEnumerable<uint>?>? ActiveMenus { get; set; }
     internal FalloutNewGameBootstrap? Bootstrap { get; set; }
@@ -62,6 +63,9 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         AddChild(_events);
         if (RuntimeLiveContentSource.Current is { } source)
         {
+            _activationSoundDefault = Scripts.NoActivationSound.BindDefault(() => FalloutExecutableStringTable.ReadNoActivationSoundDefault(
+                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
+                    source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
             AddChild(new NativeOwnedScriptSoundPlayer(Scripts.Sounds, source, Scripts.Menus));
             AddChild(new Rendering.NativeOwnedScreenBlood(Scripts.ScreenBlood, source, Scripts.Menus));
         }
@@ -77,6 +81,11 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             _error = error.Message;
             GD.PushError($"OPENNV_HUD_OWNER_UNBOUND {error.Message}");
         }
+    }
+
+    public override void _ExitTree()
+    {
+        _activationSoundDefault?.Dispose(); _activationSoundDefault = null;
     }
 
     public override void _Process(double delta)

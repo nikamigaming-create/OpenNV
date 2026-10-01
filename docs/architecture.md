@@ -30,6 +30,23 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+[SetNoActivationSound](https://geckwiki.com/index.php?title=SetNoActivationSound)
+and [ClearNoActivationSound](https://geckwiki.com/index.php?title=ClearNoActivationSound)
+share FalloutNoActivationSound across reference/results, startup and fallback
+quests. The source executable's clearing-command/global-slot/lazy-lookup
+association supplies the default SOUN editor ID; no fallback identity or build
+address is substituted. The selected winning SOUN and payload hash retain in
+FalloutScriptSession. Cold restoration validates both before admission and never
+replays transient voices. Ordinary failed/blocked flat and XR activation outside
+modal input uses the shared owned sound player, suppressing repeated input while
+its selected voice remains active. Reset leaves existing voices intact and
+resolves the owned default on the next feedback request. Synthetic contracts and
+an isolated owned command/input/native-mixer fixture cover selection, reset,
+completion, malformed associations, failed prefixes and cold identity. Retail
+precache/handle reuse, matched activation eligibility/timing and endpoint audio
+remain unverified; calling an XR input adapter without a headset is component
+evidence only.
+
 TriggerScreenBlood requests belong to FalloutScreenBlood in the shared reference
 world, with the same owner available to startup/results and fallback quests.
 Owned compiler associations admit byte Boolean INI defaults, including source

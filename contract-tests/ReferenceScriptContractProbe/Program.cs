@@ -324,6 +324,7 @@ InputControlContracts.Run();
     PlayerScriptPackageContracts.Run();
     NumericGameSettingContracts.Run();
     ScriptSoundContracts.Run();
+    NoActivationSoundContracts.Run();
     ScreenBloodContracts.Run();
     QuestMenuContracts.Run();
 IngestibleContracts.Run();

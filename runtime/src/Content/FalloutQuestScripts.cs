@@ -72,6 +72,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
         if (Values is { Strings: null })
             throw new InvalidDataException("Saved script value state is missing its string table.");
         Auxiliary?.Validate();
+        Session?.NoActivationSound?.Validate();
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
         if (Messages.Count != 0 && MessageResults is null ||
@@ -99,8 +100,8 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
 
 internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
     bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
-    FalloutPlayerScriptPackageSnapshot? PlayerPackage = null);
-internal sealed class FalloutScriptSession
+    FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null);
+internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null)
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
@@ -126,12 +127,15 @@ internal sealed class FalloutScriptSession
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture());
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
             throw new InvalidDataException("Saved script session state is invalid.");
         state.PlayerPackage?.Validate();
+        if (state.NoActivationSound is not null && noActivationSound is null)
+            throw new NotSupportedException("Saved no-activation sound has no shared source owner.");
+        noActivationSound?.Restore(state.NoActivationSound);
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         InCharGen = state.InCharGen;
@@ -178,11 +182,12 @@ internal sealed class FalloutQuestScripts
     internal FalloutInputControls? Controls { get; }
     internal FalloutScriptMenus Menus { get; }
     internal FalloutScriptSounds Sounds { get; }
+    internal FalloutNoActivationSound NoActivationSound { get; }
     internal FalloutScreenBlood ScreenBlood { get; }
     internal FalloutUiComponentStore? Ui => References?.Ui;
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
-    internal FalloutScriptSession Session { get; } = new();
+    internal FalloutScriptSession Session { get; }
     internal FalloutScriptEvents Events { get; }
     internal HashSet<FalloutFormKey> SaidInfos { get; } = [];
     internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
@@ -210,6 +215,7 @@ internal sealed class FalloutQuestScripts
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
         menus = Menus.State,
         sounds = Sounds.State,
+        noActivationSound = NoActivationSound.State,
         screenBlood = ScreenBlood.State,
         scheduling = "shared SCPT clocks; running quest admission and retained stop/restart clocks; exact retail MenuMode scheduling unverified",
     };
@@ -321,6 +327,8 @@ internal sealed class FalloutQuestScripts
         Controls = references?.Controls ?? storage?.Controls;
         Menus = references?.Menus ?? new();
         Sounds = references?.Sounds ?? new(records, Menus);
+        NoActivationSound = references?.NoActivationSound ?? new(records, Sounds);
+        Session = new(NoActivationSound);
         ScreenBlood = references?.ScreenBlood ?? new(records);
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
@@ -651,6 +659,20 @@ internal sealed class FalloutQuestScripts
                 if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
                 Sounds.Play(instance.Quest.FormKey, sound.FormKey(_records), arguments.Count == 2 &&
                     FalloutScriptSounds.SystemFlag(NumberArgument(arguments[1])));
+                return;
+            }
+            if (parts.Length == 1 && operation == "setnoactivationsound")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("SetNoActivationSound requires one SOUN form.");
+                var sound = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function);
+                if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
+                NoActivationSound.Set(sound.FormKey(_records));
+                return;
+            }
+            if (parts.Length == 1 && operation == "clearnoactivationsound")
+            {
+                if (arguments.Count != 0) throw new InvalidDataException("ClearNoActivationSound takes no arguments.");
+                NoActivationSound.Clear();
                 return;
             }
             if (parts.Length == 1 && operation == "setnumericgamesetting")

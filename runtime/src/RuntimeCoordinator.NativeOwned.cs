@@ -1054,6 +1054,9 @@ public partial class RuntimeCoordinator
             (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                 NativeAmbient(_nativeActiveCell?.Cell ?? throw new InvalidOperationException("Player body has no active cell."))));
         _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
+        _nativePlayer.NoActivationFeedback = () =>
+            (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))
+                .Scripts.NoActivationSound.RejectActivation(_nativePluginStack!.RuntimeFormKey(0x14));
         _nativePlayer.SaveGame = SaveNativeManualSlot;
         _nativePlayer.OpenPauseMenu += ToggleNativeSessionMenu;
         _nativePlayer.Configure(_configuration, transform);

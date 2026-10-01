@@ -34,8 +34,11 @@ session settings, and the package camera advances. CG00's stage-6 PlaySound now
 plays and completes its owned birth WAV. Its stage-8 same-package request now
 plays the outgoing source OnChange camera clip and retains the pending assignment
 until that clip completes. The subsequent source sequence now renders its owned
-screen blood and plays/completes a selected owned baby-cry WAV. It stops next at
-the unbound SetNoActivationSound command, preserving the executed prefix.
+screen blood and plays/completes a selected owned baby-cry WAV. Its subsequent
+SetNoActivationSound now selects the winning SOUN; ordinary E input plays and
+completes that owned cry. CG00 advances to stage 10's player package and Dad's
+authored talking flag. Dad's GameMode script stops at the unbound three-argument
+SayTo command, preserving its prefix and leaving dialogue unstarted.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
@@ -58,6 +61,20 @@ during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at th
 unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
 the result suffix. XP reward commands, modifiers and leveling remain incomplete;
 this policy and owned component audit do not establish player advancement support.
+
+SetNoActivationSound/ClearNoActivationSound share C# selection across reference/
+results, startup and fallback quests. The default SOUN identity comes from the
+owned executable's clearing-command/global-slot/lazy-lookup association. Typed
+winning source selection and hash retain cold without replaying transient voices;
+changed or malformed source identities reject restoration. Ordinary failed or
+blocked flat/XR activation outside modal input uses the common owned sound player
+and suppresses repeated requests while its selected voice remains active.
+Synthetic command/association/prefix/failure/cold checks and an isolated owned
+native command/input/mixer fixture pass. The fixture observes completion and
+nonzero samples for baby cry and reset default with zero discarded samples,
+without retaining frames. Its XR adapter invocation has no headset. Retail
+precache/handle reuse, matched activation eligibility/timing and endpoint audio
+remain unverified. These checks do not establish campaign or audio parity.
 
 TriggerScreenBlood now shares transient C# requests across reference/results,
 startup and fallback quest execution. Owned Boolean INI defaults supply its
@@ -288,9 +305,10 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached SetNoActivationSound owner from source semantics and
-shared reference/activation state. Preserve the completed stage-8 camera change,
-screen-blood and baby-cry prefixes. Complete source screen-blood lighting/flare,
+Implement the reached three-argument SayTo owner, source dialogue arbitration,
+INFO results and SayToDone event continuation through general actor/script owners.
+Preserve stage 10's player package and Dad's source talking flag, plus the
+completed screen-blood and ordinary activation-feedback prefixes. Complete source screen-blood lighting/flare,
 color transfer and XR final-eye presentation without hiding their telemetry gaps.
 Complete the
 remaining script audio routes, loop/stop ownership, environment/submersion and
@@ -402,23 +420,30 @@ Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
 The fresh ordinary Capital run is
-`tmp/development-lab/ttw-screen-blood-20261001`; both session flags are true,
+`tmp/development-lab/ttw-activation-sound-20261001`; both session flags are true,
 CG00's package camera advances and its queued move enters Fallout3.esm:028138.
 Both authored karma-setting writes execute, and the owned birth sound plays and
 completes. CG00's stage-8 same-package request plays and completes the source
 OnChange clip, then draws ten owned blood drops and plays/completes the selected
-baby-cry WAV. It retains the missing SetNoActivationSound owner and its executed
-timer prefix. The selected unfinished birth frame is
+baby-cry WAV. SetNoActivationSound selects its winning SOUN, and ordinary E plays
+and completes a third voice through that override. Stage 10 installs the source
+player package and sets Dad's authored talking flag. Reference Fallout3.esm:0290a7
+then retains the missing three-argument SayTo owner; no Dad speech starts.
+The selected unfinished birth frame is
 `local/recordings/ttw-birth-20261001/Vault-101-birth-incomplete-flat.png`; temporary
 frame data is removed. It exposes lighting and HUD gaps, not scene parity.
-Current effect checks are `tmp/screen-blood-contract.log`,
+Current activation-feedback checks are `tmp/no-activation-contract.log`,
+`tmp/no-activation-owned-native.log` and `tmp/no-activation-runtime-gate.log`.
+The source descriptor/default/persistence investigation remains outside the
+repository in the private Ghidrust no-activation-sound dossier. Current effect checks are `tmp/screen-blood-contract.log`,
 `tmp/screen-blood-default-contract.log`, `tmp/screen-blood-owned-native.log` and
 `tmp/screen-blood-runtime-gate.log`. The isolated native fixture retains no frames;
 the ordinary run retains its next fault and no manual-save attempt.
 The prior numeric-setting run's CREATE NEW SAVE attempt retains the prior-save
 requirement failure; saving was not retried in this effect check. The session
 quit through ordinary input with source readers drained. One transient native
-state-write loss remains retained; later state samples resumed. Audio checks are
+state-write interval loss and a file-replacement loss remain retained; later
+state samples resumed. Audio checks are
 `tmp/script-sounds-contract.log`, `tmp/script-sounds-owned-native.log` and
 `tmp/script-sounds-runtime-gate.log`; the mixer fixture retains no samples or frames
 and cannot establish endpoint audio or campaign parity. Numeric checks are
