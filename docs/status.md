@@ -25,7 +25,12 @@ clip and completes the deferred assignment. Its subsequent source screen-blood
 request now renders ten owned drops; the following owned baby-cry sound plays and
 completes. SetNoActivationSound now selects the source SOUN, and ordinary E input
 plays/completes the owned cry. CG00 reaches stage 10's package and Dad's authored
-talking flag; Dad's script stops at the unbound three-argument SayTo owner. That
+talking flag. Dad's three-argument SayTo now completes his owned voice/lip line,
+forced HUD subtitle and source completion event, opening the owned Boy/Girl
+question. Ordinary male selection completes its response. A fresh female run
+also completes Mom's Say and subsequent parent dialogue, reaches owned name
+entry and accepts a name. TTW_ShowGeneProjector then faults; Dad's later source
+stage reports unbound MatchRace. Those faults remain visible. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first manual save
 fails at the existing prior-save requirement, so first-snapshot initialization and
@@ -42,7 +47,20 @@ pass as component evidence. PACK reads both owned byte and UInt32 idle counts.
 Package traversal, nonempty event programs, end/removal animations, change
 cancellation and matched interruption/blend/timing remain incomplete. A fresh
 unfinished birth-room screenshot exposes lighting and HUD gaps; it is not parity
-evidence.
+evidence. A new private 30-second flat parent-dialogue MP4 contains process audio
+and retains repeated source frames in its sidecar; it is ordinary gameplay,
+not audiovisual parity evidence.
+
+Scripted Say/SayTo share actor/quest selection, owned audio/lip data, positive
+integer forced subtitles and typed topic completion. GetPCIsSex reads shared
+player state. Synthetic command/event/order/prefix/cold-local checks and owned
+native subtitle pixels pass, including forced display with general subtitles
+disabled and baseline restoration after completion. HUD dimensions, template,
+font and admitted executable placement operands supply flat presentation.
+Additional command arguments/listeners, concurrent voices, styling, queue/hold/
+fade, matched timing/scaling and XR final-eye presentation remain open. These
+checks and the ordinary parent dialogue do not establish full dialogue or
+character creation support.
 
 Activation-failure sound selection/reset share C# state across source execution
 paths and ordinary flat/XR input. The default identity comes from an admitted

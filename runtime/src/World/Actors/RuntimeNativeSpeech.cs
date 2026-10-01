@@ -10,6 +10,8 @@ internal partial class RuntimeNativeSpeech : Node
     private FalloutPluginStack _stack = null!;
     private FaceGenLipConfiguration _lipConfiguration = null!;
     private Func<FalloutFormKey, float> _questStage = null!;
+    private FalloutQuestState? _quests;
+    private Func<bool>? _playerFemale;
     private Func<FalloutCondition, float>? _conditionContext;
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private AudioStreamPlayer _voice = null!;
@@ -17,6 +19,9 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, FalloutSoundRandomState>? _soundRandom;
     private float _unitsToMetres;
     private FalloutSayToCommand? _command;
+    private string? _commandKind;
+    private long _completedCommands;
+    private FalloutFormKey? _sayToTopic;
     private FalloutDialogueInfo? _info;
     private int _responseIndex;
     private FalloutDialogueVoiceIndex _voices = null!;
@@ -34,6 +39,11 @@ internal partial class RuntimeNativeSpeech : Node
     private Action? _responseCompleted;
     internal Action<FalloutDialogueInfo, FalloutFormKey, bool>? ExecuteResults { get; set; }
     internal event Action<FalloutFormKey>? InfoCompleted;
+    internal event Action<FalloutFormKey, FalloutFormKey>? SayToCompleted;
+    internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
+    internal FalloutSpeechSubtitle? Subtitle => Error is null && _info is not null && _sayToTopic is { } topic ?
+        new(_speakerReference!.Value, _info.Record.FormKey, topic, _info.Responses[_responseIndex].Text,
+            _command!.ForceSubtitles) : null;
     internal string? Error { get; private set; }
     internal bool Active => _info is not null;
     internal bool IsTalking(FalloutFormKey reference)
@@ -54,6 +64,8 @@ internal partial class RuntimeNativeSpeech : Node
         var record = _stack.GetEffective(speaker);
         var name = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "EDID").Data;
         _command = new(name.IsEmpty ? speaker.ToString() : FalloutDialogueTopic.Text(name.Span), "player", info.Record.FormKey.ToString());
+        _commandKind = "conversation";
+        _sayToTopic = null;
         BindSpeaker(record);
         _info = info; _responseIndex = response; _responseCompleted = completed;
         try { PlayResponse(); }
@@ -64,6 +76,9 @@ internal partial class RuntimeNativeSpeech : Node
         info = _info?.Record.FormKey.ToString(),
         speaker = _command?.SpeakerEditorId,
         speakerReference = _speakerReference?.ToString(),
+        command = _commandKind,
+        listenerLookOwner = _commandKind == "SayTo" ? "unbound" : "not-requested",
+        completedCommands = _completedCommands,
         voiceBinding = _binding,
         responseSound = _responseSound?.LastEvent,
         audioSha256 = _voice?.Stream?.GetMeta("opennv_owned_media_sha256", "").AsString(),
@@ -80,6 +95,8 @@ internal partial class RuntimeNativeSpeech : Node
         speakerAnimationOwner = _info?.Responses[_responseIndex].SpeakerAnimation is null
             ? "package-idle" : "owned-response-idle",
         spatialAudioOwner = "unbound",
+        forceSubtitles = _command?.ForceSubtitles == true,
+        sayToTopic = _sayToTopic?.ToString(),
         said = _said.Select(key => key.ToString()).ToArray(),
         error = Error,
     };
@@ -88,11 +105,14 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutFormKey, float> questStage,
         Func<FalloutCondition, float>? conditionContext = null, HashSet<FalloutFormKey>? saidInfos = null,
         Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null,
-        Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0)
+        Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0, FalloutQuestState? quests = null,
+        Func<bool>? playerFemale = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _questStage = questStage;
+        _quests = quests;
+        _playerFemale = playerFemale;
         _conditionContext = conditionContext;
         _templates = templates;
         _soundRandom = soundRandom; _unitsToMetres = unitsToMetres;
@@ -126,10 +146,21 @@ internal partial class RuntimeNativeSpeech : Node
         StartCore(command, speaker, FalloutDialogueTopic.Find(_stack, "DIAL", command.TopicEditorId).FormKey);
     }
 
-    internal void SayTo(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic)
+    internal void SayTo(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic, bool forceSubtitles = false)
     {
         if (_stack.RuntimeFormId(target) != 0x14) throw new NotSupportedException("SayTo target needs its runtime actor owner.");
-        StartCore(new(speaker.ToString(), "player", topic.ToString()), _stack.GetEffective(speaker), topic);
+        ExecuteCommand(new(speaker.ToString(), "player", topic.ToString(), forceSubtitles), speaker, topic);
+    }
+    internal void Say(FalloutFormKey speaker, FalloutFormKey topic, bool forceSubtitles = false) =>
+        ExecuteCommand(new(speaker.ToString(), "", topic.ToString(), forceSubtitles), speaker, topic);
+    private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic)
+    {
+        if (Error is not null) throw new InvalidOperationException(Error);
+        try { StartCore(command, _stack.GetEffective(speaker), topic); }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
+        {
+            Fail(error); throw;
+        }
     }
 
     private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm)
@@ -140,10 +171,15 @@ internal partial class RuntimeNativeSpeech : Node
         if (npc.Signature is not ("NPC_" or "CREA")) throw new NotSupportedException("SayTo speaker is not an actor.");
         if (!_topics.TryGetValue(command.TopicEditorId, out var topic))
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, topicForm));
-        var info = topic.Select(npcKey, _said, _questStage, _conditionContext) ??
-            throw new InvalidOperationException($"No eligible source INFO in {command.TopicEditorId}.");
         BindSpeaker(speaker);
+        var conditions = new FalloutDialogueConditions(_stack,
+            _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), speaker.FormKey, _identity!,
+            _conditionContext, playerFemale: _playerFemale);
+        var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate) ??
+            throw new InvalidOperationException($"No eligible source INFO in {command.TopicEditorId}.");
         _command = command;
+        _commandKind = command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
+        _sayToTopic = topicForm;
         _info = info;
         _responseIndex = 0;
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);
@@ -169,6 +205,8 @@ internal partial class RuntimeNativeSpeech : Node
     {
         var info = _info ?? throw new InvalidOperationException("Source INFO was lost.");
         var response = info.Responses[_responseIndex];
+        if (Subtitle is { } subtitle)
+            (PrepareSubtitle ?? throw new NotSupportedException("SayTo has no subtitle presentation owner."))(subtitle);
         _binding = null; _lipSha256 = null; _advance = false;
         _lip = null; _lipWeights = [];
         ClearResponseSound();
@@ -235,6 +273,7 @@ internal partial class RuntimeNativeSpeech : Node
             if (++_responseIndex < _info.Responses.Count) { PlayResponse(); return; }
             var completed = _info;
             var completedSpeaker = _speakerReference;
+            var completedTopic = _sayToTopic; _sayToTopic = null;
             _info = null;
             _lip = null;
             _lipWeights = [];
@@ -242,6 +281,11 @@ internal partial class RuntimeNativeSpeech : Node
             GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} owner=audio-finished");
             RunResults(completed, completedSpeaker ?? throw new InvalidOperationException("Completed voice lost its source actor."), false);
             InfoCompleted?.Invoke(completed.Record.FormKey);
+            if (completedTopic is { } topic)
+            {
+                (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))(completedSpeaker!.Value, topic);
+                ++_completedCommands;
+            }
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {

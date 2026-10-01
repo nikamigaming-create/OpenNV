@@ -162,6 +162,7 @@ public partial class RuntimeCoordinator
             ingestibles = _nativeOpeningStageDriver?.IngestibleState,
             gameplayHud = _nativeGameplayHud?.State,
             hudMessages = _nativeHudMessages?.State,
+            subtitles = _nativeSubtitles?.State,
             pipBoy = _nativePipBoy?.State,
             playerPresentation = _nativePlayer?.PresentationState,
             questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Legacy save has no quest script state." : null,
@@ -1085,10 +1086,18 @@ public partial class RuntimeCoordinator
                 restore.State.PlayerRotation, FalloutNativeCampaignSave.RestorePlayerViewPitch(restore.State));
         AddChild(_nativePlayer);
         if (_nativeXr is not null) _nativePlayer.AttachXr(_nativeXr);
+        _nativeSubtitles = new(_nativePluginStack!, () => _nativeOpeningStageDriver?.Subtitle,
+            () => _nativeXr is null && !_nativeDoorLoading && !GetTree().Paused, _nativeUi);
         _nativeOpeningStageDriver = new RuntimeNativeOpeningStageDriver
         {
+            PrepareSubtitle = _nativeSubtitles.Prepare,
             ReferencePresentation = () => _nativeReferencePresentation ??
                 throw new InvalidOperationException("Native reference presentation is absent."),
+            SayToCompleted = (speaker, topic) =>
+            {
+                if (_nativeReferenceEvents?.DispatchActorEvent(speaker, "SayToDone", topic) != true)
+                    throw new NotSupportedException($"Source SayToDone actor {speaker} has no resident event binding.");
+            },
         };
         _nativeOpeningStageDriver.Configure(
             _nativeOpeningTransitions ??

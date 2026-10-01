@@ -12,6 +12,7 @@ public partial class RuntimeCoordinator
     private CanvasLayer? _nativeContainerLayer;
     private NativeOwnedGameplayHud? _nativeGameplayHud;
     private NativeOwnedHudMessages? _nativeHudMessages;
+    private NativeOwnedSubtitles? _nativeSubtitles;
     private CanvasLayer? _nativePipBoyLayer;
     private NativeOwnedPipBoy? _nativePipBoy;
     private void AddNativeGameplayHud()
@@ -24,7 +25,8 @@ public partial class RuntimeCoordinator
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
             () => _nativeXr is null && _nativePlayer is { ModalInput: false, RolloverTextEnabled: true } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState);
-        layer.AddChild(_nativeHudMessages); AddChild(layer);
+        layer.AddChild(_nativeHudMessages);
+        layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;
         _nativePlayer.OpenCombatWheel += OpenNativeCombatWheel;
         if (_nativeXr is not null)

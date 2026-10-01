@@ -216,6 +216,15 @@ internal static class ActorSourceContracts
             Check(actorConditions.Evaluate(healthCondition with { Function = 14, RunOn = 2, Reference = 0x901, Argument1 = 27 }) == 62.5f,
                 "Explicit-reference actor value did not reach its authoritative owner.");
             Reject(() => actorConditions.Evaluate(healthCondition with { Function = 14, RunOn = 2, Argument1 = 27 }));
+            var female = false;
+            var playerConditions = new FalloutDialogueConditions(records, quests, Key(0x900), speaker, playerFemale: () => female);
+            var playerSex = healthCondition with { Function = 131, Argument1 = 0 };
+            Check(playerConditions.Evaluate(playerSex) == 1 && playerConditions.Evaluate(playerSex with { Argument1 = 1 }) == 0,
+                "GetPCIsSex read speaker identity instead of the shared player state.");
+            female = true;
+            Check(playerConditions.Evaluate(playerSex) == 0 && playerConditions.Evaluate(playerSex with { Argument1 = 1, RunOn = 2 }) == 1,
+                "GetPCIsSex retained stale gender or changed ownership with the actor scope.");
+            Reject(() => playerConditions.Evaluate(playerSex with { Argument1 = 2 }));
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => { }));
             Check(scripts.Activate(Key(0x904), Key(0x900)).Error is null && world.MapMarkerVisibility(Key(0x903)) == 0,
                 "GetActionRef confused a non-player activator with the compiled Player reference.");
