@@ -33,6 +33,16 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal long Revision { get; private set; }
     internal event Action<FalloutQuestObjectiveChange>? ObjectiveChanged;
 
+    internal object ProgressState => _states.Where(pair => pair.Value.Stages.Count != 0)
+        .OrderBy(pair => stack.RuntimeFormId(pair.Key)).Select(pair => new
+        {
+            quest = pair.Key.ToString(),
+            stage = pair.Value.Stage,
+            completed = pair.Value.Completed,
+            running = pair.Value.Running,
+            enteredStages = pair.Value.Stages.Order().ToArray(),
+        }).ToArray();
+
     internal IReadOnlyList<FalloutQuestSnapshot> Capture() => _states.OrderBy(pair => stack.RuntimeFormId(pair.Key))
         .Select(pair => new FalloutQuestSnapshot(pair.Key, pair.Value.Stage, pair.Value.Completed,
             pair.Value.Stages.Order().ToArray(), new Dictionary<uint, double>(pair.Value.Variables),

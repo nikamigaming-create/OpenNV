@@ -30,6 +30,16 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+RuntimeNativeSpeech owns separate resident actor channels for scripted and
+conversation speech. Winning topic/voice indexes and SayOnce history are shared;
+each channel retains its INFO, audio/lip/face, source results and completion.
+Empty selections retain the deferred topic event owner. Conversation skip only
+affects its channel; failed prefixes remain latched and prevent saving. All
+channel and subtitle candidate state stays visible. Competing HUD subtitles and
+same-actor interruption remain unbound. FalloutQuestState reports entered source
+stages independently of the bootstrap and scheduler telemetry. See
+[speech completion](scripted-speech-completion.md).
+
 FalloutTraitMenuSelection owns a separate draft and the source trait limit;
 RuntimeNativeOpeningStageDriver commits it through the shared character owner.
 NativeOwnedTraitMenu renders winning trait-menu XML, fonts, source PERK text/icons

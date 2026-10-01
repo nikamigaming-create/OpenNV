@@ -43,7 +43,11 @@ executes four MatchFaceGeometry commands, completes twelve speeches and reaches
 CG00 stage 80's trait menu. Ordinary trait confirmation accepts zero traits;
 empty selections now deliver deferred, coalesced SayToDone without audio or an
 invented INFO. A fresh ordinary run starts Dad's stage-80 line, then Mom's
-overlapping voice exposes the remaining single-voice failure. The trait panel now
+overlapping voice now has its own audio/lip/result/completion channel. A fresh
+ordinary run completes sixteen speeches, accepts the owned trait menu and reaches
+the next unsupported StopSound command. The gurney exit remains incomplete.
+An owned concurrent fixture checks overlap, pause, skip isolation and failed
+prefix retention. Competing subtitle selection remains visibly unbound. The trait panel now
 uses [winning Fallout XML, fonts and artwork](authored-trait-menu.md), source
 descriptions/icons and Reset/Done controls. Synthetic drafts/settings and an owned
 native input/reset/pixel-restoration fixture pass. Fresh ordinary TTW input also
@@ -83,7 +87,7 @@ player state. Synthetic command/event/order/prefix/cold-local checks and owned
 native subtitle pixels pass, including forced display with general subtitles
 disabled and baseline restoration after completion. HUD dimensions, template,
 font and admitted executable placement operands supply flat presentation.
-Additional command arguments/listeners, concurrent voices, styling, queue/hold/
+Additional command arguments/listeners, same-actor interruption, styling, competing subtitle queue/hold/
 fade, matched timing/scaling and XR final-eye presentation remain open. These
 checks and the ordinary parent dialogue do not establish full dialogue or
 character creation support.

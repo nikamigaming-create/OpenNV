@@ -22,6 +22,12 @@ public partial class NativeRenderedMenuAudit : Control
                 GetTree().Quit();
                 return;
             }
+            if (args.Length >= 5 && args[1] == "--speech-concurrent")
+            {
+                await EmptySpeech(args[0], args[2], args[3], args[4], args[5..], concurrent: true);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 7 && args[1] is "--actor-race" or "--actor-face")
             {
                 await ActorRace(args[0], args[2], args[3], args[4], args[5], args[6], args[7..], args[1] == "--actor-face");
