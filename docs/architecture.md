@@ -30,6 +30,27 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+TriggerScreenBlood requests belong to FalloutScreenBlood in the shared reference
+world, with the same owner available to startup/results and fallback quests.
+Owned compiler associations admit byte Boolean INI defaults, including source
+names with spaces and numeric prefixes; installation/profile INIs override them.
+The blood enable flag is captured at presentation binding. Winning numeric and
+string GMST readers supply remaining active capacity, geometry/opacity ranges,
+duration/fade and DDS identities. Texture preparation precedes geometry/random
+commitment. Groups retain their captured duration, read live fade-start and
+advance on the shared menu-aware game clock. Retirement releases all geometry;
+campaign saves never bake or replay these transient effects.
+
+NativeOwnedScreenBlood provides a partial flat presentation using the owned
+two-by-two alpha/tint atlas and color map. Its independently written fragment
+equation combines per-drop opacity, group fade and mask alpha; source base
+blending multiplies the underlying image. The owned native fixture verifies
+changed pixels, fade and exact restoration of its baseline after expiration,
+without writing frames. Directional color-UV offsets, additive flares, color
+transfer and matched layering/timing/random stream remain explicit telemetry
+gaps. XR shares authoritative requests but retains an unbound final-eye adapter;
+no effect, campaign or retail parity is established by this component check.
+
 Non-locational [PlaySound](https://geckwiki.com/index.php/PlaySound) requests
 belong to FalloutScriptSounds in the shared reference world; fallback quests use
 the same owner. Winning SOUN records and the shared source selector provide gain,
@@ -242,8 +263,9 @@ death-delay calculations read current values. Consumers that still copy coeffici
 register a named refresh boundary; an invalidating write fails before changing the
 setting, with those boundaries exposed in telemetry. Derived player/NPC values,
 movement, face/head clocks, HUD/quantity, casing and weather refresh remain incomplete.
-Default bool/unsigned initializer layouts and complete gameplay consumers remain
-unadmitted; numeric storage does not certify their behavior.
+Default Boolean GMST/unsigned initializer layouts and complete gameplay consumers
+remain unadmitted; the admitted Boolean INI reader does not certify those numeric
+GMST defaults or gameplay behavior.
 
 Player script-package assignment and idle phase/cursor/elapsed/wait clocks live in
 the saved shared session. Outgoing OnChange camera playback retains a pending

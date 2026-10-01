@@ -7,6 +7,7 @@ internal sealed class FalloutInstallationSettings
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RuntimeLiveContentSource, FalloutInstallationSettings> Instances = new();
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
     private Lazy<IReadOnlyDictionary<string, float>> _floatDefaults = null!;
+    private Lazy<IReadOnlyDictionary<string, bool>> _booleanDefaults = null!;
     private Lazy<FalloutRendererConfiguration> _renderer = null!;
     internal FalloutRendererConfiguration Renderer => _renderer.Value;
 
@@ -16,6 +17,9 @@ internal sealed class FalloutInstallationSettings
     {
         var settings = new FalloutInstallationSettings();
         settings._floatDefaults = new(() => FalloutExecutableStringTable.ReadFloatDefaults(
+            Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
+                source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
+        settings._booleanDefaults = new(() => FalloutExecutableStringTable.ReadBooleanDefaults(
             Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
                 source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
         settings.Add(Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "Fallout_default.ini"), true);
@@ -35,6 +39,7 @@ internal sealed class FalloutInstallationSettings
         var settings = new FalloutInstallationSettings();
         foreach (var path in paths) settings.Add(path, true);
         settings._floatDefaults = new(() => new Dictionary<string, float>());
+        settings._booleanDefaults = new(() => new Dictionary<string, bool>());
         settings.Apply(profile ?? []);
         return settings;
     }
@@ -60,6 +65,13 @@ internal sealed class FalloutInstallationSettings
             ? number : throw new NotSupportedException($"Owned float setting has no admitted default: [{section}] {key}.");
     }
     internal uint Unsigned(string section, string key) => uint.Parse(Require(section, key), CultureInfo.InvariantCulture);
+    internal bool Boolean(string section, string key)
+    {
+        if (_values.TryGetValue(section + "/" + key, out var value))
+            return int.Parse(value, CultureInfo.InvariantCulture) != 0;
+        return _booleanDefaults.Value.TryGetValue(key + ":" + section, out var enabled)
+            ? enabled : throw new NotSupportedException($"Owned Boolean setting has no admitted default: [{section}] {key}.");
+    }
     internal bool Contains(string section, string key) => _values.ContainsKey(section + "/" + key);
     internal float Number(string identity)
     {

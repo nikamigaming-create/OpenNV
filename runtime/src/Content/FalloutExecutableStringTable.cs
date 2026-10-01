@@ -33,6 +33,38 @@ internal static partial class FalloutExecutableStringTable
         return result;
     }
 
+    internal static IReadOnlyDictionary<string, bool> ReadBooleanDefaults(string path)
+    {
+        var (code, image) = Load(path);
+        return ReadBooleanInitializers(code, image.Literal, image.IsWritableObject);
+    }
+
+    internal static IReadOnlyDictionary<string, bool> ReadBooleanInitializers(ReadOnlySpan<byte> code,
+        Func<uint, string?> literal, Func<uint, bool> writableObject)
+    {
+        var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        for (var at = 0; at <= code.Length - 20; ++at)
+        {
+            var candidate = code[at..];
+            if (!candidate[..3].SequenceEqual(new byte[] { 0x55, 0x8b, 0xec })) continue;
+            uint value; int nameAt, objectAt;
+            if (candidate.Length >= 23 && candidate[3] == 0x68 && candidate[8] == 0x68 &&
+                candidate[13] == 0xb9 && candidate[18] == 0xe8)
+                (value, nameAt, objectAt) = (U32(candidate, 4), 9, 14);
+            else if (candidate[3] == 0x6a && candidate[5] == 0x68 && candidate[10] == 0xb9 && candidate[15] == 0xe8)
+                (value, nameAt, objectAt) = (unchecked((uint)(sbyte)candidate[4]), 6, 11);
+            else continue;
+            if (!writableObject(U32(candidate, objectAt))) continue;
+            var name = literal(U32(candidate, nameAt));
+            if (name is null || !Regex.IsMatch(name, @"^b[A-Za-z0-9_][A-Za-z0-9_ ]*(?::[A-Za-z0-9_ ]+)?$", RegexOptions.CultureInvariant)) continue;
+            // The admitted source constructors consume a byte, with canonical
+            // zero/one initializers. Other payloads need their own contract.
+            if (value > 1) throw new NotSupportedException($"Owned Boolean initializer is noncanonical: {name}.");
+            if (!result.TryAdd(name, value != 0)) throw new InvalidDataException($"Multiple source initializers declare {name}.");
+        }
+        return result;
+    }
+
     internal static IReadOnlyDictionary<string, uint> ReadIntegerInitializers(ReadOnlySpan<byte> code,
         Func<uint, string?> literal, Func<uint, bool> writableObject)
     {

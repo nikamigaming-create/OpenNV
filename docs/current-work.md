@@ -33,8 +33,9 @@ birth CELL. Both reached SetNumericGameSetting commands now change the shared
 session settings, and the package camera advances. CG00's stage-6 PlaySound now
 plays and completes its owned birth WAV. Its stage-8 same-package request now
 plays the outgoing source OnChange camera clip and retains the pending assignment
-until that clip completes. The subsequent source sequence stops at the unbound
-TriggerScreenBlood command, before its baby-cry sound request.
+until that clip completes. The subsequent source sequence now renders its owned
+screen blood and plays/completes a selected owned baby-cry WAV. It stops next at
+the unbound SetNoActivationSound command, preserving the executed prefix.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first manual save attempt fails because world persistence
@@ -57,6 +58,20 @@ during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at th
 unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
 the result suffix. XP reward commands, modifiers and leveling remain incomplete;
 this policy and owned component audit do not establish player advancement support.
+
+TriggerScreenBlood now shares transient C# requests across reference/results,
+startup and fallback quest execution. Owned Boolean INI defaults supply its
+enable flag; winning GMST settings supply the active-drop cap, geometry/opacity
+ranges, captured duration, live fade and texture identities. Native flat
+presentation reads both owned DDS maps and applies the independently specified
+multiplicative base blend. Synthetic winning/prefix/random/clock/cleanup/cold
+checks and an isolated owned native pixel audit pass; fading changes actual
+pixels and expiration restores the underlying canvas, with no retained frames.
+The ordinary Capital run executes its source request for ten drops and its
+following baby-cry sound. Directional color-map UV offsets, additive flares,
+color transfer, exact layering/timing/random stream and the XR final-eye adapter
+remain visible gaps. This is partial effect presentation, not blood or campaign
+parity. These effects stay outside saves and do not replay executed prefixes cold.
 
 PlaySound now shares transient C# voice ownership across reference/results,
 startup and fallback quest execution. Winning SOUN declarations supply WAV
@@ -273,9 +288,11 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached TriggerScreenBlood owner from winning settings and owned
-resources, including shared transient state and visible presentation. Preserve
-the completed stage-8 change event and its executed script prefix. Complete the
+Implement the reached SetNoActivationSound owner from source semantics and
+shared reference/activation state. Preserve the completed stage-8 camera change,
+screen-blood and baby-cry prefixes. Complete source screen-blood lighting/flare,
+color transfer and XR final-eye presentation without hiding their telemetry gaps.
+Complete the
 remaining script audio routes, loop/stop ownership, environment/submersion and
 output routing without treating the audible birth voice as full audio support.
 Trace source save eligibility and initialize the first source campaign snapshot
@@ -385,16 +402,21 @@ Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
 The fresh ordinary Capital run is
-`tmp/development-lab/ttw-player-package-change-20261001`; both session flags are true,
+`tmp/development-lab/ttw-screen-blood-20261001`; both session flags are true,
 CG00's package camera advances and its queued move enters Fallout3.esm:028138.
 Both authored karma-setting writes execute, and the owned birth sound plays and
 completes. CG00's stage-8 same-package request plays and completes the source
-OnChange clip, then retains the missing TriggerScreenBlood owner before its
-baby-cry request. The selected unfinished birth frame is
+OnChange clip, then draws ten owned blood drops and plays/completes the selected
+baby-cry WAV. It retains the missing SetNoActivationSound owner and its executed
+timer prefix. The selected unfinished birth frame is
 `local/recordings/ttw-birth-20261001/Vault-101-birth-incomplete-flat.png`; temporary
 frame data is removed. It exposes lighting and HUD gaps, not scene parity.
+Current effect checks are `tmp/screen-blood-contract.log`,
+`tmp/screen-blood-default-contract.log`, `tmp/screen-blood-owned-native.log` and
+`tmp/screen-blood-runtime-gate.log`. The isolated native fixture retains no frames;
+the ordinary run retains its next fault and no manual-save attempt.
 The prior numeric-setting run's CREATE NEW SAVE attempt retains the prior-save
-requirement failure; saving was not retried in this package check. The session
+requirement failure; saving was not retried in this effect check. The session
 quit through ordinary input with source readers drained. One transient native
 state-write loss remains retained; later state samples resumed. Audio checks are
 `tmp/script-sounds-contract.log`, `tmp/script-sounds-owned-native.log` and

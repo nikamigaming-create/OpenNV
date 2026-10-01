@@ -509,6 +509,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             var callerPlugin = bindings.Source.OwnerPlugin;
+            if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("TriggerScreenBlood requires one count.");
+                world.ScreenBlood.Trigger(source, FalloutScreenBlood.Count(Number(arguments[0])));
+                return;
+            }
             if (parts.Length == 1 && operation == "playsound")
             {
                 if (arguments.Count is < 1 or > 2) throw new InvalidDataException("PlaySound requires a sound and optional system flag.");
