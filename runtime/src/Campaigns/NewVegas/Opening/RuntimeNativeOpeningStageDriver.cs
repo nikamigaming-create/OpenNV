@@ -389,9 +389,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         if (Vitals.HitPoints == 0)
             throw new InvalidOperationException("Cannot replace a playable save after player death.");
-        if (!File.Exists(_savePath))
-            throw new InvalidOperationException(
-                "Native world state has no prior save.");
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var state = CaptureCurrentState(activeCell);
         var captured = System.Diagnostics.Stopwatch.GetTimestamp();

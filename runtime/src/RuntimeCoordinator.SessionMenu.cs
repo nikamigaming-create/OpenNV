@@ -12,9 +12,13 @@ public partial class RuntimeCoordinator
 {
     private static Dictionary<string, string>? _nextSessionOptions;
     private static bool _nextSessionContinue;
+    private static bool _nextSessionPauseAfterCheckpointLoad;
+    private static RuntimeSaveSlotMetadata? _nextSessionCheckpoint;
     private static string? _scriptEventSourceIdentity;
     private static FalloutScriptEvents? _scriptEvents;
     private bool _continueAfterRestart;
+    private bool _pauseAfterCheckpointLoad;
+    private RuntimeSaveSlotMetadata? _pendingCheckpointRestore, _restoredNativeCheckpoint;
     private bool _retiringNativeSession;
     private bool _nativeSessionTransitioning;
     private Task? _nativeMenuRead;
@@ -63,6 +67,27 @@ public partial class RuntimeCoordinator
         RuntimeLiveContentSource.Current!.SaveCompatibilityId, _nativePluginStack!, _nativeVigorContract!,
         _nativeTagSkillContract!, _nativeOpeningGrant!, _nativeTraitFarewellContract!);
 
+    internal RuntimeSaveSlotMetadata CreateNativeCheckpoint(Guid id)
+    {
+        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePlayer is null ||
+            _nativeActiveCell is null || _nativeOpeningStageDriver is null)
+            throw new InvalidOperationException("A checkpoint requires a settled native campaign session.");
+        var slot = NativeSaveSlots().Create(id, () => _nativeOpeningStageDriver.PersistWorldState(_nativeActiveCell.Cell.FormKey));
+        GD.Print($"OPENNV_NATIVE_CHECKPOINT_CREATED id={slot.Id} save={slot.Path} owner=shared-campaign-state");
+        return slot;
+    }
+
+    internal RuntimeSaveSlotMetadata LoadNativeCheckpoint(Guid id, bool pauseAfterLoad)
+    {
+        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePluginStack is null ||
+            _nativeVigorContract is null || _nativeTagSkillContract is null ||
+            _nativeOpeningGrant is null || _nativeTraitFarewellContract is null)
+            throw new InvalidOperationException("Checkpoint loading requires an indexed native source stack.");
+        var slot = NativeSaveSlots().ReadSlot(id.ToString("N"));
+        SelectNativeSave(slot, pauseAfterLoad);
+        return slot;
+    }
+
     private void SaveNativeManualSlot()
     {
         try
@@ -70,7 +95,7 @@ public partial class RuntimeCoordinator
             if (_nativeDoorLoading || _nativePlayer is null) return;
             if (_nativeOpeningStageDriver!.Vitals.HitPoints == 0)
                 throw new InvalidOperationException("Load an earlier save after death; the previous Continue save is preserved.");
-            var slot = NativeSaveSlots().Create(() => _nativeOpeningStageDriver!.PersistWorldState(_nativeActiveCell!.Cell.FormKey));
+            var slot = CreateNativeCheckpoint(Guid.NewGuid());
             GD.Print($"OPENNV_NATIVE_SAVE_SLOT_CREATED id={slot.Id} save={slot.Path}");
         }
         catch (Exception error)
@@ -132,15 +157,18 @@ public partial class RuntimeCoordinator
     }
 
     private void LoadNativeSelectedSlot(RuntimeSaveSlotMetadata slot)
+        => SelectNativeSave(slot, pauseAfterLoad: false);
+
+    private void SelectNativeSave(RuntimeSaveSlotMetadata slot, bool pauseAfterLoad)
     {
         // Validate the complete source-bound state before replacing Continue.
         _ = ReadNativeSave(slot.Path);
         NativeSaveSlots().Activate(slot.Id, preserveCurrent: true);
         GD.Print($"OPENNV_NATIVE_SAVE_SLOT_SELECTED id={slot.Id}");
-        RestartNativeSession(true);
+        RestartNativeSession(true, pauseAfterLoad, slot);
     }
 
-    private async void RestartNativeSession(bool continueSave)
+    private async void RestartNativeSession(bool continueSave, bool pauseAfterLoad = false, RuntimeSaveSlotMetadata? checkpoint = null)
     {
         if (_nativeSessionTransitioning) return;
         _nativeSessionTransitioning = true;
@@ -150,6 +178,8 @@ public partial class RuntimeCoordinator
             _nextSessionOptions = new(_options, StringComparer.OrdinalIgnoreCase);
             _nextSessionOptions.Remove("launcher"); _nextSessionOptions.Remove("new-game");
             _nextSessionContinue = continueSave;
+            _nextSessionPauseAfterCheckpointLoad = continueSave && pauseAfterLoad;
+            _nextSessionCheckpoint = continueSave ? checkpoint : null;
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
@@ -160,7 +190,8 @@ public partial class RuntimeCoordinator
         }
         catch (Exception error)
         {
-            _nextSessionOptions = null; _nextSessionContinue = false;
+            _nextSessionOptions = null; _nextSessionContinue = false; _nextSessionPauseAfterCheckpointLoad = false;
+            _nextSessionCheckpoint = null;
             _retiringNativeSession = false;
             _nativeSessionTransitioning = false;
             GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");

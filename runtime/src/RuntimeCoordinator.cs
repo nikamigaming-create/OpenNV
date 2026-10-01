@@ -94,7 +94,10 @@ public partial class RuntimeCoordinator : Node3D
             _configuration = RuntimeConfiguration.Load();
             _options = _nextSessionOptions ?? ParseOptions(OS.GetCmdlineUserArgs());
             _continueAfterRestart = _nextSessionContinue;
-            _nextSessionOptions = null; _nextSessionContinue = false;
+            _pauseAfterCheckpointLoad = _nextSessionPauseAfterCheckpointLoad;
+            _pendingCheckpointRestore = _nextSessionCheckpoint;
+            _nextSessionOptions = null; _nextSessionContinue = false; _nextSessionPauseAfterCheckpointLoad = false;
+            _nextSessionCheckpoint = null;
             if (_options.TryGetValue("parity-channel", out var parityChannel))
                 EnableParityPublisher(parityChannel, _options.GetValueOrDefault("parity-capture"));
             else if (_options.ContainsKey("parity-capture"))
@@ -130,6 +133,8 @@ public partial class RuntimeCoordinator : Node3D
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.MoveForward.PhysicalKey),
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
                     ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump());
+                harness.ConfigureCheckpoints(CreateNativeCheckpoint, LoadNativeCheckpoint, () => _nativeSessionTransitioning,
+                    () => _restoredNativeCheckpoint);
                 AddChild(harness);
             }
             GetWindow().Size = new Vector2I(

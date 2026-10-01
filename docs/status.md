@@ -41,9 +41,13 @@ and race/sex screen; ordinary Next/Done/Yes accepts the selection and closes it.
 Dad's later MatchRace completes; a fresh ordinary Hispanic selection reaches
 unbound MatchFaceGeometry. That fault remains visible. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
-processing; the clip reports two unbound non-camera targets. The first manual save
-fails at the existing prior-save requirement, so first-snapshot initialization and
-source save eligibility remain unbound. Numeric settings retain within a running
+processing; the clip reports two unbound non-camera targets. The first ordinary
+manual save now initializes a v24 campaign snapshot. Code-addressed checkpoint
+creation/load uses the shared save owner and can resume directly into pause.
+A paused reload retains character, all quest state, inventory, controls,
+transform, globals, references and the player camera-package clock exactly.
+Complete actor cold clocks, active continuations, source save eligibility and
+ordinary physical VR checkpoint acceptance remain unbound. Numeric settings retain within a running
 stack and reset to owned defaults on a fresh stack. Live skill/damage checks and
 owned TTW command checks pass; retained-consumer refresh and complete karma behavior
 remain open. Script audio uses shared transient voice ownership; menu queuing,

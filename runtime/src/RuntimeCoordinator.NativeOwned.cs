@@ -561,6 +561,13 @@ public partial class RuntimeCoordinator
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
+        if (_pauseAfterCheckpointLoad)
+        {
+            _pauseAfterCheckpointLoad = false;
+            OpenNativeSessionMenu(showSaves: false);
+        }
+        _restoredNativeCheckpoint = _pendingCheckpointRestore;
+        _pendingCheckpointRestore = null;
         DismissLoadingScreen();
     }
 
