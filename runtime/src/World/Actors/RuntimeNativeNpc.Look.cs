@@ -83,7 +83,7 @@ internal partial class RuntimeNativeNpc
         // winning BPTD owns the actual node, flags and cone, including overrides.
         _headPart = FalloutBodyPartLook.Read(records.GetEffective(records.RuntimeFormKey(0x1d)));
         _headSettings = FalloutLookSettings.Read(FalloutInstallationSettings.Read(source));
-        _headTargets = new(FalloutGameSettingFloats.Read(records, "fAIHoldDefaultHeadTrackTimer"));
+        _headTargets = new(FalloutGameSettingFloats.ReadRetained(records, "fAIHoldDefaultHeadTrackTimer", nameof(FalloutHeadTrackingState)));
         _headTargetPoint = targetPoint;
         if (_headPart is null) return;
         var bone = Skeleton.BoneIndex(_headPart.TargetNode);

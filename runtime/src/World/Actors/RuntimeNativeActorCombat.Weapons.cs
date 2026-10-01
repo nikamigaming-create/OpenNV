@@ -71,7 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var group = _enemyWeapon.AnimationGroup;
         var style = _world.CombatStyle(_state.Reference);
         _attackRange = Ranged ? _enemyWeapon.MaximumRange * _skeleton.UnitsToMetres * (style?.MaximumRangeMultiplier ?? 1) :
-            _enemyWeapon.Reach * FalloutGameSettingFloats.Read(_records, "fCombatDistance") * _skeleton.UnitsToMetres;
+            _enemyWeapon.Reach * FalloutGameSettingFloats.ReadRetained(_records, "fCombatDistance", nameof(RuntimeNativeActorCombat)) * _skeleton.UnitsToMetres;
         _movementPath = SelectPath(directory, $"locomotion/{group}fastforward", $"locomotion/{group}forward",
             $"locomotion/{(_actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male")}/mtfastforward",
             "locomotion/mtfastforward", "locomotion/mtforward", "mtforward");

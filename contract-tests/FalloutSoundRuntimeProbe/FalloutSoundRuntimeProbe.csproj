@@ -19,5 +19,7 @@
     <Compile Include="..\..\runtime\src\Content\RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
   </ItemGroup>
 </Project>

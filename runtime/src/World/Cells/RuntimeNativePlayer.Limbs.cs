@@ -83,8 +83,8 @@ internal partial class RuntimeNativePlayer
             }
 
             _crippledLegSpeedSettings ??= (
-                FalloutGameSettingFloats.Read(records, "fMoveOneCrippledLegSpeedMult"),
-                FalloutGameSettingFloats.Read(records, "fMoveTwoCrippledLegsSpeedMult"));
+                FalloutGameSettingFloats.ReadRetained(records, "fMoveOneCrippledLegSpeedMult", nameof(RuntimeNativePlayer)),
+                FalloutGameSettingFloats.ReadRetained(records, "fMoveTwoCrippledLegsSpeedMult", nameof(RuntimeNativePlayer)));
             var multiplier = count == 1 ? _crippledLegSpeedSettings.Value.One : _crippledLegSpeedSettings.Value.Two;
             if (!float.IsFinite(multiplier) || multiplier < 0)
                 throw new InvalidDataException("Source crippled-leg movement multiplier is invalid.");

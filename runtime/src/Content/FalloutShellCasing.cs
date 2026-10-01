@@ -5,7 +5,7 @@ internal sealed record FalloutShellCasing(float Speed, float DirectionVariation,
 {
     internal static FalloutShellCasing Read(FalloutPluginStack records)
     {
-        float Setting(string suffix) => FalloutGameSettingFloats.Read(records, "fGunShell" + suffix);
+        float Setting(string suffix) => FalloutGameSettingFloats.ReadRetained(records, "fGunShell" + suffix, nameof(FalloutShellCasing));
         var result = new FalloutShellCasing(Setting("EjectSpeed"), Setting("DirectionRandomize"), Setting("RotateSpeed"),
             Setting("RotateRandomize"), Setting("Lifetime"), Setting("CameraDistance"));
         if (result.Speed < 0 || result.DirectionVariation < 0 || result.RotationVariation < 0 || result.Lifetime <= 0 || result.CameraDistance < 0)

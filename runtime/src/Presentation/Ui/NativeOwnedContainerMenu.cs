@@ -28,7 +28,7 @@ internal partial class NativeOwnedContainerMenu : Control
     {
         Name = "OwnedContainerMenu"; ProcessMode = ProcessModeEnum.Always;
         _records = records; _inventories = [player, container]; _close = close; _changed = changed;
-        _askQuantityAt = Math.Max(1, FalloutGameSettingIntegers.Read(records, "iInventoryAskQuantityAt"));
+        _askQuantityAt = Math.Max(1, FalloutGameSettingIntegers.ReadRetained(records, "iInventoryAskQuantityAt", nameof(NativeOwnedContainerMenu)));
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/container_menu.xml")).Elements("menu").Single();
         _tiles = new(menu, name => FalloutGameSettingStrings.Read(records, name));
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);

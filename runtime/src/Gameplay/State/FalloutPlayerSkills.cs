@@ -22,7 +22,6 @@ internal sealed class FalloutPlayerSkills
     private readonly Func<bool> _hardcore;
     private readonly Func<IReadOnlyList<FalloutFormKey>> _acquiredPerks;
     private readonly Dictionary<(FalloutFormKey Form, string Field), FalloutFormKey[]> _links = [];
-    private readonly Dictionary<string, float> _settings = new(StringComparer.Ordinal);
     private readonly HashSet<int> _evaluating = [];
     private long _weightRevision = -1;
     private bool _weightHardcore;
@@ -134,9 +133,5 @@ internal sealed class FalloutPlayerSkills
             14 => Value(checked((int)condition.Argument1)),
             _ => throw new NotSupportedException($"Ability condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
         };
-    private float Setting(string name)
-    {
-        if (!_settings.TryGetValue(name, out var value)) _settings.Add(name, value = FalloutGameSettingFloats.Read(_records, name));
-        return value;
-    }
+    private float Setting(string name) => FalloutGameSettingFloats.Read(_records, name);
 }

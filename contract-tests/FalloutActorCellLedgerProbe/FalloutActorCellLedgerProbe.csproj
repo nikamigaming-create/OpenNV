@@ -21,5 +21,7 @@
     <Compile Include="..\..\runtime\src\Content\FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
     <Compile Include="..\..\runtime\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutActorCreatureLedger.cs" Link="FalloutActorCreatureLedger.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
   </ItemGroup>
 </Project>

@@ -66,7 +66,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void ConfigureLocomotion(FalloutPluginStack records, Func<GameplayVitals?> vitals)
     {
-        _jumpHeightMeters = checked((float)FalloutGameSettingFloats.Read(records, "fJumpHeightMin")) * UnitsToMeters;
+        _jumpHeightMeters = checked((float)FalloutGameSettingFloats.ReadRetained(records, "fJumpHeightMin", nameof(RuntimeNativePlayer))) * UnitsToMeters;
         if (!float.IsFinite(_jumpHeightMeters) || _jumpHeightMeters <= 0)
             throw new InvalidDataException("Source jump height must be finite and positive.");
         ConfigureLimbLocomotion(records, vitals);

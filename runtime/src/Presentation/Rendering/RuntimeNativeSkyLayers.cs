@@ -95,7 +95,7 @@ internal partial class RuntimeNativeSkyLayers : Node3D
             _weather = weather.Form;
             _weatherFields = records.GetEffective(weather.Form).ReadSubrecords().ToArray();
             var motion = FalloutWeatherMotion.Read(records.GetEffective(weather.Form),
-                FalloutGameSettingFloats.Read(records, "fWeatherCloudSpeedMax"));
+                FalloutGameSettingFloats.ReadRetained(records, "fWeatherCloudSpeedMax", nameof(RuntimeNativeSkyLayers)));
             _cloudRates = motion.CloudUvPerSecond;
             SetMeta("opennv_source_wind_speed", motion.WindSpeed);
             SetMeta("opennv_source_cloud_uv_rates", _cloudRates);

@@ -52,6 +52,10 @@ internal static class PerkParameterContracts
                 () => [], null, inventory, Key(7), () => Key(8), () => false, () => world.AcquiredPerks(Key(0x14)));
             var damage = new FalloutWeaponDamageResolver(records, inventory, _ => 100, () => skills.PerkEntries);
             Require(damage.Resolve(Key(0x20), 10).Amount == 30, "Winning perk value did not reach weapon damage.");
+            Require(records.NumericSettings.Set("fDamageWeaponMult", 2) && damage.Resolve(Key(0x20), 10).Amount == 60,
+                "Numeric setting mutation left an existing weapon damage owner with a stale multiplier.");
+            Require(records.NumericSettings.Set("fDamageWeaponMult", 1) && damage.Resolve(Key(0x20), 10).Amount == 30,
+                "Restored session damage multiplier did not reach the same weapon owner.");
             var quests = new FalloutQuestState(records);
             var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
                 _ => throw new InvalidOperationException("Perk commands invented a presentation effect.")));

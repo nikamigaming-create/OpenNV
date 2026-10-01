@@ -216,6 +216,21 @@ Reward commands and their modifiers remain unbound. This bounded policy follows
 the primary [SetInChargen contract](https://geckwiki.com/index.php/SetInChargen);
 it does not certify complete leveling behavior.
 
+Numeric game settings have one mutable owner on the loaded winning plugin stack.
+Their typed declarations resolve winning GMST bytes and admitted owned executable
+defaults once; session overrides feed the ordinary float/integer readers and source
+commands/functions. They stay outside campaign snapshots, following the primary
+[SetNumericGameSetting session contract](https://geckwiki.com/index.php/SetNumericGameSetting)
+and [NVSE numeric type/return contracts](https://github.com/xNVSE/NVSE/blob/master/nvse/nvse/GameSettings.cpp).
+Unknown/non-numeric setters return failure. Non-finite and undefined storage
+conversions fail before mutation. Skill, weapon damage/spread, medicine, armor and
+death-delay calculations read current values. Consumers that still copy coefficients
+register a named refresh boundary; an invalidating write fails before changing the
+setting, with those boundaries exposed in telemetry. Derived player/NPC values,
+movement, face/head clocks, HUD/quantity, casing and weather refresh remain incomplete.
+Default bool/unsigned initializer layouts and complete gameplay consumers remain
+unadmitted; numeric storage does not certify their behavior.
+
 Player script-package assignment and idle phase/cursor/elapsed/wait clocks live in
 the saved shared session. Native restoration validates winning package and clip
 hashes and samples the retained clock without replaying the begin event. Package

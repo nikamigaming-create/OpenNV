@@ -26,12 +26,12 @@ internal sealed class FalloutPlayerVitals
         if (data.Length != 11 || actor.Length != 24) throw new NotSupportedException("Player base-stat layout is unbound.");
         _baseHealth = BinaryPrimitives.ReadInt32LittleEndian(data.Span);
         var level = BinaryPrimitives.ReadInt16LittleEndian(actor.Span[8..]);
-        _healthEndurance = FalloutGameSettingFloats.Read(records, "fAVDHealthEnduranceMult");
-        _healthLevel = FalloutGameSettingFloats.Read(records, "fAVDHealthLevelMult");
-        _apBase = FalloutGameSettingFloats.Read(records, "fAVDActionPointsBase");
-        _apAgility = FalloutGameSettingFloats.Read(records, "fAVDActionPointsMult");
-        _xpBase = FalloutGameSettingIntegers.Read(records, "iXPBase");
-        _xpBump = FalloutGameSettingIntegers.Read(records, "iXPBumpBase");
+        _healthEndurance = FalloutGameSettingFloats.ReadRetained(records, "fAVDHealthEnduranceMult", nameof(FalloutPlayerVitals));
+        _healthLevel = FalloutGameSettingFloats.ReadRetained(records, "fAVDHealthLevelMult", nameof(FalloutPlayerVitals));
+        _apBase = FalloutGameSettingFloats.ReadRetained(records, "fAVDActionPointsBase", nameof(FalloutPlayerVitals));
+        _apAgility = FalloutGameSettingFloats.ReadRetained(records, "fAVDActionPointsMult", nameof(FalloutPlayerVitals));
+        _xpBase = FalloutGameSettingIntegers.ReadRetained(records, "iXPBase", nameof(FalloutPlayerVitals));
+        _xpBump = FalloutGameSettingIntegers.ReadRetained(records, "iXPBumpBase", nameof(FalloutPlayerVitals));
         State = restore ?? Derive(special, level, 0);
         State.Validate();
     }

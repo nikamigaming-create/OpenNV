@@ -44,9 +44,9 @@ internal sealed partial class NativeOwnedHudMessages : Control
         _queue = queue;
         _quests = quests ?? new(records);
         _shown = shown ?? (() => true);
-        _questFadeIn = FalloutGameSettingFloats.Read(records, "fQuestCinematicObjectiveFadeIn");
-        _questHold = FalloutGameSettingFloats.Read(records, "fQuestCinematicObjectivePauseTime");
-        _questFadeOut = FalloutGameSettingFloats.Read(records, "fQuestCinematicObjectiveFadeOut");
+        _questFadeIn = FalloutGameSettingFloats.ReadRetained(records, "fQuestCinematicObjectiveFadeIn", nameof(NativeOwnedHudMessages));
+        _questHold = FalloutGameSettingFloats.ReadRetained(records, "fQuestCinematicObjectivePauseTime", nameof(NativeOwnedHudMessages));
+        _questFadeOut = FalloutGameSettingFloats.ReadRetained(records, "fQuestCinematicObjectiveFadeOut", nameof(NativeOwnedHudMessages));
         if (_questFadeIn <= 0 || _questHold <= 0 || _questFadeOut <= 0)
             throw new NotSupportedException("Quest reminder has an unsupported fade/hold clock.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned HUD source is absent.");

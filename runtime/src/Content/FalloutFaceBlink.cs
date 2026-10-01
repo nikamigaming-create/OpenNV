@@ -4,11 +4,11 @@ internal sealed record FalloutFaceBlinkSettings(float DownSeconds, float UpSecon
     float DelayMinimum, float DelayMaximum, float LookDownSuppression)
 {
     internal static FalloutFaceBlinkSettings Read(FalloutPluginStack records) => new(
-        FalloutGameSettingFloats.Read(records, "fBlinkDownTime"),
-        FalloutGameSettingFloats.Read(records, "fBlinkUpTime"),
-        FalloutGameSettingFloats.Read(records, "fBlinkDelayMin"),
-        FalloutGameSettingFloats.Read(records, "fBlinkDelayMax"),
-        FalloutGameSettingFloats.Read(records, "fLookDownDisableBlinkingAmt"));
+        FalloutGameSettingFloats.ReadRetained(records, "fBlinkDownTime", nameof(FalloutFaceBlinkSettings)),
+        FalloutGameSettingFloats.ReadRetained(records, "fBlinkUpTime", nameof(FalloutFaceBlinkSettings)),
+        FalloutGameSettingFloats.ReadRetained(records, "fBlinkDelayMin", nameof(FalloutFaceBlinkSettings)),
+        FalloutGameSettingFloats.ReadRetained(records, "fBlinkDelayMax", nameof(FalloutFaceBlinkSettings)),
+        FalloutGameSettingFloats.ReadRetained(records, "fLookDownDisableBlinkingAmt", nameof(FalloutFaceBlinkSettings)));
 }
 
 /// <summary>The FaceGen delay/close/open queue, independent of the selected skeletal KF.</summary>

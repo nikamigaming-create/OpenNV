@@ -64,7 +64,7 @@ internal sealed partial class RuntimeNativeActorCombat
             if (turning.Length != 4) throw new InvalidDataException("Creature turn speed extent is invalid.");
             _turnSpeed = Mathf.DegToRad(FalloutProjectile.Number(turning, 0));
         }
-        else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.Read(_records, "fCharacterDefaultTurningSpeed"));
+        else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.ReadRetained(_records, "fCharacterDefaultTurningSpeed", nameof(RuntimeNativeActorCombat)));
         if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
         mover.CollisionLayer = 0; mover.CollisionMask = _mask;
         mover.FloorSnapLength = radius;
@@ -135,8 +135,8 @@ internal sealed partial class RuntimeNativeActorCombat
             }
 
             _crippledLegSpeedSettings ??= (
-                FalloutGameSettingFloats.Read(_records, "fMoveOneCrippledLegSpeedMult"),
-                FalloutGameSettingFloats.Read(_records, "fMoveTwoCrippledLegsSpeedMult"));
+                FalloutGameSettingFloats.ReadRetained(_records, "fMoveOneCrippledLegSpeedMult", nameof(RuntimeNativeActorCombat)),
+                FalloutGameSettingFloats.ReadRetained(_records, "fMoveTwoCrippledLegsSpeedMult", nameof(RuntimeNativeActorCombat)));
             var multiplier = count == 1 ? _crippledLegSpeedSettings.Value.One : _crippledLegSpeedSettings.Value.Two;
             if (!float.IsFinite(multiplier) || multiplier < 0)
                 throw new InvalidDataException("Source crippled-leg movement multiplier is invalid.");

@@ -44,7 +44,6 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
     private readonly Dictionary<FalloutFormKey, FalloutArmorDefense> _armorDefense = [];
     private readonly Dictionary<FalloutFormKey, FalloutActorDefense> _armorEffects = [];
     private readonly FalloutAbilityModifiers _defenseAbilities = new(records);
-    private (float Base, float Maximum)? _armorRating;
 
     internal FalloutActorDefense Read(FalloutFormKey actor, FalloutPlayerInventory inventory, IReadOnlyList<FalloutFormKey> equipped,
         FalloutActorTemplateSelection? selection = null)
@@ -75,7 +74,7 @@ internal sealed class FalloutActorDefenseResolver(FalloutPluginStack records)
                 _armorDefense.Add(key, armor = FalloutArmorDefense.Read(records.GetEffective(key)));
             var item = inventory.Item(key)!;
             var condition = FalloutWeaponCondition.SelectedCondition(item);
-            var rating = _armorRating ??= (FalloutGameSettingFloats.Read(records, "fArmorRatingBase"), FalloutGameSettingFloats.Read(records, "fArmorRatingMax"));
+            var rating = (Base: FalloutGameSettingFloats.Read(records, "fArmorRatingBase"), Maximum: FalloutGameSettingFloats.Read(records, "fArmorRatingMax"));
             var factor = rating.Base + condition * (rating.Maximum - rating.Base);
             armorThreshold += armor.Threshold * factor;
             armorResistance += armor.Resistance * factor;

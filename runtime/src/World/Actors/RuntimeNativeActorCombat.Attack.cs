@@ -38,9 +38,9 @@ internal sealed partial class RuntimeNativeActorCombat
             var skills = stats.ReadSubrecords().Single(field => field.Signature == "DNAM").Data;
             if (statsData.Length != 11 || skills.Length != 28)
                 throw new NotSupportedException("NPC unarmed stat/skill extent is unbound.");
-            _naturalDamage = FalloutGameSettingFloats.Read(_records, "fAVDUnarmedDamageBase") +
-                FalloutGameSettingFloats.Read(_records, "fAVDUnarmedDamageMult") * skills.Span[45 - 32];
-            _attackRange = FalloutGameSettingFloats.Read(_records, "fCombatDistance") * _skeleton.UnitsToMetres;
+            _naturalDamage = FalloutGameSettingFloats.ReadRetained(_records, "fAVDUnarmedDamageBase", nameof(RuntimeNativeActorCombat)) +
+                FalloutGameSettingFloats.ReadRetained(_records, "fAVDUnarmedDamageMult", nameof(RuntimeNativeActorCombat)) * skills.Span[45 - 32];
+            _attackRange = FalloutGameSettingFloats.ReadRetained(_records, "fCombatDistance", nameof(RuntimeNativeActorCombat)) * _skeleton.UnitsToMetres;
             var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
             _movementPath = SelectPath(directory, "locomotion/h2hfastforward", "locomotion/h2hforward",
                 $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward", "locomotion/mtforward");
