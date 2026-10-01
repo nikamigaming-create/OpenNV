@@ -10,6 +10,18 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
     internal bool DoOnce => (IdleFlags & 4) != 0;
     internal byte Procedure { get; init; }
     internal int? LocationType { get; init; }
+    internal FalloutFormKey? LocationReference { get; init; }
+    internal int LocationRadius { get; init; }
+    internal bool ContainsReferenceLocation(FalloutFormKey cell, IReadOnlyList<float> position,
+        FalloutFormKey targetCell, IReadOnlyList<float> targetPosition)
+    {
+        if (LocationType != 0) throw new NotSupportedException("Package location membership requires an explicit reference.");
+        if (position.Count != 3 || targetPosition.Count != 3 || position.Concat(targetPosition).Any(value => !float.IsFinite(value)))
+            throw new InvalidDataException("Package location membership has no finite source pose.");
+        if (cell != targetCell) return false;
+        var squared = Enumerable.Range(0, 3).Sum(index => Math.Pow((double)position[index] - targetPosition[index], 2));
+        return squared <= (double)LocationRadius * LocationRadius;
+    }
     internal IReadOnlyDictionary<string, FalloutPackageEvent> EventPrograms { get; init; } =
         new Dictionary<string, FalloutPackageEvent>();
 
@@ -30,6 +42,17 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         // use the target procedure immediately, not a missing source field.
         int? locationType = fields.Any(field => field.Signature == "PLDT")
             ? BinaryPrimitives.ReadInt32LittleEndian(Required("PLDT", 12).Span) : null;
+        FalloutFormKey? locationReference = null;
+        var locationRadius = 0;
+        if (locationType is not null)
+        {
+            var location = Required("PLDT", 12).Span;
+            locationRadius = BinaryPrimitives.ReadInt32LittleEndian(location[8..]);
+            if (locationRadius < 0) throw new InvalidDataException("Package location radius is negative.");
+            if (locationType == 0)
+                locationReference = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(location[4..])) ??
+                    throw new InvalidDataException("Near-reference package location has no reference.");
+        }
         var idleFlags = fields.Any(field => field.Signature == "IDLF") ? Required("IDLF", 1).Span[0] : (byte)0;
         if ((idleFlags & ~5) != 0) throw new NotSupportedException($"PACK {record.FormKey} has unbound idle flags {idleFlags:x2}.");
         var idleCount = fields.Any(field => field.Signature == "IDLC") ? Required("IDLC", 1).Span[0] : 0;
@@ -73,7 +96,13 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         FinishEvent();
         return new(record.FormKey, FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span),
             idleFlags, timer, idles, events)
-        { Procedure = procedure, LocationType = locationType, EventPrograms = programs };
+        {
+            Procedure = procedure,
+            LocationType = locationType,
+            LocationReference = locationReference,
+            LocationRadius = locationRadius,
+            EventPrograms = programs
+        };
     }
 }
 

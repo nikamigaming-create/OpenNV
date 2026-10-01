@@ -316,6 +316,7 @@ InputControlContracts.Run();
     PlayerMoveContracts.Run();
     LoadingScreenContracts.Run();
     CharacterGenerationContracts.Run();
+    PlayerScriptPackageContracts.Run();
     QuestMenuContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);

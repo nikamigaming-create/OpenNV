@@ -27,9 +27,12 @@ actual Capital/Mojave message. Selecting Capital starts CG00's owned Fallout 3
 intro movie; ordinary Escape interrupts it and resumes the source result program.
 That continuation now executes SetLocationSpecificLoadScreensOnly and SetInCharGen
 through shared session state, then reaches CG00 stage 5's player script package.
-The source package requires travel/location ownership before its camera animation;
-its failure prevents the subsequent move into the birth CELL. TTWStart retains a
-separate TTW_EnableRadioFix fault. Fallout 3 character creation,
+That package now accepts its winning explicit reference location, starts the owned
+birth camera clip and lets the subsequent source player move load Vault 101's
+birth CELL. The result then stops at SetNumericGameSetting; package advancement
+and the birth sequence remain stalled. The loaded CELL reports 102 missing runtime
+references, and the camera clip reports two unbound non-camera targets. TTWStart
+retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice screenshot is retained privately. Recording
 is off. Synthetic bootstrap, conditional stage execution, winning renamed skill
@@ -44,6 +47,14 @@ during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at th
 unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
 the result suffix. XP reward commands, modifiers and leveling remain incomplete;
 this policy and owned component audit do not establish player advancement support.
+
+Player script-package assignment, source identity, idle phase/cursor and elapsed/wait
+clocks now retain in the saved shared session. Cold native component checks preserve
+the camera sample and subsequent event/idle remainder, reject changed owned clips,
+and pause package clocks while source player movement is pending. Explicit-location
+idles require the matching CELL and source radius; unreached traversal still fails
+visibly. Deferred change/end animations, nonempty package event scripts/topics,
+editor-location semantics, body targets and matched event timing remain unbound.
 
 Loading-screen eligibility now resolves winning LSCR direct CELL/WRLD and signed
 world-grid identities, with the shared location-only policy retained cold. Native
@@ -219,11 +230,15 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement general player script-package travel/location ownership: the reached
-CG00PlayerSection0 PACK has procedure 6 and an explicit reference location, while
-the current animation owner rejects every PLDT type other than 3. Preserve the
-source stage-5 prefix and execute its birth-CELL move through the ordinary world
-owner. Complete the deferred XP level-cap, allocation, LevelUpMenu and reward
+Implement shared mutable numeric GMST ownership for the reached SetNumericGameSetting
+commands, including winning/default settings, every live consumer and cold-restart
+semantics. The primary SetNumericGameSetting contract makes these changes session
+scoped rather than save baked; do not serialize them as permanent player values.
+Preserve CG00's stage-5/package and birth-CELL movement prefixes. Trace and repair
+the loaded birth CELL's missing runtime references and two unbound non-camera clip
+targets. Complete player package traversal, editor origins, event scripts/topics
+and deferred change/end animations without named-location success paths. Complete
+the deferred XP level-cap, allocation, LevelUpMenu and reward
 owners, plus TTW radio-worldspace dependency behavior, without discarding failed
 prefixes. TTW's source
 opening choice must lead into Fallout 3's authored character creation, exit,
@@ -323,10 +338,15 @@ Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
 The fresh ordinary Capital run is
-`tmp/development-lab/ttw-chargen-20260930`; both session flags are true, and CG00's
-stage-5 player package fails before its queued birth-CELL move. The session quit
+`tmp/development-lab/ttw-player-package-20260930`; both session flags are true, CG00's
+stage-5 package starts its owned clip and its queued move enters Fallout3.esm:028138.
+SetNumericGameSetting stops the result continuation. The session quit
 through ordinary input with source readers drained. A transient native state-write
-loss warning remains retained; later state samples resumed. Character checks are
+loss warning remains retained; later state samples resumed. Package checks are
+`tmp/player-package-contract.log`, `tmp/player-package-owned-native.log`,
+`tmp/player-package-cold-save.log` and `tmp/player-package-runtime-gate.log`.
+Native cold/camera checks are explicitly isolated owned component evidence, with
+recording off. Character checks are
 `tmp/character-generation-contract.log`, `tmp/character-generation-owned.private.json`,
 `tmp/character-generation-cold-save.log` and `tmp/character-generation-runtime-gate.log`.
 The owned command audit is explicitly isolated component evidence. Recording is

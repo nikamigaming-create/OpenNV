@@ -199,8 +199,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                     // be resident. Reevaluate without deleting any base package.
                     EvaluateActorPackages(effect.Target.Value, false);
                 }
-                else _playerPackage!.Apply(effect.Argument is { } package ? FalloutDialogueTopic.Text(_pluginStack.GetEffective(package)
-                    .ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span) : null);
+                else _playerPackage!.Apply(effect.Argument);
                 break;
             case FalloutReferenceEffectKind.ImageSpace:
                 if (effect.Enable) _imageSpaceState.Apply(FalloutImageSpaceModifierReader.Read(_pluginStack.GetEffective(effect.Target!.Value)));

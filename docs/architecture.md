@@ -216,6 +216,16 @@ Reward commands and their modifiers remain unbound. This bounded policy follows
 the primary [SetInChargen contract](https://geckwiki.com/index.php/SetInChargen);
 it does not certify complete leveling behavior.
 
+Player script-package assignment and idle phase/cursor/elapsed/wait clocks live in
+the saved shared session. Native restoration validates winning package and clip
+hashes and samples the retained clock without replaying the begin event. Package
+clocks pause while a queued source player move is pending; ordinary idles require
+their explicit reference CELL/radius, while OnBegin camera playback may start at
+assignment. Unreached traversal, editor origins, nonempty event scripts/topics,
+deferred change/end animations and non-camera body channels remain explicit gaps.
+This component boundary follows the primary [PACK layout](https://tes5edit.github.io/fopdoc/FalloutNV/Records/PACK.html)
+and [AddScriptPackage behavior](https://geckwiki.com/index.php?title=AddScriptPackage).
+
 Loading policy belongs to that shared script session, including pre-world source
 results and cold restoration. LSCR location filters resolve each winning record's
 direct CELL/WRLD identity or signed world-grid coordinates before native selection.

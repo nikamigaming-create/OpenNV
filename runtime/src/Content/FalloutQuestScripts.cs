@@ -98,13 +98,20 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
 }
 
 internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
-    bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false);
+    bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
+    FalloutPlayerScriptPackageSnapshot? PlayerPackage = null);
 internal sealed class FalloutScriptSession
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
     internal bool LocationSpecificLoadScreensOnly { get; set; }
     internal bool InCharGen { get; private set; }
+    internal FalloutPlayerScriptPackageSnapshot? PlayerPackage { get; private set; }
+    internal void PublishPlayerPackage(FalloutPlayerScriptPackageSnapshot? state)
+    {
+        state?.Validate();
+        PlayerPackage = state;
+    }
     internal void SetInCharGen(bool enabled, Action? requireLevelUpOwner)
     {
         // Leaving chargen consumes earned XP immediately. Never clear the flag
@@ -119,14 +126,16 @@ internal sealed class FalloutScriptSession
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage);
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
             throw new InvalidDataException("Saved script session state is invalid.");
+        state.PlayerPackage?.Validate();
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         InCharGen = state.InCharGen;
+        PlayerPackage = state.PlayerPackage;
         _achievements.Clear(); _achievements.UnionWith(state.Achievements);
     }
 }

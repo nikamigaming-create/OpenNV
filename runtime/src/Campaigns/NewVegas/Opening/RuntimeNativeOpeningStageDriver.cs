@@ -287,7 +287,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     public override void _Ready()
     {
-        _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player);
+        _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell);
         _speech = new RuntimeNativeSpeech();
         _speech.InfoCompleted += _ =>
         {
