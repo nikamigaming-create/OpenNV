@@ -171,8 +171,8 @@ internal partial class RuntimeNativeNpc
         }
         if (package.Events.GetValueOrDefault(kind) is { } idle)
         {
-            if (kind == "POCA")
-                throw new NotSupportedException("Package-change idle needs deferred replacement ownership.");
+            // A change event selects its source pose without an invented completion
+            // barrier. Its IDLE may loop forever; a later event can replace it.
             PlayIdle(_aiStack!, idle, "package-event");
         }
         GD.Print($"OPENNV_NATIVE_PACKAGE_EVENT reference={Appearance.Reference} package={package.Form} event={kind} owner=actor-procedure");
@@ -246,7 +246,7 @@ internal partial class RuntimeNativeNpc
                 _aiPackage = null;
                 _packageIdleSource = null;
                 _packageIdles = null;
-                _travelActive = false;
+                _travelProgress?.Cancel();
                 ClearFurniture();
                 _dialoguePackage = null; _dialoguePackageRequested = false;
                 _patrol = null; _patrolProgress = null;
@@ -277,6 +277,7 @@ internal partial class RuntimeNativeNpc
                 StartTravel(selected, reference);
                 _aiPackage = selected;
                 _packageEvents!.Change(_packageIdleSource);
+                CompletePendingTravel();
                 return;
             }
             BeginFurniturePackage(selected, reference, furniture, initializing);

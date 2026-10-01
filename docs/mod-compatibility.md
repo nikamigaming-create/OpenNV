@@ -154,7 +154,10 @@ the source campaign-choice message. Cold restoration retains the pending choice.
 Ordinary configured TTW New Game now reaches the actual Capital/Mojave choice,
 Fallout 3 birth, parent dialogue, gender/name input and the owned gene projector.
 Its source pages accept a shared selection and close through ordinary input;
-MatchRace and stationary actor/package-change animation still fail visibly.
+Initial-sample actor arrival and package-change IDLE presentation now pass
+synthetic, owned native and ordinary opening checks; Dad/Dr. Li retain source
+poses without Forward. MatchRace still fails visibly, and birth HP/AP visibility
+requires its source control owner. Complete actor timing/restoration remains open.
 Further Fallout 3 progression, authored train travel and full dependencies remain
 unverified. These checks do not establish TTW campaign or complete mod support.
 Keep reports and all mod,

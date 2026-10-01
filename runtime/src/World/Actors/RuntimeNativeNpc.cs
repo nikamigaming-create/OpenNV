@@ -222,7 +222,6 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                     _ => throw new NotSupportedException($"Source animation cycle {sequence.CycleType} has no clock owner."),
                 };
             }
-            var wasTraveling = _travelActive;
             if (_baseAnimation is not null)
             {
                 _baseElapsedSeconds += delta;
@@ -250,10 +249,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                 if (_sitting == 2) CompleteFurnitureEntry();
                 else if (_sitting == 4) CompleteFurnitureExit();
             }
-            if (wasTraveling && !_travelActive)
-            {
-                CompleteTravel();
-            }
+            CompletePendingTravel();
             AdvanceDialoguePackage();
             AdvanceHeadTracking((float)delta);
             AdvanceFaceAnimation(delta);

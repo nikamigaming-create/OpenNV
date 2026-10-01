@@ -40,8 +40,20 @@ winning model, XML, font, source surfaces and shared draft supply presentation a
 input. Acceptance closes the menu and retains ordinary source continuation.
 Source drift and unsupported overlapping requests fail visibly. Synthetic
 associations, native model/input/default restoration and ordinary TTW opening
-checks cover this bounded owner; MatchRace, actor package-change poses, matched
+checks cover this bounded owner; MatchRace, opening HUD visibility, matched
 portrait/effect/close timing and XR final-eye presentation remain unverified.
+
+GamebryoRootMotionTravel advances the winning NAVM corridor using owned KF
+displacement. It retains arrivals reached by the initial zero-distance sample;
+RuntimeNativeNpc consumes them after package binding and on later frame arrival,
+then selects stationary locomotion and delivers completion once. Cancellation
+retires pending delivery. NPC package-change events use the shared owned IDLE
+clock and source-priority layers; forever-loop poses do not impose an invented
+replacement barrier. The package's script still precedes its idle, and failed
+events retain their executed prefix and failure latch. Synthetic travel contracts,
+owned Dad/Dr. Li package changes and ordinary birth input cover this bounded
+repair. Actor cold restoration, animation group interruption/blending, Must
+Complete end-idle waits and matched event/pose timing remain unbound.
 
 [Say](https://geckwiki.com/index.php?title=Say) and
 [SayTo](https://geckwiki.com/index.php?title=SayTo) share RuntimeNativeSpeech's

@@ -87,9 +87,18 @@ projector, navigates its source pages and accepts the shared selection. The menu
 releases its pause and quits with readers drained. A requested private screenshot
 is retained. Overlapping menu replacement, portrait/effect parity, source close
 timing and XR final-eye presentation remain unverified. The user-observed walking
-during the gender question is reproduced: Dad has arrived at his source marker but
-retains Forward, and his package-change idle reports missing deferred replacement
-ownership. These faults remain visible; the projector does not complete chargen.
+during the gender question is repaired: root-motion travel retains its initial
+zero-distance arrival until the package is bound, consumes completion once and
+releases Forward. Package-change events play their winning IDLE without an
+invented finish barrier on forever-loop poses. Synthetic distance/arrival/cancel/
+malformed checks and an owned native Dad/Dr. Li fixture pass six initial-sample
+package changes with stationary bone motion. A fresh ordinary opening completes
+eight speech commands and retains the authored parent poses through character
+creation. Its requested 30-second audio clip has no sampled Forward or actor
+package errors. Actor cold restoration, group interruption/blending, Must Complete
+end-idle waits and matched event/pose timing remain unverified. HP/AP visibility
+during birth is incorrect and requires the source HUD control owner. MatchRace
+and further chargen remain unbound; neither actor nor campaign parity is claimed.
 
 Character-generation policy is shared by reference/results, fallback quest scripts
 and pre-world startup, and retains cold with a false legacy default. Deferred XP
@@ -342,9 +351,8 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Repair the reproduced stationary actors retaining Forward and their reached
-package-change idle/deferred replacement owner. Implement MatchRace through
-source-backed actor state. Preserve the ordinary gender,
+Repair source HUD visibility during the opening; HP/AP must follow its authored
+controls. Implement MatchRace through source-backed actor state. Preserve the ordinary gender,
 parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
 screen-blood and activation-feedback behavior. Complete further source dialogue
 arbitration/arguments and matched INFO-result/SayToDone timing. Complete source screen-blood lighting/flare,
@@ -458,20 +466,20 @@ identify the next source owners. The requested current-build screenshot is
 Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
-The fresh ordinary Capital run is `tmp/development-lab/ttw-gene-projector-20261001`.
-It selects Girl, completes eight source speech commands, accepts Wanderer,
-opens the source gene projector and accepts its selection through Next/Done/Yes.
-The menu closes; Dad's stage continuation reports MatchRace. Its gender-question
-telemetry reproduces the stationary Forward/package-change fault. Startup
+The fresh ordinary Capital run is `tmp/development-lab/ttw-birth-actors-20261001`.
+It selects Girl and completes eight source speech commands. Source controls
+accept a name and the projector selection; Dad's continuation reports MatchRace.
+Gender-question samples retain owned Dad/Dr. Li poses and stationary Idle with
+no actor package errors. Startup
 telemetry reports interval overruns, and other reference
 GetLinkedRef faults, 83 missing runtime references and two camera-body targets
 remain visible. The run quits with source readers drained. Current checks are
-`tmp/gene-declarations.log`, `tmp/gene-owned-audit.log` and `tmp/gene-runtime-gate.log`.
+`tmp/actor-contract.log`, `tmp/actor-owned-audit.log` and `tmp/actor-runtime-gate.log`.
 The inspected private projector frame is
 `local/recordings/ttw-birth-20261001/TTW-gene-projector-flat.png`.
 The inspected private
-MP4 is `local/recordings/ttw-birth-20261001/flat-ttw-birth-dialogue-20261001.mp4`:
-30 seconds, 1280x720, 900 output frames, 839 distinct source draws and process
+MP4 is `local/recordings/ttw-birth-20261001/flat-ttw-birth-actors-20261001.mp4`:
+30 seconds, 1280x720, 900 output frames, 616 distinct source draws and process
 audio. Its sidecar retains repeated frames; no audiovisual parity is claimed.
 Recording is off and temporary inspection frames are removed. Current checks are
 `tmp/sayto-contract.log`, `tmp/sayto-declarations.log`,

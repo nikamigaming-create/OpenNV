@@ -22,6 +22,7 @@ internal partial class RuntimeNativeNpc
         _aiPackage = package;
         StartTravel(package, wait);
         _packageEvents!.Change(_packageIdleSource);
+        CompletePendingTravel();
     }
 
     private void AdvanceDialoguePackage()
@@ -39,10 +40,13 @@ internal partial class RuntimeNativeNpc
         if (GlobalPosition.DistanceTo(target) > dialogue.ActivationDistance * Skeleton.UnitsToMetres)
         {
             if (!_travelActive)
+            {
                 StartTravelTo(_aiPackage!, dialogue.Target, new(Basis, GetParent<Node3D>().ToLocal(target)), "dialogue-target");
+                CompletePendingTravel();
+            }
             return;
         }
-        _travelActive = false;
+        _travelProgress?.Cancel();
         PlayLocomotion(false);
         _dialoguePackageRequested = true;
         (BeginPackageDialogue ?? throw new NotSupportedException("Dialogue package has no conversation owner."))(dialogue, () =>

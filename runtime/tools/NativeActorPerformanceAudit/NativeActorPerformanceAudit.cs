@@ -10,6 +10,13 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--package-arrival", var baseRoot, var mod, var modRoot, var arrivalCell,
+                var arrivalActors, var arrivalQuest, var arrivalStages, .. var dependencies])
+            {
+                ExercisePackageArrival(baseRoot, mod, modRoot, arrivalCell, arrivalActors, arrivalQuest, arrivalStages, dependencies);
+                GetTree().Quit();
+                return;
+            }
             if (args is ["--patrol-idles", var patrolRoot, var patrolReference, var patrolPackage])
             {
                 ExercisePatrolIdles(patrolRoot, patrolReference, patrolPackage);
