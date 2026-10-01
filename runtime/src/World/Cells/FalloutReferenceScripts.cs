@@ -524,6 +524,20 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     FalloutScriptSounds.SystemFlag(Number(arguments[1])));
                 return;
             }
+            if (parts.Length == 1 && operation == "setnoactivationsound")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("SetNoActivationSound requires one SOUN form.");
+                var sound = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function, UserFunction);
+                if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
+                world.NoActivationSound.Set(sound.FormKey(records));
+                return;
+            }
+            if (parts.Length == 1 && operation == "clearnoactivationsound")
+            {
+                if (arguments.Count != 0) throw new InvalidDataException("ClearNoActivationSound takes no arguments.");
+                world.NoActivationSound.Clear();
+                return;
+            }
             if (parts.Length == 1 && operation == "setnumericgamesetting")
             {
                 FalloutNumericGameSettingCommands.Set(records, arguments, Number,

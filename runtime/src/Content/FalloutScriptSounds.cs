@@ -31,6 +31,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
     internal string? LastDisposition { get; private set; }
     internal string? LastError { get; private set; }
     internal int ActiveVoices => _voices.Count;
+    internal bool IsActive(long id) => _voices.ContainsKey(id);
     internal static bool SystemFlag(double value) => double.IsFinite(value) && value == Math.Truncate(value) &&
         value >= int.MinValue && value <= int.MaxValue ? value != 0 :
         throw new InvalidDataException("PlaySound system flag must be a signed integer.");

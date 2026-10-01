@@ -194,6 +194,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutScriptMenus Menus { get; } = new();
     private FalloutScriptSounds? _sounds;
     internal FalloutScriptSounds Sounds => _sounds ??= new(records, Menus);
+    private FalloutNoActivationSound? _noActivationSound;
+    internal FalloutNoActivationSound NoActivationSound => _noActivationSound ??= new(records, Sounds);
     private FalloutScreenBlood? _screenBlood;
     internal FalloutScreenBlood ScreenBlood => _screenBlood ??= new(records);
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _instances = [];
