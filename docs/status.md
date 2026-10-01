@@ -41,7 +41,10 @@ and race/sex screen; ordinary Next/Done/Yes accepts the selection and closes it.
 Dad's later MatchRace completes; a fresh ordinary Hispanic female selection also
 executes four MatchFaceGeometry commands, completes twelve speeches and reaches
 CG00 stage 80's trait menu. Ordinary trait confirmation accepts zero traits;
-the subsequent Dad/Dr. Li speech reports no eligible INFO. That
+empty selections now deliver deferred, coalesced SayToDone without audio or an
+invented INFO. A fresh ordinary run starts Dad's stage-80 line, then Mom's
+overlapping voice exposes the remaining single-voice failure. The traits panel
+still needs its winning owned Fallout presentation. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first ordinary
 manual save now initializes a campaign snapshot. Current writes use v25 while

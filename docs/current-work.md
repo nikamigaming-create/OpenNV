@@ -60,8 +60,11 @@ screen. Ordinary Next/Done/Yes accepts the selection and closes the menu;
 Dad's subsequent source MatchRace now completes. A fresh ordinary Hispanic
 female selection also executes four MatchFaceGeometry commands, completes twelve
 speech commands and reaches CG00 stage 80's trait menu. Ordinary trait confirmation
-accepts zero selected traits; subsequent Dad/Dr. Li speech reports no eligible
-INFO in the next source topic. The active CG00 quest script remains running.
+accepts zero selected traits. Empty Say/SayTo selections now register deferred,
+topic-filtered SayToDone instead of faulting or rebinding an active voice.
+A fresh ordinary opening delivers those empty events and starts Dad's first
+stage-80 line; Mom then requests an overlapping actual voice, exposing the
+remaining single-voice arbitration failure. The active CG00 quest script remains running.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first ordinary manual save now initializes a campaign
@@ -94,7 +97,13 @@ background quest stage changes. Both protected saves remain unchanged.
 
 Say/SayTo share winning actor-trait/quest selection, positive integer forced
 subtitle admission, response voices, INFO results and topic-filtered SayToDone
-events. GetPCIsSex reads the current shared player state. Say's extra actor/audio
+events. Empty selections coalesce actor/topic marks, retain the calling suffix,
+and execute each matching/unfiltered completion block once; pending events block
+saving and failed delivery retains its prefix. Synthetic contracts and an isolated
+owned source/body/audio fixture pass. Another actor's empty request leaves Dad's
+actual voice/lip/subtitle intact and does not count as spoken dialogue. See
+[scripted speech completion](scripted-speech-completion.md). GetPCIsSex reads the
+current shared player state. Say's extra actor/audio
 arguments, SayTo's fourth look argument, other listeners, competing voices and
 matched result/event timing remain unbound. Synthetic typed-topic/order/prefix/
 cold-local contracts and an isolated owned native subtitle pixel fixture pass.
@@ -411,9 +420,13 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Resolve the reached Dad/Dr. Li dialogue selection failure after CG00 stage 80 and
-the authored ragdoll accumulation-root rotation failure on the post-face cold
-load. Preserve the verified face geometry and MatchRace family/base/cold behavior and
+Replace the generic traits panel with its winning owned Fallout menu. TTW's
+winning opening script requests ShowTraitMenu after the birth naming/appearance
+sequence; source timing and presentation are separate owners. Bind independent
+actor voices for Mom/Dad's reached simultaneous requests at CG00 stage 80,
+including speech/subtitle/event ownership, and resolve the authored ragdoll
+accumulation-root rotation failure on the post-face cold load.
+Preserve deferred empty completion, verified face geometry and MatchRace family/base/cold behavior and
 source HUD visibility, ordinary gender,
 parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
 screen-blood and activation-feedback behavior. Complete further source dialogue
@@ -488,7 +501,13 @@ during development except for a requested visual check.
 
 ## Candidate and private continuation
 
-Current face checks are `tmp/match-face-contract.log`, `tmp/match-face-owned.log`
+Current speech checks are `tmp/speech-empty-contract.log` and
+`tmp/speech-empty-owned.stdout.log`; the ordinary input run is
+`tmp/development-lab/ttw-speech-empty-20261001/`. It reaches the traits menu,
+completes twelve voiced commands, delivers the empty-selection gap and starts
+Dad's stage-80 voice. Mom's overlapping request remains a visible failure; no
+later campaign state is proved. Traits still use the generic panel. Recording
+is off. Current face checks are `tmp/match-face-contract.log`, `tmp/match-face-owned.log`
 and `tmp/match-face-runtime-gate.log`; the cold audit is
 `tmp/match-face-checkpoint.log`. `tmp/match-face-preset-order.log` confirms all
 4,220 native NPC list entries against first registration in a matched vanilla/DLC

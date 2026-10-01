@@ -28,7 +28,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
-    IReadOnlySet<FalloutFormKey>? TriggerReferences = null, FalloutFormKey? Topic = null);
+    IReadOnlySet<FalloutFormKey>? TriggerReferences = null, FalloutFormKey? Topic = null,
+    IReadOnlySet<FalloutFormKey>? Topics = null);
 
 // Dispatches authored object-script blocks against world-owned locals. Functions
 // and effects use the same authoritative owners in a lab or a presentation host.
@@ -63,9 +64,18 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             if (item is null || string.IsNullOrWhiteSpace(item.Name) || !admitted.TryAdd(item.Name, item))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
-            if (item.Name.Equals("SayToDone", StringComparison.OrdinalIgnoreCase) &&
-                (item.Topic is not { } topic || records.GetEffective(topic).Signature != "DIAL"))
-                throw new InvalidDataException("SayToDone has no typed source dialogue topic.");
+            if (item.Name.Equals("SayToDone", StringComparison.OrdinalIgnoreCase))
+            {
+                if (item.Topics is { } topics)
+                {
+                    if (item.Topic is not null || topics.Count == 0 || topics.Any(topic => records.GetEffective(topic).Signature != "DIAL"))
+                        throw new InvalidDataException("SayToDone has absent, conflicting or untyped source dialogue topics.");
+                    admitted[item.Name] = item with { Topics = new HashSet<FalloutFormKey>(topics) };
+                }
+                else if (item.Topic is not { } topic || records.GetEffective(topic).Signature != "DIAL")
+                    throw new InvalidDataException("SayToDone has no typed source dialogue topic.");
+            }
+            else if (item.Topics is not null) throw new InvalidDataException("Topic registration belongs to SayToDone.");
         }
         var instance = world.Get(reference);
         var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events);
@@ -100,7 +110,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     {
                         var topic = program!.Bindings.Form(block.Filter);
                         if (topic.Signature != "DIAL") throw new InvalidDataException("SayToDone source filter is not a DIAL form.");
-                        if (topic.FormKey != item.Topic) continue;
+                        if (!(item.Topics?.Contains(topic.FormKey) ?? topic.FormKey == item.Topic)) continue;
                     }
                     else
                     {
