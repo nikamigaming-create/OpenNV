@@ -37,7 +37,6 @@ internal static partial class FalloutNativeTraitFarewellResolver
     private const short ExitTriggerFromStage = 110;
     private const short FarewellStage = 115;
     private const short CompletedStage = 200;
-    private const int MaximumTraits = 2;
     private const int PrimitiveBytes = 32;
 
     internal static FalloutNativeTraitFarewellContract Resolve(
@@ -165,7 +164,7 @@ internal static partial class FalloutNativeTraitFarewellResolver
             StringComparer.OrdinalIgnoreCase);
         return new FalloutNativeTraitFarewellContract(
             traits,
-            MaximumTraits,
+            FalloutTraitMenuSelection.ReadMaximum(stack),
             TraitMenuStage,
             triggerReferences[0],
             dimensions,

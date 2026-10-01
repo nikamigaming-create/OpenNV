@@ -300,10 +300,10 @@ internal sealed partial class FalloutUiComponentStore
         if (token.Equals("screen()", StringComparison.OrdinalIgnoreCase) ||
             token.Equals("globals()", StringComparison.OrdinalIgnoreCase))
             throw new NotSupportedException($"Owned UI source {token} needs a presentation trait owner.");
-        if (token.StartsWith("sibling(", StringComparison.OrdinalIgnoreCase) && token.EndsWith(')'))
-            return tile.Parent?.Children.FirstOrDefault(child => child.Name.Equals(token[8..^1], StringComparison.OrdinalIgnoreCase));
-        if (token.StartsWith("child(", StringComparison.OrdinalIgnoreCase) && token.EndsWith(')'))
-            return tile.Children.FirstOrDefault(child => child.Name.Equals(token[6..^1], StringComparison.OrdinalIgnoreCase));
+        if (FalloutMenuXml.RelativeName(token, "sibling") is { } sibling)
+            return tile.Parent?.Children.FirstOrDefault(child => child.Name.Equals(sibling, StringComparison.OrdinalIgnoreCase));
+        if (FalloutMenuXml.RelativeName(token, "child") is { } childName)
+            return tile.Children.FirstOrDefault(child => child.Name.Equals(childName, StringComparison.OrdinalIgnoreCase));
         if (token.Contains('/', StringComparison.Ordinal) || token.Contains('\\', StringComparison.Ordinal))
             return ResolveTile(Split(token), alt: true);
         var menu = _menus.Values.FirstOrDefault(value => value.Root.Name.Equals(tile.MenuName, StringComparison.OrdinalIgnoreCase));

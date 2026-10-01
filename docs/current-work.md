@@ -59,8 +59,15 @@ The continuation now opens TTW's owned gene-projector NIF and source race/sex
 screen. Ordinary Next/Done/Yes accepts the selection and closes the menu;
 Dad's subsequent source MatchRace now completes. A fresh ordinary Hispanic
 female selection also executes four MatchFaceGeometry commands, completes twelve
-speech commands and reaches CG00 stage 80's trait menu. Ordinary trait confirmation
-accepts zero selected traits. Empty Say/SayTo selections now register deferred,
+speech commands and reaches CG00 stage 80's trait menu. The generic trait panel is
+replaced by its [winning Fallout menu](authored-trait-menu.md), with source fonts,
+artwork, descriptions, selection markers and Reset/Done controls. Its maximum and
+singular/plural counters read winning settings. Synthetic selection/override
+checks and an owned native pointer/keyboard/reset/acceptance/pixel-restoration
+fixture pass without retained frames. Fresh ordinary TTW input reaches this menu
+and accepts Done with zero traits; the session quits with readers drained.
+Perk eligibility/ranks, scrollbar dragging, sound, timing and matched retail/XR
+pixels remain unbound. Empty Say/SayTo selections now register deferred,
 topic-filtered SayToDone instead of faulting or rebinding an active voice.
 A fresh ordinary opening delivers those empty events and starts Dad's first
 stage-80 line; Mom then requests an overlapping actual voice, exposing the
@@ -420,9 +427,7 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Replace the generic traits panel with its winning owned Fallout menu. TTW's
-winning opening script requests ShowTraitMenu after the birth naming/appearance
-sequence; source timing and presentation are separate owners. Bind independent
+Bind independent
 actor voices for Mom/Dad's reached simultaneous requests at CG00 stage 80,
 including speech/subtitle/event ownership, and resolve the authored ragdoll
 accumulation-root rotation failure on the post-face cold load.

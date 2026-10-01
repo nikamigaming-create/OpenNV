@@ -7,11 +7,16 @@ internal static class UiComponentProbe
     {
         var document = FalloutMenuXml.Parse(Encoding.UTF8.GetBytes(
             "<menu name='StartMenu'><rect name='Parent'><rect name='Item'><value>2</value><label>base</label></rect>" +
-            "<rect name='Item'><value>3</value></rect><rect name='Mirror'><value><copy src='parent()' trait='childcount'/></value></rect></rect></menu>"));
+            "<rect name='Item'><value>3</value></rect><rect name='Mirror'><value><copy src='parent()' trait='childcount'/></value>" +
+            "<relative><copy src='sibling(item' trait='value'/></relative><absolute><copy src='sibling(ITEM)' trait='value'/></absolute></rect></rect></menu>"));
         var store = FalloutUiComponentStore.Synthetic(document.Elements("menu").Single());
         Require(store.GetFloat("StartMenu/Parent/Item:1/value") == 3, "Indexed UI child lookup failed.");
         Require(store.GetFloat("StartMenu/Parent/*:1/value", alt: true) == 3, "Alt wildcard UI child lookup failed.");
         Require(store.GetFloat("StartMenu/Parent/Mirror/value") == 3, "UI source trait evaluation failed.");
+        Require(store.GetFloat("StartMenu/Parent/Mirror/relative") == 2 && store.GetFloat("StartMenu/Parent/Mirror/absolute") == 2,
+            "Owned case-insensitive relative tile lookup lost an attribute-terminated name.");
+        Require(FalloutMenuXml.Number(new("value", new System.Xml.Linq.XElement("copy", -2), new System.Xml.Linq.XElement("abs", 0)),
+            (_, _) => throw new InvalidOperationException()) == 2, "Source UI absolute value failed.");
         Require(store.GetString("StartMenu/Parent/Item/label") == "base", "UI string read failed.");
         Require(store.SetFloat("StartMenu/Parent/Item:0/value", 7), "UI float write was rejected.");
         Require(store.GetFloat("StartMenu/Parent/Item/value") == 7, "UI float write did not own the new value.");

@@ -93,6 +93,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal Action<FalloutFormKey, IReadOnlySet<FalloutFormKey>>? SayToCompleted { get; set; }
     internal object? PlayerPackageState => _playerPackage?.State;
     internal object? CharacterCreationState => _raceSexEntry?.State;
+    internal object? TraitMenuState => _traitEntry?.State;
     internal object? VigorState => _vigorEntry?.State;
     internal IEnumerable<uint> ActiveMenus()
     {
@@ -609,13 +610,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _traitEntry = new RuntimeNativeTraitEntry();
         AddChild(_traitEntry);
         _traitEntry.Accepted += AcceptTraits;
-        _traitEntry.Configure(_traitFarewellContract, _traits);
+        _traitEntry.Failed += error => ExecutionError = error.Message;
+        _traitEntry.Configure(_pluginStack, _traitFarewellContract, _traits);
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_TRAITS_OPEN stage={Stage} " +
             $"choices={_traitFarewellContract.Traits.Count} maximum=" +
             $"{_traitFarewellContract.MaximumTraits} " +
-            "source=live-showtraitmenu-perk presentation=first-party-functional");
+            "source=live-showtraitmenu-perk presentation=menus/trait_menu.xml");
     }
 
     private void AcceptTraits(IReadOnlyList<FalloutNativeTraitIdentity> selection)
