@@ -45,11 +45,15 @@ internal partial class RuntimeNativePlayer
     {
         if (_modalInput || !_movementEnabled || _furniturePhase != 0 || _sourceCamera is not null) return false;
         if (WeaponInput(input)) return true;
-        if (input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F } && GetMeta("opennv_source_pointofview_enabled", true).AsBool())
+        if ((_inputControls is not null ? input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(13), allowEcho: false)
+            : input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F }) && GetMeta("opennv_source_pointofview_enabled", true).AsBool())
         { _thirdPersonMode = !_thirdPersonMode; PublishThirdPersonCamera(); return true; }
+        if (_inputControls is not null && (input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(6), allowEcho: false) ||
+            input.IsActionReleased(InputSystem.RuntimeNativeInputControls.Action(6))))
+        { _aiming = input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(6), allowEcho: false); return true; }
         if (input is InputEventMouseButton mouse)
         {
-            if (mouse.ButtonIndex == MouseButton.Right) { _aiming = mouse.Pressed; return true; }
+            if (_inputControls is null && mouse.ButtonIndex == MouseButton.Right) { _aiming = mouse.Pressed; return true; }
             if (mouse.Pressed && mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown && GetMeta("opennv_source_pointofview_enabled", true).AsBool())
             {
                 if (mouse.ButtonIndex == MouseButton.WheelDown)

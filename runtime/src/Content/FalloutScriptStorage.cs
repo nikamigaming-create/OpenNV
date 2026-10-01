@@ -10,16 +10,20 @@ internal sealed class FalloutScriptStorage
 {
     internal FalloutScriptIniStore Ini { get; }
     internal FalloutAuxiliaryStore Auxiliary { get; }
+    internal FalloutInputControls? Controls { get; }
 
-    internal FalloutScriptStorage(FalloutScriptIniStore ini, FalloutAuxiliaryStore? auxiliary = null)
+    internal FalloutScriptStorage(FalloutScriptIniStore ini, FalloutAuxiliaryStore? auxiliary = null, FalloutInputControls? controls = null)
     {
         Ini = ini ?? throw new ArgumentNullException(nameof(ini));
         Auxiliary = auxiliary ?? new();
+        Controls = controls;
     }
 
     internal static FalloutScriptStorage Open(RuntimeLiveContentSource source, string overlayRoot)
     {
-        return new(new FalloutScriptIniStore(source, overlayRoot));
+        return new(new FalloutScriptIniStore(source, overlayRoot), controls: new(
+            name => FalloutInstallationSettings.Read(source).Require("Controls", name),
+            Path.Combine(overlayRoot, "input-controls.json"), source.Game == RuntimeLiveContentSource.FalloutNewVegasGame));
     }
 }
 

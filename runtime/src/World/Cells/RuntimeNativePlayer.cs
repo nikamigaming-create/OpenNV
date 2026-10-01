@@ -2,6 +2,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.InputSystem;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -16,6 +17,23 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     private bool _modalInput;
     private Transform3D? _sourceCamera;
     private float _jumpHeightMeters;
+    private FalloutInputControls? _inputControls;
+
+    internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed)
+    {
+        if (_inputControls is not null) throw new InvalidOperationException("Player input controls already have an owner.");
+        _inputControls = controls;
+        var adapter = new RuntimeNativeInputControls(controls, _configuration.Player.DesktopInput, physicalKeyPressed);
+        adapter.Remapped += changed =>
+        {
+            if (changed.Any(index => index is 4 or 6 or 7))
+            {
+                _reloadPressed = false; _weaponTriggerHeld = false; _pendingShotCount = 0;
+                _holdHandled = false; _aiming = false; CancelWeaponAction();
+            }
+        };
+        AddChild(adapter);
+    }
     internal bool Sprinting { get; private set; }
     internal int JumpCount { get; private set; }
     internal int StepCount { get; private set; }
@@ -211,7 +229,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
-        if (!_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
+        if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)
         {
             OpenCombatWheel?.Invoke(wheel.PhysicalKeycode == Key.H);

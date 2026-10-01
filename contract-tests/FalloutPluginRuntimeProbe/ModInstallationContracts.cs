@@ -19,7 +19,7 @@ internal static class ModInstallationContracts
         {
             var storage = FalloutScriptStorage.Open(content, overlay);
             var ui = FalloutUiComponentStore.Open(records, content);
-            using var world = new FalloutReferenceWorld(records, auxiliary: storage.Auxiliary, ini: storage.Ini, ui: ui);
+            using var world = new FalloutReferenceWorld(records, auxiliary: storage.Auxiliary, ini: storage.Ini, ui: ui, controls: storage.Controls);
             var quests = new FalloutQuestState(records);
             var events = new FalloutScriptEvents();
             var globals = FalloutGlobalState.Read(records);
@@ -48,6 +48,7 @@ internal static class ModInstallationContracts
                 scripts = scripts.State,
                 ui = ui.State,
                 perks = records.PerkParameters.State,
+                controls = storage.Controls?.State,
                 boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
             }));
         }
