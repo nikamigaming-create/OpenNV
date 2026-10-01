@@ -11,6 +11,11 @@ internal sealed class FalloutPlayerVitals
     internal void Damage(float amount) => State = State.Damage(amount);
     internal void Damage(float amount, byte part, float limbMultiplier) => State = State.Damage(amount, part, limbMultiplier);
     internal void Publish(GameplayVitals state) { state.Validate(); State = state; }
+    internal void RequireLevelUpOwner()
+    {
+        if (State.ExperiencePoints >= State.NextLevelExperiencePoints)
+            throw new NotSupportedException("Earned player XP requires the source level-cap, skill/perk allocation and LevelUpMenu owners.");
+    }
 
     internal FalloutPlayerVitals(FalloutPluginStack records, FalloutFormKey player, FalloutNativeSpecialState special,
         GameplayVitals? restore = null)

@@ -25,15 +25,25 @@ handoff. Required TTW settings stay in the selected profile, leaving owned INIs
 unchanged. Ordinary flat New -> Yes reaches TTW's authored holding CELL and its
 actual Capital/Mojave message. Selecting Capital starts CG00's owned Fallout 3
 intro movie; ordinary Escape interrupts it and resumes the source result program.
-That continuation now executes SetLocationSpecificLoadScreensOnly through shared
-session state and fails visibly at SetInCharGen. TTWStart retains a separate
-TTW_EnableRadioFix fault. Fallout 3 character creation,
+That continuation now executes SetLocationSpecificLoadScreensOnly and SetInCharGen
+through shared session state, then reaches CG00 stage 5's player script package.
+The source package requires travel/location ownership before its camera animation;
+its failure prevents the subsequent move into the birth CELL. TTWStart retains a
+separate TTW_EnableRadioFix fault. Fallout 3 character creation,
 the Vault exit, train station, travel and continued campaigns remain unverified.
 The requested current-build choice screenshot is retained privately. Recording
 is off. Synthetic bootstrap, conditional stage execution, winning renamed skill
 identity and owned TTW/cold-save checks pass, as does the complete required
 runtime gate. The final flat build retains TTWStart's startup identity across
 background quest stage changes. Both protected saves remain unchanged.
+
+Character-generation policy is shared by reference/results, fallback quest scripts
+and pre-world startup, and retains cold with a false legacy default. Deferred XP
+can exceed the current level threshold without changing level or disappearing
+during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at the
+unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
+the result suffix. XP reward commands, modifiers and leveling remain incomplete;
+this policy and owned component audit do not establish player advancement support.
 
 Loading-screen eligibility now resolves winning LSCR direct CELL/WRLD and signed
 world-grid identities, with the shared location-only policy retained cold. Native
@@ -209,8 +219,13 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Implement the reached character-generation state and TTW
-radio-worldspace dependency behavior without discarding failed prefixes. TTW's source
+Implement general player script-package travel/location ownership: the reached
+CG00PlayerSection0 PACK has procedure 6 and an explicit reference location, while
+the current animation owner rejects every PLDT type other than 3. Preserve the
+source stage-5 prefix and execute its birth-CELL move through the ordinary world
+owner. Complete the deferred XP level-cap, allocation, LevelUpMenu and reward
+owners, plus TTW radio-worldspace dependency behavior, without discarding failed
+prefixes. TTW's source
 opening choice must lead into Fallout 3's authored character creation, exit,
 train-station route and ticketed travel into the Mojave opening. Continue through
 ordinary input and persistent saves; queued source transfers alone do not prove
@@ -308,8 +323,14 @@ Current loading checks are `tmp/loading-screen-owned.private.json`,
 `tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
 `tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
 The fresh ordinary Capital run is
-`tmp/development-lab/ttw-loading-policy-20260930`; its retained policy is true and
-the next reached stage command is SetInCharGen. Recording is off. The flat route
+`tmp/development-lab/ttw-chargen-20260930`; both session flags are true, and CG00's
+stage-5 player package fails before its queued birth-CELL move. The session quit
+through ordinary input with source readers drained. A transient native state-write
+loss warning remains retained; later state samples resumed. Character checks are
+`tmp/character-generation-contract.log`, `tmp/character-generation-owned.private.json`,
+`tmp/character-generation-cold-save.log` and `tmp/character-generation-runtime-gate.log`.
+The owned command audit is explicitly isolated component evidence. Recording is
+off. The flat route
 check in `tmp/development-lab/loading-policy-door-20260930` retained a bot capsule
 route/segment failure near Nash before activation; it is not a successful transfer.
 The copied interior checkpoint check in

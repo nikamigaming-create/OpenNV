@@ -51,7 +51,7 @@ internal sealed record GameplayVitals(
         if (Level <= 0 || MaximumHitPoints <= 0 || HitPoints < 0 ||
             HitPoints > MaximumHitPoints || MaximumActionPoints <= 0 ||
             ActionPoints < 0 || ActionPoints > MaximumActionPoints ||
-            ExperiencePoints < 0 || NextLevelExperiencePoints <= ExperiencePoints ||
+            ExperiencePoints < 0 || NextLevelExperiencePoints <= 0 ||
             !float.IsFinite(HitPointFraction) || HitPointFraction is < 0 or >= 1 || ExactHitPoints < 0 ||
             !float.IsFinite(RadiationRads) || RadiationRads < 0 ||
             LimbDamage is { } limbs && limbs.Any(pair => pair.Key > 14 || !float.IsFinite(pair.Value) || pair.Value < 0))

@@ -197,7 +197,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (name.Equals("ActionPoints", StringComparison.OrdinalIgnoreCase)) return Vitals.ActionPoints;
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
             return _playerSkills.Value(name);
-        });
+        }, RequireLevelUpOwner: _vitals.RequireLevelUpOwner);
         _inventory = inventory;
         _captureScripts = captureScripts;
         _globals = globals;
