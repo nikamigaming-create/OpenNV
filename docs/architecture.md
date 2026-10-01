@@ -120,6 +120,12 @@ Recruitment effects retain reference/base faction scope, perks, flags and combat
 style in the shared world. Creature weapons and teammate target selection reuse
 ordinary source contacts and damage. Door transfer composes destination residency
 and requires an authored NAVM arrival with native capsule clearance. These paths
+retain shared player state across CELL replacement. Source player MoveTo has a
+C# request queue; following statements execute before the native adapter resolves
+current target placement and builds the destination through the same scene path.
+The active player CELL changes before destination event binding. Failed transfers
+retain their source request and stop automatic retries; saving unsettled movement
+requires a continuation owner and currently fails closed. These paths
 have separate acceptance levels; [companion gameplay](companion-gameplay.md)
 and [creature packages](creature-packages.md) record the bounded evidence.
 

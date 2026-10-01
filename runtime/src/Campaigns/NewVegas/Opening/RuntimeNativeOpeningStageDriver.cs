@@ -62,6 +62,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal float? TimerSeconds => _machine.TimerSeconds;
     internal IReadOnlyCollection<string> PendingBlockers => _machine.PendingBlockers;
     internal FalloutFormKey ActiveCell => _activeCell;
+    internal void EnterWorldCell(FalloutFormKey cell) => _activeCell = cell;
+    internal void RequestWorldSave() => _saveRequested = true;
     internal bool HasCampaignSave => File.Exists(_savePath);
     internal string PlayerName => _playerName;
     internal int PlayerLevel => SourcePlayerLevel;
@@ -235,7 +237,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && _recipeMenu is null && _barterMenu is null) SaveCurrentState();
+            if (_saveRequested && _recipeMenu is null && _barterMenu is null && !_scripts.References!.PlayerMoves.Pending)
+                SaveCurrentState();
             _playerPackage?.Advance(delta);
             foreach (var expired in _imageSpaceState.Advance(delta))
                 GD.Print($"OPENNV_NATIVE_IMAD_EXPIRED source={expired.Form} duration={expired.Duration:R} owner=gameplay-clock");

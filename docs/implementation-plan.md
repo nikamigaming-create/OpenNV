@@ -1,8 +1,10 @@
 # Gameplay, playtest and release plan
 
-September 30 direction: complete actual JAM/MCM gameplay first, then the combined
-TTW campaign from Fallout 3's opening through its authored connection to New
-Vegas. Prioritize flat play and system polish while preserving shared VR state;
+September 30 direction: complete the combined TTW campaign from Fallout 3's
+opening through its authored train-station connection to New Vegas and continued
+campaign play. TTW now takes priority over the remaining JAM/MCM work. Complete
+its reached dependencies and preserve all ten mod targets. Prioritize flat play
+and system polish while preserving shared VR state;
 detailed VR presentation follows. Use [the flat gameplay work order](flat-gameplay-plan.md)
 for the ordinary interaction failures reached while completing those mods.
 Classic flat presentation uses winning Fallout/mod screens and controls. An
@@ -19,7 +21,8 @@ OpenXR Simulator and is labelled accordingly.
 ## Immediate outcome
 
 Implement the ten authorized targets in [mod compatibility](mod-compatibility.md),
-starting with complete JAM support, then TTW, exposed as launcher options.
+starting with the complete TTW campaign and dependencies, followed by complete
+JAM support, exposed as launcher options.
 The user selects the owned base/mod/dependency folders; runtime source
 resolution, settings and persistent state must work without a generated profile
 or developer command. The requested acceptance is full out-of-box behavior,
@@ -31,9 +34,10 @@ state and next owners are in [mod compatibility](mod-compatibility.md).
 Work in this task without subagents. Preserve the original campaign, release
 and physical-headset requirements below.
 
-The executable JAM-first breakdown, verified starting point, owner map and
+The executable JAM breakdown, verified starting point, owner map and
 acceptance gates are in [the JAM/MCM plan for Luna Max](jam-luna-max-plan.md).
-Use it for the current mod implementation; it preserves this plan's full scope.
+Use it for the remaining JAM implementation after the TTW campaign; it preserves
+this plan's full scope.
 
 Launcher UX must use original ImageGen artwork and readable native controls.
 Mods are additive checkboxes beneath the active game. Load order is automatic

@@ -5,6 +5,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args.Length >= 5 && args[0] == "--audit-player-moves")
+{
+    OwnedPlayerMoveProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
 Directory.CreateDirectory(directory);
 try
 {
@@ -298,6 +303,7 @@ ScriptDeathContracts.Run();
 PlayerSkillContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();
+PlayerMoveContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);

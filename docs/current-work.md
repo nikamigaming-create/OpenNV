@@ -2,8 +2,10 @@
 
 ## Active objective
 
-Complete actual JAM/MCM gameplay first, then the combined TTW campaign from
-Fallout 3's opening through its authored connection to New Vegas. Folder
+Complete the combined TTW campaign from Fallout 3's opening through the authored
+train-station route into New Vegas and continued campaign play. This takes
+priority over the remaining JAM/MCM work. Complete TTW's reached dependency
+behavior as part of that route; preserve all ten requested mod targets. Folder
 registration and isolated scenes do not meet this objective. Prioritize flat
 play while preserving shared VR behavior; detailed VR presentation follows.
 Classic flat presentation must use winning Fallout/mod screens and controls;
@@ -14,6 +16,21 @@ All 36 broad recovery requirements remain open; no whole-game or retail-parity
 completion is claimed.
 
 ## Verified runtime
+
+Player MoveTo now queues requests in the shared C# world owner, so the following
+source statements finish before native movement. Typed destinations and optional
+offsets resolve against current reference placement. The native adapter consumes
+that queue and uses the ordinary CELL/exterior builders for cross-cell transfers;
+door and script transfers update the active player CELL before binding events.
+Failures retain the request and error without automatic retry. Saves reject
+unsettled movement rather than discarding its continuation. Synthetic and native
+fixtures check suffix execution, offsets, mixed rotations, residency, self moves,
+failure retention and retirement. The winning TTWStart MenuMode block passes an
+explicit owned fixture: its holding-cell request and following statements execute
+once. The full runtime gate and unchanged 446-owner cold-save audit pass.
+Ordinary TTW startup, rendered transfer, opening choice, campaign and train travel
+remain unverified. The next owners are configured startup and quest MenuMode
+dispatch, followed by general player/character-creation and campaign state.
 
 Keyboard/mouse control queries and remaps now share a profile-owned C# table.
 Winning installation INI bindings remain read-only; changes swap occupied keys
@@ -28,8 +45,8 @@ no longer intercepts Q/H for the diagnostic wheels. The owned JAM
 initializer passes GetControl and now reaches SetOnHitEventHandler. Joystick/
 gamepad adapters, missing executable binding defaults, remaining stock actions,
 Classic/Nikami selection and complete mod input remain open. The next shared
-owners are hit-event context and actor-effect lifecycle, followed by remaining
-perk consumers, authored HUD/MCM and the FO3/TTW campaign.
+owners remain hit-event context and actor-effect lifecycle, remaining perk
+consumers and authored HUD/MCM. TTW startup and campaign now take priority.
 
 Winning perk parameters now have a shared C# owner for indexed numeric reads and
 writes, including independent two-value slots and byte-sized quest stages.
@@ -149,6 +166,13 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
+Replace the New Vegas startup assumptions with the winning configured starting
+quest, quest MenuMode blocks and shared player/campaign state. TTW's source
+opening choice must lead into Fallout 3's authored character creation, exit,
+train-station route and ticketed travel into the Mojave opening. Continue through
+ordinary input and persistent saves; queued source transfers alone do not prove
+that route. Implement each reached extension/effect/package/menu owner.
+
 Trace JAM's remaining actor-effect, input-control and hit-event failures through ordinary
 native owners. Chained reference expressions, lambdas, further operators and
 remaining array operations still reject syntax/behavior. Typed strings/arrays,
@@ -219,6 +243,10 @@ UI checks are in `tmp/jam-ui-contract.log`, `tmp/jam-ui-native-clock.log`,
 Perk checks are in `tmp/jam-perk-contract.log`, `tmp/jam-perk-script-contract.log`,
 `tmp/jam-perk-owned-save.log`, `tmp/jam-perk-runtime-gate.log` and
 `tmp/jam-perk-execution.private.json`.
+Current transfer checks are `tmp/ttw-player-moves-native.stdout.log`,
+`tmp/ttw-player-moves-native.stderr.log`, `tmp/ttw-player-moves-runtime-gate.log`,
+`tmp/ttw-player-moves-owned.private.json` and `tmp/ttw-player-moves-owned-save.log`.
+These fixtures do not establish a campaign playthrough.
 The requested flat screenshot is extracted from the retained September 27
 companion clip; it does not show the new September 30 code.
 

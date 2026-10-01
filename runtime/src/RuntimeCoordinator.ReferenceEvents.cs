@@ -12,6 +12,7 @@ public partial class RuntimeCoordinator
 
     public override void _Process(double delta)
     {
+        AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
         if (_nativeDeathPresented) return;
         AdvanceNativeExteriorStreaming(delta);

@@ -1,14 +1,15 @@
 # Mod implementation
 
 The requested product is select folders in the Godot launcher and play the
-complete installed mod stack. JAM comes first; TTW follows. Full support includes
+complete installed mod stack. TTW's complete campaign and dependencies now come
+first; remaining JAM work follows. Full support includes
 dependency behavior, configuration, UI, audio, animation, combat, ordinary input,
 save/load and cold restart in flat and OpenXR. Unknown behavior remains visible
 and prevents a completion claim.
 
 ## Authorized ten compatibility targets
 
-The user authorized all ten targets, starting with JAM then TTW. Mods are additive
+The user authorized all ten targets, now prioritizing TTW before JAM. Mods are additive
 checkboxes under New Vegas, rather than mutually exclusive launch choices.
 The default load order is automatic; manual changes belong under Advanced.
 Each combination still requires its appropriate versions and patches.
@@ -16,8 +17,8 @@ Retail executable patchers such as NVAC and the 4GB patcher are excluded.
 
 | Priority | Target | Behavior to support |
 | --- | --- | --- |
-| 1 | [Just Assorted Mods](https://www.nexusmods.com/newvegas/mods/66666) | All nine gameplay and HUD modules, settings and dependencies |
-| 2 | [Tale of Two Wastelands](https://mod.pub/ttw/133-tale-of-two-wastelands) | Both campaigns, their DLCs, progression and travel |
+| 1 | [Tale of Two Wastelands](https://mod.pub/ttw/133-tale-of-two-wastelands) | Both campaigns, their DLCs, progression and travel |
+| 2 | [Just Assorted Mods](https://www.nexusmods.com/newvegas/mods/66666) | All nine gameplay and HUD modules, settings and dependencies |
 | 3 | [Yukichigai Unofficial Patch](https://www.nexusmods.com/newvegas/mods/51664) | Winning bug-fix records and their runtime behavior |
 | 4 | [JSawyer Ultimate Edition](https://www.nexusmods.com/newvegas/mods/61592) | Balance, survival rules and configuration |
 | 5 | [Uncut Wasteland](https://www.nexusmods.com/newvegas/mods/56625) | Restored world content and placements |
@@ -158,17 +159,18 @@ profile restoration, restart options and isolated save paths.
 1. Preserve the verified native launcher setup and source precedence across
    selected base, mod and dependency folders. Keep plugin winners, resources
    and saves bound to the same complete selection.
-2. Implement the missing general script value/expression, function, event and
+2. Complete TTW source layering, configured starting quest, opening choice,
+   FO3/FNV progression and authored train travel, dependency functions, quest
+   state, UI, dialogue, combat and persistence. An isolated Vault 101 scene or
+   manually forced transfer does not establish the combined campaign.
+3. Implement the missing general script value/expression, function, event and
    persistent-state semantics used by JAM. Bind its dependency operations to
    real gameplay, UI and animation owners. Never report an unsupported call as
    successful or register a no-op extension.
-3. Exercise every JAM module through ordinary input: dynamic crosshair, hit
+4. Exercise every JAM module through ordinary input: dynamic crosshair, hit
    marker, hit indicator, objectives, hold breath, sprint, bullet time, weapon
    wheel and loot menu. Check configuration, interactions, AP, cancellation,
    inventory conservation and saved state, including flat/OpenXR continuation.
-4. Complete TTW source layering, start selection, FO3/FNV progression and travel,
-   dependency functions, quest state, UI, dialogue, combat and persistence.
-   An isolated Vault 101 scene is not the combined campaign.
 5. Run the required repository gate, owned-data audits, ordinary-input and
    matched retail checks before support claims. Physical headset acceptance
    remains separate from simulator evidence.

@@ -16,6 +16,15 @@ internal static class GamebryoCoordinate
     internal static Vector3 ConvertVector(Vector3 source) =>
         new(source.X, source.Z, -source.Y);
 
+    internal static Vector3 ReferenceEuler(Basis godot)
+    {
+        var axes = new Basis(Vector3.Right, Vector3.Forward, Vector3.Up);
+        var source = axes.Transposed() * godot.Orthonormalized() * axes;
+        var result = -source.GetEuler(EulerOrder.Xyz);
+        if (!result.IsFinite()) throw new InvalidDataException("Player reference rotation is not finite.");
+        return result;
+    }
+
     internal static Basis ConvertReferenceEuler(Vector3 sourceRadians, float scale)
     {
         if (!sourceRadians.IsFinite() || !float.IsFinite(scale) || scale <= 0.0f)

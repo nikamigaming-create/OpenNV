@@ -190,6 +190,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutScriptIniStore? Ini { get; } = ini;
     internal FalloutUiComponentStore? Ui { get; } = ui;
     internal FalloutInputControls? Controls { get; } = controls;
+    internal FalloutPlayerMoves PlayerMoves { get; } = new();
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _instances = [];
     private readonly Dictionary<FalloutFormKey, FalloutReferenceScriptDefinition> _definitions = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutReferenceInstance>> _residentCells = [];
@@ -198,6 +199,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     internal int InstanceCount => _instances.Count;
     internal int ResidentCellCount => _residentCells.Count;
+    internal bool IsCellResident(FalloutFormKey cell) => _residentCells.ContainsKey(cell);
     internal int ScriptDefinitionCount => _definitions.Count;
     internal IEnumerable<FalloutReferenceInstance> ResidentInstances => _residentReferences.Keys.Select(key => _instances[key]);
     internal bool IsResident(FalloutFormKey reference) => _residentReferences.ContainsKey(reference);
@@ -306,6 +308,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        PlayerMoves.RequireSettled();
         return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
             .Select(instance => instance.Capture()).ToArray();
     }
@@ -420,6 +423,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     public void Dispose()
     {
+        PlayerMoves.Clear();
         _residentCells.Clear();
         _residentReferences.Clear();
         _instances.Clear();
