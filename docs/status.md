@@ -5,7 +5,14 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
-The immediate direction is a functioning flat world, including autonomous
+The immediate priority is the complete TTW route from Fallout 3's opening through
+the train station into New Vegas, including dependencies and cold continuation.
+Queued player MoveTo now shares C# world ownership and the native scene path.
+Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
+and the required runtime gate pass; actual startup and campaign travel remain
+unverified. JAM/MCM and all other requested mod targets remain open.
+
+The broader direction is a functioning flat world, including autonomous
 NPC/creature interactions and source routines. The September 27 work repairs
 player-only combat acquisition/assistance, weaponless NPC attacks, squat
 creature motion, compiled script-local admission and delayed quest death events.

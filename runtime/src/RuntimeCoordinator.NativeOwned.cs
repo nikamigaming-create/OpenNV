@@ -137,6 +137,7 @@ public partial class RuntimeCoordinator
             missingRuntimeReferences = _nativeActiveCell is null ? [] : _parityObservations.Coverage().Missing.ToArray(),
             actorDivergences = _nativeActorDivergences.ToArray(),
             referenceDivergences = _nativeReferenceDivergences.ToArray(),
+            playerMoves = _nativeReferences?.PlayerMoves.State,
             mapMarkers = _nativeReferences?.KnownMapMarkers.Select(marker => new
             {
                 reference = marker.Source.Reference.ToString(),
@@ -895,7 +896,7 @@ public partial class RuntimeCoordinator
                 $"Native door activation has mismatched source CELL {active.Cell.FormKey}.");
         var transition = FalloutDoorDestinationResolver.Resolve(_nativePluginStack!, reference);
         var entry = reference.Teleport!;
-        var player = _nativePlayer ??
+        _ = _nativePlayer ??
             throw new InvalidOperationException("Native door activation has no authoritative player.");
         var sky = _nativeSkyLighting ?? throw new InvalidOperationException("Door transition has no sky owner.");
         var previousSky = sky.Capture();
@@ -931,6 +932,7 @@ public partial class RuntimeCoordinator
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                 PlaceDoorFollowers(targetRoot, targetScene, grid?.Cells, entry, followers);
             }
+            CommitNativeWorldTransfer(current, active, targetRoot, targetScene, TeleportTransform(entry));
         }
         catch
         {
@@ -942,13 +944,9 @@ public partial class RuntimeCoordinator
             ObserveNativeResidentReferences(active);
             throw;
         }
-        player.Teleport(TeleportTransform(entry));
-        SetNativeActiveCell(targetRoot, targetScene);
-        targetRoot.ProcessMode = ProcessModeEnum.Inherit;
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
-        current.ProcessMode = ProcessModeEnum.Disabled;
-        current.QueueFree();
-        _nativeOpeningStageDriver!.PersistWorldState(targetScene.Cell.FormKey);
+        if (_nativeReferences!.PlayerMoves.Pending) _nativeOpeningStageDriver!.RequestWorldSave();
+        else _nativeOpeningStageDriver!.PersistWorldState(targetScene.Cell.FormKey);
         GD.Print(
             $"OPENNV_NATIVE_DOOR_STREAM source={active.Cell.FormKey} destination={targetScene.Cell.FormKey} " +
             $"door={reference.FormKey} " +
@@ -960,11 +958,12 @@ public partial class RuntimeCoordinator
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(cell);
-        if (_nativeReferences is { } references && _nativeActiveCell?.Cell.FormKey != cell.Cell.FormKey)
+        if (_nativeReferences is { } references)
         {
-            _nativeReferenceEvents?.SetProcess(false);
-            references.LoadCell(cell);
-            if (_nativeActiveCell is { } previous) references.UnloadCell(previous.Cell.FormKey);
+            if (_nativeActiveCell?.Cell.FormKey != cell.Cell.FormKey) _nativeReferenceEvents?.SetProcess(false);
+            if (!references.IsCellResident(cell.Cell.FormKey)) references.LoadCell(cell);
+            if (_nativeActiveCell is { } previous && previous.Cell.FormKey != cell.Cell.FormKey &&
+                references.IsCellResident(previous.Cell.FormKey)) references.UnloadCell(previous.Cell.FormKey);
         }
         _nativeCurrentCellRoot = root;
         _nativeActiveCell = cell;

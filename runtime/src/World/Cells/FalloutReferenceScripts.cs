@@ -668,9 +668,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setplayerteammate" when arguments.Count == 1:
                     world.SetPlayerTeammate(target, Boolean(arguments[0]));
                     break;
-                case "moveto" when arguments.Count is 1 or 4 && records.RuntimeFormId(target) != 0x14:
-                    world.MoveTo(target, bindings.Reference(arguments[0]), arguments.Count == 4 ? (float)Number(arguments[1]) : 0,
-                        arguments.Count == 4 ? (float)Number(arguments[2]) : 0, arguments.Count == 4 ? (float)Number(arguments[3]) : 0);
+                case "moveto" when arguments.Count is >= 1 and <= 4:
+                    var moveDestination = Reference(arguments[0]);
+                    var moveX = arguments.Count > 1 ? (float)Number(arguments[1]) : 0;
+                    var moveY = arguments.Count > 2 ? (float)Number(arguments[2]) : 0;
+                    var moveZ = arguments.Count > 3 ? (float)Number(arguments[3]) : 0;
+                    if (records.RuntimeFormId(target) == 0x14)
+                        world.QueuePlayerMoveTo(source, moveDestination, moveX, moveY, moveZ);
+                    else world.MoveTo(target, moveDestination, moveX, moveY, moveZ);
                     break;
                 case "short" or "int" or "long" or "float" or "ref" when parts.Length == 1 && arguments.Count == 1:
                     if (frame?.Contains(arguments[0]) != true) _ = bindings.Variable(arguments[0]);

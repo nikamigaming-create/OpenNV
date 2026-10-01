@@ -4,6 +4,26 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    internal void QueuePlayerMoveTo(FalloutFormKey source, FalloutFormKey destination, float x = 0, float y = 0, float z = 0)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _ = records.GetEffective(source);
+        if (destination != records.RuntimeFormKey(0x14) && Get(destination) is ({ Deleted: true } or { DeletePending: true }))
+            throw new InvalidOperationException("Player MoveTo destination is deleted.");
+        PlayerMoves.Enqueue(new(source, destination, x, y, z));
+    }
+
+    internal FalloutReferencePlacement ResolvePlayerMove(FalloutPlayerMove move,
+        FalloutReferencePlacement player, float unitsToMetres)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (move.Destination != records.RuntimeFormKey(0x14) && Get(move.Destination) is ({ Deleted: true } or { DeletePending: true }))
+            throw new InvalidOperationException("Player MoveTo destination is deleted.");
+        var result = FalloutPlayerMoves.Resolve(move, SpatialPlacement(move.Destination, player, unitsToMetres));
+        if (records.GetEffective(result.Cell).Signature != "CELL") throw new InvalidDataException("Player MoveTo destination has no CELL.");
+        return result;
+    }
+
     internal bool IsInInterior(FalloutFormKey reference, FalloutFormKey? playerCell = null)
     {
         var cell = reference == records.RuntimeFormKey(0x14)

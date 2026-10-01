@@ -120,13 +120,6 @@ internal partial class RuntimeNativeOpeningStageDriver
                 }).CallDeferred());
                 AddChild(movie);
                 break;
-            case "moveto" when arguments.Count == 1 && _pluginStack.RuntimeFormId(target) == 0x14:
-                var marker = bindings.Reference(arguments[0]);
-                var reference = FalloutCellSceneReader.Read(_pluginStack, _activeCell).References.SingleOrDefault(reference => reference.FormKey == marker)
-                    ?? throw new NotSupportedException("Cross-cell scripted MoveTo needs a world transition owner.");
-                _player.Teleport(new(GamebryoCoordinate.ConvertReferenceEuler(new(reference.RotationRadians[0], reference.RotationRadians[1], reference.RotationRadians[2]), reference.Scale),
-                    GamebryoCoordinate.ConvertVector(new(reference.Position[0], reference.Position[1], reference.Position[2])) * _player.UnitsToMeters));
-                break;
             case "setscale" when arguments.Count == 1 && _pluginStack.RuntimeFormId(target) == 0x14:
                 if (!float.TryParse(arguments[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var scale) || !float.IsFinite(scale) || scale <= 0)
                     throw new InvalidDataException("Player source scale is invalid.");
@@ -164,6 +157,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
+        _scripts.References!.PlayerMoves.RequireSettled();
         if (_moviePlaying || _player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
             _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null ||
             _traitEntry is not null || _recipeMenu is not null || _barterMenu is not null)

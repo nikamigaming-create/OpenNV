@@ -143,8 +143,15 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
 
     internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform)
+        => Configure(configuration, authoredFloorTransform,
+            FalloutCameraProjection.Read(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!)));
+
+    internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform, FalloutCameraProjection projection)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        if (!float.IsFinite(projection.VerticalFovDegrees) || projection.VerticalFovDegrees is <= 0 or >= 180 ||
+            !float.IsFinite(projection.NearGameUnits) || projection.NearGameUnits <= 0)
+            throw new InvalidDataException("Native player projection is invalid.");
         _configuration = configuration;
         Name = "NativePlayer";
         MotionMode = MotionModeEnum.Grounded;
@@ -162,7 +169,6 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
                 Height = configuration.Player.CapsuleHeightMeters,
             },
         });
-        var projection = FalloutCameraProjection.Read(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!));
         _camera = new Camera3D
         {
             Name = "NativePlayerCamera",
@@ -176,7 +182,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         };
         AddChild(_camera);
         GD.Print($"OPENNV_NATIVE_CAMERA_PROJECTION verticalFov={projection.VerticalFovDegrees:R} " +
-            $"nearGameUnits={projection.NearGameUnits:R} source=owned-display-settings referenceAspect=4:3 " +
+            $"nearGameUnits={projection.NearGameUnits:R} source=caller-projection referenceAspect=4:3 " +
             "farClip=unverified matchedFrame=unverified");
         Teleport(authoredFloorTransform);
         SetMeta("opennv_source", "live-retail-files");

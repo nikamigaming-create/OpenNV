@@ -8,6 +8,11 @@ All ten requested mod targets and the complete NV/FO3/TTW scope remain open.
 
 ## Work order
 
+The current priority is TTW's ordinary Fallout 3 opening, campaign route to the
+train station, ticketed travel into New Vegas and continued campaign play.
+Resolve the shared systems below as those source scripts and interactions reach
+them. Complete its dependencies; retain remaining JAM and all other mod work.
+
 1. **Actor combat and quest events.** Fix source admission, natural attacks,
    detection, movement, weapon reselection, hit/death dispatch, essential-actor
    recovery and XP. Exercise retaliation, hostile acquisition and neutral actors
@@ -22,7 +27,7 @@ All ten requested mod targets and the complete NV/FO3/TTW scope remain open.
    affected interaction and continue. Cover the opening, all tutorial branches,
    connected Goodsprings spaces, Primm and subsequent campaign/DLC branches.
    No injected quest stage or named-actor exception closes a failure.
-4. **Shared mod capabilities.** Complete JAM/MCM, then TTW, then the remaining
+4. **Shared mod capabilities.** Complete TTW, then JAM/MCM, then the remaining
    [ten targets](mod-compatibility.md). Resolve missing commands, conditions,
    events, UI, effects and save ownership across their full dependency stacks.
    A launcher checkbox or parsed plugin is not working mod support.

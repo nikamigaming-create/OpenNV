@@ -138,6 +138,7 @@ public partial class NativeReferenceEventsAudit : Node
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
             await ScriptEvents(records, world, root);
             await InputControls(records);
+            PlayerMoves(records);
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)
@@ -257,6 +258,7 @@ public partial class NativeReferenceEventsAudit : Node
                 Field("SCTX", Encoding.ASCII.GetBytes("begin Function {}\nAuditRef.renderFrames += (0b101 & 0x3)\n" +
                     "AuditRef.renderCaller = GetSelfAlt\nAuditRef.renderSeconds = GetSecondsPassed\nend"))))
             .Concat(DeathFixture())
+            .Concat(PlayerMoveFixture())
             .Concat(Record("PERK", 0x705, Field("EDID", Encoding.ASCII.GetBytes("NativePerk\0")),
                 Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),
                 Field("EPFD", BitConverter.GetBytes(3f)), Field("PRKF", [])))
