@@ -78,6 +78,7 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         page = _page,
         revision = _creation.Revision,
         previewRevision = _previewRevision,
+        deviceModel = _device.SourceModel,
         character = _creation.Selection,
         error = Error,
         sourceControls = _creation.Controls.Controls.Count,
@@ -85,14 +86,14 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     };
 
     internal void Configure(FalloutNativeRaceSexContract contract, FalloutNativeRaceSexSelection current, FalloutPluginStack records,
-        RuntimeNativeImageSpace? imageSpace = null)
+        RuntimeNativeImageSpace? imageSpace = null, string modelPath = "meshes/terminals/nv_reflectron_ui.nif")
     {
         Name = "NativeRaceSexEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
         _records = records;
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Creation has no owned content source.");
         _settings = FalloutInstallationSettings.Read(source);
         _creation = new(records, contract, current, _settings);
-        _device = new("meshes/terminals/nv_reflectron_ui.nif", _settings) { Size = GetViewport().GetVisibleRect().Size };
+        _device = new(modelPath, _settings) { Size = GetViewport().GetVisibleRect().Size };
         AddChild(_device);
         _screen = new(_device, records, _settings, Fail); AddChild(_screen);
         _screen.Menu.Navigate += Navigate;

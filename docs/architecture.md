@@ -30,6 +30,19 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+TTW's race-menu device selection reads owned plugin registrations and bounded
+copy/import/shared-buffer/native-forward associations. The original executable
+model consumer and initialized buffer agree with the normal selector's default
+path; the gene selector supplies its own owned relative NIF. No plugin code is
+executed. RuntimeNativeOpeningStageDriver opens the same creation owner with the
+selected model, and standard ShowRaceMenu restores its default selection. The
+winning model, XML, font, source surfaces and shared draft supply presentation and
+input. Acceptance closes the menu and retains ordinary source continuation.
+Source drift and unsupported overlapping requests fail visibly. Synthetic
+associations, native model/input/default restoration and ordinary TTW opening
+checks cover this bounded owner; MatchRace, actor package-change poses, matched
+portrait/effect/close timing and XR final-eye presentation remain unverified.
+
 [Say](https://geckwiki.com/index.php?title=Say) and
 [SayTo](https://geckwiki.com/index.php?title=SayTo) share RuntimeNativeSpeech's
 winning INFO selection and owned voice/lip path with actual resident actors.

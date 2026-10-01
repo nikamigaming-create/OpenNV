@@ -94,8 +94,10 @@ internal static partial class FalloutExecutableStringTable
     }
 
     private static (byte[] Code, Image Image) Load(string path)
+        => Load(File.ReadAllBytes(path));
+
+    private static (byte[] Code, Image Image) Load(byte[] bytes)
     {
-        var bytes = File.ReadAllBytes(path);
         using var pe = new PEReader(new MemoryStream(bytes, false));
         if (pe.PEHeaders.CoffHeader.Machine != Machine.I386 || pe.PEHeaders.PEHeader?.Magic != PEMagic.PE32)
             throw new NotSupportedException("Owned default settings require an admitted Win32 PE layout.");
@@ -318,7 +320,7 @@ internal static partial class FalloutExecutableStringTable
             return body[..(end + 4)];
         }
 
-        internal int ScriptCommandStart(string name, byte[] code, ushort? parameterCount = null)
+        internal int ScriptCommandStart(string name, byte[] code, ushort? parameterCount = null, bool registration = false)
         {
             var codeBase = CodeBase;
             uint? execute = null;
@@ -334,7 +336,8 @@ internal static partial class FalloutExecutableStringTable
                     if (Literal(U32(row, 0)) != name) continue;
                     var handler = U32(row, 24);
                     if (Literal(U32(row, 4)) is null || Literal(U32(row, 12)) is null ||
-                        U32(row, 8) is < 0x1000 or > 0xffff || handler < codeBase || handler - codeBase >= code.Length ||
+                        !(U32(row, 8) is >= 0x1000 and <= 0xffff || registration && U32(row, 8) == 0) ||
+                        handler < codeBase || handler - codeBase >= code.Length ||
                         parameterCount is { } count && (BinaryPrimitives.ReadUInt16LittleEndian(row[18..]) != count ||
                             BinaryPrimitives.ReadUInt16LittleEndian(row[16..]) != 0))
                         throw new NotSupportedException("Owned script command descriptor is unbound.");
@@ -364,9 +367,40 @@ internal static partial class FalloutExecutableStringTable
             throw new InvalidDataException("Owned executable resource is not backed by file bytes.");
         }
 
-        internal bool IsWritableObject(uint address) => address >= Base && headers.SectionHeaders.Any(section =>
+        internal bool IsWritableObject(uint address) => IsWritableExtent(address, 12);
+
+        internal bool IsWritableExtent(uint address, int count) => count > 0 && address >= Base && headers.SectionHeaders.Any(section =>
             (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0 && address - Base >= section.VirtualAddress &&
-            (ulong)(address - Base) + 12 <= (ulong)section.VirtualAddress + (uint)section.VirtualSize);
+            (ulong)(address - Base) + (uint)count <= (ulong)section.VirtualAddress + (uint)section.VirtualSize);
+
+        internal string? ImportName(uint slot)
+        {
+            var directory = headers.PEHeader!.ImportTableDirectory;
+            for (var at = 0; at <= directory.Size - 20; at += 20)
+            {
+                var row = Read(checked(Base + (uint)directory.RelativeVirtualAddress + (uint)at), 20);
+                var names = U32(row, 0); var table = U32(row, 16);
+                if (names == 0 && table == 0) break;
+                if (names == 0 || table == 0) continue;
+                for (var offset = 0U; offset < 65536; offset += 4)
+                {
+                    var hintName = U32(Read(checked(Base + names + offset), 4), 0);
+                    if (hintName == 0) break;
+                    if ((ulong)Base + table + offset != slot) continue;
+                    if ((hintName & 0x80000000) != 0) return null;
+                    var text = new List<byte>();
+                    for (var index = 0U; index < 256; ++index)
+                    {
+                        var character = Read(checked(Base + hintName + 2 + index), 1)[0];
+                        if (character == 0) return Encoding.ASCII.GetString(text.ToArray());
+                        if (character is < 32 or > 126) return null;
+                        text.Add(character);
+                    }
+                    return null;
+                }
+            }
+            return null;
+        }
 
         internal string? Literal(uint address)
         {

@@ -151,7 +151,12 @@ its headless player and presentation boundaries remain explicit.
 An explicit TTWStart fixture now executes its MenuMode and GameMode blocks through
 the shared quest clock, queues the authored holding-cell request and publishes
 the source campaign-choice message. Cold restoration retains the pending choice.
-Configured native startup, Fallout 3 progression and train travel remain unverified.
+Ordinary configured TTW New Game now reaches the actual Capital/Mojave choice,
+Fallout 3 birth, parent dialogue, gender/name input and the owned gene projector.
+Its source pages accept a shared selection and close through ordinary input;
+MatchRace and stationary actor/package-change animation still fail visibly.
+Further Fallout 3 progression, authored train travel and full dependencies remain
+unverified. These checks do not establish TTW campaign or complete mod support.
 Keep reports and all mod,
 retail and derived files out of Git. Synthetic contracts cover dependency
 resolution, transitive failures, cycles, mixed engine detection, malformed
