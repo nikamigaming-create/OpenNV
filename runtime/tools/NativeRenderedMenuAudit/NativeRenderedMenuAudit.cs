@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 4 && args[1] == "--hud-controls")
+            {
+                await HudControls(args[0], args[2], args[3], args[4..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 4 && args[1] == "--race-menu-devices")
             {
                 await RaceMenuDevices(args[0], args[2], args[3], args[4..]);

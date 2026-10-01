@@ -14,6 +14,8 @@ internal partial class NativeOwnedGameplayHud : Control
     private readonly XElement _reticle, _info, _prompt, _name;
     private readonly Func<NativeHudTarget?> _target;
     private readonly Func<bool> _shown;
+    private readonly Func<FalloutPlayerControlState> _controls;
+    private FalloutPlayerControlState? _lastControls;
     private readonly Func<GameplayVitals>? _vitals;
     private readonly XElement? _hp, _ap, _hpMeter, _apMeter;
     private GameplayVitals? _lastVitals;
@@ -35,16 +37,22 @@ internal partial class NativeOwnedGameplayHud : Control
         notice = _lastNotice,
         error = Error,
         scriptUiRevision = _uiRevision,
+        sourceControls = _lastControls,
+        hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
+        actionPointsVisible = _ap is not null && _tiles.Number(_ap, "visible") > 0,
+        reticleVisible = _tiles.Number(_reticle, "visible") > 0,
+        rolloverVisible = _tiles.Number(_info, "visible") > 0,
         source = "HUDMainMenu/ReticleCenter/Info/HitPoints/ActionPoints"
     };
 
     internal NativeOwnedGameplayHud(FalloutPluginStack records, string activateKey, Func<NativeHudTarget?> target, Func<bool> shown,
         Func<GameplayVitals>? vitals = null, Func<NativeHudAmmo?>? ammunition = null, Func<string?>? notice = null,
-        FalloutUiComponentStore? scriptUi = null)
+        FalloutUiComponentStore? scriptUi = null, Func<FalloutPlayerControlState>? controls = null)
     {
         Name = "HUDMainMenuGameplay"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
         _scriptUi = scriptUi;
+        _controls = controls ?? (() => FalloutPlayerControlState.AllEnabled);
         var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(source.Name, source.Attributes(),
             source.Elements().Where(element => element.Attribute("name") is null).Select(element => new XElement(element)));
@@ -128,6 +136,18 @@ internal partial class NativeOwnedGameplayHud : Control
         {
             Visible = _shown();
             if (!Visible) return;
+            var controls = _controls();
+            if (controls != _lastControls)
+            {
+                _lastControls = controls;
+                // DisablePlayerControls' movement flag suppresses HP, AP and
+                // the reticle. Rollover text independently owns the Info branch.
+                var movementVisible = controls.Movement ? 1 : 0;
+                _tiles.Bind(_reticle, "visible", movementVisible);
+                if (_hp is not null) _tiles.Bind(_hp, "visible", movementVisible);
+                if (_ap is not null) _tiles.Bind(_ap, "visible", movementVisible);
+                QueueRedraw();
+            }
             if (_scriptUi is not null && _uiRevision != _scriptUi.Revision)
             {
                 _uiRevision = _scriptUi.Revision;
@@ -154,7 +174,9 @@ internal partial class NativeOwnedGameplayHud : Control
                 _tiles.Bind(_apMeter!, "width", _tiles.Number(_apMeter!, "_TotalWidth") * vitals.ActionPoints / vitals.MaximumActionPoints);
                 QueueRedraw();
             }
-            var target = _target();
+            // The movement control also disables world activation. A ray hit
+            // cannot advertise Talk/Take/Open while that action is unavailable.
+            var target = controls.Movement && controls.RolloverText ? _target() : null;
             if (target == _last) return;
             _last = target;
             _tiles.Bind(_info, "visible", target is null ? 0 : 1);

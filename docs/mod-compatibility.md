@@ -2,14 +2,16 @@
 
 The requested product is select folders in the Godot launcher and play the
 complete installed mod stack. TTW's complete campaign and dependencies now come
-first; remaining JAM work follows. Full support includes
+and all nine JAM modules are immediate priorities, alongside compatible TTW
+desirables from the current guides. Full support includes
 dependency behavior, configuration, UI, audio, animation, combat, ordinary input,
 save/load and cold restart in flat and OpenXR. Unknown behavior remains visible
 and prevents a completion claim.
 
-## Authorized ten compatibility targets
+## Authorized compatibility targets
 
-The user authorized all ten targets, now prioritizing TTW before JAM. Mods are additive
+The user authorized the original ten targets plus Benny Humbles You and Steals
+Your Stuff, now prioritizing the complete TTW/Benny route and full JAM. Mods are additive
 checkboxes under New Vegas, rather than mutually exclusive launch choices.
 The default load order is automatic; manual changes belong under Advanced.
 Each combination still requires its appropriate versions and patches.
@@ -27,6 +29,27 @@ Retail executable patchers such as NVAC and the 4GB patcher are excluded.
 | 8 | [EVE](https://www.nexusmods.com/newvegas/mods/42666) | Weapon effects, impacts, explosions and deaths |
 | 9 | [Nevada Skies](https://www.nexusmods.com/newvegas/mods/35998) | Weather and atmosphere |
 | 10 | [New Vegas Bounties I](https://www.nexusmods.com/newvegas/mods/37310) | Authored quests, dialogue, combat and persistent outcomes |
+| TTW route | [(Benny Humbles You) and Steals Your Stuff](https://www.nexusmods.com/newvegas/mods/71112) | Configured first-Mojave stat reset/deleveling, gear confiscation/recovery, penalties, progression and persistent outcomes |
+
+The TTW proof must finish Vault 101, reach Megaton, use the Fallout bot's ordinary
+movement/activation path to Union Station, complete source power/ticket/train
+requirements, enter the Mojave and reach Benny. Verify the added mod's selected
+INI behavior and cold continuity through its winning scripts; a forced level
+reset or transfer does not establish mod support. The official BHYSYS 13.05
+package is downloaded and extracted separately. Its test-profile source
+selection, full dependency behavior and ordinary gameplay remain unverified.
+
+The [Best of Times essentials](https://thebestoftimes.moddinglinked.com/essentials.html)
+and [Wasteland Survival Guide](https://wastelandsurvival.guide/docs/intro) supply
+the current required/recommended candidate stack. WSG is modular, so conflicting
+variants and its opening-skip option require explicit profile choices; the
+campaign proof still begins with the complete Fallout 3 opening. Native retail
+patches require corresponding first-party runtime behavior rather than executing
+their DLLs inside Godot. Retain guide versions, package identities, dependencies,
+patches and winning source order before enabling a combination. MCM Extender,
+the JAM additions/preset and further TTW desirables remain source-audit work.
+The long-term objective is general Nexus mod script/dependency compatibility;
+the bounded current checks do not establish universal mod support.
 
 Required xNVSE, JIP LN, JohnnyGuitar, kNVSE, UIO, MCM and other dependency
 behavior belongs to each selected stack's acceptance, rather than occupying
@@ -61,7 +84,7 @@ including older v1 files whose record properties were written in PascalCase.
 Combined TTW data is classified as New Vegas instead of standalone Fallout 3.
 The existing unavailable gameplay gates remain until the real runtime passes.
 This is launcher setup implementation, not the requested completed mod support.
-Focused source/profile/stack contracts pass. All ten owned stacks and the combined
+Focused source/profile/stack contracts pass. All ten original owned stacks and the combined
 JAM + TTW + NMC stack open; this proves source loading only. The native launcher
 check exercises three enabled mods, search and automatic order. All 5,407 winning
 NMC textures decode, including two DDS files with partial authored mip chains;
@@ -156,8 +179,11 @@ Fallout 3 birth, parent dialogue, gender/name input and the owned gene projector
 Its source pages accept a shared selection and close through ordinary input;
 Initial-sample actor arrival and package-change IDLE presentation now pass
 synthetic, owned native and ordinary opening checks; Dad/Dr. Li retain source
-poses without Forward. MatchRace still fails visibly, and birth HP/AP visibility
-requires its source control owner. Complete actor timing/restoration remains open.
+poses without Forward. Source movement controls now suppress birth HP/AP and the
+reticle independently of rollover text and hide prompts for disabled activation,
+with owned native control-mask/pixel
+checks and ordinary opening evidence. HUD override extensions and matched pixels
+remain open. MatchRace still fails visibly. Complete actor timing/restoration remains open.
 Further Fallout 3 progression, authored train travel and full dependencies remain
 unverified. These checks do not establish TTW campaign or complete mod support.
 Keep reports and all mod,
@@ -172,7 +198,8 @@ profile restoration, restart options and isolated save paths.
    selected base, mod and dependency folders. Keep plugin winners, resources
    and saves bound to the same complete selection.
 2. Complete TTW source layering, configured starting quest, opening choice,
-   FO3/FNV progression and authored train travel, dependency functions, quest
+   FO3/FNV progression through Megaton, ordinary bot traversal, authored train
+   travel and Benny with the selected humbling package, dependency functions, quest
    state, UI, dialogue, combat and persistence. An isolated Vault 101 scene or
    manually forced transfer does not establish the combined campaign.
 3. Implement the missing general script value/expression, function, event and
