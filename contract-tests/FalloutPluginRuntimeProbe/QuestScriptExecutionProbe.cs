@@ -25,6 +25,8 @@ internal static class QuestScriptExecutionProbe
             Require(writes.Select(write => write.Index).SequenceEqual([19u, 11u, 27u]),
                 "Stage assignments ignored winning compiled variable slots or source order.");
             foreach (var write in writes) state.SetVariable(write.Owner, write.Index, write.Value);
+            Require(JsonSerializer.SerializeToElement(state.ProgressState).GetArrayLength() == 0,
+                "Declaring quest variables invented an entered stage in progress telemetry.");
             state.EnterStage(quest.FormKey, 0);
             var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(quest, "SCRI"));
             var bindings = new FalloutScriptBindings(records, quest, script, script.ReadSubrecords());
@@ -64,6 +66,12 @@ internal static class QuestScriptExecutionProbe
             }
             Require(state.Stage(quest.FormKey) == 42 && state.Variable(quest.FormKey, 27) == 10,
                 "The complete source calculation did not drive progression.");
+            var progress = JsonSerializer.SerializeToElement(state.ProgressState).EnumerateArray().Single();
+            Require(progress.GetProperty("quest").GetString() == quest.FormKey.ToString() &&
+                progress.GetProperty("stage").GetInt16() == 42 &&
+                progress.GetProperty("enteredStages").EnumerateArray().Select(value => value.GetInt16()).SequenceEqual<short>([0, 42]) &&
+                JsonSerializer.Serialize(state.ProgressState) == JsonSerializer.Serialize(restoredState.ProgressState),
+                "Live and cold progress telemetry lost entered source stages or reported scheduler counts as progress.");
             TypedStringColdState(directory);
             Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { Instances = [], ParserVersion = 0 }));
             Reject(() => Scripts(new FalloutQuestState(records)).Restore(savedScripts with { ParserVersion = FalloutGameModeProgram.ParserVersion + 1 }));

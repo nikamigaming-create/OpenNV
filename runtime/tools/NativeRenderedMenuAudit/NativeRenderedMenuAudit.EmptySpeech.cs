@@ -13,7 +13,8 @@ public partial class NativeRenderedMenuAudit
 {
     // Isolated source/body/audio fixture. The reached save supplies selection
     // history only; this does not resume, repair or advance a campaign save.
-    private async Task EmptySpeech(string baseRoot, string mod, string root, string savedPath, string[] dependencies)
+    private async Task EmptySpeech(string baseRoot, string mod, string root, string savedPath, string[] dependencies,
+        bool concurrent = false)
     {
         Node3D? scene = null;
         RuntimeNativeSpeech? speech = null;
@@ -30,15 +31,17 @@ public partial class NativeRenderedMenuAudit
             var quests = new FalloutQuestState(records); quests.Restore(saved.Quests!);
             var dad = FalloutDialogueTopic.Find(records, "ACHR", "CG00DadREF");
             var doctor = FalloutDialogueTopic.Find(records, "ACHR", "CG00DoctorLiREF");
+            var mom = concurrent ? FalloutDialogueTopic.Find(records, "ACHR", "CG00MomREF") : null;
             var cg00 = FalloutDialogueTopic.Find(records, "QUST", "CG00").FormKey;
             var topic = FalloutDialogueTopic.Read(records, "CG00DadSpeech");
+            var momTopic = concurrent ? FalloutDialogueTopic.Read(records, "CG00MomSpeech") : null;
             var sourceHash = SHA256.HashData(topic.Topic.ReadData());
             var configuration = RuntimeConfiguration.Load();
             var units = configuration.World.GameUnitsToMeters;
             var cell = FalloutCellSceneReader.Read(records, world.Get(dad.FormKey).Cell);
             world.LoadCell(cell);
             scene = new Node3D(); AddChild(scene);
-            foreach (var reference in new[] { dad, doctor })
+            foreach (var reference in new[] { dad, doctor, mom }.OfType<FalloutPluginRecord>())
             {
                 var placed = cell.References.Single(item => item.FormKey == reference.FormKey);
                 var templates = world.InitializeActorTemplates(reference.FormKey, 1);
@@ -64,6 +67,20 @@ public partial class NativeRenderedMenuAudit
             var events = new List<FalloutFormKey>();
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ =>
                 throw new InvalidOperationException("Empty speech completion invented a source effect.")));
+            var results = new List<(FalloutFormKey Actor, FalloutFormKey Info, bool Begin)>();
+            var expectedResults = new HashSet<(FalloutFormKey Actor, FalloutFormKey Info, bool Begin)>();
+            void ExpectResults(FalloutFormKey actor, FalloutDialogueInfo info)
+            {
+                if (FalloutDialogueTopic.CodeLines(info.BeginScript).Any()) expectedResults.Add((actor, info.Record.FormKey, true));
+                if (FalloutDialogueTopic.CodeLines(info.EndScript).Any()) expectedResults.Add((actor, info.Record.FormKey, false));
+            }
+            speech.ExecuteResults = (info, actor, begin) =>
+            {
+                scripts.ExecuteResult(info, actor, begin);
+                results.Add((actor, info.Record.FormKey, begin));
+            };
+            var completedInfos = new List<FalloutFormKey>();
+            speech.InfoCompleted += completedInfos.Add;
             speech.SayToCompleted += (actor, topics) =>
             {
                 var result = scripts.DispatchFrame(actor, [new("SayToDone", Topics: topics)], 0).Single();
@@ -84,6 +101,7 @@ public partial class NativeRenderedMenuAudit
             stage = 80;
             speech.SayTo(dad.FormKey, player, topic.Topic.FormKey, true);
             var active = JsonSerializer.SerializeToElement(speech.State);
+            ExpectResults(dad.FormKey, topic.Infos.Single(info => info.Record.FormKey.ToString() == active.GetProperty("info").GetString()));
             var subtitle = speech.Subtitle;
             if (!speech.IsTalking(dad.FormKey) || speech.Error is not null || subtitle is null || subtitleRequests != 1)
                 throw new InvalidDataException("The subsequent eligible owned line did not start its actual actor/voice binding.");
@@ -95,19 +113,88 @@ public partial class NativeRenderedMenuAudit
             if (speech.Subtitle != subtitle || !speech.IsTalking(dad.FormKey) || speech.IsTalking(doctor.FormKey) ||
                 speech.Error is not null || events.Count != 1 || subtitleRequests != 1)
                 throw new InvalidDataException("Another actor's empty speech disturbed the active line or completed inline.");
-            var deadline = Time.GetTicksMsec() + 15000;
+            if (concurrent)
+            {
+                speech.Say(mom!.FormKey, momTopic!.Topic.FormKey, true);
+                var overlap = JsonSerializer.SerializeToElement(speech.State);
+                var channels = overlap.GetProperty("channels").EnumerateArray().Where(channel => channel.GetProperty("active").GetBoolean()).ToArray();
+                var momInfo = channels.Single(channel => channel.GetProperty("speakerReference").GetString() == mom.FormKey.ToString()).GetProperty("info").GetString();
+                ExpectResults(mom.FormKey, momTopic.Infos.Single(info => info.Record.FormKey.ToString() == momInfo));
+                if (!speech.IsTalking(dad.FormKey) || !speech.IsTalking(mom.FormKey) || speech.IsTalking(doctor.FormKey) ||
+                    speech.Error is not null || channels.Length != 2 || subtitleRequests != 2 ||
+                    overlap.GetProperty("subtitleCandidates").GetArrayLength() != 2 || speech.Subtitle is not null ||
+                    channels.Any(channel => !channel.GetProperty("playing").GetBoolean() || channel.GetProperty("lipSha256").ValueKind != JsonValueKind.String))
+                    throw new InvalidDataException("Concurrent owned speech did not retain two actual actor/audio/lip/subtitle channels.");
+                foreach (var field in new[] { "info", "speakerReference", "voiceBinding", "audioSha256", "lipSha256" })
+                    if (active.GetProperty(field).GetRawText() != overlap.GetProperty(field).GetRawText())
+                        throw new InvalidDataException("Mom's actual voice changed Dad's " + field + ".");
+                speech.SkipResponse();
+                if (JsonSerializer.SerializeToElement(speech.State).GetProperty("channels").EnumerateArray()
+                    .Any(channel => channel.GetProperty("active").GetBoolean() && !channel.GetProperty("playing").GetBoolean()))
+                    throw new InvalidDataException("Conversation skip interrupted a scripted actor channel.");
+                GetTree().Paused = true;
+                try
+                {
+                    var positions = channels.ToDictionary(channel => channel.GetProperty("speakerReference").GetString()!,
+                        channel => channel.GetProperty("positionSeconds").GetDouble());
+                    await ToSignal(GetTree().CreateTimer(.25, processAlways: true), SceneTreeTimer.SignalName.Timeout);
+                    var paused = JsonSerializer.SerializeToElement(speech.State).GetProperty("channels").EnumerateArray()
+                        .Where(channel => channel.GetProperty("active").GetBoolean()).ToArray();
+                    if (paused.Length != 2 || paused.Any(channel => Math.Abs(channel.GetProperty("positionSeconds").GetDouble() -
+                        positions[channel.GetProperty("speakerReference").GetString()!]) > .05) || completedInfos.Count != 0)
+                        throw new InvalidDataException("Pausing advanced or completed an actor voice.");
+                }
+                finally { GetTree().Paused = false; }
+            }
+            var deadline = Time.GetTicksMsec() + 20000;
             while (speech.Active && speech.Error is null && Time.GetTicksMsec() < deadline)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var completed = JsonSerializer.SerializeToElement(speech.State);
-            if (speech.Active || speech.Error is not null || !events.SequenceEqual([dad.FormKey, doctor.FormKey, dad.FormKey]) ||
-                completed.GetProperty("completedCommands").GetInt64() != 1 ||
+            var spoken = concurrent ? 2 : 1;
+            if (speech.Active || speech.Error is not null ||
+                (concurrent ? events.Count != 4 || events.Count(actor => actor == dad.FormKey) != 2 ||
+                    events.Count(actor => actor == doctor.FormKey) != 1 || events.Count(actor => actor == mom!.FormKey) != 1 ||
+                    completedInfos.Count != 2 :
+                    !events.SequenceEqual([dad.FormKey, doctor.FormKey, dad.FormKey])) ||
+                results.Count != expectedResults.Count || !expectedResults.SetEquals(results) ||
+                completed.GetProperty("completedCommands").GetInt64() != spoken ||
                 completed.GetProperty("emptyCompletions").GetProperty("completedTopics").GetInt64() != 2)
                 throw new InvalidDataException("Empty speech completion interrupted the actual voice or inflated spoken-command counts.");
             if (!savedBytes.AsSpan().SequenceEqual(File.ReadAllBytes(savedPath)) ||
                 !sourceHash.AsSpan().SequenceEqual(SHA256.HashData(topic.Topic.ReadData())))
                 throw new InvalidDataException("The isolated speech fixture modified owned input or the reached save.");
-            GD.Print("OPENNV_NATIVE_EMPTY_SPEECH_PASS deferred=true coalesced=true actualActorBinding=true voiceContinued=true " +
-                "subtitleRetained=true saidUnchangedOnEmpty=true spokenCommands=1 emptyTopics=2 sourceReadonly=true recording=false " +
+            if (concurrent)
+            {
+                speech.Free(); speech = new RuntimeNativeSpeech();
+                speech.Configure(records, configuration.ActorCompiler.FaceGenAnimation.Lip,
+                    quest => quest == cg00 ? stage : quests.Stage(quest),
+                    condition => condition is { RunOn: 1, Function: 70, Reference: 0, Argument1: <= 1 } ?
+                        (condition.Argument1 == 1) == saved.Character.Female ? 1 : 0 :
+                        throw new NotSupportedException($"Isolated speech query {condition.Function}/{condition.RunOn} is unbound."),
+                    saidInfos: beforeSaid.ToHashSet(), templates: actor => world.Get(actor).Templates,
+                    quests: quests, playerFemale: () => saved.Character.Female);
+                speech.PrepareSubtitle = _ => { };
+                var prefix = 0;
+                speech.ExecuteResults = (info, actor, begin) =>
+                {
+                    scripts.ExecuteResult(info, actor, begin); ++prefix;
+                    throw new NotSupportedException("Isolated INFO prefix divergence.");
+                };
+                AddChild(speech);
+                speech.SayTo(dad.FormKey, player, topic.Topic.FormKey, true);
+                try { speech.Say(mom!.FormKey, momTopic!.Topic.FormKey, true); }
+                catch (NotSupportedException error) when (error.Message == "Isolated INFO prefix divergence.") { }
+                try { speech.Say(mom!.FormKey, momTopic!.Topic.FormKey, true); }
+                catch (InvalidOperationException error) when (error.Message == "Isolated INFO prefix divergence.") { }
+                var failed = JsonSerializer.SerializeToElement(speech.State);
+                if (prefix != 1 || speech.Error != "Isolated INFO prefix divergence." || !speech.Active ||
+                    failed.GetProperty("completedCommands").GetInt64() != 0 ||
+                    failed.GetProperty("channels").EnumerateArray().Any(channel => channel.GetProperty("playing").GetBoolean()))
+                    throw new InvalidDataException("A failed INFO prefix replayed, completed, retired or left another actor's audio running.");
+            }
+            GD.Print((concurrent ? "OPENNV_NATIVE_CONCURRENT_SPEECH_PASS actorChannels=2 actualOverlap=true independentLip=true paused=true skipIsolated=true results=true " :
+                "OPENNV_NATIVE_EMPTY_SPEECH_PASS subtitleRetained=true ") +
+                $"deferred=true coalesced=true actualActorBinding=true voiceContinued=true saidUnchangedOnEmpty=true spokenCommands={spoken} emptyTopics=2 sourceReadonly=true recording=false " +
                 "boundary=isolated-owned-selection-body-audio-fixture coldContinuation=unverified eventFrameParity=unverified campaign=unverified");
         }
         finally { speech?.Free(); scene?.Free(); RuntimeLiveContentSource.Clear(); }

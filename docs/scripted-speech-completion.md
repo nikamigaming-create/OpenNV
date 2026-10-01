@@ -24,9 +24,26 @@ the following dispatch. Exact native script-frame scheduling remains unverified.
 RuntimeNativeSpeech selects before changing the bound speaker. A different
 actor's empty selection therefore leaves the current voice, subtitle, lip data,
 face and response animation owner intact. Missing resident actors, unsupported
-conditions and completion bindings still fail visibly. An empty request that
-interrupts its own actor's active voice and competing actual voices require
-the remaining interruption/arbitration owner.
+conditions and completion bindings still fail visibly.
+
+Actual voices now have separate channels keyed by the resident speaker's typed
+reference. Each channel owns its INFO/response cursor, audio player, source lip
+data, face/response animation, result programs and completion. Voice selection
+and SayOnce history remain shared. The owned actor-process submission retains
+these fields on its actor, rather than a single scene-wide speaker slot. A
+different actor's actual line can therefore overlap without rebinding the first
+actor. Pausing holds all voices. Conversation skip targets only the conversation
+channel. Processing snapshots channel generations before callbacks so a newly
+started command cannot inherit an outgoing command's frame completion.
+
+Same-actor replacement and empty interruption still fail visibly. A failed result
+prefix stops audible playback, retains a failure and blocks saving; another
+request does not replay that prefix. Channel identity, source binding, playback,
+lip/face state, completion counts and every subtitle candidate remain visible in
+telemetry. Competing HUD subtitle selection is unbound: the single-caption
+adapter declines an ambiguous candidate set and resumes when one remains. It
+does not establish native subtitle queue/priority/hold/fade behavior. Audio is
+still non-spatial, and matched actor result/event and output timing are unverified.
 
 Synthetic contracts cover deferred suffix order, duplicate and multiple topic
 marks, unfiltered block coalescing, pause, next dispatch, invalid typed admission,
@@ -38,6 +55,16 @@ separate empty/spoken counts and unchanged source/save input. This fixture
 changes only its selection query, not a live campaign quest. It records no
 frames and does not establish campaign, cold continuation or retail/XR parity.
 
+The concurrent variant adds Mom's actual owned body and source line. It checks
+two simultaneous audio/lip bindings, unchanged Dad binding, independent source
+results/completions, pause, isolated skip and a non-replayed failed result prefix.
+The reached save and owned inputs remain unchanged. This is component evidence.
+
 Ordinary opening continuation is independently checked from fresh New Game.
 Previously saved script errors are retained; installing this owner does not
 replay a failed source prefix or silently rearm a saved actor script.
+Fresh ordinary TTW input now completes sixteen speech commands through the
+Mom/Dad overlap and accepts the owned trait screen. Dad's next source begin
+program reaches an unsupported StopSound command; the opening and gurney exit
+remain incomplete. General quest progress telemetry reports entered source
+stages separately from the bootstrap identity and scheduler invocation counts.

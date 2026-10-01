@@ -69,9 +69,13 @@ and accepts Done with zero traits; the session quits with readers drained.
 Perk eligibility/ranks, scrollbar dragging, sound, timing and matched retail/XR
 pixels remain unbound. Empty Say/SayTo selections now register deferred,
 topic-filtered SayToDone instead of faulting or rebinding an active voice.
-A fresh ordinary opening delivers those empty events and starts Dad's first
-stage-80 line; Mom then requests an overlapping actual voice, exposing the
-remaining single-voice arbitration failure. The active CG00 quest script remains running.
+A fresh ordinary opening now gives Mom and Dad independent source voice/lip,
+result and completion channels. It completes sixteen voiced commands and accepts
+Done on the owned trait screen before Dad's next begin program faults on the
+unsupported StopSound command. The gurney exit remains incomplete. Paused
+overlap, isolated conversation skip and retained failed-result prefixes pass an
+owned component fixture. Competing subtitle selection remains visibly unbound.
+The active CG00 quest script remains running.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first ordinary manual save now initializes a campaign
@@ -111,7 +115,7 @@ owned source/body/audio fixture pass. Another actor's empty request leaves Dad's
 actual voice/lip/subtitle intact and does not count as spoken dialogue. See
 [scripted speech completion](scripted-speech-completion.md). GetPCIsSex reads the
 current shared player state. Say's extra actor/audio
-arguments, SayTo's fourth look argument, other listeners, competing voices and
+arguments, SayTo's fourth look argument, other listeners, same-actor interruption and
 matched result/event timing remain unbound. Synthetic typed-topic/order/prefix/
 cold-local contracts and an isolated owned native subtitle pixel fixture pass.
 HUDMainMenu branch dimensions, text template/font and admitted executable
@@ -427,9 +431,9 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Bind independent
-actor voices for Mom/Dad's reached simultaneous requests at CG00 stage 80,
-including speech/subtitle/event ownership, and resolve the authored ragdoll
+Bind the reached StopSound command to the general sound lifetime owner, then
+rerun the ordinary opening past the gurney. Complete competing subtitle
+selection/queue behavior, and resolve the authored ragdoll
 accumulation-root rotation failure on the post-face cold load.
 Preserve deferred empty completion, verified face geometry and MatchRace family/base/cold behavior and
 source HUD visibility, ordinary gender,
@@ -506,13 +510,16 @@ during development except for a requested visual check.
 
 ## Candidate and private continuation
 
-Current speech checks are `tmp/speech-empty-contract.log` and
-`tmp/speech-empty-owned.stdout.log`; the ordinary input run is
-`tmp/development-lab/ttw-speech-empty-20261001/`. It reaches the traits menu,
-completes twelve voiced commands, delivers the empty-selection gap and starts
-Dad's stage-80 voice. Mom's overlapping request remains a visible failure; no
-later campaign state is proved. Traits still use the generic panel. Recording
-is off. Current face checks are `tmp/match-face-contract.log`, `tmp/match-face-owned.log`
+Current speech checks are `tmp/actor-speech-concurrent.stdout.log`,
+`tmp/actor-speech-empty.stdout.log` and `tmp/actor-speech-runtime-gate.log`;
+the ordinary input run is `tmp/development-lab/ttw-actor-speech-20261001/`.
+It reaches the owned Fallout trait menu, accepts zero traits, completes sixteen
+voiced commands and retains the next unsupported StopSound failure. The session
+quits through ordinary controls with source readers drained. The selected current
+trait frame is `local/recordings/ttw-ui-20261001/TTW-owned-traits-flat.png`;
+its temporary frame files are removed. Recording is off. No gurney exit, later
+campaign state or matched retail/XR parity is proved. Current face checks are
+`tmp/match-face-contract.log`, `tmp/match-face-owned.log`
 and `tmp/match-face-runtime-gate.log`; the cold audit is
 `tmp/match-face-checkpoint.log`. `tmp/match-face-preset-order.log` confirms all
 4,220 native NPC list entries against first registration in a matched vanilla/DLC
