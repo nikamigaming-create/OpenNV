@@ -53,9 +53,16 @@ internal sealed partial class FalloutReferenceWorld
             if (snapshot.CombatStyle is { } style &&
                 (style.Value != 0 || !FormOverride(style.Form, "CSTY", 0).Sha256.Equals(style.Sha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Saved combat style differs from source.");
+            if (snapshot.Race is { } race &&
+                (ActorOverrideSource(snapshot.Target).Signature != "NPC_" || snapshot.Target == records.RuntimeFormKey(7) || race.Value != 0 ||
+                !FormOverride(race.Form, "RACE", 0).Sha256.Equals(race.Sha256, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Saved actor race differs from its winning NPC/RACE source.");
         }
+        var changedAppearance = _actorOverrides.Where(item => item.Value.Race is not null).Select(item => item.Key)
+            .Concat(admitted.Where(item => item.Value.Race is not null).Select(item => item.Key)).Distinct().ToArray();
         _actorOverrides.Clear();
         foreach (var (key, value) in admitted) _actorOverrides.Add(key, value);
+        foreach (var key in changedAppearance) _appearanceRevisions[key] = ++_appearanceRevision;
     }
 
     internal void ChangePerk(FalloutFormKey reference, FalloutFormKey perk, bool add)

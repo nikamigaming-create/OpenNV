@@ -88,7 +88,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         }, DialogueActorValue, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).TalkedToPlayer = true,
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
-            actor => _scripts.References!.ActorFactions(actor), () => _character.Female);
+            actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
+            actor => _scripts.References!.ActorRace(actor));
         AddChild(_conversation);
     }
 

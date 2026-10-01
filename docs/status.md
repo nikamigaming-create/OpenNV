@@ -38,7 +38,8 @@ question. Ordinary male selection completes its response. A fresh female run
 also completes Mom's Say and subsequent parent dialogue, reaches owned name
 entry and accepts a name. TTW_ShowGeneProjector now opens the source projector
 and race/sex screen; ordinary Next/Done/Yes accepts the selection and closes it.
-Dad's later source stage reports unbound MatchRace. That fault remains visible. That
+Dad's later MatchRace completes; a fresh ordinary Hispanic selection reaches
+unbound MatchFaceGeometry. That fault remains visible. That
 CELL reports 102 missing runtime references on entry and 83 after source reference
 processing; the clip reports two unbound non-camera targets. The first manual save
 fails at the existing prior-save requirement, so first-snapshot initialization and
@@ -91,7 +92,15 @@ unrelated controls and identical restoration; a fresh ordinary birth run and
 inspected requested screenshot verify the authored suppression. HUD override
 extensions, broader branch rules and matched retail/XR pixels remain open. Actor cold restoration,
 animation group interruption/blending, Must Complete end-idle waits and matched
-timing remain open. MatchRace and further chargen remain incomplete.
+timing remain open. NPC MatchRace now preserves source race-family age and base
+scope, including unloaded references; live dialogue reads the changed race.
+Existing owned bodies/FaceGen refresh while retaining actor/skeleton identity and
+animation phase. Save v24 retains validated base/race source hashes and reads
+prior supported saves. Synthetic state/order/failure/cold checks and an isolated
+owned native fixture pass changed/cold/restored pixels with no retained frames.
+Ordinary opening input reaches MatchFaceGeometry after accepting the changed race.
+Player-target changes, full actor cold clocks, MatchFaceGeometry and further
+chargen remain incomplete; this does not establish campaign or visual parity.
 
 Activation-failure sound selection/reset share C# state across source execution
 paths and ordinary flat/XR input. The default identity comes from an admitted

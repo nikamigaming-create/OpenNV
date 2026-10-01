@@ -4,20 +4,59 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal sealed class RuntimeNativeNifMaterialChannels
 {
-    private sealed record Target(FalloutNifFile Source, FalloutNifObject Property, IReadOnlyList<Material> Materials);
+    private sealed record Target(FalloutNifFile Source, FalloutNifObject Property, IReadOnlyList<Material> Materials, Node3D? Owner);
     private readonly Dictionary<(string Node, string Property), List<Target>> _targets = [];
+    private long _revision;
 
     internal bool HasSourceTarget(string node) => _targets.Keys.Any(key => key.Node == node);
 
-    internal void Add(string node, FalloutNifFile source, FalloutNifObject property, IReadOnlyList<Material> materials)
+    internal void Add(string node, FalloutNifFile source, FalloutNifObject property, IReadOnlyList<Material> materials, Node3D? owner = null)
     {
         var key = (node, property.Block.TypeName);
         if (!_targets.TryGetValue(key, out var entries)) _targets.Add(key, entries = []);
         if (!entries.Any(entry => ReferenceEquals(entry.Source, source) && entry.Property.Block.Index == property.Block.Index))
-            entries.Add(new(source, property, materials));
+        {
+            entries.Add(new(source, property, materials, owner));
+            _revision++;
+        }
+    }
+
+    internal RuntimeNativeNifMaterialChannels PrepareReplacement(IReadOnlySet<Node3D> owners, RuntimeNativeNifMaterialChannels replacement)
+    {
+        var result = new RuntimeNativeNifMaterialChannels();
+        foreach (var (key, targets) in _targets)
+            foreach (var target in targets.Where(target => target.Owner is null || !owners.Contains(target.Owner)))
+                result.Add(key.Node, target.Source, target.Property, target.Materials, target.Owner);
+        foreach (var (key, targets) in replacement._targets)
+            foreach (var target in targets) result.Add(key.Node, target.Source, target.Property, target.Materials, target.Owner);
+        return result;
+    }
+
+    internal void ReplaceWith(RuntimeNativeNifMaterialChannels other)
+    {
+        if (ReferenceEquals(this, other)) throw new InvalidOperationException("Material channel replacement needs a separate prepared owner.");
+        _targets.Clear();
+        foreach (var (key, value) in other._targets) _targets.Add(key, value.ToList());
+        _revision++;
     }
 
     internal Action<float>? Bind(FalloutNifFile source, FalloutNifControllerLink link)
+    {
+        var apply = BindCurrent(source, link);
+        if (apply is null) return null;
+        var revision = _revision;
+        return time =>
+        {
+            if (revision != _revision)
+            {
+                apply = BindCurrent(source, link) ?? throw new NotSupportedException("An active material channel lost its source target after body replacement.");
+                revision = _revision;
+            }
+            apply(time);
+        };
+    }
+
+    private Action<float>? BindCurrent(FalloutNifFile source, FalloutNifControllerLink link)
     {
         if (!_targets.TryGetValue((link.NodeName, link.PropertyType), out var targets)) return null;
         if (targets.Count != 1 || link.Variable2.Length != 0)
@@ -152,14 +191,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
 {
     private sealed partial class BuildState
     {
-        internal void RegisterActorMaterialChannels(RuntimeNativeNifSkeleton skeleton)
+        internal void RegisterActorMaterialChannels(RuntimeNativeNifMaterialChannels channels, Node3D owner)
         {
             foreach (var block in _source.Blocks.Where(block => block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape"))
             {
                 var geometry = _source.ReadGeometry(block.Index);
                 foreach (var index in geometry.Properties)
                     if (_materials.TryGetValue(index, out var materials))
-                        skeleton.MaterialChannels.Add(geometry.Name, _source, _source.ReadObject(index), materials);
+                        channels.Add(geometry.Name, _source, _source.ReadObject(index), materials, owner);
             }
         }
     }

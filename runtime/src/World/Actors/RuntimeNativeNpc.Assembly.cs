@@ -52,18 +52,7 @@ internal partial class RuntimeNativeNpc
                 var part = prepared.Part;
                 try
                 {
-                    var scene = NativeNifMeshBuilder.AddActorPart(prepared.Model, actor.Skeleton,
-                        materialOverride: (nif, geometry) => _materialOwner?.Invoke(appearance, part, nif, geometry),
-                        geometryOwner: prepared.Geometry.Count == 0 ? null : (_, geometry, mesh) => prepared.Geometry.GetValueOrDefault(geometry.Block.Index, mesh),
-                        rigidFaceBinds: FalloutNpcFaceAttachment.UsesHeadModelSpace(part.Role)
-                            ? _prepared.HeadBinds ?? throw new NotSupportedException("Rigid FaceGen part has no source skinned head owner.") : null,
-                        selectedGeometryName: prepared.SelectedShape,
-                        morphOwner: prepared.Morphs.Count == 0 ? null : (_, geometry, _) => prepared.Morphs[geometry.Block.Index],
-                        contentSource: _source, bipedSlots: part.Role is "armor" or "armor-addon" ? part.BipedSlots : 0);
-                    scene.Root.SetMeta("opennv_source_model", part.ModelPath!);
-                    scene.Root.SetMeta("opennv_source_part", part.Role);
-                    scene.Root.SetMeta("opennv_source_form", part.Source.ToString());
-                    if (prepared.MorphIdentity is { } identity) scene.Root.SetMeta("opennv_source_egm", identity);
+                    var scene = BuildAppearancePart(prepared, _prepared, actor.Skeleton, _source, _materialOwner);
                     _parts.Add(scene);
                 }
                 catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
@@ -93,5 +82,27 @@ internal partial class RuntimeNativeNpc
     {
         _templates = selection;
         ConfigureFaceAnimation(stack);
+    }
+
+    private static RuntimeNativeNifScene BuildAppearancePart(FalloutNpcPreparedPart prepared, FalloutNpcPreparedGeometry body,
+        RuntimeNativeNifSkeleton skeleton, RuntimeLiveContentSource source,
+        Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner,
+        RuntimeNativeNifMaterialChannels? materialChannels = null)
+    {
+        var part = prepared.Part;
+        var scene = NativeNifMeshBuilder.AddActorPart(prepared.Model, skeleton,
+            materialOverride: (nif, geometry) => materialOwner?.Invoke(body.Appearance, part, nif, geometry),
+            geometryOwner: prepared.Geometry.Count == 0 ? null : (_, geometry, mesh) => prepared.Geometry.GetValueOrDefault(geometry.Block.Index, mesh),
+            rigidFaceBinds: FalloutNpcFaceAttachment.UsesHeadModelSpace(part.Role)
+                ? body.HeadBinds ?? throw new NotSupportedException("Rigid FaceGen part has no source skinned head owner.") : null,
+            selectedGeometryName: prepared.SelectedShape,
+            morphOwner: prepared.Morphs.Count == 0 ? null : (_, geometry, _) => prepared.Morphs[geometry.Block.Index],
+            contentSource: source, bipedSlots: part.Role is "armor" or "armor-addon" ? part.BipedSlots : 0,
+            materialChannels: materialChannels);
+        scene.Root.SetMeta("opennv_source_model", part.ModelPath!);
+        scene.Root.SetMeta("opennv_source_part", part.Role);
+        scene.Root.SetMeta("opennv_source_form", part.Source.ToString());
+        if (prepared.MorphIdentity is { } identity) scene.Root.SetMeta("opennv_source_egm", identity);
+        return scene;
     }
 }

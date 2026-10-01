@@ -173,6 +173,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _imageSpaceState = imageSpaceState;
         _quests = quests;
         _scripts = scripts;
+        _scripts.References!.BindPlayerAppearance(() => FalloutNativeCharacterCreation.ActorState(_pluginStack, _raceSexContract.Player, _character));
         _scriptHost = new((quest, stage) =>
         {
             var source = _controls.Quests.Values.SelectMany(values => values.Values)
@@ -318,7 +319,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (condition.RunOn == 0 && condition.Function is 59 or 79 or 546) return _quests.Evaluate(condition);
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
         }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
-            actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female);
+            actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
+            actor => _scripts.References!.ActorRace(actor));
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

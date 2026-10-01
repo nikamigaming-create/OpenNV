@@ -65,6 +65,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         absentIdleTargets = _animation?.AbsentSourceTargets.Select(link => new { node = link.NodeName, controller = link.ControllerType }).ToArray(),
         error = AnimationError,
         combat = Combat?.Observation,
+        appearance = new { race = Appearance.Race.ToString(), _appearanceRevision, error = AppearanceError },
     };
 
     internal void PlayBaseSequence(FalloutNifFile source, FalloutNifControllerSequence sequence, string owner)
@@ -322,9 +323,10 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         FalloutPlacedReference reference,
         float unitsToMetres,
         Func<FalloutNpcAppearance, FalloutNpcAppearancePart, FalloutNifFile, FalloutNifGeometry, Material?>? materialOwner = null,
-        IReadOnlyList<FalloutFormKey>? equippedArmor = null, FalloutActorTemplateSelection? selection = null)
+        IReadOnlyList<FalloutFormKey>? equippedArmor = null, FalloutActorTemplateSelection? selection = null,
+        FalloutActorAppearanceState? appearanceState = null)
     {
-        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, selection: selection), source,
+        var actor = Create(FalloutNpcAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, equippedArmor, appearanceState, selection), source,
             unitsToMetres, materialOwner);
         try { actor.BindSourceBehavior(stack, selection); return actor; }
         catch { actor.Free(); throw; }

@@ -697,6 +697,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "resethealth" when arguments.Count == 0:
                     world.ResetHealth(target);
                     break;
+                case "matchrace" when arguments.Count == 1:
+                    world.MatchRace(target, Reference(arguments[0]));
+                    break;
                 case "restoreav" or "restoreactorvalue" when arguments.Count == 2:
                     world.RestoreActorValue(target, arguments[0], (float)Number(arguments[1]));
                     break;

@@ -40,7 +40,7 @@ winning model, XML, font, source surfaces and shared draft supply presentation a
 input. Acceptance closes the menu and retains ordinary source continuation.
 Source drift and unsupported overlapping requests fail visibly. Synthetic
 associations, native model/input/default restoration and ordinary TTW opening
-checks cover this bounded owner; MatchRace, matched
+checks cover this bounded owner; MatchFaceGeometry, matched
 portrait/effect/close timing and XR final-eye presentation remain unverified.
 
 GamebryoRootMotionTravel advances the winning NAVM corridor using owned KF
@@ -65,6 +65,20 @@ The same owned XML/font/atlas renderer supplies pixels; control re-enabling
 restores the existing branches. Synthetic mask cases through owned native pixels
 and ordinary birth input cover this bounded flat owner. HUD override extensions,
 other branch rules and matched retail/XR presentation remain unbound.
+
+FalloutReferenceWorld owns NPC-base race overrides independently of resident 3D.
+MatchRace reads winning RNAM/YNAM/ONAM links, preserves the target's age tier in
+the source family and leaves an exact same-race request unchanged. Invalid typed
+links/cycles reject before committing. NPC/RACE source hashes retain in save v24;
+v23 and prior supported saves still load without inventing overrides. Existing,
+warm and newly assembled native bodies read the same state. Revision stamps avoid
+frame-by-frame source/template scans. RuntimeNativeNpc prepares actual source
+parts, FaceGen and material channels before replacing its body parts, preserving
+the shared skeleton, animation/face clocks and non-body objects. Changed material
+targets rebind on revision; bounds and reference fade geometry refresh. Dialogue
+race/child conditions query authoritative state. Player-target race transitions,
+different skeleton rebinding, complete actor cold clocks, MatchFaceGeometry and
+matched retail/XR pixels remain unbound.
 
 [Say](https://geckwiki.com/index.php?title=Say) and
 [SayTo](https://geckwiki.com/index.php?title=SayTo) share RuntimeNativeSpeech's

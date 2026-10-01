@@ -1342,6 +1342,18 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ScriptValuesSchema });
+    var legacyScriptValues = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.WithWorldState(legacyScriptValues.State, referenceSave.ActiveCell,
+        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The preceding script-values save no longer upgrades through the ordinary save owner.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.ScriptValuesSchema,
+        ActorOverrides = [new(new("SyntheticNPC.esm", 0x100), new string('0', 64), [], [],
+            Race: new(new("SyntheticNPC.esm", 0x400), new string('0', 64), 0))],
+    }), "Legacy campaign save cannot contain actor race state");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ObjectAnimationSchema });
     var legacyAnimation = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
