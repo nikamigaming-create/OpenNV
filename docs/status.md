@@ -9,7 +9,10 @@ The immediate priority is the complete TTW route from Fallout 3's opening throug
 the train station into New Vegas, including dependencies and cold continuation.
 Queued player MoveTo now shares C# world ownership and the native scene path.
 Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
-and the required runtime gate pass; actual startup and campaign travel remain
+and the required movement runtime gate pass. Quest MenuMode and multiple GameMode
+blocks now share source scheduling; TTWStart's owned clock fixture reaches its
+two-choice message and retains it cold. The complete menu-dispatch runtime gate
+also passes. Actual startup and campaign travel remain
 unverified. JAM/MCM and all other requested mod targets remain open.
 
 The broader direction is a functioning flat world, including autonomous

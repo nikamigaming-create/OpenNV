@@ -52,7 +52,10 @@ internal sealed class FalloutScriptFunction
         _invokeValue is not null ? _invokeValue(arguments) : _invoke!(arguments);
 }
 internal sealed record FalloutScriptEventProgram(string Event, string? Filter, FalloutGameModeProgram Program,
-    IReadOnlyList<string>? Parameters = null);
+    IReadOnlyList<string>? Parameters = null)
+{
+    internal static uint MenuCategory(uint menu) => menu is 1002 or 1003 or 1023 or 1035 ? 1u : menu is 3 or 4 ? menu : 2u;
+}
 
 internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 {
@@ -67,8 +70,9 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 7;
+    internal const int ParserVersion = 8;
     private readonly IReadOnlyList<string[]> _lines;
+    internal bool HasStatements => _lines.Count != 0;
     private readonly Dictionary<int, int> _loopEnds = [];
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
     {
@@ -166,14 +170,42 @@ internal sealed partial class FalloutGameModeProgram
 
     internal static FalloutGameModeProgram Read(string source, string blockName = "GameMode", uint? argument = null)
     {
-        var matching = ReadEvents(source).Where(block => block.Event.Equals(blockName, StringComparison.OrdinalIgnoreCase));
-        if (argument is { } expected)
-            matching = matching.Where(block => uint.TryParse(block.Filter, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value == expected);
-        var blocks = matching.ToArray();
-        if (argument is null && blocks.Any(block => block.Filter is not null))
+        var blocks = ReadEvents(source).Where(block => block.Event.Equals(blockName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var menuMode = blockName.Equals("MenuMode", StringComparison.OrdinalIgnoreCase);
+        if (!menuMode && argument is null && blocks.Any(block => block.Filter is not null))
             throw new NotSupportedException($"{blockName} block arguments are unbound.");
-        if (blocks.Length > 1) throw new NotSupportedException($"Multiple {blockName} blocks need independent scheduling.");
-        return blocks.Length == 0 ? new([]) : blocks[0].Program;
+        var lines = new List<string[]>();
+        foreach (var block in blocks)
+        {
+            if (!menuMode && argument is not null && block.Filter is null) continue;
+            if (argument is { } expected && block.Filter is { } filter)
+            {
+                if (uint.TryParse(filter, NumberStyles.None, CultureInfo.InvariantCulture, out var code))
+                {
+                    if (code != expected && (!menuMode || code != 0 && code != FalloutScriptEventProgram.MenuCategory(expected))) continue;
+                }
+                else
+                {
+                    if (!menuMode) throw new NotSupportedException($"{blockName} filter is not a literal.");
+                    lines.Add(["if", filter, "==", "0", "||", filter, "==", expected.ToString(CultureInfo.InvariantCulture),
+                        "||", filter, "==", FalloutScriptEventProgram.MenuCategory(expected).ToString(CultureInfo.InvariantCulture)]);
+                    lines.AddRange(block.Program._lines);
+                    lines.Add(["endif"]);
+                    continue;
+                }
+            }
+            else if (menuMode && block.Filter is { } menuFilter)
+            {
+                lines.Add(["if", "MenuMode", menuFilter]);
+                lines.AddRange(block.Program._lines);
+                lines.Add(["endif"]);
+                continue;
+            }
+            lines.AddRange(block.Program._lines);
+        }
+        // Begin/End blocks share the invocation. In particular Return stops
+        // the remaining source blocks, not only the current block.
+        return new(lines);
     }
     internal void Execute(Func<string, double> variable, Action<string, double> assign,
         Action<string, IReadOnlyList<string>> call, Func<string, FalloutScriptFunction?>? function = null,
@@ -466,6 +498,8 @@ internal sealed partial class FalloutGameModeProgram
     // migration, and current-version saves must contain every admitted owner.
     internal static bool WasRejectedByParser(string source, int version)
     {
+        if (version < 8 && ReadEvents(source).Count(block => block.Event.Equals("GameMode", StringComparison.OrdinalIgnoreCase)) > 1)
+            return true;
         // Only these newly admitted single-character operators were lexical
         // rejections. Old parsers already tokenized shifts and based numbers;
         // their reached execution failures must remain failures on restoration.

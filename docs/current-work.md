@@ -17,6 +17,23 @@ completion is claimed.
 
 ## Verified runtime
 
+Quest scripts now execute unfiltered and filtered MenuMode blocks through the
+shared SCPT clock. Multiple GameMode blocks share source order, locals, budgets
+and Return; menu filters read their current local value at execution. A shared
+C# menu frame owns queries and identity; absent filtered-menu identity fails
+visibly. Native message and supported paused panels publish their codes, retaining
+underlying panels when a source message opens. Claimed opening menus retain their
+existing handoff; exact open-menu scheduling and title bootstrap remain unbound.
+Synthetic reference/fallback-quest checks pass source order, filters, failure
+prefixes, stopped clocks, scoped handoff and cold faults. The winning TTWStart
+owned fixture now runs through the shared quest clock with owned/default cadence,
+queues its holding-cell move once and publishes the actual two-choice message.
+Cold restoration retains its prefix and pending choice without a transient menu
+frame. The complete runtime gate passes with recording off. Parser 8 retains all 446 original saved owners and admits one previously
+rejected multi-block owner; both protected saves remain unchanged. The TTW source
+audit retains five parser failures among 1,263 entry-plugin scripts. Campaign,
+native startup, rendered choice and train travel remain unverified.
+
 Player MoveTo now queues requests in the shared C# world owner, so the following
 source statements finish before native movement. Typed destinations and optional
 offsets resolve against current reference placement. The native adapter consumes
@@ -29,8 +46,8 @@ failure retention and retirement. The winning TTWStart MenuMode block passes an
 explicit owned fixture: its holding-cell request and following statements execute
 once. The full runtime gate and unchanged 446-owner cold-save audit pass.
 Ordinary TTW startup, rendered transfer, opening choice, campaign and train travel
-remain unverified. The next owners are configured startup and quest MenuMode
-dispatch, followed by general player/character-creation and campaign state.
+remain unverified. The next owners are the configured starting quest and title/
+player bootstrap, followed by general character-creation and campaign state.
 
 Keyboard/mouse control queries and remaps now share a profile-owned C# table.
 Winning installation INI bindings remain read-only; changes swap occupied keys
@@ -87,7 +104,7 @@ select additional retail render phases remain visibly unbound.
 NVSE integer remainder, bitwise AND/OR, shifts and compound assignments now
 use signed 64-bit truncation; binary/hexadecimal literals retain their 32-bit
 contract. Focused execution, precedence, undefined-operation and migration
-checks pass. Parser 7 preserves all 446 owners in the genuine owned checkpoint
+checks pass. Parser 8 preserves all 446 original owners in the genuine owned checkpoint
 through cold restoration, with both protected source saves unchanged.
 
 Script arrays now belong to the shared C# value store. Packed lists, numeric
@@ -99,7 +116,7 @@ unowned graphs. Save v23 retains array identities alongside v22 object-animation
 state; earlier supported saves still load. Focused scalar/array/function and
 native activation/key-callback/cold-reference checks pass, as does the complete
 required runtime gate. The genuine owned checkpoint retains all 446 quest
-script clocks, failures and progression through parser 1 to 7 and another cold
+script clocks, failures and progression through parser 1 to 8 and another cold
 restore; its file remains unchanged.
 The selected JAM source audit now has 11 parser failures among 52 scripts.
 Its JBT initializer registers the winning render function and mutates its perk
@@ -107,7 +124,7 @@ parameters before reaching hit-event registration; the source execution
 audit does not establish a working bullet-time module. JHM reaches the missing
 hit-event owner.
 Complete JAM/MCM remains unverified.
-The TTW source audit admits all but nine of 1,263 entry-plugin scripts;
+The TTW source audit admits all but five of 1,263 entry-plugin scripts;
 its opening, campaign progression and travel remain unverified.
 
 Source object animation now binds PlayGroup and IsAnimPlaying to each resident
@@ -167,7 +184,7 @@ session audit passed. This intermittent construction failure remains open.
 ## Next owners
 
 Replace the New Vegas startup assumptions with the winning configured starting
-quest, quest MenuMode blocks and shared player/campaign state. TTW's source
+quest, title bootstrap and shared player/campaign state. TTW's source
 opening choice must lead into Fallout 3's authored character creation, exit,
 train-station route and ticketed travel into the Mojave opening. Continue through
 ordinary input and persistent saves; queued source transfers alone do not prove
@@ -247,6 +264,9 @@ Current transfer checks are `tmp/ttw-player-moves-native.stdout.log`,
 `tmp/ttw-player-moves-native.stderr.log`, `tmp/ttw-player-moves-runtime-gate.log`,
 `tmp/ttw-player-moves-owned.private.json` and `tmp/ttw-player-moves-owned-save.log`.
 These fixtures do not establish a campaign playthrough.
+Current menu checks are `tmp/ttw-menu-script-contract.log`,
+`tmp/ttw-menu-owned.private.json`, `tmp/ttw-menu-owned-save.log`,
+`tmp/ttw-menu-source.private.json` and `tmp/ttw-menu-runtime-gate.log`.
 The requested flat screenshot is extracted from the retained September 27
 companion clip; it does not show the new September 30 code.
 
