@@ -42,7 +42,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         .SingleOrDefault()?.IsJITOptimizerDisabled ?? false;
 
     internal void ConfigureBot(Func<string, BotObservation> observe,
-        Func<System.Numerics.Vector3, System.Numerics.Vector3, IReadOnlyList<System.Numerics.Vector3>> route, float sensitivity, Key forward, Key activate,
+        Func<System.Numerics.Vector3, System.Numerics.Vector3, float, BotNavigationRoute> route, float sensitivity, Key forward, Key activate,
         Func<OpenNV.Runtime.Gameplay.Bots.SteeringIntent, bool, bool>? inputOverride = null, Action? pumpInput = null)
     {
         if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");

@@ -67,7 +67,7 @@ public partial class RuntimeCoordinator
             paused = GetTree().Paused,
             combatWheel = _nativeCombatWheel?.State,
             xr = _nativeXr?.State,
-            detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-reference-and-controller-details",
+            detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-reference-controller-and-quest-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
             {
                 sourceCompatibilityId = RuntimeLiveContentSource.Current!.SaveCompatibilityId,
@@ -82,7 +82,9 @@ public partial class RuntimeCoordinator
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
-                state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0
+                pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
+                state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
+                    _nativeReferences.PendingProcedureCaptureCount == 0
                     ? _nativeReferences.Capture() : null,
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },
@@ -158,7 +160,7 @@ public partial class RuntimeCoordinator
             soundPaths = _nativePluginStack?.SoundPaths.State,
             questProgress = _nativeOpeningStageDriver?.Quests.ProgressState,
             conversation = _nativeOpeningStageDriver?.ConversationState,
-            questScripts = _nativeQuestScripts?.State,
+            questScripts = _nativeQuestScripts?.Observe(detailed),
             numericGameSettings = _nativePluginStack?.NumericSettings.State,
             gameTime = _nativeGameTimeAdapter?.State,
             gameTimeUnbound = _nativeGameTimeUnbound,
@@ -177,6 +179,7 @@ public partial class RuntimeCoordinator
             characterCreation = _nativeOpeningStageDriver?.CharacterCreationState,
             traitMenu = _nativeOpeningStageDriver?.TraitMenuState,
             vigor = _nativeOpeningStageDriver?.VigorState,
+            specialBook = _nativeOpeningStageDriver?.SpecialBookState,
             imageSpace = cellChildren is null ? null : cellNodes.OfType<RuntimeNativeImageSpace>().Select(presenter => new
             {
                 active = presenter.Frame?.Active.Select(modifier => new

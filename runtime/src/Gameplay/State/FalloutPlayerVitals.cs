@@ -90,7 +90,8 @@ internal sealed class FalloutPlayerVitals
         var displayed = checked((int)MathF.Ceiling(hitPoints));
         var state = derived with
         {
-            HitPoints = displayed, HitPointFraction = displayed - hitPoints,
+            HitPoints = displayed,
+            HitPointFraction = displayed - hitPoints,
             LimbDamage = _state.LimbDamage is null ? null : new Dictionary<byte, float>(_state.LimbDamage),
             RadiationRads = _state.RadiationRads,
             ActionPoints = Math.Clamp(derived.MaximumActionPoints - (_state.MaximumActionPoints - _state.ActionPoints), 0, derived.MaximumActionPoints),

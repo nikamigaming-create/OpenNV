@@ -61,7 +61,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     // admit a contact event and GameMode together; execute their blocks in the
     // authored order, never in the order callbacks arrived from presentation.
     internal IReadOnlyList<FalloutReferenceScriptEventResult> DispatchFrame(FalloutFormKey reference,
-        IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds)
+        IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
+        Action? observeActivationBegin = null, Action? observeActivationEnd = null)
     {
         if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
@@ -156,13 +157,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 }
                 var actionReference = packageEvent || trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
                     ? null : item.ActionReference;
+                if (activation) observeActivationBegin?.Invoke();
                 Execute(instance.Reference, program!.Bindings, block.Program, actionReference, elapsedSeconds);
+                if (activation) observeActivationEnd?.Invoke();
                 ++counts[name];
             }
             if (admitted.TryGetValue("OnActivate", out var activationEvent) && counts["OnActivate"] == 0)
             {
                 runningEvent = "OnActivate";
+                observeActivationBegin?.Invoke();
                 host.Apply(new(FalloutReferenceEffectKind.DefaultActivate, reference, reference, activationEvent.ActionReference));
+                observeActivationEnd?.Invoke();
             }
         }
         catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or KeyNotFoundException or OverflowException)
@@ -391,6 +396,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return soundFunction;
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(records, operation) is { } settingFunction)
                 return settingFunction;
+            if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(records, operation) is { } iniSettingFunction)
+                return iniSettingFunction;
+            if (parts.Length == 1 && FalloutModQueryCommands.Function(records, operation) is { } modQueryFunction)
+                return modQueryFunction;
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => world.Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
@@ -997,6 +1006,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setobjectivedisplayed" or "setobjectivecompleted" when parts.Length == 1 && arguments.Count == 3:
                     quests.ApplyObjective(Quest(arguments[0]), Index(Number(arguments[1])),
                         operation == "setobjectivedisplayed", Boolean(arguments[2]));
+                    break;
+                case "completeallobjectives" when parts.Length == 1 && arguments.Count == 1:
+                    quests.CompleteAllObjectives(Quest(arguments[0]));
+                    break;
+                case "killquestupdates" or "kqu" when parts.Length == 1 && arguments.Count == 0:
+                    quests.KillQuestUpdates();
                     break;
                 case "startconversation" when arguments.Count is 1 or 2:
                     var topic = arguments.Count == 2 ? bindings.Form(arguments[1]) : null;

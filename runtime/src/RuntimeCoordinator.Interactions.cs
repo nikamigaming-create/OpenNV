@@ -10,6 +10,7 @@ public partial class RuntimeCoordinator
 {
     private Presentation.OpenXR.NativeXrRig? _nativeXr;
     private CanvasLayer? _nativeContainerLayer;
+    private FalloutFormKey? _nativeContainerReference;
     private NativeOwnedGameplayHud? _nativeGameplayHud;
     private NativeOwnedHudMessages? _nativeHudMessages;
     private NativeOwnedSubtitles? _nativeSubtitles;
@@ -25,7 +26,8 @@ public partial class RuntimeCoordinator
             () => _nativePlayer!.SourceControls);
         layer.AddChild(_nativeGameplayHud);
         _nativeHudMessages = new(_nativePluginStack!, _nativeInventory.Notifications,
-            () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState);
+            () => _nativeXr is null && _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && !GetTree().Paused, _nativeQuestState,
+            () => _nativeLoadingScreens is not null || _nativeLoadingLayer is not null);
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;
@@ -152,6 +154,7 @@ public partial class RuntimeCoordinator
                 _nativeOpeningStageDriver.PlayerName, title, () =>
                 {
                     _nativeContainerLayer!.QueueFree(); _nativeContainerLayer = null;
+                    _nativeContainerReference = null;
                     GetTree().Paused = wasPaused; _nativePlayer!.SetModalInput(false);
                     Input.MouseMode = Input.MouseModeEnum.Captured; SaveNativeInteraction();
                 }, () => { });
@@ -159,9 +162,11 @@ public partial class RuntimeCoordinator
             _nativeContainerLayer = new CanvasLayer { Name = "NativeContainerLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
             AddChild(_nativeContainerLayer);
             _nativeContainerLayer.AddChild(menu);
+            _nativeContainerReference = reference.FormKey;
             if (menu.Error is { } failure)
             {
                 _nativeContainerLayer.QueueFree(); _nativeContainerLayer = null;
+                _nativeContainerReference = null;
                 GetTree().Paused = wasPaused; _nativePlayer.SetModalInput(false);
                 Input.MouseMode = Input.MouseModeEnum.Captured;
                 throw new NotSupportedException(failure);

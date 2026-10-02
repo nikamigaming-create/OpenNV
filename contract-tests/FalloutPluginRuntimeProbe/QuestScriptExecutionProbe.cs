@@ -106,6 +106,7 @@ internal static class QuestScriptExecutionProbe
             Reject(() => badScripts.AdvanceClaimed(badQuest, 0.1, new((_, _) => () => { }, _ => 0)));
             Require(badState.Variable(badQuest, 3) == 99 && badScripts.Capture().Instances.Single().Error is not null,
                 "An unsupported reached command discarded the executed prefix or hid its failure.");
+            VerifyObservation(badScripts, badState);
             Reject(() => badScripts.AdvanceClaimed(badQuest, 1, new((_, _) => () => { }, _ => 0)));
             Require(badState.Variable(badQuest, 3) == 99, "A faulted script executed its prefix twice.");
         }
@@ -114,7 +115,30 @@ internal static class QuestScriptExecutionProbe
             foreach (var file in new[] { "Base.esm", "Override.esp", "Commas.esm", "Numeric.esm", "Strings.esm", "Branches.esm", "Bad.esm" }) File.Delete(Path.Combine(directory, file));
             Directory.Delete(directory);
         }
-        Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true");
+        Console.WriteLine("OPENNV_QUEST_SCRIPT_EXECUTION_PASS sourceSlots=true stageEffects=true nestedStageQuery=true calculations=true coldRestore=true failurePrefix=true retryRejected=true observationPurity=true summaryFaultsAndClocks=true detailedVariableBits=true");
+    }
+
+    private static void VerifyObservation(FalloutQuestScripts scripts, FalloutQuestState quests)
+    {
+        var savedScripts = JsonSerializer.Serialize(scripts.Capture());
+        var savedQuests = JsonSerializer.Serialize(quests.Capture());
+        var detailed = JsonSerializer.SerializeToElement(scripts.State);
+        var summary = JsonSerializer.SerializeToElement(scripts.Observe(detailed: false));
+        foreach (var field in new[] { "quests", "unbound", "newlyParsedOnRestore", "events", "session", "strings", "menus" })
+            Require(detailed.GetProperty(field).GetRawText() == summary.GetProperty(field).GetRawText(),
+                "Periodic script observation lost identities, errors, clocks or event state: " + field);
+        Require(summary.GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal) &&
+            summary.GetProperty("variables").GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal) &&
+            summary.GetProperty("objectives").GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal),
+            "Reduced periodic observations did not explicitly declare their detail scope.");
+        var variables = detailed.GetProperty("variables").EnumerateArray().Single().GetProperty("variables");
+        var variableCounts = summary.GetProperty("variables").GetProperty("quests").EnumerateArray().Single();
+        Require(variableCounts.GetProperty("count").GetInt32() == variables.GetArrayLength() &&
+            variables.EnumerateArray().Single(value => value.GetProperty("index").GetUInt32() == 3).GetProperty("bits").GetString() ==
+            BitConverter.DoubleToInt64Bits(99d).ToString("x16", System.Globalization.CultureInfo.InvariantCulture),
+            "Detailed request observation lost the retained failed-prefix value or exact bits.");
+        Require(savedScripts == JsonSerializer.Serialize(scripts.Capture()) && savedQuests == JsonSerializer.Serialize(quests.Capture()),
+            "Observing script detail consumed or mutated authoritative state.");
     }
 
     private static void BranchAdmissionColdState(string directory)

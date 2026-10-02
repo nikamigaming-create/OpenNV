@@ -10,6 +10,7 @@ internal partial class RuntimeNativeDoorPortal : Node
     internal FalloutFormKey Destination { get; private set; }
     internal FalloutFormKey DestinationCell { get; private set; }
     internal FalloutFormKey? DestinationWorldspace { get; private set; }
+    internal long ActivationRequests { get; private set; }
 
     internal void Configure(
         FalloutFormKey reference,
@@ -39,5 +40,6 @@ internal partial class RuntimeNativeDoorPortal : Node
         if (_activate is null)
             throw new InvalidOperationException("Native door portal is not configured.");
         _activate();
+        ActivationRequests++;
     }
 }

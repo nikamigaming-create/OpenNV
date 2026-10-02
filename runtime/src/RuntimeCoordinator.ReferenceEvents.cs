@@ -68,7 +68,14 @@ public partial class RuntimeCoordinator
             existing.SetProcess(true);
             return;
         }
-        var events = new RuntimeNativeReferenceEvents { Player = _nativePlayer, Interact = ActivateNativeObject };
+        var events = new RuntimeNativeReferenceEvents
+        {
+            Player = _nativePlayer,
+            Interact = ActivateNativeObject,
+            ObservePlayerActivationBegin = BeginNativeBotActivation,
+            ObservePlayerActivationEnd = EndNativeBotActivation,
+            ObservePlayerActivationFinished = (reference, successful) => _botInteractions.Finish(reference.ToString(), successful)
+        };
         events.Configure(_nativePluginStack!, _nativeReferences!, _nativeQuestState!, cell, root,
             new(events.IsCurrentFurniture, effect =>
             {

@@ -121,6 +121,7 @@ internal static class PlayerActorValueContracts
             snapshot with { StatsWinner = "Wrong.esp" }, snapshot with { Values = snapshot.Values.Where(pair => pair.Key != 11).ToDictionary() },
             snapshot with { Values = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Key == 6 ? pair.Value with { Damage = float.NaN } : pair.Value) },
             snapshot with { Values = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Key == 6 ? pair.Value with { Base = 3.25f } : pair.Value) },
+            snapshot with { Values = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Key == 6 ? pair.Value with { Base = MathF.BitIncrement(2147483648f) } : pair.Value) },
         })
         {
             Reject(() => cold.Restore(invalid)); Require(JsonSerializer.Serialize(cold.Capture()) == before, "Failed pool restore partially changed live values.");
@@ -136,6 +137,15 @@ internal static class PlayerActorValueContracts
         cold.WriteBaseInteger(5, -5);
         Require(cold.ReadBase(5) == -5 && cold.ReadPermanent(5) == 1 && cold.ReadCurrent(5) == -3.25f && cold.ReadBoundedCurrent(5) == 1,
             "A menu allocation clamp was imposed on the source BASE setter or raw script current getter.");
+        foreach (var boundary in new[] { int.MinValue, int.MaxValue })
+        {
+            cold.WriteBaseInteger(5, boundary);
+            var boundarySnapshot = JsonSerializer.Deserialize<FalloutPlayerActorValuesSnapshot>(JsonSerializer.Serialize(cold.Capture()))!;
+            var boundaryCold = new FalloutPlayerActorValues(records, boundarySnapshot);
+            Require(cold.ReadBase(5) == (float)boundary && cold.BaseSpecial.Strength == boundary &&
+                boundaryCold.ReadBase(5) == cold.ReadBase(5) && boundaryCold.BaseSpecial == cold.BaseSpecial,
+                "Signed BASE boundary failed its Float32 storage or legacy integer/cold projection.");
+        }
     }
 
     private static void VerifyTemplate(string directory)

@@ -24,3 +24,5 @@ try { steering.Step(new(float.NaN, 0, 0), Vector3.UnitZ, Vector3.UnitX, true, .0
 catch (ArgumentException) { }
 Console.WriteLine("Reactive steering: moving-target convergence, bounded delayed frame, control reset and invalid observations PASS.");
 ReferenceBotContracts.Run();
+BotNavigationContracts.Run();
+BotInteractionContracts.Run();

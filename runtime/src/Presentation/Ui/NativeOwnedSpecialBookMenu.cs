@@ -49,7 +49,8 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             bounds = new[] { target.Bounds.Position.X, target.Bounds.Position.Y, target.Bounds.Size.X, target.Bounds.Size.Y },
             target.InFront
         }),
-        unbound = "production-permanent-value-and-base-write-binding,source-command-and-save-integration,PC-shortcut-repeat,fade-and-postprocessing,clip-plane-and-animated-bound-fitting,language-remapping,matched-retail-and-XR-pixels"
+        integration = "explicit-permanent-read-and-base-write-binding;host-owns-command-menu-and-save-policy",
+        unbound = "PC-shortcut-repeat,fade-and-postprocessing,clip-plane-and-animated-bound-fitting,language-remapping,matched-retail-and-XR-pixels"
     };
 
     internal NativeOwnedSpecialBookMenu(FalloutPluginStack records, FalloutSpecialAllocationBinding binding, int? budget,

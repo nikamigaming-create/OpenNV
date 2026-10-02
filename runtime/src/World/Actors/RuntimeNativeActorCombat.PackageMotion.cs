@@ -24,6 +24,10 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { Patrol = progress };
     }
+    internal void SetEscortProgress(FalloutEscortProgress progress)
+    {
+        if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { Escort = progress };
+    }
     internal void FacePackageDirection(Vector3 direction, double delta) => TurnToward(_actor.GlobalPosition + direction, delta);
     internal Vector3 ProjectPackageDestination(Vector3 authored)
     {
@@ -97,7 +101,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var position = _actor.GlobalPosition; var rotation = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         _state.PackageMotion = new(package.FormKey, hash, clip.Path, clip.Hash, next, false,
             [position.X, position.Y, position.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
-            retained?.Package == package.FormKey ? retained.Patrol : null);
+            retained?.Package == package.FormKey ? retained.Patrol : null,
+            retained?.Package == package.FormKey ? retained.Escort : null);
         PackageOwnsPose = true;
     }
 }

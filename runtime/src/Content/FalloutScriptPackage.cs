@@ -189,8 +189,18 @@ internal sealed class FalloutPackageEvents(Action<FalloutScriptPackage, string> 
     {
         RequireHealthy();
         if (Active is null || Done) return;
-        Publish(Active, "POEA");
-        Done = true;
+        var completing = Active;
+        var revision = Revision;
+        Publish(completing, "POEA");
+        if (Active == completing && Revision == revision + 1) Done = true;
+    }
+
+    internal void Restore(FalloutScriptPackage package, bool done)
+    {
+        RequireHealthy();
+        if (Active is not null) throw new InvalidOperationException("Package restoration requires an unbound lifecycle.");
+        Active = package;
+        Done = done;
     }
 
     private void RequireHealthy()

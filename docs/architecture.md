@@ -20,6 +20,14 @@ requires a bounded projected endpoint before the existing KF locomotion owner
 consumes arrival. Exact furniture/dialogue contracts remain separate. See
 [marker travel](source-marker-travel-radius.md).
 
+The [Escort procedure](source-escort-packages.md) reads winning reference targets,
+marker destinations and source distances. Its current player-target binding
+uses the shared NPC NAVM, KF and native capsule owner for approach, lead, wait
+and arrival. Reference-owned motion retains acquisition/completion across cold
+restoration; saving before its first motion snapshot fails closed. Source
+completion callbacks cannot complete a replacement package. Non-player Follow
+assignment, object handling and other-cell Escort routes remain unbound.
+
 Scripted [door state](source-door-state.md) retains its target and completion in
 the shared reference world. Managed source controllers retain its clock and cold
 pose, project collision with the owned animated subtree and report completion.
@@ -76,10 +84,14 @@ before native binding and admits actual PACK filters on the normal reference
 frame in authored block order. Receipt consumption preserves newer marks.
 Embedded failures retain an actor fault; pending events block campaign capture.
 
-The [SPECIAL book foundation](native-special-book-menu.md) renders winning NIF,
+The [SPECIAL book owner](native-special-book-menu.md) renders winning NIF,
 XML input, animations and light through a shared 3D menu surface. Its session
-requires explicit permanent-value reads and immediate integer base writes;
-production player pools and command/save binding remain unowned.
+binds shared player SPECIAL pools through permanent-value reads and immediate
+integer base writes. Source `ssbmp` dispatch publishes menu1060 and owns a modal
+lease; the source stage prefix and timer retain quest authority. Active book
+continuations refuse saving. Player pools retain source identity and base,
+permanent, temporary and damage lanes across cold saves; skill/vitals consumers
+read that same owner. Complete actor cold restoration remains separate work.
 
 Explicit [source-string arguments](nvse-source-string-arguments.md) resolve
 deferred typed values before admitting bare literals. Numeric executable defaults

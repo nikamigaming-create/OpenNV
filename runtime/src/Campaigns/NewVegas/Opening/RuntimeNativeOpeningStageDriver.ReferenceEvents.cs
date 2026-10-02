@@ -15,6 +15,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal Func<RuntimeNativeReferencePresentation> ReferencePresentation { get; set; } =
         () => throw new InvalidOperationException("Reference presentation has no current cell owner.");
     internal object? ConversationState => _conversation?.State;
+    internal FalloutFormKey? PresentedConversationSpeaker => _conversation?.PresentedSpeaker;
+    internal FalloutFormKey? PendingConversationSpeaker => _conversation?.PendingSpeaker;
     internal void ExecutePackageEvent(FalloutPackageEvent program, FalloutFormKey actor) =>
         (_resultScripts ?? throw new InvalidOperationException("Package results have no shared script owner."))
             .ExecutePackageEvent(program, actor);
@@ -52,7 +54,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 (reference, group, initialization) => ReferencePresentation().PlayGroup(reference, group, initialization),
                 (reference, group) => ReferencePresentation().IsAnimPlaying(reference, group), () => Vitals.Level,
                 () => _scripts.Session.LocationSpecificLoadScreensOnly, () => _scripts.Session.InCharGen,
-                reference => ReferencePresentation().GetOpenState(reference)));
+                reference => ReferencePresentation().GetOpenState(reference),
+                ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);

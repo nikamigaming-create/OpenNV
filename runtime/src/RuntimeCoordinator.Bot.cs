@@ -18,6 +18,51 @@ public partial class RuntimeCoordinator
     private RuntimeSimulatorBotInput? _botSimulatorInput;
     private readonly Dictionary<FalloutFormKey, Vector3> _botAuthoredDestinations = [];
     private readonly Dictionary<Vector3, ulong> _botBlockedPortals = [];
+    private readonly BotInteractionEvidence _botInteractions = new();
+    private readonly Dictionary<FalloutFormKey, FalloutFormKey> _botPortalDestinations = [];
+
+    private void BeginNativeBotActivation(FalloutFormKey reference)
+    {
+        try
+        {
+            var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference);
+            if (node?.GetChildren().OfType<RuntimeNativeDoorPortal>().SingleOrDefault() is { } portal)
+                _botPortalDestinations[reference] = portal.DestinationCell;
+            _botInteractions.Begin(reference.ToString(), NativeBotInteractionSnapshot(reference));
+        }
+        catch (Exception error)
+        {
+            _botInteractions.Forget(reference.ToString());
+            GD.PushError($"OPENNV_BOT_INTERACTION_OBSERVATION_UNBOUND reference={reference}: {error.Message}");
+        }
+    }
+
+    private void EndNativeBotActivation(FalloutFormKey reference, bool successful)
+    {
+        try { _botInteractions.End(reference.ToString(), NativeBotInteractionSnapshot(reference), successful); }
+        catch (Exception error)
+        {
+            _botInteractions.Forget(reference.ToString());
+            GD.PushError($"OPENNV_BOT_INTERACTION_OBSERVATION_UNBOUND reference={reference}: {error.Message}");
+        }
+    }
+
+    private BotInteractionSnapshot NativeBotInteractionSnapshot(FalloutFormKey reference)
+    {
+        var state = _nativeReferences!.Get(reference);
+        var target = JsonSerializer.Serialize(new { state.Taken, state.DoorOpen, state.Deleted, state.Destroyed });
+        string? outcome = _nativeContainerLayer is not null && _nativeContainerReference == reference ? "container" :
+            _nativeOpeningStageDriver?.PresentedConversationSpeaker == reference ? "conversation" :
+            _nativePlayer?.CurrentFurniture == reference ? "furniture" :
+            _botPortalDestinations.TryGetValue(reference, out var destination) && _nativeActiveCell?.Cell.FormKey == destination &&
+                !_nativeDoorLoading && _nativePlayer?.CollisionResident == true ? "portal:" + destination : null;
+        var portal = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference)?.GetChildren()
+            .OfType<RuntimeNativeDoorPortal>().SingleOrDefault();
+        var requested = _nativeOpeningStageDriver?.PendingConversationSpeaker == reference ? "conversation" :
+            portal is { ActivationRequests: > 0 } ? "portal:" + portal.DestinationCell : null;
+        return new(target, outcome, _nativeOpeningStageDriver?.ActiveMenus().Order().ToArray() ?? [], requested,
+            requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.ActivationRequests : 0);
+    }
 
     private bool ApplyNativeBotSimulatorInput(SteeringIntent intent, bool activate)
     {
@@ -94,19 +139,7 @@ public partial class RuntimeCoordinator
             }
         }
         var aimed = player.AimedObject() is { } collider ? _nativeReferenceEvents?.AimedReference(collider)?.FormKey.ToString() : null;
-        var interaction = JsonSerializer.Serialize(new
-        {
-            cell = _nativeActiveCell?.Cell.FormKey.ToString(),
-            paused = GetTree().Paused,
-            player.ModalInput,
-            player.FurnitureActive,
-            referenceState.Taken,
-            referenceState.DoorOpen,
-            referenceState.Deleted,
-            referenceState.Destroyed,
-            stage = _nativeOpeningStageDriver?.Stage,
-            conversation = _nativeOpeningStageDriver?.ConversationState,
-        });
+        var interaction = _botInteractions.Observe(key.ToString(), NativeBotInteractionSnapshot(key)).ToString(CultureInfo.InvariantCulture);
         static System.Numerics.Vector3 Numeric(Vector3 value) => new(value.X, value.Y, value.Z);
         return new(_nativeActiveCell!.Cell.FormKey.ToString(), Numeric(player.GlobalPosition), Numeric(player.Camera.GlobalPosition),
             Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused || player.ModalInput || _nativeDoorLoading,
@@ -115,10 +148,13 @@ public partial class RuntimeCoordinator
             player.BlockingShape, interaction, travelReady);
     }
 
-    private IReadOnlyList<System.Numerics.Vector3> FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end)
-        => FindNativeNavigationRoute(start, end, true);
+    private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float projectionRadius)
+        => FindNativeNavigationRoute(start, end, true, projectionRadius);
 
     private IReadOnlyList<System.Numerics.Vector3> FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, bool refinePlayer)
+        => FindNativeNavigationRoute(start, end, refinePlayer, 2).Waypoints;
+
+    private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, bool refinePlayer, float projectionRadius)
     {
         var scene = _nativeActiveCell ?? throw new InvalidOperationException("No active navigation scene.");
         var units = _configuration.World.GameUnitsToMeters;
@@ -135,8 +171,12 @@ public partial class RuntimeCoordinator
         }
         Vector3 Source(System.Numerics.Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
         Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
-        if (!refinePlayer) return _botNavigation!.FindPath(Source(start), Source(end))
-            .Select(World).Select(point => new System.Numerics.Vector3(point.X, point.Y, point.Z)).ToArray();
+        static System.Numerics.Vector3 Numeric(Vector3 point) => new(point.X, point.Y, point.Z);
+        if (!refinePlayer)
+        {
+            var actorPath = _botNavigation!.FindPath(Source(start), Source(end)).Select(World).Select(Numeric).ToArray();
+            return new(actorPath, end, actorPath[^1], true, identity);
+        }
         var origin = new Vector3(start.X, start.Y, start.Z);
         var now = Time.GetTicksMsec();
         foreach (var point in _botBlockedPortals.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
@@ -152,17 +192,18 @@ public partial class RuntimeCoordinator
             // A reference may rest on an isolated counter/prop navmesh. Reach a
             // nearby authored floor, then let the ordinary interaction ray and
             // distance checks decide whether the target can actually be used.
-            var path = _botNavigation!.FindPath(Source(start), Source(end), Permitted, 2 / units);
+            var path = _botNavigation!.FindPath(Source(start), Source(end), Permitted, projectionRadius / units);
             var worldPath = path.Select(World).ToArray();
-            if (worldPath.Length == 0) return [];
+            if (worldPath.Length == 0) throw new InvalidOperationException("Source navigation returned no corridor.");
             var (target, resume) = NativeCapsuleNavigation.CorridorPrefix(origin, worldPath, 8);
             try
             {
                 var local = NativeCapsuleNavigation.Find(_nativePlayer!, origin, target,
                     _configuration.Player.StepHeightMeters, Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters), NativeCollisionResident);
                 GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={target} sourceWaypoint={resume} " +
-                    $"blockedPortals={_botBlockedPortals.Count} ms={Time.GetTicksMsec() - now}");
-                return local.Select(point => new System.Numerics.Vector3(point.X, point.Y, point.Z)).ToArray();
+                    $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} " +
+                    $"reachesProjected={resume == worldPath.Length} blockedPortals={_botBlockedPortals.Count} ms={Time.GetTicksMsec() - now}");
+                return new(local.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), resume == worldPath.Length, identity, projectionRadius);
             }
             catch (InvalidOperationException error) when (attempt < 7 && path.Count > 1)
             {

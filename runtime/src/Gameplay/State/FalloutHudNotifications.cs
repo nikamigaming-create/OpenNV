@@ -10,15 +10,39 @@ internal sealed record FalloutHudEvent(FalloutHudEventKind Kind, FalloutFormKey 
     FalloutFormKey? Quest = null, FalloutFormKey? Script = null, uint? ObjectiveIndex = null);
 internal sealed record FalloutHudNotice(long Ordinal, FalloutHudEvent Event);
 internal sealed record FalloutHudNotificationsSnapshot(long LastOrdinal, FalloutHudNotice? Current,
-    double Elapsed, IReadOnlyList<FalloutHudNotice> Pending);
+    double Elapsed, IReadOnlyList<FalloutHudNotice> Pending, bool QuestUpdateCancellationRequested = false);
 
 internal sealed class FalloutHudNotifications
 {
     private readonly Queue<FalloutHudNotice> _pending = [];
     private long _ordinal;
+    private bool _questUpdateCancellationRequested;
     internal FalloutHudNotice? Current { get; private set; }
     internal double Elapsed { get; private set; }
-    internal FalloutHudNotificationsSnapshot Capture() => new(_ordinal, Current, Elapsed, _pending.ToArray());
+    internal FalloutHudNotificationsSnapshot Capture() => new(_ordinal, Current, Elapsed, _pending.ToArray(), _questUpdateCancellationRequested);
+
+    internal void RequestQuestUpdateCancellation() => _questUpdateCancellationRequested = true;
+
+    // The script command requests cancellation; the next HUD update consumes
+    // it. Loading hides quest tiles but preserves their queued notices.
+    internal bool ConsumeQuestUpdateCancellation(bool loading)
+    {
+        if (!_questUpdateCancellationRequested) return false;
+        _questUpdateCancellationRequested = false;
+        if (loading) return true;
+        if (Current is { } current && IsQuestUpdate(current.Event))
+        {
+            Current = null;
+            Elapsed = 0;
+        }
+        var retained = _pending.Where(notice => !IsQuestUpdate(notice.Event)).ToArray();
+        _pending.Clear();
+        foreach (var notice in retained) _pending.Enqueue(notice);
+        return true;
+    }
+
+    private static bool IsQuestUpdate(FalloutHudEvent value) =>
+        value.Kind is FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted;
 
     internal static void Validate(IReadOnlyList<FalloutHudEvent> events)
     {
@@ -64,7 +88,7 @@ internal sealed class FalloutHudNotifications
 
     internal void Restore(FalloutHudNotificationsSnapshot snapshot)
     {
-        if (_ordinal != 0 || Current is not null || _pending.Count != 0)
+        if (_ordinal != 0 || Current is not null || _pending.Count != 0 || _questUpdateCancellationRequested)
             throw new InvalidOperationException("HUD restoration requires a fresh owner.");
         var notices = (snapshot.Current is null ? Enumerable.Empty<FalloutHudNotice>() : [snapshot.Current]).Concat(snapshot.Pending).ToArray();
         Validate(notices.Select(notice => notice.Event).ToArray());
@@ -75,6 +99,7 @@ internal sealed class FalloutHudNotifications
         _ordinal = snapshot.LastOrdinal;
         Current = snapshot.Current;
         Elapsed = snapshot.Elapsed;
+        _questUpdateCancellationRequested = snapshot.QuestUpdateCancellationRequested;
         foreach (var notice in snapshot.Pending) _pending.Enqueue(notice);
     }
 }

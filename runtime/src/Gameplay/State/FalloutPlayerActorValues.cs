@@ -69,6 +69,10 @@ internal sealed class FalloutPlayerActorValues
     private int BaseInteger(int actorValue)
     {
         var value = ReadBase(actorValue);
+        // The signed integer setter converts to native Float32 storage. The
+        // upper integer boundary rounds to 2^31; retain that authoritative
+        // value while keeping the older integer view representable.
+        if (value == 2147483648f) return int.MaxValue;
         if (value < int.MinValue || (double)value > int.MaxValue)
             throw new NotSupportedException("Player base value exceeds the legacy seven-integer view.");
         return checked((int)value);

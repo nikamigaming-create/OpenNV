@@ -372,6 +372,8 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Legacy save cannot contain pending actor death events.");
         if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema) && state.References?.Any(reference => reference.PackageMotion?.Patrol is not null) == true)
             throw new InvalidDataException("Patrol progress requires the current campaign save schema.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageMotion?.Escort is not null) == true)
+            throw new InvalidDataException("Escort progress requires the current campaign save schema.");
         if (state.Schema is ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema && state.EncounterZones is null)
             throw new InvalidDataException("Saved campaign is missing encounter-zone state.");
         if (state.Ingestibles is { } ingestibles) FalloutPlayerIngestibles.Validate(ingestibles);

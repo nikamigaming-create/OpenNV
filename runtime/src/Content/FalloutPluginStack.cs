@@ -79,7 +79,7 @@ internal sealed class FalloutPluginStack : IDisposable
         IReadOnlyList<FalloutPluginContext> plugins,
         IDictionary<FalloutFormKey, FalloutPluginRecord> winners,
         IDictionary<string, int> loadOrderIndices,
-        RuntimeLiveContentSource? ownedSource)
+        RuntimeLiveContentSource? ownedSource, FalloutInstallationSettings? installationSettings)
     {
         _plugins = new ReadOnlyCollection<FalloutPluginContext>(plugins.ToArray());
         _winners = new ReadOnlyDictionary<FalloutFormKey, FalloutPluginRecord>(
@@ -97,14 +97,20 @@ internal sealed class FalloutPluginStack : IDisposable
         _effectiveRecordCount = _winnerKeysBySignature.Values.Sum(keys => keys.Count);
         PerkParameters = new(this);
         NumericSettings = new(this, ownedSource);
+        _iniSettings = new(() => (installationSettings ?? (ownedSource is { } content
+            ? FalloutInstallationSettings.Read(content)
+            : throw new NotSupportedException("Numeric INI settings have no bound owned source."))).NumericIni);
         SoundPaths = new(this);
     }
 
     internal IReadOnlyList<FalloutPluginContext> Plugins => _plugins;
+    internal bool IsPluginLoaded(string name) => _loadOrderIndices.ContainsKey(name);
     internal int WinnerRecordCount => _winners.Count;
     internal int EffectiveRecordCount => _effectiveRecordCount;
     internal FalloutPerkParameters PerkParameters { get; }
     internal FalloutNumericGameSettings NumericSettings { get; }
+    private readonly Lazy<FalloutNumericIniSettings> _iniSettings;
+    internal FalloutNumericIniSettings IniSettings => _iniSettings.Value;
 
     internal static FalloutPluginStack Load(string dataRoot, IReadOnlyList<string> configuredNames)
     {
@@ -128,7 +134,7 @@ internal sealed class FalloutPluginStack : IDisposable
     internal static FalloutPluginStack Load(
         IReadOnlyList<FalloutPluginSource> sources,
         bool loadAllSignatureIndexesForAudit,
-        out FalloutPluginStackLoadMetrics metrics)
+        out FalloutPluginStackLoadMetrics metrics, FalloutInstallationSettings? installationSettings = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         if (sources.Count == 0)
@@ -139,6 +145,8 @@ internal sealed class FalloutPluginStack : IDisposable
             sources.Select(source => source.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != sources.Count)
             throw new FalloutPluginFormatException("Plugin load order contains an invalid or duplicate name.");
         var ownedSource = sources[0].OwnedSource;
+        if (ownedSource is not null && installationSettings is not null)
+            throw new FalloutPluginFormatException("An owned source graph cannot replace its installation-settings owner.");
         if (sources.Any(source => !ReferenceEquals(source.OwnedSource, ownedSource)) ||
             ownedSource is not null && !sources.SequenceEqual(ownedSource.PluginSources))
             throw new FalloutPluginFormatException("Plugin sources differ from their complete owned source graph.");
@@ -256,7 +264,7 @@ internal sealed class FalloutPluginStack : IDisposable
                 winnerConstruction.Stop();
             }
             winnerConstruction.Start();
-            var stack = new FalloutPluginStack(contexts, winners, loadOrderIndices, ownedSource);
+            var stack = new FalloutPluginStack(contexts, winners, loadOrderIndices, ownedSource, installationSettings);
             if (loadAllSignatureIndexesForAudit)
                 stack.LoadAllSignatureIndexes();
             winnerConstruction.Stop();

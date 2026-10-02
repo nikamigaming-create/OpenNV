@@ -22,10 +22,12 @@ internal partial class RuntimeNativeOpeningStageDriver
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
         _conversation?.Active == true ? "conversation" : _speech?.Active == true ? "speech" :
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
+        _specialBookEntry is not null ? "special-book-menu" :
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
         _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
         _barterMenu is not null ? "barter-menu" :
-        _scripts.References?.PendingPackageEventCount > 0 ? "actor-package-events" : null;
+        _scripts.References?.PendingPackageEventCount > 0 ? "actor-package-events" :
+        _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" : null;
     internal object SaveRequestState => new
     {
         requested = _saveRequested,
@@ -111,6 +113,12 @@ internal partial class RuntimeNativeOpeningStageDriver
                 SynchronizeTraitEntry(sourceRequested: true);
                 if (_traitEntry is null) throw new NotSupportedException("Trait input has no active menu owner.");
                 break;
+            case "showspecialbookmenuparams" or "ssbmp" when parts.Length == 1 && arguments.Count == 1:
+                if (!int.TryParse(arguments[0], System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var bookBudget))
+                    throw new NotSupportedException("SPECIAL book allocation requires an owned integer points parameter.");
+                OpenSpecialBookMenu(bookBudget);
+                break;
             case "showrecipemenu" when arguments.Count == 1 && (parts.Length == 1 || _pluginStack.RuntimeFormId(target) == 0x14):
                 var recipeCategory = bindings.Form(arguments[0]);
                 if (recipeCategory.Signature != "RCCT")
@@ -168,8 +176,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
         _scripts.References!.PlayerMoves.RequireSettled();
-        if (SaveContinuationBlocker is not null)
-            throw new NotSupportedException("Saving an active movie, furniture, speech or menu requires continuation state.");
+        if (SaveContinuationBlocker is { } blocker)
+            throw new NotSupportedException($"Saving {blocker} requires continuation state.");
         var transform = _player.GlobalTransform;
         var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
         var complete = _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
@@ -193,7 +201,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_recipeMenu is not null) throw new InvalidOperationException("A recipe menu is already active.");
         if (_player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
-            _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null ||
+            _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null ||
             _tagSkillEntry is not null || _traitEntry is not null)
             throw new InvalidOperationException("Crafting cannot open while another player interaction owns input.");
 
@@ -252,7 +260,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_barterMenu is not null) throw new InvalidOperationException("A barter menu is already active.");
         if (_moviePlaying || _player.FurnitureActive || _recipeMenu is not null || _nameEntry is not null ||
-            _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null || _traitEntry is not null)
+            _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null || _tagSkillEntry is not null || _traitEntry is not null)
             throw new InvalidOperationException("Barter cannot open while another player interaction owns input.");
 
         var actor = _pluginStack.GetEffective(actorReference);

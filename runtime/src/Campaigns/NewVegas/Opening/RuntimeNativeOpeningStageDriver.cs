@@ -103,6 +103,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_nameEntry is not null) yield return 1051;
         if (_raceSexEntry is not null) yield return 1036;
         if (_vigorEntry is not null) yield return 1074;
+        if (_specialBookEntry is not null) yield return FalloutSpecialBookPresentation.MenuId;
         if (_tagSkillEntry is not null) yield return 1048;
         if (_traitEntry is not null) yield return 1084;
         if (_recipeMenu is not null) yield return 1077;
@@ -251,7 +252,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void OpenVigorMenu(int total)
     {
-        if (_vigorEntry is not null || ExecutionError is not null)
+        if (_vigorEntry is not null || _specialBookEntry is not null || ExecutionError is not null)
             throw new InvalidOperationException("SPECIAL menu cannot open while its owner is busy or failed.");
         _specialMenuContract = _vigorContract with { RequiredTotal = total };
         _vigorEntry = new RuntimeNativeVigorEntry();
@@ -284,7 +285,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             GD.PushError($"OPENNV_NATIVE_PLAYER_PACKAGE_DIVERGENCE: {error.Message}");
             return;
         }
-        if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null &&
+        if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null && _specialBookEntry is null &&
             _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }

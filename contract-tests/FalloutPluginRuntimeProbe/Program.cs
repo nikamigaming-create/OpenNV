@@ -20,6 +20,11 @@ if (args is ["--test-source-string"])
     ScriptSourceStringProbe.Run();
     return;
 }
+if (args is ["--test-numeric-ini"])
+{
+    NumericIniSettingProbe.Run();
+    return;
+}
 if (args.Length >= 3 && args[0] == "--audit-jdc-game-settings")
 {
     ScriptSourceStringProbe.Owned(args[1], args[2], args[3..]);
@@ -62,6 +67,7 @@ QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 ScriptPostfixProbe.Run();
 ScriptSourceStringProbe.Run();
+NumericIniSettingProbe.Run();
 ScriptValueProbe.Run();
 ScriptArrayProbe.Run();
 ScriptStorageProbe.Run();
@@ -637,6 +643,8 @@ try
         Subrecord("EDID", ZString("SyntheticClock" + form)), Subrecord("FNAM", [(byte)'s']),
         Subrecord("FLTV", BitConverter.GetBytes(value))));
     var weatherColors = Enumerable.Range(0, 240).Select(value => (byte)(value % 251)).ToArray();
+    var playerStats = new byte[24];
+    BinaryPrimitives.WriteInt16LittleEndian(playerStats.AsSpan(8), 1);
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Cell.esm"), Combine(
         Record("TES4", 0, 0, []),
         ClockGlobal(0x35, 2210), ClockGlobal(0x36, 11), ClockGlobal(0x37, 31),
@@ -679,9 +687,9 @@ try
         Record("ARMO", 0x11a, 0, Combine(
             Subrecord("EDID", ZString("SyntheticFarewellWeapon")),
             Subrecord("DATA", armorData))),
-        Record("NPC_", 0x180, 0, Combine(
+        Record("NPC_", 7, 0, Combine(
             Subrecord("EDID", ZString("Player")),
-            Subrecord("ACBS", new byte[24]),
+            Subrecord("ACBS", playerStats),
             Subrecord("DATA", Combine(UInt32(100), [5, 5, 5, 5, 5, 5, 5])),
             Subrecord("RNAM", UInt32(0x181)),
             Subrecord("HNAM", UInt32(0x182)),
@@ -1389,6 +1397,13 @@ try
     ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell), "winning source identity");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with { Special = syntheticSpecial }), "BASE pools");
+    playerValues.WriteBaseInteger(5, int.MaxValue);
+    var boundaryCampaign = pooledCampaign with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, boundaryCampaign);
+    var boundaryRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(boundaryRestore.State.Special.Strength == int.MaxValue && boundaryRestore.State.PlayerActorValues!.Values[5].Base == 2147483648f,
+        "Campaign save lost the signed BASE boundary between its authoritative Float32 and legacy integer views.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
     Require(FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f)
             .SequenceEqual(syntheticCampaignState.PlayerPosition) &&

@@ -237,8 +237,10 @@ internal sealed class FalloutQuestScripts
         else References.WriteVariable(_quests, owner, index, value);
     }
 
-    internal object State => new
+    internal object State => Observe(detailed: true);
+    internal object Observe(bool detailed) => new
     {
+        detail = detailed ? "complete-script-observation" : "live-summary;request-state-for-quest-variables-and-objective-details",
         quests = _instances.Select(instance => new { quest = instance.Quest.FormKey.ToString(), script = instance.Script.FormKey.ToString(), instance.Claimed, instance.Executions, instance.Clock.Remaining, clock = instance.Clock.Capture(), instance.Clock.Interval, instance.Error }).ToArray(),
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
         newlyParsedOnRestore = _newlyParsed.Select(key => key.ToString()).ToArray(),
@@ -250,8 +252,8 @@ internal sealed class FalloutQuestScripts
         events = Events.State,
         strings = ScriptValues.Capture(),
         auxiliary = Auxiliary.State,
-        objectives = _quests.ObjectiveState,
-        variables = _quests.VariableState,
+        objectives = detailed ? _quests.ObjectiveState : _quests.ObjectiveSummaryState,
+        variables = detailed ? _quests.VariableState : _quests.VariableSummaryState,
         initialization = new { _initialization.EmbeddedQuestScripts, _initialization.Initializations, _initialization.DefaultDelay },
         menus = Menus.State,
         sounds = Sounds.State,
@@ -650,6 +652,10 @@ internal sealed class FalloutQuestScripts
             }
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(_records, operation) is { } settingFunction)
                 return settingFunction;
+            if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(_records, operation) is { } iniSettingFunction)
+                return iniSettingFunction;
+            if (parts.Length == 1 && FalloutModQueryCommands.Function(_records, operation) is { } modQueryFunction)
+                return modQueryFunction;
             if (parts.Length == 1 && operation is "getinifloat" or "getinistring")
             {
                 var ini = Ini ?? throw new NotSupportedException("INI functions have no user/profile storage owner.");
@@ -901,6 +907,12 @@ internal sealed class FalloutQuestScripts
                     break;
                 case "startquest" or "stopquest" when arguments.Count == 1:
                     _quests.SetRunning(Quest(arguments[0]).FormKey, command.Equals("startquest", StringComparison.OrdinalIgnoreCase));
+                    break;
+                case "completeallobjectives" when arguments.Count == 1:
+                    _quests.CompleteAllObjectives(Quest(arguments[0]).FormKey);
+                    break;
+                case "killquestupdates" or "kqu" when arguments.Count == 0:
+                    _quests.KillQuestUpdates();
                     break;
                 case "player.additem" when arguments.Count is 2 or 3:
                     if (!instance.Bindings.HasPlayerReference)

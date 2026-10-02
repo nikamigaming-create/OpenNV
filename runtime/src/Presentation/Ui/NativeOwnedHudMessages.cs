@@ -12,6 +12,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private readonly FalloutPluginStack _records;
     private readonly FalloutHudNotifications _queue;
     private readonly Func<bool> _shown;
+    private readonly Func<bool> _loading;
     private readonly FalloutHudMessageDeclarations _declaration;
     private readonly FalloutInstallationSettings _settings;
     private readonly NativeOwnedMenuTree _tiles;
@@ -35,7 +36,8 @@ internal sealed partial class NativeOwnedHudMessages : Control
         unbound = "native-fade-clock,glow,event-alignment"
     };
 
-    internal NativeOwnedHudMessages(FalloutPluginStack records, FalloutHudNotifications queue, Func<bool>? shown = null, FalloutQuestState? quests = null)
+    internal NativeOwnedHudMessages(FalloutPluginStack records, FalloutHudNotifications queue, Func<bool>? shown = null,
+        FalloutQuestState? quests = null, Func<bool>? loading = null)
     {
         Name = "HUDMainMenuMessages";
         MouseFilter = MouseFilterEnum.Ignore;
@@ -44,6 +46,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
         _queue = queue;
         _quests = quests ?? new(records);
         _shown = shown ?? (() => true);
+        _loading = loading ?? (() => false);
         _questFadeIn = FalloutGameSettingFloats.ReadRetained(records, "fQuestCinematicObjectiveFadeIn", nameof(NativeOwnedHudMessages));
         _questHold = FalloutGameSettingFloats.ReadRetained(records, "fQuestCinematicObjectivePauseTime", nameof(NativeOwnedHudMessages));
         _questFadeOut = FalloutGameSettingFloats.ReadRetained(records, "fQuestCinematicObjectiveFadeOut", nameof(NativeOwnedHudMessages));
@@ -133,7 +136,14 @@ internal sealed partial class NativeOwnedHudMessages : Control
         if (Error is not null) return;
         try
         {
-            Visible = _shown();
+            var loading = _loading();
+            if (_queue.ConsumeQuestUpdateCancellation(loading))
+            {
+                _tiles.Bind(_quest, "visible", 0);
+                if (IsObjective(_queue.Current?.Event) || _queue.Current is null) _displayed = 0;
+                QueueRedraw();
+            }
+            Visible = !loading && _shown();
             if (!Visible) return; // Hidden menus must not consume unseen notifications.
             _queue.Advance(delta, value => Resolve(value).Seconds);
             var current = _queue.Current;

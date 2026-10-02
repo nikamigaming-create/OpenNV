@@ -10,7 +10,7 @@ internal static class ReferenceBotContracts
             new(0, 0, 6), new(0, 1, 6), null, false, true, true, true, null, "closed");
         SteeringIntent input = default;
         var activations = 0; var routes = 0;
-        var bot = new ReactiveReferenceBot(_ => observation, (_, end) => { routes++; return [end]; },
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) => { routes++; return new([end], end, end, true); },
             (intent, activate) => { input = intent; if (activate) activations++; });
 
         bot.Start("actor", "approach", 2.5f);
@@ -58,7 +58,7 @@ internal static class ReferenceBotContracts
 
         var segments = 0;
         var partial = new ReactiveReferenceBot(_ => observation,
-            (from, end) => { segments++; return [Vector3.Lerp(from, end, Math.Min(1, 2 / Vector3.Distance(from, end)))]; },
+            (from, end, _) => { segments++; return new([Vector3.Lerp(from, end, Math.Min(1, 2 / Vector3.Distance(from, end)))], end, end, false); },
             (intent, _) => input = intent);
         partial.Start("actor", "travel", 1); partial.Tick(.016f);
         observation = observation with { Position = new(0, 0, 2), Camera = new(0, 1, 2) };
@@ -82,10 +82,10 @@ internal static class ReferenceBotContracts
         if (Phase(bot) != "arrival-observed") throw new Exception("Streamed destination did not complete travel.");
         observation = observation with { Position = Vector3.Zero, Camera = Vector3.UnitY };
 
-        var missing = new ReactiveReferenceBot(_ => throw new KeyNotFoundException("reference unloaded"), (_, _) => [], (_, _) => { });
+        var missing = new ReactiveReferenceBot(_ => throw new KeyNotFoundException("reference unloaded"), (_, end, _) => new([], end, end, true), (_, _) => { });
         missing.Start("missing", "approach", 1); missing.Tick(.016f);
         if (Phase(missing) != "blocked") throw new Exception("A missing reference escaped the failure owner.");
-        var unavailableInput = new ReactiveReferenceBot(_ => observation, (_, end) => [end], (_, _) => throw new IOException("transport lost"));
+        var unavailableInput = new ReactiveReferenceBot(_ => observation, (_, end, _) => new([end], end, end, true), (_, _) => throw new IOException("transport lost"));
         unavailableInput.Start("actor", "approach", 1); unavailableInput.Tick(.016f);
         if (Phase(unavailableInput) != "blocked") throw new Exception("Failed input release escaped the failure owner.");
         Console.WriteLine("Reference bot: moving targets, modal stop, standoff tolerance, exact-reference activation, observed completion, obstruction, missing reference and transport failure PASS.");

@@ -1,8 +1,9 @@
 # Gameplay, playtest and release plan
 
-October 1 direction: complete the combined TTW campaign from Fallout 3's
+October 2 resumed direction: complete the combined TTW campaign from Fallout 3's
 opening through Vault 101 and Megaton, use the Fallout bot's ordinary
-movement/activation adapters to reach the authored train-station connection,
+movement/activation/menu adapters from the toddler checkpoint to reach the authored
+train-station connection,
 then enter New Vegas and reach Benny with the selected Benny Humbles You and
 Steals Your Stuff reset/deleveling, gear confiscation/recovery and persistent
 outcomes. Continue

@@ -9,6 +9,9 @@ internal partial class RuntimeNativeConversation : Node
 {
     private FalloutConversation _conversation = null!;
     internal bool Active => _pending.Count != 0 || _conversation.Phase != "closed";
+    internal FalloutFormKey? PresentedSpeaker => _menu is not null && Error is null &&
+        _conversation.Error is null && _conversation.Phase != "closed" ? _speaker : null;
+    internal FalloutFormKey? PendingSpeaker => _pending.TryPeek(out var request) ? request.Speaker : null;
     private RuntimeNativeSpeech _speech = null!;
     private RuntimeNativePlayer _player = null!;
     private FalloutPluginStack _records = null!;

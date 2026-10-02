@@ -12,6 +12,7 @@ internal static partial class ScriptSourceStringProbe
         Expressions();
         Owners();
         StatementSetterRefusals();
+        IniOwners();
         Console.WriteLine("OPENNV_SCRIPT_SOURCE_STRING_PASS explicitSignature=true declaredTypes=true lazyNames=true evaluateOnce=true compiledSlots=true functionFrame=true coldHandles=true failurePrefix=true statementOrder=true parity=unverified");
     }
 

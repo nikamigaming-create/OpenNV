@@ -5,6 +5,21 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--escort-contracts"])
+{
+    EscortContracts.Run();
+    return;
+}
+if (args.Length == 1 && args[0] == "--quest-update-contracts")
+{
+    QuestUpdateContracts.Run();
+    return;
+}
+if (args.Length >= 5 && args[0] == "--audit-quest-updates")
+{
+    OwnedQuestUpdateProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
 if (args.Length >= 5 && args[0] == "--audit-reference-access")
 {
     OwnedReferenceAccessProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
@@ -61,6 +76,10 @@ try
             "begin GameMode\nset timer to timer + 1\nset count to GetCurrentTime\nend"))))
         .Concat(Record("SCPT", 0x522, Local(1, "count"), Local(2, "timer"), Field("SCTX", Text(
             "begin OnLoad\nset count to GetRandomPercent\nset timer to timer + 1\nend"))))
+        .Concat(Record("SCPT", 0x523, Local(1, "count"), Local(2, "timer"), Local(3, "failure"), Field("SCTX", Text(
+            "begin OnActivate\nset count to count + 1\nend\nbegin GameMode\nset timer to 10\nend\n" +
+            "begin OnActivate\nif failure == 1\nMissingOperation\nendif\nset count to count + 1\nend\n" +
+            "begin OnLoad\nset timer to 20\nend"))))
         .Concat(Explosion(0xA00, flags: 0x12, damage: 28, radius: 256))
         .Concat(Explosion(0xA01, flags: 0x80, damage: 4, radius: 32))
         .Concat(Explosion(0xA02, flags: 0, damage: 4, radius: 32, force: 5))
@@ -77,8 +96,10 @@ try
         .Concat(Record("ACTI", 0x720, Field("SCRI", BitConverter.GetBytes(0x520u))))
         .Concat(Record("ACTI", 0x721, Field("SCRI", BitConverter.GetBytes(0x521u))))
         .Concat(Record("ACTI", 0x722, Field("SCRI", BitConverter.GetBytes(0x522u))))
+        .Concat(Record("ACTI", 0x723, Field("SCRI", BitConverter.GetBytes(0x523u))))
         .Concat(Cell(0x803, Reference(0x920, "ReadBeforeMutation", 0x720), Reference(0x921, "EffectBeforeRead", 0x721),
             Reference(0x922, "RandomRead", 0x722)))
+        .Concat(Cell(0x805, Reference(0x923, "ActivationObservation", 0x723)))
         .Concat(Cell(0x800, Reference(0x900, "FirstREF"), Reference(0x901, "SecondREF")))
         .Concat(Cell(0x801, Reference(0x902, "PeerREF")))
         .Concat(Record("CELL", 0x804, Field("DATA", [0]), Field("XCLC", new byte[8])))
@@ -86,6 +107,25 @@ try
             EnableChild(0x905, 0x904, 1), EnableChild(0x906, 0x905, 2), EnableChild(0x907, 0x908, 0), EnableChild(0x908, 0x907, 0))).ToArray());
     File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Header("Base.esm").Concat(Script(2)).ToArray());
     using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
+    using (var activationWorld = new FalloutReferenceWorld(records))
+    {
+        activationWorld.LoadCell(FalloutCellSceneReader.Read(records, Key(0x805)));
+        var executor = new FalloutReferenceScripts(records, activationWorld, new(records),
+            new((_, _) => false, _ => throw new InvalidDataException("Unexpected observation fixture effect.")));
+        var instance = activationWorld.Get(Key(0x923));
+        var observations = new List<string>();
+        IReadOnlyList<FalloutReferenceScriptEventResult> ObserveActivation() => executor.DispatchFrame(Key(0x923),
+            [new("OnLoad"), new("GameMode"), new("OnActivate", Key(0x14))], 0,
+            () => observations.Add($"begin:{instance.Read(1)}:{instance.Read(2)}"),
+            () => observations.Add($"end:{instance.Read(1)}:{instance.Read(2)}"));
+        var result = ObserveActivation();
+        Require(result.All(value => value.Error is null) && observations.SequenceEqual(new[] { "begin:0:0", "end:1:0", "begin:1:10", "end:2:10" }) &&
+            instance.Read(2) == 20, "Activation observation included another source event or changed source block order.");
+        observations.Clear(); instance.Write(3, 1);
+        result = ObserveActivation();
+        Require(result.Any(value => value.Error is not null) && observations.SequenceEqual(new[] { "begin:2:20", "end:3:20", "begin:3:10" }),
+            "Failed activation block produced a successful end observation or lost its retained prefix.");
+    }
     CellReviewContracts.Run(records);
     ExplosionContracts.Run(records);
     Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x502))));
@@ -327,6 +367,7 @@ ActorSourceContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 PatrolContracts.Run();
+EscortContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();
@@ -350,6 +391,7 @@ NoActivationSoundContracts.Run();
 SayToContracts.Run();
 ScreenBloodContracts.Run();
 QuestMenuContracts.Run();
+QuestUpdateContracts.Run();
 IngestibleContracts.Run();
 if (args is [var voiceRoot, "--voices"]) OwnedDialogueVoiceProbe.Run(voiceRoot);
 if (args is [var aidRoot, "--ingestibles"]) OwnedIngestibleProbe.Run(aidRoot);
