@@ -79,4 +79,14 @@ internal partial class RuntimeNativeReferencePresentation
         if (matching.Length != 1) throw new NotSupportedException($"Reference {key} has no unique animation type for group {group}.");
         return matching[0].Playing;
     }
+
+    internal int GetOpenState(FalloutFormKey key)
+    {
+        var controllers = ObjectControllers(key);
+        var node = _nodes[key];
+        if (node.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() is { } motion) return motion.OpenState();
+        if (RuntimeNativeDoorMotion.HasOpenClose(controllers))
+            throw new NotSupportedException($"Reference {key} declares Open/Close animations without a bound motion owner.");
+        return 0;
+    }
 }

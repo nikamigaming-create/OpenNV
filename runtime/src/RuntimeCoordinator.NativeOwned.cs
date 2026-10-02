@@ -868,7 +868,7 @@ public partial class RuntimeCoordinator
             NativeReferenceState(reference, baseObject, "model"));
         if (baseObject.Signature == "DOOR" && reference.Teleport is not null)
             AddNativeDoorPortal(instance, reference);
-        else if (baseObject.Signature == "DOOR")
+        else if (baseObject.Signature == "DOOR" || RuntimeNativeDoorMotion.HasOpenClose(controllers))
             instance.AddChild(new RuntimeNativeDoorMotion(_nativeReferences!.Get(reference.FormKey), controllers, SaveNativeInteraction));
     }
 

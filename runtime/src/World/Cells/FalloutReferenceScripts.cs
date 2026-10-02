@@ -8,7 +8,7 @@ internal enum FalloutReferenceEffectKind
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
     ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say, PlayerYouth,
-    PlayerToddler, PlayerScale
+    PlayerToddler, PlayerScale, DoorOpenState
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
@@ -25,7 +25,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, bool>? IsInInterior = null,
     Action<FalloutFormKey, string, int>? PlayGroup = null,
     Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null,
-    Func<int>? PlayerLevel = null, Func<bool>? LocationSpecificLoadScreensOnly = null, Func<bool>? InCharGen = null);
+    Func<int>? PlayerLevel = null, Func<bool>? LocationSpecificLoadScreensOnly = null, Func<bool>? InCharGen = null,
+    Func<FalloutFormKey, int>? GetOpenState = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -464,6 +465,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     host.IsCurrentFurniture(Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDisabled", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsEnabled(Target()) ? 0 : 1) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getopenstate")
+                return new([], _ => host.GetOpenState is not null && world.IsResident(Target()) ? host.GetOpenState(Target()) :
+                    world.Get(Target()).DoorMotion?.OpenState ?? throw new NotSupportedException("GetOpenState has no source animation owner."))
+                { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetUnconscious", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsUnconscious(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
@@ -672,6 +677,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             switch (operation)
             {
+                case "setopenstate" when arguments.Count == 1:
+                    _ = world.Get(target);
+                    host.Apply(new(FalloutReferenceEffectKind.DoorOpenState, source, target, Enable: Boolean(arguments[0])));
+                    break;
                 case "kill" or "killactor":
                     if (arguments.Count > 3) throw new InvalidDataException("KillActor has an invalid argument count.");
                     if (arguments.Count > 1) throw new NotSupportedException("Script death limb/cause parameters have no source owner.");

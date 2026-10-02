@@ -15,6 +15,14 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--door-state", var doorRoot, var doorMod, var doorModRoot,
+                var doorReference, var doorQuest, var doorStage, .. var doorDependencies])
+            {
+                ExerciseOwnedDoorState(doorRoot, doorMod, doorModRoot, doorReference, doorQuest,
+                    short.Parse(doorStage, System.Globalization.CultureInfo.InvariantCulture), doorDependencies);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--script-death", var deathDataRoot, var deathSavePath])
             {
                 await ExerciseOwnedScriptDeath(deathDataRoot, deathSavePath);

@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Scripted [door state](source-door-state.md) retains its target and completion in
+the shared reference world. Managed source controllers retain its clock and cold
+pose, project collision with the owned animated subtree and report completion.
+SetOpenState does not dispatch activation or synthesize quest outcomes.
+
 ## Boundaries
 
 - Retail files are read-only. OpenNV never edits the selected installation.

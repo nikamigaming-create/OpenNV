@@ -118,6 +118,14 @@ internal partial class RuntimeNativeReferencePresentation : Node
                 effect.TexturePath ?? throw new InvalidDataException("Texture path is absent."));
             return;
         }
+        if (effect.Kind == FalloutReferenceEffectKind.DoorOpenState)
+        {
+            var node = Resolve(key) ?? throw new NotSupportedException($"Door state target {key} has no loaded source model.");
+            var motion = node.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() ??
+                throw new NotSupportedException($"Reference {key} has no source Open/Close motion owner.");
+            motion.SetOpen(effect.Enable);
+            return;
+        }
         if (effect.Kind != FalloutReferenceEffectKind.ReferenceEnable) throw new NotSupportedException("Reference presentation effect is unbound.");
         // This is a command notification. The world update applies queued
         // enable state before the native projection changes visibility.
@@ -141,6 +149,8 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     private void Synchronize()
     {
+        foreach (var node in _nodes.Values)
+            foreach (var motion in node.GetChildren().OfType<RuntimeNativeDoorMotion>()) motion.Synchronize();
         foreach (var actor in Actors) SynchronizeActorAppearance?.Invoke(actor);
         foreach (var reference in _references)
         {
