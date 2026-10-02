@@ -1,7 +1,9 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Cells;
 
@@ -39,6 +41,7 @@ public partial class NativeSpecialBookMenuAudit : Control
                 if (!source.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
                 identities.Add(identity); hashes.Add(SHA256.HashData(bytes));
             }
+            VerifyFailedSurface(source);
             var player = records.GetEffective(records.RuntimeFormKey(7));
             var playerData = player.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
             if (playerData.Length != 11) throw new NotSupportedException("Owned player SPECIAL layout is unbound.");
@@ -291,6 +294,7 @@ public partial class NativeSpecialBookMenuAudit : Control
                 pausedClock = true,
                 priorPauseModalMouseRestoredOnce = true,
                 constructorLiveReadWriteAcceptFailure = true,
+                failedSurfaceNodesFreed = true,
                 failureTelemetryReadable = true,
                 unsupportedActivationPrefixRetained = true,
                 failureVisible = true,
@@ -304,6 +308,32 @@ public partial class NativeSpecialBookMenuAudit : Control
             entry?.Free(); clock?.Free(); GetTree().Paused = priorPause; Input.MouseMode = priorMouse; RuntimeLiveContentSource.Clear();
             if (!success && File.Exists(diagnostic)) File.Delete(diagnostic);
         }
+    }
+    private static void VerifyFailedSurface(RuntimeLiveContentSource content)
+    {
+        Check(OS.IsDebugBuild(), "Owned menu failure-lifetime proof requires debug orphan-node telemetry.");
+        const string path = "meshes/terminals/babybook02.nif";
+        if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
+        var source = FalloutNifFile.Read(bytes);
+        Check(source.Roots.Count > 0, "Owned book has no visual root for its failure-lifetime fixture.");
+        var unsupportedRoot = source.Blocks.First(block => block.TypeName == "NiControllerSequence").Index;
+        // Redirect only a private in-memory copy's root to a non-visual source
+        // block. The real builder must reject it without orphaning menu nodes.
+        var rejectedBytes = bytes.ToArray();
+        BinaryPrimitives.WriteInt32LittleEndian(rejectedBytes.AsSpan(rejectedBytes.Length - source.Roots.Count * sizeof(int)), unsupportedRoot);
+        var rejectedSource = FalloutNifFile.Read(rejectedBytes);
+        var nodes = Performance.GetMonitor(Performance.Monitor.ObjectOrphanNodeCount);
+        Exception? rejection = null;
+        try
+        {
+            var surface = new NativeOwnedNifMenuSurface([new(path, rejectedSource, Transform3D.Identity)],
+                new(Transform3D.Identity, _ => 1, 1, 5000, 20, Vector3.One));
+            surface.Free();
+        }
+        catch (NotSupportedException error) { rejection = error; }
+        Check(rejection is not null && rejection.Message.Contains("NiControllerSequence", StringComparison.Ordinal),
+            "Unsupported source visual root did not retain its construction failure.");
+        Check(Performance.GetMonitor(Performance.Monitor.ObjectOrphanNodeCount) == nodes, "Failed owned menu surface orphaned native nodes.");
     }
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidDataException(message); }
 }

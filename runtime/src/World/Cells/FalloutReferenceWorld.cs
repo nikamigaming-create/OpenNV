@@ -196,6 +196,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal FalloutInputControls? Controls { get; } = controls;
     internal FalloutPlayerMoves PlayerMoves { get; } = new();
     internal FalloutScriptMenus Menus { get; } = new();
+    private FalloutReferencePackageEvents? _packageEvents;
+    internal FalloutReferencePackageEvents PackageEvents => _packageEvents ??= new(records);
+    internal int PendingPackageEventCount => _packageEvents?.PendingCount ?? 0;
     private FalloutScriptSounds? _sounds;
     internal FalloutScriptSounds Sounds => _sounds ??= new(records, Menus);
     private FalloutNoActivationSound? _noActivationSound;
@@ -320,6 +323,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();
+        if (PendingPackageEventCount != 0)
+            throw new NotSupportedException("Saving pending actor package events requires their continuation state.");
         return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
             .Select(instance => instance.Capture()).ToArray();
     }
@@ -438,6 +443,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _sounds?.Clear();
         _screenBlood?.Clear();
         PlayerMoves.Clear();
+        _packageEvents?.Clear();
         Menus.Publish(true);
         _residentCells.Clear();
         _residentReferences.Clear();

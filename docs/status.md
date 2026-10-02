@@ -1,6 +1,6 @@
 # Product status
 
-Updated October 1, 2026 from current code and fresh tests. OpenNV is
+Updated October 2, 2026 from current code and fresh tests. OpenNV is
 experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
@@ -21,12 +21,18 @@ package-result script owner, with passing scope/prefix/cold-value contracts and
 an owned native arrival/result fixture. The resumed ordinary route executes the
 result and enters stage 16. The [source door-state owner](source-door-state.md)
 now closes the actual gate through its winning QSDT in the owned fixture and
-ordinary route, with moving source collision and retained cold motion. Dad's next
-The fresh ordinary route stays at stage 16 on CG01DadCloseDoor's nonzero-radius
-refusal. The [marker-radius owner](source-marker-travel-radius.md) now passes its
-radius through owned NAVM/KF and completes that package in the selected native
-fixture; zero-radius results still pass. The attached source OnPackageDone event
-and subsequent ordinary stage programs remain unowned.
+ordinary route, with moving source collision and retained cold motion.
+The [marker-radius owner](source-marker-travel-radius.md) passes the winning
+radius through owned NAVM/KF. The resumed ordinary route completes
+CG01DadCloseDoor inside radius 25 without an AI error. The shared checkpoint
+actually writes that reached stage 16.
+The candidate [attached package event owner](reference-package-events.md) passes
+synthetic/native bootstrap, pause, suspended admission, typed filters, source
+order, once-only results and failure quarantine. Actual attached OnPackageDone
+advances the owned fixture to 18. A separate ordinary cold Continue from the
+reached stage-16 checkpoint now reaches 18 and retains the source room door's
+unsupported Lock 100; stage 20 and complete cold actor continuation remain
+unverified.
 Further ordinary quest, full actor cold continuation and gurney/HUD behavior
 remain open; see [package results](package-event-results.md).
 The [camera repeat owner](player-package-camera-loops.md) now uses the winning
@@ -52,6 +58,15 @@ lazy, compiled-binding, cold and retained-failure checks. Selected JAM admission
 is 46/52 with six parser failures. Eight MCM initializers each pass 360 headless
 executions; visible configuration and full JAM gameplay are unverified.
 JBTMCM's attached object-type script lacks current quest-clock admission.
+The candidate [source-string and numeric-default owner](nvse-source-string-arguments.md)
+passes independent owned JDC proof for eleven reads from nine executable
+declarations and two winning GMST records, without an ambient Current fallback.
+Its next INI query remains unbound; saved failed prefixes cannot be replayed.
+The [original SPECIAL book foundation](native-special-book-menu.md) passes the
+owned XML/NIF/light, all 18 transitions, source budgets, live edits, retained
+cancellation and failure/modal retirement fixture. Production permanent/base
+player pools, book command dispatch and saves remain unowned. The combined
+required runtime gate passes; publication and exact-head CI remain pending.
 Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
 and the required movement runtime gate pass. Quest MenuMode and multiple GameMode
 blocks now share source scheduling; TTWStart's owned clock fixture reaches its

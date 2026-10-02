@@ -60,7 +60,9 @@ cancelled edits, source Done, paused clocks and modal lease retirement. It reads
 owned inputs without modifying them. Unsupported source activation retains its
 stage prefix and guard. Constructor/live getter, base-writer and acceptance
 callback failures retain readable errors and restore each prior input state on
-retirement. Its one private PNG is for selected visual
+retirement. A privately altered in-memory source root additionally verifies that
+failed surface construction retains its error and frees all native nodes, using
+debug orphan-node telemetry; owned bytes remain unchanged. Its one private PNG is for selected visual
 inspection; the caller deletes it in `finally`, including failed runs. Recording
 remains off.
 

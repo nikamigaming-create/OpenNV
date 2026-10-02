@@ -38,8 +38,9 @@ internal sealed partial class NativeOwnedNifMenuSurface : Control
             foreach (var declaration in models)
             {
                 var pose = new Node3D { Name = "SourceMenuPose", Transform = declaration.Transform };
+                View.AddChild(pose);
                 var model = RuntimeNativeNifMeshBuilder.Build(declaration.Source, 1).Root;
-                pose.AddChild(model); View.AddChild(pose); _models.Add((declaration, pose, model));
+                pose.AddChild(model); _models.Add((declaration, pose, model));
                 foreach (var mesh in model.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Where(mesh => mesh.HasMeta("opennv_nif_source_name")))
                 {
                     var sourceName = mesh.GetMeta("opennv_nif_source_name").AsString();

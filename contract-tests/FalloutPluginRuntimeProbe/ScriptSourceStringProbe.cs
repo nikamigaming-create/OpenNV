@@ -11,7 +11,8 @@ internal static partial class ScriptSourceStringProbe
     {
         Expressions();
         Owners();
-        Console.WriteLine("OPENNV_SCRIPT_SOURCE_STRING_PASS explicitSignature=true declaredTypes=true lazyNames=true evaluateOnce=true compiledSlots=true functionFrame=true coldHandles=true failurePrefix=true parity=unverified");
+        StatementSetterRefusals();
+        Console.WriteLine("OPENNV_SCRIPT_SOURCE_STRING_PASS explicitSignature=true declaredTypes=true lazyNames=true evaluateOnce=true compiledSlots=true functionFrame=true coldHandles=true failurePrefix=true statementOrder=true parity=unverified");
     }
 
     private static void Expressions()
@@ -175,6 +176,65 @@ internal static partial class ScriptSourceStringProbe
         {
             File.Delete(Path.Combine(directory, "SourceString.esm")); File.Delete(Path.Combine(directory, "SourceStringPatch.esp"));
             Directory.Delete(directory);
+        }
+    }
+
+    private static void StatementSetterRefusals()
+    {
+        foreach (var statement in new[]
+        {
+            "SetNumericGameSetting prefix (GetGameLoaded)",
+            "SetNumericGameSetting fSourceNumber (GetGameLoaded) trailing",
+            "SetNumericGameSetting fSourceNumber (GetGameLoaded) (1 +)",
+        })
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "opennv-source-string-statement-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var body = "prefix += 1\n" + statement + "\nprefix += 100\n";
+                var plugin = Header().Concat(Setting(0x800, 3.5f))
+                    .Concat(Script(0x100, body, 1, false))
+                    .Concat(Script(0x102, body, 31, true))
+                    .Concat(Function())
+                    .Concat(Record("ACTI", 0x400, Field("SCRI", BitConverter.GetBytes(0x100u))))
+                    .Concat(Record("ACTI", 0x401))
+                    .Concat(Record("QUST", 0x700, Field("EDID", Text("SourceQuest")), Field("DATA", new byte[8]),
+                        Field("SCRI", BitConverter.GetBytes(0x102u))))
+                    .Concat(Cell()).ToArray();
+                File.WriteAllBytes(Path.Combine(directory, "SourceString.esm"), plugin);
+                using var records = FalloutPluginStack.Load(directory, ["SourceString.esm"]);
+                var state = new FalloutQuestState(records);
+                using var world = new FalloutReferenceWorld(records);
+                world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x600)));
+                var referenceEvents = new FalloutScriptEvents(); referenceEvents.LoadGame();
+                var executor = new FalloutReferenceScripts(records, world, state,
+                    new((_, _) => false, _ => throw new InvalidDataException("A refused setter invented a presentation effect."),
+                        Events: referenceEvents));
+                var failed = executor.Dispatch(Key(0x500), "GameMode");
+                Require(failed.Error is not null && executor.Dispatch(Key(0x500), "GameMode").Error == failed.Error &&
+                    world.Get(Key(0x500)).Read(2) == 1 && records.NumericSettings.Get("fSourceNumber") == 3.5,
+                    "Root statement refusal lost its failure/prefix or mutated the setting: " + statement);
+                Require(referenceEvents.GetGameLoaded(Key(0x100)) && !referenceEvents.GetGameLoaded(Key(0x100)),
+                    "A refused root statement consumed its later GetGameLoaded argument: " + statement);
+
+                var questState = new FalloutQuestState(records); questState.SetRunning(Key(0x700), true);
+                var questEvents = new FalloutScriptEvents(); questEvents.LoadGame();
+                var scripts = new FalloutQuestScripts(records, questState, new HashSet<FalloutFormKey>(),
+                    new FalloutPlayerInventory(), defaultProcessingDelay: 1, events: questEvents);
+                scripts.Advance(1);
+                var error = scripts.Capture().Instances.Single().Error;
+                scripts.Advance(1);
+                Require(error is not null && scripts.Capture().Instances.Single().Error == error &&
+                    questState.Variable(Key(0x700), 32) == 1 && records.NumericSettings.Get("fSourceNumber") == 3.5,
+                    "Fallback statement refusal lost its failure/prefix or mutated the setting: " + statement);
+                Require(questEvents.GetGameLoaded(Key(0x102)) && !questEvents.GetGameLoaded(Key(0x102)),
+                    "A refused fallback statement consumed its later GetGameLoaded argument: " + statement);
+            }
+            finally
+            {
+                File.Delete(Path.Combine(directory, "SourceString.esm")); Directory.Delete(directory);
+            }
         }
     }
 

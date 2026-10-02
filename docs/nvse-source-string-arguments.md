@@ -43,7 +43,8 @@ existing cached declarations cannot silently change to a different installation.
 `ScriptSourceStringProbe` checks explicit signature scope, typed refusal,
 unresolved inactive names, parsing before effects, once-only grouped/indexed
 arguments, winning compiled slots, actual function-frame string parameters,
-root/fallback setters, serialized string handles, cold recurrence and retained
+root/fallback setters, invalid names and malformed/extra suffixes before
+stateful setter arguments, serialized string handles, cold recurrence and retained
 failed prefixes. It also verifies a new stack does not retain numeric overrides.
 
 The selected owned JAM 4.6 proof executes `JDCScript` through the real quest,

@@ -706,6 +706,11 @@ internal sealed class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
+                return;
+            }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
@@ -740,12 +745,6 @@ internal sealed class FalloutQuestScripts
             {
                 if (arguments.Count != 0) throw new InvalidDataException("ClearNoActivationSound takes no arguments.");
                 NoActivationSound.Clear();
-                return;
-            }
-            if (parts.Length == 1 && operation == "setnumericgamesetting")
-            {
-                FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,
-                    token => values.ReadSourceString(token).Text);
                 return;
             }
             if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) && operation == "setscale")

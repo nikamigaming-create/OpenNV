@@ -46,6 +46,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         recoveredReadFaults = _recoveredReadFaults,
         recoveredCommandFaults = _recoveredCommandFaults,
         references = _bindings.Count,
+        pendingPackageEvents = _world.PendingPackageEventCount,
+        pendingPackageActors = _world.PackageEvents.PendingActors.Select(actor => actor.ToString()).ToArray(),
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
         errors = _bindings.Values.Where(value => value.Instance.ScriptError is not null)
             .Select(value => new { reference = value.Reference.FormKey.ToString(), error = value.Instance.ScriptError }).ToArray(),
@@ -288,18 +290,23 @@ internal partial class RuntimeNativeReferenceEvents : Node
         var tree = GetTree();
         foreach (var binding in _bindings.Values)
         {
+            var packageBatch = binding.Signature is "NPC_" or "CREA" &&
+                binding.Node is not RuntimeNativeNpc { PackageEventError: not null } &&
+                _world.PackageEvents.HasPending(binding.Reference.FormKey)
+                ? _world.PackageEvents.SnapshotPending(binding.Reference.FormKey) : null;
+            var hasPackageEvents = packageBatch?.Count > 0;
             var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
                 !_abilityActors.Contains(binding.Reference.FormKey);
-            if (!needsAbilities && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!needsAbilities && !hasPackageEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
             if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
                 _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
-            if (binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!hasPackageEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             var enabled = _world.IsEnabled(binding.Reference.FormKey);
             binding.ActorScriptStarted |= enabled;
             if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) continue;
             if (binding.Trigger is { } volume && volume.Visible != enabled) GamebryoReferenceEnableRuntime.Apply(volume, enabled);
-            if (binding.Instance.Script is null && binding.PendingActivation is null) continue;
+            if (!hasPackageEvents && binding.Instance.Script is null && binding.PendingActivation is null) continue;
             // Keep admitting real contact transitions after a script fault. The
             // C# owner decides whether a fresh event can retry its source block;
             // suppressing contact sampling here permanently poisoned saved triggers.
@@ -325,8 +332,13 @@ internal partial class RuntimeNativeReferenceEvents : Node
                     .Select(key => key!.Value).Distinct().ToArray();
                 events.AddRange(binding.Contacts.Advance(contacts));
             }
+            if (hasPackageEvents) events.AddRange(packageBatch!.Events);
             events.Add(new("GameMode"));
-            Report(binding, _scripts.DispatchFrame(binding.Reference.FormKey, events, delta));
+            var results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta);
+            // Source faults retain their executed prefix on the actual instance.
+            // Consume this admission once while preserving marks produced by it.
+            if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
+            Report(binding, results);
         }
     }
 

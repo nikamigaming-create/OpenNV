@@ -609,6 +609,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     Function, UserFunction);
                 return;
             }
+            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
+                    Function, UserFunction);
+                return;
+            }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
             var callerPlugin = bindings.Source.OwnerPlugin;
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
@@ -643,12 +649,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             {
                 if (arguments.Count != 0) throw new InvalidDataException("ClearNoActivationSound takes no arguments.");
                 world.NoActivationSound.Clear();
-                return;
-            }
-            if (parts.Length == 1 && operation == "setnumericgamesetting")
-            {
-                FalloutNumericGameSettingCommands.Set(records, arguments, Number,
-                    token => values.ReadSourceString(token).Text);
                 return;
             }
             if (parts.Length == 1 && FalloutInputControlCommands.IsCommand(operation))
