@@ -51,6 +51,10 @@ inverse bind and the receiving animated head remain authoritative.
 scene traversal index independently of its stored label, sharing binding between
 actor and equipped weapon materials.
 
+[Scripted speech participation](scripted-speech-participation.md) uses applied
+shared enable state. Disabled participants create neither voices nor completion
+events; missing enabled actors still retain a visible fault.
+
 ## Boundaries
 
 - Retail files are read-only. OpenNV never edits the selected installation.

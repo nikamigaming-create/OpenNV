@@ -30,6 +30,8 @@ public partial class NativeRenderedMenuAudit
             quests.EnterStage(FalloutDialogueTopic.Find(records, "QUST", questId).FormKey, stage);
             var cell = FalloutCellSceneReader.Read(records, world.Get(actor.FormKey).Cell);
             world.LoadCell(cell);
+            world.SetEnabled(actor.FormKey, true); // Isolated response/body fixture.
+            world.AdvanceEnableChanges(0, new(1, 1), _ => false);
             var placed = cell.References.Single(item => item.FormKey == actor.FormKey);
             var configuration = RuntimeConfiguration.Load();
             var units = configuration.World.GameUnitsToMeters;
@@ -54,7 +56,7 @@ public partial class NativeRenderedMenuAudit
                 {
                     queries.Add((reference, value));
                     return world.ActorValue(reference, FalloutActorValue.UserSlot(value));
-                }, dialogueRandom: _ => 0);
+                }, dialogueRandom: _ => 0, references: world);
             speech.PrepareSubtitle = _ => { };
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
                 _ => throw new InvalidDataException("The isolated user-value response invented an unrelated stage effect.")));
