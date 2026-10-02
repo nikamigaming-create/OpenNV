@@ -2,8 +2,9 @@
 
 ## Active objective
 
-Complete TTW and all nine JAM modules with MCM through ordinary input and
-persistent state. The campaign objective includes Fallout 3's opening, all
+The immediate objective is birth to Megaton, the authored train connection and
+the Mojave through ordinary input and persistent state. Complete TTW and all
+nine JAM modules with MCM. The campaign includes Fallout 3's opening, all
 Vault 101 quests including the G.O.A.T., Megaton, authored Union Station
 power/ticket/train travel, the Mojave, Benny and continued play. Retain TTW
 dependencies, compatible guide recommendations and the original mod targets.
@@ -25,24 +26,29 @@ CG01 stages90/100, completes and stops CG01, and enters CG02 stages0/5. No
 collision, actor position or quest stage was edited. Automatic escort-door
 recovery without player activation still needs acceptance.
 
-The birthday race/inventory prefix executes. Amata's child FaceGen now assembles,
+The birthday race/inventory prefix executes. Amata's child FaceGen assembles,
 receives source head tracking and plays her owned introduction voice and lip
-morphs. The current continuation stops before birthday-room relocation because
-the security outfit's alternate-texture mismatch leaves its actor missing.
-The glasses environment texture also leaves a birthday actor missing.
+morphs. The security actor now assembles and receives source head tracking.
+The actual source player relocation enters the birthday room. Speech still
+fails for Beatrice, who has no visible resident runtime actor for SayTo. The
+glasses environment texture also leaves a birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
 
-[Rigid FaceGen components](actor-face-attachment.md) use the selected head's
-source inverse bind and the receiving animated head even when their export
-omits biped Prn data. The synthetic native audit covers explicit/implicit
-attachments, replaced export transforms, animation and rejection cleanup.
-The complete mounted-stack actor audit assembles all three birthday children
-with source materials and inventory. PP lighting flag0x40 is retained as source
-state independently of the no-lighting property's falloff behavior. Ordinary
-Amata speech now passes the previous missing-mouth boundary. Matched retail
-pixels and physical OpenXR acceptance remain unverified.
+[Model alternate textures](model-texture-indices.md) follow the source geometry's
+3D index in scene-child traversal order. Stored labels do not validate or
+redirect the index; later duplicate indices replace the texture. The immutable
+order is reused within each decoded NIF. Synthetic checks cover nested/reordered
+children, repeated/stale names, replacement order, unreferenced geometry,
+particle index consumption and invalid-owner refusal. Both affected owned
+security actors assemble with all selected parts, materials and inventory. The
+ordinary retry passes security head tracking and enters the birthday room.
+
+[Rigid FaceGen components](actor-face-attachment.md) retain the selected head
+inverse bind and animated head without requiring biped Prn markers. All three
+children pass complete owned assembly, and ordinary Amata speech passes.
+Matched retail pixels and physical OpenXR acceptance remain unverified.
 
 Shared [race aging](scripted-race-age.md), [inventory commands](inventory-script-commands.md)
 and [scripted challenges](scripted-challenges.md) retain authoritative state and
@@ -53,9 +59,9 @@ continuation. The [skin-root repair](actor-skin-root.md) and
 
 ## Next owners
 
-1. Bind the security outfit's alternate textures from source model behavior,
-   including repeated shape names and record indices. The current missing
-   actor is the first birthday Look/speech blocker.
+1. Trace Beatrice's birthday SayTo absence against winning enable/state rules
+   and native speech/process behavior. Missing actors and faults remain visible;
+   do not invent an actor or clear the consumed birthday prefix.
 2. Bind the glasses' authored 2D environment-map behavior without substituting
    a guessed cubemap. Retry the genuine checkpoint and continue birthday play.
 3. Repair sampled short bot endpoint crossing. Ordinary follow can overshoot
@@ -73,10 +79,10 @@ authoritative gameplay and saves.
 ## Private continuation
 
 Run `tmp/development-lab/ttw-bot-20261002/` exited through ordinary Quit after
-the security-actor failure. Recording remained off. Genuine stage16, stage40,
+the birthday speech failure. Recording remained off. Genuine stage16, stage40,
 stage50 and open/closed stage80 backups are under
 `local/ttw-bot-resume-20261002/`; closed stage80 is the next retry. The private
-manifest and focused FaceGen/campaign reports retain hashes and source evidence.
+manifest and focused actor/campaign reports retain hashes and source evidence.
 Do not resume the failed CG02 prefix as though its source effects completed.
 The original `tmp/development-lab/ttw-departure-clock-20261001/` is unchanged.
 

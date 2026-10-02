@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--model-textures"])
+            {
+                ExerciseModelTextures(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--facegen-attachment"])
             {
                 await ExerciseFaceGenAttachment(); GetTree().Quit(); return;
@@ -90,6 +94,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseHeadTracking();
             ExerciseAuthoredDecalSurfaces();
             ExerciseDormantEnvironmentMask();
+            ExerciseModelTextures();
             if (OS.GetCmdlineUserArgs() is ["--look", var lookRoot, var lookActor, var lookQuest])
             {
                 ExerciseOwnedHeadTracking(lookRoot, lookActor, lookQuest);
