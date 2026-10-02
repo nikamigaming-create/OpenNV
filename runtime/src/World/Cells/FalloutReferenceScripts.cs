@@ -287,7 +287,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             else world.Get(key.Owner).Write(key.Index, cleared);
         }
         void Write(string name, double value) => WriteValue(name, value);
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, valueStore.Arrays);
+        bool IsForm(string name) => frame?.Contains(name) == true
+            ? frame.Definition.Kind(name) == FalloutScriptLocalKind.Form
+            : FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is { Signature: not "GLOB" } ||
+                bindings.HasVariable(name) && bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, valueStore.Arrays, ReferenceFunction, IsForm);
         FalloutFormKey Reference(string name)
         {
             if (FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is not null) return bindings.Reference(name);
@@ -326,10 +330,25 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var value = quests.Objective(Quest(arguments[0].Identifier!), Index(arguments[1].Number));
             return (completed ? value.Completed : value.Displayed) ? 1 : 0;
         }
-        FalloutScriptFunction? Function(string name)
+        FalloutScriptFunction? ReferenceFunction(string name)
+        {
+            var signature = FunctionFor("this." + name, null);
+            return signature is null ? null : FalloutScriptFunction.Reference(signature,
+                (caller, arguments) => FunctionFor("this." + name, caller)!.InvokeValue(arguments));
+        }
+        FalloutScriptFunction? Function(string name) => FunctionFor(name, null);
+        FalloutScriptFunction? FunctionFor(string name, FalloutScriptValue? caller)
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            FalloutFormKey? suppliedTarget = null;
+            if (caller is { } value)
+            {
+                FalloutScriptFunction.RequireReference(value);
+                suppliedTarget = value.FormKey(records);
+                if (value.Number != 0x14 && records.GetEffective(suppliedTarget.Value).Signature is not ("REFR" or "ACHR" or "ACRE"))
+                    throw new InvalidDataException("Reference function caller is not a placed reference.");
+            }
             if (parts.Length == 1 && FalloutSoundCommands.Function(records, operation) is { } soundFunction)
                 return soundFunction;
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(records, operation) is { } settingFunction)
@@ -345,7 +364,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     throw new NotSupportedException("Character-generation query has no session owner."))() ? 1 : 0)
                 { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
-            FalloutFormKey Target() => parts.Length == 1 ? source : Reference(parts[0]);
+            FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
             FalloutFormKey AuxiliaryTarget(IReadOnlyList<FalloutScriptArgument> arguments)
             {
                 if (arguments.Count >= 3)
@@ -435,7 +454,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
                     return (host.IsInSameCell ?? throw new NotSupportedException("GetInSameCell has no spatial owner."))
-                        (parts.Length == 1 ? source : Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0;
+                        (Target(), Reference(arguments[0].Identifier!)) ? 1 : 0;
                 });
             if (parts.Length <= 2 && operation == "getdistance")
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
@@ -462,7 +481,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 });
             if (parts.Length == 2 && parts[1].Equals("IsCurrentFurnitureRef", StringComparison.OrdinalIgnoreCase))
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    host.IsCurrentFurniture(Reference(parts[0]), Reference(arguments[0].Identifier!)) ? 1 : 0);
+                    host.IsCurrentFurniture(Target(), Reference(arguments[0].Identifier!)) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetDisabled", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsEnabled(Target()) ? 0 : 1) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getopenstate")
@@ -488,12 +507,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))
                     (Target(), arguments[0].Identifier!));
             if (parts.Length <= 2 && operation == "getkiller")
-                return new([], _ => world.Get(Target()).Injury?.Killer is { } killer ? records.RuntimeFormId(killer) : 0);
+                return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
+                    world.Get(Target()).Injury?.Killer is { } killer ? records.RuntimeFormId(killer) : 0));
             return name.ToLowerInvariant() switch
             {
                 "getgameloaded" => new([], _ => Events().GetGameLoaded(bindings.Source) ? 1 : 0),
                 "getgamerestarted" => new([], _ => Events().GetGameRestarted(bindings.Source) ? 1 : 0),
-                "getself" or "getselfalt" => new([], _ => CallingReference() is { } caller ? records.RuntimeFormId(caller) : 0),
+                "getself" or "getselfalt" => FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
+                    CallingReference() is { } reference ? records.RuntimeFormId(reference) : 0)),
                 "iskeypressed" => new([FalloutScriptArgumentKind.Number], arguments => Events().IsKeyPressed(checked((int)Index(arguments[0].Number))) ? 1 : 0),
                 "isxbox" or "isps3" => new([], _ => 0),
                 "iswin32" => new([], _ => 1),
@@ -516,7 +537,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments => Objective(arguments, false)),
                 "getobjectivecompleted" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments => Objective(arguments, true)),
                 "isactionref" => new([FalloutScriptArgumentKind.Identifier], arguments => actor == bindings.Reference(arguments[0].Identifier!) ? 1 : 0),
-                "getactionref" => new([], _ => actor is { } activator ? records.RuntimeFormId(activator) : 0),
+                "getactionref" => FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
+                    actor is { } activator ? records.RuntimeFormId(activator) : 0)),
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
                 _ => null,
             };

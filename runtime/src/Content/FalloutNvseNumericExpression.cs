@@ -21,7 +21,20 @@ internal static class FalloutNvseNumericExpression
     internal static FalloutScriptValue EvaluateValue(IReadOnlyList<string> tokens,
         FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function = null,
         Func<string, string, FalloutScriptFunction>? userFunction = null,
-        bool nvseLogical = true)
+        bool nvseLogical = true) =>
+        Parse(tokens, values, function, userFunction, nvseLogical, operandOnly: false).Value();
+
+    // Statement arguments can contain one complete primary/postfix operand.
+    // Return its deferred evaluation so syntax can be checked without calling
+    // a receiver, argument function or assignment while determining extent.
+    internal static (Func<FalloutScriptValue> Value, int Count) ReadOperand(IReadOnlyList<string> tokens,
+        FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function = null,
+        Func<string, string, FalloutScriptFunction>? userFunction = null) =>
+        Parse(tokens, values, function, userFunction, nvseLogical: true, operandOnly: true);
+
+    private static (Func<FalloutScriptValue> Value, int Count) Parse(IReadOnlyList<string> tokens,
+        FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function,
+        Func<string, string, FalloutScriptFunction>? userFunction, bool nvseLogical, bool operandOnly)
     {
         var at = 0;
         FalloutScriptFunction? Resolve(string token)
@@ -32,6 +45,49 @@ internal static class FalloutNvseNumericExpression
                 throw new NotSupportedException("Call needs a bound function identity.");
             return (userFunction ?? throw new NotSupportedException("Call has no user-function owner."))(
                 token, tokens[at++]);
+        }
+
+        IReadOnlyList<Func<FalloutScriptArgument>> Arguments(string name, FalloutScriptFunction command)
+        {
+            var arguments = new List<Func<FalloutScriptArgument>>();
+            var argumentIndex = 0;
+            while (argumentIndex < command.Arguments.Count || command.Variadic is not null)
+            {
+                var variadic = argumentIndex >= command.Arguments.Count;
+                var kind = variadic ? command.Variadic!.Value : command.Arguments[argumentIndex++];
+                var optional = kind is FalloutScriptArgumentKind.OptionalNumber or
+                    FalloutScriptArgumentKind.OptionalIdentifier or FalloutScriptArgumentKind.OptionalString or
+                    FalloutScriptArgumentKind.OptionalValue;
+                var required = kind switch
+                {
+                    FalloutScriptArgumentKind.OptionalNumber => FalloutScriptArgumentKind.Number,
+                    FalloutScriptArgumentKind.OptionalIdentifier => FalloutScriptArgumentKind.Identifier,
+                    FalloutScriptArgumentKind.OptionalString => FalloutScriptArgumentKind.String,
+                    FalloutScriptArgumentKind.OptionalValue => FalloutScriptArgumentKind.Value,
+                    _ => kind,
+                };
+                if ((optional || variadic) && (at >= tokens.Count || !CanStartOptionalArgument(tokens[at], required)))
+                    break;
+                if (required == FalloutScriptArgumentKind.Identifier)
+                {
+                    if (at >= tokens.Count || !Identifier(tokens[at]))
+                        throw new InvalidDataException($"Script function {name} needs an identifier argument.");
+                    var argumentName = tokens[at++];
+                    arguments.Add(() => new(0, argumentName));
+                }
+                else
+                {
+                    var argument = Read(14);
+                    arguments.Add(() =>
+                    {
+                        var value = argument.Value();
+                        if (required == FalloutScriptArgumentKind.Number && value.Kind == FalloutScriptValueKind.Array)
+                            throw new InvalidDataException("Numeric script argument cannot use an array identity.");
+                        return required == FalloutScriptArgumentKind.Number ? new(value.Number) : new(value, null);
+                    });
+                }
+            }
+            return arguments;
         }
 
         Operand Read(int precedence)
@@ -80,44 +136,7 @@ internal static class FalloutNvseNumericExpression
             }
             else if (Resolve(token) is { } command)
             {
-                var arguments = new List<Func<FalloutScriptArgument>>();
-                var argumentIndex = 0;
-                while (argumentIndex < command.Arguments.Count || command.Variadic is not null)
-                {
-                    var variadic = argumentIndex >= command.Arguments.Count;
-                    var kind = variadic ? command.Variadic!.Value : command.Arguments[argumentIndex++];
-                    var optional = kind is FalloutScriptArgumentKind.OptionalNumber or
-                        FalloutScriptArgumentKind.OptionalIdentifier or FalloutScriptArgumentKind.OptionalString or
-                        FalloutScriptArgumentKind.OptionalValue;
-                    var required = kind switch
-                    {
-                        FalloutScriptArgumentKind.OptionalNumber => FalloutScriptArgumentKind.Number,
-                        FalloutScriptArgumentKind.OptionalIdentifier => FalloutScriptArgumentKind.Identifier,
-                        FalloutScriptArgumentKind.OptionalString => FalloutScriptArgumentKind.String,
-                        FalloutScriptArgumentKind.OptionalValue => FalloutScriptArgumentKind.Value,
-                        _ => kind,
-                    };
-                    if ((optional || variadic) && (at >= tokens.Count || !CanStartOptionalArgument(tokens[at], required)))
-                        break;
-                    if (required == FalloutScriptArgumentKind.Identifier)
-                    {
-                        if (at >= tokens.Count || !Identifier(tokens[at]))
-                            throw new InvalidDataException($"Script function {token} needs an identifier argument.");
-                        var name = tokens[at++];
-                        arguments.Add(() => new(0, name));
-                    }
-                    else
-                    {
-                        var argument = Read(14);
-                        arguments.Add(() =>
-                        {
-                            var value = argument.Value();
-                            if (required == FalloutScriptArgumentKind.Number && value.Kind == FalloutScriptValueKind.Array)
-                                throw new InvalidDataException("Numeric script argument cannot use an array identity.");
-                            return required == FalloutScriptArgumentKind.Number ? new(value.Number) : new(value, null);
-                        });
-                    }
-                }
+                var arguments = Arguments(token, command);
                 left = new(() => command.InvokeValue(arguments.Select(argument => argument()).ToArray()));
             }
             else
@@ -127,6 +146,28 @@ internal static class FalloutNvseNumericExpression
 
             while (at < tokens.Count)
             {
+                if (tokens[at] == ".")
+                {
+                    ++at;
+                    if (at >= tokens.Count || !Regex.IsMatch(tokens[at],
+                        @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant))
+                        throw new InvalidDataException("Postfix reference call needs a method name.");
+                    var name = tokens[at++];
+                    var command = values.ReferenceFunction?.Invoke(name) ??
+                        throw new NotSupportedException($"Postfix reference function {name} has no runtime owner.");
+                    var arguments = Arguments(name, command);
+                    var receiver = left;
+                    left = new(() =>
+                    {
+                        var caller = receiver.Value();
+                        // Check the typed receiver before evaluating any
+                        // stateful argument. Do not substitute a numeric ID,
+                        // an EDID lookup, or the ambient calling reference.
+                        FalloutScriptFunction.RequireReference(caller);
+                        return command.InvokeReferenceValue(caller, arguments.Select(argument => argument()).ToArray());
+                    });
+                    continue;
+                }
                 if (tokens[at] == "[")
                 {
                     ++at;
@@ -184,12 +225,12 @@ internal static class FalloutNvseNumericExpression
             return left;
         }
 
-        var expression = Read(-1);
-        if (at != tokens.Count)
+        var expression = Read(operandOnly ? 14 : -1);
+        if (!operandOnly && at != tokens.Count)
             throw new NotSupportedException("NVSE expression has an unbound operation.");
         // Parse the complete expression before invoking any stateful command
         // or assignment. Short-circuited branches never read or write state.
-        return expression.Value();
+        return (expression.Value, at);
 
         bool CanStartOptionalArgument(string token, FalloutScriptArgumentKind required)
         {
@@ -198,7 +239,7 @@ internal static class FalloutNvseNumericExpression
             // not to the preceding optional integer index. This also keeps
             // `GetAuxVar "name" SomeReference` distinct from an index read.
             return required != FalloutScriptArgumentKind.Number || !Identifier(token) ||
-                function?.Invoke(token) is not null || values.Read(token).Kind != FalloutScriptValueKind.Form;
+                function?.Invoke(token) is not null || values.IsForm?.Invoke(token) != true;
         }
     }
 

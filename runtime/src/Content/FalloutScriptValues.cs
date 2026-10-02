@@ -94,7 +94,9 @@ internal sealed record FalloutScriptValueContext(
     Func<string, FalloutScriptValue> Read,
     Action<string, FalloutScriptValue> Write,
     Func<uint, string>? FormName = null,
-    FalloutScriptArrayStore? Arrays = null);
+    FalloutScriptArrayStore? Arrays = null,
+    Func<string, FalloutScriptFunction?>? ReferenceFunction = null,
+    Func<string, bool>? IsForm = null);
 
 internal sealed record FalloutScriptStringSnapshot(uint Id, string Plugin, string Text);
 internal sealed record FalloutScriptValueStoreSnapshot(
