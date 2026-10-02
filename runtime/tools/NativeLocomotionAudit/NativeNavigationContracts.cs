@@ -75,6 +75,13 @@ internal static class NativeNavigationContracts
         try { _ = directedGraph.FindPath(new(9, 9, 0), new(1, 1, 0), destinationRadiusGameUnits: 2); }
         catch (InvalidOperationException) { distantFloorRefused = true; }
         if (!distantFloorRefused) throw new InvalidOperationException("Reference approach exceeded its bounded source floor distance.");
+        var wrongHeightRefused = false;
+        try { _ = directedGraph.FindPath(new(9, 9, 0), new(9, 9, 3), destinationRadiusGameUnits: 2); }
+        catch (InvalidOperationException) { wrongHeightRefused = true; }
+        if (!wrongHeightRefused) throw new InvalidOperationException("Same-triangle travel accepted a destination on another floor outside its source radius.");
+        var raisedApproach = directedGraph.FindPath(new(9, 9, 0), new(9, 9, 1), destinationRadiusGameUnits: 2);
+        if (raisedApproach.Count != 1 || raisedApproach[0] != new Vector3(9, 9, 0))
+            throw new InvalidOperationException("Bounded same-triangle travel lost the owned floor projection.");
         using var selfLinked = JsonDocument.Parse("""
             {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
               {"formId":"self","cellFormId":"cell","version":11,

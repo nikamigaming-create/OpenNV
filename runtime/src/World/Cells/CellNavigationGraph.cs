@@ -68,7 +68,11 @@ internal sealed partial class CellNavigationGraph
         foreach (var pair in trianglePath.Zip(trianglePath.Skip(1)))
             result.Add(Portal(pair.First, pair.Second));
         var last = trianglePath[^1];
-        result.Add(last.NavMesh.ClosestPoint(last.TriangleIndex, destinationGameUnits));
+        var endpoint = last.NavMesh.ClosestPoint(last.TriangleIndex, destinationGameUnits);
+        if (destinationRadiusGameUnits > 0 &&
+            endpoint.DistanceSquaredTo(destinationGameUnits) > destinationRadiusGameUnits * destinationRadiusGameUnits)
+            throw new InvalidOperationException("Owned NAVM endpoint lies outside the source destination radius.");
+        result.Add(endpoint);
         return result;
     }
 
