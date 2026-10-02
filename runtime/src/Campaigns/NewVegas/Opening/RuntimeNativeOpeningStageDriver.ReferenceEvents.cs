@@ -89,12 +89,14 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.Get(actor).TalkedToPlayer = true,
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
-            actor => _scripts.References!.ActorRace(actor));
+            actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded);
         AddChild(_conversation);
     }
 
     private float DialogueActorValue(FalloutFormKey actor, int value)
     {
+        if (value is >= 62 and <= 71)
+            return _scripts.References!.ActorValue(actor, FalloutActorValue.UserSlot(value));
         if (_pluginStack.RuntimeFormId(actor) == 0x14)
         {
             if (value == 16) return Vitals.ExactHitPoints;
@@ -169,6 +171,13 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case FalloutReferenceEffectKind.CharacterGeneration:
                 _scripts.Session.SetInCharGen(effect.Enable, _vitals.RequireLevelUpOwner);
+                break;
+            case FalloutReferenceEffectKind.PlayerToddler:
+                _scripts.Session.SetPlayerToddler(effect.Enable);
+                break;
+            case FalloutReferenceEffectKind.PlayerScale:
+                _scripts.Session.SetPlayerScale(effect.Scale);
+                _player.ApplySourceScale(_scripts.Session.PlayerScale);
                 break;
             case FalloutReferenceEffectKind.PlayerYouth:
                 _scripts.Session.SetPlayerYoung(effect.Enable);

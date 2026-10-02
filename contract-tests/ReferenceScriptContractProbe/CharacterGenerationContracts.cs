@@ -28,9 +28,11 @@ internal static class CharacterGenerationContracts
                 Setting(105, "iXPBumpBase", BitConverter.GetBytes(150)),
                 Record("QUST", 0x601, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x600u))),
                 Record("SCPT", 0x600, Field("SCHR", header), Field("SLSD", local), Field("SCVR", Text("sample")),
-                    Field("SCTX", Text("short sample\nbegin GameMode\nSetPCYoung -2\nSetInCharGen 1\nset sample to GetInCharGen\nend"))),
+                    Field("SCRO", BitConverter.GetBytes(0x14u)),
+                    Field("SCTX", Text("short sample\nbegin GameMode\nSetPCYoung -2\nSetPCToddler -3\nplayer.SetScale .406\nSetInCharGen 1\nset sample to GetInCharGen\nend"))),
                 Record("QUST", 0x630, Field("DATA", [0, 0]), Field("INDX", new byte[2]), Field("QSDT", [0]),
-                    Field("SCTX", Text("SetPCYoung 1\nSetInCharGen 1")))));
+                    Field("SCRO", BitConverter.GetBytes(0x14u)),
+                    Field("SCTX", Text("SetPCYoung 1\nSetPCToddler 1\nplayer.SetScale .4\nSetInCharGen 1")))));
             using var records = FalloutPluginStack.Load(directory, ["Creation.esm"]);
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
@@ -40,21 +42,27 @@ internal static class CharacterGenerationContracts
                 "Fallback source program did not enter chargen and read the shared flag.");
             Require(scripts.Session.PlayerYoung && scripts.Session.PlayerAppearanceRevision == 1,
                 "Fallback SetPCYoung did not booleanize a signed integer or invalidate appearance.");
+            Require(scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .41f,
+                "Fallback source commands lost signed toddler selection or source scale precision.");
             scripts.Advance(0);
             Require(scripts.Session.PlayerAppearanceRevision == 1, "Repeated youth assignment invalidated an unchanged appearance.");
             var snapshot = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scripts.Capture()))!;
             var coldQuests = new FalloutQuestState(records); coldQuests.Restore(quests.Capture());
             var cold = new FalloutQuestScripts(records, coldQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0);
             cold.Restore(snapshot);
-            Require(cold.Session.InCharGen && cold.Session.PlayerYoung, "Cold script session lost character-generation or youth state.");
+            Require(cold.Session.InCharGen && cold.Session.PlayerYoung && cold.Session.PlayerToddler && cold.Session.PlayerScale == .41f,
+                "Cold script session lost character-generation, youth, toddler or scale state.");
             var legacy = JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>("{\"Hardcore\":false,\"AutoDisplayObjectives\":true,\"Achievements\":[]}")!;
-            Require(!legacy.InCharGen && !legacy.PlayerYoung, "Legacy session acquired character generation or youth.");
+            Require(!legacy.InCharGen && !legacy.PlayerYoung && !legacy.PlayerToddler && legacy.PlayerScale == 1,
+                "Legacy session acquired character generation, youth, toddler selection or nondefault scale.");
 
             var special = new FalloutNativeSpecialState(5, 5, 5, 5, 5, 5, 5);
             var vitals = new FalloutPlayerVitals(records, Key(7), special);
             var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effect =>
             {
                 if (effect.Kind == FalloutReferenceEffectKind.PlayerYouth) scripts.Session.SetPlayerYoung(effect.Enable);
+                else if (effect.Kind == FalloutReferenceEffectKind.PlayerToddler) scripts.Session.SetPlayerToddler(effect.Enable);
+                else if (effect.Kind == FalloutReferenceEffectKind.PlayerScale) scripts.Session.SetPlayerScale(effect.Scale);
                 else if (effect.Kind == FalloutReferenceEffectKind.CharacterGeneration) scripts.Session.SetInCharGen(effect.Enable, vitals.RequireLevelUpOwner);
                 else throw new InvalidDataException("Unexpected effect.");
             }, InCharGen: () => scripts.Session.InCharGen));
@@ -71,8 +79,24 @@ internal static class CharacterGenerationContracts
                 Reject(() => Run("SetPCYoung " + invalid + "\nset sample to 99"));
             Require(scripts.Session.PlayerYoung && quests.Variable(Key(0x601), 1) == 0,
                 "Invalid youth flag changed state or executed its suffix.");
+            Run("SetPCToddler 0\nplayer.SetScale .4");
+            Require(!scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .4f && scripts.Session.PlayerYoung,
+                "Toddler and scale commands changed unrelated youth appearance or did not clear the shared mode.");
+            Run("SetPCToddler -1");
+            foreach (var invalid in new[] { "0.5", "2147483648", "-2147483649" })
+                Reject(() => Run("SetPCToddler " + invalid + "\nset sample to 99"));
+            Reject(() => Run("SetPCToddler 1 0\nset sample to 99"));
+            Require(scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .4f && quests.Variable(Key(0x601), 1) == 0,
+                "Invalid toddler input mutated policy, scale or the source suffix.");
+            Run("player.SetScale 0"); Require(scripts.Session.PlayerScale == .01f, "Scale lost the source lower clamp.");
+            Run("player.SetScale 25"); Require(scripts.Session.PlayerScale == 10, "Scale lost the source upper clamp.");
+            Run("player.SetScale .4");
+            foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, double.MaxValue }) Reject(() => scripts.Session.SetPlayerScale(invalid));
+            Reject(() => scripts.Session.Restore(scripts.Session.Capture() with { PlayerScale = .405f }));
+            Require(scripts.Session.PlayerScale == .4f && scripts.Session.PlayerToddler, "Invalid saved scale partially restored policy.");
             cold.Session.Restore(legacy);
-            Require(!cold.Session.PlayerYoung, "Cold legacy restoration retained an earlier youth flag.");
+            Require(!cold.Session.PlayerYoung && !cold.Session.PlayerToddler && cold.Session.PlayerScale == 1,
+                "Cold legacy restoration retained earlier player policy.");
             foreach (var invalid in new[] { "-1", "2", "0.5" }) Reject(() => Run("SetInCharGen " + invalid + "\nset sample to 99"));
             Require(scripts.Session.InCharGen && quests.Variable(Key(0x601), 1) == 0, "Invalid flag mutated state or executed its suffix.");
 
@@ -104,8 +128,9 @@ internal static class CharacterGenerationContracts
                 _ => throw new InvalidDataException("Unexpected startup effect."), () => true);
             scripts.Session.Restore(legacy);
             bootstrap.Start();
-            Require(scripts.Session.InCharGen && scripts.Session.PlayerYoung, "Pre-world source result lost chargen or youth policy.");
-            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewards=unbound parity=unverified");
+            Require(scripts.Session.InCharGen && scripts.Session.PlayerYoung && scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .4f,
+                "Pre-world source result lost shared player policy.");
+            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewards=unbound parity=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
     }

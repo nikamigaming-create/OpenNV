@@ -52,7 +52,7 @@ internal partial class RuntimeNativeConversation : Node
         Action<FalloutFormKey>? recordTalkedToPlayer = null,
         Func<FalloutFormKey, bool>? talkedToPlayer = null,
         Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
-        Func<FalloutFormKey, FalloutFormKey>? actorRace = null)
+        Func<FalloutFormKey, FalloutFormKey>? actorRace = null, Func<uint, uint>? dialogueRandom = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         _resolveRunOnCell = resolveRunOnCell;
@@ -64,7 +64,7 @@ internal partial class RuntimeNativeConversation : Node
         _factions = factions;
         _playerFemale = playerFemale;
         _actorRace = actorRace;
-        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos);
+        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos, dialogueRandom);
     }
 
     internal void Request(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey? topic, Action? completed = null)

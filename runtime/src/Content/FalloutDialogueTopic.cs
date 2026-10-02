@@ -114,20 +114,28 @@ internal sealed partial class FalloutDialogueTopic
     internal FalloutDialogueInfo? Select(FalloutFormKey speakerBase, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null,
         Func<FalloutFormKey, bool>? questEligible = null, Func<FalloutFormKey, int>? questPriority = null,
-        bool conversation = false)
+        bool conversation = false, Func<uint, uint>? random = null)
     {
         IEnumerable<FalloutDialogueInfo> candidates = questPriority is null ? Infos : Infos.OrderByDescending(info => questPriority(info.Quest));
+        List<FalloutDialogueInfo>? pool = null;
         foreach (var info in candidates)
         {
             if (!Eligible(info, speakerBase, said, questStage, context, questEligible)) continue;
-            // SayTo owns one complete INFO and finishes after its responses and
-            // end script. Goodbye requires no further conversational turn here;
-            // it must not suppress the authored line. Random and other routing
-            // flags still require their own selection owners.
-            RequireFlags(info, conversation);
-            return info;
+            if ((info.Flags & 2) == 0 && pool is not null) return Choose();
+            RequireFlags(info, conversation, randomSelection: true);
+            if ((info.Flags & 2) == 0) return info;
+            (pool ??= []).Add(info);
+            if ((info.Flags & 32) != 0) return Choose();
         }
-        return null;
+        return pool is null ? null : Choose();
+
+        FalloutDialogueInfo Choose()
+        {
+            var count = checked((uint)pool!.Count);
+            var index = (random ?? throw new NotSupportedException("Random dialogue selection has no shared saved RNG owner."))(count);
+            if (index >= count) throw new InvalidDataException("Dialogue RNG selected outside the eligible source group.");
+            return pool[(int)index];
+        }
     }
 
     internal static IReadOnlyList<FalloutSayToCommand> SayToCommands(string script)
@@ -255,9 +263,10 @@ internal sealed partial class FalloutDialogueTopic
                 $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
         }, evaluateRunOn: true);
 
-    internal static void RequireFlags(FalloutDialogueInfo info, bool conversation)
+    internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false)
     {
-        if (info.Type != (conversation ? 0 : 1) || info.NextSpeaker != 0 || (info.Flags & ~5) != 0 || info.Flags2 != 0)
+        var supported = randomSelection ? 39 : 5;
+        if (info.Type != (conversation ? 0 : 1) || info.NextSpeaker != 0 || (info.Flags & ~supported) != 0 || info.Flags2 != 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");
     }
 

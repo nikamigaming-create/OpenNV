@@ -30,6 +30,15 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+FalloutScriptSession also owns saved toddler animation and source player scale.
+Native first-person movement and Camera1st consume the actual toddler palette,
+including looking-only controls; transfers preserve the same scale. Scripted
+speech shares actor-value conditions with conversation selection, and eligible
+random INFO groups use the saved script RNG. Pending autosaves publish their
+active-continuation blocker and write when supported capture becomes available.
+See [toddler animation and scale](player-toddler-animation.md) for bounded checks
+and the remaining gurney, HUD, save and campaign limits.
+
 FalloutScriptSession owns source SetPCYoung state and cold restoration. The
 appearance resolver applies winning sex-specific race default hair and suppresses
 head attachments without discarding stored custom choices. Shared player

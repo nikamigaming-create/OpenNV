@@ -11,6 +11,7 @@ internal partial class RuntimeNativePlayer
     private FalloutPlayerInventory? _presentationInventory;
     private Func<FalloutNpcAppearance>? _appearance;
     private Func<long>? _appearanceRevision;
+    private Func<FalloutScriptSession>? _playerPolicy;
     private long _presentationAppearanceRevision = -1;
     private Func<Color>? _presentationAmbient;
     private RuntimeNativePlayerActor? _firstPerson, _thirdPerson;
@@ -28,6 +29,8 @@ internal partial class RuntimeNativePlayer
         thirdPerson = _thirdPersonMode,
         zoomMeters = _thirdPersonDistance,
         appearanceRevision = _presentationAppearanceRevision,
+        sourceScale = _sourceScale,
+        toddler = _playerPolicy?.Invoke().PlayerToddler ?? false,
         first = _firstPerson?.State,
         third = _thirdPerson?.State,
         error = _presentationError,
@@ -38,10 +41,12 @@ internal partial class RuntimeNativePlayer
 
     internal void ConfigurePresentation(FalloutPluginStack records, FalloutPlayerInventory inventory,
         Func<FalloutNpcAppearance> appearance, Func<Color> ambient, FalloutWeaponHandlingSnapshot? handling = null,
-        Func<long>? appearanceRevision = null)
+        Func<long>? appearanceRevision = null, Func<FalloutScriptSession>? playerPolicy = null)
     {
         _presentationRecords = records; _presentationInventory = inventory; _appearance = appearance; _presentationAmbient = ambient;
         _appearanceRevision = appearanceRevision;
+        _playerPolicy = playerPolicy;
+        if (playerPolicy is not null) ApplySourceScale(playerPolicy().PlayerScale);
         _weaponHandling = new(inventory);
         if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key));
     }
@@ -75,6 +80,11 @@ internal partial class RuntimeNativePlayer
     {
         if (_xr is not null) return;
         if (_sourceCamera is not null || _furniturePhase != 0) return;
+        if (!_thirdPersonMode && _firstPerson is { Toddler: true })
+        {
+            _camera.Transform = _firstPerson.SourceCamera * new Transform3D(new Basis(Vector3.Right, _pitchRadians), Vector3.Zero);
+            return;
+        }
         var head = Vector3.Up * _configuration.Player.SpawnCenterHeightMeters + _configuration.Player.DesktopCameraOffsetMeters.Vector3();
         var basis = new Basis(Vector3.Right, _pitchRadians);
         var offset = _thirdPersonMode ? basis.Z * _thirdPersonDistance : Vector3.Zero;
@@ -122,7 +132,17 @@ internal partial class RuntimeNativePlayer
             }
             if (changing && _presentationError is null && _weaponHandling!.Drawn) RequestWeaponAction("equip");
         }
-        if (!active && _xr is null) return;
+        if (_playerPolicy is not null && _presentationError is null)
+        {
+            var policy = _playerPolicy();
+            ApplySourceScale(policy.PlayerScale);
+            _firstPerson?.SetToddler(policy.PlayerToddler);
+        }
+        if (!active && _xr is null && !(_firstPerson is { Toddler: true } && !_modalInput && _sourceCamera is null && _furniturePhase == 0))
+        {
+            PublishThirdPersonCamera();
+            return;
+        }
         if (_presentationError is not null) return;
         var simulationDelta = GetTree().Paused ? 0 : delta;
         AdvanceWeaponHandling(simulationDelta);

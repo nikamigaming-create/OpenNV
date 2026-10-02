@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
 internal static class ActorSourceContracts
@@ -12,6 +13,7 @@ internal static class ActorSourceContracts
         Directory.CreateDirectory(directory);
         try
         {
+            RandomDialogueContracts(directory);
             File.WriteAllBytes(Path.Combine(directory, "Actors.esm"), Join(Header(),
                 Creature(0x800, 0, 0, "creatures/test/skeleton.nif", "body.nif", 1.5f,
                     Field("CNTO", Join(BitConverter.GetBytes(0x840u), BitConverter.GetBytes(3)))),
@@ -92,6 +94,10 @@ internal static class ActorSourceContracts
                 ["meshes/creatures/test/mtidle.kf", "meshes/creatures/test/locomotion/mtidle.kf"]));
             var speaker = FalloutDialogueSpeaker.Read(records, Key(0x801));
             using var world = new FalloutReferenceWorld(records);
+            Check(FalloutActorValue.UserSlot(62) == "variable01" && FalloutActorValue.UserSlot(66) == "variable05" &&
+                FalloutActorValue.UserSlot(71) == "variable10", "Numeric user values changed their engine slots.");
+            Reject(() => FalloutActorValue.UserSlot(61));
+            Reject(() => FalloutActorValue.UserSlot(72));
             using (var spatial = new FalloutReferenceWorld(records))
             {
                 var player = new FalloutReferencePlacement(Key(0x880), [0, 0, 0], [0, 0, 0]);
@@ -287,6 +293,53 @@ internal static class ActorSourceContracts
             Console.WriteLine("OPENNV_ACTOR_SOURCE_PASS templates=independent voice=speaker-info-response override=original-identity ambiguous=rejected clock=cold-exact");
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static void RandomDialogueContracts(string directory)
+    {
+        var path = Path.Combine(directory, "Random.esm");
+        byte[] Info(uint id, byte flags, bool conditional = false)
+        {
+            var condition = Condition(59, 1);
+            return Record("INFO", id, Field("DATA", [1, 0, flags, 0]), Field("QSTI", BitConverter.GetBytes(0x40u)),
+                Field("TRDT", Response()), Field("NAM1", Text("Synthetic source line")),
+                conditional ? Field("CTDA", condition) : []);
+        }
+        File.WriteAllBytes(path, Join(Header(), Record("QUST", 0x40, Field("EDID", Text("SyntheticQuest"))),
+            Record("DIAL", 0x100, Field("EDID", Text("SyntheticRandom"))),
+            Group(7, 0x100, Join(Info(0x101, 4), Info(0x102, 2, true), Info(0x103, 2), Info(0x104, 34), Info(0x105, 34))),
+            Record("DIAL", 0x200, Field("EDID", Text("SyntheticBoundary"))),
+            Group(7, 0x200, Join(Info(0x201, 2), Info(0x202, 0, true), Info(0x203, 34))),
+            Record("DIAL", 0x300, Field("EDID", Text("SyntheticUnknownFlag"))), Group(7, 0x300, Info(0x301, 8))));
+        using var records = FalloutPluginStack.Load(directory, ["Random.esm"]);
+        FalloutFormKey Key(uint id) => new("Random.esm", id);
+        var topic = FalloutDialogueTopic.Read(records, Key(0x100));
+        var said = new HashSet<FalloutFormKey>();
+        var draws = 0;
+        uint ChooseLast(uint count) { ++draws; Check(count == 2, "Random End lost its eligible pool boundary."); return count - 1; }
+        Check(topic.Select(Key(0x14), said, _ => 0, _ => 0, random: ChooseLast)!.Record.FormKey == Key(0x101) && draws == 0,
+            "Nonrandom first response consumed a random draw or lost SayOnce precedence.");
+        said.Add(Key(0x101));
+        Check(topic.Select(Key(0x14), said, _ => 0, _ => 0, random: ChooseLast)!.Record.FormKey == Key(0x104) && draws == 1,
+            "Random selection crossed the first eligible Random End or admitted a false condition.");
+        Check(topic.Select(Key(0x14), said, _ => 0, _ => 0, random: _ => 0)!.Record.FormKey == Key(0x103),
+            "Random selection lost a valid earlier source response.");
+        Reject(() => topic.Select(Key(0x14), said, _ => 0, _ => 0));
+        Reject(() => topic.Select(Key(0x14), said, _ => 0, _ => 0, random: count => count));
+        var boundary = FalloutDialogueTopic.Read(records, Key(0x200));
+        Check(boundary.Select(Key(0x14), said, _ => 0, _ => 1, random: count =>
+        {
+            Check(count == 1, "An eligible nonrandom INFO entered the random pool."); return 0;
+        })!.Record.FormKey == Key(0x201), "Nonrandom source boundary did not close the prior pool.");
+        Check(boundary.Select(Key(0x14), said, _ => 0, _ => 0, random: count =>
+        {
+            Check(count == 2, "An ineligible INFO incorrectly ended the pool."); return 1;
+        })!.Record.FormKey == Key(0x203), "Skipped source conditions broke the later random boundary.");
+        Reject(() => FalloutDialogueTopic.Read(records, Key(0x300)).Select(Key(0x14), said, _ => 0, random: _ => 0));
+        var values = new FalloutScriptValueStore(); _ = values.RandomBounded(7);
+        var cold = new FalloutScriptValueStore(); cold.Restore(values.Capture());
+        Check(Enumerable.Range(0, 32).All(_ => values.RandomBounded(5) == cold.RandomBounded(5)), "Dialogue selection lost the shared RNG's cold sequence.");
+        Console.WriteLine("OPENNV_DIALOGUE_RANDOM_CONTRACT_PASS sourceOrder=true conditions=true sayOnce=true boundaries=true invalidRng=true unknownFlags=true coldRandom=true retailSequence=unverified");
     }
 
     private static byte[] Creature(uint id, ushort flags, uint template, string skeleton, string part, float scale, params byte[][] extra)

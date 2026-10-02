@@ -54,15 +54,18 @@ Fresh ordinary input completes seventeen speeches, enters CG00 stages 90 and
 packages, disables Dad and stops CG00. The [shared saved youth policy](player-youth-appearance.md)
 executes SetPCYoung. The [source sound-path owner](source-sound-paths.md) executes
 SetSoundSourceFile and changes PHYBabyRattle to its owned baby-rattle directory.
-CG01 enters stages 0 and 5. Its next SetPCToddler has no owner; the nested failure
-remains visible on calling CG00. The player stays in birth CELL
-Fallout3.esm:028138 before the authored player scale/move suffix. Do not rearm,
-reset, teleport or bypass this retained prefix. The later current-build video
-reaches nineteen speeches and background CG01 stage 10 while the player remains
-in the birth room; speech reports `Dialogue condition 14 RunOn 0 has no actor/quest
-owner.` This background progress does not establish the blocked player transfer.
-Childhood-room entry and the gurney exit are not accepted. Ordinary Quit drains
-all source readers.
+The [shared toddler/scale owner](player-toddler-animation.md) now executes
+SetPCToddler, the source One Year Later movie, player scale 0.4 and MoveTo to
+CG01PlayerStartMarker. Birth and playroom share CELL Fallout3.esm:028138; reached
+marker, pose and actual room pixels establish the ordinary toddler transfer.
+CG01 reaches stage 10. Scripted speech now receives the existing actor-value
+owner, and eligible random INFO groups use the saved shared script RNG. The fresh
+run completes 28 speeches without the previous speech or opening-driver errors.
+The autosave stays pending during active continuation, then writes the actual
+campaign snapshot. Complete actor/interaction cold continuation is not accepted.
+Ordinary W/A input moves the toddler against the source playpen wall before the
+reach-Dad trigger fires. Do not bypass that contact, teleport or jump a stage.
+The gurney departure, toddler quest completion and Vault exit remain open.
 
 ## Shared owners and checks
 
@@ -87,8 +90,10 @@ during the opening while retaining subtitles. Further capabilities and exact
 limits are in [status](status.md); component checks do not establish campaign,
 actor, rendering, audio or physical-headset parity.
 
-The selected owned audit and full required runtime gate pass for the sound-path
-patch. Publish after the final diff check, obtain all required exact-head CI checks,
+Synthetic toddler/scale, numeric actor-value and random-dialogue checks pass.
+Owned native male/female body/camera/movement/clear/scale checks and two actual
+encouragement voice/result/completion checks pass. The full required runtime gate
+passes. Publish after the final diff check, obtain all required exact-head CI checks,
 merge and synchronize clean main. Recording is off during development and gates.
 
 ## Visible gaps
@@ -115,23 +120,25 @@ merge and synchronize clean main. Recording is off during development and gates.
 
 ## Next owner
 
-Implement reached SetPCToddler through shared source-validated player animation
-policy and its actual flat/XR consumers. Trace owned locomotion/camera behavior;
-do not add a flag-only bypass. Preserve youth appearance, modal pause, package
-cancellation, independent sound voices and path invalidation. Rerun ordinary input
-through the source movie and player transfer, then repair the next reached owner,
-including the visible dialogue condition context failure. Continue the complete
-TTW/JAM/Benny objective above.
+Trace the actual reach-Dad trigger sphere/placement/contact owner against the
+retained source playpen collision and ordinary toddler pose. Use source geometry
+and normal input, preserve closed-door collision and reject unknown clearance.
+Repair the general missing owner and continue every toddler/Vault quest.
+The gurney camera still needs its authored IDLE repeat interval, package handoff
+and sound text keys; do not replay its entire travel segment as an idle loop.
+Preserve shared youth/scale, modal pause, camera cancellation, independent sound
+voices and path invalidation. Continue the complete TTW/JAM/Benny objective above.
 
 ## Private continuation
 
-Current ordinary video run: `tmp/development-lab/ttw-sound-paths-video-20261001/`.
-Reached state: `tmp/sound-path-video-reached.private.json`.
-The bounded source-prefix check is
-`tmp/sound-paths-ordinary-reached.private.json`.
-Checks: `tmp/sound-path-reference-contract.log`,
-`tmp/sound-paths-owned.stdout.log`, `tmp/sound-path-runtime-gate.log`.
-Owned audit helper: `tmp/Run-SoundPathsAudit.ps1`.
+Current ordinary run: `tmp/development-lab/ttw-toddler-continuation-20261001/`.
+Reached state: `tmp/toddler-continuation-reached.private.json`.
+The actually written stage-10 autosave remains in that private run; it has not
+passed complete cold actor continuation. Checks:
+`tmp/toddler-followthrough-reference.log`, `tmp/toddler-owned.stdout.log`,
+`tmp/speech-actor-values-owned.stdout.log`, `tmp/toddler-runtime-gate.log`.
+Owned audit helpers: `tmp/Run-ToddlerAudit.ps1`,
+`tmp/Run-SpeechActorValuesAudit.ps1`.
 
 Private source analysis: `tmp/player-young-cg01.private.jsonl`,
 `tmp/phy-baby-rattle.private.jsonl`, `tmp/set-pc-toddler-command.private.txt`,
@@ -141,14 +148,17 @@ remain under `tmp/`; raw owned bytes and private addresses are never public inpu
 
 The requested current trait screenshot is
 `local/recordings/ttw-current-opening-20261001/TTW-owned-traits-flat-20261001.png`.
-The requested current-build video is
-`local/recordings/ttw-current-opening-20261001/flat-traits-birth-handoff-20261001.mp4`.
-It contains forty seconds of ordinary trait Done input, late birth dialogue and
-camera release, with stereo audio. The 1280x720, 30fps export retains repeated
-latest frames (816 unique draw IDs across 1,200 frames); exact audiovisual timing
-remains unverified. The player stays in the birth room throughout. Recording is
-off and temporary inspection frames are removed. The complete journey reel is
-pending ordinary campaign progress.
+The requested fresh transfer video is
+`local/recordings/ttw-current-opening-20261001/flat-toddler-transfer-20261001.mp4`.
+It includes the source movie and actual playroom entry, with stereo audio.
+The new follow-through take is
+`local/recordings/ttw-current-opening-20261001/flat-toddler-walk-20261001.mp4`;
+ordinary movement approaches the playpen and Dad's encouragement continues.
+The selected playpen still is
+`local/recordings/ttw-current-opening-20261001/TTW-toddler-playpen-walk-20261001.png`.
+Exports retain repeated latest frames; exact audiovisual timing remains
+unverified. Recording is off and temporary inspection frames are removed. The
+complete journey reel is pending ordinary campaign progress.
 
 Both protected saves (`local/playtest-20260927-world/save.json` and
 `local/playtest-20260920-companion/save.json`) must remain unchanged, with SHA256

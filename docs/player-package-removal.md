@@ -33,8 +33,9 @@ A fresh ordinary flat New/Capital run completes seventeen dialogue commands,
 reaches CG00 stage 100, removes the package/camera, disables Dad and stops CG00.
 The shared saved SetPCYoung policy and modal trait pause now execute; ordinary
 input executes the [sound-path command](source-sound-paths.md) and enters CG01
-stages 0 and 5 before its unsupported SetPCToddler. See
+stages 0 and 5. The later [toddler/scale owner](player-toddler-animation.md)
+executes the source movie and actual playroom transfer. See
 [player youth and modal traits](player-youth-appearance.md). Telemetry interval
 overruns remain visible. No child race change,
-next-cell transition, gurney-exit acceptance, campaign or retail/XR parity is
+gurney-exit acceptance, campaign or retail/XR parity is
 claimed from these component and prefix checks.

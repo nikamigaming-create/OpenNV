@@ -18,6 +18,19 @@ internal partial class RuntimeNativeOpeningStageDriver
     private CanvasLayer? _barterLayer;
     private NativeOwnedBarterMenu? _barterMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
+    private string? SaveContinuationBlocker =>
+        _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
+        _conversation?.Active == true ? "conversation" : _speech?.Active == true ? "speech" :
+        _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
+        _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
+        _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
+        _barterMenu is not null ? "barter-menu" : null;
+    internal object SaveRequestState => new
+    {
+        requested = _saveRequested,
+        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker,
+        activeContinuationSaving = "unbound"
+    };
 
     internal void ApplyNativeSourceCommand(FalloutFormKey source, FalloutScriptBindings bindings, string command, IReadOnlyList<string> arguments)
     {
@@ -121,11 +134,6 @@ internal partial class RuntimeNativeOpeningStageDriver
                 }).CallDeferred());
                 AddChild(movie);
                 break;
-            case "setscale" when arguments.Count == 1 && _pluginStack.RuntimeFormId(target) == 0x14:
-                if (!float.TryParse(arguments[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var scale) || !float.IsFinite(scale) || scale <= 0)
-                    throw new InvalidDataException("Player source scale is invalid.");
-                _player.Scale = Vector3.One * scale;
-                break;
             case "playmusic" when parts.Length == 1 && arguments.Count == 1:
                 var music = bindings.Form(arguments[0]);
                 if (music.Signature != "MUSC") throw new InvalidDataException("Script music is not MUSC.");
@@ -159,12 +167,10 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
         _scripts.References!.PlayerMoves.RequireSettled();
-        if (_moviePlaying || _player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
-            _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null ||
-            _traitEntry is not null || _recipeMenu is not null || _barterMenu is not null)
+        if (SaveContinuationBlocker is not null)
             throw new NotSupportedException("Saving an active movie, furniture, speech or menu requires continuation state.");
         var transform = _player.GlobalTransform;
-        var rotation = transform.Basis.GetRotationQuaternion().Normalized();
+        var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
         var complete = _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
         var state = FalloutNativeCampaignSave.Capture(_saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
             _vigorContract, _special, _tagSkillContract, _tagSkills, _traitFarewellContract, _traits, PlayerControls,

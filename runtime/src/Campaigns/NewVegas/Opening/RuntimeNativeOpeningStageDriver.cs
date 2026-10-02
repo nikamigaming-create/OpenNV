@@ -270,7 +270,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && _recipeMenu is null && _barterMenu is null && !_scripts.References!.PlayerMoves.Pending)
+            if (_saveRequested && SaveContinuationBlocker is null && !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
             _playerPackage?.Advance(delta);
             foreach (var expired in _imageSpaceState.Advance(delta))
@@ -323,7 +323,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
         }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
-            actor => _scripts.References!.ActorRace(actor));
+            actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

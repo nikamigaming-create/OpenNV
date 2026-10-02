@@ -101,7 +101,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
 internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
     bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
     FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null,
-    bool PlayerYoung = false);
+    bool PlayerYoung = false, bool PlayerToddler = false, float PlayerScale = 1);
 internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null)
 {
     internal bool Hardcore { get; set; }
@@ -109,6 +109,18 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
     internal bool LocationSpecificLoadScreensOnly { get; set; }
     internal bool InCharGen { get; private set; }
     internal bool PlayerYoung { get; private set; }
+    internal bool PlayerToddler { get; private set; }
+    internal float PlayerScale { get; private set; } = 1;
+    internal void SetPlayerToddler(bool enabled) => PlayerToddler = enabled;
+    internal void SetPlayerScale(double value) => PlayerScale = PlayerScaleValue(value);
+    internal static float PlayerScaleValue(double value)
+    {
+        var single = (float)value;
+        if (!float.IsFinite(single)) throw new InvalidDataException("Player scale requires a finite source float.");
+        // The owned command stores two decimal places, clamped to its reference range.
+        var rounded = float.Parse(single.ToString("F2", System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
+        return Math.Clamp(rounded, .01f, 10f);
+    }
     internal long PlayerAppearanceRevision { get; private set; }
     internal void SetPlayerYoung(bool enabled)
     {
@@ -120,6 +132,12 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
     {
         if (!double.IsFinite(value) || value != Math.Truncate(value) || value < int.MinValue || value > int.MaxValue)
             throw new InvalidDataException("SetPCYoung requires a signed integer flag.");
+        return value != 0;
+    }
+    internal static bool PlayerToddlerFlag(double value)
+    {
+        if (!double.IsFinite(value) || value != Math.Truncate(value) || value < int.MinValue || value > int.MaxValue)
+            throw new InvalidDataException("SetPCToddler requires a signed integer flag.");
         return value != 0;
     }
     internal FalloutPlayerScriptPackageSnapshot? PlayerPackage { get; private set; }
@@ -142,12 +160,13 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale);
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
             throw new InvalidDataException("Saved script session state is invalid.");
         state.PlayerPackage?.Validate();
+        if (PlayerScaleValue(state.PlayerScale) != state.PlayerScale) throw new InvalidDataException("Saved player scale is outside the source reference range or precision.");
         if (state.NoActivationSound is not null && noActivationSound is null)
             throw new NotSupportedException("Saved no-activation sound has no shared source owner.");
         noActivationSound?.Restore(state.NoActivationSound);
@@ -155,6 +174,8 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         InCharGen = state.InCharGen;
         SetPlayerYoung(state.PlayerYoung);
+        SetPlayerToddler(state.PlayerToddler);
+        SetPlayerScale(state.PlayerScale);
         PlayerPackage = state.PlayerPackage;
         _achievements.Clear(); _achievements.UnionWith(state.Achievements);
     }
@@ -702,6 +723,18 @@ internal sealed class FalloutQuestScripts
             {
                 FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,
                     token => token.StartsWith('"') || instance.Bindings.HasVariable(token) ? StringArgument(token) : token);
+                return;
+            }
+            if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) && operation == "setscale")
+            {
+                if (!instance.Bindings.HasPlayerReference || arguments.Count != 1) throw new InvalidDataException("Player SetScale requires its compiled reference and one source float.");
+                Session.SetPlayerScale(NumberArgument(arguments[0]));
+                return;
+            }
+            if (parts.Length == 1 && operation == "setpctoddler")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("SetPCToddler requires one integer flag.");
+                Session.SetPlayerToddler(FalloutScriptSession.PlayerToddlerFlag(NumberArgument(arguments[0])));
                 return;
             }
             if (parts.Length == 1 && operation == "setpcyoung")

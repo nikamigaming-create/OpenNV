@@ -16,6 +16,14 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     private bool _activationEnabled = true;
     private bool _modalInput;
     private Transform3D? _sourceCamera;
+    private float _sourceScale = 1;
+    internal void ApplySourceScale(float scale)
+    {
+        if (_sourceScale == scale && Scale.IsEqualApprox(Vector3.One * scale)) return;
+        if (FalloutScriptSession.PlayerScaleValue(scale) != scale) throw new InvalidDataException("Player presentation scale is not source-valid.");
+        _sourceScale = scale;
+        Scale = Vector3.One * scale;
+    }
     private float _jumpHeightMeters;
     private FalloutInputControls? _inputControls;
 
@@ -197,7 +205,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         if (_furniturePhase != 0) throw new NotSupportedException("Teleporting an active furniture interaction needs interruption/phase restoration.");
         if (_configuration is null)
             throw new InvalidOperationException("Native player is not configured.");
-        var basis = authoredFloorTransform.Basis.Orthonormalized();
+        var basis = authoredFloorTransform.Basis.Orthonormalized().Scaled(Vector3.One * _sourceScale);
         GlobalTransform = new Transform3D(
             basis,
             authoredFloorTransform.Origin);
@@ -220,7 +228,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         var quaternion = new Quaternion(
             rotation[0], rotation[1], rotation[2], rotation[3]).Normalized();
         GlobalTransform = new Transform3D(
-            new Basis(quaternion),
+            new Basis(quaternion).Scaled(Vector3.One * _sourceScale),
             new Vector3(position[0], position[1], position[2]));
         _pitchRadians = viewPitchRadians;
         if (_xr is null) _camera.Rotation = new Vector3(_pitchRadians, 0, 0);

@@ -69,6 +69,12 @@ internal sealed class FalloutNewGameBootstrap
                 case FalloutReferenceEffectKind.CharacterGeneration:
                     scripts.Session.SetInCharGen(change.Enable, null);
                     break;
+                case FalloutReferenceEffectKind.PlayerToddler:
+                    scripts.Session.SetPlayerToddler(change.Enable);
+                    break;
+                case FalloutReferenceEffectKind.PlayerScale:
+                    scripts.Session.SetPlayerScale(change.Scale);
+                    break;
                 case FalloutReferenceEffectKind.PlayerYouth:
                     scripts.Session.SetPlayerYoung(change.Enable);
                     break;

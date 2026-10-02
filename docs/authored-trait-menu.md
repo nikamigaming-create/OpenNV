@@ -36,9 +36,10 @@ commands, shows its source artwork and retains identical speech, camera-package
 time, quest progress and draft across an extended hold. Done accepts no traits
 and resumes source progression; seventeen speeches complete, the
 [sound-path command](source-sound-paths.md) executes and CG01 stages 0 and 5
-are entered before the unsupported SetPCToddler. The session then quits
-with readers drained. Childhood-room entry, full campaign and matched timing
-remain unverified. See [the shared youth and pause owners](player-youth-appearance.md).
+are entered. The later [toddler/scale owner](player-toddler-animation.md) executes
+the source movie and actual playroom transfer. The session quits with readers
+drained. Full childhood/campaign play and matched timing remain unverified.
+See [the shared youth and pause owners](player-youth-appearance.md).
 
 Perk conditions/multiple ranks, native unstable sort ties and non-ASCII collation,
 description-scrollbar extent, scrollbar dragging, focus/click sound, close/layout
