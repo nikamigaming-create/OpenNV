@@ -44,11 +44,10 @@ Fresh ordinary flat New/Capital input completes seventeen speeches, accepts the
 owned trait screen, stops three birth loops and clears the player camera package.
 The source disables Dad, stops CG00 and sets the youth policy. SetSoundSourceFile
 changes the winning rattle path; the quest enters CG01 stages 0 and 5. Its next
-SetPCToddler remains unsupported before the player transfer, so the player stays
-in the birth room. The calling CG00 scheduler retains that nested failure without
-rearming its completed prefix. Ordinary Quit drains source readers. Publication
-overruns and existing reference gaps remain visible. A later forty-second
-current-build video retains nineteen speeches and background CG01 stage 10,
-with a visible RunOn 0 dialogue-condition context failure, while the player stays
-in the same birth room. Neither childhood-room entry nor campaign or retail/XR
-parity is established.
+The subsequent [toddler/scale owner](player-toddler-animation.md) now executes
+the source movie and actual playroom transfer; ordinary input reaches CG01 stage
+10. Shared scripted actor-value and random-dialogue selection let encouragement
+continue, and the source autosave writes after its active continuation settles.
+Ordinary Quit drains source readers. Publication overruns, playpen/trigger
+progression and existing reference gaps remain visible. The gurney departure,
+campaign and retail/XR parity remain unverified.

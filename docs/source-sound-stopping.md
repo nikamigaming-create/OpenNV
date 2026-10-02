@@ -6,8 +6,9 @@ The current ordinary run passes the former StopSound fault, completes seventeen
 speech commands and reaches stage 100. [Package removal](player-package-removal.md)
 now cancels the pending change; [shared youth state and trait pause](player-youth-appearance.md)
 execute. The [source sound-path owner](source-sound-paths.md) executes
-SetSoundSourceFile; ordinary input enters CG01 stages 0 and 5. SetPCToddler is
-the next fault before the player transfer.
+SetSoundSourceFile; ordinary input enters CG01 stages 0 and 5. The later
+[toddler/scale owner](player-toddler-animation.md) executes the source movie and
+actual playroom transfer.
 The gurney exit and subsequent campaign remain open.
 
 ## Source contract and owners
@@ -64,7 +65,7 @@ and the owned trait menu. It reaches stages 90 and 100 and stops three actual
 birth-loop instances. Package cancellation and subsequent youth/pause behavior
 are tracked in the [removal contract](player-package-removal.md) and
 [appearance contract](player-youth-appearance.md); CG01's sound-path mutation is
-the next fault.
+tracked in [the toddler/scale contract](player-toddler-animation.md).
 Telemetry publication interval overruns remain visible in this run.
 
 Retail instance-map lifetime, queued-menu admission, exact command/mixer timing,

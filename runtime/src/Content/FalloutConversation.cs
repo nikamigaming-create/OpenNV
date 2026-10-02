@@ -7,7 +7,8 @@ internal sealed record FalloutConversationChoice(FalloutFormKey Topic, FalloutFo
 // The dialogue owner decides which authored responses and choices are active.
 // Audio and menus report completion/input; they never choose the next INFO.
 internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQuestState quests,
-    Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, bool> results, HashSet<FalloutFormKey>? saidInfos = null)
+    Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, bool> results, HashSet<FalloutFormKey>? saidInfos = null,
+    Func<uint, uint>? random = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutDialogueTopic> _topics = [];
     private readonly Dictionary<FalloutFormKey, (int Priority, IReadOnlyList<FalloutCondition> Conditions)> _questHeaders = [];
@@ -96,7 +97,7 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
 
     private FalloutDialogueInfo? Select(FalloutFormKey topic) => Topic(topic).Select(_speaker, _said, quest => quests.Stage(quest), evaluate,
         QuestEligible,
-        quest => Header(quest).Priority, conversation: !FalloutDialogueTopic.IsGoodbye(records, topic));
+        quest => Header(quest).Priority, conversation: !FalloutDialogueTopic.IsGoodbye(records, topic), random: random);
 
     private bool QuestEligible(FalloutFormKey quest) => quests.IsRunning(quest) &&
         FalloutCondition.AllPass(Header(quest).Conditions, evaluate, evaluateRunOn: true);

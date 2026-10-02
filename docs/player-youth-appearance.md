@@ -45,8 +45,9 @@ the trait draft remain identical across an extended hold. Done releases gameplay
 seventeen speeches complete, source sound stopping removes three birth loops,
 the camera package clears, Dad disables and CG00 stops. SetPCYoung executes and
 the [source sound-path owner](source-sound-paths.md) executes SetSoundSourceFile.
-CG01 stages 0 and 5 are entered; SetPCToddler remains unsupported before the
-source player transfer. The session quits normally with readers drained.
+CG01 stages 0 and 5 are entered. The later [toddler/scale owner](player-toddler-animation.md)
+executes the source movie and actual playroom transfer. The session quits
+normally with readers drained.
 State-publication overruns, missing references, actor behavior and cold-animation
-gaps remain visible. Childhood-room entry, campaign completion and matched
-retail/XR timing or pixels are unverified.
+gaps remain visible. Toddler quest/Vault completion and matched retail/XR timing
+or pixels are unverified.

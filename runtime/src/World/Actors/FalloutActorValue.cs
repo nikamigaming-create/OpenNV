@@ -16,4 +16,8 @@ internal sealed record FalloutActorValue(float Base, float Permanent = 0, float 
             throw new NotSupportedException($"Actor value {name} has no source base/formula owner.");
         return canonical;
     }
+
+    internal static string UserSlot(int value) => value is >= 62 and <= 71
+        ? "variable" + (value - 61).ToString("D2", System.Globalization.CultureInfo.InvariantCulture)
+        : throw new NotSupportedException($"Actor value slot {value} is not a user-defined value.");
 }

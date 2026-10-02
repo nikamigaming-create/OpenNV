@@ -126,6 +126,7 @@ public partial class RuntimeCoordinator
                 pending = _nativeOpeningStageDriver.PendingBlockers.ToArray(),
                 headTrackingCommands = _nativeOpeningStageDriver.HeadTrackingCommands,
                 error = _nativeOpeningStageDriver.ExecutionError,
+                saveRequest = _nativeOpeningStageDriver.SaveRequestState,
             },
             movies = GetChildren().OfType<NativeGamebryoMovie>()
                 .Concat(_nativeOpeningStageDriver?.GetChildren().OfType<NativeGamebryoMovie>() ?? [])
@@ -1081,7 +1082,8 @@ public partial class RuntimeCoordinator
         _nativePlayer.ConfigurePresentation(_nativePluginStack!, _nativeInventory,
             () => _nativeOpeningStageDriver!.PlayerAppearance, () => NativeAmbient(_nativeActiveCell!.Cell),
             _nativeContinueOpening ? _nativeOpeningRestore?.State.WeaponHandling : null,
-            () => _nativeOpeningStageDriver!.PlayerAppearanceRevision);
+            () => _nativeOpeningStageDriver!.PlayerAppearanceRevision,
+            () => (_nativeQuestScripts ?? throw new InvalidOperationException("Player presentation has no shared script session.")).Scripts.Session);
         _nativePlayer.ConfigureCombat(_nativePluginStack!, _nativeGlobals!,
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
             () => _nativeOpeningStageDriver!.PlayerPerkEntries,

@@ -51,17 +51,21 @@ and releases the camera. Fresh ordinary input completes that removal, disables
 Dad and stops CG00. The [shared saved youth policy](player-youth-appearance.md)
 now executes SetPCYoung. The [source sound-path owner](source-sound-paths.md)
 executes SetSoundSourceFile and refreshes cached playback. Fresh ordinary input
-enters CG01 stages 0 and 5, stopping at SetPCToddler before the player transfer.
-A fresh forty-second video with audio shows trait Done and camera release;
-background CG01 later reaches stage 10 and nineteen speeches while the player
-remains in the birth room. A RunOn 0 dialogue-condition context failure is also
-visible. This is not an accepted childhood-room transition.
+enters CG01 stages 0 and 5. The [shared toddler/scale owner](player-toddler-animation.md)
+now executes the source movie and player transfer to the actual playroom.
+Birth and playroom use the same CELL; source marker, pose and room pixels provide
+the transfer evidence. Scripted speech receives saved actor values, random INFO
+groups use the shared saved RNG, and a pending autosave writes after continuation
+settles. Fresh ordinary input completes 28 speeches without the previous
+opening/speech errors, then walks into the playpen collision before the reach-Dad
+trigger fires. Full toddler quest and gurney departure remain incomplete.
 Synthetic command/cache checks and an owned native rattle/reset/mixer fixture
 pass. Form-path cold continuity remains unmeasured. The trait menu pauses native gameplay
 while accepting ordinary input, and Done releases the pause. A fresh ordinary hold
 retains identical speech, package time, quest progress and draft. Synthetic
 command/cold/appearance checks and owned first/third body and modal menu checks
-pass. Childhood-room entry and gurney-exit acceptance remain incomplete.
+pass. Actual toddler-room entry is observed; complete childhood play, gurney-exit
+acceptance, Vault exit and matched retail/XR presentation remain incomplete.
 The [shared source-sound owner](source-sound-stopping.md)
 has synthetic and owned native command/mixer/reference-filter checks, including
 paused stopping, independent loops and clean retirement. State-publication

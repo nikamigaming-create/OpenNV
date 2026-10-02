@@ -113,8 +113,9 @@ internal sealed class FalloutScriptValueStore
     internal FalloutScriptArrayStore Arrays { get; } = new();
 
     // Shared reference/quest/result stream; its sequence is not retail parity.
-    internal uint RandomPercent() => (_random ??= new(BitConverter.ToUInt64(
-        System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))))).NextBounded(100);
+    internal uint RandomPercent() => RandomBounded(100);
+    internal uint RandomBounded(uint exclusiveUpperBound) => (_random ??= new(BitConverter.ToUInt64(
+        System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))))).NextBounded(exclusiveUpperBound);
 
     internal FalloutScriptValue Read(FalloutScriptLocalKind kind, double raw)
     {

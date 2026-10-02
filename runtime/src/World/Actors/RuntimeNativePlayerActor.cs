@@ -30,9 +30,19 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal FalloutWeaponPresentation? Weapon { get; }
     internal RuntimeNativeNifSkeleton Skeleton => Actor.Skeleton;
     internal string? Error { get; private set; }
+    internal bool Toddler { get; private set; }
+    internal void SetToddler(bool enabled)
+    {
+        if (!_first) throw new InvalidOperationException("Toddler mode changes the first-person animation palette.");
+        if (Toddler == enabled) return;
+        Toddler = enabled;
+        _movement = null; _movementPath = null; _movementSeconds = 0; _group = null;
+        Advance(0, Vector3.Zero, true, false);
+    }
     internal object State => new
     {
         firstPerson = _first,
+        toddler = Toddler,
         appearance = new
         {
             race = Actor.Appearance.Race.ToString(),
@@ -230,11 +240,13 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         var family = _drawn ? Weapon?.AnimationGroup ?? "mt" : "mt";
         var direction = MathF.Abs(velocity.Z) >= MathF.Abs(velocity.X) ? velocity.Z < 0 ? "forward" : "backward" : velocity.X < 0 ? "left" : "right";
         var prefix = !_first && family == "mt" ? $"{(Actor.Appearance.Female ? "female" : "male")}/mt" : family;
-        var requested = grounded ? $"locomotion/{prefix}{direction}" : family + "jumploop";
+        var requested = Toddler ? $"locomotion/toddler/{family}{(grounded ? direction + "_toddler" : "jumploop" + direction)}" :
+            grounded ? $"locomotion/{prefix}{direction}" : family + "jumploop";
         _movementFallback = null;
         if (!ClipExists(requested))
         {
-            var common = grounded ? $"locomotion/{(_first ? "" : Actor.Appearance.Female ? "female/" : "male/")}mt{direction}" : "mtjumploop";
+            var common = Toddler ? $"locomotion/toddler/mt{(grounded ? direction + "_toddler" : "jumploop" + direction)}" :
+                grounded ? $"locomotion/{(_first ? "" : Actor.Appearance.Female ? "female/" : "male/")}mt{direction}" : "mtjumploop";
             _movementFallback = requested + " -> " + common + "; retail-group-inheritance-unverified";
             requested = common;
         }

@@ -37,6 +37,8 @@ internal partial class RuntimeNativeSpeech : Node
     private FalloutQuestState? _quests;
     private Func<bool>? _playerFemale;
     private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
+    private Func<FalloutFormKey, int, float>? _actorValue;
+    private Func<uint, uint>? _dialogueRandom;
     private Func<FalloutCondition, float>? _conditionContext;
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private Func<FalloutFormKey, FalloutSoundRandomState>? _soundRandom;
@@ -164,7 +166,8 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutCondition, float>? conditionContext = null, HashSet<FalloutFormKey>? saidInfos = null,
         Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null,
         Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0, FalloutQuestState? quests = null,
-        Func<bool>? playerFemale = null, Func<FalloutFormKey, FalloutFormKey>? actorRace = null)
+        Func<bool>? playerFemale = null, Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
+        Func<FalloutFormKey, int, float>? actorValue = null, Func<uint, uint>? dialogueRandom = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
@@ -172,6 +175,8 @@ internal partial class RuntimeNativeSpeech : Node
         _quests = quests;
         _playerFemale = playerFemale;
         _actorRace = actorRace;
+        _actorValue = actorValue;
+        _dialogueRandom = dialogueRandom;
         _conditionContext = conditionContext;
         _templates = templates;
         _soundRandom = soundRandom; _unitsToMetres = unitsToMetres;
@@ -242,8 +247,8 @@ internal partial class RuntimeNativeSpeech : Node
         var identity = FalloutDialogueSpeaker.Read(_stack, npcKey, _templates?.Invoke(speaker.FormKey));
         var conditions = new FalloutDialogueConditions(_stack,
             _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), speaker.FormKey, identity,
-            _conditionContext, playerFemale: _playerFemale, actorRace: _actorRace);
-        var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate);
+            _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace);
+        var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate, random: _dialogueRandom);
         if (info is null)
         {
             if (IsTalking(speaker.FormKey))
