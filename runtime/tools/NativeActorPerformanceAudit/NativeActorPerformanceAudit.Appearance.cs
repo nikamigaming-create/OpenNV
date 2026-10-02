@@ -11,15 +11,22 @@ public partial class NativeActorPerformanceAudit
 {
     private void ExerciseAppearances(string root, string[] references)
     {
-        if (references.Length == 0) throw new ArgumentException("Appearance audit requires placed actor identities.");
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);
         using var content = RuntimeLiveContentSource.Current!;
+        ExerciseAppearances(content, references);
+    }
+
+    private void ExerciseAppearances(RuntimeLiveContentSource content, string[] references)
+    {
+        if (references.Length == 0) throw new ArgumentException("Appearance audit requires placed actor identities.");
         using var records = FalloutPluginStack.Load(content.PluginSources);
         using var world = new FalloutReferenceWorld(records);
         var globals = FalloutGlobalState.Read(records);
         foreach (var hex in references)
         {
-            var key = records.RuntimeFormKey(Convert.ToUInt32(hex, 16));
+            var identity = hex.Split(':');
+            var key = identity.Length == 2 ? new FalloutFormKey(identity[0], Convert.ToUInt32(identity[1], 16)) :
+                records.RuntimeFormKey(Convert.ToUInt32(hex, 16));
             var source = records.GetEffective(key);
             var cell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(source)!.Value);
             var reference = cell.References.Single(item => item.FormKey == key);
@@ -37,7 +44,7 @@ public partial class NativeActorPerformanceAudit
             VerifyPreparedNpc(prepared, content);
             var phases = new List<double>();
             using var assembly = new RuntimeNativeNpc.Assembly(prepared, content, .0142875f,
-                (look, part, nif, geometry) => NativeNpcMaterial.Resolve(look, part, nif, geometry, records, new Color(.3f, .3f, .3f)));
+                (look, part, nif, geometry) => NativeNpcMaterial.Resolve(look, part, nif, geometry, records, new Color(.3f, .3f, .3f), content));
             var complete = false;
             while (!complete)
             {

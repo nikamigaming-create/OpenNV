@@ -44,6 +44,10 @@ progress and once-only completion through the same persistent script owner.
 and the activating NPC identity. A bounded finer query preserves the same
 physical clearance rules. [Actor skin roots](actor-skin-root.md) retain the
 model frame independently of the influence names bound to the actor skeleton.
+[Rigid FaceGen components](actor-face-attachment.md) bind through the selected
+head model even when their export omits biped parent markers. Their source
+inverse bind and the receiving animated head remain authoritative.
+
 ## Boundaries
 
 - Retail files are read-only. OpenNV never edits the selected installation.

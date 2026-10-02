@@ -10,6 +10,15 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--appearance-stack", var appearanceGame, var appearanceMod, var appearanceModRoot,
+                var appearanceReferences, .. var appearanceDependencies])
+            {
+                var setup = new FalloutModStackSelection([new(appearanceMod, appearanceModRoot, appearanceDependencies)])
+                    .Resolve(appearanceGame);
+                using var appearanceContent = setup.OpenSource();
+                ExerciseAppearances(appearanceContent, appearanceReferences.Split(','));
+                GetTree().Quit(); return;
+            }
             if (args is ["--escort-package", var escortRoot, var escortMod, var escortModRoot, var escortActor,
                 var escortQuest, var escortStage, .. var escortDependencies])
             {

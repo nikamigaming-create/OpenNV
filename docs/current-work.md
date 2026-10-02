@@ -2,105 +2,86 @@
 
 ## Active objective
 
-The user requested a durable stopping point on October 2. The game is stopped
-and genuine checkpoints are preserved. The required runtime gate, selected owned
-audits and resume instructions accompany this implementation block.
-On resumption, use ordinary bot input to complete Vault 101 and reach Megaton
-with retail behavior under TTW's authored overrides.
-
-The full objective remains Vault 101 including the G.O.A.T., Megaton, authored
-Union Station power/ticket/train travel, the Mojave, Benny and continued play.
-Complete JAM/MCM, TTW dependencies, compatible guide recommendations and the
-original mod targets through the same first-party runtime owners. All 36
-[recovery requirements](recovery-checklist.md) remain open. Follow the
+Complete TTW and all nine JAM modules with MCM through ordinary input and
+persistent state. The campaign objective includes Fallout 3's opening, all
+Vault 101 quests including the G.O.A.T., Megaton, authored Union Station
+power/ticket/train travel, the Mojave, Benny and continued play. Retain TTW
+dependencies, compatible guide recommendations and the original mod targets.
+All 36 [recovery requirements](recovery-checklist.md) remain open. Follow the
 [implementation plan](implementation-plan.md), [mod compatibility](mod-compatibility.md),
 [flat work order](flat-gameplay-plan.md) and [JAM/MCM plan](jam-luna-max-plan.md).
 
 ## Verified campaign state
 
-The bot starts at the genuine human-reached toddler stage40 checkpoint. Its
-ordinary approach, book activation and source pointer controls allocate40
-SPECIAL points, close menu1060 and advance source CG01 through50/70/72/73/74/75/80.
-Ordinary bot main-door activation and following Dad reach90/100, complete and
-stop CG01, then enter CG02 stages0/5. The latest run passes the executed signed
-AgeRace and birthday player inventory commands, but stops at Look/speech for
-Amata, whose source child mouth mesh cannot yet assemble. The player remains
-in the original Vault cell before the queued birthday-room relocation.
+The ordinary bot route from the genuine human-reached toddler stage40 checkpoint
+activates the source SPECIAL book, allocates40 points through its actual pointer
+controls and reaches CG01 stage80 through source timers and speech.
+
+A fresh Continue from the genuine closed-door stage80 restores acquired Escort
+progress. Close following obstructs Dad among the living-room furniture. Moving
+the player toward the source main door and activating it through ordinary input
+lets the integrated finer capsule route continue. Following Dad then reaches
+CG01 stages90/100, completes and stops CG01, and enters CG02 stages0/5. No
+collision, actor position or quest stage was edited. Automatic escort-door
+recovery without player activation still needs acceptance.
+
+The birthday race/inventory prefix executes. Amata's child FaceGen now assembles,
+receives source head tracking and plays her owned introduction voice and lip
+morphs. The current continuation stops before birthday-room relocation because
+the security outfit's alternate-texture mismatch leaves its actor missing.
+The glasses environment texture also leaves a birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
-
-The genuine closed-door stage80 checkpoint cold-loads with acquired Escort
-progress intact. The actual automatic-door retry strands Dad on a source coffee
-table before activation. New contact telemetry identifies the table separately
-from the intended door. A bounded finer capsule search now passes an isolated
-owned-table fixture and ordinary native controller traversal; the repaired
-closed-door campaign retry remains pending. A subsequent actual bot interaction
-opens the door, but the stranded coarse route still refuses descent. The latest
-birthday continuation therefore uses the earlier genuinely reached open-door
-stage80 checkpoint. No collision geometry or campaign stages were edited.
-
-The live follow also exposed short-endpoint oscillation when ordinary movement
-passes a two-centimetre arrival radius. A closer ordinary follow goal continued
-the hall route. Sampled crossing/closing policy remains a bot owner to repair.
 
 ## Current implementation block
 
-Shared signed race aging follows winning RACE age links and persists effective
-race, mutable actor height and source hair fallback. Player and NPC appearance
-use the same state. New inventory commands bind RemoveAllItems, EquipItem,
-ResetInventory and typed GetEquippedObject to the existing authoritative owners.
-Source equipment locks, NPC reset random state and cold continuation are retained.
-The NPC SayTo target and listener conditions now use the actual resident actor.
-Scripted challenge unlock/progress and completion-statistic cascades retain
-source identities, once-only completion and cold state; reward scripts remain
-explicitly unbound. See [race aging](scripted-race-age.md),
-[inventory commands](inventory-script-commands.md) and
-[scripted challenges](scripted-challenges.md).
+[Rigid FaceGen components](actor-face-attachment.md) use the selected head's
+source inverse bind and the receiving animated head even when their export
+omits biped Prn data. The synthetic native audit covers explicit/implicit
+attachments, replaced export transforms, animation and rejection cleanup.
+The complete mounted-stack actor audit assembles all three birthday children
+with source materials and inventory. PP lighting flag0x40 is retained as source
+state independently of the no-lighting property's falloff behavior. Ordinary
+Amata speech now passes the previous missing-mouth boundary. Matched retail
+pixels and physical OpenXR acceptance remain unverified.
 
-The NPC navigation owner retains actual source corridor/rejected contacts,
-considers sibling NIF collision bodies only for the same placed reference,
-walks a validated approach and propagates the real actor through activation.
-Failed diameter-grid searches get one bounded radius-grid retry using the same
-capsule, floor and step rules. See [route doors](npc-door-navigation.md).
-The party-hat loader now distinguishes a model-local skin root from the actual
-actor influence palette while retaining previously supported nested actor roots.
-Both owned party-hat assemblies pass; see [skin roots](actor-skin-root.md). Component tests
-and owned fixtures do not establish ordinary campaign or retail visual parity.
-
-Campaign schema v27 admits the new height/hair, equipment-lock and challenge
-state. Existing v26 Escort/SPECIAL checkpoints remain readable. Never clear
-saved faults or replay a consumed source prefix to manufacture continuation.
+Shared [race aging](scripted-race-age.md), [inventory commands](inventory-script-commands.md)
+and [scripted challenges](scripted-challenges.md) retain authoritative state and
+cold values. Campaign schema v27 reads the genuine v26 Escort/SPECIAL checkpoints.
+Never clear saved faults or replay a consumed source prefix to manufacture
+continuation. The [skin-root repair](actor-skin-root.md) and
+[route-door owner](npc-door-navigation.md) retain their component evidence.
 
 ## Next owners
 
-1. Repair Amata's unskinned child mouth attachment from the winning source
-   FaceGen contract. The model lacks a Prn marker; a guessed parent is not a fix.
-2. Repair the Vault security outfit alternate-texture index/name mismatch and
-   the glasses environment-map source behavior. The actual missing actors remain
-   visible. Party-hat skin-root component repair still needs live scene acceptance.
-3. Retry the genuine closed-door stage80 with the integrated finer search and
-   actor-preserving door activation, then continue the source birthday scene.
-4. Repair short bot endpoint crossing and proceed through ordinary birthday
-   interactions, G.O.A.T. and Vault escape to Megaton. The reached challenge owner
-   is component-tested; ForceRadioStationUpdate still needs a real station owner.
+1. Bind the security outfit's alternate textures from source model behavior,
+   including repeated shape names and record indices. The current missing
+   actor is the first birthday Look/speech blocker.
+2. Bind the glasses' authored 2D environment-map behavior without substituting
+   a guessed cubemap. Retry the genuine checkpoint and continue birthday play.
+3. Repair sampled short bot endpoint crossing. Ordinary follow can overshoot
+   a two-centimetre arrival radius; closer follow goals currently continue.
+4. Continue birthday interactions, G.O.A.T. and Vault escape to Megaton, then
+   the authored train route. ForceRadioStationUpdate still needs a real station
+   owner when reached. Complete all nine JAM/MCM modules and their dependencies
+   under the same campaign and persistent gameplay owners.
 
-The live stack has18 plugins and six TTW dependency roots. JAM and Benny are
-not mounted in this checkpoint stack. Their module acceptance remains separate
-required work; selected initializer/parser admission is not full mod support.
-Flat and OpenXR share authoritative gameplay and saves; physical and matched
-retail presentation remain unverified.
+The live checkpoint stack has18 plugins and six TTW dependency roots. JAM and
+Benny are not mounted in that stack. Their acceptance remains required work;
+initializer/parser admission is not full mod support. Flat and OpenXR share
+authoritative gameplay and saves.
 
 ## Private continuation
 
-Active run: `tmp/development-lab/ttw-bot-20261002/`; exited normally after the
-latest source CG02-entry failure. Frame recording is off. Original run:
-`tmp/development-lab/ttw-departure-clock-20261001/`, left unchanged.
-Genuine stage16, stage40, stage50 and both open/closed stage80 backups are under
-`local/ttw-bot-resume-20261002/`; the closed stage80 is the preferred next retry.
-The private manifest retains hashes, build identity, checks and publication.
-Do not resume the failed CG02 prefix as though its source effects had completed.
+Run `tmp/development-lab/ttw-bot-20261002/` exited through ordinary Quit after
+the security-actor failure. Recording remained off. Genuine stage16, stage40,
+stage50 and open/closed stage80 backups are under
+`local/ttw-bot-resume-20261002/`; closed stage80 is the next retry. The private
+manifest and focused FaceGen/campaign reports retain hashes and source evidence.
+Do not resume the failed CG02 prefix as though its source effects completed.
+The original `tmp/development-lab/ttw-departure-clock-20261001/` is unchanged.
 
 Protected user saves under `local/playtest-20260927-world/` and
 `local/playtest-20260920-companion/` remain untouched. Never publish saves,
 retail-derived media, extracted assets or binary observations. Keep recording
-off during development; selected visual checks require cleanup of temporary
-frames. The requested complete journey video remains pending.
+off during development and remove temporary frames after selected visual checks.
+The requested complete journey video remains pending.
