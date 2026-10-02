@@ -19,6 +19,18 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 72)
+        {
+            var subject = condition.RunOn switch
+            {
+                0 => speaker,
+                1 => Listener,
+                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                    ?? throw new InvalidDataException("Dialogue identity query has no explicit reference."),
+                _ => throw new NotSupportedException($"Dialogue identity query run-on {condition.RunOn} is unbound."),
+            };
+            return FalloutReferenceIdentity.Base(records, subject) == condition.FormArgument1 ? 1 : 0;
+        }
         if (condition.Function == 131 && playerFemale is not null)
         {
             if (condition.Argument1 > 1) throw new InvalidDataException("GetPCIsSex has an invalid sex argument.");
@@ -62,7 +74,6 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
             70 when condition.Argument1 <= 1 => actorIdentity.Female == (condition.Argument1 == 1) ? 1 : 0,
             71 => ActorFactions(actor, actorIdentity).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
             73 => ActorFactions(actor, actorIdentity).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
-            72 => actorIdentity.Actor == condition.FormArgument1 ? 1 : 0,
             365 => Race() is { } selected && FalloutRaceProperties.IsChild(records.GetEffective(selected)) ? 1 : 0,
             427 => actorIdentity.VoiceType == condition.FormArgument1 ? 1 : 0,
             _ => Unbound(condition),

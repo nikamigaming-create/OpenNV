@@ -38,6 +38,11 @@ The user selects the owned base/mod/dependency folders; runtime source
 resolution, settings and persistent state must work without a generated profile
 or developer command. The requested acceptance is full out-of-box behavior,
 including dependency semantics, ordinary flat/OpenXR input and cold save/load.
+Original downloaded mods should run unchanged against the shared compatibility
+layer. Implement vanilla and extension interfaces generally, including the
+required native plugin host/interface work, instead of requiring rewritten mods.
+Recover the existing D: drive research and source-bound Ghidrust contracts, then
+verify actual mod outcomes through the same authoritative gameplay owners.
 Use fresh `codex/` branches from current main for each published block. Do not
 label registration, a parser pass
 or the earlier sprint/time-scale adapters as mod support. The exact verified

@@ -2,9 +2,18 @@
 
 OpenNV implements shared script semantics against its existing quest, reference
 and global state owners. A mod function name or successfully loaded plugin is
-not sufficient evidence of working behavior. Native DLLs that hook the original
-executable need an independently implemented capability or an OpenNV port;
-their presence in a selected folder does not execute them.
+not sufficient evidence of working behavior. The compatibility target is
+unmodified original mods using the vanilla and extension interfaces they expect.
+Shared C# commands, callbacks, settings, UI and persistence supply those behaviors
+behind the original interfaces. A new mod using an implemented behavior must not
+need a mod-name branch or rewritten script.
+
+Native binary compatibility remains implementation work: a host must supply the
+original plugin interfaces, object layouts, imports and hook/callback behavior
+through the same authoritative state owners. Presence of an installed DLL does
+not execute it or establish that interface. Unknown commands/layouts remain
+visible failures; successful loading or version detection cannot substitute for
+the required gameplay, UI, audio and cold-save outcomes.
 
 ## Numeric expressions
 

@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Reference base identity](reference-base-identity.md) supplies the same winning
+reference/base mapping to dialogue GetIsID and ordinary scripts. Player,
+speaker, listener and explicit targets retain independent source ownership.
+
 Player camera packages share the C# IDLE playback clock with source intro,
 repeat and outro intervals. Assignment handoff retains identical event poses;
 source text-key crossings feed the existing native player sound owner. Saved
