@@ -23,7 +23,7 @@ internal static class ScriptSoundContracts
         try
         {
             const string source = "short done\nref sound\nbegin GameMode\nif done == 0\nlet sound := SourceSound\n" +
-                "PlaySound sound -1\nset done to 1\nendif\nend";
+                "PlaySound sound -1\nStopSound sound\nset done to 1\nendif\nend";
             var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), 2); header[16] = 1;
             File.WriteAllBytes(Path.Combine(directory, "Sounds.esm"), Join(Record("TES4", 0),
                 Sound(0x100, "SourceSound", "fx/base.wav", 0x40), Sound(0x101, "LoopSound", "fx/loop.wav", 0x10),
@@ -31,8 +31,11 @@ internal static class ScriptSoundContracts
                 Sound(0x103, "CompressedSound", "fx/ambient.mp3", 0), Sound(0x104, "EnvironmentSound", "fx/dry.wav", 0xc0, reverb: 0),
                 Sound(0x105, "FolderSound", "fx/variants/", 1, frequency: 10),
                 Sound(0x106, "BadMediaSound", "fx/bad.wav", 1, frequency: 10),
+                Sound(0x107, "AliasSound", "fx/winner.wav", 0),
+                Record("REFR", 0x200, Field("EDID", Text("EmitterA"))),
+                Record("REFR", 0x201, Field("EDID", Text("EmitterB"))),
                 Record("SCPT", 0x601, Field("SCHR", header), Local(1, "done"), Local(2, "sound"),
-                    Join(Enumerable.Range(0x100, 7).Select(id => Field("SCRO", BitConverter.GetBytes((uint)id))).ToArray()), Field("SCTX", Text(source))),
+                    Join(Enumerable.Range(0x100, 8).Concat([0x200, 0x201]).Select(id => Field("SCRO", BitConverter.GetBytes((uint)id))).ToArray()), Field("SCTX", Text(source))),
                 Record("QUST", 0x600, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x601u)))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Record("TES4", 0, Field("MAST", Text("Sounds.esm"))),
                 Sound(0x100, "SourceSound", "fx/winner.wav", 0, attenuation: 200, frequency: 10)));
@@ -61,7 +64,7 @@ internal static class ScriptSoundContracts
                 "GameMode did not resume queued voices once or restarted existing audio.");
             sounds.Complete(1); sounds.Complete(1);
             Require(voices[1].Releases == 1 && sounds.ActiveVoices == 3, "Duplicate completion lost concurrent voice ownership.");
-            foreach (var invalid in new[] { 0x101u, 0x102u, 0x103u, 0x600u }) Reject(() => sounds.Play(caller, Key(invalid)));
+            foreach (var invalid in new[] { 0x102u, 0x103u, 0x600u }) Reject(() => sounds.Play(caller, Key(invalid)));
             var before = sounds.LastRequest;
             Reject(() => sounds.Play(caller, Key(0x106)));
             Require(ReferenceEquals(before, sounds.LastRequest) && sounds.ActiveVoices == 3, "Decode failure committed a request or lost existing audio.");
@@ -81,19 +84,49 @@ internal static class ScriptSoundContracts
             void Execute(string body) => executor.ExecuteProgram(quest, script, FalloutGameModeProgram.Read("begin GameMode\n" + body + "\nend"), 0);
             Execute("PlaySound SourceSound\nset done to 7");
             Require(quests.Variable(caller, 1) == 7 && sounds.LastRequest!.Caller == caller, "Reference/result execution lost its sound prefix or suffix.");
-            Reject(() => Execute("PlaySound LoopSound\nset done to 99"));
-            Require(quests.Variable(caller, 1) == 7, "Unsupported loop executed the source suffix.");
+            Reject(() => Execute("PlaySound TimedSound\nset done to 99"));
+            Require(quests.Variable(caller, 1) == 7, "Unsupported scheduling executed the source suffix.");
+            sounds.Play(caller, Key(0x101)); var loopId = sounds.LastRequest!.Id;
+            Execute("StopSound LoopSound\nset done to 8");
+            Require(!sounds.IsActive(loopId) && voices[loopId].Releases == 1 && quests.Variable(caller, 1) == 8,
+                "Source loop did not stop or its command suffix failed.");
+            var stoppedA = 0; var stoppedB = 0; var stoppedFlat = 0; var stoppedAlias = 0;
+            using var a = records.SoundVoices.Register(Key(0x100), Key(0x200), "animation", () => true, () => ++stoppedA);
+            using var b = records.SoundVoices.Register(Key(0x100), Key(0x201), "reference-node", () => true, () => ++stoppedB);
+            using var flat = records.SoundVoices.Register(Key(0x100), null, "paused-menu", () => false, () => ++stoppedFlat);
+            using var alias = records.SoundVoices.Register(Key(0x107), Key(0x200), "same-path-other-SOUN", () => true, () => ++stoppedAlias);
+            using var ended = records.SoundVoices.Register(Key(0x100), Key(0x200), "completed", () => false,
+                () => throw new InvalidDataException("Completed instance was stopped."));
+            ended.Dispose();
+            using var retired = records.SoundVoices.Register(Key(0x100), Key(0x200), "retired", () => true,
+                () => throw new InvalidDataException("Retired instance was stopped."));
+            retired.Dispose();
+            Execute("StopSound SourceSound EmitterA");
+            Require(stoppedA == 1 && stoppedB == 0 && stoppedFlat == 0 && stoppedAlias == 0 && sounds.IsActive(2),
+                "Reference filter confused the caller, a 2D instance, a completed instance or equal media paths.");
+            Execute("set done to 1 + (StopSound SourceSound 0)");
+            Require(stoppedA == 1 && stoppedB == 1 && stoppedFlat == 1 && stoppedAlias == 0 &&
+                !sounds.IsActive(2) && quests.Variable(caller, 1) == 1,
+                "Global stop missed another owner, replayed an instance or returned a count instead of zero.");
+            Reject(() => Execute("StopSound SourceSound EmitterA EmitterB\nset done to 99"));
+            Reject(() => Execute("StopSound SourceSound SourceSound\nset done to 99"));
+            Reject(() => Execute("StopSound EmitterA\nset done to 99"));
+            Require(quests.Variable(caller, 1) == 1 && stoppedAlias == 0, "Invalid stop arguments ran the suffix or stopped another SOUN.");
+            records.SoundVoices.Stop(new("SOUNDS.ESM", 0x107));
+            Require(stoppedAlias == 1, "StopSound lost canonical case-insensitive plugin identity.");
+            ended.Dispose();
             quests.SetVariable(caller, 1, 0);
             var fallback = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: world);
             fallback.Advance(0);
             Require(ReferenceEquals(fallback.Sounds, sounds) && fallback.Capture().Instances.Single().Error is null &&
                 quests.Variable(caller, 1) == 1 && sounds.LastRequest!.SystemSound, "Fallback typed form/flag execution bypassed shared sounds.");
             var saved = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(fallback.Capture()))!;
+            sounds.Play(caller, Key(0x100)); var afterSave = sounds.LastRequest!.Id;
             using var coldWorld = new FalloutReferenceWorld(records);
             var coldQuests = new FalloutQuestState(records); coldQuests.Restore(quests.Capture());
             var cold = new FalloutQuestScripts(records, coldQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: coldWorld);
             cold.Restore(saved); cold.Advance(0);
-            Require(cold.Sounds.LastRequest is null && cold.Sounds.ActiveVoices == 0 && cold.Capture().Instances.Single().Error is null,
+            Require(cold.Sounds.LastRequest is null && cold.Sounds.ActiveVoices == 0 && cold.Capture().Instances.Single().Error is null && sounds.IsActive(afterSave),
                 "Cold restoration replayed a completed command prefix or inherited transient voices.");
             binding.Dispose();
             Require(sounds.ActiveVoices == 0 && voices.Values.All(voice => voice.Releases == 1), "World/presentation retirement leaked owned voices.");
@@ -102,9 +135,22 @@ internal static class ScriptSoundContracts
             using var surround = sounds.Bind(Variants, request => new Voice().Prepare(request), stereo: false);
             Reject(() => sounds.Play(caller, Key(0x104)));
             Require(FalloutSoundRecordReader.Read(records, Key(0x100)).Flags == 0, "Playback mutated the owned sound declaration.");
-            Console.WriteLine("OPENNV_SCRIPT_SOUND_CONTRACT_PASS winning=true typedSourceCommands=true fallback=true queue=true systemSound=true concurrent=true prefixFailure=true randomAtomic=true completion=true retirement=true coldNoReplay=true audioDivergenceVisible=true parity=unverified");
+            StopFailure(records);
+            Console.WriteLine("OPENNV_SCRIPT_SOUND_CONTRACT_PASS winning=true typedSourceCommands=true fallback=true queue=true systemSound=true concurrent=true prefixFailure=true randomAtomic=true completion=true retirement=true coldNoReplay=true audioDivergenceVisible=true loops=true stopSound=true referenceFilter=true crossOwner=true zeroResult=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
+    }
+
+    private static void StopFailure(FalloutPluginStack records)
+    {
+        var registry = new FalloutSoundVoices(records); var first = 0; var failing = 0; var suffix = 0;
+        using var a = registry.Register(Key(0x100), null, "prefix", () => true, () => ++first);
+        using var b = registry.Register(Key(0x100), null, "fault", () => true, () => { ++failing; throw new InvalidDataException("Synthetic stop failure."); });
+        using var c = registry.Register(Key(0x100), null, "suffix", () => true, () => ++suffix);
+        Reject(() => registry.Stop(Key(0x100)));
+        try { registry.Stop(Key(0x100)); } catch (InvalidOperationException) { }
+        Require(first == 1 && failing == 1 && suffix == 0 && registry.Error == "Synthetic stop failure." && registry.ActiveVoices == 2,
+            "Failed stop lost its applied prefix, replayed a callback or hid the unresolved suffix.");
     }
 
     private static IReadOnlyList<string> Variants(FalloutSoundRecord descriptor) => FalloutAnimationSound.Variants(descriptor,

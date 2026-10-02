@@ -10,7 +10,7 @@ internal static class NativeOwnedSoundPlayback
         FalloutSoundFlags.TwoDimensional |
         FalloutSoundFlags.DialogueSound;
 
-    internal static AudioStreamPlayer CreateMenu(FalloutSoundRecord descriptor,
+    internal static AudioStreamPlayer CreateMenu(FalloutSoundRecord descriptor, FalloutPluginStack records,
         RuntimeLiveContentSource source, FalloutSoundRandomState random)
     {
         var before = random.State;
@@ -30,7 +30,7 @@ internal static class NativeOwnedSoundPlayback
         // Environmental/submersion gates belong to positioned sounds. A menu
         // request has no world position or underwater listener relationship.
         var menuFlags = descriptor.Flags & ~(FalloutSoundFlags.EnvironmentIgnored | FalloutSoundFlags.MuteWhenSubmerged);
-        var player = CreateTwoDimensional(descriptor with { LogicalPath = selected, Flags = menuFlags | FalloutSoundFlags.MenuSound });
+        var player = CreateTwoDimensional(descriptor with { LogicalPath = selected, Flags = menuFlags | FalloutSoundFlags.MenuSound }, records);
         player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
         player.SetMeta("opennv_menu_sound_source_flags", (int)descriptor.Flags);
         player.SetMeta("opennv_menu_sound_variant", selected);
@@ -39,7 +39,7 @@ internal static class NativeOwnedSoundPlayback
         return player;
     }
 
-    internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor)
+    internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor, FalloutPluginStack records)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         if (!descriptor.HasExactFile)
@@ -54,17 +54,21 @@ internal static class NativeOwnedSoundPlayback
 
         var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath);
         ConfigureLoop(stream, descriptor);
-        return new AudioStreamPlayer
+        var player = new AudioStreamPlayer
         {
             Name = $"NativeSound_{descriptor.EditorId}",
             Stream = stream,
             VolumeDb = -descriptor.StaticAttenuationDb,
             PitchScale = descriptor.FixedPitchScale,
         };
+        NativeOwnedSoundVoice.Bind(records, player, descriptor.FormKey, () => null, "source-2D-or-menu",
+            () => player.Playing, player.Stop);
+        return player;
     }
 
     internal static NativeOwnedSoundPlayer3D CreateThreeDimensional(
         FalloutSoundRecord descriptor,
+        FalloutPluginStack records,
         float gameUnitsToMetres,
         Node3D listener,
         uint environmentReverbAreaMask = 0U)
@@ -74,11 +78,12 @@ internal static class NativeOwnedSoundPlayback
             throw FalloutSoundPlaybackContract.Unsupported(descriptor,
                 "RNAM chance without the deterministic gameplay-state selection entry point");
         return CreateSelectedThreeDimensional(
-            descriptor, gameUnitsToMetres, listener, environmentReverbAreaMask);
+            descriptor, records, gameUnitsToMetres, listener, environmentReverbAreaMask);
     }
 
     internal static bool TryCreateThreeDimensional(
         FalloutSoundRecord descriptor,
+        FalloutPluginStack records,
         FalloutSoundRandomState random,
         float gameUnitsToMetres,
         Node3D listener,
@@ -92,12 +97,13 @@ internal static class NativeOwnedSoundPlayback
             return false;
         }
         player = CreateSelectedThreeDimensional(
-            descriptor, gameUnitsToMetres, listener, environmentReverbAreaMask);
+            descriptor, records, gameUnitsToMetres, listener, environmentReverbAreaMask);
         return true;
     }
 
     private static NativeOwnedSoundPlayer3D CreateSelectedThreeDimensional(
         FalloutSoundRecord descriptor,
+        FalloutPluginStack records,
         float gameUnitsToMetres,
         Node3D listener,
         uint environmentReverbAreaMask)
@@ -111,8 +117,11 @@ internal static class NativeOwnedSoundPlayback
             descriptor, environmentReverbAreaMask);
         var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath);
         ConfigureLoop(stream, descriptor);
-        return new NativeOwnedSoundPlayer3D(
+        var player = new NativeOwnedSoundPlayer3D(
             descriptor, stream, gameUnitsToMetres, listener, environmentReverbAreaMask);
+        NativeOwnedSoundVoice.Bind(records, player, descriptor.FormKey, () => NativeOwnedSoundVoice.Reference(records, player),
+            "source-3D", () => player.Playing, player.Stop);
+        return player;
     }
 
     private static void ConfigureLoop(AudioStream stream, FalloutSoundRecord descriptor)
@@ -126,13 +135,14 @@ internal static class NativeOwnedSoundPlayback
                 wav.LoopMode = loop
                     ? AudioStreamWav.LoopModeEnum.Forward
                     : AudioStreamWav.LoopModeEnum.Disabled;
-                if (loop && descriptor.LoopEndSample != 0)
+                if (loop)
                 {
-                    if (descriptor.LoopEndSample <= descriptor.LoopStartSample ||
-                        descriptor.LoopEndSample > int.MaxValue)
-                        throw Unsupported(descriptor, "invalid WAV loop sample bounds");
-                    wav.LoopBegin = checked((int)descriptor.LoopStartSample);
-                    wav.LoopEnd = checked((int)descriptor.LoopEndSample);
+                    var region = FalloutSoundLoop.Read(descriptor);
+                    var frames = Math.Round(wav.GetLength() * wav.MixRate);
+                    if (region.Start >= frames || region.End > frames)
+                        throw new InvalidDataException("SOUN loop region exceeds the decoded owned WAV.");
+                    wav.LoopBegin = checked((int)region.Start);
+                    wav.LoopEnd = region.End == 0 ? checked((int)frames) : checked((int)region.End);
                 }
                 break;
             case AudioStreamMP3 mp3:
@@ -149,6 +159,21 @@ internal static class NativeOwnedSoundPlayback
                 throw new InvalidDataException(
                     $"Unsupported Godot audio stream type: {stream.GetType().Name}");
         }
+    }
+
+    internal static AudioStream CreateLoopStream(AudioStream source, FalloutSoundLoop loop)
+    {
+        if (source is not AudioStreamWav wav)
+            throw new NotSupportedException("Source loop/envelope playback requires a decoded WAV sample clock.");
+        var frames = Math.Round(wav.GetLength() * wav.MixRate);
+        if (loop.Start >= frames || loop.End > frames)
+            throw new InvalidDataException("SOUN loop region exceeds the decoded owned WAV.");
+        // Each voice owns its loop switch; decoded resource reuse is immutable.
+        var result = (AudioStreamWav)wav.Duplicate();
+        result.LoopMode = AudioStreamWav.LoopModeEnum.Forward;
+        result.LoopBegin = checked((int)loop.Start);
+        result.LoopEnd = loop.End == 0 ? checked((int)frames) : checked((int)loop.End);
+        return result;
     }
 
     private static NotSupportedException Unsupported(FalloutSoundRecord descriptor, string behavior) =>

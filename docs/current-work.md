@@ -71,8 +71,11 @@ pixels remain unbound. Empty Say/SayTo selections now register deferred,
 topic-filtered SayToDone instead of faulting or rebinding an active voice.
 A fresh ordinary opening now gives Mom and Dad independent source voice/lip,
 result and completion channels. It completes sixteen voiced commands and accepts
-Done on the owned trait screen before Dad's next begin program faults on the
-unsupported StopSound command. The gurney exit remains incomplete. Paused
+Done on the owned trait screen. The reached StopSound command now shares the
+[source sound owner](source-sound-stopping.md). Ordinary flat input stops three
+actual birth-loop instances, completes seventeen speeches and enters stages 90
+and 100. The next source player-package removal faults during a pending change
+animation; the gurney exit remains incomplete. Paused
 overlap, isolated conversation skip and retained failed-result prefixes pass an
 owned component fixture. Competing subtitle selection remains visibly unbound.
 The active CG00 quest script remains running.
@@ -216,6 +219,14 @@ color transfer, exact layering/timing/random stream and the XR final-eye adapter
 remain visible gaps. This is partial effect presentation, not blood or campaign
 parity. These effects stay outside saves and do not replay executed prefixes cold.
 
+StopSound now selects canonical source SOUN instances across the shared loaded
+graph, with optional actual-reference filtering, paused stopping and a zero
+expression result. Script, animation/NIF, response-SOUN and menu/spatial adapters
+retire registrations on completion, stopping and tree/session exit. Each source
+WAV loop has independent validated bounds and mutable playback state. Synthetic
+contracts and an owned native command/mixer/reference-filter fixture pass. See
+[source sound stopping](source-sound-stopping.md) for the bounded contract.
+
 PlaySound now shares transient C# voice ownership across reference/results,
 startup and fallback quest execution. Winning SOUN declarations supply WAV
 identity, gain, pitch, chance and variants; stream preparation fails before
@@ -225,7 +236,7 @@ These transient voices are not save-baked and do not replay on cold restoration.
 Synthetic prefix/typed-form/random/cleanup checks, an isolated owned native
 mixer check and the complete required runtime gate pass. The ordinary Capital run also plays and completes the birth
 sound. Reverb, submersion and stereo/LFE presentation gaps remain explicit;
-loops, timed scheduling, 3D/reference-node playback, complete volume routing and
+timed scheduling, script 3D/reference-node requests, complete volume routing and
 matched voice timing remain unbound. This is partial audio presentation, not
 audio or campaign parity.
 
@@ -431,8 +442,10 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Bind the reached StopSound command to the general sound lifetime owner, then
-rerun the ordinary opening past the gurney. Complete competing subtitle
+Bind player-package removal/cancellation during a pending change animation, the
+next retained stage-100 fault, then rerun the ordinary opening past the gurney.
+Preserve the shared source-sound stopping and independent loop ownership.
+Complete competing subtitle
 selection/queue behavior, and resolve the authored ragdoll
 accumulation-root rotation failure on the post-face cold load.
 Preserve deferred empty completion, verified face geometry and MatchRace family/base/cold behavior and
@@ -442,7 +455,7 @@ screen-blood and activation-feedback behavior. Complete further source dialogue
 arbitration/arguments and matched INFO-result/SayToDone timing. Complete source screen-blood lighting/flare,
 color transfer and XR final-eye presentation without hiding their telemetry gaps.
 Complete the
-remaining script audio routes, loop/stop ownership, environment/submersion and
+remaining script audio routes, environment/submersion and
 output routing without treating the audible birth voice as full audio support.
 Measure source voice/lip/output clocks and camera frame intervals; distinguish
 runtime hitches, telemetry overruns and recording readback/repeated frames before
@@ -510,12 +523,21 @@ during development except for a requested visual check.
 
 ## Candidate and private continuation
 
+Current sound checks are `tmp/source-sound-contract.log`,
+`tmp/source-stop-owned.stdout.log` and `tmp/source-sound-runtime-gate.log`.
+The ordinary run is `tmp/development-lab/ttw-source-stop-20261001/`;
+its selected post-stage-100 state is `tmp/source-stop-post100.private.json`.
+It completes seventeen speeches, stops three actual birth-loop instances and
+enters source stages 90 and 100. CG00 retains the subsequent player-package
+removal failure during a pending change animation. State-publication interval
+overruns remain visible. The session quits through ordinary controls with source
+readers drained. The complete required runtime gate and diff checks pass;
+both protected saves retain their source hashes. Recording is off; the gurney
+exit remains unverified.
 Current speech checks are `tmp/actor-speech-concurrent.stdout.log`,
 `tmp/actor-speech-empty.stdout.log` and `tmp/actor-speech-runtime-gate.log`;
-the ordinary input run is `tmp/development-lab/ttw-actor-speech-20261001/`.
-It reaches the owned Fallout trait menu, accepts zero traits, completes sixteen
-voiced commands and retains the next unsupported StopSound failure. The session
-quits through ordinary controls with source readers drained. The selected current
+the concurrent component fixture retains both actual voices and failed prefixes.
+The selected current
 trait frame is `local/recordings/ttw-ui-20261001/TTW-owned-traits-flat.png`;
 its temporary frame files are removed. Recording is off. No gurney exit, later
 campaign state or matched retail/XR parity is proved. Current face checks are

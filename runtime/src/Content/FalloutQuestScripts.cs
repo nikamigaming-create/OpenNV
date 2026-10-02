@@ -528,6 +528,8 @@ internal sealed class FalloutQuestScripts
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && FalloutSoundCommands.Function(_records, operation) is { } soundFunction)
+                return soundFunction;
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
@@ -659,6 +661,12 @@ internal sealed class FalloutQuestScripts
                 if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
                 Sounds.Play(instance.Quest.FormKey, sound.FormKey(_records), arguments.Count == 2 &&
                     FalloutScriptSounds.SystemFlag(NumberArgument(arguments[1])));
+                return;
+            }
+            if (parts.Length == 1 && operation == "stopsound")
+            {
+                if (arguments.Count is < 1 or > 2) throw new InvalidDataException("StopSound requires a sound and optional object reference.");
+                FalloutNvseNumericExpression.EvaluateValue(["StopSound", .. arguments], values, Function);
                 return;
             }
             if (parts.Length == 1 && operation == "setnoactivationsound")

@@ -30,6 +30,16 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+FalloutSoundVoices owns transient SOUN instance identity for each loaded graph.
+Reference/result/stage and fallback quest commands share StopSound, optional
+actual-reference filtering and zero numeric results. Godot script, animation/NIF,
+response-SOUN and menu/spatial adapters register their existing native voices;
+completion, stopping and tree/session retirement release those registrations.
+Per-voice WAV loops preserve immutable decoded resource reuse. Pausing retains
+source instances, while queued script requests have not entered playback.
+Failed stopping retains its prefix and latches the unresolved suffix. No voice
+is save-baked or replayed cold. See [source sound stopping](source-sound-stopping.md).
+
 RuntimeNativeSpeech owns separate resident actor channels for scripted and
 conversation speech. Winning topic/voice indexes and SayOnce history are shared;
 each channel retains its INFO, audio/lip/face, source results and completion.

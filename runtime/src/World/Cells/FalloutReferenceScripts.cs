@@ -315,6 +315,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && FalloutSoundCommands.Function(records, operation) is { } soundFunction)
+                return soundFunction;
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(records, operation) is { } settingFunction)
                 return settingFunction;
             if (parts.Length == 1 && operation == "menumode")
@@ -546,6 +548,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
                 world.Sounds.Play(source, sound.FormKey(records), arguments.Count == 2 &&
                     FalloutScriptSounds.SystemFlag(Number(arguments[1])));
+                return;
+            }
+            if (parts.Length == 1 && operation == "stopsound")
+            {
+                if (arguments.Count is < 1 or > 2) throw new InvalidDataException("StopSound requires a sound and optional object reference.");
+                FalloutNvseNumericExpression.EvaluateValue(["StopSound", .. arguments], values, Function, UserFunction);
                 return;
             }
             if (parts.Length == 1 && operation == "setnoactivationsound")

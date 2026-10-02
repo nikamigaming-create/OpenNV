@@ -17,7 +17,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             // Resolve audio before committing the inventory/vitals transaction.
             if (use.Sound is { } soundForm)
-                sound = NativeOwnedSoundPlayback.CreateMenu(FalloutSoundRecordReader.Read(_pluginStack.GetEffective(soundForm)),
+                sound = NativeOwnedSoundPlayback.CreateMenu(FalloutSoundRecordReader.Read(_pluginStack.GetEffective(soundForm)), _pluginStack,
                     RuntimeLiveContentSource.Current!, _ingestibleSoundRandom);
             var result = use.Commit();
             if (sound is not null && result.Consumed)

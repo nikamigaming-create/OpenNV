@@ -4,9 +4,10 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed partial class NativeOwnedAnimationSoundPlayer
 {
-    private sealed record Voice(Node3D Emitter, FalloutSoundLoop Loop, AudioStream? OwnedStream)
+    private sealed record Voice(Node3D Emitter, FalloutSoundLoop Loop, AudioStream? OwnedStream, Action? Completed)
     {
         internal bool Releasing { get; set; }
+        internal IDisposable? Registration { get; set; }
     }
     private readonly Dictionary<Node, Voice> _voices = [];
     private readonly Dictionary<string, Node3D> _emitters = new(StringComparer.Ordinal);
@@ -55,26 +56,15 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         return _emitters[name] = nodes[0];
     }
 
-    private static AudioStream CreateLoopStream(AudioStream source, FalloutSoundLoop loop)
-    {
-        if (source is not AudioStreamWav wav)
-            throw new NotSupportedException("Source loop/envelope playback requires a decoded WAV sample clock.");
-        var frames = Math.Round(wav.GetLength() * wav.MixRate);
-        if (loop.Start >= frames || loop.End > frames)
-            throw new InvalidDataException("SOUN loop region exceeds the decoded owned WAV.");
-        // The decoder cache remains immutable. Every envelope owns its loop
-        // switch so releasing one voice cannot release another instance.
-        var result = (AudioStreamWav)wav.Duplicate();
-        result.LoopMode = AudioStreamWav.LoopModeEnum.Forward;
-        result.LoopBegin = checked((int)loop.Start);
-        result.LoopEnd = loop.End == 0 ? checked((int)frames) : checked((int)loop.End);
-        return result;
-    }
-
-    private void TrackVoice(Node voice, Node3D emitter, FalloutSoundLoop loop)
+    private void TrackVoice(Node voice, Node3D emitter, FalloutSoundLoop loop, FalloutFormKey sound, Action? completed)
     {
         var stream = voice is AudioStreamPlayer3D spatial ? spatial.Stream : ((AudioStreamPlayer)voice).Stream;
-        _voices.Add(voice, new(emitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream));
+        var state = new Voice(emitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream, completed);
+        var reference = voice is AudioStreamPlayer3D ? NativeOwnedSoundVoice.Reference(_records, emitter) : null;
+        state.Registration = _records.SoundVoices.Register(sound, reference, "source-animation-or-response",
+            () => GodotObject.IsInstanceValid(voice) && (voice is AudioStreamPlayer3D positioned ? positioned.Playing : ((AudioStreamPlayer)voice).Playing),
+            () => { StopVoice(voice); FinishVoice(voice); });
+        _voices.Add(voice, state);
         // An effect or weapon can leave the tree before its sound completes.
         // Finished is not emitted when its emitter frees the child voice.
         voice.TreeExiting += () => ForgetVoice(voice);
@@ -103,24 +93,32 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             }
             else
             {
-                if (node is AudioStreamPlayer3D spatial) { spatial.Stop(); _spatial.Remove(spatial); }
-                else ((AudioStreamPlayer)node).Stop();
+                StopVoice(node);
                 FinishVoice(node);
             }
         }
         return stopped;
     }
 
-    private void FinishVoice(Node node)
+    private static void StopVoice(Node node)
     {
+        if (node is AudioStreamPlayer3D spatial) spatial.Stop();
+        else ((AudioStreamPlayer)node).Stop();
+    }
+
+    private void FinishVoice(Node node, bool completed = true)
+    {
+        var completion = completed && _voices.TryGetValue(node, out var voice) ? voice.Completed : null;
         ForgetVoice(node);
         node.QueueFree();
+        completion?.Invoke();
     }
 
     private void ForgetVoice(Node node)
     {
         if (node is AudioStreamPlayer3D spatialVoice) _spatial.Remove(spatialVoice);
         if (!_voices.Remove(node, out var voice)) return;
+        voice.Registration?.Dispose();
         if (voice.OwnedStream is { } stream)
         {
             if (node is AudioStreamPlayer3D spatial) spatial.Stream = null;
@@ -133,9 +131,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         foreach (var node in _voices.Keys.ToArray())
         {
-            if (node is AudioStreamPlayer3D spatial) spatial.Stop();
-            else ((AudioStreamPlayer)node).Stop();
-            FinishVoice(node);
+            StopVoice(node); FinishVoice(node, completed: false);
         }
         _spatial.Clear(); _emitters.Clear();
         foreach (var stream in _streams.Values) stream.Dispose();

@@ -151,6 +151,7 @@ public partial class RuntimeCoordinator
                 marker.State.CanTravel,
             }).ToArray(),
             speech = _nativeOpeningStageDriver?.SpeechState,
+            soundVoices = _nativePluginStack?.SoundVoices.State,
             questProgress = _nativeOpeningStageDriver?.Quests.ProgressState,
             conversation = _nativeOpeningStageDriver?.ConversationState,
             questScripts = _nativeQuestScripts?.State,

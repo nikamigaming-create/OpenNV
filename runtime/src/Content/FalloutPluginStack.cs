@@ -64,6 +64,8 @@ internal sealed class FalloutPluginStack : IDisposable
     private readonly Dictionary<string, IReadOnlyList<FalloutPluginRecord>> _registrationBySignature =
         new(StringComparer.Ordinal);
     private readonly int _effectiveRecordCount;
+    private FalloutSoundVoices? _soundVoices;
+    internal FalloutSoundVoices SoundVoices => _soundVoices ??= new(this);
     private readonly object _cellIndexLock = new();
     private readonly Dictionary<string, Dictionary<FalloutFormKey, IReadOnlyList<FalloutPluginRecord>>>
         _cellChildrenBySignatureAndCell = new(StringComparer.Ordinal);
@@ -395,8 +397,11 @@ internal sealed class FalloutPluginStack : IDisposable
 
     public void Dispose()
     {
-        foreach (var context in _plugins)
-            context.Plugin.Dispose();
+        try { _soundVoices?.Retire(); }
+        finally
+        {
+            foreach (var context in _plugins) context.Plugin.Dispose();
+        }
     }
 
     private static string FindExactlyOneCaseInsensitiveFile(string root, string expectedName)

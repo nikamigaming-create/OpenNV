@@ -23,10 +23,15 @@ internal sealed partial class NativeOwnedScriptSoundPlayer(FalloutScriptSounds o
         if (!_streams.TryGetValue(selected.Path!, out var stream))
         {
             stream = NativeOwnedMediaLoader.LoadAudio(selected.Path!);
+            if (stream is AudioStreamWav cachedWav) cachedWav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
             _streams.Add(selected.Path!, stream);
         }
-        if (stream is not AudioStreamWav wav) throw new InvalidDataException("PlaySound did not resolve an owned WAV stream.");
-        wav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
+        if (stream is not AudioStreamWav) throw new InvalidDataException("PlaySound did not resolve an owned WAV stream.");
+        var media = new FalloutScriptSoundMedia(selected.Path!, stream.GetMeta("opennv_owned_media_source").AsString(),
+            stream.GetMeta("opennv_owned_media_sha256").AsString(), stream.GetLength());
+        var loop = FalloutSoundLoop.Read(request.Source);
+        AudioStream? ownedStream = null;
+        if (loop.Mode != FalloutSoundLoopMode.None) stream = ownedStream = NativeOwnedSoundPlayback.CreateLoopStream(stream, loop);
         var voice = new AudioStreamPlayer
         {
             Name = $"ScriptSound_{request.Id}",
@@ -35,11 +40,9 @@ internal sealed partial class NativeOwnedScriptSoundPlayer(FalloutScriptSounds o
             VolumeDb = selected.GainDb,
             PitchScale = selected.PitchScale,
         };
-        var media = new FalloutScriptSoundMedia(selected.Path!, stream.GetMeta("opennv_owned_media_source").AsString(),
-            stream.GetMeta("opennv_owned_media_sha256").AsString(), stream.GetLength());
         voice.Finished += () => owner.Complete(request.Id);
         try { AddChild(voice); }
-        catch { voice.Free(); throw; }
+        catch { voice.Free(); ownedStream?.Dispose(); throw; }
         var released = false;
         return new(media, () =>
         {
@@ -51,8 +54,8 @@ internal sealed partial class NativeOwnedScriptSoundPlayer(FalloutScriptSounds o
         {
             if (released) return;
             released = true;
-            if (!GodotObject.IsInstanceValid(voice)) return;
-            voice.Stop(); voice.QueueFree();
+            if (GodotObject.IsInstanceValid(voice)) { voice.Stop(); voice.Stream = null; voice.QueueFree(); }
+            ownedStream?.Dispose();
         });
     }
 
@@ -65,5 +68,10 @@ internal sealed partial class NativeOwnedScriptSoundPlayer(FalloutScriptSounds o
         }
     }
 
-    public override void _ExitTree() { _binding?.Dispose(); _binding = null; _streams.Clear(); }
+    public override void _ExitTree()
+    {
+        _binding?.Dispose(); _binding = null;
+        foreach (var stream in _streams.Values) stream.Dispose();
+        _streams.Clear();
+    }
 }
