@@ -47,6 +47,9 @@ model frame independently of the influence names bound to the actor skeleton.
 [Rigid FaceGen components](actor-face-attachment.md) bind through the selected
 head model even when their export omits biped parent markers. Their source
 inverse bind and the receiving animated head remain authoritative.
+[Model alternate textures](model-texture-indices.md) use the source geometry's
+scene traversal index independently of its stored label, sharing binding between
+actor and equipped weapon materials.
 
 ## Boundaries
 

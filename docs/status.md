@@ -57,8 +57,11 @@ without biped parent markers, retaining their selected head inverse bind and
 animation. All three birthday children pass complete owned actor assembly.
 An ordinary closed-door stage80 Continue, player door activation and following
 reach CG01 completion and CG02 stages0/5. Amata now delivers her introduction
-voice/lip morphs. The current next failure is a missing security actor from its
-alternate-texture binding; birthday outfit/glasses failures remain visible.
+voice/lip morphs. [Model alternate textures](model-texture-indices.md) now bind
+by native scene traversal index independently of stored names. Both affected
+security actors pass owned assembly; ordinary security head tracking and source
+player relocation enter the birthday room. Beatrice's SayTo has no visible
+resident actor, and the glasses environment-map failure remains visible.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
 Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,

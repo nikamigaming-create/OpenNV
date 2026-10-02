@@ -58,19 +58,17 @@ internal static class NativeNpcMaterial
     internal static IReadOnlyList<string>? Alternate(FalloutNpcAppearancePart part, FalloutNifFile nif, FalloutNifGeometry geometry)
     {
         if (part.AlternateTextures.Count == 0) return null;
-        var shapes = nif.Blocks.Where(block => block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape")
-            .Select(block => nif.ReadGeometry(block.Index)).ToArray();
-        FalloutNifGeometry Target(FalloutNpcTextureOverride entry)
+        var shapes = FalloutNifGeometryOrder.Read(nif);
+        foreach (var entry in part.AlternateTextures)
         {
-            if (entry.ShapeIndex >= 0 && entry.ShapeIndex < shapes.Length &&
-                shapes[entry.ShapeIndex].Name.TrimStart('#') == entry.ShapeName.TrimStart('#'))
-                return shapes[entry.ShapeIndex];
-            var matches = shapes.Where(shape => shape.Name == entry.ShapeName).ToArray();
-            if (matches.Length != 1)
-                throw new InvalidDataException($"Record alternate texture target differs: {part.Source}/{entry.ShapeIndex}/{entry.ShapeName}.");
-            return matches[0];
+            if (entry.ShapeIndex < 0 || entry.ShapeIndex >= shapes.Count)
+                throw new InvalidDataException($"Record alternate texture index is outside its source model: {part.Source}/{entry.ShapeIndex}/{entry.ShapeName}.");
+            if (shapes[entry.ShapeIndex].Block.TypeName == "NiParticleSystem")
+                throw new NotSupportedException($"Record particle texture substitution is unbound: {part.Source}/{entry.ShapeIndex}.");
         }
-        var selected = part.AlternateTextures.SingleOrDefault(entry => Target(entry).Block.Index == geometry.Block.Index);
+        // The model loader keys entries by 3D index, with later entries replacing
+        // the texture at that index. Stored names do not redirect or validate it.
+        var selected = part.AlternateTextures.LastOrDefault(entry => shapes[entry.ShapeIndex].Block.Index == geometry.Block.Index);
         if (selected is null) return null;
         var properties = geometry.Properties.Where(index => index >= 0).Select(nif.ReadObject).ToArray();
         var shader = properties.OfType<FalloutNifShaderProperty>().SingleOrDefault();
