@@ -15,6 +15,9 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal Func<RuntimeNativeReferencePresentation> ReferencePresentation { get; set; } =
         () => throw new InvalidOperationException("Reference presentation has no current cell owner.");
     internal object? ConversationState => _conversation?.State;
+    internal void ExecutePackageEvent(FalloutPackageEvent program, FalloutFormKey actor) =>
+        (_resultScripts ?? throw new InvalidOperationException("Package results have no shared script owner."))
+            .ExecutePackageEvent(program, actor);
     internal OpenNV.Runtime.Gameplay.State.FalloutPipBoyState PipBoy => _pipBoy ?? throw new InvalidOperationException("Pip-Boy state is absent.");
     internal FalloutQuestState Quests => _quests;
     internal IReadOnlyList<FalloutNativeSkillIdentity> Skills => _tagSkillContract.Skills;

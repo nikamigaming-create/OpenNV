@@ -15,6 +15,13 @@ unverified. All nine JAM modules and compatible TTW guide recommendations are
 immediate implementation targets; ordinary bot campaign proof and the requested
 edited journey video remain pending.
 Queued player MoveTo now shares C# world ownership and the native scene path.
+Ordinary toddler input opens the source playpen gate, reaches Dad's trigger and
+advances to stages 12/14. The reached On End SetStage failure now has a shared
+package-result script owner, with passing scope/prefix/cold-value contracts and
+an owned native arrival/result fixture. The resumed ordinary route executes the
+result, enters stage 16 and reaches the next missing SetOpenState door command.
+Further ordinary quest, full actor cold
+continuation and gurney/HUD behavior remain open; see [package results](package-event-results.md).
 Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
 and the required movement runtime gate pass. Quest MenuMode and multiple GameMode
 blocks now share source scheduling; TTWStart's owned clock fixture reaches its

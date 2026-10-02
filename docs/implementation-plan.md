@@ -41,7 +41,8 @@ Use fresh `codex/` branches from current main for each published block. Do not
 label registration, a parser pass
 or the earlier sprint/time-scale adapters as mod support. The exact verified
 state and next owners are in [mod compatibility](mod-compatibility.md).
-Work in this task without subagents. Preserve the original campaign, release
+Coordinate the user-authorized parallel camera, UI and mod work in this task,
+with one live-input and publication owner. Preserve the original campaign, release
 and physical-headset requirements below.
 
 The executable JAM breakdown, verified starting point, owner map and

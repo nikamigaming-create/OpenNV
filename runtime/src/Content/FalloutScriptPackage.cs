@@ -135,6 +135,13 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
 
     internal void ExecuteScript(Action<string> execute)
     {
+        ValidateScript();
+        foreach (var line in FalloutDialogueTopic.CodeLines(Source)) execute(line);
+        RequireEmptyTopic();
+    }
+
+    internal void ValidateScript()
+    {
         var compiled = Fields.Where(field => field.Signature == "SCDA").ToArray();
         if (compiled.Length > 1) throw new InvalidDataException("Package event repeats its compiled program.");
         var headers = Fields.Where(field => field.Signature == "SCHR").ToArray();
@@ -149,7 +156,10 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
         if (FalloutDialogueTopic.CodeLines(Source).Any() &&
             (headers.Length != 1 || compiled.Length != 1 || compiled[0].Data.Length == 0))
             throw new InvalidDataException("Package event source has no complete compiled program owner.");
-        foreach (var line in FalloutDialogueTopic.CodeLines(Source)) execute(line);
+    }
+
+    internal void RequireEmptyTopic()
+    {
         foreach (var topic in Fields.Where(field => field.Signature == "TNAM"))
             if (topic.Data.Length != 4 || BinaryPrimitives.ReadUInt32LittleEndian(topic.Data.Span) != 0)
                 throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event topic execution is unbound.");

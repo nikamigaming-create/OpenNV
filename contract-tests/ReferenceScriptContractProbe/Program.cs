@@ -322,6 +322,7 @@ InputControlContracts.Run();
     LoadingScreenContracts.Run();
     CharacterGenerationContracts.Run();
     PlayerScriptPackageContracts.Run();
+    PackageEventContracts.Run();
     NumericGameSettingContracts.Run();
     ActorAppearanceContracts.Run();
     FaceGeometryContracts.Run();

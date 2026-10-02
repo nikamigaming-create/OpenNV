@@ -186,6 +186,19 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         Execute(owner.FormKey, bindings, program, null, seconds);
     }
 
+    internal void ExecutePackageEvent(FalloutPackageEvent program, FalloutFormKey actor)
+    {
+        program.ValidateScript();
+        var reference = records.GetEffective(actor);
+        if (reference.Signature is not ("ACHR" or "ACRE"))
+            throw new InvalidDataException("Package results require a placed actor as their calling reference.");
+        Execute(actor, Bindings(reference, program.Package, program.Fields),
+            FalloutGameModeProgram.Read("begin Result\n" + program.Source + "\nend", "Result"), null, 0);
+        // A reached unsupported topic retains the script prefix. The package
+        // lifecycle latches that failure before admitting another event.
+        program.RequireEmptyTopic();
+    }
+
     internal void ExecuteStage(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source) =>
         Execute(quest.FormKey, Bindings(quest, quest, fields),
             FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);

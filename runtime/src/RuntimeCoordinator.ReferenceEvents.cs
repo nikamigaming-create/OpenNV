@@ -52,9 +52,14 @@ public partial class RuntimeCoordinator
     private void BindNativeReferenceEvents(Node3D root, FalloutCellScene cell)
     {
         foreach (var actor in root.GetChildren().OfType<RuntimeNativeNpc>())
+        {
             actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
                 throw new InvalidOperationException("Package dialogue has no gameplay owner."))
                 .RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);
+            actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
+                throw new InvalidOperationException("Package results have no gameplay owner."))
+                .ExecutePackageEvent(program, caller);
+        }
         _nativeReferencePresentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().Single();
         _nativeReferencePresentation.SynchronizeActorAppearance = actor => SynchronizeNativeNpcAppearance(actor, _nativeActiveCell!);
         if (root.GetChildren().OfType<RuntimeNativeReferenceEvents>().SingleOrDefault() is { } existing)
