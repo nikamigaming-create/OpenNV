@@ -38,9 +38,11 @@ internal sealed class FalloutQuestScriptClock
     internal bool Advance(float seconds)
     {
         if (!float.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
-        // An already-due invocation does not accrue this frame's delta again.
-        if (Remaining <= 0) return true;
-        var remaining = (float)((double)Remaining - seconds);
+        // Initial linking and globally disabled recurrence retain their zero
+        // elapsed dispatch. Later overdue calls still receive each new frame's
+        // time: countdown debt and GetSecondsPassed are independent owners.
+        if (Remaining <= 0 && (Invocations == 0 || _defaultDelay <= 0)) return true;
+        var remaining = Remaining > 0 ? (float)((double)Remaining - seconds) : Remaining;
         var elapsed = (float)((double)Elapsed + seconds);
         if (!float.IsFinite(remaining) || !float.IsFinite(elapsed))
             throw new InvalidDataException("Quest script clock exceeds Float32 storage.");
