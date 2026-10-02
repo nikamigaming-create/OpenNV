@@ -81,9 +81,7 @@ public partial class RuntimeCoordinator
             {
                 if (effect.Kind == FalloutReferenceEffectKind.DefaultActivate)
                 {
-                    if (effect.Argument is { } actor && _nativePluginStack!.RuntimeFormId(actor) != 0x14)
-                        throw new NotSupportedException($"Default activation by {actor} has no actor interaction owner.");
-                    events.DefaultActivate(effect.Target ?? effect.Source);
+                    events.DefaultActivate(effect.Target ?? effect.Source, effect.Argument);
                 }
                 else (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Native event effects have no gameplay host."))
                     .ApplyReferenceEffect(effect);
@@ -98,7 +96,8 @@ public partial class RuntimeCoordinator
                 (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group),
                 () => _nativeOpeningStageDriver!.Vitals.Level,
                 ReadActorValue: (actor, name, kind) => _nativeOpeningStageDriver!.ReadActorValue(actor, name, kind),
-                ChangeActorValue: (actor, name, operation, value) => _nativeOpeningStageDriver!.ChangeActorValue(actor, name, operation, value)),
+                ChangeActorValue: (actor, name, operation, value) => _nativeOpeningStageDriver!.ChangeActorValue(actor, name, operation, value),
+                Inventory: _nativeOpeningStageDriver!.InventoryCommands, Challenges: _nativeQuestScripts!.Scripts.Challenges),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

@@ -32,7 +32,7 @@ internal partial class RuntimeNativeNpc
         // A newly assembled body can already contain this override. Later
         // revisions still invalidate it even when age-family matching selects
         // the same final race; exact same-race input never creates a revision.
-        if (state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
+        if (_appearanceRevision < 0 && state is null && !Appearance.RuntimeFace && Appearance.Race == world.ActorRace(reference) ||
             _appearanceRevision < 0 && state is not null && Appearance.RuntimeFace &&
                 (state.Race is null || Appearance.Race == state.Race) &&
                 (state.FaceGen is null || Appearance.FaceGen.SymmetricGeometry.AsSpan().SequenceEqual(state.FaceGen.SymmetricGeometry) &&
@@ -72,7 +72,8 @@ internal partial class RuntimeNativeNpc
             var previous = Parts;
             Skeleton.MaterialChannels.ReplaceWith(channels);
             Appearance = appearance;
-            Skeleton.Node.Scale = Vector3.One * appearance.RaceHeight;
+            Skeleton.Node.Scale = Vector3.One * appearance.Height;
+            foreach (var combat in GetChildren().OfType<RuntimeNativeActorCombat>()) combat.RefreshAppearanceMovement();
             Parts = created.ToArray();
             _faceTargets.Clear();
             foreach (var (name, bindings) in targets) _faceTargets.Add(name, bindings);

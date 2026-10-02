@@ -11,6 +11,13 @@ internal sealed partial class RuntimeNativeActorCombat
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
     internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeapon;
 
+    internal void PrepareInventoryChange()
+    {
+        if (OwnsPose || _enemyWeapon is not null || _packageWeapon is not null)
+            throw new NotSupportedException("Changing a presented actor weapon requires its animation and attachment retirement owner.");
+        _packageWeaponPrepared = false;
+    }
+
     private void PreparePackageWeapon(bool drawn)
     {
         if (OwnsPose) return;

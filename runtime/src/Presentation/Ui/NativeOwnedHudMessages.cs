@@ -23,6 +23,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private readonly Dictionary<FalloutHudEvent, (string Text, string? Icon, double Seconds)> _resolved = [];
     private long _displayed;
     private string? _displayIcon;
+    private FalloutChallengeHudDeclaration? _challengeDeclaration;
     internal string? Error { get; private set; }
     internal object State => new
     {
@@ -223,6 +224,15 @@ internal sealed partial class NativeOwnedHudMessages : Control
         }
         else if (IsObjective(value))
             result = (_quests.ObjectiveText(value.Source, value.ObjectiveIndex!.Value), null, _questFadeIn + _questHold + _questFadeOut);
+        else if (value.Kind is FalloutHudEventKind.ChallengeProgress or FalloutHudEventKind.ChallengeCompleted)
+        {
+            var challenge = FalloutChallengeDefinition.Read(record);
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Challenge HUD source is absent.");
+            _challengeDeclaration ??= FalloutExecutableStringTable.ReadChallengeHudDeclaration(
+                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+            result = (Format(_challengeDeclaration.Format, [challenge.Name, value.Count.ToString(CultureInfo.InvariantCulture),
+                challenge.Threshold.ToString(CultureInfo.InvariantCulture), challenge.Description]), challenge.Icon, _challengeDeclaration.Seconds);
+        }
         else throw new NotSupportedException($"HUD event {value.Kind} has no presentation owner.");
         _resolved.Add(value, result);
         return result;
@@ -236,7 +246,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             if (format[index] != '%') { result.Append(format[index]); continue; }
             if (++index == format.Length) throw new InvalidDataException("HUD format is incomplete.");
             if (format[index] == '%') { result.Append('%'); continue; }
-            if (format[index] is not ('s' or 'i') || argument == arguments.Count)
+            if (format[index] is not ('s' or 'i' or 'd') || argument == arguments.Count)
                 throw new NotSupportedException("HUD format has an unbound conversion.");
             result.Append(arguments[argument++]);
         }

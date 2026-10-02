@@ -72,9 +72,10 @@ Frame recording remains off.
 Non-player targets need their temporary Follow-assignment owner. Object targets
 need search, pickup and drop procedures. Other-cell destinations, non-marker
 destination interactions, additional target selectors and search flags remain
-unbound. Automatic NPC door activation also remains unbound: a source-authored
-closed door can block the capsule route until ordinary player activation opens
-it. The reached live route resumed after that activation without any collision
-or grid changes. Combat assistance, exact retail scheduling/stopping behavior and
+unbound. Ordinary unlocked route doors now use the shared
+[NPC door navigation owner](npc-door-navigation.md). The original reached live
+route resumed after player activation without any collision or grid changes;
+that observation alone does not verify NPC automatic activation. Combat
+assistance, exact retail scheduling/stopping behavior and
 physical OpenXR acceptance require separate evidence. The ordinary campaign
 result and next reached blocker belong in [current work](current-work.md).

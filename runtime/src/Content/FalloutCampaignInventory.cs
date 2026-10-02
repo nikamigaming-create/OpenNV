@@ -25,7 +25,7 @@ internal sealed record FalloutCampaignItem(
     int Count,
     int? Value,
     float? Weight,
-    IReadOnlyList<FalloutItemVariant>? Variants = null);
+    IReadOnlyList<FalloutItemVariant>? Variants = null, bool UnequipLocked = false);
 
 internal sealed record FalloutCampaignWeapon(
     FalloutCampaignItem Item,

@@ -19,6 +19,7 @@
     <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/FalloutNpcAppearance*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../runtime/src/Content/FalloutNpcHeight.cs" Link="FalloutNpcHeight.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorTemplateOwner.cs" Link="FalloutActorTemplateOwner.cs" />
     <Compile Include="../../runtime/src/Content/FalloutActorTemplateSelection.cs" Link="FalloutActorTemplateSelection.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />

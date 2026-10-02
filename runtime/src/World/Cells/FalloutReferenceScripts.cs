@@ -29,7 +29,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<int>? PlayerLevel = null, Func<bool>? LocationSpecificLoadScreensOnly = null, Func<bool>? InCharGen = null,
     Func<FalloutFormKey, int>? GetOpenState = null,
     Func<FalloutFormKey, string, FalloutActorValueRead, double>? ReadActorValue = null,
-    Action<FalloutFormKey, string, string, double>? ChangeActorValue = null);
+    Action<FalloutFormKey, string, string, double>? ChangeActorValue = null,
+    FalloutInventoryCommands? Inventory = null, FalloutChallenges? Challenges = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -412,6 +413,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
+            if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
+                return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var form = (host.Inventory ?? throw new NotSupportedException("Equipment query has no shared inventory owner."))
+                        .EquippedObject(Target(), FalloutInventoryCommands.Slot(arguments[0].Number));
+                    return FalloutScriptValue.Form(form is { } equipped ? records.RuntimeFormId(equipped) : 0);
+                });
             FalloutFormKey AuxiliaryTarget(IReadOnlyList<FalloutScriptArgument> arguments)
             {
                 if (arguments.Count >= 3)
@@ -830,6 +838,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "matchrace" when arguments.Count == 1:
                     world.MatchRace(target, Reference(arguments[0]));
                     break;
+                case "agerace" when arguments.Count == 1:
+                    world.AgeRace(target, FalloutReferenceWorld.RaceAgeSteps(Number(arguments[0])));
+                    break;
                 case "matchfacegeometry" when arguments.Count == 2:
                     var facePercentage = Number(arguments[1]);
                     if (!double.IsFinite(facePercentage) || Math.Truncate(facePercentage) is < int.MinValue or > int.MaxValue)
@@ -936,8 +947,27 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     host.Apply(new(FalloutReferenceEffectKind.AddItem, source, target, bindings.Form(arguments[0]).FormKey,
                         Value: (int)quantity, Enable: arguments.Count == 3 && Boolean(arguments[2])));
                     break;
-                case "equipitem" when arguments.Count == 1:
-                    host.Apply(new(FalloutReferenceEffectKind.EquipItem, source, target, bindings.Form(arguments[0]).FormKey));
+                case "equipitem" or "equipobject" when arguments.Count is >= 1 and <= 3:
+                    var equipItem = bindings.Form(arguments[0]).FormKey;
+                    var noUnequip = arguments.Count >= 2 && Boolean(arguments[1]);
+                    var hideEquip = arguments.Count < 3 || Boolean(arguments[2]);
+                    if (host.Inventory is { } equipment)
+                        equipment.Execute(new(FalloutInventoryCommandKind.Equip, target, Item: equipItem, NoUnequip: noUnequip, Silent: hideEquip));
+                    else if (arguments.Count == 1)
+                        host.Apply(new(FalloutReferenceEffectKind.EquipItem, source, target, equipItem));
+                    else throw new NotSupportedException("EquipItem flags have no shared inventory owner.");
+                    break;
+                case "removeallitems" when arguments.Count <= 3:
+                    var destination = arguments.Count == 0 || arguments[0] == "0" ? (FalloutFormKey?)null : Reference(arguments[0]);
+                    var retain = arguments.Count >= 2 && Boolean(arguments[1]);
+                    var silentRemoval = arguments.Count >= 3 && Boolean(arguments[2]);
+                    (host.Inventory ?? throw new NotSupportedException("RemoveAllItems has no shared inventory owner."))
+                        .Execute(new(FalloutInventoryCommandKind.RemoveAll, target, Destination: destination,
+                            RetainOwnership: retain, Silent: silentRemoval));
+                    break;
+                case "resetinventory" when arguments.Count == 0:
+                    (host.Inventory ?? throw new NotSupportedException("ResetInventory has no shared inventory owner."))
+                        .Execute(new(FalloutInventoryCommandKind.Reset, target));
                     break;
                 case "addnote" when parts.Length == 1 && arguments.Count == 1:
                     var note = bindings.Form(arguments[0]);
@@ -1009,6 +1039,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "completeallobjectives" when parts.Length == 1 && arguments.Count == 1:
                     quests.CompleteAllObjectives(Quest(arguments[0]));
+                    break;
+                case "unlockchallenge" when parts.Length == 1 && arguments.Count == 1:
+                    (host.Challenges ?? throw new NotSupportedException("UnlockChallenge has no shared challenge owner."))
+                        .Unlock(bindings.Form(arguments[0]).FormKey);
+                    break;
+                case "incrementscriptedchallenge" when parts.Length == 1 && arguments.Count == 1:
+                    (host.Challenges ?? throw new NotSupportedException("IncrementScriptedChallenge has no shared challenge owner."))
+                        .IncrementScripted(bindings.Form(arguments[0]).FormKey);
                     break;
                 case "killquestupdates" or "kqu" when parts.Length == 1 && arguments.Count == 0:
                     quests.KillQuestUpdates();

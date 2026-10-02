@@ -29,7 +29,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private string _playerName = string.Empty;
     private FalloutNativeRaceSexSelection _character = null!;
     private long _characterRevision;
-    internal long PlayerAppearanceRevision => _characterRevision + _scripts.Session.PlayerAppearanceRevision;
+    internal long PlayerAppearanceRevision => _characterRevision + _scripts.Session.PlayerAppearanceRevision +
+        (_scripts.References?.ActorAppearanceRevision(_pluginStack.RuntimeFormKey(0x14)) ?? 0);
     private FalloutPlayerActorValues _playerActorValues = null!;
     private FalloutPlayerVitals _vitals = null!;
     private FalloutPlayerSkills _playerSkills = null!;
@@ -176,7 +177,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _imageSpaceState = imageSpaceState;
         _quests = quests;
         _scripts = scripts;
-        _scripts.References!.BindPlayerAppearance(() => PlayerActorState);
+        _inventory = inventory;
+        _globals = globals;
+        _scripts.References!.BindPlayerAppearance(() => PlayerCreationState);
         _scriptHost = new((quest, stage) =>
         {
             var source = _controls.Quests.Values.SelectMany(values => values.Values)
@@ -208,12 +211,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
             return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
-            ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change);
-        _inventory = inventory;
+            ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change,
+            Inventory: InventoryCommands);
         _captureScripts = captureScripts;
-        _globals = globals;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
-            raceSexContract.Player, () => pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId), () => _scripts.Session.Hardcore,
+            raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
             () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues);
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);

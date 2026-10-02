@@ -55,7 +55,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 (reference, group) => ReferencePresentation().IsAnimPlaying(reference, group), () => Vitals.Level,
                 () => _scripts.Session.LocationSpecificLoadScreensOnly, () => _scripts.Session.InCharGen,
                 reference => ReferencePresentation().GetOpenState(reference),
-                ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue));
+                ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -123,8 +123,25 @@ internal partial class RuntimeNativeOpeningStageDriver
         throw new NotSupportedException($"Dialogue actor {actor} value {value} has no state owner.");
     }
 
-    private FalloutActorAppearanceState PlayerActorState =>
+    private FalloutActorAppearanceState PlayerCreationState =>
         FalloutNativeCharacterCreation.ActorState(_pluginStack, _raceSexContract.Player, _character) with { PlayerYoung = _scripts.Session.PlayerYoung };
+
+    private FalloutActorAppearanceState PlayerActorState
+    {
+        get
+        {
+            var player = _pluginStack.RuntimeFormKey(0x14);
+            var original = PlayerCreationState;
+            var changed = _scripts.References!.ActorAppearanceOverride(player);
+            return original with
+            {
+                Race = _scripts.References.ActorRace(player),
+                Height = _scripts.References.ActorHeight(player),
+                Hair = changed?.HairOverridden == true ? changed.Hair : original.Hair,
+                HairOverridden = changed?.HairOverridden == true,
+            };
+        }
+    }
 
     internal FalloutNpcAppearance PlayerAppearance => FalloutNpcAppearanceResolver.Resolve(_pluginStack, _raceSexContract.Player,
         equippedArmor: _inventory.Equipped.Select(_pluginStack.RuntimeFormKey).Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray(),

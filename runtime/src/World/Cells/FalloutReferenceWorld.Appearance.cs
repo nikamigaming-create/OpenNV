@@ -25,13 +25,17 @@ internal sealed partial class FalloutReferenceWorld
         var (source, traits) = NpcAppearanceSource(reference);
         var changed = _actorOverrides.GetValueOrDefault(source.FormKey)?.Race ?? _actorOverrides.GetValueOrDefault(traits.FormKey)?.Race;
         var face = _actorOverrides.GetValueOrDefault(source.FormKey)?.FaceGeometry;
-        return changed is null && face is null ? null : new(null, changed?.Form, null, null, face is null ? null : ActorFace(reference));
+        var height = _actorOverrides.GetValueOrDefault(source.FormKey)?.Height ?? _actorOverrides.GetValueOrDefault(traits.FormKey)?.Height;
+        var hair = _actorOverrides.GetValueOrDefault(source.FormKey)?.Hair;
+        return changed is null && face is null && height is null && hair is null ? null :
+            new(null, changed?.Form, hair?.Form, null, face is null ? null : ActorFace(reference), Height: height, HairOverridden: hair is not null);
     }
 
     internal long ActorAppearanceRevision(FalloutFormKey reference)
     {
         var (source, traits) = NpcAppearanceSource(reference);
-        return Math.Max(_appearanceRevisions.GetValueOrDefault(source.FormKey), _appearanceRevisions.GetValueOrDefault(traits.FormKey));
+        return Math.Max(_appearanceRevisions.GetValueOrDefault(reference),
+            Math.Max(_appearanceRevisions.GetValueOrDefault(source.FormKey), _appearanceRevisions.GetValueOrDefault(traits.FormKey)));
     }
 
     internal FalloutFormKey ActorRace(FalloutFormKey reference)
@@ -47,13 +51,11 @@ internal sealed partial class FalloutReferenceWorld
     // Changes belong to the NPC base and outlive every resident 3D instance.
     internal bool MatchRace(FalloutFormKey target, FalloutFormKey source)
     {
-        var targetSource = NpcAppearanceSource(target).Base;
+        _ = NpcAppearanceSource(target);
         _ = NpcAppearanceSource(source);
         var before = ActorRace(target); var from = ActorRace(source);
         _ = RequireRace(before); _ = RequireRace(from);
         if (before == from) return false;
-        if (target == records.RuntimeFormKey(0x14))
-            throw new NotSupportedException("Scripted player race changes require the shared character-identity transition owner.");
         var (_, age) = YoungestRace(before);
         var (race, _) = YoungestRace(from);
         var visited = new HashSet<FalloutFormKey> { race };
@@ -64,10 +66,8 @@ internal sealed partial class FalloutReferenceWorld
             if (!visited.Add(older)) throw new InvalidDataException("Race older-family links contain a cycle.");
             race = older;
         }
-        var entry = FormOverride(race, "RACE", 0);
-        var current = Overrides(targetSource.FormKey);
-        _actorOverrides[targetSource.FormKey] = current with { Race = entry };
-        _appearanceRevisions[targetSource.FormKey] = ++_appearanceRevision;
+        if (!ChangeActorRace(target, race))
+            _appearanceRevisions[NpcAppearanceSource(target).Base.FormKey] = ++_appearanceRevision;
         return true;
     }
 

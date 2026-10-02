@@ -222,6 +222,18 @@ internal static class ActorSourceContracts
             Check(actorConditions.Evaluate(healthCondition with { Function = 14, RunOn = 2, Reference = 0x901, Argument1 = 27 }) == 62.5f,
                 "Explicit-reference actor value did not reach its authoritative owner.");
             Reject(() => actorConditions.Evaluate(healthCondition with { Function = 14, RunOn = 2, Argument1 = 27 }));
+            var listenerIdentity = FalloutDialogueSpeaker.Read(records, Key(0x804));
+            var npcListener = new FalloutDialogueConditions(records, quests, Key(0x900), speaker,
+                runtime: _ => throw new InvalidOperationException("NPC listener fell through to the player context."),
+                healthPercentage: actor => actor == Key(0x901) ? .75f : throw new InvalidDataException("Wrong listener health owner."),
+                actorValue: (actor, value) => actor == Key(0x901) && value == 27 ? 31 : throw new InvalidDataException("Wrong listener AV owner."),
+                listener: Key(0x901), listenerIdentity: listenerIdentity);
+            Check(npcListener.Evaluate(healthCondition with { RunOn = 1 }) == .75f &&
+                npcListener.Evaluate(healthCondition with { Function = 14, RunOn = 1, Argument1 = 27 }) == 31 &&
+                npcListener.Evaluate(healthCondition with { Function = 72, RunOn = 1, Argument1 = 0x804 }) == 1 &&
+                npcListener.Evaluate(healthCondition with { Function = 72, RunOn = 1, Argument1 = 0x801 }) == 0,
+                "NPC-directed speech selected the player or speaker as its listener.");
+            Reject(() => npcListener.Evaluate(healthCondition with { Function = 999, RunOn = 1 }));
             var female = false;
             var playerConditions = new FalloutDialogueConditions(records, quests, Key(0x900), speaker, playerFemale: () => female);
             var playerSex = healthCondition with { Function = 131, Argument1 = 0 };

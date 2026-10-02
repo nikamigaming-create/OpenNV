@@ -12,6 +12,14 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--actor-skin-root"])
+            {
+                ExerciseActorSkinRoot(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-actor-skins", var skinGame, var skinMod, var skinRoot, var skinSkeleton, .. var skinArguments])
+            {
+                ExerciseOwnedActorSkins(skinGame, skinMod, skinRoot, skinSkeleton, skinArguments); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--upload-cost", var uploadRoot, var uploadModel])
             {
                 ExerciseUploadCost(uploadRoot, uploadModel);
@@ -67,6 +75,7 @@ public partial class NativeNifInstanceAudit : Node
                 return;
             }
             ExerciseReferenceAngles();
+            ExerciseActorSkinRoot();
             ExerciseObjectAnimation();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
