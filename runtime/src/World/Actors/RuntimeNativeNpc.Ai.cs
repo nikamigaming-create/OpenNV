@@ -265,26 +265,29 @@ internal partial class RuntimeNativeNpc
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;
             if (data.Length != 12 || location.Length != 12) throw new InvalidDataException("AI package has an invalid field extent.");
-            if (data.Span[4] is not (6 or 15) || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0 ||
-                BinaryPrimitives.ReadInt32LittleEndian(location.Span[8..]) != 0)
+            if (data.Span[4] is not (6 or 15) || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0)
                 throw new NotSupportedException($"PACK {selected.FormKey} requires its travel/procedure owner.");
             var target = selected.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(location.Span[4..]));
             var reference = _aiCell!.References.SingleOrDefault(value => value.FormKey == target) ??
                 throw new NotSupportedException($"PACK {selected.FormKey} target {target} is outside the active cell.");
             if (data.Span[4] == 15)
             {
+                if (_packageIdleSource.LocationRadius != 0)
+                    throw new NotSupportedException($"PACK {selected.FormKey} requires its dialogue location-radius owner.");
                 BeginDialoguePackage(selected, reference);
                 return;
             }
             var furniture = _aiStack.GetEffective(reference.Base);
             if (furniture.Signature != "FURN")
             {
-                StartTravel(selected, reference);
+                StartTravel(selected, reference, destinationRadiusGameUnits: _packageIdleSource.LocationRadius);
                 _aiPackage = selected;
                 _packageEvents!.Change(_packageIdleSource);
                 CompletePendingTravel();
                 return;
             }
+            if (_packageIdleSource.LocationRadius != 0)
+                throw new NotSupportedException($"PACK {selected.FormKey} requires its furniture location-radius owner.");
             BeginFurniturePackage(selected, reference, furniture, initializing);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)

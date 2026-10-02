@@ -76,8 +76,15 @@ The resumed ordinary route executes Dad's On End result and enters stage 16.
 Its QSDT starts Dad's next voice. The [source door-state owner](source-door-state.md)
 now executes `CG01PlaypenGateREF.setOpenState 0` in both the owned native fixture
 and the resumed ordinary route, with its actual source collision. Dad then selects
-CG01DadCloseDoor (FalloutNV.esm:0457c4), whose travel/procedure remains unbound.
-The quest stays at stage 16 with that visible AI error.
+CG01DadCloseDoor (FalloutNV.esm:0457c4). A second fresh ordinary route again
+reaches stage 16 and reproduces its nonzero-location-radius refusal. The
+[source marker-radius owner](source-marker-travel-radius.md) now passes the
+radius 25 to owned NAVM, refuses endpoints outside its radius and completes the
+actual package in the selected native fixture. The zero-radius arrival/result
+regression still passes. This package's own result scripts are empty; its
+attached actor script separately declares OnPackageDone and the next stage.
+That typed reference-package event bridge remains unowned. Ordinary continuation
+with the candidate, subsequent stage programs and complete cold travel remain open.
 The gurney departure, toddler quest completion and Vault exit remain open.
 
 The [source camera repeat owner](player-package-camera-loops.md) now runs each
@@ -89,9 +96,16 @@ sound-child reuse and voice-retirement checks. The mixer fixture observes nonzer
 output without recording frames. Fresh ordinary input reaches CG01 stage 10 with
 current/pending camera packages cleared and no camera or speech error. The new
 110-second stereo take shows the source movie and actual playroom, but the camera
-still remains under the birth-room lamp until the fade. Proper gurney room
-departure is not accepted. Its source motion targets and removal timing are the
-camera agent's next investigation.
+still remains under the birth-room lamp until the fade. Proper visible gurney
+room departure is not accepted. A separate fresh live clock/pose observation
+shows the actual current viewport camera advancing 6.74496 metres through the
+owned path before removal. The travel channel and source anchor are bound.
+The [quest elapsed-time repair](quest-script-clock-elapsed.md) fixes a general
+overdue-clock path that discarded new frame time from GetSecondsPassed. It
+retains scheduling debt, initial dispatch and saved clock fields. Synthetic and
+owned CG00 timer checks pass at 30/60/90 Hz and with a 750 ms frame, including
+modal suppression, once-only result and serialized overdue cold continuation.
+Visible departure, fade/speech alignment and matched retail timing remain open.
 
 The reviewed [tag skill menu](native-tag-skill-menu.md) uses winning Fallout XML,
 AVIF text/icons, bitmap fonts and source controls. Draft values, Reset,
@@ -104,9 +118,10 @@ branches and source compiled bindings. The selected JAM source audit admits
 46 of 52 scripts, previously 41; eight MCM initialization scripts each execute
 360 clean headless frames. Full module/player/MCM behavior remains unproved.
 JBTMCM's attached object-type script lacks quest-clock admission and remains
-visibly unowned. Both reviewed slices are integrated; the combined gate and
-selected owned audits pass, with native tag-menu stderr empty and its temporary
-PNG deleted after inspection. Publish after final diff review and exact-head CI.
+visibly unowned. The combined gate and selected owned audits pass, with native
+tag-menu stderr empty and its temporary PNG deleted after inspection. All five
+exact-head checks passed; the tag/postfix block is merged. Clean main equaled
+origin/main before the fresh radius/clock integration branch.
 
 ## Shared owners and checks
 
@@ -170,15 +185,14 @@ Recording is off during development and gates.
 
 ## Next owner
 
-Publish the integrated authored tag menu and typed postfix reference-call block
-after the combined gate and selected owned audits. Trace the observed incomplete
-gurney departure through source motion targets and script timing. Bind the
-reached CG01DadCloseDoor travel
-radius through the existing source NAVM destination-radius owner, retaining exact
-furniture approaches and once-only package results, then resume the ordinary
-toddler/Vault route. The UI owner traces the source SPECIAL book's native NIF,
-input proxies and immediate authoritative SPECIAL writes. The mod owner traces
-bare source-string argument binding and actual equipped-object queries. Preserve
+Publish the integrated source marker-radius and quest elapsed-time repairs after
+the combined gate, selected owned checks and exact-head CI, then resume the
+ordinary toddler/Vault route. Bind actual source OnPackageDone events through the
+typed PACK filter and existing reference-script owner; do not substitute quest
+results for arrival. The UI owner implements the source SPECIAL book's native
+NIF/input/session foundation with explicit permanent-read/base-write callbacks.
+The mod owner implements deferred source-string argument binding and graph-owned
+numeric defaults. Preserve
 the real inventory-reference identity gap; do not replace it with a base form.
 The source trigger sphere and gate clearance have now executed through normal
 input; preserve closed-door collision and reject unknown clearance.
@@ -202,6 +216,12 @@ Door-state checks: `tmp/door-state-contract.log`,
 Integrated camera checks: `tmp/gurney-runtime-gate.log` and
 `tmp/gurney-{camera,change,package}-owned.stdout.log`.
 Tag/postfix integration gate: `tmp/tags-postfix-runtime-gate.log`.
+Radius checks: `tmp/npc-radius-navigation.log`,
+`tmp/npc-radius-owned.stdout.log`, `tmp/npc-radius-exact-regression.log`.
+Radius/clock integration gate: `tmp/radius-clock-runtime-gate.log`.
+The combined required gate passes. Final integrated owned checks are
+`tmp/radius-clock-owned-timer.log`, `tmp/radius-clock-owned-travel.log` and
+`tmp/radius-clock-owned-zero.log`; all pass with recording off.
 Owned audit helpers: `tmp/Run-ToddlerAudit.ps1`,
 `tmp/Run-SpeechActorValuesAudit.ps1`.
 

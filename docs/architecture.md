@@ -10,6 +10,16 @@ phase and source identities validate before any live restoration mutation.
 See [camera repeats](player-package-camera-loops.md) for component proof and
 remaining body, blend, event-timing and ordinary-departure boundaries.
 
+Quest recurrence retains its scheduling countdown independently of elapsed time.
+After initial dispatch, overdue gameplay frames still contribute to the shared
+GetSecondsPassed accumulator. Existing snapshots retain both clock lanes; see
+[quest elapsed time](quest-script-clock-elapsed.md).
+
+NPC marker travel passes winning package radii into the owned NAVM planner and
+requires a bounded projected endpoint before the existing KF locomotion owner
+consumes arrival. Exact furniture/dialogue contracts remain separate. See
+[marker travel](source-marker-travel-radius.md).
+
 Scripted [door state](source-door-state.md) retains its target and completion in
 the shared reference world. Managed source controllers retain its clock and cold
 pose, project collision with the owned animated subtree and report completion.

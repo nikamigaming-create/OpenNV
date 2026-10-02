@@ -22,7 +22,11 @@ an owned native arrival/result fixture. The resumed ordinary route executes the
 result and enters stage 16. The [source door-state owner](source-door-state.md)
 now closes the actual gate through its winning QSDT in the owned fixture and
 ordinary route, with moving source collision and retained cold motion. Dad's next
-CG01DadCloseDoor travel/procedure is unbound and the quest stays at stage 16.
+The fresh ordinary route stays at stage 16 on CG01DadCloseDoor's nonzero-radius
+refusal. The [marker-radius owner](source-marker-travel-radius.md) now passes its
+radius through owned NAVM/KF and completes that package in the selected native
+fixture; zero-radius results still pass. The attached source OnPackageDone event
+and subsequent ordinary stage programs remain unowned.
 Further ordinary quest, full actor cold continuation and gurney/HUD behavior
 remain open; see [package results](package-event-results.md).
 The [camera repeat owner](player-package-camera-loops.md) now uses the winning
@@ -33,6 +37,11 @@ sound-child reuse and voice-cleanup checks with nonzero native mixer output and
 recording off. Fresh ordinary gurney departure and matched timing remain open.
 The fresh 110-second camera-build take reaches Baby Steps, but remains under the
 birth-room lamp before fading; proper gurney room departure is still unaccepted.
+Separate live camera/clock measurements show 6.74496 metres of actual viewport
+motion before removal. The general [quest elapsed-time repair](quest-script-clock-elapsed.md)
+retains overdue frame time and passes source CG00 timer, modal, once-only and
+serialized cold checks at 30/60/90 Hz and with a 750 ms frame. Visible departure
+and matched fade/speech/retail timing remain open.
 The [owned tag screen](native-tag-skill-menu.md) replaces its generic Godot column
 with winning XML, fonts, atlas and AVIF content. Isolated synthetic/native checks
 cover draft limits, values, Reset, keyboard/pointer input, pause and production

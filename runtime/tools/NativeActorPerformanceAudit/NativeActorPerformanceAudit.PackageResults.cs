@@ -10,7 +10,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private void PackageResults(string baseRoot, string mod, string root, string actorId, string questId,
-        short stage, short expected, string[] dependencies)
+        short stage, short? expected, string[] dependencies)
     {
         RuntimeNativeNpc? actor = null;
         try
@@ -45,16 +45,36 @@ public partial class NativeActorPerformanceAudit
             actor.ConfigureAi(records, quests, cell, Placement, world: world);
             var package = actor.CurrentPackage ?? throw new InvalidDataException("The owned fixture selected no package.");
             var source = records.GetEffective(package); var hash = SHA256.HashData(source.ReadData());
-            for (var frame = 0; quests.Stage(quest) != expected && frame < 60 * 120; frame++) actor._Process(1.0 / 60);
+            var declaration = FalloutScriptPackage.Read(source);
+            for (var frame = 0; (expected is { } resultStage ? quests.Stage(quest) != resultStage : actor.Traveling) &&
+                 frame < 60 * 120; frame++) actor._Process(1.0 / 60);
             var state = JsonSerializer.SerializeToElement(actor.AiState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var events = state.GetProperty("packageEvents");
-            if (quests.Stage(quest) != expected || effects.Count != 1 || effects[0].Stage != expected || actor.Traveling ||
+            var expectedResult = expected is { } requested ? quests.Stage(quest) == requested && effects.Count == 1 &&
+                effects[0].Stage == requested : quests.Stage(quest) == stage && effects.Count == 0;
+            if (!expectedResult || actor.Traveling ||
                 actor.AnimationError is not null || actor.AiError is not null || actor.PackageIdleError is not null ||
                 events.GetProperty("error").ValueKind != JsonValueKind.Null || !events.GetProperty("done").GetBoolean() ||
                 events.GetProperty("lastEvent").GetString() != "POEA" || !hash.SequenceEqual(SHA256.HashData(source.ReadData())))
-                throw new InvalidDataException("The source package arrival did not execute exactly one authored completion: " + events);
-            GD.Print($"OPENNV_NATIVE_PACKAGE_RESULTS_PASS actor={caller} package={package} quest={quest} initialStage={stage} resultStage={expected} " +
-                "sourceNavm=true sourceKf=true ordinaryActorOwner=true completionResult=true eventScope=true sourceUnchanged=true recording=false " +
+                throw new InvalidDataException("The source package arrival did not retain its authored completion: " + events);
+            if (declaration.LocationRadius > 0)
+            {
+                var target = cell.References.Single(value => value.FormKey == declaration.LocationReference);
+                var endpoint = new[] { actor.Position.X / units, -actor.Position.Z / units, actor.Position.Y / units };
+                if (!declaration.ContainsReferenceLocation(cell.Cell.FormKey, endpoint, cell.Cell.FormKey, target.Position) ||
+                    state.GetProperty("navigation").GetProperty("locationRadiusGameUnits").GetInt32() != declaration.LocationRadius)
+                    throw new InvalidDataException("Package arrival did not remain inside its owned reference radius.");
+                // Arrival is consumed once; staying in the source radius cannot
+                // replay the package's authored result on later actor frames.
+                for (var frame = 0; frame < 12; frame++) actor._Process(1.0 / 60);
+                if (effects.Count != (expected is null ? 0 : 1) || actor.AiError is not null || actor.AnimationError is not null)
+                    throw new InvalidDataException("Radius arrival repeated its result or lost the actor procedure.");
+            }
+            GD.Print($"{(expected is null ? "OPENNV_NATIVE_PACKAGE_TRAVEL_PASS" : "OPENNV_NATIVE_PACKAGE_RESULTS_PASS")} " +
+                $"actor={caller} package={package} quest={quest} initialStage={stage} resultStage={quests.Stage(quest)} " +
+                $"locationRadius={declaration.LocationRadius} endpointInSourceRadius={declaration.LocationRadius > 0} " +
+                "sourceNavm=true sourceKf=true ordinaryActorOwner=true " +
+                $"completionResult={expected is not null} eventScope=true sourceUnchanged=true recording=false " +
                 "boundary=isolated-owned-package-result-fixture stageProgramAndColdLifecycle=unverified parity=unverified");
         }
         finally { actor?.Free(); RuntimeLiveContentSource.Clear(); }

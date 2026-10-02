@@ -6,6 +6,14 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
+if (args.Length >= 7 && args[0] == "--audit-quest-clock")
+{
+    QuestScriptClockOwnedProbe.Run(args[1], args[2], args[3], args[4],
+        short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture),
+        short.Parse(args[6], System.Globalization.CultureInfo.InvariantCulture), args[7..]);
+    return;
+}
+
 if (args is ["--audit-quest-save", var saveRoot, var campaignSave])
 {
     QuestScriptSaveProbe.Run(saveRoot, campaignSave);

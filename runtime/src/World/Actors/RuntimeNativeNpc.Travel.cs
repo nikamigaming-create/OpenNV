@@ -18,6 +18,8 @@ internal partial class RuntimeNativeNpc
     private FalloutFormKey? _travelPackage;
     private FalloutFormKey? _travelTarget;
     private string? _travelPurpose;
+    private int _travelLocationRadiusGameUnits;
+    private Vector3 _travelLocationPosition;
 
     private object TravelState => new
     {
@@ -29,35 +31,44 @@ internal partial class RuntimeNativeNpc
         cursor = _travelProgress?.Cursor ?? 0,
         arrivalPending = _travelProgress?.ArrivalPending == true,
         target = new[] { _travelDestination.Origin.X, _travelDestination.Origin.Y, _travelDestination.Origin.Z },
+        location = new[] { _travelLocationPosition.X, _travelLocationPosition.Y, _travelLocationPosition.Z },
+        locationRadiusGameUnits = _travelLocationRadiusGameUnits,
         rootCycleDistance = _travelCycleDistance,
         source = "winning-navm-and-kf-accumulation",
         unbound = new[] { "dynamic-obstacle-avoidance", "turn-blending", "retail-path-costs" },
     };
 
-    private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target, Transform3D? furnitureApproach = null)
+    private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target, Transform3D? furnitureApproach = null,
+        int destinationRadiusGameUnits = 0)
     {
         if (furnitureApproach is null && !FalloutNewVegasBuiltinForms.IsInternalStatic(_aiCell!.BaseObjects[target.Base].Signature,
             _aiStack!.RuntimeFormId(target.Base)))
             throw new NotSupportedException($"PACK {package.FormKey} requires its non-marker interaction owner.");
         var destination = furnitureApproach ?? _referenceTransform!(target);
         StartTravelTo(package, target.FormKey, destination,
-            furnitureApproach is null ? "reference-marker" : "furniture-approach", furnitureApproach is not null);
+            furnitureApproach is null ? "reference-marker" : "furniture-approach", furnitureApproach is not null,
+            destinationRadiusGameUnits);
     }
 
     private void StartTravelTo(FalloutPluginRecord package, FalloutFormKey target, Transform3D destination,
-        string purpose, bool exact = false)
+        string purpose, bool exact = false, int destinationRadiusGameUnits = 0)
     {
+        if (destinationRadiusGameUnits < 0 || exact && destinationRadiusGameUnits != 0)
+            throw new InvalidDataException("Exact actor interaction cannot use a travel location radius.");
         _navigation ??= CellNavigationGraph.LoadOwned(_aiStack!, _aiCell!.Cell.FormKey);
         var units = Skeleton.UnitsToMetres;
         var sourceStart = new Vector3(Position.X, -Position.Z, Position.Y) / units;
         var sourceDestination = new Vector3(destination.Origin.X, -destination.Origin.Z, destination.Origin.Y) / units;
-        var path = _navigation.FindPath(sourceStart, sourceDestination).Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
+        var path = _navigation.FindPath(sourceStart, sourceDestination, destinationRadiusGameUnits: destinationRadiusGameUnits)
+            .Select(value => GamebryoCoordinate.ConvertVector(value) * units).ToArray();
         if (path.Length == 0) throw new InvalidDataException("Owned NAVM returned no travel corridor.");
         if (exact && path[^1] != destination.Origin) path = [.. path, destination.Origin];
         _travelDestination = exact ? destination : new(destination.Basis.Orthonormalized().Scaled(Scale), path[^1]);
         _travelPackage = package.FormKey;
         _travelTarget = target;
         _travelPurpose = purpose;
+        _travelLocationRadiusGameUnits = destinationRadiusGameUnits;
+        _travelLocationPosition = destination.Origin;
         _travelProgress?.Cancel();
         _travelProgress = new(path);
         _travelPublishedDistance = 0;
@@ -65,7 +76,8 @@ internal partial class RuntimeNativeNpc
         Activity.SetMovement(running: false, sneaking: false);
         PlayLocomotion(true);
         GD.Print($"OPENNV_NATIVE_PACKAGE_TRAVEL reference={Appearance.Reference} package={package.FormKey} target={target} " +
-            $"navmeshes={_navigation.NavMeshes} waypoints={_travelProgress.Waypoints} distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
+            $"navmeshes={_navigation.NavMeshes} waypoints={_travelProgress.Waypoints} locationRadius={destinationRadiusGameUnits} " +
+            $"distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
     }
 
     private void PlayLocomotion(bool moving)
