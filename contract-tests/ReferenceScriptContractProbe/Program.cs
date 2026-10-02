@@ -5,6 +5,27 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--challenge-contracts"])
+{
+    ChallengeContracts.Run();
+    return;
+}
+if (args.Length >= 5 && args[0] == "--audit-challenges")
+{
+    OwnedChallengeProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
+if (args is ["--age-race-contracts"])
+{
+    AgeRaceContracts.Run();
+    ActorAppearanceContracts.Run();
+    return;
+}
+if (args.Length >= 5 && args[0] == "--audit-age-race")
+{
+    OwnedAgeRaceProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
 if (args is ["--escort-contracts"])
 {
     EscortContracts.Run();
@@ -13,6 +34,16 @@ if (args is ["--escort-contracts"])
 if (args.Length == 1 && args[0] == "--quest-update-contracts")
 {
     QuestUpdateContracts.Run();
+    return;
+}
+if (args is ["--inventory-command-contracts"])
+{
+    InventoryCommandContracts.Run();
+    return;
+}
+if (args.Length >= 6 && args[0] == "--audit-inventory-commands")
+{
+    OwnedInventoryCommandProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
     return;
 }
 if (args.Length >= 5 && args[0] == "--audit-quest-updates")
@@ -385,6 +416,8 @@ DoorMotionContracts.Run();
 ReferenceAccessContracts.Run();
 NumericGameSettingContracts.Run();
 ActorAppearanceContracts.Run();
+ChallengeContracts.Run();
+AgeRaceContracts.Run();
 FaceGeometryContracts.Run();
 ScriptSoundContracts.Run();
 NoActivationSoundContracts.Run();
@@ -403,6 +436,7 @@ else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolPro
 else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var recoveryOutput])
     OwnedScriptRecoveryProbe.Run(recoveryRoot, recoverySave, recoveryOutput);
 StageAndInventoryContracts.Run();
+InventoryCommandContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();
 DestructionContracts.Run();

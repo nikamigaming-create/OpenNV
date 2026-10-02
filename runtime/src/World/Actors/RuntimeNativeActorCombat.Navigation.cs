@@ -13,6 +13,11 @@ internal sealed partial class RuntimeNativeActorCombat
     private float _waypointDistance = float.PositiveInfinity;
     private string? _routeError;
     private IEnumerator<IReadOnlyList<Vector3>?>? _routeSearch;
+    private NativeNavigationProbe? _routeProbe;
+    private Vector3 _routeEnd;
+    private float _routeSpacing;
+    private int _routeRefinements, _routeRefinementRequests;
+    private string? _coarseRouteError;
 
     private Vector3? PursuitTarget(Vector3 target, double delta, float stoppingDistance)
     {
@@ -20,6 +25,7 @@ internal sealed partial class RuntimeNativeActorCombat
         // still need a supported controller root before planning floor edges.
         if (!_mover!.IsOnFloor() && _pursuitPath.Length == 0) return null;
         _routeClock -= delta;
+        if (_routeDoor is not null && target.DistanceTo(_routeTarget) > _radius) ResetDoorNavigation();
         if (_routeSearch is not null && target.DistanceTo(_routeTarget) > _radius)
         {
             _routeSearch.Dispose(); _routeSearch = null; _routeClock = 0;
@@ -37,6 +43,11 @@ internal sealed partial class RuntimeNativeActorCombat
             _pursuitCursor++;
             _waypointDistance = float.PositiveInfinity;
             _routeStall = 0;
+        }
+        if (_routeDoor is not null)
+        {
+            if (AdvanceDoorNavigation(delta))
+                return _pursuitCursor < _pursuitPath.Length ? _pursuitPath[_pursuitCursor] : null;
         }
         if (_routeSearch is null && _routeClock <= 0 && (_pursuitCursor >= _pursuitPath.Length ||
             target.DistanceTo(_routeTarget) > _radius || _routeStall >= .75))
@@ -57,11 +68,17 @@ internal sealed partial class RuntimeNativeActorCombat
                 // End within the desired approach distance, not inside the
                 // target's physical body. Keep room for waypoint tolerance.
                 var approach = Math.Clamp(length - stoppingDistance + _radius * .5f, _radius * .5f, 8);
-                var (end, _) = NativeCapsuleNavigation.CorridorPrefix(_actor.GlobalPosition, coarse, approach);
+                var (end, resume) = NativeCapsuleNavigation.CorridorPrefix(_actor.GlobalPosition, coarse, approach);
+                _routeEnd = end;
+                _routeSpacing = Math.Max(.3f, _radius * 2);
+                _routeRefinements = 0;
+                _coarseRouteError = null;
+                var prefix = coarse.Take(resume).Append(end).ToArray();
+                _routeProbe = new(NativeCapsuleNavigation.FirstCorridorContact(_mover, _actor.GlobalPosition, prefix), _context.CollisionReference);
                 // The source corridor carries intent; the actor's own complete
                 // capsule, resident collision and floor rules supply clearance.
                 _routeSearch = NativeCapsuleNavigation.Search(_mover, _actor.GlobalPosition, end,
-                    _context.StepHeight, Math.Max(.3f, _radius * 2), _context.Resident, 512).GetEnumerator();
+                    _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe).GetEnumerator();
                 _routeClock = .5;
             }
             catch (InvalidOperationException error)
@@ -98,6 +115,21 @@ internal sealed partial class RuntimeNativeActorCombat
             _routeFailures = Math.Min(4, _routeFailures + 1);
             _routeClock = .5 * _routeFailures;
             _routeSearch!.Dispose(); _routeSearch = null;
+            var refinedSpacing = Math.Max(.15f, _radius);
+            if (_routeRefinements == 0 && refinedSpacing < _routeSpacing)
+            {
+                // A diameter-sized lattice can skip an executable short
+                // support transition. Refine once, with the same complete
+                // capsule, floor rules, node limit and shared time budget.
+                _coarseRouteError = error.Message;
+                _routeSpacing = refinedSpacing;
+                _routeRefinements++;
+                _routeRefinementRequests++;
+                _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, _routeEnd,
+                    _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe).GetEnumerator();
+                return;
+            }
+            BeginDoorNavigation();
         }
         finally
         {

@@ -76,7 +76,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case "unequipitem" when arguments.Count == 1:
                 var removedEquipment = bindings.Form(arguments[0]).FormKey;
-                if (_pluginStack.RuntimeFormId(target) == 0x14) _inventory.Unequip(_pluginStack, removedEquipment);
+                if (_pluginStack.RuntimeFormId(target) == 0x14) _inventory.Unequip(_pluginStack, removedEquipment, force: true);
                 else
                 {
                     if (_scripts.References!.IsResident(target))
@@ -235,7 +235,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             14 => _playerSkills.Value(checked((int)condition.Argument1)),
             67 => FalloutDialogueConditions.InInteriorCell(_pluginStack, _activeCell, condition.FormArgument1),
-            69 => condition.FormArgument1 == _pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId) ? 1 : 0,
+            69 => condition.FormArgument1 == _scripts.References!.ActorRace(_pluginStack.RuntimeFormKey(0x14)) ? 1 : 0,
             70 when condition.Argument1 <= 1 => _character.Female == (condition.Argument1 == 1) ? 1 : 0,
             72 => condition.FormArgument1 == _raceSexContract.Player ? 1 : 0,
             _ => throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} is unbound."),

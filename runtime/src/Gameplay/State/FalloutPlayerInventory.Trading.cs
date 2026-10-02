@@ -53,6 +53,7 @@ internal sealed partial class FalloutPlayerInventory
     {
         if (!sourceItems.TryGetValue(transfer.Form, out var source) || transfer.Count > source.Count)
             throw new InvalidOperationException($"Trade item quantity is no longer available: {transfer.Form}.");
+        if (source.UnequipLocked) throw new InvalidOperationException("Locked equipped items cannot be traded.");
         if (sourceEquipped.Contains(source.RuntimeFormId))
         {
             if (transfer.Count != source.Count)

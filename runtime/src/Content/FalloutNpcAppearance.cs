@@ -16,7 +16,7 @@ internal sealed record FalloutNpcFaceGen(FalloutFormKey Source, byte[] Symmetric
 internal sealed record FalloutActorAppearanceState(bool? Female, FalloutFormKey? Race,
     FalloutFormKey? Hair, FalloutFormKey? Eyes, FalloutNpcFaceGen? FaceGen = null,
     byte[]? HairColor = null, byte[]? HairLength = null, IReadOnlyList<FalloutFormKey>? HeadParts = null,
-    bool PlayerYoung = false);
+    bool PlayerYoung = false, float? Height = null, bool HairOverridden = false);
 
 internal sealed record FalloutNpcInventoryItem(FalloutFormKey Source, FalloutFormKey Item, string Signature,
     int Count, byte[]? ExtraData, IReadOnlyList<FalloutFormKey> PossibleArmor);
@@ -32,9 +32,10 @@ internal sealed record FalloutNpcAppearance(FalloutFormKey Npc, FalloutFormKey? 
     IReadOnlyList<FalloutNpcAppearancePart> RaceParts, IReadOnlyList<FalloutNpcAppearancePart> Models,
     IReadOnlyList<FalloutNpcInventoryItem> Inventory, IReadOnlyList<FalloutNpcArmor> Armor,
     IReadOnlyList<FalloutFormKey> EquippedArmor, IReadOnlyList<string> Blockers,
-    FalloutFormKey? Hair, FalloutFormKey? Eyes, bool RuntimeFace = false)
+    FalloutFormKey? Hair, FalloutFormKey? Eyes, bool RuntimeFace = false, float? HeightOverride = null)
 {
     internal bool CanConstruct => Blockers.Count == 0;
+    internal float Height => HeightOverride is { } height ? FalloutNpcHeight.Require(height) : FalloutNpcHeight.Normalize(NpcHeightBytes, RaceHeight);
 }
 
 /// <summary>
@@ -81,7 +82,8 @@ internal static class FalloutNpcAppearanceResolver
         var young = appearanceState?.PlayerYoung == true;
         var defaults = young ? OptionalBytes(race, "DNAM", 8) : [];
         var hair = young ? defaults.Length == 0 ? null : race.Plugin.AdjustOptionalFormId(
-            BinaryPrimitives.ReadUInt32LittleEndian(defaults.AsSpan(female ? 4 : 0))) : appearanceState?.Hair ?? OptionalForm(model, "HNAM");
+            BinaryPrimitives.ReadUInt32LittleEndian(defaults.AsSpan(female ? 4 : 0))) : appearanceState?.HairOverridden == true
+                ? appearanceState.Hair : appearanceState?.Hair ?? OptionalForm(model, "HNAM");
         if (hair is { } hairKey)
         {
             var hairRecord = Require(stack, hairKey, "HAIR");
@@ -142,7 +144,7 @@ internal static class FalloutNpcAppearanceResolver
             OptionalBytes(traits, "NAM6", 4), OptionalBytes(traits, "NAM7", 4),
             appearanceState?.HairColor ?? Bytes(model, "HCLR", 4), appearanceState?.HairLength ?? OptionalBytes(model, "LNAM", 4),
             appearanceState?.FaceGen ?? ReadFaceGen(model, model.ReadSubrecords().ToArray()),
-            raceFace, raceParts, parts, inventory, armors, selected, blockers, hair, eye, appearanceState is not null);
+            raceFace, raceParts, parts, inventory, armors, selected, blockers, hair, eye, appearanceState is not null, appearanceState?.Height);
     }
 
     internal static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort group)

@@ -5,6 +5,10 @@ namespace OpenNV.Runtime.Gameplay.State;
 /// <summary>Shared player item state for native source commands and saves.</summary>
 internal sealed partial class FalloutPlayerInventory
 {
+    internal FalloutPlayerInventory(ulong? randomState = null)
+    {
+        if (randomState is { } state) _random = new(state);
+    }
     private readonly Dictionary<FalloutFormKey, FalloutCampaignItem> _items = [];
     private readonly HashSet<uint> _equipped = [];
     private FalloutSoundRandomState _random = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
@@ -13,10 +17,11 @@ internal sealed partial class FalloutPlayerInventory
     internal IReadOnlyList<FalloutCampaignItem> Items => _items.Values.OrderBy(item => item.RuntimeFormId).ToArray();
     internal IReadOnlyList<uint> Equipped => _equipped.Order().ToArray();
     internal FalloutCampaignItem? Item(FalloutFormKey form) => _items.GetValueOrDefault(form);
-    internal void TransferTo(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex = null)
+    internal void TransferTo(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex = null, bool force = false)
     {
         if (ReferenceEquals(this, target)) throw new InvalidOperationException("Inventory transfer needs distinct owners.");
         var source = Item(form) ?? throw new InvalidOperationException("Transferred item is absent.");
+        if (source.UnequipLocked && !force) throw new InvalidOperationException("Locked equipped items cannot be transferred.");
         if (count <= 0 || count > source.Count) throw new ArgumentOutOfRangeException(nameof(count));
         var remaining = (source.Variants ?? [new(source.Count)]).ToList();
         var selected = new List<FalloutItemVariant>();
@@ -38,7 +43,12 @@ internal sealed partial class FalloutPlayerInventory
             if (index < 0) variants.Add(item);
             else variants[index] = variants[index] with { Count = checked(variants[index].Count + item.Count) };
         }
-        var addition = source with { Count = checked((previous?.Count ?? 0) + count), Variants = variants };
+        var addition = source with
+        {
+            Count = checked((previous?.Count ?? 0) + count),
+            Variants = variants,
+            UnequipLocked = previous?.UnequipLocked ?? false
+        };
         // Validate all additions before either side changes. Transfers preserve
         // instance condition/ownership and never reroll a leveled source list.
         target.Publish([addition]);
@@ -96,14 +106,14 @@ internal sealed partial class FalloutPlayerInventory
             var total = checked((previous?.Count ?? 0) + group.Sum(addition => addition.Variant.Count));
             replacements.Add(FalloutCampaignInventoryResolver.Resolve(records,
                 [new(records.RuntimeFormId(group.Key), name, source.Signature, total)], null).Items.Single() with
-            { Variants = variants });
+            { Variants = variants, UnequipLocked = previous?.UnequipLocked ?? false });
         }
         Publish(replacements); _random = random;
         if (!silent) Notifications.Publish(additions.GroupBy(addition => addition.Form)
             .Select(group => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, group.Key, group.Sum(value => value.Variant.Count))).ToArray());
     }
 
-    internal void Equip(FalloutPluginStack records, FalloutFormKey form)
+    internal void Equip(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip = null)
     {
         var item = Item(form) ?? throw new InvalidOperationException("Cannot equip an item absent from inventory.");
         if (item.RecordType is not ("ARMO" or "WEAP")) throw new NotSupportedException("Equipped item has no armor/weapon owner.");
@@ -114,18 +124,27 @@ internal sealed partial class FalloutPlayerInventory
             return System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
         }
         var slots = item.RecordType == "ARMO" ? Slots(form) : 0;
-        foreach (var equipped in _equipped.ToArray())
+        var displaced = new List<uint>();
+        foreach (var equipped in _equipped)
         {
             var other = records.GetEffective(records.RuntimeFormKey(equipped));
             if (item.RecordType == "WEAP" && other.Signature == "WEAP" || item.RecordType == "ARMO" &&
-                other.Signature == "ARMO" && (slots & Slots(other.FormKey)) != 0) _equipped.Remove(equipped);
+                other.Signature == "ARMO" && (slots & Slots(other.FormKey)) != 0)
+            {
+                if (other.FormKey != form && Item(other.FormKey)!.UnequipLocked) return;
+                displaced.Add(equipped);
+            }
         }
+        foreach (var equipped in displaced) _equipped.Remove(equipped);
         _equipped.Add(item.RuntimeFormId);
+        if (noUnequip is { } locked) _items[form] = item with { UnequipLocked = locked };
         ++Revision;
     }
-    internal bool Unequip(FalloutPluginStack records, FalloutFormKey form)
+    internal bool Unequip(FalloutPluginStack records, FalloutFormKey form, bool force = false)
     {
+        if (Item(form)?.UnequipLocked == true && !force) return false;
         if (!_equipped.Remove(records.RuntimeFormId(form))) return false;
+        if (Item(form) is { UnequipLocked: true } item) _items[form] = item with { UnequipLocked = false };
         ++Revision;
         return true;
     }
@@ -148,6 +167,7 @@ internal sealed partial class FalloutPlayerInventory
             {
                 Count = checked(item.Count + previous.Count),
                 Variants = (previous.Variants ?? [new(previous.Count)]).Concat(item.Variants ?? [new(item.Count)]).ToArray(),
+                UnequipLocked = previous.UnequipLocked,
             };
         }).ToArray();
         if (grant.EquippedRuntimeFormIds.Any(id => !additions.Any(item => item.RuntimeFormId == id) && !_items.Values.Any(item => item.RuntimeFormId == id)))
@@ -160,6 +180,9 @@ internal sealed partial class FalloutPlayerInventory
         if (_items.Count != 0 || _equipped.Count != 0) throw new InvalidOperationException("Inventory restoration requires a fresh owner.");
         if (equipped.Distinct().Count() != equipped.Count || equipped.Any(id => !inventory.Items.Any(item => item.RuntimeFormId == id)))
             throw new InvalidDataException("Restored equipment is absent or duplicated.");
+        if (inventory.Items.Any(item => item.UnequipLocked &&
+            (item.RecordType is not ("ARMO" or "WEAP") || !equipped.Contains(item.RuntimeFormId))))
+            throw new InvalidDataException("Restored locked equipment is not worn armor or a weapon.");
         Publish(inventory.Items.ToArray());
         _equipped.UnionWith(equipped);
         if (randomState is { } state) _random = new(state);

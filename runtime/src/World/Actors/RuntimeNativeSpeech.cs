@@ -14,6 +14,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal string? CommandKind;
         internal long CompletedCommands, Generation;
         internal FalloutFormKey? Topic;
+        internal FalloutFormKey? Listener;
         internal FalloutDialogueInfo? Info;
         internal int ResponseIndex;
         internal FalloutDialogueSpeaker? Identity;
@@ -92,6 +93,7 @@ internal partial class RuntimeNativeSpeech : Node
         var name = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "EDID").Data;
         voice.Command = new(name.IsEmpty ? speaker.ToString() : FalloutDialogueTopic.Text(name.Span), "player", info.Record.FormKey.ToString());
         voice.CommandKind = "conversation";
+        voice.Listener = _stack.RuntimeFormKey(0x14);
         voice.Topic = null;
         BindSpeaker(voice, record, ResidentSpeaker(record));
         voice.Info = info; voice.ResponseIndex = response; voice.ResponseCompleted = completed;
@@ -109,6 +111,7 @@ internal partial class RuntimeNativeSpeech : Node
                 info = voice?.Info?.Record.FormKey.ToString(),
                 speaker = voice?.Command?.SpeakerEditorId,
                 speakerReference = voice?.Reference.ToString(),
+                listenerReference = voice?.Listener?.ToString(),
                 command = voice?.CommandKind,
                 listenerLookOwner = voice?.CommandKind == "SayTo" ? "unbound" : "not-requested",
                 completedCommands = _completedCommands,
@@ -141,6 +144,7 @@ internal partial class RuntimeNativeSpeech : Node
     private static object ChannelState(Voice voice) => new
     {
         speakerReference = voice.Reference.ToString(),
+        listenerReference = voice.Listener?.ToString(),
         info = voice.Info?.Record.FormKey.ToString(),
         command = voice.CommandKind,
         completedCommands = voice.CompletedCommands,
@@ -209,35 +213,46 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void StartCore(FalloutSayToCommand command)
     {
-        if (!command.TargetEditorId.Equals("player", StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException("SayTo target needs its runtime actor owner.");
         var speakers = new[] { "ACHR", "ACRE" }.SelectMany(signature => _stack.EffectiveRecords(signature)).Where(record =>
             record.ReadSubrecords().Any(field => field.Signature == "EDID" &&
                 FalloutDialogueTopic.Text(field.Data.Span).Equals(command.SpeakerEditorId, StringComparison.OrdinalIgnoreCase))).ToArray();
         if (speakers.Length != 1) throw new InvalidDataException("SayTo speaker reference is absent or ambiguous.");
         var speaker = speakers[0];
-        StartCore(command, speaker, FalloutDialogueTopic.Find(_stack, "DIAL", command.TopicEditorId).FormKey);
+        var target = command.TargetEditorId.Equals("player", StringComparison.OrdinalIgnoreCase) ? _stack.RuntimeFormKey(0x14) :
+            new[] { "ACHR", "ACRE" }.SelectMany(signature => _stack.EffectiveRecords(signature)).Single(record =>
+                record.ReadSubrecords().Any(field => field.Signature == "EDID" &&
+                    FalloutDialogueTopic.Text(field.Data.Span).Equals(command.TargetEditorId, StringComparison.OrdinalIgnoreCase))).FormKey;
+        StartCore(command, speaker, FalloutDialogueTopic.Find(_stack, "DIAL", command.TopicEditorId).FormKey, target);
     }
 
     internal void SayTo(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic, bool forceSubtitles = false)
     {
-        if (_stack.RuntimeFormId(target) != 0x14) throw new NotSupportedException("SayTo target needs its runtime actor owner.");
-        ExecuteCommand(new(speaker.ToString(), "player", topic.ToString(), forceSubtitles), speaker, topic);
+        ExecuteCommand(new(speaker.ToString(), target.ToString(), topic.ToString(), forceSubtitles), speaker, topic, target);
     }
     internal void Say(FalloutFormKey speaker, FalloutFormKey topic, bool forceSubtitles = false) =>
-        ExecuteCommand(new(speaker.ToString(), "", topic.ToString(), forceSubtitles), speaker, topic);
-    private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic)
+        ExecuteCommand(new(speaker.ToString(), "", topic.ToString(), forceSubtitles), speaker, topic, null);
+    private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic, FalloutFormKey? target)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
-        try { StartCore(command, _stack.GetEffective(speaker), topic); }
+        try { StartCore(command, _stack.GetEffective(speaker), topic, target); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
             Fail(error); throw;
         }
     }
 
-    private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm)
+    private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target)
     {
+        FalloutDialogueSpeaker? listenerIdentity = null;
+        if (target is { } listener && listener != _stack.RuntimeFormKey(0x14))
+        {
+            var listenerReference = _stack.GetEffective(listener);
+            if (listenerReference.Signature is not ("ACHR" or "ACRE"))
+                throw new InvalidDataException("SayTo listener is not an actor reference.");
+            _ = ResidentSpeaker(listenerReference);
+            listenerIdentity = FalloutDialogueSpeaker.Read(_stack, FalloutDialogueTopic.RequiredForm(listenerReference, "NAME"),
+                _templates?.Invoke(listener));
+        }
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
         var npc = _stack.GetEffective(npcKey);
         if (npc.Signature is not ("NPC_" or "CREA")) throw new NotSupportedException("SayTo speaker is not an actor.");
@@ -247,7 +262,8 @@ internal partial class RuntimeNativeSpeech : Node
         var identity = FalloutDialogueSpeaker.Read(_stack, npcKey, _templates?.Invoke(speaker.FormKey));
         var conditions = new FalloutDialogueConditions(_stack,
             _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), speaker.FormKey, identity,
-            _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace);
+            _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace,
+            listener: target, listenerIdentity: listenerIdentity);
         var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate, random: _dialogueRandom);
         if (info is null)
         {
@@ -262,6 +278,7 @@ internal partial class RuntimeNativeSpeech : Node
         BindSpeaker(voice, speaker, actor);
         voice.Command = command;
         voice.CommandKind = command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
+        voice.Listener = target;
         voice.Topic = topicForm;
         voice.Info = info;
         voice.ResponseIndex = 0;

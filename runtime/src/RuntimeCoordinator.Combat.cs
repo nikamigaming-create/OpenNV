@@ -19,5 +19,8 @@ public partial class RuntimeCoordinator
         {
             if (_nativeReferenceEvents?.DispatchActorEvent(actor, name) != true)
                 throw new InvalidOperationException($"Actor event {actor}/{name} has no resident owner.");
-        }, () => _nativeActiveCell?.Cell.FormKey, _configuration.Player.MaximumWalkableSlopeDegrees);
+        }, () => _nativeActiveCell?.Cell.FormKey, _configuration.Player.MaximumWalkableSlopeDegrees,
+        (actor, collider, activate) => _nativeReferenceEvents?.RouteDoor(actor, collider, activate) ??
+            new(null, Error: "NPC route door has no resident activation owner."),
+        collider => _nativeReferenceEvents?.CollisionReference(collider));
 }

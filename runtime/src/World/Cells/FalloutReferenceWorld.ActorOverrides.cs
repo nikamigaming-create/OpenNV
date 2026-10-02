@@ -57,14 +57,23 @@ internal sealed partial class FalloutReferenceWorld
                 (style.Value != 0 || !FormOverride(style.Form, "CSTY", 0).Sha256.Equals(style.Sha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Saved combat style differs from source.");
             if (snapshot.Race is { } race &&
-                (ActorOverrideSource(snapshot.Target).Signature != "NPC_" || snapshot.Target == records.RuntimeFormKey(7) || race.Value != 0 ||
+                (ActorOverrideSource(snapshot.Target).Signature != "NPC_" || race.Value != 0 ||
                 !FormOverride(race.Form, "RACE", 0).Sha256.Equals(race.Sha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Saved actor race differs from its winning NPC/RACE source.");
+            if (snapshot.Height is { } height)
+            {
+                if (ActorOverrideSource(snapshot.Target).Signature != "NPC_") throw new InvalidDataException("Saved height is not an NPC base override.");
+                _ = FalloutNpcHeight.Require(height);
+            }
+            if (snapshot.Hair is { } hair && (ActorOverrideSource(snapshot.Target).Signature != "NPC_" ||
+                (hair.Form is null ? hair.Sha256 is not null :
+                    !FormOverride(hair.Form.Value, "HAIR", 0).Sha256.Equals(hair.Sha256, StringComparison.OrdinalIgnoreCase))))
+                throw new InvalidDataException("Saved actor hair differs from its winning source.");
             if (snapshot.FaceGeometry is { } face) ValidateFaceGeometry(snapshot, face);
             admitted[snapshot.Target] = CloneFace(snapshot);
         }
-        var changedAppearance = _actorOverrides.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null).Select(item => item.Key)
-            .Concat(admitted.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null).Select(item => item.Key)).Distinct().ToArray();
+        var changedAppearance = _actorOverrides.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null || item.Value.Height is not null || item.Value.Hair is not null).Select(item => item.Key)
+            .Concat(admitted.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null || item.Value.Height is not null || item.Value.Hair is not null).Select(item => item.Key)).Distinct().ToArray();
         _actorOverrides.Clear();
         foreach (var (key, value) in admitted) _actorOverrides.Add(key, value);
         foreach (var key in changedAppearance) _appearanceRevisions[key] = ++_appearanceRevision;

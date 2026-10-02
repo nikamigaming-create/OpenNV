@@ -2,100 +2,105 @@
 
 ## Active objective
 
-Complete the bot-driven TTW campaign from the genuine Fallout 3 checkpoint through
-all Vault 101 quests including the G.O.A.T., Megaton, authored Union Station
-power/ticket/train travel and the Mojave, then Benny and continued campaign play.
-The October 2 user request resumes implementation and ordinary bot input.
-The bot may read the complete owned graph and authoritative observations, then
-acts through ordinary walk/look/activate/dialogue/menu controls. Stage injection,
-teleportation and fixture outcomes never count as campaign progress.
+The user requested a durable stopping point on October 2. The game is stopped
+and genuine checkpoints are preserved. The required runtime gate, selected owned
+audits and resume instructions accompany this implementation block.
+On resumption, use ordinary bot input to complete Vault 101 and reach Megaton
+with retail behavior under TTW's authored overrides.
 
-Complete all nine JAM modules, MCM, TTW dependencies and compatible guide
-recommendations, Benny's selected deleveling/confiscation/recovery and the ten
-original mod targets. Preserve general Nexus script/dependency compatibility,
-source-authored classic screens, shared flat/OpenXR gameplay and saves, audio,
-HUD, smoothness and truthful journey video. All 36
+The full objective remains Vault 101 including the G.O.A.T., Megaton, authored
+Union Station power/ticket/train travel, the Mojave, Benny and continued play.
+Complete JAM/MCM, TTW dependencies, compatible guide recommendations and the
+original mod targets through the same first-party runtime owners. All 36
 [recovery requirements](recovery-checklist.md) remain open. Follow the
 [implementation plan](implementation-plan.md), [mod compatibility](mod-compatibility.md),
 [flat work order](flat-gameplay-plan.md) and [JAM/MCM plan](jam-luna-max-plan.md).
 
-## Verified starting point
+## Verified campaign state
 
-Ordinary opening input reaches the toddler playroom. The prior run reaches
-CG01 stages 0/5/10/12/14/16/18/20/30/40. Its genuine pre-book autosave is v26;
-book activation previously entered stage50 before failing at `ssbmp 40`.
-The saved pre-activation book has no script error. The manual stage16 slot remains
-intact. The initial route was human-driven; bot campaign progress starts here.
-The repaired bot cold-loads that genuine save, walks/aims/activates the real book,
-and observes source stage50 and menu1060. Ordinary source-geometry pointer input
-allocates40 points, retaining immediate shared BASE writes, then Done restores
-gameplay. Saving while the book is active correctly refuses continuation loss.
-The source timer and Dad's return/speech advance70/72/73/74/75/80. Dad's shared
-Escort procedure acquires the player and begins native movement. The closed,
-unlocked main door blocks his route; ordinary bot activation opens it, Dad
-continues and waits for the trailing player, then the bot follows him to the
-source destination. His completion advances90/100 and stops/completes CG01.
-CG02 enters0/5, then the calling CG01 script retains an unbound `player.AgeRace`
-failure before birthday-room relocation. This run's gameplay is bot-driven from
-the copied stage40 checkpoint; no stage injection or teleport was used.
-The complete birthday quest, Vault exit, Megaton, train and Mojave remain unreached.
+The bot starts at the genuine human-reached toddler stage40 checkpoint. Its
+ordinary approach, book activation and source pointer controls allocate40
+SPECIAL points, close menu1060 and advance source CG01 through50/70/72/73/74/75/80.
+Ordinary bot main-door activation and following Dad reach90/100, complete and
+stop CG01, then enter CG02 stages0/5. The latest run passes the executed signed
+AgeRace and birthday player inventory commands, but stops at Look/speech for
+Amata, whose source child mouth mesh cannot yet assemble. The player remains
+in the original Vault cell before the queued birthday-room relocation.
+Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
-The genuine stage40 and stage16 saves are backed up separately under
-`local/ttw-bot-resume-20261002/`; their original run remains unchanged.
+The genuine closed-door stage80 checkpoint cold-loads with acquired Escort
+progress intact. The actual automatic-door retry strands Dad on a source coffee
+table before activation. New contact telemetry identifies the table separately
+from the intended door. A bounded finer capsule search now passes an isolated
+owned-table fixture and ordinary native controller traversal; the repaired
+closed-door campaign retry remains pending. A subsequent actual bot interaction
+opens the door, but the stranded coarse route still refuses descent. The latest
+birthday continuation therefore uses the earlier genuinely reached open-door
+stage80 checkpoint. No collision geometry or campaign stages were edited.
 
-## Active implementation
+The live follow also exposed short-endpoint oscillation when ordinary movement
+passes a two-centimetre arrival radius. A closer ordinary follow goal continued
+the hall route. Sampled crossing/closing policy remains a bot owner to repair.
 
-The candidate integrates reference access, player SPECIAL pools and save
-binding, production book/scoped quest observations, source Escort motion and
-quest-update commands. Bot navigation now distinguishes partial/projected
-endpoints, retains bounded closing progress and replans for a moving target.
-Activation results require effects or matching requests from the actual source
-OnActivate blocks; unrelated timers, stages and menu changes cannot complete it.
+## Current implementation block
 
-The next gameplay owner is the shared signed race-age transition reached by CG02,
-followed by its inventory reset and equipment commands. Automatic NPC door
-activation also remains an active general navigation gap.
-The settled post-book stage50 slot and stage80 door-interaction autosave retain
-the player's allocated BASE pools; the latter also retains acquired Escort
-progress. A fresh process cold-loads stage80, restores acquired Escort without
-replaying its start event, and follows through eight moving-target replans to
-the same source stage100/CG02-entry failure without a bot error. The stage80
-backup is now a verified reusable checkpoint for this bounded continuation.
-NPC automatic route-door activation remains unbound; the successful run used
-ordinary bot door input. No collision geometry was changed to pass the route.
-Retain pause/modal/mouse restoration and refuse active-continuation saving.
-Never clear saved faults or replay a consumed source prefix.
+Shared signed race aging follows winning RACE age links and persists effective
+race, mutable actor height and source hair fallback. Player and NPC appearance
+use the same state. New inventory commands bind RemoveAllItems, EquipItem,
+ResetInventory and typed GetEquippedObject to the existing authoritative owners.
+Source equipment locks, NPC reset random state and cold continuation are retained.
+The NPC SayTo target and listener conditions now use the actual resident actor.
+Scripted challenge unlock/progress and completion-statistic cascades retain
+source identities, once-only completion and cold state; reward scripts remain
+explicitly unbound. See [race aging](scripted-race-age.md),
+[inventory commands](inventory-script-commands.md) and
+[scripted challenges](scripted-challenges.md).
 
-The combined `scripts/Test-GodotRuntime.ps1` gate and selected installed-stack
-reference-access, player-value, quest-update and JDC audits pass. Final regressions
-retain queued autosaves during Escort initialization and preserve failed package
-results on unscripted actors across cold restoration without replay. Publish
-each completed block through a checked PR, merge and synchronize main.
-JAM's typed INI decoder, selected getter and loaded-plugin query pass focused
-synthetic and owned checks. The selected JDC initializer completes 360 audit
-invocations without error; its recurring callback next faults at its equipment
-query. Shared objective completion and deferred quest-HUD cancellation also
-pass focused contracts, the owned CG01 stage90 source audit and ordinary source
-continuation through stage90. Native HUD timing and pixels remain unverified.
-Equipment/extra-reference and JBTMCM object-script clock owners remain incomplete.
-The live checkpoint stack has18 plugins and six TTW dependency roots; JAM and
-Benny are not mounted. Their module acceptance remains separate work.
+The NPC navigation owner retains actual source corridor/rejected contacts,
+considers sibling NIF collision bodies only for the same placed reference,
+walks a validated approach and propagates the real actor through activation.
+Failed diameter-grid searches get one bounded radius-grid retry using the same
+capsule, floor and step rules. See [route doors](npc-door-navigation.md).
+The party-hat loader now distinguishes a model-local skin root from the actual
+actor influence palette while retaining previously supported nested actor roots.
+Both owned party-hat assemblies pass; see [skin roots](actor-skin-root.md). Component tests
+and owned fixtures do not establish ordinary campaign or retail visual parity.
+
+Campaign schema v27 admits the new height/hair, equipment-lock and challenge
+state. Existing v26 Escort/SPECIAL checkpoints remain readable. Never clear
+saved faults or replay a consumed source prefix to manufacture continuation.
+
+## Next owners
+
+1. Repair Amata's unskinned child mouth attachment from the winning source
+   FaceGen contract. The model lacks a Prn marker; a guessed parent is not a fix.
+2. Repair the Vault security outfit alternate-texture index/name mismatch and
+   the glasses environment-map source behavior. The actual missing actors remain
+   visible. Party-hat skin-root component repair still needs live scene acceptance.
+3. Retry the genuine closed-door stage80 with the integrated finer search and
+   actor-preserving door activation, then continue the source birthday scene.
+4. Repair short bot endpoint crossing and proceed through ordinary birthday
+   interactions, G.O.A.T. and Vault escape to Megaton. The reached challenge owner
+   is component-tested; ForceRadioStationUpdate still needs a real station owner.
+
+The live stack has18 plugins and six TTW dependency roots. JAM and Benny are
+not mounted in this checkpoint stack. Their module acceptance remains separate
+required work; selected initializer/parser admission is not full mod support.
+Flat and OpenXR share authoritative gameplay and saves; physical and matched
+retail presentation remain unverified.
 
 ## Private continuation
 
-Original run: `tmp/development-lab/ttw-departure-clock-20261001/`.
-Active bot run: `tmp/development-lab/ttw-bot-20261002/`; exited normally after the
-retained CG02-entry AgeRace failure. Source stages, bot input, build hash and
-selected observations are private. Genuine stage40, stage50 and stage80 backups
-remain available; do not load the failed continuation as a repaired prefix.
-Private preserved saves: `local/ttw-bot-resume-20261002/`.
-Never publish saves, retail-derived media, binary observations or extracted assets.
-Preserve protected user saves under `local/playtest-20260927-world/` and
-`local/playtest-20260920-companion/`.
+Active run: `tmp/development-lab/ttw-bot-20261002/`; exited normally after the
+latest source CG02-entry failure. Frame recording is off. Original run:
+`tmp/development-lab/ttw-departure-clock-20261001/`, left unchanged.
+Genuine stage16, stage40, stage50 and both open/closed stage80 backups are under
+`local/ttw-bot-resume-20261002/`; the closed stage80 is the preferred next retry.
+The private manifest retains hashes, build identity, checks and publication.
+Do not resume the failed CG02 prefix as though its source effects had completed.
 
-Frame recording is off during development, headless checks and ordinary bot
-investigation. Enable only for a selected visual check; delete temporary frames
-in cleanup/finally paths. Existing requested selected media stays in
-`local/recordings/ttw-current-opening-20261001/`. The complete journey reel remains
-pending. Proper gurney departure, cold actor faults, timing, smoothness and
-matched retail/OpenXR presentation remain unverified.
+Protected user saves under `local/playtest-20260927-world/` and
+`local/playtest-20260920-companion/` remain untouched. Never publish saves,
+retail-derived media, extracted assets or binary observations. Keep recording
+off during development; selected visual checks require cleanup of temporary
+frames. The requested complete journey video remains pending.

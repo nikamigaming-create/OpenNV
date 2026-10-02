@@ -653,6 +653,8 @@ try
         Record("WTHR", 0x15e, 0, Subrecord("NAM0", weatherColors)),
         Record("CLMT", 0x15f, 0, Subrecord("TNAM", [24, 48, 96, 120, 0, 0])),
         Record("REGN", 0x990, 0, Subrecord("EDID", ZString("SyntheticRegion"))),
+        Record("CHAL", 0x9d0, 0, Combine(Subrecord("EDID", ZString("SyntheticScriptedChallenge")),
+            Subrecord("DATA", Combine(UInt32(13), UInt32(2), UInt32(1), UInt32(1), new byte[8])))),
         Record("CELL", 0x100, 0, Combine(
             Subrecord("EDID", ZString("SyntheticCell")),
             Subrecord("DATA", [1]),
@@ -1426,6 +1428,78 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema });
+    var v26Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(v26Restore.State.Schema == FalloutNativeCampaignSave.ReferenceAccessSchema &&
+        FalloutNativeCampaignSave.WithWorldState(v26Restore.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The v26 checkpoint no longer restores and upgrades through the campaign owner.");
+    var challengeForm = cellStack.RuntimeFormKey(0x9d0);
+    var campaignChallenges = new FalloutChallenges(cellStack, new());
+    campaignChallenges.Unlock(challengeForm); campaignChallenges.IncrementScripted(challengeForm);
+    var challengeSave = referenceSave with
+    {
+        Quests = [], Scripts = new([], [], Challenges: campaignChallenges.Capture()),
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave);
+    var challengeRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    var coldChallenges = new FalloutChallenges(cellStack, new()); coldChallenges.Restore(challengeRestore.State.Scripts!.Challenges);
+    Require(coldChallenges.State(challengeForm) is { Unlocked: true, Progress: 1, Completed: false },
+        "Current campaign save lost unlocked partial challenge progress.");
+    coldChallenges.IncrementScripted(challengeForm); coldChallenges.IncrementScripted(challengeForm);
+    Require(coldChallenges.State(challengeForm) is { Completed: true, Progress: 2 } && coldChallenges.ChallengesCompleted == 1,
+        "Cold campaign challenge failed to finish once through its authoritative owner.");
+    foreach (var oldSchema in new[] { FalloutNativeCampaignSave.ReferenceAccessSchema, FalloutNativeCampaignSave.ReferenceAccessLegacySchema })
+    {
+        foreach (var legacyChallenge in new FalloutChallengesSnapshot?[] { null, new([], 0) })
+        {
+            var legacyChallengeSave = challengeSave with { Schema = oldSchema, Scripts = challengeSave.Scripts! with { Challenges = legacyChallenge } };
+            FalloutNativeCampaignSave.Write(syntheticSavePath, legacyChallengeSave);
+            _ = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+                cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+        }
+        foreach (var invalidChallenges in new[] { campaignChallenges.Capture(), new FalloutChallengesSnapshot([], 1) })
+        {
+            // Read deliberately bypasses Write so the schema boundary is tested
+            // against existing bytes, not only the writer's validation.
+            var invalidLegacy = challengeSave with { Schema = oldSchema, Scripts = challengeSave.Scripts! with { Challenges = invalidChallenges } };
+            File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(invalidLegacy));
+            ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+                cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell),
+                "Challenge state requires the current campaign save schema");
+        }
+    }
+    FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave);
+    var validChallengeBytes = File.ReadAllBytes(syntheticSavePath);
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema }),
+        "Challenge state requires the current campaign save schema");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(validChallengeBytes), "Rejected legacy challenge state replaced a current save.");
+    var playerBase = cellStack.GetEffective(cellStack.RuntimeFormKey(7));
+    var heightSave = referenceSave with
+    {
+        ActorOverrides = [new(playerBase.FormKey, Convert.ToHexString(SHA256.HashData(playerBase.ReadData())).ToLowerInvariant(), [], [],
+            Height: .8f, Hair: new(null, null))],
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, heightSave);
+    var heightRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(heightRestore.State.ActorOverrides!.Single() is { Height: .8f, Hair: { Form: null } },
+        "Campaign restoration lost stored height or an explicit bald race fallback.");
+    var currentHeightBytes = File.ReadAllBytes(syntheticSavePath);
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, heightSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema }),
+        "Legacy campaign save cannot contain stored actor height or race hair state");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(currentHeightBytes), "Rejected v26 appearance state replaced a valid save.");
+    var lockItem = referenceSave.Inventory.First(item => item.RecordType is "ARMO" or "WEAP" && referenceSave.EquippedRuntimeFormIds.Contains(item.RuntimeFormId));
+    var lockedSave = referenceSave with { Inventory = referenceSave.Inventory.Select(item => item.RuntimeFormId == lockItem.RuntimeFormId ? item with { UnequipLocked = true } : item).ToArray() };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, lockedSave);
+    var lockedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(lockedRestore.Inventory.Items.Single(item => item.RuntimeFormId == lockItem.RuntimeFormId).UnequipLocked,
+        "Campaign cold inventory lost an equipped script lock.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, lockedSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema }),
+        "Equipment locks require the current campaign save schema");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessLegacySchema });
     var legacyAccessState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

@@ -9,6 +9,8 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativeActorCombat
 {
     private CharacterBody3D? _mover;
+    private CollisionShape3D? _movementEnvelope;
+    private float _movementSkeletonScale, _movementActorScale;
     private float _radius, _motionScale, _turnSpeed;
     private string? _movementBlock;
     private string? _stepBlock;
@@ -19,6 +21,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private object MotionObservation => new
     {
         radius = _radius,
+        routeDoor = DoorNavigationObservation,
         waypoints = _pursuitPath.Length,
         cursor = _pursuitCursor,
         waypoint = _pursuitCursor < _pursuitPath.Length ? new float[]
@@ -28,6 +31,10 @@ internal sealed partial class RuntimeNativeActorCombat
         routeError = _routeError,
         routeRequests = _routeRequests,
         routePlanning = _routeSearch is not null,
+        routeSpacing = _routeSpacing,
+        routeRefinements = _routeRefinements,
+        routeRefinementRequests = _routeRefinementRequests,
+        coarseRouteError = _coarseRouteError,
         routeMilliseconds = _routeMilliseconds,
         routeSourceMilliseconds = _routeSourceMilliseconds,
         routeMaximumSliceMilliseconds = _routeMaximumSliceMilliseconds,
@@ -41,7 +48,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void PrepareMovement()
     {
-        if (_mover is not null) return;
+        if (_mover is not null && _movementSkeletonScale == _skeleton.Node.Scale.X && _movementActorScale == _actor.Scale.X) return;
+        var refreshing = _mover is not null;
         var mover = (CharacterBody3D)_actor;
         var source = _skeleton.Source;
         var bound = source.Roots.Select(source.ReadNode).SelectMany(node => node.ExtraData).Where(index => index >= 0)
@@ -69,19 +77,29 @@ internal sealed partial class RuntimeNativeActorCombat
         mover.CollisionLayer = 0; mover.CollisionMask = _mask;
         mover.FloorSnapLength = radius;
         mover.FloorMaxAngle = Mathf.DegToRad(_context?.MaximumWalkableSlopeDegrees ?? PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
-        mover.AddChild(new CollisionShape3D
+        if (_movementEnvelope is null)
         {
-            Name = "SourceActorMovementEnvelope",
-            Position = Vector3.Up * height / 2,
-            // Squat creatures cannot fit a vertical capsule without either
-            // narrowing their footprint or inflating their authored height.
-            // Native sweeps/stepping already query the body's actual shape.
-            Shape = height >= radius * 2
-                ? new CapsuleShape3D { Radius = radius, Height = height }
-                : new CylinderShape3D { Radius = radius, Height = height }
-        });
+            _movementEnvelope = new() { Name = "SourceActorMovementEnvelope" };
+            mover.AddChild(_movementEnvelope);
+        }
+        _movementEnvelope.Position = Vector3.Up * height / 2;
+        // Squat creatures retain their authored height and footprint.
+        _movementEnvelope.Shape = height >= radius * 2
+            ? new CapsuleShape3D { Radius = radius, Height = height }
+            : new CylinderShape3D { Radius = radius, Height = height };
+        _movementSkeletonScale = _skeleton.Node.Scale.X;
+        _movementActorScale = _actor.Scale.X;
         _mover = mover;
+        if (refreshing)
+        {
+            ResetDoorNavigation();
+            _routeSearch?.Dispose(); _routeSearch = null;
+            _pursuitPath = []; _pursuitCursor = 0;
+            _routeClock = 0; _routeStall = 0; _waypointDistance = float.PositiveInfinity;
+        }
     }
+
+    internal void RefreshAppearanceMovement() { if (_mover is not null) PrepareMovement(); }
 
     internal float PreparePortalArrival() { PrepareMovement(); return _radius; }
 

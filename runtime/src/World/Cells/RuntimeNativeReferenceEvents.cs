@@ -24,7 +24,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private FalloutReferenceWorld _world = null!;
     private RuntimeNativeReferencePresentation? _presentation;
     internal RuntimeNativePlayer? Player { get; set; }
-    internal Action<FalloutPlacedReference, Node3D?, string>? Interact { get; set; }
+    internal Action<FalloutPlacedReference, Node3D?, string, FalloutFormKey>? Interact { get; set; }
     internal Action<FalloutFormKey>? ObservePlayerActivationBegin { get; set; }
     internal Action<FalloutFormKey, bool>? ObservePlayerActivationEnd { get; set; }
     internal Action<FalloutFormKey, bool>? ObservePlayerActivationFinished { get; set; }
@@ -214,14 +214,20 @@ internal partial class RuntimeNativeReferenceEvents : Node
         return null;
     }
 
-    internal void DefaultActivate(FalloutFormKey reference)
+    internal void DefaultActivate(FalloutFormKey reference, FalloutFormKey? actionReference = null)
     {
         var binding = _bindings[reference];
+        var actor = actionReference ?? _records.RuntimeFormKey(0x14);
         if (binding.Instance.Destroyed || binding.Instance.DeletePending) return;
+        if (actor != _records.RuntimeFormKey(0x14) && binding.Signature != "ACTI")
+        {
+            if (binding.Signature != "DOOR") throw new NotSupportedException($"Default activation of {binding.Signature} by {actor} has no actor interaction owner.");
+            RequireNpcDoor(binding, actor);
+        }
         if (binding.Signature is "DOOR" or "CONT" || FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
             binding.Signature is "NPC_" or "CREA" && _world.IsDead(reference))
         {
-            (Interact ?? throw new InvalidOperationException("Reference interaction owner is absent."))(binding.Reference, binding.Node, binding.Signature);
+            (Interact ?? throw new InvalidOperationException("Reference interaction owner is absent."))(binding.Reference, binding.Node, binding.Signature, actor);
             return;
         }
         var type = binding.Signature;
@@ -246,7 +252,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     {
         if (!_bindings.TryGetValue(reference, out var binding)) throw new NotSupportedException("Script activation target has no resident event owner.");
         if (binding.Instance.DeletePending) return;
-        if (!runOnActivate) { DefaultActivate(reference); return; }
+        if (!runOnActivate) { DefaultActivate(reference, actor); return; }
         if (binding.PendingActivation is not null) throw new InvalidOperationException("Reference already has an admitted activation.");
         binding.PendingActivation = actor;
     }

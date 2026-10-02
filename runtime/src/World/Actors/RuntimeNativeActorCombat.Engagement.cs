@@ -9,7 +9,9 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
     Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,
     Func<int> Level, FalloutGlobalState Globals, float StepHeight, float Gravity,
     Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null,
-    float MaximumWalkableSlopeDegrees = PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
+    float MaximumWalkableSlopeDegrees = PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees,
+    Func<FalloutFormKey, ulong, bool, NativeRouteDoorStatus>? RouteDoor = null,
+    Func<ulong, FalloutFormKey?>? CollisionReference = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {

@@ -16,9 +16,18 @@ public partial class NativeLocomotionAudit : Node3D
                 GetTree().Quit();
                 return;
             }
+            if (arguments.FirstOrDefault() == "--route-door-contact")
+            {
+                await CheckRouteDoorContact();
+                await CheckSupportedDescentRefinement();
+                GetTree().Quit();
+                return;
+            }
             NativeNavigationContracts.Run();
             await CheckNavigation();
             await CheckNavigation(lowCeiling: true);
+            await CheckRouteDoorContact();
+            await CheckSupportedDescentRefinement();
             await Check(.3f, false, true);
             await Check(2, false, false);
             await Check(.3f, true, false);

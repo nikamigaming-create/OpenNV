@@ -128,10 +128,13 @@ public partial class RuntimeCoordinator
             }).CallDeferred();
     }
 
-    private void ActivateNativeObject(FalloutPlacedReference reference, Node3D? node, string type)
+    private void ActivateNativeObject(FalloutPlacedReference reference, Node3D? node, string type, FalloutFormKey actor)
     {
         var world = _nativeReferences!;
-        if (type is "DOOR" or "CONT" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
+        var player = actor == _nativePluginStack!.RuntimeFormKey(0x14);
+        if (!player && (type != "DOOR" || reference.Teleport is not null || world.GetLocked(reference.FormKey) != 0))
+            throw new NotSupportedException($"Default interaction by {actor} requires an unlocked ordinary door.");
+        if (player && type is "DOOR" or "CONT" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
         {
             GD.Print($"OPENNV_NATIVE_LOCKED reference={reference.FormKey} level={world.Lock(reference.FormKey)!.Level}");
             return;

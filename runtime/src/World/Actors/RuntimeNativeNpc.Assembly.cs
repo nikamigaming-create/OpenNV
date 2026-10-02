@@ -41,8 +41,7 @@ internal partial class RuntimeNativeNpc
                 actor.Skeleton = NativeNifMeshBuilder.BuildActorSkeleton(_prepared.Skeleton, _units);
                 actor.Skeleton.Node.SetMeta("opennv_source_model", appearance.SkeletonPath);
                 actor.AddChild(actor.Skeleton.Node);
-                // NAM6/NAM7 are unused; their legal zero values cannot collapse the body.
-                actor.Skeleton.Node.Scale = Vector3.One * appearance.RaceHeight;
+                actor.Skeleton.Node.Scale = Vector3.One * appearance.Height;
                 _stage = 0;
                 return false;
             }

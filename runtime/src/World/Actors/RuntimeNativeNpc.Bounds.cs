@@ -18,7 +18,7 @@ internal partial class RuntimeNativeNpc
                 .Where(bound => bound.Name == "BBX").ToArray();
             if (bounds.Length != 1 || !float.IsFinite(bounds[0].Dimensions.Z) || bounds[0].Dimensions.Z <= 0)
                 throw new NotSupportedException("Actor height requires one authored BBX bound.");
-            return bounds[0].Dimensions.Z * 2 * Appearance.RaceHeight;
+            return bounds[0].Dimensions.Z * 2 * Appearance.Height;
         }
     }
 

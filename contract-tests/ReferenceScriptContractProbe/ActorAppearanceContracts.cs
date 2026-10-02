@@ -43,6 +43,10 @@ internal static class ActorAppearanceContracts
             var raceCondition = new FalloutCondition(records.GetEffective(Key(0x100)), 0, 1, 69, 0x411, 0, 0, 0);
             Require(dialogue.Evaluate(raceCondition) == 1 && dialogue.Evaluate(raceCondition with { Argument1 = 0x401 }) == 0,
                 "Dialogue selection ignored the authoritative changed race.");
+            var matchedRevision = world.ActorAppearanceRevision(Key(0x900));
+            Require(world.MatchRace(Key(0x900), player) && world.ActorRace(Key(0x900)) == Key(0x411) &&
+                world.ActorAppearanceRevision(Key(0x900)) > matchedRevision,
+                "Matching a different source tier lost its existing appearance refresh semantics.");
             current = current with { Race = Key(0x411) };
             var revision = world.ActorAppearanceRevision(Key(0x900));
             Require(!world.MatchRace(Key(0x900), player) && world.ActorAppearanceRevision(Key(0x900)) == revision,
@@ -64,7 +68,10 @@ internal static class ActorAppearanceContracts
                 "Removing an override did not invalidate the resident or unloaded source body.");
             Require(world.MatchRace(Key(0x907), Key(0x900)) && world.ActorRace(Key(0x907)) == Key(0x412),
                 "Matching another source NPC ignored its changed base race.");
-            Reject(() => world.MatchRace(player, Key(0x903)));
+            current = current with { Race = Key(0x401) };
+            Require(world.MatchRace(player, Key(0x903)) && world.ActorRace(player) == Key(0x411),
+                "Shared race matching rejected the player or changed its age tier.");
+            world.RestoreActorOverrides(world.CaptureActorOverrides().Where(value => value.Target != Key(7)).ToArray());
             current = current with { Race = Key(0x401) };
             _ = world.MatchRace(Key(0x900), player);
             Require(dialogue.Evaluate(raceCondition) == 0 && dialogue.Evaluate(raceCondition with { Argument1 = 0x401 }) == 1,
@@ -107,8 +114,14 @@ internal static class ActorAppearanceContracts
         var data = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(data, 1.34f);
         return Record("TES4", 0, Field("HEDR", data));
     }
-    private static byte[] Race(uint id, uint? younger = null, uint? older = null) => Record("RACE", id,
-        Join(younger is { } y ? Field("YNAM", BitConverter.GetBytes(y)) : [], older is { } o ? Field("ONAM", BitConverter.GetBytes(o)) : []));
+    private static byte[] Race(uint id, uint? younger = null, uint? older = null)
+    {
+        var data = new byte[36];
+        BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(16), 1);
+        BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(20), 1);
+        return Record("RACE", id, Field("DATA", data),
+            Join(younger is { } y ? Field("YNAM", BitConverter.GetBytes(y)) : [], older is { } o ? Field("ONAM", BitConverter.GetBytes(o)) : []));
+    }
     private static byte[] Npc(uint id, uint race, uint script = 0) => Record("NPC_", id, Field("ACBS", new byte[24]),
         Field("RNAM", BitConverter.GetBytes(race)), script == 0 ? [] : Field("SCRI", BitConverter.GetBytes(script)));
     private static byte[] Reference(uint id, uint npc) => Record("ACHR", id, Field("EDID", Text($"Actor{id:x}")),

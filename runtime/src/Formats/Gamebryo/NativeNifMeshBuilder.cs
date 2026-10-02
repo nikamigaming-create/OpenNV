@@ -414,9 +414,15 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var skinData = (FalloutNifSkinData)_source.ReadObject(instance.Data);
             var partitionData = (FalloutNifSkinPartition)_source.ReadObject(instance.SkinPartition);
             var sourceRoot = _source.ReadNode(instance.SkeletonRoot);
-            var rootBone = skeleton.BoneIndex(sourceRoot.Name);
-            if (skeleton.Node.GetBoneParent(rootBone) != -1)
-                throw new NotSupportedException("Actor skin root is not a root of the external source skeleton.");
+            // The skin root identifies this model's coordinate frame. Its
+            // display name need not name an actor bone; only the influence
+            // palette is rebound to the external skeleton by source name.
+            if (!_source.Roots.Contains(instance.SkeletonRoot))
+            {
+                var rootBone = skeleton.BoneIndex(sourceRoot.Name);
+                if (skeleton.Node.GetBoneParent(rootBone) != -1)
+                    throw new NotSupportedException("Actor skin root is not a root of the external source skeleton.");
+            }
             var partitions = FalloutNifHardwareSkin.Read(instance, skinData, partitionData, data.Vertices.Length, data.Triangles);
             var material = BuildMaterial(geometry);
             foreach (var partition in partitions)

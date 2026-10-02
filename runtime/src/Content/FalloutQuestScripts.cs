@@ -62,7 +62,8 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
     IReadOnlyList<FalloutMessageRequest> Messages, FalloutHudNotificationsSnapshot? Notifications = null,
     FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
     IReadOnlyList<FalloutFormKey>? SaidInfos = null, int ParserVersion = 0,
-    FalloutScriptValueStoreSnapshot? Values = null, FalloutAuxiliaryStoreSnapshot? Auxiliary = null)
+    FalloutScriptValueStoreSnapshot? Values = null, FalloutAuxiliaryStoreSnapshot? Auxiliary = null,
+    FalloutChallengesSnapshot? Challenges = null)
 {
     internal void Validate()
     {
@@ -73,6 +74,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
         if (Values is { Strings: null })
             throw new InvalidDataException("Saved script value state is missing its string table.");
         Auxiliary?.Validate();
+        Challenges?.Validate();
         Session?.NoActivationSound?.Validate();
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
@@ -187,7 +189,7 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null,
     FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null,
     Func<string, FalloutActorValueRead, double>? ReadPlayerActorValue = null,
-    Action<string, string, double>? ChangePlayerActorValue = null);
+    Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -228,6 +230,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
     internal FalloutScriptSession Session { get; }
+    internal FalloutChallenges Challenges { get; }
     internal FalloutScriptEvents Events { get; }
     internal HashSet<FalloutFormKey> SaidInfos { get; } = [];
     internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
@@ -249,6 +252,7 @@ internal sealed class FalloutQuestScripts
         messageResults = MessageResults.Capture(),
         notifications = _inventory.Notifications.Capture(),
         session = Session.Capture(),
+        challenges = Challenges.Capture(),
         events = Events.State,
         strings = ScriptValues.Capture(),
         auxiliary = Auxiliary.State,
@@ -288,13 +292,14 @@ internal sealed class FalloutQuestScripts
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
-        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent());
+        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture());
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
         if (_instances.Any(instance => instance.Executions != 0 || instance.Clock.Invocations != 0) || _messages.Count != 0)
             throw new InvalidOperationException("Script restoration requires a fresh owner.");
         snapshot.Validate();
+        Challenges.Restore(snapshot.Challenges);
         ScriptValues.Restore(snapshot.Values);
         Auxiliary.RestorePermanent(snapshot.Auxiliary);
         ValidateValueHandles();
@@ -371,6 +376,7 @@ internal sealed class FalloutQuestScripts
         Sounds = references?.Sounds ?? new(records, Menus);
         NoActivationSound = references?.NoActivationSound ?? new(records, Sounds);
         Session = new(NoActivationSound);
+        Challenges = new(records, inventory.Notifications);
         ScreenBlood = references?.ScreenBlood ?? new(records);
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(
@@ -600,6 +606,17 @@ internal sealed class FalloutQuestScripts
             if (parts.Length == 1 && operation == "getinchargen")
                 return new([], _ => Session.InCharGen ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
+            if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
+                return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var target = caller?.FormKey(_records) ?? (parts.Length == 2
+                        ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey);
+                    var owner = host?.Inventory ?? new FalloutInventoryCommands(_records, References ??
+                        throw new NotSupportedException("Equipment query has no reference world."), _inventory,
+                        () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
+                    var equipped = owner.EquippedObject(target, FalloutInventoryCommands.Slot(arguments[0].Number));
+                    return FalloutScriptValue.Form(equipped is { } item ? _records.RuntimeFormId(item) : 0);
+                });
             if (parts.Length == 1 && FalloutInputControlCommands.IsQuery(operation))
                 return FalloutInputControlCommands.Query(operation, Controls ?? throw new NotSupportedException("Control queries have no profile input owner."));
             if (parts.Length == 1 && operation is "getnthperkentryvalue1" or "getnthperkentryvalue2" or
@@ -727,6 +744,36 @@ internal sealed class FalloutQuestScripts
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length <= 2 && operation is "equipitem" or "equipobject" or "removeallitems" or "resetinventory")
+            {
+                var target = parts.Length == 2 ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey;
+                bool Flag(string token) => NumberArgument(token) switch
+                { 0 => false, 1 => true, _ => throw new InvalidDataException("Inventory command flag is not boolean.") };
+                var owner = host?.Inventory ?? new FalloutInventoryCommands(_records, References ??
+                    throw new NotSupportedException("Inventory command has no reference world."), _inventory,
+                    () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
+                var request = operation switch
+                {
+                    "equipitem" or "equipobject" when arguments.Count is >= 1 and <= 3 => new FalloutInventoryCommand(
+                        FalloutInventoryCommandKind.Equip, target, Item: Form(arguments[0]).FormKey,
+                        NoUnequip: arguments.Count >= 2 && Flag(arguments[1]), Silent: arguments.Count < 3 || Flag(arguments[2])),
+                    "removeallitems" when arguments.Count <= 3 => new FalloutInventoryCommand(
+                        FalloutInventoryCommandKind.RemoveAll, target,
+                        Destination: arguments.Count == 0 || arguments[0] == "0" ? null : instance.Bindings.Reference(arguments[0]),
+                        RetainOwnership: arguments.Count >= 2 && Flag(arguments[1]), Silent: arguments.Count >= 3 && Flag(arguments[2])),
+                    "resetinventory" when arguments.Count == 0 => new FalloutInventoryCommand(FalloutInventoryCommandKind.Reset, target),
+                    _ => throw new InvalidDataException("Inventory command argument count is invalid.")
+                };
+                owner.Execute(request);
+                return;
+            }
+            if (parts.Length == 2 && operation == "agerace")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("AgeRace requires one signed step count.");
+                (References ?? throw new NotSupportedException("AgeRace has no shared reference world."))
+                    .AgeRace(ReferenceArgument(parts[0]), FalloutReferenceWorld.RaceAgeSteps(NumberArgument(arguments[0])));
+                return;
+            }
             if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) &&
                 operation is "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue")
             {
@@ -910,6 +957,12 @@ internal sealed class FalloutQuestScripts
                     break;
                 case "completeallobjectives" when arguments.Count == 1:
                     _quests.CompleteAllObjectives(Quest(arguments[0]).FormKey);
+                    break;
+                case "unlockchallenge" when arguments.Count == 1:
+                    Challenges.Unlock(Form(arguments[0]).FormKey);
+                    break;
+                case "incrementscriptedchallenge" when arguments.Count == 1:
+                    Challenges.IncrementScripted(Form(arguments[0]).FormKey);
                     break;
                 case "killquestupdates" or "kqu" when arguments.Count == 0:
                     _quests.KillQuestUpdates();

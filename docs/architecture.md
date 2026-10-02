@@ -33,6 +33,17 @@ the shared reference world. Managed source controllers retain its clock and cold
 pose, project collision with the owned animated subtree and report completion.
 SetOpenState does not dispatch activation or synthesize quest outcomes.
 
+Shared [race aging](scripted-race-age.md) updates effective NPC/player race,
+stored height and source hair fallback without replacing the character-creation
+selection. [Inventory script commands](inventory-script-commands.md) share
+player/reference inventory, equipment locks, reset randomness and appearance
+invalidation. [Scripted challenges](scripted-challenges.md) retain source-bound
+progress and once-only completion through the same persistent script owner.
+
+[Native route doors](npc-door-navigation.md) retain rejected capsule contacts
+and the activating NPC identity. A bounded finer query preserves the same
+physical clearance rules. [Actor skin roots](actor-skin-root.md) retain the
+model frame independently of the influence names bound to the actor skeleton.
 ## Boundaries
 
 - Retail files are read-only. OpenNV never edits the selected installation.

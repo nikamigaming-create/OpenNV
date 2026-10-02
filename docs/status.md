@@ -43,13 +43,23 @@ cold waiting, target-ahead travel, blocking-wall refusal and once-only arrival.
 The separate live run follows Dad, opens the source main door through ordinary
 bot activation, and follows him to the destination. Source completion advances
 CG01 through90/100 into CG02 stages0/5, then retains an unbound `player.AgeRace`
-failure before birthday-room relocation. Non-player targets, object handling,
-automatic NPC door activation and other-cell Escort remain unbound. A fresh
+failure before birthday-room relocation. Non-player targets, object handling
+and other-cell Escort remain unbound. A fresh
 process cold-loads the genuine stage80 autosave and repeats the hall continuation
 with eight moving-target replans and no bot error or Escort-start replay. The
 integrated runtime gate and selected installed-stack audits pass. Autosaves defer
 through procedure initialization, and failed package results on unscripted actors
 remain visible after cold restoration without replay.
+The current continuation binds shared signed race aging, birthday inventory
+commands, NPC-directed speech and scripted challenge progress with cold state.
+The ordinary hall run executes the birthday race/inventory prefix, then stops
+before relocation because Amata's child mouth model fails assembly. Additional
+birthday actor outfit/glasses failures remain visible. A finer native capsule
+search executes the owned coffee-table escape fixture; the actual closed-door
+campaign retry remains pending. Party-hat skin-root binding has a component
+repair whose native checks and live acceptance are reported in current work.
+The user requested a durable stopping point; the game is stopped while this
+block is verified and published. Megaton and the wider campaign remain open.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,
 Megaton, train/Mojave travel and complete cold actor acceptance remain unverified.
 Further ordinary quest, full actor cold continuation and gurney/HUD behavior
