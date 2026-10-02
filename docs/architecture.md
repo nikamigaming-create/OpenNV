@@ -30,6 +30,14 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+FalloutScriptSession owns source SetPCYoung state and cold restoration. The
+appearance resolver applies winning sex-specific race default hair and suppresses
+head attachments without discarding stored custom choices. Shared player
+presentation revisions invalidate first/third-person bodies independently of
+equipment and movement controls. RuntimeNativeTraitEntry owns modal pause,
+processing the owned menu's input and restoring prior pause on acceptance/exit.
+See [player youth and modal traits](player-youth-appearance.md).
+
 RuntimeNativePlayerPackage validates reached exit behavior before cancelling a
 script assignment. Removal clears both current and pending change state and
 releases the native player's source camera; later advancement and cold state

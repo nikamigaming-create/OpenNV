@@ -100,13 +100,28 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
 
 internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
     bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
-    FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null);
+    FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null,
+    bool PlayerYoung = false);
 internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null)
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
     internal bool LocationSpecificLoadScreensOnly { get; set; }
     internal bool InCharGen { get; private set; }
+    internal bool PlayerYoung { get; private set; }
+    internal long PlayerAppearanceRevision { get; private set; }
+    internal void SetPlayerYoung(bool enabled)
+    {
+        if (PlayerYoung == enabled) return;
+        PlayerYoung = enabled;
+        PlayerAppearanceRevision++;
+    }
+    internal static bool PlayerYouthFlag(double value)
+    {
+        if (!double.IsFinite(value) || value != Math.Truncate(value) || value < int.MinValue || value > int.MaxValue)
+            throw new InvalidDataException("SetPCYoung requires a signed integer flag.");
+        return value != 0;
+    }
     internal FalloutPlayerScriptPackageSnapshot? PlayerPackage { get; private set; }
     internal void PublishPlayerPackage(FalloutPlayerScriptPackageSnapshot? state)
     {
@@ -127,7 +142,7 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture());
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung);
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
@@ -139,6 +154,7 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         InCharGen = state.InCharGen;
+        SetPlayerYoung(state.PlayerYoung);
         PlayerPackage = state.PlayerPackage;
         _achievements.Clear(); _achievements.UnionWith(state.Achievements);
     }
@@ -687,6 +703,12 @@ internal sealed class FalloutQuestScripts
             {
                 FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,
                     token => token.StartsWith('"') || instance.Bindings.HasVariable(token) ? StringArgument(token) : token);
+                return;
+            }
+            if (parts.Length == 1 && operation == "setpcyoung")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("SetPCYoung requires one integer flag.");
+                Session.SetPlayerYoung(FalloutScriptSession.PlayerYouthFlag(NumberArgument(arguments[0])));
                 return;
             }
             if (parts.Length == 1 && operation == "setinchargen")

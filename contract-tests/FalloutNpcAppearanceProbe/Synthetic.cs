@@ -45,9 +45,23 @@ internal static class Synthetic
             };
             File.WriteAllBytes(Path.Combine(directory.FullName, "base.esm"), Combine(Header(null), Combine(records.ToArray())));
             File.WriteAllBytes(Path.Combine(directory.FullName, "override.esp"), Combine(Header("base.esm"),
-                Armor(0x400, "winning.nif", 4, 0x410), Record("TXST", 0x500, Field("TX00", Z("winning.dds")))));
+                Race(0x200, "raceA", 0x301, 0), Armor(0x400, "winning.nif", 4, 0x410), Record("TXST", 0x500, Field("TX00", Z("winning.dds")))));
             using var stack = FalloutPluginStack.Load(directory.FullName, ["base.esm", "override.esp"]);
             var appearance = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100));
+            foreach (var female in new[] { false, true })
+            {
+                var draft = new FalloutActorAppearanceState(female, null, Key(0x300), null, HeadParts: [Key(0x302)]);
+                var adult = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100), equippedArmor: [], appearanceState: draft);
+                var young = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100), equippedArmor: [], appearanceState: draft with { PlayerYoung = true });
+                Require(young.Hair == (female ? null : Key(0x301)) && young.Models.All(part => part.Role != "head-addon") &&
+                    young.Models.Count(part => part.Role == "hair") == (female ? 0 : 1) && young.Race == adult.Race &&
+                    young.RaceHeight == adult.RaceHeight && young.FaceGen.SymmetricGeometry.AsSpan().SequenceEqual(adult.FaceGen.SymmetricGeometry),
+                    "Youth did not select the winning sex-specific default/bald hair, suppress attachments or preserve race/face/height.");
+                var restored = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100), equippedArmor: [], appearanceState: draft);
+                Require(restored.Hair == Key(0x300) && restored.Models.Count(part => part.Role == "head-addon") == 2 &&
+                    draft.Hair == Key(0x300) && draft.HeadParts!.Count == 1,
+                    "Clearing youth did not recover the unchanged stored hair/attachment selection.");
+            }
             var sharedArmor = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x117));
             Require(sharedArmor.CanConstruct && sharedArmor.Models.Single(part => part.Role == "armor").ModelPath == "meshes/shared-body.nif",
                 "Female ARMO without an override must retain the source male model.");
@@ -141,11 +155,11 @@ internal static class Synthetic
         return Record("NPC_", id, fields.ToArray());
     }
 
-    private static byte[] Race(uint id, string label)
+    private static byte[] Race(uint id, string label, uint maleHair = 0x300, uint femaleHair = 0x301)
     {
         var data = new byte[36];
         for (var offset = 16; offset < 32; offset += 4) BinaryPrimitives.WriteSingleLittleEndian(data.AsSpan(offset), 1);
-        var fields = new List<byte[]> { Field("DATA", data), Field("NAM0", []) };
+        var fields = new List<byte[]> { Field("DATA", data), Field("NAM2", []), Field("DNAM", Combine(U32(maleHair), U32(femaleHair))), Field("NAM0", []) };
         foreach (var sex in new[] { "MNAM", "FNAM" })
         {
             fields.Add(Field(sex, []));

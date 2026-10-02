@@ -3,6 +3,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 public partial class NativeRenderedMenuAudit
 {
@@ -13,6 +14,9 @@ public partial class NativeRenderedMenuAudit
         RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
             installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
         NativeOwnedTraitMenu? menu = null;
+        RuntimeNativeTraitEntry? entry = null;
+        Godot.Timer? clock = null;
+        var previousPause = GetTree().Paused;
         try
         {
             var source = RuntimeLiveContentSource.Current!;
@@ -26,8 +30,18 @@ public partial class NativeRenderedMenuAudit
             var hash = SHA256.HashData(xml);
             IReadOnlyList<FalloutNativeTraitIdentity>? accepted = null;
             Exception? failed = null;
-            menu = new(records, contract, [], selection => accepted = selection, error => failed = error);
-            AddChild(menu);
+            var ticks = 0;
+            clock = new Godot.Timer { WaitTime = .01, Autostart = true };
+            clock.Timeout += () => ticks++;
+            AddChild(clock);
+            for (var frame = 0; frame < 6; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (ticks == 0) throw new InvalidDataException("Trait fixture has no advancing gameplay clock.");
+            var activeEntry = new RuntimeNativeTraitEntry(); entry = activeEntry; AddChild(activeEntry);
+            entry.Accepted += selection => { accepted = selection; activeEntry.ReleasePause(); };
+            entry.Failed += error => failed = error;
+            entry.Configure(records, contract, []);
+            menu = entry.GetChildren().OfType<NativeOwnedTraitMenu>().Single();
+            var pausedTicks = ticks;
             var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             JsonElement State() => JsonSerializer.SerializeToElement(menu.State, json);
             int Selected() => State().GetProperty("selected").GetArrayLength();
@@ -51,6 +65,7 @@ public partial class NativeRenderedMenuAudit
                     GetViewport().PushInput(new InputEventMouseButton { Position = point, GlobalPosition = point, ButtonIndex = MouseButton.Left, Pressed = pressed }, true);
             }
             var baseline = await Pixels();
+            if (!GetTree().Paused || ticks != pausedTicks) throw new InvalidDataException("Trait entry did not pause native gameplay.");
             if (baseline.All(value => value == 0)) throw new InvalidDataException("Trait menu is blank.");
             var rows = menu.GetChildren().OfType<NativeBitmapMenuButton>().Where(button => button.Name.ToString().StartsWith("Trait_", StringComparison.Ordinal)).ToArray();
             Click(rows[0]);
@@ -67,10 +82,22 @@ public partial class NativeRenderedMenuAudit
             var resetPixels = await Pixels();
             if (!baseline.AsSpan().SequenceEqual(resetPixels)) throw new InvalidDataException("Reset did not restore source pixels at matched focus.");
             Key(Godot.Key.Enter); await Pixels();
+            if (ticks != pausedTicks) throw new InvalidDataException("Trait input advanced paused gameplay.");
             var selected = State().GetProperty("selected").EnumerateArray().Select(value => value.GetProperty("runtimeFormId").GetUInt32()).ToArray();
             Key(Godot.Key.A); await Pixels();
             if (accepted is null || !accepted.Select(value => value.RuntimeFormId).SequenceEqual(selected))
                 throw new InvalidDataException("Source Done shortcut did not submit the draft.");
+            for (var frame = 0; frame < 6; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (GetTree().Paused || ticks == pausedTicks) throw new InvalidDataException("Done did not release native gameplay.");
+            entry.ReleasePause(); entry.Free(); entry = null; menu = null;
+            GetTree().Paused = true;
+            entry = new RuntimeNativeTraitEntry(); AddChild(entry); entry.Configure(records, contract, []);
+            entry.ReleasePause(); entry.Free(); entry = null;
+            if (!GetTree().Paused) throw new InvalidDataException("Trait disposal resumed a previously paused tree.");
+            GetTree().Paused = false;
+            entry = new RuntimeNativeTraitEntry(); AddChild(entry); entry.Configure(records, contract, []);
+            entry.Free(); entry = null;
+            if (GetTree().Paused) throw new InvalidDataException("Trait tree exit leaked its pause.");
             var zero = new FalloutTraitMenuSelection(records, contract, []); zero.Reset();
             if (zero.Submit().Count != 0) throw new InvalidDataException("Trait menu rejected zero selections.");
             if (!source.TryRead("menus/trait_menu.xml", null, out var after, out _) || !hash.AsSpan().SequenceEqual(SHA256.HashData(after)))
@@ -87,12 +114,17 @@ public partial class NativeRenderedMenuAudit
                 done = true,
                 resetPixelsRestored = true,
                 zeroSelection = true,
+                modalClock = true,
+                inputWhilePaused = true,
+                acceptedResume = true,
+                priorPausePreserved = true,
+                exitCleanup = true,
                 sourceReadonly = true,
                 recording = false,
                 retainedFrames = 0,
                 boundary = "isolated-owned-trait-menu;campaign-native-timing-retail-and-XR-unverified"
             }));
         }
-        finally { menu?.Free(); RuntimeLiveContentSource.Clear(); }
+        finally { entry?.Free(); clock?.Free(); GetTree().Paused = previousPause; RuntimeLiveContentSource.Clear(); }
     }
 }

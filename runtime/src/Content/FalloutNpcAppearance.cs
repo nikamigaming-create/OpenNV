@@ -15,7 +15,8 @@ internal sealed record FalloutNpcFaceGen(FalloutFormKey Source, byte[] Symmetric
 
 internal sealed record FalloutActorAppearanceState(bool? Female, FalloutFormKey? Race,
     FalloutFormKey? Hair, FalloutFormKey? Eyes, FalloutNpcFaceGen? FaceGen = null,
-    byte[]? HairColor = null, byte[]? HairLength = null, IReadOnlyList<FalloutFormKey>? HeadParts = null);
+    byte[]? HairColor = null, byte[]? HairLength = null, IReadOnlyList<FalloutFormKey>? HeadParts = null,
+    bool PlayerYoung = false);
 
 internal sealed record FalloutNpcInventoryItem(FalloutFormKey Source, FalloutFormKey Item, string Signature,
     int Count, byte[]? ExtraData, IReadOnlyList<FalloutFormKey> PossibleArmor);
@@ -77,7 +78,10 @@ internal static class FalloutNpcAppearanceResolver
                 if (parts[index].Role is "eye-left" or "eye-right")
                     parts[index] = parts[index] with { TexturePath = texture, TextureSource = eyes.FormKey };
         }
-        var hair = appearanceState?.Hair ?? OptionalForm(model, "HNAM");
+        var young = appearanceState?.PlayerYoung == true;
+        var defaults = young ? OptionalBytes(race, "DNAM", 8) : [];
+        var hair = young ? defaults.Length == 0 ? null : race.Plugin.AdjustOptionalFormId(
+            BinaryPrimitives.ReadUInt32LittleEndian(defaults.AsSpan(female ? 4 : 0))) : appearanceState?.Hair ?? OptionalForm(model, "HNAM");
         if (hair is { } hairKey)
         {
             var hairRecord = Require(stack, hairKey, "HAIR");
@@ -85,7 +89,7 @@ internal static class FalloutNpcAppearanceResolver
                 PathField(hairRecord, "ICON", "textures", required: true)));
         }
         var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var headParts = appearanceState?.HeadParts ?? model.ReadSubrecords().Where(row => row.Signature == "PNAM")
+        var headParts = young ? [] : appearanceState?.HeadParts ?? model.ReadSubrecords().Where(row => row.Signature == "PNAM")
             .Select(row => model.Plugin.AdjustFormId(UInt32(row.Data.Span, model, "PNAM"))).ToArray();
         foreach (var headPart in headParts) AddHeadParts(stack, headPart, parts, added, []);
 

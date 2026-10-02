@@ -28,11 +28,16 @@ foreign/drifted identities, descriptions/icons, capped drafts, reset, acceptance
 source formatting and relative-name/absolute-value expressions. An isolated owned
 native check renders the actual menu, tests pointer and keyboard selection, the
 limit, Reset and Done, and restores identical pixels at matched focus after reset.
-It records no frames. Fresh ordinary TTW input reaches the same menu after twelve
-completed voiced commands, shows its source artwork, and accepts Done with no
-traits. The session then quits with readers drained. This is menu evidence;
-Mom/Dad's competing voice request still faults at CG00 stage 80 and blocks the
-opening. Neither the menu check nor the repeated gurney camera is campaign progress.
+It records no frames. RuntimeNativeTraitEntry owns modal pause while the source
+menu keeps processing input. The fixture verifies paused gameplay clocks,
+Done/resume, previous-pause preservation, idempotent release and exit cleanup.
+Fresh ordinary TTW input reaches the same menu after twelve completed voiced
+commands, shows its source artwork and retains identical speech, camera-package
+time, quest progress and draft across an extended hold. Done accepts no traits
+and resumes source progression; seventeen speeches complete and CG01 stage 0
+is entered before its unsupported SetSoundSourceFile. The session then quits
+with readers drained. Childhood-room entry, full campaign and matched timing
+remain unverified. See [the shared youth and pause owners](player-youth-appearance.md).
 
 Perk conditions/multiple ranks, native unstable sort ties and non-ASCII collation,
 description-scrollbar extent, scrollbar dragging, focus/click sound, close/layout

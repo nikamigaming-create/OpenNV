@@ -48,9 +48,14 @@ ordinary run accepts the owned trait menu, completes seventeen speeches, stops
 three actual birth-loop instances and enters stages 90 and 100. Pending
 [player-package removal](player-package-removal.md) now cancels its assignment
 and releases the camera. Fresh ordinary input completes that removal, disables
-Dad and stops CG00 before the unsupported SetPCYoung command. The trait menu's
-missing pause permits background progression; CG01 and gurney-exit acceptance
-remain incomplete. The [shared source-sound owner](source-sound-stopping.md)
+Dad and stops CG00. The [shared saved youth policy](player-youth-appearance.md)
+now executes SetPCYoung and enters CG01 stage 0; its SetSoundSourceFile remains
+unsupported before the player transfer. The trait menu now pauses native gameplay
+while accepting ordinary input, and Done releases the pause. A fresh ordinary hold
+retains identical speech, package time, quest progress and draft. Synthetic
+command/cold/appearance checks and owned first/third body and modal menu checks
+pass. Childhood-room entry and gurney-exit acceptance remain incomplete.
+The [shared source-sound owner](source-sound-stopping.md)
 has synthetic and owned native command/mixer/reference-filter checks, including
 paused stopping, independent loops and clean retirement. State-publication
 interval overruns remain visible in the ordinary run.

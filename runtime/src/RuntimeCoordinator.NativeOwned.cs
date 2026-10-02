@@ -1079,7 +1079,8 @@ public partial class RuntimeCoordinator
         _nativePlayer.ConfigureLocomotion(_nativePluginStack!, () => _nativeOpeningStageDriver?.Vitals);
         _nativePlayer.ConfigurePresentation(_nativePluginStack!, _nativeInventory,
             () => _nativeOpeningStageDriver!.PlayerAppearance, () => NativeAmbient(_nativeActiveCell!.Cell),
-            _nativeContinueOpening ? _nativeOpeningRestore?.State.WeaponHandling : null);
+            _nativeContinueOpening ? _nativeOpeningRestore?.State.WeaponHandling : null,
+            () => _nativeOpeningStageDriver!.PlayerAppearanceRevision);
         _nativePlayer.ConfigureCombat(_nativePluginStack!, _nativeGlobals!,
             () => _nativeOpeningStageDriver!.PlayerLevel, value => _nativeOpeningStageDriver!.PlayerCombatValue(value),
             () => _nativeOpeningStageDriver!.PlayerPerkEntries,
