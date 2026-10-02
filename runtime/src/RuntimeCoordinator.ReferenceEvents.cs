@@ -89,7 +89,9 @@ public partial class RuntimeCoordinator
                 actor => _nativeOpeningStageDriver!.IsInInterior(actor),
                 (reference, group, initialization) => _nativeReferencePresentation!.PlayGroup(reference, group, initialization),
                 (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group),
-                () => _nativeOpeningStageDriver!.Vitals.Level),
+                () => _nativeOpeningStageDriver!.Vitals.Level,
+                ReadActorValue: (actor, name, kind) => _nativeOpeningStageDriver!.ReadActorValue(actor, name, kind),
+                ChangeActorValue: (actor, name, operation, value) => _nativeOpeningStageDriver!.ChangeActorValue(actor, name, operation, value)),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

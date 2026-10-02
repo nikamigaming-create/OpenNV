@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Content;
 
@@ -184,7 +185,9 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
 internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action> PrepareSetStage,
     Func<string, double> PlayerActorValue,
     Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null,
-    FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null);
+    FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null,
+    Func<string, FalloutActorValueRead, double>? ReadPlayerActorValue = null,
+    Action<string, string, double>? ChangePlayerActorValue = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -692,12 +695,17 @@ internal sealed class FalloutQuestScripts
                     if (index != Math.Truncate(index)) throw new InvalidDataException("Objective index is fractional.");
                     return _quests.Objective(Quest(arguments[0].Identifier!).FormKey, checked((uint)index)).Displayed ? 1 : 0;
                 }),
-                "player.getactorvalue" or "player.getav" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                "player.getactorvalue" or "player.getav" or "player.getbaseactorvalue" or "player.getbaseav" or
+                    "player.getpermanentactorvalue" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
                     if (!instance.Bindings.HasPlayerReference) throw new InvalidDataException("Player function has no compiled engine reference.");
                     if (caller is { } value && value.Number != 0x14)
                         throw new NotSupportedException("Quest fallback actor values have only a player gameplay owner.");
-                    return host?.PlayerActorValue(arguments[0].Identifier!) ?? throw new NotSupportedException("Player actor values have no gameplay owner.");
+                    var kind = FalloutActorValue.Query(operation)!.Value;
+                    return host?.ReadPlayerActorValue is { } read ? read(arguments[0].Identifier!, kind) :
+                        kind == FalloutActorValueRead.Current ? host?.PlayerActorValue(arguments[0].Identifier!) ??
+                            throw new NotSupportedException("Player actor values have no gameplay owner.") :
+                            throw new NotSupportedException("Player base/permanent values have no source pool owner.");
                 }),
                 _ => null,
             };
@@ -713,6 +721,15 @@ internal sealed class FalloutQuestScripts
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) &&
+                operation is "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue")
+            {
+                if (!instance.Bindings.HasPlayerReference || arguments.Count != 2)
+                    throw new InvalidDataException("Player actor value command requires its compiled reference and two arguments.");
+                (host?.ChangePlayerActorValue ?? throw new NotSupportedException("Player actor value writes have no source pool owner."))
+                    (arguments[0], operation, NumberArgument(arguments[1]));
+                return;
+            }
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
             {
                 if (arguments.Count != 1) throw new InvalidDataException("TriggerScreenBlood requires one count.");

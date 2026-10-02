@@ -174,10 +174,10 @@ internal partial class RuntimeNativeOpeningStageDriver
         var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
         var complete = _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
         var state = FalloutNativeCampaignSave.Capture(_saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
-            _vigorContract, _special, _tagSkillContract, _tagSkills, _traitFarewellContract, _traits, PlayerControls,
+            _vigorContract, Special, _tagSkillContract, _tagSkills, _traitFarewellContract, _traits, PlayerControls,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
-            QuestEditorId, Stage, complete, _player.ViewPitchRadians);
+            QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture());
         return state with
         {
             Vitals = Vitals,

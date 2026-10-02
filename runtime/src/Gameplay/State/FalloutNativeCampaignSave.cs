@@ -37,7 +37,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutWeaponHandlingSnapshot? WeaponHandling = null, float? PlayerViewPitchRadians = null,
     FalloutIngestiblesSnapshot? Ingestibles = null, IReadOnlyList<FalloutActorOverrides>? ActorOverrides = null,
     IReadOnlyList<FalloutEncounterZoneSnapshot>? EncounterZones = null,
-    IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null);
+    IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null,
+    FalloutPlayerActorValuesSnapshot? PlayerActorValues = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -97,10 +98,11 @@ internal static class FalloutNativeCampaignSave
         FalloutGameTimeSnapshot? gameTime = null,
         FalloutSkyLightingSnapshot? skyLighting = null,
         IReadOnlyList<FalloutReferenceSnapshot>? references = null, string questEditorId = OpeningQuestEditorId,
-        short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0)
+        short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0,
+        FalloutPlayerActorValuesSnapshot? playerActorValues = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
-        FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
+        if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
         FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills, allowUnspent: !characterCreationComplete);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, traits);
         var state = new FalloutNativeCampaignState(
@@ -133,7 +135,7 @@ internal static class FalloutNativeCampaignSave
             ],
             playerPosition.ToArray(),
             playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references, grant.InventoryRandomState, characterCreationComplete,
-            PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : []);
+            PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -192,7 +194,14 @@ internal static class FalloutNativeCampaignSave
             foreach (var id in face.HeadParts)
                 if (stack.GetEffective(stack.RuntimeFormKey(id)).Signature != "HDPT") throw new InvalidDataException("Saved player head part is not an owned HDPT.");
         }
-        FalloutNativeVigorResolver.Validate(vigorContract, state.Special, allowUnspent: !state.CharacterCreationComplete);
+        if (state.PlayerActorValues is null)
+        {
+            FalloutNativeVigorResolver.Validate(vigorContract, state.Special, allowUnspent: !state.CharacterCreationComplete);
+            // Legacy saves held only seven BASE integers. Runtime modifiers
+            // start at zero; current winning source abilities are re-evaluated.
+            state = state with { PlayerActorValues = new FalloutPlayerActorValues(stack, legacy: state.Special).Capture() };
+        }
+        else _ = new FalloutPlayerActorValues(stack, state.PlayerActorValues);
         FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, state.Traits);
         var expectedGrant = state.Scripts is not null ? null : FalloutNativeTraitFarewellResolver.ResolveGrant(
@@ -334,6 +343,12 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         state.Vitals?.Validate();
+        if (state.PlayerActorValues is { } playerValues)
+        {
+            FalloutPlayerActorValues.Validate(playerValues);
+            if (state.Special is null || state.Special.Values.Where((value, index) => playerValues.Values[index + 5].Base != (float)value).Any())
+                throw new InvalidDataException("Legacy SPECIAL view differs from the saved player BASE pools.");
+        }
         if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
             reference.LockState is not null || reference.OwnershipOverride is not null) == true)
             throw new InvalidDataException("Legacy campaign save cannot contain reference lock or ownership overrides.");

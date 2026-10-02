@@ -1,5 +1,6 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -26,7 +27,9 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<FalloutFormKey, string, int>? PlayGroup = null,
     Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null,
     Func<int>? PlayerLevel = null, Func<bool>? LocationSpecificLoadScreensOnly = null, Func<bool>? InCharGen = null,
-    Func<FalloutFormKey, int>? GetOpenState = null);
+    Func<FalloutFormKey, int>? GetOpenState = null,
+    Func<FalloutFormKey, string, FalloutActorValueRead, double>? ReadActorValue = null,
+    Action<FalloutFormKey, string, string, double>? ChangeActorValue = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -540,10 +543,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && parts[^1].Equals("IsTalking", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => (host.IsTalking ?? throw new NotSupportedException("IsTalking has no speech owner."))
                     (Target()) ? 1 : 0);
-            if (parts.Length <= 2 && parts[^1].ToLowerInvariant() is "getav" or "getactorvalue")
+            if (parts.Length <= 2 && FalloutActorValue.Query(parts[^1]) is { } valueRead)
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))
-                    (Target(), arguments[0].Identifier!));
+                    host.ReadActorValue is { } read ? read(Target(), arguments[0].Identifier!, valueRead) :
+                    valueRead == FalloutActorValueRead.Current
+                        ? (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))(Target(), arguments[0].Identifier!)
+                        : throw new NotSupportedException("Base/permanent actor value query has no source pool owner."));
             if (parts.Length <= 2 && operation == "getkiller")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
                     world.Get(Target()).Injury?.Killer is { } killer ? records.RuntimeFormId(killer) : 0));
@@ -973,7 +978,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         Enable: operation is "applyimagespacemodifier" or "imod"));
                     break;
                 case "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue" when arguments.Count == 2:
-                    world.ChangeActorValue(target, arguments[0], operation, (float)Number(arguments[1]));
+                    if (host.ChangeActorValue is { } change) change(target, arguments[0], operation, Number(arguments[1]));
+                    else world.ChangeActorValue(target, arguments[0], operation, (float)Number(arguments[1]));
                     break;
                 case "enable" or "disable" when arguments.Count <= 1:
                     var enable = operation == "enable";

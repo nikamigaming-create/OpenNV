@@ -10,6 +10,16 @@ if (args.Length >= 5 && args[0] == "--audit-reference-access")
     OwnedReferenceAccessProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
     return;
 }
+if (args.Length == 1 && args[0] == "--player-actor-value-contracts")
+{
+    PlayerActorValueContracts.Run();
+    return;
+}
+if (args.Length >= 5 && args[0] == "--audit-player-actor-values")
+{
+    OwnedPlayerActorValueProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
 if (args.Length >= 5 && args[0] == "--audit-player-moves")
 {
     OwnedPlayerMoveProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
@@ -321,6 +331,7 @@ AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();
 PlayerSkillContracts.Run();
+PlayerActorValueContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();
 PlayerMoveContracts.Run();

@@ -138,6 +138,19 @@ internal partial class RuntimeNativeOpeningStageDriver
             .Request(speaker, package.Target, package.Topic, completed);
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?
         _scriptHost.PlayerActorValue(name) : _scripts.References!.ActorValue(actor, name);
+    private static bool IsSpecial(string name) => FalloutNativeVigorResolver.AttributeNames.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
+    private double ReadPlayerActorValue(string name, FalloutActorValueRead kind) => IsSpecial(name)
+        ? _playerActorValues.Read(FalloutPlayerActorValues.SpecialValue(name), kind)
+        : kind == FalloutActorValueRead.Current ? _scriptHost.PlayerActorValue(name) :
+            throw new NotSupportedException($"Player base/permanent value {name} has no pool/formula owner.");
+    internal double ReadActorValue(FalloutFormKey actor, string name, FalloutActorValueRead kind) => _pluginStack.RuntimeFormId(actor) == 0x14
+        ? ReadPlayerActorValue(name, kind) : kind == FalloutActorValueRead.Current ? _scripts.References!.ActorValue(actor, name) :
+            throw new NotSupportedException($"Reference {actor} base/permanent value {name} has no query owner.");
+    internal void ChangeActorValue(FalloutFormKey actor, string name, string operation, double value)
+    {
+        if (_pluginStack.RuntimeFormId(actor) == 0x14) _playerActorValues.Change(name, operation, value);
+        else _scripts.References!.ChangeActorValue(actor, name, operation, (float)value);
+    }
     internal bool IsPlayerTagSkill(string name) => _tagSkills.Any(skill => FalloutPlayerSkills.SkillName(_pluginStack, skill).Equals(name, StringComparison.OrdinalIgnoreCase));
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);
     internal float PlayerCombatValue(int value) => _playerSkills.Value(value);

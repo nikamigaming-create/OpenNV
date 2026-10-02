@@ -1366,6 +1366,30 @@ try
     var centeredRestore = FalloutNativeCampaignSave.Read(syntheticSavePath,
         syntheticSaveCompatibilityId, cellStack, syntheticVigor, syntheticTagSkills,
         syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(centeredRestore.State.PlayerActorValues is { } migratedPlayer && migratedPlayer.Values.Count == 7 &&
+        migratedPlayer.Values.All(pair => pair.Value.Base == centeredState.Special.Values[pair.Key - 5] &&
+            pair.Value.Permanent == 0 && pair.Value.Temporary == 0 && pair.Value.Damage == 0),
+        "Legacy campaign SPECIAL did not migrate into source-bound BASE pools with zero runtime modifiers.");
+    var playerValues = new FalloutPlayerActorValues(cellStack, legacy: syntheticSpecial);
+    playerValues.BindConstantModifiers((_, _) => []);
+    playerValues.WriteBaseInteger(5, 14);
+    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Permanent, .5f);
+    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Temporary, -2);
+    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Damage, -1);
+    var pooledCampaign = syntheticCampaignState with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign);
+    var pooledRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    var coldPlayerValues = new FalloutPlayerActorValues(cellStack, pooledRestore.State.PlayerActorValues!);
+    coldPlayerValues.BindConstantModifiers((_, _) => []);
+    Require(coldPlayerValues.ReadBase(5) == 14 && coldPlayerValues.ReadPermanent(5) == 10 && coldPlayerValues.ReadCurrent(5) == 11.5f,
+        "Campaign restore conflated player modifier pools or imposed the Vigor menu's allocation budget on runtime values.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with
+    { PlayerActorValues = playerValues.Capture() with { PlayerSha256 = new string('0', 64) } });
+    ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell), "winning source identity");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with { Special = syntheticSpecial }), "BASE pools");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
     Require(FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f)
             .SequenceEqual(syntheticCampaignState.PlayerPosition) &&
         FalloutNativeCampaignSave.RestorePlayerPosition(syntheticCampaignState, 0.5f)

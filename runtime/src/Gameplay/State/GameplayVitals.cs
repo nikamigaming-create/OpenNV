@@ -28,7 +28,7 @@ internal sealed record GameplayVitals(
         if (!float.IsFinite(limbs[part])) throw new InvalidDataException("Player limb damage exceeds finite storage.");
         return state with { LimbDamage = limbs };
     }
-    internal static GameplayVitals Derive(int baseHealth, int level, int endurance, int agility,
+    internal static GameplayVitals Derive(double baseHealth, int level, double endurance, double agility,
         double healthEndurance, double healthLevel, double apBase, double apAgility,
         int experience, double xpBase, double xpBump)
     {
