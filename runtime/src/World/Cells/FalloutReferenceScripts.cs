@@ -31,7 +31,8 @@ internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Referenc
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
     IReadOnlySet<FalloutFormKey>? TriggerReferences = null, FalloutFormKey? Topic = null,
-    IReadOnlySet<FalloutFormKey>? Topics = null);
+    IReadOnlySet<FalloutFormKey>? Topics = null, FalloutFormKey? Package = null,
+    IReadOnlySet<FalloutFormKey>? Packages = null);
 
 // Dispatches authored object-script blocks against world-owned locals. Functions
 // and effects use the same authoritative owners in a lab or a presentation host.
@@ -46,8 +47,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     private readonly Dictionary<(FalloutFormKey Owner, FalloutFormKey Script), FalloutScriptBindings> _questBindings = [];
 
     internal FalloutReferenceScriptEventResult Dispatch(FalloutFormKey reference, string eventName,
-        FalloutFormKey? actor = null, double elapsedSeconds = 0, FalloutFormKey? topic = null) =>
-        DispatchFrame(reference, [new(eventName, actor, Topic: topic)], elapsedSeconds).Single();
+        FalloutFormKey? actor = null, double elapsedSeconds = 0, FalloutFormKey? topic = null,
+        FalloutFormKey? package = null) =>
+        DispatchFrame(reference, [new(eventName, actor, Topic: topic, Package: package)], elapsedSeconds).Single();
 
     internal FalloutReferenceScriptEventResult Activate(FalloutFormKey reference, FalloutFormKey actor) =>
         Dispatch(reference, "OnActivate", actor);
@@ -64,9 +66,29 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         var admitted = new Dictionary<string, FalloutReferenceScriptEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in events)
         {
-            if (item is null || string.IsNullOrWhiteSpace(item.Name) || !admitted.TryAdd(item.Name, item))
+            if (item is null || string.IsNullOrWhiteSpace(item.Name))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
-            if (item.Name.Equals("SayToDone", StringComparison.OrdinalIgnoreCase))
+            var name = FalloutReferencePackageEvents.CanonicalName(item.Name);
+            if (!admitted.TryAdd(name, item))
+                throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
+            if (FalloutReferencePackageEvents.TryKind(name, out _))
+            {
+                FalloutReferencePackageEvents.RequireActor(records, reference);
+                if (item.ActionReference is not null || item.TriggerReferences is not null || item.Topic is not null || item.Topics is not null)
+                    throw new InvalidDataException("Package events have a typed PACK identity and no action reference, contact or dialogue topic.");
+                if (item.Packages is { } packages)
+                {
+                    if (item.Package is not null || packages.Count == 0)
+                        throw new InvalidDataException("Package events have absent or conflicting source packages.");
+                    foreach (var package in packages) FalloutReferencePackageEvents.RequirePackage(records, package);
+                    admitted[name] = item with { Packages = new HashSet<FalloutFormKey>(packages) };
+                }
+                else if (item.Package is { } package) FalloutReferencePackageEvents.RequirePackage(records, package);
+                else throw new InvalidDataException("Package event has no typed source package.");
+            }
+            else if (item.Package is not null || item.Packages is not null)
+                throw new InvalidDataException("Package registration belongs to an actor package event.");
+            if (name.Equals("SayToDone", StringComparison.OrdinalIgnoreCase))
             {
                 if (item.Topics is { } topics)
                 {
@@ -91,7 +113,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         var counts = admitted.Keys.ToDictionary(name => name, _ => 0, StringComparer.OrdinalIgnoreCase);
         var failure = instance.ScriptError;
         IReadOnlyList<FalloutReferenceScriptEventResult> Results() => events.Select(item =>
-            new FalloutReferenceScriptEventResult(reference, item.Name, counts[item.Name], failure,
+            new FalloutReferenceScriptEventResult(reference, item.Name, counts[FalloutReferencePackageEvents.CanonicalName(item.Name)], failure,
                 recovered?.StartsWith(item.Name + ":", StringComparison.OrdinalIgnoreCase) == true ? recovered : null)).ToArray();
         if (instance.ScriptError is not null || instance.DeletePending || instance.Deleted || events.Count == 0) return Results();
         var runningEvent = "Parse";
@@ -100,13 +122,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var program = instance.Script is null ? null : Program(instance);
             foreach (var block in program?.Events ?? [])
             {
-                if (!admitted.TryGetValue(block.Event, out var item)) continue;
+                var name = FalloutReferencePackageEvents.CanonicalName(block.Event);
+                if (!admitted.TryGetValue(name, out var item)) continue;
                 runningEvent = block.Event;
                 // The engine ignores an OnActivate header argument. OnTrigger
                 // filters contact membership but does not establish an action ref.
                 var activation = block.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase);
                 var trigger = block.Event.Equals("OnTrigger", StringComparison.OrdinalIgnoreCase);
-                if (!activation && block.Filter is not null)
+                var packageEvent = FalloutReferencePackageEvents.TryKind(name, out _);
+                if (packageEvent)
+                {
+                    if (block.Filter is null) throw new InvalidDataException("Actor package event requires one source PACK filter.");
+                    var package = program!.Bindings.Form(block.Filter);
+                    FalloutReferencePackageEvents.RequirePackage(records, package.FormKey);
+                    if (!(item.Packages?.Contains(package.FormKey) ?? package.FormKey == item.Package)) continue;
+                }
+                else if (!activation && block.Filter is not null)
                 {
                     if (block.Event.Equals("SayToDone", StringComparison.OrdinalIgnoreCase))
                     {
@@ -120,10 +151,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         if (trigger && item.TriggerReferences is { } contacts ? !contacts.Contains(filter) : filter != item.ActionReference) continue;
                     }
                 }
-                var actionReference = trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
+                var actionReference = packageEvent || trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
                     ? null : item.ActionReference;
                 Execute(instance.Reference, program!.Bindings, block.Program, actionReference, elapsedSeconds);
-                ++counts[block.Event];
+                ++counts[name];
             }
             if (admitted.TryGetValue("OnActivate", out var activationEvent) && counts["OnActivate"] == 0)
             {
