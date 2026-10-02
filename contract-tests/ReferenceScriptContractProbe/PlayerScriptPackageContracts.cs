@@ -67,15 +67,19 @@ internal static class PlayerScriptPackageContracts
             }
             var legacy = JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>("{\"Hardcore\":false,\"AutoDisplayObjectives\":true,\"Achievements\":[]}")!;
             Require(legacy.PlayerPackage is null, "Legacy session acquired a script package.");
+            cold.PublishPlayerPackage(changing);
             cold.PublishPlayerPackage(null);
             Require(cold.Capture().PlayerPackage is null, "Package removal did not clear saved assignment.");
+            var removed = JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!;
+            cold.PublishPlayerPackage(changing); cold.Restore(removed);
+            Require(cold.PlayerPackage is null, "Cold removal restored a stale change or pending assignment.");
             File.WriteAllBytes(Path.Combine(directory, "Bad.esp"), Join(Header("Packages.esm"), Package(0x100, 0, 0)));
             using (var bad = FalloutPluginStack.Load(directory, ["Packages.esm", "Bad.esp"]))
                 Reject(() => FalloutScriptPackage.Read(bad.GetEffective(Key(0x100))));
             File.WriteAllBytes(Path.Combine(directory, "Bad.esp"), Join(Header("Packages.esm"), Package(0x100, 0x200, -1)));
             using (var bad = FalloutPluginStack.Load(directory, ["Packages.esm", "Bad.esp"]))
                 Reject(() => FalloutScriptPackage.Read(bad.GetEffective(Key(0x100))));
-            Console.WriteLine("OPENNV_PLAYER_SCRIPT_PACKAGE_CONTRACT_PASS winning=true masterAdjusted=true idleCountWidths=true radius=true cell=true exact=true cold=true coldChange=true legacy=true invalidAtomic=true nativeClock=requires-owned-audit traversal=unbound parity=unverified");
+            Console.WriteLine("OPENNV_PLAYER_SCRIPT_PACKAGE_CONTRACT_PASS winning=true masterAdjusted=true idleCountWidths=true radius=true cell=true exact=true cold=true coldChange=true coldRemoval=true legacy=true invalidAtomic=true nativeClock=requires-owned-audit traversal=unbound parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
     }

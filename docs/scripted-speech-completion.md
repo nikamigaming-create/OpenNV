@@ -66,7 +66,9 @@ replay a failed source prefix or silently rearm a saved actor script.
 Fresh ordinary TTW input now completes seventeen speech commands through the
 Mom/Dad overlap and accepts the owned trait screen. Dad's next source begin
 program executes the [shared StopSound owner](source-sound-stopping.md), and the
-quest enters stages 90 and 100. Player-package removal then faults during a
-pending change animation; the opening and gurney exit remain incomplete.
+quest enters stages 90 and 100. Player-package removal now cancels the pending
+change and releases the camera. The source suffix disables Dad and stops CG00
+before the unsupported SetPCYoung command; the opening and gurney exit remain
+incomplete. Trait-menu modal pause remains a separate timing gap.
 General quest progress telemetry reports entered source
 stages separately from the bootstrap identity and scheduler invocation counts.

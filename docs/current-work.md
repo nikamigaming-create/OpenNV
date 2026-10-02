@@ -74,8 +74,12 @@ result and completion channels. It completes sixteen voiced commands and accepts
 Done on the owned trait screen. The reached StopSound command now shares the
 [source sound owner](source-sound-stopping.md). Ordinary flat input stops three
 actual birth-loop instances, completes seventeen speeches and enters stages 90
-and 100. The next source player-package removal faults during a pending change
-animation; the gurney exit remains incomplete. Paused
+and 100. [Player-package removal](player-package-removal.md) now cancels the
+pending change, releases the camera and clears current/pending state. A fresh
+ordinary opening completes that removal, disables Dad and stops CG00, then
+retains the unsupported SetPCYoung command before CG01. The source trait menu's
+missing pause lets background progression continue while it is open. The gurney
+exit and next-cell transition remain incomplete. Paused
 overlap, isolated conversation skip and retained failed-result prefixes pass an
 owned component fixture. Competing subtitle selection remains visibly unbound.
 The active CG00 quest script remains running.
@@ -442,8 +446,9 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Bind player-package removal/cancellation during a pending change animation, the
-next retained stage-100 fault, then rerun the ordinary opening past the gurney.
+Bind the reached SetPCYoung command to the general player appearance/age owner,
+and bind modal trait-menu pause, then rerun the ordinary opening past the gurney.
+Preserve source-validated player-package cancellation and camera release.
 Preserve the shared source-sound stopping and independent loop ownership.
 Complete competing subtitle
 selection/queue behavior, and resolve the authored ragdoll
@@ -523,13 +528,22 @@ during development except for a requested visual check.
 
 ## Candidate and private continuation
 
-Current sound checks are `tmp/source-sound-contract.log`,
+Current package-removal checks are `tmp/package-removal-contract.log`,
+`tmp/package-removal-owned.stdout.log` and `tmp/package-removal-runtime-gate.log`.
+The ordinary run is `tmp/development-lab/ttw-package-removal-20261001/`.
+It reaches stage 100 through seventeen speeches and stops the birth loop,
+removes the camera package, disables Dad and stops CG00. The retained next fault
+is SetPCYoung, before CG01. The trait menu remains unpaused while its source
+background progression executes. Interval overruns stay visible; recording is
+off. The camera fixture checks same/different pending cancellation, late frames,
+repeated removal and cold cleared state. The full required runtime gate and
+diff checks pass; both protected saves retain their source hashes. Ordinary
+Quit drains source readers. Current sound checks are `tmp/source-sound-contract.log`,
 `tmp/source-stop-owned.stdout.log` and `tmp/source-sound-runtime-gate.log`.
 The ordinary run is `tmp/development-lab/ttw-source-stop-20261001/`;
 its selected post-stage-100 state is `tmp/source-stop-post100.private.json`.
-It completes seventeen speeches, stops three actual birth-loop instances and
-enters source stages 90 and 100. CG00 retains the subsequent player-package
-removal failure during a pending change animation. State-publication interval
+The sound owner completes the source command and its following fade sound.
+State-publication interval
 overruns remain visible. The session quits through ordinary controls with source
 readers drained. The complete required runtime gate and diff checks pass;
 both protected saves retain their source hashes. Recording is off; the gurney

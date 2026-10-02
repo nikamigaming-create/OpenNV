@@ -3,8 +3,9 @@
 The winning TTW CG00 stage 90 result stops QSTBirthRoomLP before playing its
 fade sound. Stage 100 then removes the player's scripted camera package.
 The current ordinary run passes the former StopSound fault, completes seventeen
-speech commands and reaches stage 100. Package removal still fails during a
-pending change animation, so the gurney exit and subsequent campaign remain open.
+speech commands and reaches stage 100. [Package removal](player-package-removal.md)
+now cancels the pending change; SetPCYoung is the next fault before CG01.
+The gurney exit and subsequent campaign remain open.
 
 ## Source contract and owners
 
@@ -57,7 +58,8 @@ no frame recording is enabled. The audit does not advance a campaign.
 
 The ordinary flat opening uses New/Capital, gender/name input, the gene projector
 and the owned trait menu. It reaches stages 90 and 100 and stops three actual
-birth-loop instances. The retained package-removal fault is the next owner.
+birth-loop instances. Package cancellation and the next SetPCYoung fault are
+tracked in the [removal contract](player-package-removal.md).
 Telemetry publication interval overruns remain visible in this run.
 
 Retail instance-map lifetime, queued-menu admission, exact command/mixer timing,
