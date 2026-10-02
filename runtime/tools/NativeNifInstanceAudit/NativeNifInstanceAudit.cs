@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--facegen-attachment"])
+            {
+                await ExerciseFaceGenAttachment(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--actor-skin-root"])
             {
                 ExerciseActorSkinRoot(); GetTree().Quit(); return;
@@ -76,6 +80,7 @@ public partial class NativeNifInstanceAudit : Node
             }
             ExerciseReferenceAngles();
             ExerciseActorSkinRoot();
+            await ExerciseFaceGenAttachment();
             ExerciseObjectAnimation();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);

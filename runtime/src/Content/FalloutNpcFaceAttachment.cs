@@ -17,9 +17,9 @@ internal static class FalloutNpcFaceAttachment
         "mouth" or "teeth-lower" or "teeth-upper" or "tongue" or "eye-left" or "eye-right" or "hair" or "head-addon";
 
     // Rigid FaceGen vertices share the skinned head's model space. The actual
-    // Prn target selects the head skin's inverse bind; the component's export
-    // root rotation must not be composed a second time. This recovers the
-    // source-skin binding contract from the first-party actor implementation.
+    // Prn target selects the head skin's inverse bind. Components without Prn
+    // belong to the FaceGen head assembly and use its HeadBone bind. The
+    // component's export root rotation must not be composed a second time.
     internal static IReadOnlyDictionary<string, FalloutNifTransform> ReadHeadBinds(FalloutNifFile head)
     {
         var shapes = head.Blocks.Where(block => block.TypeName is "NiTriShape" or "NiTriStrips")

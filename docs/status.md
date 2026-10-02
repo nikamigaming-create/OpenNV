@@ -52,14 +52,15 @@ through procedure initialization, and failed package results on unscripted actor
 remain visible after cold restoration without replay.
 The current continuation binds shared signed race aging, birthday inventory
 commands, NPC-directed speech and scripted challenge progress with cold state.
-The ordinary hall run executes the birthday race/inventory prefix, then stops
-before relocation because Amata's child mouth model fails assembly. Additional
-birthday actor outfit/glasses failures remain visible. A finer native capsule
-search executes the owned coffee-table escape fixture; the actual closed-door
-campaign retry remains pending. Party-hat skin-root binding has a component
-repair whose native checks and live acceptance are reported in current work.
-The user requested a durable stopping point; the game is stopped while this
-block is verified and published. Megaton and the wider campaign remain open.
+The [rigid FaceGen assembly](actor-face-attachment.md) admits source child models
+without biped parent markers, retaining their selected head inverse bind and
+animation. All three birthday children pass complete owned actor assembly.
+An ordinary closed-door stage80 Continue, player door activation and following
+reach CG01 completion and CG02 stages0/5. Amata now delivers her introduction
+voice/lip morphs. The current next failure is a missing security actor from its
+alternate-texture binding; birthday outfit/glasses failures remain visible.
+Automatic escort-door recovery and short bot endpoint crossing remain open.
+Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,
 Megaton, train/Mojave travel and complete cold actor acceptance remain unverified.
 Further ordinary quest, full actor cold continuation and gurney/HUD behavior

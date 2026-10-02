@@ -11,6 +11,7 @@ internal static class NativeFaceGenMaterial
     private const uint SkinShaderType = 14;
     private const uint SpecularFlag = 1U;
     private const uint SkinnedFlag = 1U << 1;
+    private const uint ReservedPpFlag = 1U << 6;
     private const uint FaceGenFlag = 1U << 10;
     private const uint RemappableTexturesFlag = 1U << 25;
     private const uint DepthTestFlag = 1U << 31;
@@ -51,7 +52,10 @@ internal static class NativeFaceGenMaterial
         }
         if (shader is null || shader.ShaderType != SkinShaderType || (shader.ShaderFlags & FaceGenFlag) == 0)
             throw new InvalidDataException("The native FaceGen material requires the source skin shader and FaceGen flag.");
-        var allowedFlags = SpecularFlag | SkinnedFlag | FaceGenFlag | RemappableTexturesFlag | DepthTestFlag;
+        // The owned PP lighting selector does not consume flag 0x40. Preserve
+        // it as source state; it is neither alpha texture (0x100) nor the
+        // angular falloff used by the separate no-lighting property family.
+        var allowedFlags = SpecularFlag | SkinnedFlag | ReservedPpFlag | FaceGenFlag | RemappableTexturesFlag | DepthTestFlag;
         if ((shader.ShaderFlags & ~allowedFlags) != 0 ||
             (shader.ShaderFlags2 & ~(DepthWriteFlag | VertexColorsFlag)) != 0 ||
             shader.Controller >= 0 || shader.ExtraData.Any(index => index >= 0) ||
@@ -116,6 +120,8 @@ internal static class NativeFaceGenMaterial
         SetSourceAmbient(result, sourceAmbient);
         result.SetMeta("opennv_nif_shader_block", shader.Block.Index);
         result.SetMeta("opennv_nif_shader_type", shader.ShaderType);
+        result.SetMeta("opennv_nif_shader_flags", shader.ShaderFlags);
+        result.SetMeta("opennv_nif_shader_flags2", shader.ShaderFlags2);
         result.SetMeta("opennv_facegen_base_texture", inputs.BaseTexturePath);
         result.SetMeta("opennv_facegen_normal_texture", inputs.NormalTexturePath);
         result.SetMeta("opennv_facegen_base_mod", inputs.BaseMod.SourceName);

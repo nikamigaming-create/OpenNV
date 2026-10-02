@@ -257,6 +257,21 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     .Where(extra => extra.Name == "Prn").Select(extra => extra.Value).ToArray();
                 if (parentNames.Length > 1)
                     throw new InvalidDataException("Actor NIF has multiple source parent attachments.");
+                if (parentNames.Length == 0 && rigidFaceBinds is not null)
+                {
+                    // FaceGen's rigid components belong to its head-model
+                    // assembly even when their export omits biped Prn data.
+                    // Require the selected head's actual inverse bind; this
+                    // path is unavailable to ordinary unskinned actor parts.
+                    if (!rigidFaceBinds.ContainsKey(FalloutNpcFaceAttachment.HeadBone))
+                        throw new InvalidDataException("Rigid FaceGen component has no source head inverse bind.");
+                    var shapes = source.Blocks
+                        .Where(block => block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape")
+                        .Select(block => source.ReadGeometry(block.Index)).ToArray();
+                    if (shapes.Length == 0 || shapes.Any(shape => shape.SkinInstance >= 0))
+                        throw new NotSupportedException("Implicit FaceGen attachment requires unskinned source geometry.");
+                    parentNames = [FalloutNpcFaceAttachment.HeadBone];
+                }
                 var bipedHead = parentNames.Length == 0 && FalloutNpcFaceAttachment.IsRigidHeadEquipment(bipedSlots) &&
                     source.Blocks.Where(block => block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape")
                         .All(block => source.ReadGeometry(block.Index).SkinInstance < 0);
