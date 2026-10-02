@@ -3,6 +3,13 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Player camera packages share the C# IDLE playback clock with source intro,
+repeat and outro intervals. Assignment handoff retains identical event poses;
+source text-key crossings feed the existing native player sound owner. Saved
+phase and source identities validate before any live restoration mutation.
+See [camera repeats](player-package-camera-loops.md) for component proof and
+remaining body, blend, event-timing and ordinary-departure boundaries.
+
 Scripted [door state](source-door-state.md) retains its target and completion in
 the shared reference world. Managed source controllers retain its clock and cold
 pose, project collision with the owned animated subtree and report completion.
