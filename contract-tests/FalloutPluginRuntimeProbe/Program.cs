@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 if (args.Length >= 7 && args[0] == "--audit-quest-clock")
 {
@@ -1105,7 +1106,7 @@ try
         "Trait reset/acceptance changed committed input or restored the initial selection.");
     ExpectFailure(() => traitDraft.Toggle(syntheticTraits[0] with { EditorId = "ForeignTrait" }), "outside its source contract");
     ExpectFailure(() => new FalloutTraitMenuSelection(cellStack, syntheticTraitFarewell with
-        { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, []), "differs from its winning PERK");
+    { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, []), "differs from its winning PERK");
     Require(FalloutTraitMenuSelection.FormatCount("CHOOSE %d TRAITS", 1) == "CHOOSE 1 TRAITS", "Source trait count formatting failed.");
     ExpectFailure(() => FalloutTraitMenuSelection.FormatCount("%d %d", 1), "another source format owner");
     ExpectFailure(() => cellStack.NumericSettings.Set("iTraitMenuMaxNumTraits", 3), "trait selection contract");
@@ -1386,6 +1387,24 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessLegacySchema });
+    var legacyAccessState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.WithWorldState(legacyAccessState.State, referenceSave.ActiveCell,
+        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The preceding access save no longer loads and upgrades through the ordinary save owner.");
+    var accessSaveBytes = File.ReadAllBytes(syntheticSavePath);
+    foreach (var accessSchema in new[] { FalloutNativeCampaignSave.ReferenceAccessLegacySchema, FalloutNativeCampaignSave.RaceOverridesSchema })
+        foreach (var accessReference in new[]
+        {
+            new FalloutReferenceSnapshot(new("SyntheticCells.esm", 1), referenceSave.ActiveCell, new("SyntheticCells.esm", 2),
+                null, null, new Dictionary<uint, double>(), null, LockState: new(new string('0', 64), 100, true)),
+            new FalloutReferenceSnapshot(new("SyntheticCells.esm", 1), referenceSave.ActiveCell, new("SyntheticCells.esm", 2),
+                null, null, new Dictionary<uint, double>(), null, OwnershipOverride: new(new string('0', 64), new("SyntheticCells.esm", 7))),
+        })
+            ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
+            { Schema = accessSchema, References = [accessReference] }), "Legacy campaign save cannot contain reference lock or ownership overrides");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(accessSaveBytes), "Rejected legacy access state replaced a valid save.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.RaceOverridesSchema });
     var legacyRaceState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

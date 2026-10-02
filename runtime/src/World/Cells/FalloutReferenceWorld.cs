@@ -18,7 +18,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null,
     FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null, bool KnockedDown = false,
     FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null,
-    FalloutDoorMotionState? DoorMotion = null)
+    FalloutDoorMotionState? DoorMotion = null, FalloutReferenceLockState? LockState = null,
+    FalloutReferenceOwnershipOverride? OwnershipOverride = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -50,6 +51,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 }
             }
             snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
+            snapshot.LockState?.Validate();
+            snapshot.OwnershipOverride?.Validate();
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
@@ -90,6 +93,8 @@ internal sealed class FalloutReferenceInstance
     internal bool DoorOpen { get; set; }
     internal FalloutDoorMotionState? DoorMotion { get; set; }
     internal bool Unlocked { get; set; }
+    internal FalloutReferenceLockState? LockState { get; set; }
+    internal FalloutReferenceOwnershipOverride? OwnershipOverride { get; set; }
     internal bool Unconscious { get; set; }
     internal bool KnockedDown { get; set; }
     internal bool Restrained { get; set; }
@@ -169,7 +174,7 @@ internal sealed class FalloutReferenceInstance
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
         CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
         TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
-        CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion);
+        CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -375,7 +380,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
             instance.DoorMotion = snapshot.DoorMotion;
-            instance.Unlocked = snapshot.Unlocked;
+            validated.RestoreAccess(instance, snapshot);
             if (snapshot.Placement is { } placement)
             {
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");

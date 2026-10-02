@@ -523,6 +523,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([], _ => host.GetOpenState is not null && world.IsResident(Target()) ? host.GetOpenState(Target()) :
                     world.Get(Target()).DoorMotion?.OpenState ?? throw new NotSupportedException("GetOpenState has no source animation owner."))
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation is "getlocked" or "getlocklevel")
+                return new([], _ => operation == "getlocked" ? world.GetLocked(Target()) : world.GetLockLevel(Target()))
+                { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetUnconscious", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsUnconscious(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
@@ -737,6 +740,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setopenstate" when arguments.Count == 1:
                     _ = world.Get(target);
                     host.Apply(new(FalloutReferenceEffectKind.DoorOpenState, source, target, Enable: Boolean(arguments[0])));
+                    break;
+                case "lock":
+                    if (arguments.Count > 2) throw new InvalidDataException("Lock takes a difficulty and optional CELL access flag.");
+                    world.LockReference(target, arguments.Count == 0 ? 0 : Number(arguments[0]),
+                        arguments.Count == 2 ? Number(arguments[1]) : 0);
+                    break;
+                case "unlock":
+                    if (arguments.Count > 1) throw new InvalidDataException("Unlock takes an optional CELL access flag.");
+                    world.UnlockReference(target, arguments.Count == 0 ? 0 : Number(arguments[0]));
+                    break;
+                case "setownership":
+                    if (arguments.Count > 1) throw new InvalidDataException("SetOwnership takes an optional NPC_ or FACT owner.");
+                    var ownershipId = arguments.Count == 0 ? 0 : Number(arguments[0]);
+                    if (!double.IsFinite(ownershipId) || ownershipId < 0 || ownershipId > uint.MaxValue || ownershipId != Math.Truncate(ownershipId))
+                        throw new InvalidDataException("SetOwnership owner has no valid form identity.");
+                    world.SetOwnership(target, ownershipId == 0 ? null : records.RuntimeFormKey((uint)ownershipId));
                     break;
                 case "kill" or "killactor":
                     if (arguments.Count > 3) throw new InvalidDataException("KillActor has an invalid argument count.");
