@@ -10,6 +10,8 @@ internal partial class RuntimeNativePlayer
     private FalloutPluginStack? _presentationRecords;
     private FalloutPlayerInventory? _presentationInventory;
     private Func<FalloutNpcAppearance>? _appearance;
+    private Func<long>? _appearanceRevision;
+    private long _presentationAppearanceRevision = -1;
     private Func<Color>? _presentationAmbient;
     private RuntimeNativePlayerActor? _firstPerson, _thirdPerson;
     private SubViewport? _firstPersonView;
@@ -25,6 +27,7 @@ internal partial class RuntimeNativePlayer
     {
         thirdPerson = _thirdPersonMode,
         zoomMeters = _thirdPersonDistance,
+        appearanceRevision = _presentationAppearanceRevision,
         first = _firstPerson?.State,
         third = _thirdPerson?.State,
         error = _presentationError,
@@ -34,9 +37,11 @@ internal partial class RuntimeNativePlayer
     };
 
     internal void ConfigurePresentation(FalloutPluginStack records, FalloutPlayerInventory inventory,
-        Func<FalloutNpcAppearance> appearance, Func<Color> ambient, FalloutWeaponHandlingSnapshot? handling = null)
+        Func<FalloutNpcAppearance> appearance, Func<Color> ambient, FalloutWeaponHandlingSnapshot? handling = null,
+        Func<long>? appearanceRevision = null)
     {
         _presentationRecords = records; _presentationInventory = inventory; _appearance = appearance; _presentationAmbient = ambient;
+        _appearanceRevision = appearanceRevision;
         _weaponHandling = new(inventory);
         if (handling is not null) _weaponHandling.Restore(handling, key => FalloutWeaponPresentation.Read(records, key));
     }
@@ -96,14 +101,15 @@ internal partial class RuntimeNativePlayer
             _thirdPerson.SetViewPolicy(_xr is not null || _thirdPersonMode, true);
         }
         if (_xr is not null && _firstPerson is not null) _firstPerson.Visible = _presentationError is null;
-        if (!active && _xr is null) return;
         var equipment = _presentationEquipment is not null && _presentationInventoryRevision == _presentationInventory!.Revision
             ? _presentationEquipment : _presentationInventory!.Equipped.ToArray();
         _presentationInventoryRevision = _presentationInventory.Revision;
-        if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment))
+        var appearanceRevision = _appearanceRevision?.Invoke() ?? 0;
+        if (_presentationEquipment is null || !equipment.SequenceEqual(_presentationEquipment) || appearanceRevision != _presentationAppearanceRevision)
         {
             var changing = _presentationEquipment is not null;
             _presentationEquipment = equipment; _presentationError = null; CancelWeaponAction(); _pendingShotCount = 0; _shot = null;
+            _presentationAppearanceRevision = appearanceRevision;
             try { RebuildPresentation(equipment); }
             catch (Exception error)
             {
@@ -116,6 +122,7 @@ internal partial class RuntimeNativePlayer
             }
             if (changing && _presentationError is null && _weaponHandling!.Drawn) RequestWeaponAction("equip");
         }
+        if (!active && _xr is null) return;
         if (_presentationError is not null) return;
         var simulationDelta = GetTree().Paused ? 0 : delta;
         AdvanceWeaponHandling(simulationDelta);

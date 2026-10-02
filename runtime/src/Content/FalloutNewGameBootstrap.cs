@@ -69,6 +69,9 @@ internal sealed class FalloutNewGameBootstrap
                 case FalloutReferenceEffectKind.CharacterGeneration:
                     scripts.Session.SetInCharGen(change.Enable, null);
                     break;
+                case FalloutReferenceEffectKind.PlayerYouth:
+                    scripts.Session.SetPlayerYoung(change.Enable);
+                    break;
                 case FalloutReferenceEffectKind.Message:
                     var owner = records.GetEffective(change.Source);
                     var caller = owner.Signature == "QUST" ? FalloutScriptLocals.AttachedScript(records, owner)?.FormKey :

@@ -33,6 +33,13 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal object State => new
     {
         firstPerson = _first,
+        appearance = new
+        {
+            race = Actor.Appearance.Race.ToString(),
+            female = Actor.Appearance.Female,
+            hair = Actor.Appearance.Hair?.ToString(),
+            headParts = Actor.Appearance.Models.Where(part => part.Role == "head-addon").Select(part => part.Source.ToString()).ToArray(),
+        },
         weapon = Weapon?.Form.ToString(),
         group = _group,
         seconds = _seconds,

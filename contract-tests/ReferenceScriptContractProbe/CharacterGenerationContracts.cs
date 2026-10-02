@@ -28,9 +28,9 @@ internal static class CharacterGenerationContracts
                 Setting(105, "iXPBumpBase", BitConverter.GetBytes(150)),
                 Record("QUST", 0x601, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x600u))),
                 Record("SCPT", 0x600, Field("SCHR", header), Field("SLSD", local), Field("SCVR", Text("sample")),
-                    Field("SCTX", Text("short sample\nbegin GameMode\nSetInCharGen 1\nset sample to GetInCharGen\nend"))),
+                    Field("SCTX", Text("short sample\nbegin GameMode\nSetPCYoung -2\nSetInCharGen 1\nset sample to GetInCharGen\nend"))),
                 Record("QUST", 0x630, Field("DATA", [0, 0]), Field("INDX", new byte[2]), Field("QSDT", [0]),
-                    Field("SCTX", Text("SetInCharGen 1")))));
+                    Field("SCTX", Text("SetPCYoung 1\nSetInCharGen 1")))));
             using var records = FalloutPluginStack.Load(directory, ["Creation.esm"]);
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
@@ -38,26 +38,41 @@ internal static class CharacterGenerationContracts
             scripts.Advance(0);
             Require(scripts.Session.InCharGen && quests.Variable(Key(0x601), 1) == 1 && scripts.Capture().Instances.Single().Error is null,
                 "Fallback source program did not enter chargen and read the shared flag.");
+            Require(scripts.Session.PlayerYoung && scripts.Session.PlayerAppearanceRevision == 1,
+                "Fallback SetPCYoung did not booleanize a signed integer or invalidate appearance.");
+            scripts.Advance(0);
+            Require(scripts.Session.PlayerAppearanceRevision == 1, "Repeated youth assignment invalidated an unchanged appearance.");
             var snapshot = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(scripts.Capture()))!;
             var coldQuests = new FalloutQuestState(records); coldQuests.Restore(quests.Capture());
             var cold = new FalloutQuestScripts(records, coldQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0);
             cold.Restore(snapshot);
-            Require(cold.Session.InCharGen, "Cold script session lost character-generation state.");
+            Require(cold.Session.InCharGen && cold.Session.PlayerYoung, "Cold script session lost character-generation or youth state.");
             var legacy = JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>("{\"Hardcore\":false,\"AutoDisplayObjectives\":true,\"Achievements\":[]}")!;
-            Require(!legacy.InCharGen, "Legacy session acquired character generation.");
+            Require(!legacy.InCharGen && !legacy.PlayerYoung, "Legacy session acquired character generation or youth.");
 
             var special = new FalloutNativeSpecialState(5, 5, 5, 5, 5, 5, 5);
             var vitals = new FalloutPlayerVitals(records, Key(7), special);
             var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effect =>
             {
-                if (effect.Kind != FalloutReferenceEffectKind.CharacterGeneration) throw new InvalidDataException("Unexpected effect.");
-                scripts.Session.SetInCharGen(effect.Enable, vitals.RequireLevelUpOwner);
+                if (effect.Kind == FalloutReferenceEffectKind.PlayerYouth) scripts.Session.SetPlayerYoung(effect.Enable);
+                else if (effect.Kind == FalloutReferenceEffectKind.CharacterGeneration) scripts.Session.SetInCharGen(effect.Enable, vitals.RequireLevelUpOwner);
+                else throw new InvalidDataException("Unexpected effect.");
             }, InCharGen: () => scripts.Session.InCharGen));
             void Run(string body) => executor.ExecuteProgram(records.GetEffective(Key(0x601)), records.GetEffective(Key(0x600)),
                 FalloutGameModeProgram.Read("begin GameMode\n" + body + "\nend"), 0);
             Run("SetInCharGen 0\nset sample to GetInCharGen");
             Require(!scripts.Session.InCharGen && quests.Variable(Key(0x601), 1) == 0, "Reference result did not share chargen state.");
             Run("SetInCharGen 1");
+            Run("SetPCYoung 0");
+            Require(!scripts.Session.PlayerYoung, "Reference result did not clear shared youth state.");
+            Run("SetPCYoung 2");
+            Require(scripts.Session.PlayerYoung, "Reference result rejected a nonzero signed youth flag.");
+            foreach (var invalid in new[] { "0.5", "2147483648", "-2147483649" })
+                Reject(() => Run("SetPCYoung " + invalid + "\nset sample to 99"));
+            Require(scripts.Session.PlayerYoung && quests.Variable(Key(0x601), 1) == 0,
+                "Invalid youth flag changed state or executed its suffix.");
+            cold.Session.Restore(legacy);
+            Require(!cold.Session.PlayerYoung, "Cold legacy restoration retained an earlier youth flag.");
             foreach (var invalid in new[] { "-1", "2", "0.5" }) Reject(() => Run("SetInCharGen " + invalid + "\nset sample to 99"));
             Require(scripts.Session.InCharGen && quests.Variable(Key(0x601), 1) == 0, "Invalid flag mutated state or executed its suffix.");
 
@@ -89,8 +104,8 @@ internal static class CharacterGenerationContracts
                 _ => throw new InvalidDataException("Unexpected startup effect."), () => true);
             scripts.Session.Restore(legacy);
             bootstrap.Start();
-            Require(scripts.Session.InCharGen, "Pre-world source result lost its chargen flag.");
-            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewards=unbound parity=unverified");
+            Require(scripts.Session.InCharGen && scripts.Session.PlayerYoung, "Pre-world source result lost chargen or youth policy.");
+            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewards=unbound parity=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
     }

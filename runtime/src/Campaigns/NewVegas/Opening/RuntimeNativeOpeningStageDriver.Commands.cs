@@ -51,6 +51,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 }
                 else _character = _raceSexContract.Select(_character.RaceRuntimeFormId, female, _character) with { Face = _character.Face };
                 FalloutNativeRaceSexResolver.Validate(_raceSexContract, _character);
+                _characterRevision++;
                 break;
             case "clearscreensplatter" when parts.Length == 1 && arguments.Count == 0:
                 foreach (var splatter in _screenSplatters)

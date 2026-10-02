@@ -28,6 +28,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutFormKey _activeCell;
     private string _playerName = string.Empty;
     private FalloutNativeRaceSexSelection _character = null!;
+    private long _characterRevision;
+    internal long PlayerAppearanceRevision => _characterRevision + _scripts.Session.PlayerAppearanceRevision;
     private FalloutNativeSpecialState _special = null!;
     private FalloutPlayerVitals _vitals = null!;
     private FalloutPlayerSkills _playerSkills = null!;
@@ -174,7 +176,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _imageSpaceState = imageSpaceState;
         _quests = quests;
         _scripts = scripts;
-        _scripts.References!.BindPlayerAppearance(() => FalloutNativeCharacterCreation.ActorState(_pluginStack, _raceSexContract.Player, _character));
+        _scripts.References!.BindPlayerAppearance(() => PlayerActorState);
         _scriptHost = new((quest, stage) =>
         {
             var source = _controls.Quests.Values.SelectMany(values => values.Values)
@@ -496,6 +498,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         FalloutNativeRaceSexResolver.Validate(_raceSexContract, selection);
         _character = selection;
+        _characterRevision++;
         if (_raceSexEntry is not null)
         {
             _raceSexEntry.Accepted -= AcceptCharacter;
@@ -600,6 +603,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             if (_traitEntry is not null)
             {
+                _traitEntry.ReleasePause();
                 _traitEntry.QueueFree();
                 _traitEntry = null;
             }
@@ -627,6 +631,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_traitEntry is not null)
         {
             _traitEntry.Accepted -= AcceptTraits;
+            _traitEntry.ReleasePause();
             _traitEntry.QueueFree();
             _traitEntry = null;
         }

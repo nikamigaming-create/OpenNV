@@ -114,9 +114,12 @@ internal partial class RuntimeNativeOpeningStageDriver
         throw new NotSupportedException($"Dialogue actor {actor} value {value} has no state owner.");
     }
 
+    private FalloutActorAppearanceState PlayerActorState =>
+        FalloutNativeCharacterCreation.ActorState(_pluginStack, _raceSexContract.Player, _character) with { PlayerYoung = _scripts.Session.PlayerYoung };
+
     internal FalloutNpcAppearance PlayerAppearance => FalloutNpcAppearanceResolver.Resolve(_pluginStack, _raceSexContract.Player,
         equippedArmor: _inventory.Equipped.Select(_pluginStack.RuntimeFormKey).Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray(),
-        appearanceState: FalloutNativeCharacterCreation.ActorState(_pluginStack, _raceSexContract.Player, _character));
+        appearanceState: PlayerActorState);
 
     internal int TakeMessageButton(FalloutFormKey caller) => _scripts.MessageResults.Take(caller);
     internal bool IsTalking(FalloutFormKey actor) => _speech?.IsTalking(actor) ??
@@ -166,6 +169,9 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case FalloutReferenceEffectKind.CharacterGeneration:
                 _scripts.Session.SetInCharGen(effect.Enable, _vitals.RequireLevelUpOwner);
+                break;
+            case FalloutReferenceEffectKind.PlayerYouth:
+                _scripts.Session.SetPlayerYoung(effect.Enable);
                 break;
             case FalloutReferenceEffectKind.Achievement:
                 _scripts.Session.AddAchievement(effect.Value);

@@ -76,13 +76,19 @@ Done on the owned trait screen. The reached StopSound command now shares the
 actual birth-loop instances, completes seventeen speeches and enters stages 90
 and 100. [Player-package removal](player-package-removal.md) now cancels the
 pending change, releases the camera and clears current/pending state. A fresh
-ordinary opening completes that removal, disables Dad and stops CG00, then
-retains the unsupported SetPCYoung command before CG01. The source trait menu's
-missing pause lets background progression continue while it is open. The gurney
-exit and next-cell transition remain incomplete. Paused
+ordinary opening completes that removal, disables Dad and stops CG00. The shared
+[player youth policy](player-youth-appearance.md) now executes SetPCYoung and
+enters CG01 stage 0, where SetSoundSourceFile remains unsupported before the
+player transfer. The trait menu now pauses gameplay; fresh ordinary input retains
+identical speech, camera-package time, quest progress and draft across an extended
+hold, then Done releases progression. Native clock/input/acceptance/cleanup checks
+pass. Synthetic command/cold/policy checks and owned male/female first/third body
+construction checks pass. Childhood-room entry and gurney-exit acceptance remain
+incomplete. Paused
 overlap, isolated conversation skip and retained failed-result prefixes pass an
 owned component fixture. Competing subtitle selection remains visibly unbound.
-The active CG00 quest script remains running.
+CG00 is stopped after its executed stage-100 prefix; the failed nested CG01
+continuation remains visible on that calling script owner.
 The loaded CELL reports 102 missing runtime references on entry
 and 83 after ordinary reference processing; the camera clip reports two unbound
 non-camera targets. The first ordinary manual save now initializes a campaign
@@ -446,8 +452,10 @@ session audit passed. This intermittent construction failure remains open.
 
 ## Next owners
 
-Bind the reached SetPCYoung command to the general player appearance/age owner,
-and bind modal trait-menu pause, then rerun the ordinary opening past the gurney.
+Bind CG01 stage 0's reached SetSoundSourceFile through a shared, source-validated
+sound-path override owner and invalidate existing descriptor caches. Then rerun
+ordinary input through the childhood transfer and toddler sequence. Preserve
+the shared saved youth policy, appearance invalidation and modal trait-menu pause.
 Preserve source-validated player-package cancellation and camera release.
 Preserve the shared source-sound stopping and independent loop ownership.
 Complete competing subtitle

@@ -7,7 +7,7 @@ internal enum FalloutReferenceEffectKind
 {
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
-    ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say
+    ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say, PlayerYouth
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
@@ -793,6 +793,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "setinchargen" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.CharacterGeneration, source, Enable: Boolean(arguments[0])));
+                    break;
+                case "setpcyoung" when parts.Length == 1 && arguments.Count == 1:
+                    host.Apply(new(FalloutReferenceEffectKind.PlayerYouth, source,
+                        Enable: FalloutScriptSession.PlayerYouthFlag(Number(arguments[0]))));
                     break;
                 case "autodisplayobjectives" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.AutoDisplayObjectives, source, Enable: Boolean(arguments[0])));
