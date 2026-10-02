@@ -24,7 +24,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
         _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
-        _barterMenu is not null ? "barter-menu" : null;
+        _barterMenu is not null ? "barter-menu" :
+        _scripts.References?.PendingPackageEventCount > 0 ? "actor-package-events" : null;
     internal object SaveRequestState => new
     {
         requested = _saveRequested,

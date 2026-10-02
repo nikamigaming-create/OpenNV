@@ -41,7 +41,7 @@ internal sealed class RuntimeLiveContentSource : IDisposable
         ContentRoot = contentRoot;
         _layers = layers;
         Settings = settings?.ToArray() ?? [];
-        PluginSources = pluginSources;
+        PluginSources = Array.AsReadOnly(pluginSources.Select(source => source with { OwnedSource = this }).ToArray());
         _archivePaths = archivePaths;
         Game = game;
         Campaign = campaign;

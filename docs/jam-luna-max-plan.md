@@ -1,12 +1,15 @@
 # JAM and MCM implementation plan for Luna Max
 
-Intended executor: `gpt-5.6-luna`, reasoning effort `max`. This is an execution
-plan for the existing OpenNV task. It does not create another task or change a
-model setting. Implement and verify each block, publish it, then continue with
-the next unresolved source behavior. Work without subagents.
+This plan was prepared for `gpt-5.6-luna` with reasoning effort `max`; it does
+not create another task or change the current model. The current user-directed
+task uses parallel agents. Implement and verify each block, publish it, then
+continue with the next unresolved source behavior.
 
-The user's priority is complete JAM first, including MCM, followed by TTW and
-the remaining [ten targets](mod-compatibility.md). Mods remain additive launcher
+The current priorities are the ordinary Fallout 3/TTW campaign route and all
+nine JAM modules with MCM, plus Benny and the remaining
+[ten targets](mod-compatibility.md). Follow the current
+[implementation plan](implementation-plan.md) and
+[verified state](current-work.md). Mods remain additive launcher
 options with automatic ordering and optional Advanced overrides. The player
 selects their owned folders; ordinary launch, settings, gameplay and saved
 continuation must work in flat and OpenXR. Dependency behavior belongs to that
@@ -46,7 +49,7 @@ information or an external action that is actually required; continue other
 independent work while waiting. Physical headset acceptance is a separate user
 action and cannot be inferred from simulator results.
 
-## Verified starting point
+## Historical starting point
 
 The runtime baseline is main commit
 [`252ba59`](https://github.com/nikamigaming-create/OpenNV/commit/252ba59f2f7d76e6084787e070d5585489b0bec6),
@@ -84,7 +87,8 @@ Still incomplete:
 - Full JAM gameplay and complete campaigns remain unavailable. Keep their
   existing support gates until acceptance justifies changing them.
 
-The latest owned initialization audit stops at these concrete operations:
+The PR 45 baseline initialization audit stopped at these concrete operations;
+this table is historical and does not describe the current first failures:
 
 | Caller | First reached missing behavior |
 | --- | --- |
@@ -94,8 +98,9 @@ The latest owned initialization audit stops at these concrete operations:
 | JHI and JHM initialization | `UnloadUIComponent` |
 | JDC callback admission | Chained dot call on the result of `GetEquippedItemRef` |
 
-These are first failures, not an exhaustive feature list. Do not skip them to
-make a later frame appear successful.
+The current next owners are recorded in [current work](current-work.md).
+Reproduce the earliest current source failure and retain its prefix; do not
+skip it to make a later frame appear successful.
 
 ## Local inputs and evidence
 

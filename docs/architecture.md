@@ -71,6 +71,20 @@ through the existing C# statement interpreter. The package lifecycle retains
 failed prefixes without replay. See [package results](package-event-results.md)
 for bounded owned arrival/result proof and early construction/cold boundaries.
 
+The C# world [collects attached actor package events](reference-package-events.md)
+before native binding and admits actual PACK filters on the normal reference
+frame in authored block order. Receipt consumption preserves newer marks.
+Embedded failures retain an actor fault; pending events block campaign capture.
+
+The [SPECIAL book foundation](native-special-book-menu.md) renders winning NIF,
+XML input, animations and light through a shared 3D menu surface. Its session
+requires explicit permanent-value reads and immediate integer base writes;
+production player pools and command/save binding remain unowned.
+
+Explicit [source-string arguments](nvse-source-string-arguments.md) resolve
+deferred typed values before admitting bare literals. Numeric executable defaults
+bind the immutable complete owned graph independently of ambient source state.
+
 FalloutScriptSession also owns saved toddler animation and source player scale.
 Native first-person movement and Camera1st consume the actual toddler palette,
 including looking-only controls; transfers preserve the same scale. Scripted

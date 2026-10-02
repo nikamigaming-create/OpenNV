@@ -42,6 +42,7 @@ internal partial class RuntimeNativeNpc
     internal bool WeaponDrawn => Activity.WeaponDrawn;
     private long _aiActivityRevision = -1;
     internal string? PackageIdleError => _packageIdleError;
+    internal string? PackageEventError => _packageEvents?.Error;
     internal string? AiError => _aiError;
     internal int SittingState => _sitting;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
@@ -129,6 +130,7 @@ internal partial class RuntimeNativeNpc
         error = _aiError,
         scheduleTime = _aiScheduleTime,
         evaluationPolicy = "quest-activity-hour-changes-and-ten-second-poll;retail-cadence-unmatched",
+        referencePackageEventOwner = _aiWorld is null ? "unbound-no-reference-world" : "shared-reference-world",
         unbound = new[] { "retail-navigation-timing", "furniture-entry-script-procedure-code", "furniture-idle-variations", "idle-internal-loop-counts", "head-eye-aiming", "actor-save-restoration", "combat-event-dispatch" },
     };
 
@@ -155,6 +157,31 @@ internal partial class RuntimeNativeNpc
     }
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
+    {
+        // The source process marks the actual actor before executing its PACK
+        // result. Its attached script consumes these marks in declaration order
+        // on the normal source frame, including events produced before 3D binds.
+        if (_aiWorld is { } world)
+            world.PackageEvents.Mark(Appearance.Reference!.Value, package.Form, kind switch
+            {
+                "POBA" => FalloutReferencePackageEventKind.Start,
+                "POEA" => FalloutReferencePackageEventKind.Done,
+                "POCA" => FalloutReferencePackageEventKind.Change,
+                _ => throw new InvalidDataException("Package lifecycle event kind is unknown."),
+            });
+        try { DispatchPackageActions(package, kind); }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
+        {
+            // An unsupported embedded result cannot release the attached actor
+            // script's suffix. Keep the same source fault with the world owner,
+            // even if this actor's native presentation is later evicted.
+            if (_aiWorld is { } failedWorld)
+                failedWorld.Get(Appearance.Reference!.Value).ScriptError ??= $"Package {kind} {package.Form}: {error.Message}";
+            throw;
+        }
+    }
+
+    private void DispatchPackageActions(FalloutScriptPackage package, string kind)
     {
         // Result scripts precede the event's topic and idle. An unsupported
         // reached effect keeps this event failed, rather than replaying it.

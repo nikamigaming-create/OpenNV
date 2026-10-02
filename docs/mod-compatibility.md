@@ -125,8 +125,10 @@ The [typed postfix reference-call owner](nvse-postfix-reference-calls.md) admits
 46 of JAM's 52 source scripts, previously 41. It retains typed calling identity,
 once-only evaluation, compiled bindings, lazy inactive arguments and cold state.
 Six scripts still fail parsing on anonymous-function blocks or key/value pairs.
-The owned 360-frame execution audit reaches bare numeric-setting argument names,
-actual equipped-object queries, hit-event registration and Dispel. Eight MCM
+The source-string/numeric-default owner now retains eleven correct JDC reads
+from nine executable declarations and two winning GMST records. Its next owned
+query is GetNumericINISetting. The selected 360-frame audit also reaches actual
+equipped-object queries, hit-event registration and Dispel. Eight MCM
 initializers each execute 360 clean headless frames; this is initialization
 evidence without a player host or visible configuration acceptance.
 JBTMCM's attached object-type SCPT lacks current quest-clock admission; no

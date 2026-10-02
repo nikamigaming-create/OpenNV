@@ -81,7 +81,9 @@ public partial class RuntimeCoordinator
                 _nativeReferences.InstanceCount,
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
-                state = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.Capture() : null,
+                pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
+                state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0
+                    ? _nativeReferences.Capture() : null,
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },
             ui = _nativeUi?.State,

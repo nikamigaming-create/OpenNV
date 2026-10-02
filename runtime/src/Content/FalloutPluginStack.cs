@@ -9,7 +9,11 @@ internal sealed record FalloutPluginSource(
     string AbsolutePath,
     long? RegisteredBytes = null,
     long? RegisteredMtimeUnixMilliseconds = null,
-    string? RegisteredSha256 = null);
+    string? RegisteredSha256 = null)
+{
+    // In-process source ownership is not persisted with file provenance.
+    internal RuntimeLiveContentSource? OwnedSource { get; init; }
+}
 
 internal readonly record struct FalloutPluginStackLoadMetrics(
     TimeSpan PluginHeaderScan,
@@ -74,7 +78,8 @@ internal sealed class FalloutPluginStack : IDisposable
     private FalloutPluginStack(
         IReadOnlyList<FalloutPluginContext> plugins,
         IDictionary<FalloutFormKey, FalloutPluginRecord> winners,
-        IDictionary<string, int> loadOrderIndices)
+        IDictionary<string, int> loadOrderIndices,
+        RuntimeLiveContentSource? ownedSource)
     {
         _plugins = new ReadOnlyCollection<FalloutPluginContext>(plugins.ToArray());
         _winners = new ReadOnlyDictionary<FalloutFormKey, FalloutPluginRecord>(
@@ -91,7 +96,7 @@ internal sealed class FalloutPluginStack : IDisposable
                     StringComparer.Ordinal));
         _effectiveRecordCount = _winnerKeysBySignature.Values.Sum(keys => keys.Count);
         PerkParameters = new(this);
-        NumericSettings = new(this);
+        NumericSettings = new(this, ownedSource);
         SoundPaths = new(this);
     }
 
@@ -133,6 +138,10 @@ internal sealed class FalloutPluginStack : IDisposable
         if (sources.Any(source => string.IsNullOrWhiteSpace(source.Name)) ||
             sources.Select(source => source.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != sources.Count)
             throw new FalloutPluginFormatException("Plugin load order contains an invalid or duplicate name.");
+        var ownedSource = sources[0].OwnedSource;
+        if (sources.Any(source => !ReferenceEquals(source.OwnedSource, ownedSource)) ||
+            ownedSource is not null && !sources.SequenceEqual(ownedSource.PluginSources))
+            throw new FalloutPluginFormatException("Plugin sources differ from their complete owned source graph.");
 
         var canonicalByFold = sources.ToDictionary(source => source.Name, source => source.Name, StringComparer.OrdinalIgnoreCase);
         var orderedPluginNames = sources.Select(source => source.Name).ToArray();
@@ -247,7 +256,7 @@ internal sealed class FalloutPluginStack : IDisposable
                 winnerConstruction.Stop();
             }
             winnerConstruction.Start();
-            var stack = new FalloutPluginStack(contexts, winners, loadOrderIndices);
+            var stack = new FalloutPluginStack(contexts, winners, loadOrderIndices, ownedSource);
             if (loadAllSignatureIndexesForAudit)
                 stack.LoadAllSignatureIndexes();
             winnerConstruction.Stop();

@@ -525,7 +525,10 @@ internal sealed class FalloutQuestScripts
         void Write(string name, double value) => WriteValue(name, value);
         bool IsForm(string name) => FalloutScriptBindings.IsPlayer(name) || TryForm(name) is { Signature: not "GLOB" } ||
             instance.Bindings.HasVariable(name) && instance.Bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays, ReferenceFunction, IsForm);
+        bool HasValueOwner(string name) => FalloutScriptBindings.IsPlayer(name) || TryForm(name) is not null ||
+            instance.Bindings.HasVariable(name);
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays,
+            ReferenceFunction, IsForm, HasValueOwner);
         FalloutPluginRecord Quest(string name)
         {
             var quest = Form(name);
@@ -703,6 +706,11 @@ internal sealed class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
+                return;
+            }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
@@ -737,12 +745,6 @@ internal sealed class FalloutQuestScripts
             {
                 if (arguments.Count != 0) throw new InvalidDataException("ClearNoActivationSound takes no arguments.");
                 NoActivationSound.Clear();
-                return;
-            }
-            if (parts.Length == 1 && operation == "setnumericgamesetting")
-            {
-                FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,
-                    token => token.StartsWith('"') || instance.Bindings.HasVariable(token) ? StringArgument(token) : token);
                 return;
             }
             if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) && operation == "setscale")
