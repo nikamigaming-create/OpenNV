@@ -8,11 +8,17 @@ internal sealed class FalloutNifAnimatedNodePath
     internal int AnimatedPathNodes => _path.Count(item => item.Track is not null);
     internal int UnboundOtherTargets { get; }
     internal FalloutNifControllerSequence Sequence { get; }
+    internal IReadOnlyList<FalloutNifTextKey> TextKeys { get; }
 
     internal FalloutNifAnimatedNodePath(FalloutNifFile skeleton, FalloutNifFile clip, string target)
     {
         if (clip.Roots.Count != 1) throw new InvalidDataException("An explicitly selected KF needs one sequence.");
         Sequence = clip.ReadControllerSequence(clip.Roots[0]);
+        TextKeys = Sequence.TextKeys < 0 ? [] :
+            (clip.ReadObject(Sequence.TextKeys) as FalloutNifTextKeyExtraData ??
+                throw new InvalidDataException("Source camera text keys have no declared owner.")).Keys;
+        if (TextKeys.Any(key => !float.IsFinite(key.Time)))
+            throw new InvalidDataException("Source camera text key has a non-finite time.");
         if (Sequence.Weight != 1 || Sequence.Frequency <= 0 || !float.IsFinite(Sequence.Frequency) ||
             Sequence.StopTime <= Sequence.StartTime || Sequence.CycleType is not (0 or 2))
             throw new NotSupportedException("KF camera timing/weight needs another animation owner.");

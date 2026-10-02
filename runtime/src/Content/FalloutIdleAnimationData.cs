@@ -31,6 +31,14 @@ internal sealed record FalloutIdleAnimationData(byte Group, byte LoopMinimum, by
         if (choice >= width) throw new InvalidDataException("Idle random selection exceeded its exclusive bound.");
         return (byte)(LoopMinimum + choice - 1);
     }
+
+    internal bool AdmitsAdditionalLoops(byte selected)
+    {
+        if (LoopMinimum == 0 || LoopMaximum == 0) return selected == 0;
+        if (LoopMinimum == byte.MaxValue) return selected == byte.MaxValue;
+        if (LoopMaximum <= LoopMinimum) return selected == LoopMaximum - 1;
+        return selected >= LoopMinimum - 1 && selected < LoopMaximum - 1;
+    }
 }
 
 /// <summary>Actor-wide cooldown membership survives interruption of a selected animation.</summary>
