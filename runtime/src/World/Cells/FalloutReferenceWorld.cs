@@ -17,7 +17,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferencePlacement? Placement = null, bool Restrained = false, bool PlayerTeammate = false,
     bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null,
     FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null, bool KnockedDown = false,
-    FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null)
+    FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null,
+    FalloutDoorMotionState? DoorMotion = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -48,6 +49,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                         throw new InvalidDataException("Saved object animation controller is duplicated.");
                 }
             }
+            snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
@@ -86,6 +88,7 @@ internal sealed class FalloutReferenceInstance
     internal bool Deleted { get; set; }
     internal bool Taken { get; set; }
     internal bool DoorOpen { get; set; }
+    internal FalloutDoorMotionState? DoorMotion { get; set; }
     internal bool Unlocked { get; set; }
     internal bool Unconscious { get; set; }
     internal bool KnockedDown { get; set; }
@@ -166,7 +169,7 @@ internal sealed class FalloutReferenceInstance
         Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
         CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
         TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
-        CaptureObjectAnimations?.Invoke() ?? ObjectAnimations);
+        CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion);
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -366,6 +369,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Deleted = snapshot.Deleted;
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
+            instance.DoorMotion = snapshot.DoorMotion;
             instance.Unlocked = snapshot.Unlocked;
             if (snapshot.Placement is { } placement)
             {

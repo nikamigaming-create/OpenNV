@@ -73,8 +73,11 @@ the authored On End `setstage CG01 16` exposed the limited package-script host.
 The [shared package-result owner](package-event-results.md) now passes synthetic
 scope/prefix/cold-value checks and the owned native arrival/result fixture.
 The resumed ordinary route executes Dad's On End result and enters stage 16.
-Its QSDT prefix starts Dad's next voice, then the authored gate-closing
-`CG01PlaypenGateREF.setOpenState 0` reaches the next missing door-state owner.
+Its QSDT starts Dad's next voice. The [source door-state owner](source-door-state.md)
+now executes `CG01PlaypenGateREF.setOpenState 0` in both the owned native fixture
+and the resumed ordinary route, with its actual source collision. Dad then selects
+CG01DadCloseDoor (FalloutNV.esm:0457c4), whose travel/procedure remains unbound.
+The quest stays at stage 16 with that visible AI error.
 The gurney departure, toddler quest completion and Vault exit remain open.
 
 ## Shared owners and checks
@@ -104,13 +107,17 @@ Synthetic toddler/scale, numeric actor-value and random-dialogue checks pass.
 Owned native male/female body/camera/movement/clear/scale checks and two actual
 encouragement voice/result/completion checks pass. The full required runtime gate
 passes; that block is merged and main was synchronized before the next branch.
-The package-result block also passes its selected owned fixture and full gate.
-Publish after the final diff check, obtain required exact-head CI checks, merge
-and synchronize clean main. Recording is off during development and gates.
+The package-result block passed its owned fixture and full gate, was merged after
+all five CI checks, and main was synchronized before the fresh door-state branch.
+The door-state synthetic and owned native checks pass, including cold motion,
+source collision, duplicate requests, unbound-owner refusal and source-drift
+rejection. The complete required runtime gate also passes. Publish after the
+final diff check, obtain required exact-head CI, merge and synchronize clean main.
+Recording is off during development and gates.
 
 ## Visible gaps
 
-- The current birth CELL retains 83 missing runtime references and two reached
+- The current cold toddler CELL retains 109 missing runtime references and two reached
   GetLinkedRef operand failures. Camera body targets, actor cold clocks,
   interaction continuation, subtitle competition and matched timing remain open.
 - PlaySound's reverb, listener submersion, complete output/volume routing and script
@@ -132,8 +139,11 @@ and synchronize clean main. Recording is off during development and gates.
 
 ## Next owner
 
-Bind the reached SetOpenState door command to shared source door state and the
-existing native controller, then resume the ordinary toddler/Vault route.
+Publish the verified source door-state block, then bind the reached
+CG01DadCloseDoor travel/procedure through the general NPC package owner and
+resume the ordinary toddler/Vault route. The isolated gurney agent has passing
+source-camera loop and mixer checks; review and integrate its change, then verify
+the actual departure through fresh ordinary opening input.
 The source trigger sphere and gate clearance have now executed through normal
 input; preserve closed-door collision and reject unknown clearance.
 The gurney camera still needs its authored IDLE repeat interval, package handoff
@@ -151,6 +161,8 @@ passed complete cold actor continuation. Checks:
 `tmp/speech-actor-values-owned.stdout.log`, `tmp/toddler-runtime-gate.log`.
 Package result checks: `tmp/package-results-contract.log`,
 `tmp/package-results-owned.stdout.log`, `tmp/package-results-runtime-gate.log`.
+Door-state checks: `tmp/door-state-contract.log`,
+`tmp/door-state-owned.stdout.log`, `tmp/door-state-runtime-gate.log`.
 Owned audit helpers: `tmp/Run-ToddlerAudit.ps1`,
 `tmp/Run-SpeechActorValuesAudit.ps1`.
 

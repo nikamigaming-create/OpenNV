@@ -7,6 +7,13 @@ internal sealed partial class RuntimeNifControllerPlayer
     private string? _pendingSequence;
     private bool _scriptSelected;
 
+    internal void RequireManagedFiniteSequence(string name)
+    {
+        if (SourceController < 0 || SourceSha256 is not { Length: 64 } || !SourceSha256.All(Uri.IsHexDigit) ||
+            !_sequences.TryGetValue(name, out var sequence) || sequence.DirectClock is not null || sequence.CycleType != 2)
+            throw new NotSupportedException("Door motion requires a finite managed source animation sequence.");
+    }
+
     internal void RequestSourceSequence(string name, int initialization)
     {
         if (!_sequences.TryGetValue(name, out var sequence)) throw new KeyNotFoundException($"Unknown source animation group {name}.");
