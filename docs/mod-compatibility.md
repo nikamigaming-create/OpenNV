@@ -51,6 +51,15 @@ the JAM additions/preset and further TTW desirables remain source-audit work.
 The long-term objective is general Nexus mod script/dependency compatibility;
 the bounded current checks do not establish universal mod support.
 
+The user's current compatibility requirement is to use original downloaded mods
+unchanged. Implement shared vanilla, xNVSE and dependency behavior through the
+compatibility layer, so another mod using the same interface needs no bespoke
+support path. Native DLL compatibility needs its original interfaces, object
+layouts and hooks bound to the C# gameplay owners; this remains required host
+work. Recover verified contracts from the existing D: drive engine/script and
+Ghidrust investigations before repeating research. No unbound interface may
+return invented success to make a mod believe its effect happened.
+
 Required xNVSE, JIP LN, JohnnyGuitar, kNVSE, UIO, MCM and other dependency
 behavior belongs to each selected stack's acceptance, rather than occupying
 target slots. Record exact versions, patches and dependencies per tested stack;

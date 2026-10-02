@@ -33,11 +33,19 @@ The actual source player relocation enters the birthday room. Beatrice is
 source-disabled; her two SayTo calls now create neither voices nor completion
 events. Ordinary source speech continues through CG02 stage6. The selected
 clapping Travel package now completes at party actors' editor locations;
-later speech selection retains an unbound player-target GetIsID condition.
+shared reference identity now admits the later player-target GetIsID condition.
+The ordinary continuation reaches CG02 stage7, then source speech retains a
+missing owned-font glyph for a curly apostrophe.
 The glasses environment texture also leaves a birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
+
+[Reference base identity](reference-base-identity.md) supplies dialogue speaker,
+listener and explicit-reference GetIsID and the same ordinary script command.
+The installed source condition and synthetic dispatcher checks pass; the genuine
+birthday retry now reaches stage7. Leveled permanent-base identity and matched
+retail acceptance remain open.
 
 [Travel to editor location](source-editor-travel.md) separates winning authored
 placement from current script movement. Owned NAVM/KF and the existing native
@@ -78,8 +86,8 @@ continuation. The [skin-root repair](actor-skin-root.md) and
 
 ## Next owners
 
-1. Bind shared dialogue actor identity for player-target GetIsID conditions.
-   The reached source speech selection retains its fault; retry the genuine
+1. Bind Unicode punctuation to its authored owned-font glyph slots.
+   The reached source speech/drawing path retains its fault; retry the genuine
    checkpoint after repair instead of replaying its consumed prefix.
 2. Bind the glasses' authored 2D environment-map behavior without substituting
    a guessed cubemap. Retry the genuine checkpoint and continue birthday play.
@@ -98,7 +106,7 @@ authoritative gameplay and saves.
 ## Private continuation
 
 Run `tmp/development-lab/ttw-bot-20261002/` exited through ordinary Quit after
-the birthday player-target condition failure at stage6. Recording remained off. Genuine stage16, stage40,
+the birthday owned-font glyph failure at stage7. Recording remained off. Genuine stage16, stage40,
 stage50 and open/closed stage80 backups are under
 `local/ttw-bot-resume-20261002/`; closed stage80 is the next retry. The private
 manifest and focused actor/campaign reports retain hashes and source evidence.

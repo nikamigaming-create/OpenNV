@@ -19,6 +19,7 @@ internal static class ActorSourceContracts
                     Field("CNTO", Join(BitConverter.GetBytes(0x840u), BitConverter.GetBytes(3)))),
                 Creature(0x801, 65, 0x800, "creatures/local/skeleton.nif", "local.nif", .75f),
                 Creature(0x802, 66, 0x802, "creatures/test/skeleton.nif", "body.nif", 1),
+                Record("NPC_", 7, Field("EDID", Text("PlayerBase"))),
                 Creature(0x803, 0, 0, "creatures/test/skeleton.nif", "../escape.nif", 1),
                 Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1),
                 Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
@@ -48,7 +49,7 @@ internal static class ActorSourceContracts
                 Record("SCPT", 0x890, Field("SCTX", Text("begin OnActivate\nif GetUnconscious\nSetUnconscious 0\nelse\nSetUnconscious 1\nendif\nend"))),
                 Record("SCPT", 0x891, Field("SCRO", BitConverter.GetBytes(0x903u)),
                     Field("SCRO", BitConverter.GetBytes(0x14u)),
-                    Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
+                    Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player && player.GetIsID 7 == 1 && GetIsID 0x845 == 1\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
                 Record("VTYP", 0x850, Field("EDID", Text("TestVoice"))),
                 Record("WRLD", 0x8f0, Field("ICON", Text("interface/worldmap/owned.dds")),
                     Field("MNAM", Join(BitConverter.GetBytes(2048), BitConverter.GetBytes(1024),
@@ -236,6 +237,16 @@ internal static class ActorSourceContracts
             Reject(() => npcListener.Evaluate(healthCondition with { Function = 999, RunOn = 1 }));
             var female = false;
             var playerConditions = new FalloutDialogueConditions(records, quests, Key(0x900), speaker, playerFemale: () => female);
+            Check(playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 1, Argument1 = 7 }) == 1 &&
+                playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 1, Argument1 = 0x804 }) == 0 &&
+                playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 0, Argument1 = 0x801 }) == 1 &&
+                playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 2, Reference = 0x901, Argument1 = 0x804 }) == 1 &&
+                playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 2, Reference = 0x903, Argument1 = 0x844 }) == 1 &&
+                playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 2, Reference = 0x14, Argument1 = 7 }) == 1,
+                "Dialogue GetIsID lost player, speaker, listener or explicit source base ownership.");
+            Reject(() => playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 2 }));
+            Reject(() => playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 2, Reference = 0x840 }));
+            Reject(() => playerConditions.Evaluate(healthCondition with { Function = 72, RunOn = 3, Argument1 = 7 }));
             var playerSex = healthCondition with { Function = 131, Argument1 = 0 };
             Check(playerConditions.Evaluate(playerSex) == 1 && playerConditions.Evaluate(playerSex with { Argument1 = 1 }) == 0,
                 "GetPCIsSex read speaker identity instead of the shared player state.");
@@ -302,7 +313,7 @@ internal static class ActorSourceContracts
             var idleSave = firstIdle.Capture()!; var coldIdle = new FalloutActorAnimationState(); coldIdle.Restore(idleSave);
             coldIdle.StartAmbientLoop(Key(0x900), 2.5);
             Check(coldIdle.Capture() == idleSave, "Cold idle restarted or changed its persisted phase.");
-            Console.WriteLine("OPENNV_ACTOR_SOURCE_PASS templates=independent voice=speaker-info-response override=original-identity ambiguous=rejected clock=cold-exact");
+            Console.WriteLine("OPENNV_ACTOR_SOURCE_PASS templates=independent voice=speaker-info-response override=original-identity ambiguous=rejected clock=cold-exact dialogueIdentity=player-speaker-listener-explicit scriptIdentity=true");
         }
         finally { Directory.Delete(directory, true); }
     }

@@ -65,8 +65,10 @@ player relocation enter the birthday room. Shared
 Beatrice's source-disabled SayTo calls without voices or completion events.
 The ordinary retry reaches CG02 stage6. Shared
 [editor-location travel](source-editor-travel.md) now completes the source
-clapping package through native capsule movement. Later speech selection retains
-an unbound player-target GetIsID condition. The glasses environment-map failure
+clapping package through native capsule movement. Shared
+[reference base identity](reference-base-identity.md) now admits player-target
+GetIsID and ordinary script queries; the genuine birthday retry reaches stage7
+before an owned-font punctuation glyph failure. The glasses environment-map failure
 remains visible. Synthetic source/save contracts and a separate owned actor
 blocking/cold/arrival fixture pass; campaign and matched timing remain unverified.
 Automatic escort-door recovery and short bot endpoint crossing remain open.

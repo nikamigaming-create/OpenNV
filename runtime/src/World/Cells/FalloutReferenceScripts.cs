@@ -515,6 +515,15 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.Distance ?? throw new NotSupportedException("GetDistance has no spatial owner."))
                     (Target(), Reference(arguments[0].Identifier!)));
+            if (parts.Length <= 2 && operation == "getisid")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                {
+                    var value = arguments[0].Value;
+                    var requested = value.Kind == FalloutScriptValueKind.Number && value.Number is >= 0 and <= uint.MaxValue &&
+                        value.Number == Math.Truncate(value.Number) ? records.RuntimeFormKey((uint)value.Number) : value.FormKey(records);
+                    return FalloutReferenceIdentity.Base(records, Target()) == requested ? 1 : 0;
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "isininterior")
                 return new([], _ => (host.IsInInterior?.Invoke(Target()) ?? world.IsInInterior(Target())) ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "isanimplaying")
