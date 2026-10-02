@@ -2,6 +2,8 @@ using Godot;
 using OpenNV.Runtime.Presentation.Ui;
 using System.Text.Json;
 
+TagSkillMenuContracts.Run();
+
 var hash = new string('a', 64);
 var layout = new OwnedGamebryoTileLayout(
     "menus\\dialog\\texteditmenu.xml",

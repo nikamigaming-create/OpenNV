@@ -86,7 +86,27 @@ poses no longer block package handoff; identical outgoing/incoming poses retain
 their phase. Source text keys use the actual player sound owner. Synthetic and
 three owned native fixtures pass repeat, cold camera, atomic rejection, removal,
 sound-child reuse and voice-retirement checks. The mixer fixture observes nonzero
-output without recording frames. Fresh ordinary departure acceptance is next.
+output without recording frames. Fresh ordinary input reaches CG01 stage 10 with
+current/pending camera packages cleared and no camera or speech error. The new
+110-second stereo take shows the source movie and actual playroom, but the camera
+still remains under the birth-room lamp until the fade. Proper gurney room
+departure is not accepted. Its source motion targets and removal timing are the
+camera agent's next investigation.
+
+The reviewed [tag skill menu](native-tag-skill-menu.md) uses winning Fallout XML,
+AVIF text/icons, bitmap fonts and source controls. Draft values, Reset,
+complete-only Done and live refresh have synthetic and isolated native proof.
+Acceptance, cancellation, failure closure and tree exit restore prior pause,
+mouse and player modal input once while retaining the source control mask.
+The [typed postfix call owner](nvse-postfix-reference-calls.md) retains actual
+reference identity and evaluates receivers/arguments once, with lazy inactive
+branches and source compiled bindings. The selected JAM source audit admits
+46 of 52 scripts, previously 41; eight MCM initialization scripts each execute
+360 clean headless frames. Full module/player/MCM behavior remains unproved.
+JBTMCM's attached object-type script lacks quest-clock admission and remains
+visibly unowned. Both reviewed slices are integrated; the combined gate and
+selected owned audits pass, with native tag-menu stderr empty and its temporary
+PNG deleted after inspection. Publish after final diff review and exact-head CI.
 
 ## Shared owners and checks
 
@@ -122,7 +142,8 @@ source collision, duplicate requests, unbound-owner refusal and source-drift
 rejection. Its required runtime gate and all five CI checks pass; the block is
 merged and local main equals origin/main before this camera integration branch.
 The integrated camera gate and all three owned audits also pass, with empty
-native stderr. Publish with exact-head CI, merge and synchronize clean main.
+native stderr. All five exact-head CI checks passed, the block is merged, and
+clean local main equaled origin/main before the fresh tag/postfix integration.
 Recording is off during development and gates.
 
 ## Visible gaps
@@ -141,7 +162,7 @@ Recording is off during development and gates.
   that checkpoint is not fully reusable.
 - TTWStart retains TTW_EnableRadioFix failure. Complete TTW/FO3 character creation,
   Vault exit, train travel, New Vegas/Benny and continued campaigns are unverified.
-  JAM/MCM remain partial; 11 of the selected 52 JAM scripts are rejected by the
+  JAM/MCM remain partial; six of the selected 52 JAM scripts are rejected by the
   parser. Folder registration is not full module/dependency behavior. Benny 13.05
   is privately available but is not mounted or runtime-proved.
 - Missing source resources and unsupported behavior fail visibly. All broad
@@ -149,12 +170,16 @@ Recording is off during development and gates.
 
 ## Next owner
 
-Publish the integrated source-camera repeat block and verify the actual departure
-through fresh ordinary opening input. Bind the reached CG01DadCloseDoor travel
+Publish the integrated authored tag menu and typed postfix reference-call block
+after the combined gate and selected owned audits. Trace the observed incomplete
+gurney departure through source motion targets and script timing. Bind the
+reached CG01DadCloseDoor travel
 radius through the existing source NAVM destination-radius owner, retaining exact
 furniture approaches and once-only package results, then resume the ordinary
-toddler/Vault route. The parallel UI and mod owners continue authored tag input
-and typed reference-call work under the same integration owner.
+toddler/Vault route. The UI owner traces the source SPECIAL book's native NIF,
+input proxies and immediate authoritative SPECIAL writes. The mod owner traces
+bare source-string argument binding and actual equipped-object queries. Preserve
+the real inventory-reference identity gap; do not replace it with a base form.
 The source trigger sphere and gate clearance have now executed through normal
 input; preserve closed-door collision and reject unknown clearance.
 Camera body/blend targets and matched finite-event/audio timing remain unbound;
@@ -176,6 +201,7 @@ Door-state checks: `tmp/door-state-contract.log`,
 `tmp/door-state-owned.stdout.log`, `tmp/door-state-runtime-gate.log`.
 Integrated camera checks: `tmp/gurney-runtime-gate.log` and
 `tmp/gurney-{camera,change,package}-owned.stdout.log`.
+Tag/postfix integration gate: `tmp/tags-postfix-runtime-gate.log`.
 Owned audit helpers: `tmp/Run-ToddlerAudit.ps1`,
 `tmp/Run-SpeechActorValuesAudit.ps1`.
 
@@ -198,6 +224,12 @@ The selected playpen still is
 Exports retain repeated latest frames; exact audiovisual timing remains
 unverified. Recording is off and temporary inspection frames are removed. The
 complete journey reel is pending ordinary campaign progress.
+The fresh camera-build take is
+`local/recordings/ttw-current-opening-20261001/flat-gurney-departure-20261001.mp4`:
+110 seconds, 3,300 exported frames, 2,778 distinct source draws, stereo 48 kHz
+AAC and a measured audio start offset of 0.0190942 seconds. It reaches Baby Steps
+but does not establish proper gurney room departure or exact audiovisual timing.
+Recording is off and all temporary review frames/pixels were deleted.
 
 Both protected saves (`local/playtest-20260927-world/save.json` and
 `local/playtest-20260920-companion/save.json`) must remain unchanged, with SHA256

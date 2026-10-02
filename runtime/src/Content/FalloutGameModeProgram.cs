@@ -22,6 +22,7 @@ internal sealed class FalloutScriptFunction
 {
     private readonly Func<IReadOnlyList<FalloutScriptArgument>, double>? _invoke;
     private readonly Func<IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue>? _invokeValue;
+    private readonly Func<FalloutScriptValue, IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue>? _invokeReference;
 
     internal IReadOnlyList<FalloutScriptArgumentKind> Arguments { get; }
     internal bool ReadOnly { get; init; }
@@ -48,8 +49,34 @@ internal sealed class FalloutScriptFunction
         bool readOnly = false, FalloutScriptArgumentKind? variadic = null) =>
         new(arguments, invoke) { ReadOnly = readOnly, Variadic = variadic };
 
+    private FalloutScriptFunction(FalloutScriptFunction signature,
+        Func<FalloutScriptValue, IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue> invoke)
+    {
+        Arguments = signature.Arguments;
+        ReadOnly = signature.ReadOnly;
+        Variadic = signature.Variadic;
+        _invokeReference = invoke;
+    }
+
+    internal static FalloutScriptFunction Reference(FalloutScriptFunction signature,
+        Func<FalloutScriptValue, IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue> invoke) =>
+        new(signature, invoke);
+
+    internal static void RequireReference(FalloutScriptValue caller)
+    {
+        if (caller.Kind != FalloutScriptValueKind.Form || caller.Number == 0)
+            throw new InvalidDataException("Reference function requires a non-null typed form identity.");
+    }
+
+    internal FalloutScriptValue InvokeReferenceValue(FalloutScriptValue caller, IReadOnlyList<FalloutScriptArgument> arguments)
+    {
+        RequireReference(caller);
+        return (_invokeReference ?? throw new InvalidDataException("Function has no reference caller binding."))(caller, arguments);
+    }
+
     internal FalloutScriptValue InvokeValue(IReadOnlyList<FalloutScriptArgument> arguments) =>
-        _invokeValue is not null ? _invokeValue(arguments) : _invoke!(arguments);
+        _invokeValue is not null ? _invokeValue(arguments) :
+            (_invoke ?? throw new InvalidDataException("Reference function has no caller."))(arguments);
 }
 internal sealed record FalloutScriptEventProgram(string Event, string? Filter, FalloutGameModeProgram Program,
     IReadOnlyList<string>? Parameters = null)
@@ -70,7 +97,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 8;
+    internal const int ParserVersion = 9;
     private readonly IReadOnlyList<string[]> _lines;
     internal bool HasStatements => _lines.Count != 0;
     private readonly Dictionary<int, int> _loopEnds = [];
@@ -369,7 +396,7 @@ internal sealed partial class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||<<|>>|:=|[+*/%&|-]=|[\\[\\]{}$=()+*/%!<>&|-]", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||<<|>>|:=|[+*/%&|-]=|[\\[\\]{}$=()+*/%!<>&|-]|\\.", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {
@@ -377,7 +404,24 @@ internal sealed partial class FalloutGameModeProgram
             at = match.Index + match.Length;
         }
         if (!Separators(line.AsSpan(at))) throw new NotSupportedException("Script contains an unbound token.");
-        return matches.Select(match => match.Value).ToArray();
+        var tokens = new List<string>();
+        foreach (Match match in matches)
+        {
+            // Preserve compiled qualified names such as Quest.local and
+            // PlayerRef.GetAV. Only a separate postfix dot starts a method
+            // chain on an expression result.
+            if (tokens.LastOrDefault() == "." && Regex.IsMatch(match.Value,
+                @"^[A-Za-z_][A-Za-z0-9_.]*$", RegexOptions.CultureInvariant))
+            {
+                foreach (var part in match.Value.Split('.'))
+                {
+                    if (tokens[^1] != ".") tokens.Add(".");
+                    tokens.Add(part);
+                }
+            }
+            else tokens.Add(match.Value);
+        }
+        return tokens.ToArray();
 
         // Source command arguments permit optional commas. Quoted strings are
         // complete tokens above, so their commas remain part of the argument.
@@ -413,73 +457,17 @@ internal sealed partial class FalloutGameModeProgram
         var result = new List<string>();
         for (var index = 0; index < tokens.Count;)
         {
-            if (tokens[index] is "-" or "+" && index + 1 < tokens.Count)
+            if (tokens[index] == "(" || index + 1 < tokens.Count &&
+                (tokens[index] is "-" or "+" or "$" || tokens[index + 1] is "[" or "."))
             {
                 // In a statement argument list this is a signed operand, not
-                // an outer infix expression. Keep complete indexed/grouped
-                // arguments under the same expression owner.
-                var end = tokens[index + 1] == "(" ? BracketEnd(index + 1, "(", ")") : index + 2;
-                while (end < tokens.Count && tokens[end] == "[") end = BracketEnd(end, "[", "]");
-                var value = FalloutNvseNumericExpression.EvaluateValue(tokens.Skip(index).Take(end - index).ToArray(), values, function, userFunction);
-                result.Add(CommandValue(value));
-                index = end;
-                continue;
-
-                int BracketEnd(int start, string open, string close)
-                {
-                    var depth = 1;
-                    var end = start + 1;
-                    for (; end < tokens.Count && depth != 0; ++end)
-                    {
-                        if (tokens[end] == open) ++depth;
-                        else if (tokens[end] == close) --depth;
-                    }
-                    if (depth != 0) throw new InvalidDataException("Signed script argument has an unclosed expression.");
-                    return end;
-                }
-            }
-            if (tokens[index] == "(")
-            {
-                var depth = 1;
-                var end = index + 1;
-                for (; end < tokens.Count && depth != 0; ++end)
-                {
-                    if (tokens[end] == "(") ++depth;
-                    else if (tokens[end] == ")") --depth;
-                }
-                if (depth != 0) throw new InvalidDataException("Script command argument has an unclosed expression.");
-                var value = FalloutNvseNumericExpression.EvaluateValue(
-                    tokens.Skip(index + 1).Take(end - index - 2).ToArray(), values, function, userFunction);
-                result.Add(CommandValue(value));
-                index = end;
-                continue;
-            }
-            if (tokens[index] == "$" && index + 1 < tokens.Count)
-            {
-                var value = FalloutNvseNumericExpression.EvaluateValue(
-                    tokens.Skip(index).Take(2).ToArray(), values, function, userFunction);
-                result.Add(CommandValue(value));
-                index += 2;
-                continue;
-            }
-            if (index + 1 < tokens.Count && tokens[index + 1] == "[")
-            {
-                var end = index + 1;
-                while (end < tokens.Count && tokens[end] == "[")
-                {
-                    var depth = 1;
-                    ++end;
-                    for (; end < tokens.Count && depth != 0; ++end)
-                    {
-                        if (tokens[end] == "[") ++depth;
-                        else if (tokens[end] == "]") --depth;
-                    }
-                    if (depth != 0) throw new InvalidDataException("Script command argument has an unclosed array index.");
-                }
-                var value = FalloutNvseNumericExpression.EvaluateValue(tokens.Skip(index).Take(end - index).ToArray(),
-                    values, function, userFunction);
-                result.Add(CommandValue(value));
-                index = end;
+                // an outer infix expression. The expression parser owns the
+                // complete grouped/indexed/postfix extent, including method
+                // arguments; a closing bracket cannot split the receiver
+                // from its method and leak separate tokens to the host.
+                var operand = FalloutNvseNumericExpression.ReadOperand(tokens.Skip(index).ToArray(), values, function, userFunction);
+                result.Add(CommandValue(operand.Value()));
+                index += operand.Count;
                 continue;
             }
             result.Add(tokens[index++]);
@@ -498,6 +486,8 @@ internal sealed partial class FalloutGameModeProgram
     // migration, and current-version saves must contain every admitted owner.
     internal static bool WasRejectedByParser(string source, int version)
     {
+        if (version < 9 && source.Split('\n').Select(line => StripComment(line).Trim())
+            .Where(line => line.Length != 0).Any(line => Tokens(line).Contains("."))) return true;
         if (version < 8 && ReadEvents(source).Count(block => block.Event.Equals("GameMode", StringComparison.OrdinalIgnoreCase)) > 1)
             return true;
         // Only these newly admitted single-character operators were lexical

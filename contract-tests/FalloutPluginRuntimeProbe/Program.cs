@@ -40,6 +40,7 @@ HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
+ScriptPostfixProbe.Run();
 ScriptValueProbe.Run();
 ScriptArrayProbe.Run();
 ScriptStorageProbe.Run();

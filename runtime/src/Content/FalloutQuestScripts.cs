@@ -492,6 +492,8 @@ internal sealed class FalloutQuestScripts
         }
         FalloutScriptValue ReadValue(string name)
         {
+            if (FalloutScriptBindings.IsPlayer(name))
+                return FalloutScriptValue.Form(_records.RuntimeFormId(instance.Bindings.Reference(name)));
             if (Global(name) is { } global) return _globals!.Get(global);
             if (TryForm(name) is { } form) return FalloutScriptValue.Form(_records.RuntimeFormId(form.FormKey));
             var key = Variable(name);
@@ -521,7 +523,9 @@ internal sealed class FalloutQuestScripts
             SetVariable(key.Owner, key.Index, cleared);
         }
         void Write(string name, double value) => WriteValue(name, value);
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays);
+        bool IsForm(string name) => FalloutScriptBindings.IsPlayer(name) || TryForm(name) is { Signature: not "GLOB" } ||
+            instance.Bindings.HasVariable(name) && instance.Bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays, ReferenceFunction, IsForm);
         FalloutPluginRecord Quest(string name)
         {
             var quest = Form(name);
@@ -549,8 +553,10 @@ internal sealed class FalloutQuestScripts
                 throw new InvalidDataException("Auxiliary variable owner has no valid form identity.");
             return _records.RuntimeFormKey((uint)value.Number);
         }
-        FalloutFormKey AuxiliaryTarget(string[] parts, IReadOnlyList<FalloutScriptArgument>? arguments = null) =>
-            arguments is { Count: >= 3 } ? AuxiliaryValueOwner(arguments[2].Value) : parts.Length == 1
+        FalloutFormKey AuxiliaryTarget(string[] parts, IReadOnlyList<FalloutScriptArgument>? arguments = null,
+            FalloutScriptValue? caller = null) =>
+            arguments is { Count: >= 3 } ? AuxiliaryValueOwner(arguments[2].Value) : caller is { } value
+                ? AuxiliaryValueOwner(value) : parts.Length == 1
                 ? instance.Bindings.HasPlayerReference
                     ? instance.Bindings.Reference("PlayerRef")
                     : _records.RuntimeFormKey(0x14)
@@ -561,10 +567,22 @@ internal sealed class FalloutQuestScripts
                 return instance.Bindings.Reference(token);
             return AuxiliaryValueOwner(NumberArgument(token));
         }
-        FalloutScriptFunction? Function(string name)
+        FalloutScriptFunction? ReferenceFunction(string name)
+        {
+            var signature = FunctionFor("player." + name, null);
+            return signature is null ? null : FalloutScriptFunction.Reference(signature,
+                (caller, arguments) => FunctionFor("player." + name, caller)!.InvokeValue(arguments));
+        }
+        FalloutScriptFunction? Function(string name) => FunctionFor(name, null);
+        FalloutScriptFunction? FunctionFor(string name, FalloutScriptValue? caller)
         {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (caller is { } receiver)
+            {
+                FalloutScriptFunction.RequireReference(receiver);
+                if (receiver.Number != 0x14) _ = _records.GetEffective(receiver.FormKey(_records));
+            }
             if (parts.Length == 1 && FalloutSoundCommands.Function(_records, operation) is { } soundFunction)
                 return soundFunction;
             if (parts.Length == 1 && operation == "menumode")
@@ -601,25 +619,25 @@ internal sealed class FalloutQuestScripts
                     "auxiliaryvariablegetfloat" or "auxvargetflt" =>
                         new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
                             FalloutScriptArgumentKind.OptionalValue],
-                            arguments => Auxiliary.GetFloat(AuxiliaryTarget(parts, arguments), instance.Script.FormKey.OwnerPlugin,
+                            arguments => Auxiliary.GetFloat(AuxiliaryTarget(parts, arguments, caller), instance.Script.FormKey.OwnerPlugin,
                                 arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0)),
                     "auxiliaryvariablegettype" or "auxvartype" =>
                         new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
                             FalloutScriptArgumentKind.OptionalValue],
-                            arguments => Auxiliary.GetType(AuxiliaryTarget(parts, arguments), instance.Script.FormKey.OwnerPlugin,
+                            arguments => Auxiliary.GetType(AuxiliaryTarget(parts, arguments, caller), instance.Script.FormKey.OwnerPlugin,
                                 arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0)),
                     "auxiliaryvariablegetref" or "auxvargetref" =>
                         FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
                             FalloutScriptArgumentKind.OptionalValue],
                             arguments =>
                             {
-                                var form = Auxiliary.GetForm(AuxiliaryTarget(parts, arguments), instance.Script.FormKey.OwnerPlugin,
+                                var form = Auxiliary.GetForm(AuxiliaryTarget(parts, arguments, caller), instance.Script.FormKey.OwnerPlugin,
                                     arguments[0].Text, arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0);
                                 return FalloutScriptValue.Form(form is { } value ? _records.RuntimeFormId(value) : 0);
                             }),
                     _ => FalloutScriptFunction.Typed([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.OptionalNumber,
                         FalloutScriptArgumentKind.OptionalValue],
-                        arguments => FalloutScriptValue.String(Auxiliary.GetString(AuxiliaryTarget(parts, arguments),
+                        arguments => FalloutScriptValue.String(Auxiliary.GetString(AuxiliaryTarget(parts, arguments, caller),
                             instance.Script.FormKey.OwnerPlugin, arguments[0].Text,
                             arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0))),
                 };
@@ -674,6 +692,8 @@ internal sealed class FalloutQuestScripts
                 "player.getactorvalue" or "player.getav" => new([FalloutScriptArgumentKind.Identifier], arguments =>
                 {
                     if (!instance.Bindings.HasPlayerReference) throw new InvalidDataException("Player function has no compiled engine reference.");
+                    if (caller is { } value && value.Number != 0x14)
+                        throw new NotSupportedException("Quest fallback actor values have only a player gameplay owner.");
                     return host?.PlayerActorValue(arguments[0].Identifier!) ?? throw new NotSupportedException("Player actor values have no gameplay owner.");
                 }),
                 _ => null,

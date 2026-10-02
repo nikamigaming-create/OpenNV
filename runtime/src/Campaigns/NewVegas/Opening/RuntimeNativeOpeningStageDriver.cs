@@ -558,6 +558,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         {
             if (_tagSkillEntry is not null)
             {
+                _tagSkillEntry.Accepted -= AcceptTagSkills;
+                _tagSkillEntry.ReleasePause();
                 _tagSkillEntry.QueueFree();
                 _tagSkillEntry = null;
             }
@@ -568,12 +570,16 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _tagSkillEntry = new RuntimeNativeTagSkillEntry();
         AddChild(_tagSkillEntry);
         _tagSkillEntry.Accepted += AcceptTagSkills;
-        _tagSkillEntry.Configure(_tagSkillContract, _tagSkills);
+        _tagSkillEntry.Failed += error => ExecutionError = error.Message;
+        var previousModalInput = _player.ModalInput;
+        _tagSkillEntry.Released += () => _player.SetModalInput(previousModalInput);
+        _tagSkillEntry.Configure(_pluginStack, _tagSkillContract, _tagSkills,
+            skill => _playerSkills.Value(FalloutNativeTagSkillResolver.ActorValueName(_pluginStack, skill)));
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_OPEN stage={Stage} " +
             $"choices={_tagSkillContract.Skills.Count} required={_tagSkillContract.RequiredCount} " +
-            "source=live-settagskills-avif presentation=first-party-functional");
+            "source=live-settagskills-avif presentation=menus/chargen/char_gen_menu.xml");
     }
 
     private void AcceptTagSkills(IReadOnlyList<FalloutNativeSkillIdentity> selection)
@@ -583,12 +589,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_tagSkillEntry is not null)
         {
             _tagSkillEntry.Accepted -= AcceptTagSkills;
+            _tagSkillEntry.ReleasePause();
             _tagSkillEntry.QueueFree();
             _tagSkillEntry = null;
         }
-        _player.SetModalInput(false);
-        if (DisplayServer.GetName() != "headless")
-            Input.MouseMode = Input.MouseModeEnum.Captured;
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_ACCEPTED skills=" +
             $"{string.Join(',', _tagSkills.Select(value => value.EditorId))} " +

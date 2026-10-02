@@ -13,7 +13,7 @@ internal sealed partial class FalloutGameModeProgram
                 if (priorMutation || tokens.Length != argumentCount + 1) return false;
                 if (tokens.Skip(1).Any(token => functions(token) is { ReadOnly: false } ||
                     token.Equals("eval", StringComparison.OrdinalIgnoreCase) || token.Equals("call", StringComparison.OrdinalIgnoreCase) ||
-                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--")) return false;
+                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--" or ".")) return false;
                 found = true;
                 // This exact command always failed in the legacy runtime. A
                 // later alternative cannot follow an executed earlier effect.
@@ -23,7 +23,7 @@ internal sealed partial class FalloutGameModeProgram
             { priorMutation = true; continue; }
             foreach (var token in tokens.Skip(1))
                 if (token.Equals("eval", StringComparison.OrdinalIgnoreCase) || token.Equals("call", StringComparison.OrdinalIgnoreCase) ||
-                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--" || functions(token) is { ReadOnly: false })
+                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--" or "." || functions(token) is { ReadOnly: false })
                     return false;
         }
         return found;
@@ -57,7 +57,7 @@ internal sealed partial class FalloutGameModeProgram
             foreach (var token in tokens.Skip(start))
             {
                 if (token.Equals("eval", StringComparison.OrdinalIgnoreCase) || token.Equals("call", StringComparison.OrdinalIgnoreCase) ||
-                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--") return false;
+                    FalloutNvseNumericExpression.IsAssignment(token) || token is "++" or "--" or ".") return false;
                 if (!token.Equals(operand, StringComparison.OrdinalIgnoreCase) && functions(token) is { ReadOnly: false }) return false;
             }
         }
