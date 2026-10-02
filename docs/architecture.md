@@ -30,6 +30,11 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+NPC package results bind their own compiled event scope and actual actor caller
+through the existing C# statement interpreter. The package lifecycle retains
+failed prefixes without replay. See [package results](package-event-results.md)
+for bounded owned arrival/result proof and early construction/cold boundaries.
+
 FalloutScriptSession also owns saved toddler animation and source player scale.
 Native first-person movement and Camera1st consume the actual toddler palette,
 including looking-only controls; transfers preserve the same scale. Scripted

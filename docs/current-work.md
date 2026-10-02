@@ -15,7 +15,9 @@ Preserve all ten original mod targets plus Benny and the broader objective of
 Nexus script/dependency compatibility. Registration and isolated fixtures are not
 complete mod support. Follow [mod compatibility](mod-compatibility.md), the
 [implementation plan](implementation-plan.md), [flat work order](flat-gameplay-plan.md)
-and [JAM/MCM plan](jam-luna-max-plan.md). Work without subagents.
+and [JAM/MCM plan](jam-luna-max-plan.md). Coordinate the user-authorized parallel
+camera, UI and mod investigations while keeping live input and publication under
+one integration owner.
 
 Prioritize flat play and system polish while retaining shared VR gameplay and
 saves. Classic flat presentation uses winning Fallout/mod screens and controls;
@@ -63,8 +65,16 @@ owner, and eligible random INFO groups use the saved shared script RNG. The fres
 run completes 28 speeches without the previous speech or opening-driver errors.
 The autosave stays pending during active continuation, then writes the actual
 campaign snapshot. Complete actor/interaction cold continuation is not accepted.
-Ordinary W/A input moves the toddler against the source playpen wall before the
-reach-Dad trigger fires. Do not bypass that contact, teleport or jump a stage.
+Cold Continue returns to the actual playroom pose and source toddler/scale state,
+but retains visible unrelated actor/ragdoll failures. Normal E activation opens
+the source playpen gate. Ordinary movement through its actual clearance fires
+the reach-Dad trigger and enters stages 12/14. Dad reaches his next marker, where
+the authored On End `setstage CG01 16` exposed the limited package-script host.
+The [shared package-result owner](package-event-results.md) now passes synthetic
+scope/prefix/cold-value checks and the owned native arrival/result fixture.
+The resumed ordinary route executes Dad's On End result and enters stage 16.
+Its QSDT prefix starts Dad's next voice, then the authored gate-closing
+`CG01PlaypenGateREF.setOpenState 0` reaches the next missing door-state owner.
 The gurney departure, toddler quest completion and Vault exit remain open.
 
 ## Shared owners and checks
@@ -93,8 +103,10 @@ actor, rendering, audio or physical-headset parity.
 Synthetic toddler/scale, numeric actor-value and random-dialogue checks pass.
 Owned native male/female body/camera/movement/clear/scale checks and two actual
 encouragement voice/result/completion checks pass. The full required runtime gate
-passes. Publish after the final diff check, obtain all required exact-head CI checks,
-merge and synchronize clean main. Recording is off during development and gates.
+passes; that block is merged and main was synchronized before the next branch.
+The package-result block also passes its selected owned fixture and full gate.
+Publish after the final diff check, obtain required exact-head CI checks, merge
+and synchronize clean main. Recording is off during development and gates.
 
 ## Visible gaps
 
@@ -120,10 +132,10 @@ merge and synchronize clean main. Recording is off during development and gates.
 
 ## Next owner
 
-Trace the actual reach-Dad trigger sphere/placement/contact owner against the
-retained source playpen collision and ordinary toddler pose. Use source geometry
-and normal input, preserve closed-door collision and reject unknown clearance.
-Repair the general missing owner and continue every toddler/Vault quest.
+Bind the reached SetOpenState door command to shared source door state and the
+existing native controller, then resume the ordinary toddler/Vault route.
+The source trigger sphere and gate clearance have now executed through normal
+input; preserve closed-door collision and reject unknown clearance.
 The gurney camera still needs its authored IDLE repeat interval, package handoff
 and sound text keys; do not replay its entire travel segment as an idle loop.
 Preserve shared youth/scale, modal pause, camera cancellation, independent sound
@@ -137,6 +149,8 @@ The actually written stage-10 autosave remains in that private run; it has not
 passed complete cold actor continuation. Checks:
 `tmp/toddler-followthrough-reference.log`, `tmp/toddler-owned.stdout.log`,
 `tmp/speech-actor-values-owned.stdout.log`, `tmp/toddler-runtime-gate.log`.
+Package result checks: `tmp/package-results-contract.log`,
+`tmp/package-results-owned.stdout.log`, `tmp/package-results-runtime-gate.log`.
 Owned audit helpers: `tmp/Run-ToddlerAudit.ps1`,
 `tmp/Run-SpeechActorValuesAudit.ps1`.
 

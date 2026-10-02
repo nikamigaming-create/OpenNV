@@ -10,6 +10,15 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--package-results", var resultRoot, var resultMod, var resultModRoot, var resultActor,
+                var resultQuest, var resultStage, var expectedStage, .. var resultDependencies])
+            {
+                PackageResults(resultRoot, resultMod, resultModRoot, resultActor, resultQuest,
+                    short.Parse(resultStage, System.Globalization.CultureInfo.InvariantCulture),
+                    short.Parse(expectedStage, System.Globalization.CultureInfo.InvariantCulture), resultDependencies);
+                GetTree().Quit();
+                return;
+            }
             if (args is ["--package-arrival", var baseRoot, var mod, var modRoot, var arrivalCell,
                 var arrivalActors, var arrivalQuest, var arrivalStages, .. var dependencies])
             {

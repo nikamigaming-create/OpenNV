@@ -30,6 +30,7 @@ internal partial class RuntimeNativeNpc
     private int _sitting;
     private FalloutScriptPackage? _packageIdleSource;
     private FalloutPackageEvents? _packageEvents;
+    internal Action<FalloutPackageEvent, FalloutFormKey>? ExecutePackageEvent { get; set; }
     private FalloutIdleCollectionPlayback? _packageIdles;
     private FalloutIdleConditions? _idleConditions;
     private IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = new Dictionary<FalloutFormKey, sbyte>();
@@ -159,15 +160,19 @@ internal partial class RuntimeNativeNpc
         // reached effect keeps this event failed, rather than replaying it.
         if (package.EventPrograms.GetValueOrDefault(kind) is { } program)
         {
-            var commands = FalloutHeadTrackingPrograms.Bind(program.Source,
-                new(_aiStack!, program.Package, program.Package, program.Fields), Appearance.Reference).ToDictionary(command => command.Line);
-            var index = 0;
-            program.ExecuteScript(line =>
+            if (ExecutePackageEvent is { } execute) execute(program, Appearance.Reference!.Value);
+            else
             {
-                if (!commands.TryGetValue(index++, out var command))
-                    throw new NotSupportedException($"Package event command is unbound: {line}");
-                ApplyBoundHeadTrackingCommand(command);
-            });
+                var commands = FalloutHeadTrackingPrograms.Bind(program.Source,
+                    new(_aiStack!, program.Package, program.Package, program.Fields), Appearance.Reference).ToDictionary(command => command.Line);
+                var index = 0;
+                program.ExecuteScript(line =>
+                {
+                    if (!commands.TryGetValue(index++, out var command))
+                        throw new NotSupportedException($"Package event command is unbound: {line}");
+                    ApplyBoundHeadTrackingCommand(command);
+                });
+            }
         }
         if (package.Events.GetValueOrDefault(kind) is { } idle)
         {

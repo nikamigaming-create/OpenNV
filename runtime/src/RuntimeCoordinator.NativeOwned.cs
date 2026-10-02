@@ -753,6 +753,8 @@ public partial class RuntimeCoordinator
                     return root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
                         .SingleOrDefault(value => value.Appearance.Reference == target)?.HeadTargetPoint;
                 });
+                if (_nativeOpeningStageDriver is not null)
+                    actor.ExecutePackageEvent = (program, caller) => _nativeOpeningStageDriver.ExecutePackageEvent(program, caller);
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
                     () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences);
                 root.AddChild(actor);
