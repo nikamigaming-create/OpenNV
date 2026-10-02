@@ -31,6 +31,11 @@ if (args is ["--escort-contracts"])
     EscortContracts.Run();
     return;
 }
+if (args is ["--editor-travel-contracts"])
+{
+    EditorTravelContracts.Run();
+    return;
+}
 if (args.Length == 1 && args[0] == "--quest-update-contracts")
 {
     QuestUpdateContracts.Run();
@@ -399,6 +404,7 @@ EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
+EditorTravelContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();

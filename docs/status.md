@@ -63,9 +63,12 @@ security actors pass owned assembly; ordinary security head tracking and source
 player relocation enter the birthday room. Shared
 [scripted speech participation](scripted-speech-participation.md) accepts
 Beatrice's source-disabled SayTo calls without voices or completion events.
-The ordinary retry reaches CG02 stage6, then retains an INFO-result failure for
-an unbound Travel package's editor-location procedure. The glasses
-environment-map failure remains visible.
+The ordinary retry reaches CG02 stage6. Shared
+[editor-location travel](source-editor-travel.md) now completes the source
+clapping package through native capsule movement. Later speech selection retains
+an unbound player-target GetIsID condition. The glasses environment-map failure
+remains visible. Synthetic source/save contracts and a separate owned actor
+blocking/cold/arrival fixture pass; campaign and matched timing remain unverified.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
 Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,

@@ -28,13 +28,17 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { Escort = progress };
     }
+    internal void SetEditorTravelProgress(FalloutEditorTravelProgress progress)
+    {
+        if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { EditorTravel = progress };
+    }
     internal void FacePackageDirection(Vector3 direction, double delta) => TurnToward(_actor.GlobalPosition + direction, delta);
     internal Vector3 ProjectPackageDestination(Vector3 authored)
     {
         PrepareMovement();
         var route = _context!.Route(authored, authored);
         if (route.Length == 0 || route[^1].DistanceTo(authored) > _radius * 6)
-            throw new NotSupportedException("Patrol marker has no nearby authored navigation floor.");
+            throw new NotSupportedException("Package destination has no nearby authored navigation floor.");
         return route[^1];
     }
 
@@ -102,7 +106,8 @@ internal sealed partial class RuntimeNativeActorCombat
         _state.PackageMotion = new(package.FormKey, hash, clip.Path, clip.Hash, next, false,
             [position.X, position.Y, position.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             retained?.Package == package.FormKey ? retained.Patrol : null,
-            retained?.Package == package.FormKey ? retained.Escort : null);
+            retained?.Package == package.FormKey ? retained.Escort : null,
+            retained?.Package == package.FormKey ? retained.EditorTravel : null);
         PackageOwnsPose = true;
     }
 }

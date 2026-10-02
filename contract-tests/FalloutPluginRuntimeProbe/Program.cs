@@ -661,6 +661,14 @@ try
             Subrecord("XCLL", new byte[40]),
             Subrecord("LTMP", UInt32(0)),
             Subrecord("LNAM", UInt32(0x9f)))),
+        Record("PACK", 0x7fff20, 0, Combine(
+            Subrecord("EDID", ZString("SyntheticEditorTravel")),
+            Subrecord("PKDT", Combine(UInt32(0x1006), [6, 0, 0, 0], new byte[4])),
+            Subrecord("PLDT", Combine(UInt32(3), new byte[8])))),
+        Record("CELL", 0x7fff22, 0, Combine(Subrecord("EDID", ZString("SyntheticEditorCell")), Subrecord("DATA", [1]))),
+        GroupFormId(0x7fff22, 6, Record("ACHR", 0x7fff21, 0, Combine(
+            Subrecord("NAME", UInt32(7)),
+            Subrecord("DATA", new float[] { 1, 2, 3, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray())))),
         Record("STAT", 0x110, 0, Combine(
             Subrecord("EDID", ZString("SyntheticBase")),
             Subrecord("MODL", ZString("clutter/test.nif")))),
@@ -1428,6 +1436,32 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.SignedRaceSchema });
+    var v27Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(v27Restore.State.Schema == FalloutNativeCampaignSave.SignedRaceSchema &&
+        FalloutNativeCampaignSave.WithWorldState(v27Restore.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The v27 checkpoint no longer restores and upgrades through the campaign owner.");
+    var editorCell = new FalloutFormKey("Cell.esm", 0x7fff22);
+    var editorProgress = new FalloutEditorTravelProgress(editorCell, [1, 2, 3], true);
+    var editorPackage = cellStack.GetEffective(new("Cell.esm", 0x7fff20));
+    var editorMotion = new FalloutActorPackageMotion(editorPackage.FormKey, Convert.ToHexString(SHA256.HashData(editorPackage.ReadData())),
+        "meshes/actor/mtidle.kf", new string('b', 64), 4, false, [4, 5, 6], [0, 0, 0, 1], EditorTravel: editorProgress);
+    var editorSave = referenceSave with
+    {
+        References = [new(new("Cell.esm", 0x7fff21), editorCell,
+        new("Cell.esm", 7), null, null, new Dictionary<uint, double>(), null, PackageMotion: editorMotion)]
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, editorSave);
+    var editorRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(editorRestore.State.References!.Single().PackageMotion?.EditorTravel is { Complete: true } retainedEditor &&
+        retainedEditor.Location.SequenceEqual([1f, 2f, 3f]), "Campaign cold state lost its source editor-travel arrival.");
+    var editorSaveBytes = File.ReadAllBytes(syntheticSavePath);
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, editorSave with { Schema = FalloutNativeCampaignSave.SignedRaceSchema }),
+        "Legacy campaign schema has editor travel progress");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(editorSaveBytes), "Rejected legacy editor-travel state replaced a valid save.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema });
     var v26Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

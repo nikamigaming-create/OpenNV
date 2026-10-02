@@ -24,6 +24,7 @@ internal partial class RuntimeNativeNpc
     public override void _PhysicsProcess(double delta)
     {
         Combat?.StopPackageMotion();
+        if (_editorTravel is not null) { AdvanceEditorTravel(delta); return; }
         if (_escortPackage is not null) { AdvanceEscort(delta); return; }
         if (_patrol is not { } route || Combat is null || _aiError is not null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;

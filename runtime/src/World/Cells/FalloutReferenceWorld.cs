@@ -414,6 +414,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     throw new InvalidDataException("Saved package motion differs from the winning package.");
                 if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
                 if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
+                if (motion.EditorTravel is { } editorTravel)
+                    FalloutEditorTravelPackage.Read(package).Validate(validated, snapshot.Reference, editorTravel);
                 instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
             }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);

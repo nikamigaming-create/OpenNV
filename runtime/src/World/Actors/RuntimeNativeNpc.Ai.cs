@@ -46,7 +46,7 @@ internal partial class RuntimeNativeNpc
     internal string? AiError => _aiError;
     internal int SittingState => _sitting;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
-    internal bool Traveling => _travelActive || _escortPackage is not null && Combat?.PackageMoving == true;
+    internal bool Traveling => _travelActive || (_escortPackage is not null || _editorTravel is not null) && Combat?.PackageMoving == true;
     internal FalloutFormKey? CurrentPackage => _aiPackage?.FormKey;
 
     // These are script-visible engine procedure codes. The currently owned
@@ -58,7 +58,7 @@ internal partial class RuntimeNativeNpc
             "ApproachTarget" => 19,
             "WaitForTarget" or "waiting-for-target-residency" => 3,
             _ => 12,
-        } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive ? 0 : 17;
+        } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive || _editorTravelProgress is { Complete: false } ? 0 : 17;
     private int CurrentAiPackage => _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
     {
         2 => 2,
@@ -107,6 +107,7 @@ internal partial class RuntimeNativeNpc
         currentProcedure = _sitting == 2 ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
         escort = EscortState,
+        editorTravel = EditorTravelState,
         patrol = _patrol is null ? null : new { source = _patrol.SourceSha256, points = _patrol.Points.Count, progress = _patrolProgress, status = _patrolStatus },
         dialoguePackage = _dialoguePackage is null ? null : new
         {
@@ -233,7 +234,8 @@ internal partial class RuntimeNativeNpc
     {
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
             _aiError is not null || _sitting is 2 or 4 || _travelActive || _escortPackage is not null && _escortProgress?.Complete != true ||
-            _patrol is not null && _patrolProgress?.Arrived != true) return delta;
+            _patrol is not null && _patrolProgress?.Arrived != true ||
+            _editorTravel is not null && _editorTravelProgress?.Complete != true) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
         try
         {
@@ -269,6 +271,8 @@ internal partial class RuntimeNativeNpc
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
             if (_aiPackage?.FormKey == selected?.FormKey) return;
+            if (_editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
+                throw new NotSupportedException("Incomplete editor travel needs its must-complete package reevaluation owner.");
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
             if (_aiPackage is not null)
             {
@@ -290,9 +294,10 @@ internal partial class RuntimeNativeNpc
                 ClearFurniture();
                 _dialoguePackage = null; _dialoguePackageRequested = false;
                 _patrol = null; _patrolProgress = null;
-                if (_escortPackage is not null && _aiWorld is { } escortWorld)
+                if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)
                     escortWorld.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
                 _escortPackage = null; _escortProgress = null; _escortDestination = null; _escortStatus = null;
+                _editorTravel = null; _editorTravelProgress = null; _editorTravelDestination = null; _editorTravelStatus = null;
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
@@ -300,6 +305,7 @@ internal partial class RuntimeNativeNpc
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
+            if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
             var fields = selected.ReadSubrecords().ToArray();
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;
