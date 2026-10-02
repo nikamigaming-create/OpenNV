@@ -45,9 +45,12 @@ empty selections now deliver deferred, coalesced SayToDone without audio or an
 invented INFO. A fresh ordinary run starts Dad's stage-80 line, then Mom's
 overlapping voice now has its own audio/lip/result/completion channel. A fresh
 ordinary run accepts the owned trait menu, completes seventeen speeches, stops
-three actual birth-loop instances and enters stages 90 and 100. The next retained
-fault is player-package removal during a pending change animation; the gurney
-exit remains incomplete. The [shared source-sound owner](source-sound-stopping.md)
+three actual birth-loop instances and enters stages 90 and 100. Pending
+[player-package removal](player-package-removal.md) now cancels its assignment
+and releases the camera. Fresh ordinary input completes that removal, disables
+Dad and stops CG00 before the unsupported SetPCYoung command. The trait menu's
+missing pause permits background progression; CG01 and gurney-exit acceptance
+remain incomplete. The [shared source-sound owner](source-sound-stopping.md)
 has synthetic and owned native command/mixer/reference-filter checks, including
 paused stopping, independent loops and clean retirement. State-publication
 interval overruns remain visible in the ordinary run.

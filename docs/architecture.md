@@ -30,6 +30,12 @@ installation in place and publish authoritative state to Godot.
 
 ## Main owners
 
+RuntimeNativePlayerPackage validates reached exit behavior before cancelling a
+script assignment. Removal clears both current and pending change state and
+releases the native player's source camera; later advancement and cold state
+cannot reinstall the cancelled assignment. Exit scripts/topics and end animations
+remain explicit boundaries. See [player-package removal](player-package-removal.md).
+
 FalloutSoundVoices owns transient SOUN instance identity for each loaded graph.
 Reference/result/stage and fallback quest commands share StopSound, optional
 actual-reference filtering and zero numeric results. Godot script, animation/NIF,

@@ -49,7 +49,7 @@ internal sealed class RuntimeNativePlayerPackage
         locationRadius = _package?.LocationRadius,
         pendingPlayerMove = _world.PlayerMoves.Pending,
         unbound = new[] { "unreached-destination-traversal", "editor-location-semantics", "nonempty-event-scripts-and-topics",
-            "end-animation-and-change-cancellation", "body-animation-targets", "matched-event-timing" },
+            "end-animation-and-script-execution", "body-animation-targets", "matched-event-timing" },
         parity = "unmeasured"
     };
 
@@ -57,11 +57,13 @@ internal sealed class RuntimeNativePlayerPackage
     {
         if (form is null)
         {
-            if (_pendingPackage is not null)
-                throw new NotSupportedException("Removing a player package during its change animation requires cancellation ownership.");
             _package?.EventPrograms.GetValueOrDefault("POEA")?.RequireEmptyScript();
             if (_package?.Events.GetValueOrDefault("POEA") is not null)
                 throw new NotSupportedException("Player package exit animation requires deferred removal ownership.");
+            // Removal clears the script assignment, including an uncommitted
+            // replacement. A completed outgoing clip must not reinstall it.
+            // Validate the reached exit behavior before discarding that state.
+            _pendingPackage = null; _pendingPackageHash = null;
             _package = null;
             _packageHash = null;
             _animation = null;
