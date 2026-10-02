@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
@@ -96,7 +97,28 @@ internal sealed record FalloutScriptValueContext(
     Func<uint, string>? FormName = null,
     FalloutScriptArrayStore? Arrays = null,
     Func<string, FalloutScriptFunction?>? ReferenceFunction = null,
-    Func<string, bool>? IsForm = null);
+    Func<string, bool>? IsForm = null,
+    Func<string, bool>? HasValueOwner = null)
+{
+    internal static bool IsBareSourceName(string token) => Regex.IsMatch(token,
+        @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant);
+
+    // Only an explicitly declared source-string parameter admits an unbound
+    // bare name as literal text. Ownership checks are pure metadata and stay
+    // inside this deferred read; an inactive argument never binds a local.
+    internal FalloutScriptValue ReadSourceString(string token)
+    {
+        var value = token.Length >= 2 && token[0] == '"' && token[^1] == '"'
+            ? FalloutScriptValue.String(token[1..^1])
+            : IsBareSourceName(token)
+                ? (HasValueOwner ?? throw new NotSupportedException(
+                    "Source-string argument has no operand declaration owner."))(token)
+                    ? Read(token) : FalloutScriptValue.String(token)
+                : Read(token);
+        return value.Kind == FalloutScriptValueKind.String ? value :
+            throw new InvalidDataException("Source-string argument requires a string value.");
+    }
+}
 
 internal sealed record FalloutScriptStringSnapshot(uint Id, string Plugin, string Text);
 internal sealed record FalloutScriptValueStoreSnapshot(

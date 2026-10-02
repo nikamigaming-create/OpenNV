@@ -8,6 +8,7 @@ internal enum FalloutScriptArgumentKind
 {
     Number, Identifier, String, Value,
     OptionalNumber, OptionalIdentifier, OptionalString, OptionalValue,
+    SourceString,
 }
 internal readonly record struct FalloutScriptArgument(FalloutScriptValue Value, string? Identifier = null)
 {

@@ -14,6 +14,17 @@ if (args.Length >= 7 && args[0] == "--audit-quest-clock")
     return;
 }
 
+if (args is ["--test-source-string"])
+{
+    ScriptSourceStringProbe.Run();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-jdc-game-settings")
+{
+    ScriptSourceStringProbe.Owned(args[1], args[2], args[3..]);
+    return;
+}
+
 if (args is ["--audit-quest-save", var saveRoot, var campaignSave])
 {
     QuestScriptSaveProbe.Run(saveRoot, campaignSave);
@@ -49,6 +60,7 @@ QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 ScriptPostfixProbe.Run();
+ScriptSourceStringProbe.Run();
 ScriptValueProbe.Run();
 ScriptArrayProbe.Run();
 ScriptStorageProbe.Run();

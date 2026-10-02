@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 
 // Numeric settings are mutable engine state for this loaded stack. They are
 // deliberately absent from campaign snapshots; a new stack reads owned defaults.
-internal sealed class FalloutNumericGameSettings(FalloutPluginStack records)
+internal sealed class FalloutNumericGameSettings(FalloutPluginStack records, RuntimeLiveContentSource? ownedSource = null)
 {
     private sealed record Declaration(string Name, char Kind, double Value);
     private static readonly ConditionalWeakTable<RuntimeLiveContentSource, IReadOnlyDictionary<string, float>> FloatDefaults = new();
@@ -89,6 +89,7 @@ internal sealed class FalloutNumericGameSettings(FalloutPluginStack records)
             lock (_sync) return new
             {
                 revision = Revision,
+                defaultsSource = ownedSource?.StackId,
                 overrides = _overrides.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
                     .Select(pair => new { name = pair.Key, value = pair.Value }).ToArray(),
                 retainedConsumerBoundaries = _retainedConsumers.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
@@ -128,7 +129,7 @@ internal sealed class FalloutNumericGameSettings(FalloutPluginStack records)
                 declaration = new(identity, identity[0], number);
             }
         }
-        else if (RuntimeLiveContentSource.Current is { } content)
+        else if (ownedSource is { } content)
         {
             if (content.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
                 throw new NotSupportedException("This engine's executable numeric-setting layout has not been admitted.");

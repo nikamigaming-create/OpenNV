@@ -4,9 +4,9 @@ internal static class FalloutNumericGameSettingCommands
 {
     internal static FalloutScriptFunction? Function(FalloutPluginStack records, string operation) => operation switch
     {
-        "getnumericgamesetting" => new([FalloutScriptArgumentKind.String], arguments => records.NumericSettings.Get(arguments[0].Text)) { ReadOnly = true },
+        "getnumericgamesetting" => new([FalloutScriptArgumentKind.SourceString], arguments => records.NumericSettings.Get(arguments[0].Text)) { ReadOnly = true },
         "getgamesetting" or "getgs" => new([FalloutScriptArgumentKind.Identifier], arguments => records.NumericSettings.Read(arguments[0].Identifier!)) { ReadOnly = true },
-        "setnumericgamesetting" => new([FalloutScriptArgumentKind.String, FalloutScriptArgumentKind.Number],
+        "setnumericgamesetting" => new([FalloutScriptArgumentKind.SourceString, FalloutScriptArgumentKind.Number],
             arguments => records.NumericSettings.Set(arguments[0].Text, arguments[1].Number) ? 1 : 0),
         _ => null,
     };

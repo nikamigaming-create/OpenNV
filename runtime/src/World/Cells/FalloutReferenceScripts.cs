@@ -291,7 +291,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             ? frame.Definition.Kind(name) == FalloutScriptLocalKind.Form
             : FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is { Signature: not "GLOB" } ||
                 bindings.HasVariable(name) && bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, valueStore.Arrays, ReferenceFunction, IsForm);
+        bool HasValueOwner(string name) => frame?.Contains(name) == true ||
+            name.Equals("this", StringComparison.OrdinalIgnoreCase) || FalloutScriptBindings.IsPlayer(name) ||
+            bindings.TryForm(name) is not null || bindings.HasVariable(name);
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, valueStore.Arrays,
+            ReferenceFunction, IsForm, HasValueOwner);
         FalloutFormKey Reference(string name)
         {
             if (FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is not null) return bindings.Reference(name);
@@ -613,7 +617,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length == 1 && operation == "setnumericgamesetting")
             {
                 FalloutNumericGameSettingCommands.Set(records, arguments, Number,
-                    token => token.StartsWith('"') || frame?.Contains(token) == true || bindings.HasVariable(token) ? StringValue(token) : token);
+                    token => values.ReadSourceString(token).Text);
                 return;
             }
             if (parts.Length == 1 && FalloutInputControlCommands.IsCommand(operation))

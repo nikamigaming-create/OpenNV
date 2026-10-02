@@ -525,7 +525,10 @@ internal sealed class FalloutQuestScripts
         void Write(string name, double value) => WriteValue(name, value);
         bool IsForm(string name) => FalloutScriptBindings.IsPlayer(name) || TryForm(name) is { Signature: not "GLOB" } ||
             instance.Bindings.HasVariable(name) && instance.Bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
-        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays, ReferenceFunction, IsForm);
+        bool HasValueOwner(string name) => FalloutScriptBindings.IsPlayer(name) || TryForm(name) is not null ||
+            instance.Bindings.HasVariable(name);
+        var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, ScriptValues.Arrays,
+            ReferenceFunction, IsForm, HasValueOwner);
         FalloutPluginRecord Quest(string name)
         {
             var quest = Form(name);
@@ -742,7 +745,7 @@ internal sealed class FalloutQuestScripts
             if (parts.Length == 1 && operation == "setnumericgamesetting")
             {
                 FalloutNumericGameSettingCommands.Set(_records, arguments, NumberArgument,
-                    token => token.StartsWith('"') || instance.Bindings.HasVariable(token) ? StringArgument(token) : token);
+                    token => values.ReadSourceString(token).Text);
                 return;
             }
             if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) && operation == "setscale")

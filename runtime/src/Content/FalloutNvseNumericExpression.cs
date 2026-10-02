@@ -77,10 +77,12 @@ internal static class FalloutNvseNumericExpression
                 }
                 else
                 {
-                    var argument = Read(14);
+                    var argument = Read(14, required == FalloutScriptArgumentKind.SourceString);
                     arguments.Add(() =>
                     {
                         var value = argument.Value();
+                        if (required == FalloutScriptArgumentKind.SourceString && value.Kind != FalloutScriptValueKind.String)
+                            throw new InvalidDataException("Source-string argument requires a string value.");
                         if (required == FalloutScriptArgumentKind.Number && value.Kind == FalloutScriptValueKind.Array)
                             throw new InvalidDataException("Numeric script argument cannot use an array identity.");
                         return required == FalloutScriptArgumentKind.Number ? new(value.Number) : new(value, null);
@@ -90,7 +92,7 @@ internal static class FalloutNvseNumericExpression
             return arguments;
         }
 
-        Operand Read(int precedence)
+        Operand Read(int precedence, bool sourceString = false)
         {
             if (at >= tokens.Count) throw new InvalidDataException("Missing NVSE expression operand.");
             var token = tokens[at++];
@@ -141,7 +143,10 @@ internal static class FalloutNvseNumericExpression
             }
             else
             {
-                left = new(() => values.Read(token), () => (() => values.Read(token), value => values.Write(token, value)));
+                var bareSourceName = sourceString && FalloutScriptValueContext.IsBareSourceName(token) &&
+                    (at >= tokens.Count || tokens[at] is not ("[" or "."));
+                left = new(() => bareSourceName ? values.ReadSourceString(token) : values.Read(token),
+                    () => (() => values.Read(token), value => values.Write(token, value)));
             }
 
             while (at < tokens.Count)
