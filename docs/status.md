@@ -25,6 +25,12 @@ ordinary route, with moving source collision and retained cold motion. Dad's nex
 CG01DadCloseDoor travel/procedure is unbound and the quest stays at stage 16.
 Further ordinary quest, full actor cold continuation and gurney/HUD behavior
 remain open; see [package results](package-event-results.md).
+The [camera repeat owner](player-package-camera-loops.md) now uses the winning
+IDLE's intro, inner loop and outro, retaining identical event poses across
+assignment changes. Source sound/stop keys execute on the actual player. Three
+owned native fixtures pass long-repeat, cold-camera, atomic failed-restore,
+sound-child reuse and voice-cleanup checks with nonzero native mixer output and
+recording off. Fresh ordinary gurney departure and matched timing remain open.
 Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
 and the required movement runtime gate pass. Quest MenuMode and multiple GameMode
 blocks now share source scheduling; TTWStart's owned clock fixture reaches its

@@ -80,6 +80,14 @@ CG01DadCloseDoor (FalloutNV.esm:0457c4), whose travel/procedure remains unbound.
 The quest stays at stage 16 with that visible AI error.
 The gurney departure, toddler quest completion and Vault exit remain open.
 
+The [source camera repeat owner](player-package-camera-loops.md) now runs each
+selected IDLE intro once and repeats its authored inner interval. Infinite event
+poses no longer block package handoff; identical outgoing/incoming poses retain
+their phase. Source text keys use the actual player sound owner. Synthetic and
+three owned native fixtures pass repeat, cold camera, atomic rejection, removal,
+sound-child reuse and voice-retirement checks. The mixer fixture observes nonzero
+output without recording frames. Fresh ordinary departure acceptance is next.
+
 ## Shared owners and checks
 
 Source sound paths resolve canonical winning SOUN forms, preserve getter text,
@@ -111,8 +119,10 @@ The package-result block passed its owned fixture and full gate, was merged afte
 all five CI checks, and main was synchronized before the fresh door-state branch.
 The door-state synthetic and owned native checks pass, including cold motion,
 source collision, duplicate requests, unbound-owner refusal and source-drift
-rejection. The complete required runtime gate also passes. Publish after the
-final diff check, obtain required exact-head CI, merge and synchronize clean main.
+rejection. Its required runtime gate and all five CI checks pass; the block is
+merged and local main equals origin/main before this camera integration branch.
+The integrated camera gate and all three owned audits also pass, with empty
+native stderr. Publish with exact-head CI, merge and synchronize clean main.
 Recording is off during development and gates.
 
 ## Visible gaps
@@ -139,15 +149,16 @@ Recording is off during development and gates.
 
 ## Next owner
 
-Publish the verified source door-state block, then bind the reached
-CG01DadCloseDoor travel/procedure through the general NPC package owner and
-resume the ordinary toddler/Vault route. The isolated gurney agent has passing
-source-camera loop and mixer checks; review and integrate its change, then verify
-the actual departure through fresh ordinary opening input.
+Publish the integrated source-camera repeat block and verify the actual departure
+through fresh ordinary opening input. Bind the reached CG01DadCloseDoor travel
+radius through the existing source NAVM destination-radius owner, retaining exact
+furniture approaches and once-only package results, then resume the ordinary
+toddler/Vault route. The parallel UI and mod owners continue authored tag input
+and typed reference-call work under the same integration owner.
 The source trigger sphere and gate clearance have now executed through normal
 input; preserve closed-door collision and reject unknown clearance.
-The gurney camera still needs its authored IDLE repeat interval, package handoff
-and sound text keys; do not replay its entire travel segment as an idle loop.
+Camera body/blend targets and matched finite-event/audio timing remain unbound;
+the camera fixtures do not establish ordinary departure or retail parity.
 Preserve shared youth/scale, modal pause, camera cancellation, independent sound
 voices and path invalidation. Continue the complete TTW/JAM/Benny objective above.
 
@@ -163,6 +174,8 @@ Package result checks: `tmp/package-results-contract.log`,
 `tmp/package-results-owned.stdout.log`, `tmp/package-results-runtime-gate.log`.
 Door-state checks: `tmp/door-state-contract.log`,
 `tmp/door-state-owned.stdout.log`, `tmp/door-state-runtime-gate.log`.
+Integrated camera checks: `tmp/gurney-runtime-gate.log` and
+`tmp/gurney-{camera,change,package}-owned.stdout.log`.
 Owned audit helpers: `tmp/Run-ToddlerAudit.ps1`,
 `tmp/Run-SpeechActorValuesAudit.ps1`.
 

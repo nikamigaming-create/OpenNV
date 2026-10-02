@@ -44,6 +44,28 @@ internal static class PlayerScriptPackageContracts
             var cold = new FalloutScriptSession();
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(session.Capture()))!);
             Require(cold.PlayerPackage == saved, "Cold player package lost assignment, phase, cursor, hash or elapsed time.");
+            var repeated = saved with
+            {
+                Elapsed = 23.5,
+                EventKind = "POCA",
+                Playback = new(3.5, 255, 255, 5, false, false),
+                IdleSha256 = new string('C', 64), SoundRandomState = 8765
+            };
+            cold.PublishPlayerPackage(repeated);
+            cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!);
+            Require(cold.PlayerPackage == repeated && cold.PlayerPackage.PendingPackage is null,
+                "Cold settled change pose lost its IDLE identity, repetitions, phase or sound random state.");
+            foreach (var invalidRepeat in new[]
+            {
+                repeated with { Playback = null }, repeated with { IdleSha256 = null },
+                repeated with { IdleSha256 = "bad" }, repeated with { Idle = null, AnimationSha256 = null, PackageEvent = false },
+                repeated with { Playback = repeated.Playback! with { SourceSeconds = double.PositiveInfinity } },
+                repeated with { Playback = repeated.Playback! with { RemainingAdditionalLoops = 254 } }
+            })
+            {
+                Reject(() => cold.PublishPlayerPackage(invalidRepeat));
+                Require(cold.PlayerPackage == repeated, "Rejected repeat state partially changed the live player package.");
+            }
             var changing = saved with { EventKind = "POCA", PendingPackage = Key(0x101), PendingPackageSha256 = new string('B', 64) };
             cold.PublishPlayerPackage(changing);
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!);

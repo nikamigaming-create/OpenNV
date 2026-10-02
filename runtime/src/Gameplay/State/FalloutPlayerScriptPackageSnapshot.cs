@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutPlayerScriptPackageSnapshot(FalloutFormKey Package, string PackageSha256,
     FalloutFormKey? Idle, string? AnimationSha256, int Cursor, bool PackageEvent, bool Complete,
     double Elapsed, double Wait, string? EventKind = null, FalloutFormKey? PendingPackage = null,
-    string? PendingPackageSha256 = null)
+    string? PendingPackageSha256 = null, FalloutIdleAnimationPlaybackSnapshot? Playback = null,
+    string? IdleSha256 = null, ulong? SoundRandomState = null)
 {
     internal string? Phase => EventKind ?? (PackageEvent ? "POBA" : null);
     internal void Validate()
@@ -19,7 +20,9 @@ internal sealed record FalloutPlayerScriptPackageSnapshot(FalloutFormKey Package
             EventKind is not (null or "POBA" or "POCA") || EventKind is not null && !PackageEvent ||
             PendingPackage.HasValue != (PendingPackageSha256 is not null) || PendingPackage.HasValue && !Hash(PendingPackageSha256) ||
             PendingPackage is { } pending && (string.IsNullOrWhiteSpace(pending.OwnerPlugin) || pending.ObjectId == 0) ||
-            (Phase == "POCA") != PendingPackage.HasValue)
+            PendingPackage.HasValue && Phase != "POCA" || Phase == "POCA" && PendingPackage is null && Playback is null ||
+            (Playback is not null) != (IdleSha256 is not null) || Playback is not null && (Idle is null || !Hash(IdleSha256)))
             throw new InvalidDataException("Saved player script-package state is invalid.");
+        Playback?.Validate();
     }
 }

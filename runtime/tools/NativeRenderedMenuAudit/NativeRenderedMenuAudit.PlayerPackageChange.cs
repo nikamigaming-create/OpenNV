@@ -67,6 +67,12 @@ public partial class NativeRenderedMenuAudit
                 var nif = FalloutNifFile.Read(bytes); var sequence = nif.Roots.Select(nif.ReadControllerSequence).Single();
                 return (double)(sequence.StopTime - sequence.StartTime) / sequence.Frequency;
             }
+            if (FalloutIdleAnimationData.Read(records.GetEffective(change)).AdmitsAdditionalLoops(byte.MaxValue))
+            {
+                RepeatedPlayerPackageChange(records, world, definition, nextDefinition, replacementDefinition,
+                    marker.Cell, Create, Camera, CheckRemoval);
+                return;
+            }
             player = Create(); coldPlayer = Create();
             var session = new FalloutScriptSession(); var cold = new FalloutScriptSession();
             var owner = new RuntimeNativePlayerPackage(records, player, session, world, () => marker.Cell);

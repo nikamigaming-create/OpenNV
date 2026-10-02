@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 6 && args[1] == "--player-package-camera-loop")
+            {
+                await PlayerPackageCameraLoop(args[0], args[2], args[3], args[4], args[5], args[6..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 8 && args[1] == "--speech-actor-values")
             {
                 await SpeechActorValues(args[0], args[2], args[3], args[4], args[5], args[6], short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8..]);
