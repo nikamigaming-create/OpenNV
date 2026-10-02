@@ -66,6 +66,7 @@ internal sealed class FalloutPluginStack : IDisposable
     private readonly int _effectiveRecordCount;
     private FalloutSoundVoices? _soundVoices;
     internal FalloutSoundVoices SoundVoices => _soundVoices ??= new(this);
+    internal FalloutSoundPaths SoundPaths { get; }
     private readonly object _cellIndexLock = new();
     private readonly Dictionary<string, Dictionary<FalloutFormKey, IReadOnlyList<FalloutPluginRecord>>>
         _cellChildrenBySignatureAndCell = new(StringComparer.Ordinal);
@@ -91,6 +92,7 @@ internal sealed class FalloutPluginStack : IDisposable
         _effectiveRecordCount = _winnerKeysBySignature.Values.Sum(keys => keys.Count);
         PerkParameters = new(this);
         NumericSettings = new(this);
+        SoundPaths = new(this);
     }
 
     internal IReadOnlyList<FalloutPluginContext> Plugins => _plugins;

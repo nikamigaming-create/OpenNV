@@ -228,8 +228,18 @@ The pause timing remains unmatched against retail. Voice state is transient,
 outside campaign snapshots, with no cold replay of an executed script prefix.
 Environmental/submersion and stereo/LFE presentation gaps remain explicit in the
 request, while unsupported loop/timed/codec behavior fails before the source
-suffix. 3D/node routes, stop ownership and complete audio volume/output behavior
-remain unbound; a native mixer fixture does not establish endpoint audio parity.
+suffix. Script 3D/node routes and complete audio volume/output behavior remain
+unbound. [Source stopping](source-sound-stopping.md) shares the selected graph's
+instance registry across native sound adapters; a mixer fixture does not establish
+endpoint audio parity.
+
+[Source path commands](source-sound-paths.md) share FalloutSoundPaths in the
+selected C# graph. The typed getter preserves raw source text; the setter advances
+only the changed form's revision. Stack-aware readers and retained script,
+animation and menu descriptors refresh on that revision. Prepared or playing
+voices retain immutable source/media identity. Owned files remain read-only.
+These form mutations live outside campaign snapshots; fresh graph scope is tested,
+while retail cold continuity and matched command/voice timing remain unmeasured.
 
 - `runtime/src/Content`: installation detection, plugin/archive readers,
   strings, media, records, and live source precedence.

@@ -11,7 +11,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private readonly Node3D _actor;
     private readonly float _unitsToMetres;
     private readonly FalloutSoundRandomState _random;
-    private readonly Dictionary<string, (FalloutSoundRecord Source, IReadOnlyList<string> Variants)> _descriptors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (FalloutSoundRecord Source, IReadOnlyList<string> Variants, long Revision)> _descriptors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AudioStream> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<AudioStreamPlayer3D, FalloutAnimationSoundSelection> _spatial = [];
     private long _eventCount;
@@ -49,11 +49,13 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         {
             var editorId = form?.ToString() ?? FalloutAnimationSound.EditorId(textKey);
             if (editorId is null) return "unbound-runtime-event";
-            if (!_descriptors.TryGetValue(editorId, out var entry))
+            if (!_descriptors.TryGetValue(editorId, out var entry) || entry.Revision != _records.SoundPaths.Revision(entry.Source.FormKey))
             {
-                var source = FalloutSoundRecordReader.Read(form is { } key ? _records.GetEffective(key) : FalloutSoundRecordReader.Find(_records, editorId));
-                entry = (source, FalloutAnimationSound.Variants(source, source.HasExactFile ? [] : _content.ResourcePathsUnder(source.LogicalPath)));
-                _descriptors.Add(editorId, entry);
+                var key = form ?? FalloutSoundRecordReader.Find(_records, editorId).FormKey;
+                var path = _records.SoundPaths.Read(key);
+                var source = FalloutSoundRecordReader.Read(_records, key);
+                entry = (source, FalloutAnimationSound.Variants(source, source.HasExactFile ? [] : _content.ResourcePathsUnder(source.LogicalPath)), path.Revision);
+                _descriptors[editorId] = entry;
             }
             var selected = FalloutAnimationSound.Select(entry.Source, entry.Variants, _random, ownsLoopStop,
                 stereoOutput: AudioServer.GetSpeakerMode() == AudioServer.SpeakerMode.ModeStereo);

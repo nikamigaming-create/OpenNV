@@ -34,8 +34,9 @@ Done/resume, previous-pause preservation, idempotent release and exit cleanup.
 Fresh ordinary TTW input reaches the same menu after twelve completed voiced
 commands, shows its source artwork and retains identical speech, camera-package
 time, quest progress and draft across an extended hold. Done accepts no traits
-and resumes source progression; seventeen speeches complete and CG01 stage 0
-is entered before its unsupported SetSoundSourceFile. The session then quits
+and resumes source progression; seventeen speeches complete, the
+[sound-path command](source-sound-paths.md) executes and CG01 stages 0 and 5
+are entered before the unsupported SetPCToddler. The session then quits
 with readers drained. Childhood-room entry, full campaign and matched timing
 remain unverified. See [the shared youth and pause owners](player-youth-appearance.md).
 

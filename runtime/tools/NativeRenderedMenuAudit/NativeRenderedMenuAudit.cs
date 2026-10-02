@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 5 && args[1] == "--sound-paths")
+            {
+                await SoundPaths(args[0], args[2], args[3], args[4], args[5..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 4 && args[1] == "--player-youth")
             {
                 PlayerYouth(args[0], args[2], args[3], args[4..]);

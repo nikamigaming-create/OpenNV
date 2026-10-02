@@ -69,7 +69,8 @@ program executes the [shared StopSound owner](source-sound-stopping.md), and the
 quest enters stages 90 and 100. Player-package removal now cancels the pending
 change and releases the camera. The source suffix disables Dad and stops CG00
 then executes the [shared saved youth policy](player-youth-appearance.md) and
-enters CG01 stage 0 before its unsupported SetSoundSourceFile. The trait menu
+executes the [sound-path command](source-sound-paths.md), then enters CG01
+stages 0 and 5 before its unsupported SetPCToddler. The trait menu
 now pauses native gameplay and releases it on Done. Childhood-room entry and
 gurney-exit acceptance remain incomplete.
 General quest progress telemetry reports entered source

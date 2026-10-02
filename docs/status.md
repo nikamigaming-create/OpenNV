@@ -49,8 +49,15 @@ three actual birth-loop instances and enters stages 90 and 100. Pending
 [player-package removal](player-package-removal.md) now cancels its assignment
 and releases the camera. Fresh ordinary input completes that removal, disables
 Dad and stops CG00. The [shared saved youth policy](player-youth-appearance.md)
-now executes SetPCYoung and enters CG01 stage 0; its SetSoundSourceFile remains
-unsupported before the player transfer. The trait menu now pauses native gameplay
+now executes SetPCYoung. The [source sound-path owner](source-sound-paths.md)
+executes SetSoundSourceFile and refreshes cached playback. Fresh ordinary input
+enters CG01 stages 0 and 5, stopping at SetPCToddler before the player transfer.
+A fresh forty-second video with audio shows trait Done and camera release;
+background CG01 later reaches stage 10 and nineteen speeches while the player
+remains in the birth room. A RunOn 0 dialogue-condition context failure is also
+visible. This is not an accepted childhood-room transition.
+Synthetic command/cache checks and an owned native rattle/reset/mixer fixture
+pass. Form-path cold continuity remains unmeasured. The trait menu pauses native gameplay
 while accepting ordinary input, and Done releases the pause. A fresh ordinary hold
 retains identical speech, package time, quest progress and draft. Synthetic
 command/cold/appearance checks and owned first/third body and modal menu checks

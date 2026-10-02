@@ -23,7 +23,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
     private sealed record Binding(Func<FalloutSoundRecord, IReadOnlyList<string>> Variants,
         Func<FalloutScriptSoundRequest, FalloutScriptSoundPlayback> Prepare, bool Stereo);
     private readonly FalloutSoundRandomState _random = new(seed ?? BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
-    private readonly Dictionary<FalloutFormKey, FalloutSoundRecord> _sources = [];
+    private readonly Dictionary<FalloutFormKey, (FalloutSoundRecord Source, long Revision)> _sources = [];
     private readonly Dictionary<long, Voice> _voices = [];
     private Binding? _binding;
     private long _requests, _completed, _cancelled;
@@ -65,13 +65,15 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
         try
         {
             var binding = _binding ?? throw new NotSupportedException("PlaySound has no owned sound presentation binding.");
-            if (!_sources.TryGetValue(sound, out var source))
+            var revision = records.SoundPaths.Revision(sound);
+            if (!_sources.TryGetValue(sound, out var entry) || entry.Revision != revision)
             {
                 var record = records.GetEffective(sound);
                 if (record.Signature != "SOUN") throw new InvalidDataException("PlaySound argument is not a SOUN form.");
-                source = FalloutSoundRecordReader.Read(record);
-                _sources.Add(sound, source);
+                entry = (FalloutSoundRecordReader.Read(records, sound), revision);
+                _sources[sound] = entry;
             }
+            var source = entry.Source;
             // PlaySound explicitly requests non-locational playback. Keep the
             // original flags separately; the shared selector still exposes
             // environmental, submersion and stereo/LFE presentation gaps.
