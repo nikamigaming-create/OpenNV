@@ -31,12 +31,21 @@ receives source head tracking and plays her owned introduction voice and lip
 morphs. The security actor now assembles and receives source head tracking.
 The actual source player relocation enters the birthday room. Beatrice is
 source-disabled; her two SayTo calls now create neither voices nor completion
-events. Ordinary source speech continues through CG02 stage6, then an INFO
-result fails while selecting an unbound Travel package with an editor
-location. The glasses environment texture also leaves a birthday actor missing.
+events. Ordinary source speech continues through CG02 stage6. The selected
+clapping Travel package now completes at party actors' editor locations;
+later speech selection retains an unbound player-target GetIsID condition.
+The glasses environment texture also leaves a birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
+
+[Travel to editor location](source-editor-travel.md) separates winning authored
+placement from current script movement. Owned NAVM/KF and the existing native
+capsule drive arrival, source idles and once-only completion. Synthetic source
+and campaign contracts cover cold validation and v26/v27 compatibility. The
+owned actor movement fixture covers blocked/cold/supported arrival; the separate
+ordinary birthday retry passes the selected clapping package and reaches the
+next dialogue condition fault. Complete campaign and matched timing remain open.
 
 [Scripted speech participation](scripted-speech-participation.md) consults shared
 applied enable state before voice selection or resident actor resolution.
@@ -62,15 +71,15 @@ Matched retail pixels and physical OpenXR acceptance remain unverified.
 
 Shared [race aging](scripted-race-age.md), [inventory commands](inventory-script-commands.md)
 and [scripted challenges](scripted-challenges.md) retain authoritative state and
-cold values. Campaign schema v27 reads the genuine v26 Escort/SPECIAL checkpoints.
+cold values. Campaign schema v28 reads v27 and the genuine v26 Escort/SPECIAL checkpoints.
 Never clear saved faults or replay a consumed source prefix to manufacture
 continuation. The [skin-root repair](actor-skin-root.md) and
 [route-door owner](npc-door-navigation.md) retain their component evidence.
 
 ## Next owners
 
-1. Bind the selected Travel package's source editor-location and idle
-   procedure. The reached INFO result retains its fault; retry the genuine
+1. Bind shared dialogue actor identity for player-target GetIsID conditions.
+   The reached source speech selection retains its fault; retry the genuine
    checkpoint after repair instead of replaying its consumed prefix.
 2. Bind the glasses' authored 2D environment-map behavior without substituting
    a guessed cubemap. Retry the genuine checkpoint and continue birthday play.
@@ -89,7 +98,7 @@ authoritative gameplay and saves.
 ## Private continuation
 
 Run `tmp/development-lab/ttw-bot-20261002/` exited through ordinary Quit after
-the birthday package/result failure at stage6. Recording remained off. Genuine stage16, stage40,
+the birthday player-target condition failure at stage6. Recording remained off. Genuine stage16, stage40,
 stage50 and open/closed stage80 backups are under
 `local/ttw-bot-resume-20261002/`; closed stage80 is the next retry. The private
 manifest and focused actor/campaign reports retain hashes and source evidence.

@@ -28,6 +28,12 @@ restoration; saving before its first motion snapshot fails closed. Source
 completion callbacks cannot complete a replacement package. Non-player Follow
 assignment, object handling and other-cell Escort routes remain unbound.
 
+[Editor-location Travel](source-editor-travel.md) uses winning authored reference
+placement independently of the current moved pose. The shared NAVM/KF/native
+capsule owner publishes arrival before source results and retains procedure
+progress in reference package motion. Cold validation binds its destination to
+the winning actor. Other-cell routing and must-complete reevaluation remain open.
+
 Scripted [door state](source-door-state.md) retains its target and completion in
 the shared reference world. Managed source controllers retain its clock and cold
 pose, project collision with the owned animated subtree and report completion.

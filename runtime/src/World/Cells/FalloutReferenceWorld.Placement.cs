@@ -34,6 +34,13 @@ internal sealed partial class FalloutReferenceWorld
         return new(instance.Cell, (float[])source.Position.Clone(), (float[])source.RotationRadians.Clone());
     }
 
+    internal FalloutReferencePlacement EditorPlacement(FalloutFormKey reference)
+    {
+        var instance = Get(reference);
+        var source = PlacementSource(instance).References.Single(value => value.FormKey == reference);
+        return new(instance.Cell, (float[])source.Position.Clone(), (float[])source.RotationRadians.Clone());
+    }
+
     internal void MoveTo(FalloutFormKey reference, FalloutFormKey destination, float x = 0, float y = 0, float z = 0)
     {
         var instance = Get(reference);

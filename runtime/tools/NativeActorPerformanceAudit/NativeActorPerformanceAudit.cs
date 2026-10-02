@@ -10,6 +10,13 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--editor-travel", var editorRoot, var editorMod, var editorModRoot, var editorActor,
+                var editorQuest, var editorStage, .. var editorDependencies])
+            {
+                await EditorTravel(editorRoot, editorMod, editorModRoot, editorActor, editorQuest,
+                    short.Parse(editorStage, System.Globalization.CultureInfo.InvariantCulture), editorDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--appearance-stack", var appearanceGame, var appearanceMod, var appearanceModRoot,
                 var appearanceReferences, .. var appearanceDependencies])
             {
