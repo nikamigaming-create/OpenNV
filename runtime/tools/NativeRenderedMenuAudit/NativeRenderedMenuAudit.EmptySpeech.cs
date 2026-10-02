@@ -43,6 +43,9 @@ public partial class NativeRenderedMenuAudit
             scene = new Node3D(); AddChild(scene);
             foreach (var reference in new[] { dad, doctor, mom }.OfType<FalloutPluginRecord>())
             {
+                // This isolated body/audio fixture owns its active participants.
+                world.SetEnabled(reference.FormKey, true);
+                world.AdvanceEnableChanges(0, new(1, 1), _ => false);
                 var placed = cell.References.Single(item => item.FormKey == reference.FormKey);
                 var templates = world.InitializeActorTemplates(reference.FormKey, 1);
                 var body = RuntimeNativeNpc.Create(records, source, placed, units,
@@ -62,7 +65,8 @@ public partial class NativeRenderedMenuAudit
                         return (condition.Argument1 == 1) == saved.Character.Female ? 1 : 0;
                     throw new NotSupportedException($"Isolated speech query {condition.Function}/{condition.RunOn} is unbound.");
                 }, saidInfos: said,
-                templates: reference => world.Get(reference).Templates, quests: quests, playerFemale: () => saved.Character.Female);
+                templates: reference => world.Get(reference).Templates, quests: quests, playerFemale: () => saved.Character.Female,
+                references: world);
             var subtitleRequests = 0; speech.PrepareSubtitle = _ => ++subtitleRequests;
             var events = new List<FalloutFormKey>();
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ =>
@@ -172,7 +176,7 @@ public partial class NativeRenderedMenuAudit
                         (condition.Argument1 == 1) == saved.Character.Female ? 1 : 0 :
                         throw new NotSupportedException($"Isolated speech query {condition.Function}/{condition.RunOn} is unbound."),
                     saidInfos: beforeSaid.ToHashSet(), templates: actor => world.Get(actor).Templates,
-                    quests: quests, playerFemale: () => saved.Character.Female);
+                    quests: quests, playerFemale: () => saved.Character.Female, references: world);
                 speech.PrepareSubtitle = _ => { };
                 var prefix = 0;
                 speech.ExecuteResults = (info, actor, begin) =>

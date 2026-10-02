@@ -60,8 +60,12 @@ reach CG01 completion and CG02 stages0/5. Amata now delivers her introduction
 voice/lip morphs. [Model alternate textures](model-texture-indices.md) now bind
 by native scene traversal index independently of stored names. Both affected
 security actors pass owned assembly; ordinary security head tracking and source
-player relocation enter the birthday room. Beatrice's SayTo has no visible
-resident actor, and the glasses environment-map failure remains visible.
+player relocation enter the birthday room. Shared
+[scripted speech participation](scripted-speech-participation.md) accepts
+Beatrice's source-disabled SayTo calls without voices or completion events.
+The ordinary retry reaches CG02 stage6, then retains an INFO-result failure for
+an unbound Travel package's editor-location procedure. The glasses
+environment-map failure remains visible.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
 Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,

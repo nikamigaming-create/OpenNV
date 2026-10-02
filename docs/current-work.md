@@ -29,12 +29,22 @@ recovery without player activation still needs acceptance.
 The birthday race/inventory prefix executes. Amata's child FaceGen assembles,
 receives source head tracking and plays her owned introduction voice and lip
 morphs. The security actor now assembles and receives source head tracking.
-The actual source player relocation enters the birthday room. Speech still
-fails for Beatrice, who has no visible resident runtime actor for SayTo. The
-glasses environment texture also leaves a birthday actor missing.
+The actual source player relocation enters the birthday room. Beatrice is
+source-disabled; her two SayTo calls now create neither voices nor completion
+events. Ordinary source speech continues through CG02 stage6, then an INFO
+result fails while selecting an unbound Travel package with an editor
+location. The glasses environment texture also leaves a birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
+
+[Scripted speech participation](scripted-speech-participation.md) consults shared
+applied enable state before voice selection or resident actor resolution.
+Disabled speakers/listeners have no voice or completion; enabled missing actors
+retain a visible fault. Synthetic native checks cover parents/opposite links,
+queued changes and cold restoration. The genuine owned checkpoint passes the
+disabled-speaker audit, and the ordinary retry reaches birthday stage6. Active
+voice interruption, matched timing and full campaign acceptance remain open.
 
 [Model alternate textures](model-texture-indices.md) follow the source geometry's
 3D index in scene-child traversal order. Stored labels do not validate or
@@ -59,9 +69,9 @@ continuation. The [skin-root repair](actor-skin-root.md) and
 
 ## Next owners
 
-1. Trace Beatrice's birthday SayTo absence against winning enable/state rules
-   and native speech/process behavior. Missing actors and faults remain visible;
-   do not invent an actor or clear the consumed birthday prefix.
+1. Bind the selected Travel package's source editor-location and idle
+   procedure. The reached INFO result retains its fault; retry the genuine
+   checkpoint after repair instead of replaying its consumed prefix.
 2. Bind the glasses' authored 2D environment-map behavior without substituting
    a guessed cubemap. Retry the genuine checkpoint and continue birthday play.
 3. Repair sampled short bot endpoint crossing. Ordinary follow can overshoot
@@ -79,7 +89,7 @@ authoritative gameplay and saves.
 ## Private continuation
 
 Run `tmp/development-lab/ttw-bot-20261002/` exited through ordinary Quit after
-the birthday speech failure. Recording remained off. Genuine stage16, stage40,
+the birthday package/result failure at stage6. Recording remained off. Genuine stage16, stage40,
 stage50 and open/closed stage80 backups are under
 `local/ttw-bot-resume-20261002/`; closed stage80 is the next retry. The private
 manifest and focused actor/campaign reports retain hashes and source evidence.

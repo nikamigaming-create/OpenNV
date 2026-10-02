@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -40,19 +41,23 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
     private Func<FalloutFormKey, int, float>? _actorValue;
     private Func<uint, uint>? _dialogueRandom;
+    private FalloutReferenceWorld? _references;
     private Func<FalloutCondition, float>? _conditionContext;
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private Func<FalloutFormKey, FalloutSoundRandomState>? _soundRandom;
     private float _unitsToMetres;
     private long _completedCommands;
     private readonly FalloutSpeechCompletionEvents _emptyCompletions = new();
-    private FalloutDialogueVoiceIndex _voiceIndex = null!;
+    private FalloutDialogueVoiceIndex? _voiceIndex;
+    private long _disabledCommands;
+    private FalloutFormKey? _lastDisabledParticipant;
     private readonly SortedSet<string> _unbound = new(StringComparer.Ordinal);
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal Action<FalloutDialogueInfo, FalloutFormKey, bool>? ExecuteResults { get; set; }
     internal event Action<FalloutFormKey>? InfoCompleted;
     internal event Action<FalloutFormKey, IReadOnlySet<FalloutFormKey>>? SayToCompleted;
     internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
+    internal Action<string> ReportDivergence { get; set; } = GD.PushError;
     // Overlapping audio is actor-owned. HUD subtitle arbitration is a separate
     // contract: retain every candidate and expose ambiguity rather than guess.
     internal FalloutSpeechSubtitle? Subtitle
@@ -115,6 +120,8 @@ internal partial class RuntimeNativeSpeech : Node
                 command = voice?.CommandKind,
                 listenerLookOwner = voice?.CommandKind == "SayTo" ? "unbound" : "not-requested",
                 completedCommands = _completedCommands,
+                disabledCommands = _disabledCommands,
+                lastDisabledParticipant = _lastDisabledParticipant?.ToString(),
                 emptyCompletions = _emptyCompletions.State,
                 voiceBinding = voice?.Binding,
                 responseSound = voice?.ResponseSound?.LastEvent,
@@ -171,7 +178,8 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutFormKey, FalloutActorTemplateSelection?>? templates = null,
         Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0, FalloutQuestState? quests = null,
         Func<bool>? playerFemale = null, Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
-        Func<FalloutFormKey, int, float>? actorValue = null, Func<uint, uint>? dialogueRandom = null)
+        Func<FalloutFormKey, int, float>? actorValue = null, Func<uint, uint>? dialogueRandom = null,
+        FalloutReferenceWorld? references = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
@@ -181,11 +189,12 @@ internal partial class RuntimeNativeSpeech : Node
         _actorRace = actorRace;
         _actorValue = actorValue;
         _dialogueRandom = dialogueRandom;
+        _references = references;
         _conditionContext = conditionContext;
         _templates = templates;
         _soundRandom = soundRandom; _unitsToMetres = unitsToMetres;
         _said = saidInfos ?? [];
-        _voiceIndex = new((RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.")).ResourcePathsUnder("sound/voice"));
+        _voiceIndex = null;
         Name = "SourceSpeech";
     }
 
@@ -243,19 +252,34 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target)
     {
-        FalloutDialogueSpeaker? listenerIdentity = null;
-        if (target is { } listener && listener != _stack.RuntimeFormKey(0x14))
-        {
-            var listenerReference = _stack.GetEffective(listener);
-            if (listenerReference.Signature is not ("ACHR" or "ACRE"))
-                throw new InvalidDataException("SayTo listener is not an actor reference.");
-            _ = ResidentSpeaker(listenerReference);
-            listenerIdentity = FalloutDialogueSpeaker.Read(_stack, FalloutDialogueTopic.RequiredForm(listenerReference, "NAME"),
-                _templates?.Invoke(listener));
-        }
+        if (speaker.Signature is not ("ACHR" or "ACRE")) throw new InvalidDataException("Scripted speaker is not an actor reference.");
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
         var npc = _stack.GetEffective(npcKey);
         if (npc.Signature is not ("NPC_" or "CREA")) throw new NotSupportedException("SayTo speaker is not an actor.");
+        if (_stack.GetEffective(topicForm).Signature != "DIAL") throw new InvalidDataException("Scripted speech topic is not DIAL.");
+        var references = _references ?? throw new NotSupportedException("Scripted speech has no shared reference enable owner.");
+        var listenerReference = target is { } listener && listener != _stack.RuntimeFormKey(0x14) ? _stack.GetEffective(listener) : null;
+        if (listenerReference is not null && listenerReference.Signature is not ("ACHR" or "ACRE"))
+            throw new InvalidDataException("SayTo listener is not an actor reference.");
+        // Disabled participants have no active speech process. Native commands
+        // accept this case without voice selection, results or SayToDone.
+        // An enabled participant still requires its actual resident actor.
+        var disabled = !references.IsEnabled(speaker.FormKey) ? speaker.FormKey :
+            listenerReference is not null && !references.IsEnabled(listenerReference.FormKey) ? listenerReference.FormKey : (FalloutFormKey?)null;
+        if (disabled is { } disabledParticipant)
+        {
+            if (IsTalking(speaker.FormKey))
+                throw new NotSupportedException("Disabling an active speech participant requires its interruption owner.");
+            ++_disabledCommands; _lastDisabledParticipant = disabledParticipant;
+            return;
+        }
+        FalloutDialogueSpeaker? listenerIdentity = null;
+        if (listenerReference is not null)
+        {
+            _ = ResidentSpeaker(listenerReference);
+            listenerIdentity = FalloutDialogueSpeaker.Read(_stack, FalloutDialogueTopic.RequiredForm(listenerReference, "NAME"),
+                _templates?.Invoke(listenerReference.FormKey));
+        }
         if (!_topics.TryGetValue(command.TopicEditorId, out var topic))
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, topicForm));
         var actor = ResidentSpeaker(speaker);
@@ -339,6 +363,7 @@ internal partial class RuntimeNativeSpeech : Node
             GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} sound={sound} owner=source-SOUN disposition={disposition}");
             return;
         }
+        _voiceIndex ??= new((RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned source is absent.")).ResourcePathsUnder("sound/voice"));
         voice.Binding = _voiceIndex.Resolve(voice.Identity ?? throw new InvalidOperationException("Source voice type was lost."), info, voice.ResponseIndex);
         var lipPath = voice.Binding.LipPath;
         if (RuntimeLiveContentSource.Current!.TryRead(lipPath, null, out var lipBytes, out _))
@@ -417,7 +442,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (Error is not null) return;
         Error = error.Message;
         StopVoices();
-        GD.PushError($"OPENNV_NATIVE_SPEECH_DIVERGENCE {error.Message}");
+        ReportDivergence($"OPENNV_NATIVE_SPEECH_DIVERGENCE {error.Message}");
     }
 
     public override void _ExitTree() => StopVoices();

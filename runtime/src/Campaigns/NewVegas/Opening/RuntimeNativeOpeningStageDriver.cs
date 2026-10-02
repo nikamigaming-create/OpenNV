@@ -328,7 +328,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new NotSupportedException($"Dialogue condition {condition.Function} RunOn {condition.RunOn} has no actor/quest owner.");
         }, _scripts.SaidInfos, actor => _scripts.References!.Get(actor).Templates,
             actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
-            actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded);
+            actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

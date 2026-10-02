@@ -41,6 +41,12 @@ public partial class NativeReferenceEventsAudit : Node
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             world.LoadCell(cell);
+            if (OS.GetCmdlineUserArgs() is ["--disabled-speech"])
+            {
+                DisabledSpeech(records);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--ui-animation"])
             {
                 await UiClock();
@@ -149,6 +155,7 @@ public partial class NativeReferenceEventsAudit : Node
             PlayerMoves(records);
             SaveDeferral(player);
             DoorActivation(records);
+            DisabledSpeech(records);
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)
@@ -250,7 +257,8 @@ public partial class NativeReferenceEventsAudit : Node
             Field("NAME", BitConverter.GetBytes(0x700u)), Field("DATA", new byte[24]), fields.SelectMany(field => field).ToArray());
         var children = Reference(0x900, Field("XPRM", primitive), Field("XTRI", BitConverter.GetBytes(12u)))
             .Concat(Reference(0x901)).Concat(Record("ACRE", 0x902,
-                Field("NAME", BitConverter.GetBytes(0x701u)), Field("DATA", new byte[24]))).Concat(DoorActivationReferences()).ToArray();
+                Field("NAME", BitConverter.GetBytes(0x701u)), Field("DATA", new byte[24])))
+            .Concat(DoorActivationReferences()).Concat(DisabledSpeechReferences()).ToArray();
         var group = new byte[24 + children.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
@@ -270,6 +278,7 @@ public partial class NativeReferenceEventsAudit : Node
             .Concat(DeathFixture())
             .Concat(PlayerMoveFixture())
             .Concat(DoorActivationFixture())
+            .Concat(Record("DIAL", 0x740, Field("DATA", [0])))
             .Concat(Record("PERK", 0x705, Field("EDID", Encoding.ASCII.GetBytes("NativePerk\0")),
                 Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),
                 Field("EPFD", BitConverter.GetBytes(3f)), Field("PRKF", [])))
