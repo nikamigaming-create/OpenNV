@@ -42,6 +42,20 @@ SetOpenState does not dispatch activation or synthesize quest outcomes.
 
 ## Main owners
 
+The shared expression interpreter retains typed Form receivers for postfix
+reference calls on grouped, indexed and returned values. Function signatures
+and compiled local-kind metadata parse without reading live values; invocation
+evaluates a valid receiver once before arguments. Inactive branches stay lazy,
+and unsupported methods retain their executed prefix. See
+[typed reference calls](nvse-postfix-reference-calls.md).
+
+FalloutTagSkillMenuSelection owns the tag draft. NativeOwnedTagSkillMenu renders
+winning XML, fonts, atlas and AVIF content through the shared tile owner; the
+opening driver accepts identities through existing character state. The wrapper
+restores its prior pause/mouse state, and its release event restores the driver's
+prior modal input once. See [authored tags](native-tag-skill-menu.md) for native
+input/retirement proof and permanent actor-value, timing and XR boundaries.
+
 NPC package results bind their own compiled event scope and actual actor caller
 through the existing C# statement interpreter. The package lifecycle retains
 failed prefixes without replay. See [package results](package-event-results.md)

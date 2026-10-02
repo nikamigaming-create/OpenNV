@@ -70,9 +70,12 @@ registration barrier and reports the next reached initializer failure for the
 bare-name numeric setting `fUnaimedSpreadPenalty`. The admitted JDC callback
 reports an unbound expression at its equipped-object query before its later
 postfix equipped-item query can execute. Hit-event registration and `Dispel`
-remain unowned for the other previously faulted modules. The nine MCM
+remain unowned for the other previously faulted modules. Eight MCM
 initializers each complete 360 executions in this headless audit, which has no
 ordinary player input, player gameplay host, or visible MCM acceptance.
+JBTMCM remains unadmitted: its attached SCPT declares object type 0, and the
+current quest-clock admission requires a quest declaration. No other execution
+owner or native acceptance has been established for that attached script.
 
 No matched retail/OpenNV parity, ordinary gameplay, physical OpenXR, full JAM,
 TTW campaign, or Benny behavior acceptance follows from these checks. Owned

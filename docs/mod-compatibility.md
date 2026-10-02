@@ -121,7 +121,17 @@ The shared interpreter now executes typed scalar/array expressions and user func
 integer operators, loops and per-script lifecycle/frame/key/render events.
 MCM's full in-game configuration
 is required by the requested product scope and remains in implementation.
-11 of JAM's 52 source scripts still fail parsing. The reached initialization
+The [typed postfix reference-call owner](nvse-postfix-reference-calls.md) admits
+46 of JAM's 52 source scripts, previously 41. It retains typed calling identity,
+once-only evaluation, compiled bindings, lazy inactive arguments and cold state.
+Six scripts still fail parsing on anonymous-function blocks or key/value pairs.
+The owned 360-frame execution audit reaches bare numeric-setting argument names,
+actual equipped-object queries, hit-event registration and Dispel. Eight MCM
+initializers each execute 360 clean headless frames; this is initialization
+evidence without a player host or visible configuration acceptance.
+JBTMCM's attached object-type SCPT lacks current quest-clock admission; no
+alternate owner establishes its execution. This remains visible in the audit.
+The reached initialization
 scripts retain specific UI, actor-effect, perk-consumer and hit-event gaps.
 JBT now registers its winning render function and applies its source perk
 parameter writes and queries its source control binding before reaching hit-event
@@ -166,7 +176,7 @@ dotnet run --project contract-tests/FalloutPluginRuntimeProbe --configuration Re
 ```
 
 Reports retain source plugin hashes, active load order, archives, resolved files,
-missing packages and script parser failures. JAM has 11 parser failures; TTW's
+missing packages and script parser failures. JAM has six parser failures; TTW's
 current source audit has five among 1,263 entry-plugin scripts in its 18-plugin graph.
 These counts establish source admission only. The execution audit
 reports reached initialization state/errors through the ordinary script owners;
@@ -183,7 +193,9 @@ poses without Forward. Source movement controls now suppress birth HP/AP and the
 reticle independently of rollover text and hide prompts for disabled activation,
 with owned native control-mask/pixel
 checks and ordinary opening evidence. HUD override extensions and matched pixels
-remain open. MatchRace still fails visibly. Complete actor timing/restoration remains open.
+remain open. Ordinary input now executes MatchRace and source face-geometry
+changes and reaches the toddler playroom. Complete actor timing/restoration,
+proper gurney departure and later campaign progression remain open.
 Further Fallout 3 progression, authored train travel and full dependencies remain
 unverified. These checks do not establish TTW campaign or complete mod support.
 Keep reports and all mod,
