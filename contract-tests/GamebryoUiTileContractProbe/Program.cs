@@ -3,6 +3,7 @@ using OpenNV.Runtime.Presentation.Ui;
 using System.Text.Json;
 
 TagSkillMenuContracts.Run();
+SpecialBookMenuContracts.Run();
 
 var hash = new string('a', 64);
 var layout = new OwnedGamebryoTileLayout(
