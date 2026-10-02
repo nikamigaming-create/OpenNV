@@ -18,6 +18,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
         internal readonly FalloutScriptSoundRequest Request = request;
         internal readonly FalloutScriptSoundPlayback Playback = playback;
         internal string Phase = "queued-menu";
+        internal IDisposable? Registration;
     }
     private sealed record Binding(Func<FalloutSoundRecord, IReadOnlyList<string>> Variants,
         Func<FalloutScriptSoundRequest, FalloutScriptSoundPlayback> Prepare, bool Stereo);
@@ -76,7 +77,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
             // environmental, submersion and stereo/LFE presentation gaps.
             var random = new FalloutSoundRandomState(_random.State);
             var selection = FalloutAnimationSound.Select(source with { Flags = source.Flags | FalloutSoundFlags.TwoDimensional },
-                binding.Variants(source), random, stereoOutput: binding.Stereo);
+                binding.Variants(source), random, ownsLoopStop: true, stereoOutput: binding.Stereo);
             if (selection.Play && !Path.GetExtension(selection.Path!).Equals(".wav", StringComparison.OrdinalIgnoreCase))
                 throw FalloutSoundPlaybackContract.Unsupported(source, "PlaySound for a non-WAV ambient effect");
             var request = new FalloutScriptSoundRequest(checked(_requests + 1), caller, source, selection, systemSound);
@@ -99,7 +100,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
             {
                 var voice = new Voice(request, playback); _voices.Add(request.Id, voice);
                 try { Update(voice, menus.Query() == 0); }
-                catch { _voices.Remove(request.Id); playback.Release(); LastDisposition = "failed-start"; throw; }
+                catch { _voices.Remove(request.Id); voice.Registration?.Dispose(); playback.Release(); LastDisposition = "failed-start"; throw; }
             }
         }
         catch (FalloutPluginFormatException error)
@@ -122,7 +123,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
             catch (Exception error)
             {
                 LastError = error.Message; LastDisposition = "failed-playback";
-                _voices.Remove(voice.Request.Id); voice.Playback.Release(); throw;
+                _voices.Remove(voice.Request.Id); voice.Registration?.Dispose(); voice.Playback.Release(); throw;
             }
         }
     }
@@ -133,7 +134,10 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
         if (voice.Phase == "queued-menu")
         {
             if (!audible) return;
-            voice.Phase = "playing"; LastDisposition = "source-sound-playing"; voice.Playback.Start();
+            voice.Phase = "playing"; LastDisposition = "source-sound-playing";
+            voice.Registration = records.SoundVoices.Register(voice.Request.Source.FormKey, null, "PlaySound",
+                () => _voices.ContainsKey(voice.Request.Id), () => StopVoice(voice));
+            voice.Playback.Start();
         }
         else if (audible == (voice.Phase == "paused-menu"))
         {
@@ -144,14 +148,21 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
     internal void Complete(long id)
     {
         if (!_voices.Remove(id, out var voice)) return;
-        _completed++; LastDisposition = "source-sound-completed"; voice.Playback.Release();
+        _completed++; LastDisposition = "source-sound-completed"; voice.Registration?.Dispose(); voice.Playback.Release();
+    }
+
+    private void StopVoice(Voice voice)
+    {
+        if (!_voices.Remove(voice.Request.Id)) return;
+        ++_cancelled; LastDisposition = "source-sound-stopped";
+        voice.Registration?.Dispose(); voice.Playback.Release();
     }
 
     internal void Clear()
     {
         _binding = null;
         var voices = _voices.Values.ToArray(); _voices.Clear();
-        foreach (var voice in voices) { _cancelled++; voice.Playback.Release(); }
+        foreach (var voice in voices) { _cancelled++; voice.Registration?.Dispose(); voice.Playback.Release(); }
         if (voices.Length != 0) LastDisposition = "session-retired";
     }
     private sealed class Scope(Action release) : IDisposable

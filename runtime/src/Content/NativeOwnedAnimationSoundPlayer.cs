@@ -37,10 +37,10 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         Name = "OwnedAnimationSounds";
     }
 
-    internal string Dispatch(string textKey) => Dispatch(textKey, this, ownsLoopStop: false);
+    internal string Dispatch(string textKey) => Dispatch(textKey, this, ownsLoopStop: true);
 
     internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
-        Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: false, form, completed);
+        Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: true, form, completed);
 
     private string Dispatch(string textKey, Node3D emitter, bool ownsLoopStop, FalloutFormKey? form = null, Action? completed = null)
     {
@@ -69,12 +69,12 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                     _streams.Add(selected.Path!, stream);
                 }
                 var loop = FalloutSoundLoop.Read(selected.Source);
-                if (loop.Mode != FalloutSoundLoopMode.None) stream = CreateLoopStream(stream, loop);
+                if (loop.Mode != FalloutSoundLoopMode.None) stream = NativeOwnedSoundPlayback.CreateLoopStream(stream, loop);
                 if (selected.Source.IsTwoDimensional)
                 {
                     var voice = new AudioStreamPlayer { Stream = stream, PitchScale = selected.PitchScale, VolumeDb = selected.GainDb };
-                    AddChild(voice); TrackVoice(voice, emitter, loop);
-                    voice.Finished += () => { FinishVoice(voice); completed?.Invoke(); }; voice.Play();
+                    AddChild(voice); TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed);
+                    voice.Finished += () => FinishVoice(voice); voice.Play();
                 }
                 else
                 {
@@ -86,8 +86,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                         MaxDistance = selected.Source.MaximumDistanceGameUnits * _unitsToMetres,
                         AreaMask = 0
                     };
-                    emitter.AddChild(voice); _spatial.Add(voice, selected); TrackVoice(voice, emitter, loop);
-                    voice.Finished += () => { _spatial.Remove(voice); FinishVoice(voice); completed?.Invoke(); };
+                    emitter.AddChild(voice); _spatial.Add(voice, selected); TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed);
+                    voice.Finished += () => FinishVoice(voice);
                     ApplyListener(voice, selected); voice.Play();
                 }
             }

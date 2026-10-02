@@ -10,6 +10,7 @@
     <Compile Include="..\..\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="..\..\src\Content\FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="..\..\src\Content\FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
+    <Compile Include="..\..\src\Content\FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
     <Compile Include="..\..\src\Content\FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="..\..\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="..\..\src\Content\RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />

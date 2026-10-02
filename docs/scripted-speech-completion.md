@@ -63,8 +63,10 @@ The reached save and owned inputs remain unchanged. This is component evidence.
 Ordinary opening continuation is independently checked from fresh New Game.
 Previously saved script errors are retained; installing this owner does not
 replay a failed source prefix or silently rearm a saved actor script.
-Fresh ordinary TTW input now completes sixteen speech commands through the
+Fresh ordinary TTW input now completes seventeen speech commands through the
 Mom/Dad overlap and accepts the owned trait screen. Dad's next source begin
-program reaches an unsupported StopSound command; the opening and gurney exit
-remain incomplete. General quest progress telemetry reports entered source
+program executes the [shared StopSound owner](source-sound-stopping.md), and the
+quest enters stages 90 and 100. Player-package removal then faults during a
+pending change animation; the opening and gurney exit remain incomplete.
+General quest progress telemetry reports entered source
 stages separately from the bootstrap identity and scheduler invocation counts.

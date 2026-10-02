@@ -328,7 +328,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
                 .Where(row => row.Signature == "EDID").Any(row => Encoding.ASCII.GetString(row.Data.Span).TrimEnd('\0') == editorId));
             _sounds.Add(editorId, descriptor = FalloutSoundRecordReader.Read(record));
         }
-        var player = NativeOwnedSoundPlayback.CreateMenu(descriptor, RuntimeLiveContentSource.Current!, _soundRandom);
+        var player = NativeOwnedSoundPlayback.CreateMenu(descriptor, _records, RuntimeLiveContentSource.Current!, _soundRandom);
         (surviveMenu ? GetTree().Root : (Node)this).AddChild(player);
         player.Finished += player.QueueFree;
         player.Play();

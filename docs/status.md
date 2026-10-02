@@ -44,8 +44,13 @@ CG00 stage 80's trait menu. Ordinary trait confirmation accepts zero traits;
 empty selections now deliver deferred, coalesced SayToDone without audio or an
 invented INFO. A fresh ordinary run starts Dad's stage-80 line, then Mom's
 overlapping voice now has its own audio/lip/result/completion channel. A fresh
-ordinary run completes sixteen speeches, accepts the owned trait menu and reaches
-the next unsupported StopSound command. The gurney exit remains incomplete.
+ordinary run accepts the owned trait menu, completes seventeen speeches, stops
+three actual birth-loop instances and enters stages 90 and 100. The next retained
+fault is player-package removal during a pending change animation; the gurney
+exit remains incomplete. The [shared source-sound owner](source-sound-stopping.md)
+has synthetic and owned native command/mixer/reference-filter checks, including
+paused stopping, independent loops and clean retirement. State-publication
+interval overruns remain visible in the ordinary run.
 An owned concurrent fixture checks overlap, pause, skip isolation and failed
 prefix retention. Competing subtitle selection remains visibly unbound. The trait panel now
 uses [winning Fallout XML, fonts and artwork](authored-trait-menu.md), source
@@ -70,7 +75,7 @@ owned TTW command checks pass; retained-consumer refresh and complete karma beha
 remain open. Script audio uses shared transient voice ownership; menu queuing,
 system sounds, concurrent completion, prefix failures and retirement pass
 synthetic and owned native-mixer checks. Reverb, submersion and stereo/LFE gaps
-remain visible; loop/3D playback, complete volume routing, endpoint audio and
+remain visible; script 3D requests, complete volume routing, endpoint audio and
 matched voice timing remain unverified. Saved package
 assignment/clock, pending change assignment and native cold-camera/remainder checks
 pass as component evidence. PACK reads both owned byte and UInt32 idle counts.
