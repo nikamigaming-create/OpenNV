@@ -26,6 +26,26 @@ internal static partial class ScriptSourceStringProbe
         var executable = Path.Combine(setup.BaseInstallation.InstallRoot, "FalloutNV.exe");
         var executableHash = SHA256.HashData(File.ReadAllBytes(executable));
         var defaults = FalloutExecutableStringTable.ReadFloatDefaults(executable);
+        var iniQuery = Regex.Match(source, @"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*GetNumericINISetting\s+""([^""]+)""\s*$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        Require(iniQuery.Success, "JDC does not contain its expected numeric INI assignment.");
+        var iniName = iniQuery.Groups[2].Value;
+        var iniDeclarations = FalloutExecutableStringTable.ReadIniDeclarations(executable);
+        var iniDeclaration = iniDeclarations.Single(row => row.Name.Equals(iniName, StringComparison.OrdinalIgnoreCase));
+        Require(iniDeclaration.Collection == FalloutIniCollection.Main && iniDeclaration.Kind == 'f',
+            "JDC INI source declaration is not a Main Float32 setting.");
+        var iniExpected = (double)BitConverter.Int32BitsToSingle(unchecked((int)iniDeclaration.Payload));
+        Require(double.IsFinite(iniExpected), "JDC INI source declaration is non-finite.");
+        var iniOrigin = "owned-executable-default";
+        var userIni = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FalloutNV");
+        var iniFiles = new[] { Path.Combine(setup.BaseInstallation.InstallRoot, "Fallout_default.ini"),
+            Path.Combine(userIni, "Fallout.ini"), Path.Combine(userIni, "FalloutCustom.ini") };
+        var iniHashes = iniFiles.Where(File.Exists).ToDictionary(path => path, path => SHA256.HashData(File.ReadAllBytes(path)));
+        foreach (var path in iniFiles)
+            if (ReadOwnedIniFloat(path, iniName) is { } value) { iniExpected = value; iniOrigin = path; }
+        foreach (var row in content.Settings)
+            if ((row.Key + ":" + row.Section).Equals(iniName, StringComparison.OrdinalIgnoreCase))
+            { iniExpected = float.Parse(row.Value, System.Globalization.CultureInfo.InvariantCulture); iniOrigin = "profile"; }
         var overlay = Path.Combine(Path.GetTempPath(), "opennv-jdc-source-string-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(overlay);
         try
@@ -91,15 +111,24 @@ internal static partial class ScriptSourceStringProbe
             Require(values.Count(value => value.origin == "owned-executable-default") == 9,
                 "Selected JDC defaults/GMST denominator changed.");
             var reached = scripts.Capture().Instances.Single(instance => instance.Quest == quest.FormKey);
-            Require(reached.Error?.Contains("unbound operation", StringComparison.Ordinal) == true && reached.Executions == 0,
-                "JDC should retain its next unsupported INI query rather than claim complete initialization.");
-            var after = source[(queries[^1].Index + queries[^1].Length)..];
-            var next = FalloutDialogueTopic.CodeLines(after).First();
-            Require(FalloutGameModeProgram.Tokens(next).Skip(2).First().Equals("GetNumericINISetting", StringComparison.OrdinalIgnoreCase),
-                "The next authored JDC operation is not the expected unbound INI getter.");
-            var saved = JsonSerializer.Serialize(state.Capture());
-            scripts.Advance(1);
-            Require(JsonSerializer.Serialize(state.Capture()) == saved, "JDC replayed the prefix after its unsupported suffix.");
+            var iniSlot = bindings.Variable(iniQuery.Groups[1].Value);
+            var iniEncoded = new byte[2 + iniName.Length]; BinaryPrimitives.WriteUInt16LittleEndian(iniEncoded, (ushort)iniName.Length);
+            Encoding.ASCII.GetBytes(iniName).CopyTo(iniEncoded, 2);
+            Require(iniSlot.Index == 15 && bytecode.Span.IndexOf(iniEncoded) >= 0 &&
+                state.Variable(iniSlot.Owner, iniSlot.Index) == iniExpected && records.IniSettings.Get(iniName) == iniExpected,
+                "JDC did not execute its compiled world-FOV query with independently resolved file/profile precedence.");
+            Require(reached.Error is null && reached.Executions > 0, "JDC initializer did not complete: " + reached.Error);
+            var afterIni = source[(iniQuery.Index + iniQuery.Length)..];
+            Require(afterIni.Contains("IsModLoaded", StringComparison.OrdinalIgnoreCase) &&
+                state.Variable(bindings.Variable("fDefaultDistanceMult").Owner, bindings.Variable("fDefaultDistanceMult").Index) > 0 &&
+                state.Variable(bindings.Variable("iMode").Owner, bindings.Variable("iMode").Index) == -1 &&
+                state.Variable(bindings.Variable("iHUDEditor").Owner, bindings.Variable("iHUDEditor").Index) ==
+                    (records.Plugins.Any(plugin => plugin.Plugin.Name.Equals("TheHUDEditor.esm", StringComparison.OrdinalIgnoreCase)) ? 1 : 0),
+                "JDC did not finish its ordinary authored loaded-plugin branch and suffix.");
+            var eventState = JsonSerializer.SerializeToElement(events.State);
+            var callbackFaults = eventState.GetProperty("mainLoop").EnumerateArray()
+                .Where(row => row.GetProperty("Error").ValueKind == JsonValueKind.String).ToArray();
+            Require(callbackFaults.Length > 0, "The expected callback boundary changed; inspect the complete source route.");
 
             Reject(() => FalloutPluginStack.Load(content.PluginSources.Skip(1).ToArray()));
             Reject(() => FalloutPluginStack.Load(content.PluginSources.Select((entry, index) =>
@@ -107,6 +136,8 @@ internal static partial class ScriptSourceStringProbe
             Reject(() => FalloutPluginStack.Load(content.PluginSources.Select((entry, index) =>
                 index == 0 ? entry with { RegisteredBytes = entry.RegisteredBytes.GetValueOrDefault() + 1 } : entry).ToArray()));
             Reject(() => FalloutPluginStack.Load(content.PluginSources.Reverse().ToArray()));
+            Reject(() => FalloutPluginStack.Load(content.PluginSources, false, out _,
+                FalloutInstallationSettings.ReadIniLayers(() => [], [], "foreign-owner")));
             Require(content.PluginSources is System.Collections.ObjectModel.ReadOnlyCollection<FalloutPluginSource> &&
                 !JsonSerializer.Serialize(content.PluginSources).Contains("OwnedSource", StringComparison.Ordinal),
                 "Owned source provenance is mutable or serializes its in-process owner.");
@@ -125,28 +156,51 @@ internal static partial class ScriptSourceStringProbe
                 "A new stack retained another graph's overrides or required an ambient source.");
             Require(SHA256.HashData(File.ReadAllBytes(executable)).AsSpan().SequenceEqual(executableHash),
                 "Owned executable bytes changed during the read-only audit.");
+            Require(iniHashes.All(pair => SHA256.HashData(File.ReadAllBytes(pair.Key)).AsSpan().SequenceEqual(pair.Value)),
+                "Owned INI files changed during the read-only audit.");
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                schema = "opennv-owned-jdc-source-string-audit/v1",
+                schema = "opennv-owned-jdc-source-string-audit/v2",
                 quest = quest.FormKey.ToString(),
                 script = script.FormKey.ToString(),
                 pluginSha256 = records.Plugins.Single(plugin => plugin.Plugin.Name == setup.EntryPlugin).Sha256,
                 settings = values,
+                iniSetting = new { name = iniName, slot = iniSlot.Index, actual = state.Variable(iniSlot.Owner, iniSlot.Index),
+                    expected = iniExpected, origin = iniOrigin, canonicalKind = iniDeclaration.Kind,
+                    collection = iniDeclaration.Collection.ToString(), compiledLiteral = true },
                 sourceBinding = "explicit-complete-graph",
                 ambientSource = false,
                 sourceIsolation = true,
-                failedPrefixRetained = true,
                 executions = reached.Executions,
                 error = reached.Error,
-                nextOwner = "GetNumericINISetting",
+                callbackFaults,
+                nextOwner = "source main-loop callback equipment/extra-reference ownership",
                 sourceReadonly = true,
                 recording = false,
-                boundary = "owned-JDC-cache-prefix-only;INI-and-equipment-queries-unbound;no-player-input-or-module-gameplay-acceptance",
+                boundary = "owned-JDC-initializer-only;callback-equipment-unbound;no-player-input-or-module-gameplay-acceptance",
             }));
         }
         finally
         {
             if (Directory.Exists(overlay)) Directory.Delete(overlay, recursive: true);
         }
+    }
+
+    private static float? ReadOwnedIniFloat(string path, string identity)
+    {
+        if (!File.Exists(path)) return null;
+        var separator = identity.IndexOf(':');
+        var key = identity[..separator]; var expectedSection = identity[(separator + 1)..];
+        var section = ""; float? found = null;
+        foreach (var raw in File.ReadLines(path))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith('[') && line.EndsWith(']')) { section = line[1..^1]; continue; }
+            var equals = line.IndexOf('=');
+            if (equals <= 0 || !section.Equals(expectedSection, StringComparison.OrdinalIgnoreCase) ||
+                !line[..equals].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) continue;
+            found = float.Parse(line[(equals + 1)..].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        return found;
     }
 }

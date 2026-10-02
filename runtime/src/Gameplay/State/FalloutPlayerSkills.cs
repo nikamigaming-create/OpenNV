@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -12,6 +13,7 @@ internal sealed class FalloutPlayerSkills
     }
     private readonly FalloutPluginStack _records;
     private readonly Func<FalloutNativeSpecialState> _special;
+    private readonly FalloutPlayerActorValues? _actorValues;
     private readonly Func<string, bool> _tagged;
     private readonly Func<IReadOnlyList<FalloutNativeTraitIdentity>> _traits;
     private readonly FalloutGlobalState? _globals;
@@ -36,11 +38,13 @@ internal sealed class FalloutPlayerSkills
 
     internal FalloutPlayerSkills(FalloutPluginStack records, Func<FalloutNativeSpecialState> special, Func<string, bool> tagged,
         Func<IReadOnlyList<FalloutNativeTraitIdentity>> traits, FalloutGlobalState? globals, FalloutPlayerInventory inventory,
-        FalloutFormKey actor, Func<FalloutFormKey> race, Func<bool> hardcore, Func<IReadOnlyList<FalloutFormKey>>? acquiredPerks = null)
+        FalloutFormKey actor, Func<FalloutFormKey> race, Func<bool> hardcore, Func<IReadOnlyList<FalloutFormKey>>? acquiredPerks = null,
+        FalloutPlayerActorValues? actorValues = null)
     {
         _records = records; _special = special; _tagged = tagged; _traits = traits; _globals = globals;
         _inventory = inventory; _abilities = new(records); _actor = actor; _race = race; _hardcore = hardcore;
         _acquiredPerks = acquiredPerks ?? (() => []);
+        _actorValues = actorValues;
     }
 
     internal float Value(string name)
@@ -54,6 +58,7 @@ internal sealed class FalloutPlayerSkills
 
     internal float Value(int value)
     {
+        if (value is >= 5 and <= 11 && _actorValues is not null) return _actorValues.ReadBoundedCurrent(value);
         if (!_evaluating.Add(value)) throw new NotSupportedException("Actor ability conditions have a recursive value dependency.");
         try
         {
@@ -85,6 +90,10 @@ internal sealed class FalloutPlayerSkills
         }
         finally { _evaluating.Remove(value); }
     }
+
+    internal IReadOnlyList<FalloutAbilityModifier> Modifiers(int actorValue, FalloutActorValuePool pool) => ConstantEffects()
+        .SelectMany(form => _abilities.Spell(form)).Where(effect => effect.ActorValue == actorValue && effect.Pool == pool &&
+            FalloutCondition.AllPass(effect.Conditions, Condition)).ToArray();
 
     private IEnumerable<FalloutFormKey> Perks => _traits().Select(trait => _records.RuntimeFormKey(trait.RuntimeFormId)).Concat(_acquiredPerks()).Distinct();
     internal IReadOnlyList<FalloutPerkEntry> PerkEntries => Perks.SelectMany(perk => _abilities.Perk(perk).Entries).ToArray();
@@ -130,7 +139,8 @@ internal sealed class FalloutPlayerSkills
         ? throw new NotSupportedException($"Ability condition run-on {condition.RunOn} is unbound.") : condition.Function switch
         {
             74 => (_globals ?? throw new InvalidOperationException("Ability has no global state owner.")).Get(condition.FormArgument1),
-            14 => Value(checked((int)condition.Argument1)),
+            14 => condition.Argument1 is >= 5 and <= 11 && _actorValues is not null
+                ? _actorValues.ReadCurrent(checked((int)condition.Argument1)) : Value(checked((int)condition.Argument1)),
             _ => throw new NotSupportedException($"Ability condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
         };
     private float Setting(string name) => FalloutGameSettingFloats.Read(_records, name);

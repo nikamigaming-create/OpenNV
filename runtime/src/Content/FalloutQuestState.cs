@@ -66,6 +66,32 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         targets = "unbound",
     };
 
+    internal object ObjectiveSummaryState => new
+    {
+        revision = Revision,
+        detail = "counts;request-state-for-objective-text-and-individual-flags",
+        quests = _states.Where(pair => pair.Value.Objectives.Count != 0).Select(pair => new
+        {
+            quest = pair.Key.ToString(),
+            count = pair.Value.Objectives.Count,
+            displayed = pair.Value.Objectives.Values.Count(value => value.Displayed),
+            completed = pair.Value.Objectives.Values.Count(value => value.Completed),
+        }).ToArray(),
+        presentation = "unbound",
+        targets = "unbound",
+    };
+
+    internal object VariableSummaryState => new
+    {
+        revision = Revision,
+        detail = "counts;request-state-for-individual-values-and-bits",
+        quests = _states.Where(pair => pair.Value.Variables.Count != 0).Select(pair => new
+        {
+            quest = pair.Key.ToString(),
+            count = pair.Value.Variables.Count,
+        }).ToArray(),
+    };
+
     internal void Restore(IReadOnlyList<FalloutQuestSnapshot> snapshots)
     {
         if (Revision != 0) throw new InvalidOperationException("Quest restoration requires an unmodified owner.");
@@ -182,6 +208,16 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         ApplyObjective(quest, command.Index, command.Display, command.Value);
     }
 
+    internal void CompleteAllObjectives(FalloutFormKey quest)
+    {
+        // Source declaration order controls reminder order. Hidden objectives
+        // also complete; completion does not change their displayed state.
+        foreach (var index in Require(quest).Objectives.Keys.ToArray())
+            ApplyObjective(quest, index, display: false, value: true);
+    }
+
+    internal void KillQuestUpdates() => notifications?.RequestQuestUpdateCancellation();
+
     internal void ApplyObjective(FalloutFormKey quest, uint index, bool display, bool value)
     {
         var state = Require(quest);
@@ -191,7 +227,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         if (after == before) return;
         state.Objectives[index] = after;
         Revision++;
-        if (after.Displayed && (!before.Displayed || !before.Completed && after.Completed))
+        if (!state.Completed && after.Displayed && (!before.Displayed || !before.Completed && after.Completed))
             notifications?.Publish([new(after.Completed ? FalloutHudEventKind.ObjectiveCompleted : FalloutHudEventKind.ObjectiveDisplayed,
                 quest, 0, Quest: quest, ObjectiveIndex: index)]);
         ObjectiveChanged?.Invoke(new(quest, state.ObjectiveText[index], before, after, Revision));

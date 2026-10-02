@@ -1,5 +1,6 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -26,7 +27,9 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<FalloutFormKey, string, int>? PlayGroup = null,
     Func<FalloutFormKey, string?, bool>? IsAnimPlaying = null,
     Func<int>? PlayerLevel = null, Func<bool>? LocationSpecificLoadScreensOnly = null, Func<bool>? InCharGen = null,
-    Func<FalloutFormKey, int>? GetOpenState = null);
+    Func<FalloutFormKey, int>? GetOpenState = null,
+    Func<FalloutFormKey, string, FalloutActorValueRead, double>? ReadActorValue = null,
+    Action<FalloutFormKey, string, string, double>? ChangeActorValue = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -58,7 +61,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     // admit a contact event and GameMode together; execute their blocks in the
     // authored order, never in the order callbacks arrived from presentation.
     internal IReadOnlyList<FalloutReferenceScriptEventResult> DispatchFrame(FalloutFormKey reference,
-        IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds)
+        IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
+        Action? observeActivationBegin = null, Action? observeActivationEnd = null)
     {
         if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
@@ -153,13 +157,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 }
                 var actionReference = packageEvent || trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
                     ? null : item.ActionReference;
+                if (activation) observeActivationBegin?.Invoke();
                 Execute(instance.Reference, program!.Bindings, block.Program, actionReference, elapsedSeconds);
+                if (activation) observeActivationEnd?.Invoke();
                 ++counts[name];
             }
             if (admitted.TryGetValue("OnActivate", out var activationEvent) && counts["OnActivate"] == 0)
             {
                 runningEvent = "OnActivate";
+                observeActivationBegin?.Invoke();
                 host.Apply(new(FalloutReferenceEffectKind.DefaultActivate, reference, reference, activationEvent.ActionReference));
+                observeActivationEnd?.Invoke();
             }
         }
         catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or KeyNotFoundException or OverflowException)
@@ -388,6 +396,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return soundFunction;
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(records, operation) is { } settingFunction)
                 return settingFunction;
+            if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(records, operation) is { } iniSettingFunction)
+                return iniSettingFunction;
+            if (parts.Length == 1 && FalloutModQueryCommands.Function(records, operation) is { } modQueryFunction)
+                return modQueryFunction;
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => world.Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
@@ -523,6 +535,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([], _ => host.GetOpenState is not null && world.IsResident(Target()) ? host.GetOpenState(Target()) :
                     world.Get(Target()).DoorMotion?.OpenState ?? throw new NotSupportedException("GetOpenState has no source animation owner."))
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation is "getlocked" or "getlocklevel")
+                return new([], _ => operation == "getlocked" ? world.GetLocked(Target()) : world.GetLockLevel(Target()))
+                { ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].Equals("GetUnconscious", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IsUnconscious(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("GetPlayerTeammate", StringComparison.OrdinalIgnoreCase))
@@ -537,10 +552,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && parts[^1].Equals("IsTalking", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => (host.IsTalking ?? throw new NotSupportedException("IsTalking has no speech owner."))
                     (Target()) ? 1 : 0);
-            if (parts.Length <= 2 && parts[^1].ToLowerInvariant() is "getav" or "getactorvalue")
+            if (parts.Length <= 2 && FalloutActorValue.Query(parts[^1]) is { } valueRead)
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))
-                    (Target(), arguments[0].Identifier!));
+                    host.ReadActorValue is { } read ? read(Target(), arguments[0].Identifier!, valueRead) :
+                    valueRead == FalloutActorValueRead.Current
+                        ? (host.ActorValue ?? ((target, value) => world.ActorValue(target, value)))(Target(), arguments[0].Identifier!)
+                        : throw new NotSupportedException("Base/permanent actor value query has no source pool owner."));
             if (parts.Length <= 2 && operation == "getkiller")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
                     world.Get(Target()).Injury?.Killer is { } killer ? records.RuntimeFormId(killer) : 0));
@@ -737,6 +754,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setopenstate" when arguments.Count == 1:
                     _ = world.Get(target);
                     host.Apply(new(FalloutReferenceEffectKind.DoorOpenState, source, target, Enable: Boolean(arguments[0])));
+                    break;
+                case "lock":
+                    if (arguments.Count > 2) throw new InvalidDataException("Lock takes a difficulty and optional CELL access flag.");
+                    world.LockReference(target, arguments.Count == 0 ? 0 : Number(arguments[0]),
+                        arguments.Count == 2 ? Number(arguments[1]) : 0);
+                    break;
+                case "unlock":
+                    if (arguments.Count > 1) throw new InvalidDataException("Unlock takes an optional CELL access flag.");
+                    world.UnlockReference(target, arguments.Count == 0 ? 0 : Number(arguments[0]));
+                    break;
+                case "setownership":
+                    if (arguments.Count > 1) throw new InvalidDataException("SetOwnership takes an optional NPC_ or FACT owner.");
+                    var ownershipId = arguments.Count == 0 ? 0 : Number(arguments[0]);
+                    if (!double.IsFinite(ownershipId) || ownershipId < 0 || ownershipId > uint.MaxValue || ownershipId != Math.Truncate(ownershipId))
+                        throw new InvalidDataException("SetOwnership owner has no valid form identity.");
+                    world.SetOwnership(target, ownershipId == 0 ? null : records.RuntimeFormKey((uint)ownershipId));
                     break;
                 case "kill" or "killactor":
                     if (arguments.Count > 3) throw new InvalidDataException("KillActor has an invalid argument count.");
@@ -954,7 +987,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         Enable: operation is "applyimagespacemodifier" or "imod"));
                     break;
                 case "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue" when arguments.Count == 2:
-                    world.ChangeActorValue(target, arguments[0], operation, (float)Number(arguments[1]));
+                    if (host.ChangeActorValue is { } change) change(target, arguments[0], operation, Number(arguments[1]));
+                    else world.ChangeActorValue(target, arguments[0], operation, (float)Number(arguments[1]));
                     break;
                 case "enable" or "disable" when arguments.Count <= 1:
                     var enable = operation == "enable";
@@ -972,6 +1006,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setobjectivedisplayed" or "setobjectivecompleted" when parts.Length == 1 && arguments.Count == 3:
                     quests.ApplyObjective(Quest(arguments[0]), Index(Number(arguments[1])),
                         operation == "setobjectivedisplayed", Boolean(arguments[2]));
+                    break;
+                case "completeallobjectives" when parts.Length == 1 && arguments.Count == 1:
+                    quests.CompleteAllObjectives(Quest(arguments[0]));
+                    break;
+                case "killquestupdates" or "kqu" when parts.Length == 1 && arguments.Count == 0:
+                    quests.KillQuestUpdates();
                     break;
                 case "startconversation" when arguments.Count is 1 or 2:
                     var topic = arguments.Count == 2 ? bindings.Form(arguments[1]) : null;

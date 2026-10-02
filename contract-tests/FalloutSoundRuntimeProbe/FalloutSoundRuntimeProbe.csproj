@@ -23,5 +23,10 @@
     <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />
     <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Ini.cs" Link="FalloutExecutableStringTable.Ini.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.IniPayload.cs" Link="FalloutExecutableStringTable.IniPayload.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutNumericIniSettings.cs" Link="FalloutNumericIniSettings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
   </ItemGroup>
 </Project>

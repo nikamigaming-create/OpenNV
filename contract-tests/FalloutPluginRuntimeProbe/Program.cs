@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 if (args.Length >= 7 && args[0] == "--audit-quest-clock")
 {
@@ -17,6 +18,11 @@ if (args.Length >= 7 && args[0] == "--audit-quest-clock")
 if (args is ["--test-source-string"])
 {
     ScriptSourceStringProbe.Run();
+    return;
+}
+if (args is ["--test-numeric-ini"])
+{
+    NumericIniSettingProbe.Run();
     return;
 }
 if (args.Length >= 3 && args[0] == "--audit-jdc-game-settings")
@@ -61,6 +67,7 @@ QuestObjectiveProbe.Run();
 ScriptExpressionProbe.Run();
 ScriptPostfixProbe.Run();
 ScriptSourceStringProbe.Run();
+NumericIniSettingProbe.Run();
 ScriptValueProbe.Run();
 ScriptArrayProbe.Run();
 ScriptStorageProbe.Run();
@@ -636,6 +643,8 @@ try
         Subrecord("EDID", ZString("SyntheticClock" + form)), Subrecord("FNAM", [(byte)'s']),
         Subrecord("FLTV", BitConverter.GetBytes(value))));
     var weatherColors = Enumerable.Range(0, 240).Select(value => (byte)(value % 251)).ToArray();
+    var playerStats = new byte[24];
+    BinaryPrimitives.WriteInt16LittleEndian(playerStats.AsSpan(8), 1);
     File.WriteAllBytes(Path.Combine(fixtureRoot, "Cell.esm"), Combine(
         Record("TES4", 0, 0, []),
         ClockGlobal(0x35, 2210), ClockGlobal(0x36, 11), ClockGlobal(0x37, 31),
@@ -678,9 +687,9 @@ try
         Record("ARMO", 0x11a, 0, Combine(
             Subrecord("EDID", ZString("SyntheticFarewellWeapon")),
             Subrecord("DATA", armorData))),
-        Record("NPC_", 0x180, 0, Combine(
+        Record("NPC_", 7, 0, Combine(
             Subrecord("EDID", ZString("Player")),
-            Subrecord("ACBS", new byte[24]),
+            Subrecord("ACBS", playerStats),
             Subrecord("DATA", Combine(UInt32(100), [5, 5, 5, 5, 5, 5, 5])),
             Subrecord("RNAM", UInt32(0x181)),
             Subrecord("HNAM", UInt32(0x182)),
@@ -1105,7 +1114,7 @@ try
         "Trait reset/acceptance changed committed input or restored the initial selection.");
     ExpectFailure(() => traitDraft.Toggle(syntheticTraits[0] with { EditorId = "ForeignTrait" }), "outside its source contract");
     ExpectFailure(() => new FalloutTraitMenuSelection(cellStack, syntheticTraitFarewell with
-        { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, []), "differs from its winning PERK");
+    { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, []), "differs from its winning PERK");
     Require(FalloutTraitMenuSelection.FormatCount("CHOOSE %d TRAITS", 1) == "CHOOSE 1 TRAITS", "Source trait count formatting failed.");
     ExpectFailure(() => FalloutTraitMenuSelection.FormatCount("%d %d", 1), "another source format owner");
     ExpectFailure(() => cellStack.NumericSettings.Set("iTraitMenuMaxNumTraits", 3), "trait selection contract");
@@ -1365,6 +1374,37 @@ try
     var centeredRestore = FalloutNativeCampaignSave.Read(syntheticSavePath,
         syntheticSaveCompatibilityId, cellStack, syntheticVigor, syntheticTagSkills,
         syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(centeredRestore.State.PlayerActorValues is { } migratedPlayer && migratedPlayer.Values.Count == 7 &&
+        migratedPlayer.Values.All(pair => pair.Value.Base == centeredState.Special.Values[pair.Key - 5] &&
+            pair.Value.Permanent == 0 && pair.Value.Temporary == 0 && pair.Value.Damage == 0),
+        "Legacy campaign SPECIAL did not migrate into source-bound BASE pools with zero runtime modifiers.");
+    var playerValues = new FalloutPlayerActorValues(cellStack, legacy: syntheticSpecial);
+    playerValues.BindConstantModifiers((_, _) => []);
+    playerValues.WriteBaseInteger(5, 14);
+    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Permanent, .5f);
+    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Temporary, -2);
+    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Damage, -1);
+    var pooledCampaign = syntheticCampaignState with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign);
+    var pooledRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    var coldPlayerValues = new FalloutPlayerActorValues(cellStack, pooledRestore.State.PlayerActorValues!);
+    coldPlayerValues.BindConstantModifiers((_, _) => []);
+    Require(coldPlayerValues.ReadBase(5) == 14 && coldPlayerValues.ReadPermanent(5) == 10 && coldPlayerValues.ReadCurrent(5) == 11.5f,
+        "Campaign restore conflated player modifier pools or imposed the Vigor menu's allocation budget on runtime values.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with
+    { PlayerActorValues = playerValues.Capture() with { PlayerSha256 = new string('0', 64) } });
+    ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell), "winning source identity");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with { Special = syntheticSpecial }), "BASE pools");
+    playerValues.WriteBaseInteger(5, int.MaxValue);
+    var boundaryCampaign = pooledCampaign with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, boundaryCampaign);
+    var boundaryRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(boundaryRestore.State.Special.Strength == int.MaxValue && boundaryRestore.State.PlayerActorValues!.Values[5].Base == 2147483648f,
+        "Campaign save lost the signed BASE boundary between its authoritative Float32 and legacy integer views.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
     Require(FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f)
             .SequenceEqual(syntheticCampaignState.PlayerPosition) &&
         FalloutNativeCampaignSave.RestorePlayerPosition(syntheticCampaignState, 0.5f)
@@ -1386,6 +1426,24 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessLegacySchema });
+    var legacyAccessState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(FalloutNativeCampaignSave.WithWorldState(legacyAccessState.State, referenceSave.ActiveCell,
+        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The preceding access save no longer loads and upgrades through the ordinary save owner.");
+    var accessSaveBytes = File.ReadAllBytes(syntheticSavePath);
+    foreach (var accessSchema in new[] { FalloutNativeCampaignSave.ReferenceAccessLegacySchema, FalloutNativeCampaignSave.RaceOverridesSchema })
+        foreach (var accessReference in new[]
+        {
+            new FalloutReferenceSnapshot(new("SyntheticCells.esm", 1), referenceSave.ActiveCell, new("SyntheticCells.esm", 2),
+                null, null, new Dictionary<uint, double>(), null, LockState: new(new string('0', 64), 100, true)),
+            new FalloutReferenceSnapshot(new("SyntheticCells.esm", 1), referenceSave.ActiveCell, new("SyntheticCells.esm", 2),
+                null, null, new Dictionary<uint, double>(), null, OwnershipOverride: new(new string('0', 64), new("SyntheticCells.esm", 7))),
+        })
+            ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
+            { Schema = accessSchema, References = [accessReference] }), "Legacy campaign save cannot contain reference lock or ownership overrides");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(accessSaveBytes), "Rejected legacy access state replaced a valid save.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.RaceOverridesSchema });
     var legacyRaceState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

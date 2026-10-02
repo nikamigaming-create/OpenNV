@@ -68,7 +68,14 @@ public partial class RuntimeCoordinator
             existing.SetProcess(true);
             return;
         }
-        var events = new RuntimeNativeReferenceEvents { Player = _nativePlayer, Interact = ActivateNativeObject };
+        var events = new RuntimeNativeReferenceEvents
+        {
+            Player = _nativePlayer,
+            Interact = ActivateNativeObject,
+            ObservePlayerActivationBegin = BeginNativeBotActivation,
+            ObservePlayerActivationEnd = EndNativeBotActivation,
+            ObservePlayerActivationFinished = (reference, successful) => _botInteractions.Finish(reference.ToString(), successful)
+        };
         events.Configure(_nativePluginStack!, _nativeReferences!, _nativeQuestState!, cell, root,
             new(events.IsCurrentFurniture, effect =>
             {
@@ -89,7 +96,9 @@ public partial class RuntimeCoordinator
                 actor => _nativeOpeningStageDriver!.IsInInterior(actor),
                 (reference, group, initialization) => _nativeReferencePresentation!.PlayGroup(reference, group, initialization),
                 (reference, group) => _nativeReferencePresentation!.IsAnimPlaying(reference, group),
-                () => _nativeOpeningStageDriver!.Vitals.Level),
+                () => _nativeOpeningStageDriver!.Vitals.Level,
+                ReadActorValue: (actor, name, kind) => _nativeOpeningStageDriver!.ReadActorValue(actor, name, kind),
+                ChangeActorValue: (actor, name, operation, value) => _nativeOpeningStageDriver!.ChangeActorValue(actor, name, operation, value)),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;

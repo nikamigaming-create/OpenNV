@@ -1,10 +1,21 @@
 namespace OpenNV.Runtime.World.Actors;
 
+internal enum FalloutActorValueRead { Base, Permanent, Current }
+internal enum FalloutActorValuePool { Permanent, Temporary, Damage }
+
 internal sealed record FalloutActorValue(float Base, float Permanent = 0, float Temporary = 0, float Damage = 0)
 {
     internal float Current => Base + Permanent + Temporary + Damage;
     internal bool IsFinite => float.IsFinite(Base) && float.IsFinite(Permanent) && float.IsFinite(Temporary) &&
         float.IsFinite(Damage) && float.IsFinite(Current);
+
+    internal static FalloutActorValueRead? Query(string method) => method.ToLowerInvariant() switch
+    {
+        "getav" or "getactorvalue" => FalloutActorValueRead.Current,
+        "getbaseav" or "getbaseactorvalue" => FalloutActorValueRead.Base,
+        "getpermanentactorvalue" => FalloutActorValueRead.Permanent,
+        _ => null,
+    };
 
     // The engine's ten user-defined actor values have no NPC/CREA base-data
     // field or derived formula. Their initial base and modifier pools are zero.

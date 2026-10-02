@@ -1,9 +1,10 @@
 using System.Buffers.Binary;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutAbilityModifier(FalloutFormKey Spell, FalloutFormKey Effect, int ActorValue,
-    float Amount, IReadOnlyList<FalloutCondition> Conditions);
+    float Amount, IReadOnlyList<FalloutCondition> Conditions, FalloutActorValuePool Pool = FalloutActorValuePool.Temporary);
 internal sealed record FalloutAbilityScript(FalloutFormKey Spell, FalloutFormKey Effect, FalloutFormKey Script,
     IReadOnlyList<FalloutCondition> Conditions);
 internal sealed record FalloutPerkEntry(byte Entry, byte Function, float Value, IReadOnlyList<FalloutCondition> Conditions,
@@ -84,8 +85,12 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
             {
                 var value = BinaryPrimitives.ReadInt32LittleEndian((flags & 0x180000) != 0 ? data[16..] : definition[68..]);
                 var magnitude = BinaryPrimitives.ReadUInt32LittleEndian(data);
-                result.Add(new(form, effect.FormKey, value, (flags & 4) == 0 ? magnitude : -(float)magnitude,
-                    group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+                var conditions = group.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray();
+                // For the player, an unconditional Recover ability changes the
+                // permanent pool. Conditional abilities and apparel change the
+                // temporary pool. Non-Recover lifecycle effects remain unbound.
+                result.Add(new(form, effect.FormKey, value, (flags & 4) == 0 ? magnitude : -(float)magnitude, conditions,
+                    source.Signature == "SPEL" && conditions.Length == 0 ? FalloutActorValuePool.Permanent : FalloutActorValuePool.Temporary));
             }
             index = end - 1;
         }

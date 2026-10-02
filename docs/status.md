@@ -6,8 +6,8 @@ simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
 The immediate priority is the complete TTW route from Fallout 3's opening through
-Vault 101, Megaton, ordinary Fallout-bot traversal to the train station, New Vegas
-and Benny, including dependencies and cold continuation. The original ten mod
+Vault 101, Megaton, the train station, New Vegas and Benny, using ordinary bot
+input from the toddler checkpoint and verifying dependencies and cold continuation. The original ten mod
 targets remain required, with Benny Humbles You and Steals Your Stuff added for
 its configured reset, confiscation/recovery and persistent outcomes. Its official
 13.05 package is downloaded/extracted; runtime selection and behavior remain
@@ -26,13 +26,32 @@ The [marker-radius owner](source-marker-travel-radius.md) passes the winning
 radius through owned NAVM/KF. The resumed ordinary route completes
 CG01DadCloseDoor inside radius 25 without an AI error. The shared checkpoint
 actually writes that reached stage 16.
-The candidate [attached package event owner](reference-package-events.md) passes
+The [attached package event owner](reference-package-events.md) passes
 synthetic/native bootstrap, pause, suspended admission, typed filters, source
 order, once-only results and failure quarantine. Actual attached OnPackageDone
 advances the owned fixture to 18. A separate ordinary cold Continue from the
-reached stage-16 checkpoint now reaches 18 and retains the source room door's
-unsupported Lock 100; stage 20 and complete cold actor continuation remain
-unverified.
+reached stage-16 checkpoint executes source Lock100 with the recovered
+[reference-access owner](reference-lock-ownership.md) and reaches18/20/30.
+The genuine pre-book stage40 autosave now cold-loads into the repaired
+[bot navigation](bot-navigation.md). Ordinary bot approach/ray activation enters50
+and opens the source [SPECIAL book](native-special-book-menu.md); source pointer
+input allocates40 points and Done restores gameplay. Active-book save refusal is
+verified. The source timer, Dad's return and speech reach70/72/73/74/75/80.
+The new [Escort owner](source-escort-packages.md) passes focused synthetic
+contracts and an owned NAVM/KF/native-capsule fixture for approach, waiting,
+cold waiting, target-ahead travel, blocking-wall refusal and once-only arrival.
+The separate live run follows Dad, opens the source main door through ordinary
+bot activation, and follows him to the destination. Source completion advances
+CG01 through90/100 into CG02 stages0/5, then retains an unbound `player.AgeRace`
+failure before birthday-room relocation. Non-player targets, object handling,
+automatic NPC door activation and other-cell Escort remain unbound. A fresh
+process cold-loads the genuine stage80 autosave and repeats the hall continuation
+with eight moving-target replans and no bot error or Escort-start replay. The
+integrated runtime gate and selected installed-stack audits pass. Autosaves defer
+through procedure initialization, and failed package results on unscripted actors
+remain visible after cold restoration without replay.
+The bot run starts from a genuine human-reached checkpoint; Vault completion,
+Megaton, train/Mojave travel and complete cold actor acceptance remain unverified.
 Further ordinary quest, full actor cold continuation and gurney/HUD behavior
 remain open; see [package results](package-event-results.md).
 The [camera repeat owner](player-package-camera-loops.md) now uses the winning
@@ -61,12 +80,16 @@ JBTMCM's attached object-type script lacks current quest-clock admission.
 The candidate [source-string and numeric-default owner](nvse-source-string-arguments.md)
 passes independent owned JDC proof for eleven reads from nine executable
 declarations and two winning GMST records, without an ambient Current fallback.
-Its next INI query remains unbound; saved failed prefixes cannot be replayed.
+The shared [typed INI and loaded-plugin owners](numeric-ini-settings.md) now pass
+their synthetic and owned JDC checks. The selected initializer completes 360
+audit invocations without error; its recurring equipment callback remains
+unbound. Saved failed prefixes cannot be replayed.
 The [original SPECIAL book foundation](native-special-book-menu.md) passes the
 owned XML/NIF/light, all 18 transitions, source budgets, live edits, retained
-cancellation and failure/modal retirement fixture. Production permanent/base
-player pools, book command dispatch and saves remain unowned. The combined
-required runtime gate passes; publication and exact-head CI remain pending.
+cancellation and failure/modal retirement fixture. Production book dispatch now
+uses shared player BASE/permanent/current pools. Ordinary bot input opens the
+book and allocates its source budget; active-book saving refuses continuation
+loss. The integrated runtime gate and selected owned player-value audit pass.
 Synthetic/native movement fixtures, TTWStart's explicit owned MenuMode fixture
 and the required movement runtime gate pass. Quest MenuMode and multiple GameMode
 blocks now share source scheduling; TTWStart's owned clock fixture reaches its

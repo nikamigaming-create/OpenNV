@@ -46,16 +46,22 @@ internal partial class RuntimeNativeNpc
     internal string? AiError => _aiError;
     internal int SittingState => _sitting;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
-    internal bool Traveling => _travelActive;
+    internal bool Traveling => _travelActive || _escortPackage is not null && Combat?.PackageMoving == true;
     internal FalloutFormKey? CurrentPackage => _aiPackage?.FormKey;
 
     // These are script-visible engine procedure codes. The currently owned
     // travel procedure ends on arrival; furniture exit has its own transition.
     private int CurrentAiProcedure => _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
-        : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive ? 0 : 17;
+        : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
+        {
+            "ApproachTarget" => 19,
+            "WaitForTarget" or "waiting-for-target-residency" => 3,
+            _ => 12,
+        } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive ? 0 : 17;
     private int CurrentAiPackage => _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
     {
+        2 => 2,
         6 => 14, // Source PACK travel type -> script-visible Travel package.
         13 => 37, // Fallout script-visible Patrol code (not the PACK type).
         _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
@@ -100,6 +106,7 @@ internal partial class RuntimeNativeNpc
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
         currentProcedure = _sitting == 2 ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
+        escort = EscortState,
         patrol = _patrol is null ? null : new { source = _patrol.SourceSha256, points = _patrol.Points.Count, progress = _patrolProgress, status = _patrolStatus },
         dialoguePackage = _dialoguePackage is null ? null : new
         {
@@ -225,7 +232,8 @@ internal partial class RuntimeNativeNpc
     private double PreparePackageIdle(double delta)
     {
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
-            _aiError is not null || _sitting is 2 or 4 || _travelActive || _patrol is not null && _patrolProgress?.Arrived != true) return delta;
+            _aiError is not null || _sitting is 2 or 4 || _travelActive || _escortPackage is not null && _escortProgress?.Complete != true ||
+            _patrol is not null && _patrolProgress?.Arrived != true) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
         try
         {
@@ -282,11 +290,15 @@ internal partial class RuntimeNativeNpc
                 ClearFurniture();
                 _dialoguePackage = null; _dialoguePackageRequested = false;
                 _patrol = null; _patrolProgress = null;
+                if (_escortPackage is not null && _aiWorld is { } escortWorld)
+                    escortWorld.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
+                _escortPackage = null; _escortProgress = null; _escortDestination = null; _escortStatus = null;
             }
             if (selected is null) return;
             _packageIdleSource = FalloutScriptPackage.Read(selected);
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
+            if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             var fields = selected.ReadSubrecords().ToArray();
             var data = fields.Single(field => field.Signature == "PKDT").Data;

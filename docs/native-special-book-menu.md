@@ -66,11 +66,25 @@ debug orphan-node telemetry; owned bytes remain unchanged. Its one private PNG i
 inspection; the caller deletes it in `finally`, including failed runs. Recording
 remains off.
 
-Production command dispatch, the player permanent/base actor-value pools and
-their save integration are deliberately unbound until their gameplay owners are
-reviewed. Current player skill values must not be substituted for permanent
-SPECIAL values. The existing detached Vigor draft is not silently changed by
-this slice. Source fade/composition, renderer-fitted near/far clipping, bounds
+The production `ssbmp`/`ShowSPECIALBookMenuParams` dispatch binds the shared
+engine-created player's SPECIAL pools. The permanent getter and integer BASE
+writer remain separate from skill values and the detached Vigor draft. The
+driver publishes native menu1060, rejects overlapping allocation menus and
+refuses saving while the book owns a continuation. Done closes its modal lease;
+the original source script and quest timer own subsequent progression.
+
+The October2 bot run cold-loads the genuine pre-book stage40 save, approaches
+and activates through the actual ray, and observes stage50 and menu1060. Source
+geometry pointer input spends the40-point budget and submits Done; pause/modal
+input release and active-book save refusal are observed. A genuine settled
+stage50 checkpoint retains the allocated BASE values. The separate source
+Escort continuation then reaches CG01 stage100 and CG02 stage5, where AgeRace
+remains unbound; the complete next quest and campaign remain unreached.
+Selected synthetic and installed-data checks also cover player
+modifier pools, immediate writes, source identity, legacy save migration and
+cold values. Full cold actor continuation remains separate acceptance.
+
+Source fade/composition, renderer-fitted near/far clipping, bounds
 through animated poses, keyboard shortcut/repeat timing, audio alignment,
 language remapping, matched retail pixels and physical XR remain unverified.
-No campaign, retail parity or headset acceptance claim follows from the fixture.
+No campaign, retail parity or headset acceptance claim follows from these checks.

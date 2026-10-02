@@ -30,7 +30,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutNativeRaceSexSelection _character = null!;
     private long _characterRevision;
     internal long PlayerAppearanceRevision => _characterRevision + _scripts.Session.PlayerAppearanceRevision;
-    private FalloutNativeSpecialState _special = null!;
+    private FalloutPlayerActorValues _playerActorValues = null!;
     private FalloutPlayerVitals _vitals = null!;
     private FalloutPlayerSkills _playerSkills = null!;
     private FalloutPlayerIngestibles _ingestibles = null!;
@@ -77,7 +77,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal bool HasCampaignSave => File.Exists(_savePath);
     internal string PlayerName => _playerName;
     internal int PlayerLevel => SourcePlayerLevel;
-    internal FalloutNativeSpecialState Special => _special;
+    internal FalloutNativeSpecialState Special => _playerActorValues.BaseSpecial;
+    internal FalloutSpecialAllocationBinding SpecialAllocationBinding => _playerActorValues.AllocationBinding;
     internal GameplayVitals Vitals => _vitals.State;
     private FalloutActorDefenseResolver? _incomingDefense;
     internal void DamagePlayer(FalloutWeaponDamage damage, byte part)
@@ -102,6 +103,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_nameEntry is not null) yield return 1051;
         if (_raceSexEntry is not null) yield return 1036;
         if (_vigorEntry is not null) yield return 1074;
+        if (_specialBookEntry is not null) yield return FalloutSpecialBookPresentation.MenuId;
         if (_tagSkillEntry is not null) yield return 1048;
         if (_traitEntry is not null) yield return 1084;
         if (_recipeMenu is not null) yield return 1077;
@@ -163,10 +165,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 .ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span);
         _character = restore?.State.Character ?? raceSexContract.Initial;
         FalloutNativeRaceSexResolver.Validate(raceSexContract, _character);
-        _special = restore?.State.Special ?? vigorContract.Initial;
-        _vitals = new(pluginStack, raceSexContract.Player, _special, restore?.State.Vitals);
-        if (restore is not null)
-            FalloutNativeVigorResolver.Validate(vigorContract, _special, allowUnspent: !restore.State.CharacterCreationComplete);
+        _playerActorValues = new(pluginStack, restore?.State.PlayerActorValues,
+            restore?.State.PlayerActorValues is null ? restore?.State.Special : null);
         _tagSkills = restore?.State.TagSkills ?? [];
         if (restore is not null)
             FalloutNativeTagSkillResolver.Validate(tagSkillContract, _tagSkills, allowUnspent: !restore.State.CharacterCreationComplete);
@@ -206,14 +206,17 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (name.Equals("RadiationRads", StringComparison.OrdinalIgnoreCase)) return Vitals.RadiationRads;
             if (name.Equals("ActionPoints", StringComparison.OrdinalIgnoreCase)) return Vitals.ActionPoints;
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
-            return _playerSkills.Value(name);
-        }, RequireLevelUpOwner: _vitals.RequireLevelUpOwner);
+            return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
+        }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
+            ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change);
         _inventory = inventory;
         _captureScripts = captureScripts;
         _globals = globals;
-        _playerSkills = new(pluginStack, () => _special, IsPlayerTagSkill, () => _traits, globals, inventory,
+        _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => pluginStack.RuntimeFormKey(_character.RaceRuntimeFormId), () => _scripts.Session.Hardcore,
-            () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)));
+            () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues);
+        _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
+        _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -249,13 +252,13 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void OpenVigorMenu(int total)
     {
-        if (_vigorEntry is not null || ExecutionError is not null)
+        if (_vigorEntry is not null || _specialBookEntry is not null || ExecutionError is not null)
             throw new InvalidOperationException("SPECIAL menu cannot open while its owner is busy or failed.");
         _specialMenuContract = _vigorContract with { RequiredTotal = total };
         _vigorEntry = new RuntimeNativeVigorEntry();
         AddChild(_vigorEntry);
         _vigorEntry.Accepted += AcceptSpecial;
-        _vigorEntry.Configure(_specialMenuContract, _special, _pluginStack, _imageSpacePresenter());
+        _vigorEntry.Configure(_specialMenuContract, Special, _pluginStack, _imageSpacePresenter());
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_OPEN stage={Stage} total={total} " +
@@ -282,7 +285,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             GD.PushError($"OPENNV_NATIVE_PLAYER_PACKAGE_DIVERGENCE: {error.Message}");
             return;
         }
-        if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null &&
+        if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null && _specialBookEntry is null &&
             _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
@@ -533,8 +536,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private void AcceptSpecialCore(FalloutNativeSpecialState state)
     {
         FalloutNativeVigorResolver.Validate(_specialMenuContract ?? _vigorContract, state);
-        _special = state;
-        _vitals.SetSpecial(state);
+        for (var index = 0; index < state.Values.Count; index++) _playerActorValues.WriteBaseInteger(index + 5, state.Values[index]);
+        _ = Vitals;
         if (_vigorEntry is not null)
         {
             _vigorEntry.Accepted -= AcceptSpecial;
@@ -545,8 +548,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
         GD.Print(
-            $"OPENNV_NATIVE_SPECIAL_ACCEPTED total={_special.Values.Sum()} " +
-            $"values={string.Join(',', _special.Values)} stage={Stage} " +
+            $"OPENNV_NATIVE_SPECIAL_ACCEPTED total={Special.Values.Sum()} " +
+            $"values={string.Join(',', Special.Values)} stage={Stage} " +
             "source=configured-player-input-live-vigor-contract");
         Synchronize();
     }

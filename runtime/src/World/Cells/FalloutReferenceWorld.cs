@@ -18,7 +18,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     bool TalkedToPlayer = false, FalloutActorPackageMotion? PackageMotion = null,
     FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null, bool KnockedDown = false,
     FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null,
-    FalloutDoorMotionState? DoorMotion = null)
+    FalloutDoorMotionState? DoorMotion = null, FalloutReferenceLockState? LockState = null,
+    FalloutReferenceOwnershipOverride? OwnershipOverride = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -50,6 +51,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 }
             }
             snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
+            snapshot.LockState?.Validate();
+            snapshot.OwnershipOverride?.Validate();
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
@@ -90,12 +93,15 @@ internal sealed class FalloutReferenceInstance
     internal bool DoorOpen { get; set; }
     internal FalloutDoorMotionState? DoorMotion { get; set; }
     internal bool Unlocked { get; set; }
+    internal FalloutReferenceLockState? LockState { get; set; }
+    internal FalloutReferenceOwnershipOverride? OwnershipOverride { get; set; }
     internal bool Unconscious { get; set; }
     internal bool KnockedDown { get; set; }
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
     internal bool TalkedToPlayer { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
+    internal string? ProcedureCaptureBlocker { get; set; }
     internal FalloutReferencePlacement? Placement { get; set; }
     internal long PlacementRevision { get; set; }
     internal FalloutReferenceInventory? Inventory { get; set; }
@@ -162,14 +168,19 @@ internal sealed class FalloutReferenceInstance
         foreach (var index in script?.Locals.Values ?? []) Variables.Add(index, 0);
     }
 
-    internal FalloutReferenceSnapshot Capture() => new(Reference, Cell, Base, Script?.Record.FormKey,
-        Script?.Sha256, new Dictionary<uint, double>(Variables), ScriptError, Enabled, EnableRequest, Opacity, NoFade,
-        new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
-        _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
-        Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
-        CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-        TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
-        CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion);
+    internal FalloutReferenceSnapshot Capture()
+    {
+        if (ProcedureCaptureBlocker is { } blocker)
+            throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
+        return new(Reference, Cell, Base, Script?.Record.FormKey,
+            Script?.Sha256, new Dictionary<uint, double>(Variables), ScriptError, Enabled, EnableRequest, Opacity, NoFade,
+            new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
+            _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
+            Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
+            CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
+            TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
+            CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride);
+    }
 }
 
 internal sealed class FalloutReferenceScriptDefinition(FalloutPluginRecord record)
@@ -319,6 +330,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         instance.BindTemplateScript(definition);
     }
 
+    internal int PendingProcedureCaptureCount => _instances.Values.Count(instance => instance.ProcedureCaptureBlocker is not null);
+
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -356,7 +369,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             // Parsing executes no source statements. Retry it after a cold
             // load so a parser correction can recover an existing save.
             // Reached execution failures retain their applied prefix/error.
-            instance.ScriptError = instance.Script is null ||
+            // PACK result scripts belong to their package, so even an actor
+            // without an attached script can retain their reached failure.
+            var packageFault = snapshot.ScriptError is { } error &&
+                (error.StartsWith("Package POBA ", StringComparison.Ordinal) ||
+                 error.StartsWith("Package POCA ", StringComparison.Ordinal) ||
+                 error.StartsWith("Package POEA ", StringComparison.Ordinal));
+            instance.ScriptError = instance.Script is null && !packageFault ||
                 snapshot.ScriptError?.StartsWith("Parse:", StringComparison.OrdinalIgnoreCase) == true
                 ? null : snapshot.ScriptError;
             instance.Enabled = snapshot.Enabled ?? instance.Enabled;
@@ -375,7 +394,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
             instance.DoorMotion = snapshot.DoorMotion;
-            instance.Unlocked = snapshot.Unlocked;
+            validated.RestoreAccess(instance, snapshot);
             if (snapshot.Placement is { } placement)
             {
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
@@ -394,6 +413,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Saved package motion differs from the winning package.");
                 if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
+                if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
                 instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
             }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);

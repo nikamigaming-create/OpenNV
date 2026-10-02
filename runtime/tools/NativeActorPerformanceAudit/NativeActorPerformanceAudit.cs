@@ -5,11 +5,19 @@ using OpenNV.Runtime.World.Actors;
 
 public partial class NativeActorPerformanceAudit : Node
 {
-    public override void _Ready()
+    public override async void _Ready()
     {
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--escort-package", var escortRoot, var escortMod, var escortModRoot, var escortActor,
+                var escortQuest, var escortStage, .. var escortDependencies])
+            {
+                await EscortPackage(escortRoot, escortMod, escortModRoot, escortActor, escortQuest,
+                    short.Parse(escortStage, System.Globalization.CultureInfo.InvariantCulture), escortDependencies);
+                GetTree().Quit();
+                return;
+            }
             if (args is ["--reference-package-events", var eventRoot, var eventMod, var eventModRoot,
                 var eventActor, var eventQuest, var eventStage, var eventExpectedStage, .. var eventDependencies])
             {

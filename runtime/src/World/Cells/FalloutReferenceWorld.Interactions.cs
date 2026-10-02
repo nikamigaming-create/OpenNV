@@ -12,22 +12,17 @@ internal sealed partial class FalloutReferenceWorld
 
     internal FalloutReferenceLock? Lock(FalloutFormKey reference)
     {
-        if (Get(reference).Unlocked) return null;
-        var source = records.GetEffective(reference);
-        var field = source.ReadSubrecords().SingleOrDefault(value => value.Signature == "XLOC").Data;
-        if (field.IsEmpty) return null;
-        if (field.Length is not (12 or 20)) throw new InvalidDataException("Reference lock has an invalid extent.");
-        var level = field.Span[0];
-        var key = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Span[4..]));
-        return new(level, key, (field.Span[8] & 4) != 0);
+        var (state, declaration) = EffectiveLock(reference);
+        return state?.Locked == true ? new(GetLockLevel(reference), declaration?.Key,
+            ((declaration?.Flags ?? 0) & 4) != 0) : null;
     }
 
     internal bool UnlockWithKey(FalloutFormKey reference, FalloutPlayerInventory player)
     {
-        var locked = Lock(reference);
-        if (locked is null) return true;
-        if (locked.Key is not { } key || player.Item(key) is null) return false;
-        Get(reference).Unlocked = true;
+        var (state, declaration) = EffectiveLock(reference);
+        if (state?.Locked != true) return true;
+        if (declaration?.Key is not { } key || player.Item(key) is null) return false;
+        UnlockReference(reference);
         return true;
     }
 
@@ -44,13 +39,9 @@ internal sealed partial class FalloutReferenceWorld
         var conditionField = fields.SingleOrDefault(field => field.Signature == "XHLP").Data;
         if (!conditionField.IsEmpty && conditionField.Length != 4) throw new InvalidDataException("Item health has an invalid extent.");
         float? condition = conditionField.IsEmpty ? null : BinaryPrimitives.ReadSingleLittleEndian(conditionField.Span) / 100;
-        var ownerField = fields.SingleOrDefault(field => field.Signature == "XOWN").Data;
-        if (!ownerField.IsEmpty && ownerField.Length != 4) throw new InvalidDataException("Item owner has an invalid extent.");
-        var owner = ownerField.IsEmpty ? null : source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(ownerField.Span));
-        var rankField = fields.SingleOrDefault(field => field.Signature == "XRNK").Data;
-        if (!rankField.IsEmpty && rankField.Length != 4) throw new InvalidDataException("Item ownership rank has an invalid extent.");
-        int? rank = rankField.IsEmpty ? null : BinaryPrimitives.ReadInt32LittleEndian(rankField.Span);
-        player.Add(records, instance.Base, count, level, false, globals, new(count, condition, owner, FactionRank: rank));
+        var ownership = Ownership(reference);
+        player.Add(records, instance.Base, count, level, false, globals,
+            new(count, condition, ownership.Owner, ownership.Global, ownership.FactionRank));
         instance.Taken = true;
     }
 }

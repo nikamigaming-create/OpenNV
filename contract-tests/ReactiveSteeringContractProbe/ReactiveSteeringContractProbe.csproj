@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="../../runtime/src/Gameplay/Bots/ReactiveSteering.cs" Link="ReactiveSteering.cs" />
     <Compile Include="../../runtime/src/Gameplay/Bots/ReactiveReferenceBot.cs" Link="ReactiveReferenceBot.cs" />
+    <Compile Include="../../runtime/src/Gameplay/Bots/BotInteractionEvidence.cs" Link="BotInteractionEvidence.cs" />
   </ItemGroup>
 </Project>

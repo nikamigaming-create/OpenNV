@@ -369,6 +369,11 @@ internal static partial class FalloutExecutableStringTable
 
         internal bool IsWritableObject(uint address) => IsWritableExtent(address, 12);
 
+        internal bool IsFileExtent(uint address, int count) => count > 0 && address >= Base && headers.SectionHeaders.Any(section =>
+            address - Base >= section.VirtualAddress &&
+            (ulong)(address - Base) + (uint)count <= (ulong)section.VirtualAddress + (uint)section.SizeOfRawData &&
+            (ulong)section.PointerToRawData + address - Base - (uint)section.VirtualAddress + (uint)count <= (ulong)bytes.Length);
+
         internal bool IsWritableExtent(uint address, int count) => count > 0 && address >= Base && headers.SectionHeaders.Any(section =>
             (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0 && address - Base >= section.VirtualAddress &&
             (ulong)(address - Base) + (uint)count <= (ulong)section.VirtualAddress + (uint)section.VirtualSize);

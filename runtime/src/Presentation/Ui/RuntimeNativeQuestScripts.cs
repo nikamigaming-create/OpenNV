@@ -23,9 +23,10 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     internal Func<IEnumerable<uint>?>? ActiveMenus { get; set; }
     internal FalloutNewGameBootstrap? Bootstrap { get; set; }
     internal string? StartupError => _error;
-    internal object State => new
+    internal object State => Observe(detailed: true);
+    internal object Observe(bool detailed) => new
     {
-        scripts = Scripts.State,
+        scripts = Scripts.Observe(detailed),
         worldActive = _worldActive,
         message = _current,
         hud = _hud?.State,

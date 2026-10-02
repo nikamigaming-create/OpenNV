@@ -37,7 +37,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutWeaponHandlingSnapshot? WeaponHandling = null, float? PlayerViewPitchRadians = null,
     FalloutIngestiblesSnapshot? Ingestibles = null, IReadOnlyList<FalloutActorOverrides>? ActorOverrides = null,
     IReadOnlyList<FalloutEncounterZoneSnapshot>? EncounterZones = null,
-    IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null);
+    IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null,
+    FalloutPlayerActorValuesSnapshot? PlayerActorValues = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -45,7 +46,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v25";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v26";
+    internal const string ReferenceAccessLegacySchema = "opennv-native-fnv-campaign-save/v25";
     internal const string RaceOverridesSchema = "opennv-native-fnv-campaign-save/v24";
     internal const string ScriptValuesSchema = "opennv-native-fnv-campaign-save/v23";
     internal const string ObjectAnimationSchema = "opennv-native-fnv-campaign-save/v22";
@@ -96,10 +98,11 @@ internal static class FalloutNativeCampaignSave
         FalloutGameTimeSnapshot? gameTime = null,
         FalloutSkyLightingSnapshot? skyLighting = null,
         IReadOnlyList<FalloutReferenceSnapshot>? references = null, string questEditorId = OpeningQuestEditorId,
-        short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0)
+        short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0,
+        FalloutPlayerActorValuesSnapshot? playerActorValues = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
-        FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
+        if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
         FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills, allowUnspent: !characterCreationComplete);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, traits);
         var state = new FalloutNativeCampaignState(
@@ -132,7 +135,7 @@ internal static class FalloutNativeCampaignSave
             ],
             playerPosition.ToArray(),
             playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references, grant.InventoryRandomState, characterCreationComplete,
-            PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : []);
+            PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -191,7 +194,14 @@ internal static class FalloutNativeCampaignSave
             foreach (var id in face.HeadParts)
                 if (stack.GetEffective(stack.RuntimeFormKey(id)).Signature != "HDPT") throw new InvalidDataException("Saved player head part is not an owned HDPT.");
         }
-        FalloutNativeVigorResolver.Validate(vigorContract, state.Special, allowUnspent: !state.CharacterCreationComplete);
+        if (state.PlayerActorValues is null)
+        {
+            FalloutNativeVigorResolver.Validate(vigorContract, state.Special, allowUnspent: !state.CharacterCreationComplete);
+            // Legacy saves held only seven BASE integers. Runtime modifiers
+            // start at zero; current winning source abilities are re-evaluated.
+            state = state with { PlayerActorValues = new FalloutPlayerActorValues(stack, legacy: state.Special).Capture() };
+        }
+        else _ = new FalloutPlayerActorValues(stack, state.PlayerActorValues);
         FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, state.Traits);
         var expectedGrant = state.Scripts is not null ? null : FalloutNativeTraitFarewellResolver.ResolveGrant(
@@ -333,38 +343,49 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         state.Vitals?.Validate();
-        if (state.Schema != ExpectedSchema && state.ActorOverrides?.Any(actor => actor.FaceGeometry is not null) == true)
+        if (state.PlayerActorValues is { } playerValues)
+        {
+            FalloutPlayerActorValues.Validate(playerValues);
+            if (state.Special is null || state.Special.Values.Where((value, index) => playerValues.Values[index + 5].Base != (float)value).Any())
+                throw new InvalidDataException("Legacy SPECIAL view differs from the saved player BASE pools.");
+        }
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
+            reference.LockState is not null || reference.OwnershipOverride is not null) == true)
+            throw new InvalidDataException("Legacy campaign save cannot contain reference lock or ownership overrides.");
+        if (state.Schema != ExpectedSchema && state.Schema != ReferenceAccessLegacySchema && state.ActorOverrides?.Any(actor => actor.FaceGeometry is not null) == true)
             throw new InvalidDataException("Legacy save cannot contain actor face geometry.");
-        if (state.Schema is not (ExpectedSchema or RaceOverridesSchema) && state.ActorOverrides?.Any(actor => actor.Race is not null) == true)
+        if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema) && state.ActorOverrides?.Any(actor => actor.Race is not null) == true)
             throw new InvalidDataException("Legacy campaign save cannot contain actor race state.");
-        if (state.Schema != ExpectedSchema && state.Schema != RaceOverridesSchema && state.Schema != ScriptValuesSchema && (state.Scripts?.Values?.LastArrayId is > 0 ||
+        if (state.Schema != ExpectedSchema && state.Schema != ReferenceAccessLegacySchema && state.Schema != RaceOverridesSchema && state.Schema != ScriptValuesSchema && (state.Scripts?.Values?.LastArrayId is > 0 ||
                 state.Scripts?.Values?.Arrays is { Count: > 0 }))
             throw new InvalidDataException("Legacy campaign save cannot contain script array state.");
-        if (state.Schema is not (ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema) && state.References?.Any(reference => reference.ObjectAnimations is { Count: > 0 }) == true)
+        if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema) && state.References?.Any(reference => reference.ObjectAnimations is { Count: > 0 }) == true)
             throw new InvalidDataException("Legacy save cannot contain object animation state.");
-        if (state.Schema is not (ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema) && (state.References?.Any(reference => reference.KnockedDown || reference.Destruction is not null) == true ||
+        if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema) && (state.References?.Any(reference => reference.KnockedDown || reference.Destruction is not null) == true ||
                 state.ExplosionExposure is { Count: > 0 }))
             throw new InvalidDataException("Legacy save cannot contain knockdown, destruction or explosion exposure state.");
-        if (state.Schema is not (ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema) && state.References?.Any(reference =>
+        if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema) && state.References?.Any(reference =>
                 reference.HitReaction is not null || reference.HitReactionRandomState is not null) == true)
             throw new InvalidDataException("Legacy save cannot contain hit-reaction state.");
-        if (state.Schema is not (ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema) && state.References?.Any(reference =>
+        if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema) && state.References?.Any(reference =>
                 reference.Injury is { DeathEventPending: true } or { DeathEventElapsed: > 0 }) == true)
             throw new InvalidDataException("Legacy save cannot contain pending actor death events.");
-        if (state.Schema is not (ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema) && state.References?.Any(reference => reference.PackageMotion?.Patrol is not null) == true)
+        if (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema) && state.References?.Any(reference => reference.PackageMotion?.Patrol is not null) == true)
             throw new InvalidDataException("Patrol progress requires the current campaign save schema.");
-        if (state.Schema is ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema && state.EncounterZones is null)
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageMotion?.Escort is not null) == true)
+            throw new InvalidDataException("Escort progress requires the current campaign save schema.");
+        if (state.Schema is ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema && state.EncounterZones is null)
             throw new InvalidDataException("Saved campaign is missing encounter-zone state.");
         if (state.Ingestibles is { } ingestibles) FalloutPlayerIngestibles.Validate(ingestibles);
         if (state.WeaponHandling is { } handling) FalloutWeaponHandling.Validate(handling);
-        if ((state.Schema != ExpectedSchema && state.Schema != RaceOverridesSchema && state.Schema != ScriptValuesSchema && state.Schema != ObjectAnimationSchema && state.Schema != DestructionSchema && state.Schema != HitReactionSchema && state.Schema != DeathEventSchema && state.Schema != PatrolSchema && state.Schema != EncounterZoneSchema && state.Schema != ActorOverridesSchema && state.Schema != PackageMotionSchema && state.Schema != IngestiblesSchema && state.Schema != ViewPitchSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
+        if ((state.Schema != ExpectedSchema && state.Schema != ReferenceAccessLegacySchema && state.Schema != RaceOverridesSchema && state.Schema != ScriptValuesSchema && state.Schema != ObjectAnimationSchema && state.Schema != DestructionSchema && state.Schema != HitReactionSchema && state.Schema != DeathEventSchema && state.Schema != PatrolSchema && state.Schema != EncounterZoneSchema && state.Schema != ActorOverridesSchema && state.Schema != PackageMotionSchema && state.Schema != IngestiblesSchema && state.Schema != ViewPitchSchema && state.Schema != ReferenceStateSchema && state.Schema != QuestClockSchema && state.Schema != SkyLightingSchema && state.Schema != GlobalClockSchema && state.Schema != QuestScriptsSchema && state.Schema != FeetAnchoredSchema && state.Schema != CapsuleCenteredSchema) ||
             (state.Scripts is null) != (state.Quests is null) ||
             (state.Globals is null) != (state.GameTime is null) ||
-            (state.Schema is ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
-            (state.Schema is ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema && state.SkyLighting is null) ||
-            (state.Schema is ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema or ReferenceStateSchema && state.References is null) ||
-            (state.Schema is ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema && state.PlayerViewPitchRadians is null) ||
-            (state.Ingestibles is not null && (state.Schema is not (ExpectedSchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema) || state.Vitals is null)) ||
+            (state.Schema is ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema or GlobalClockSchema && state.Globals is null) ||
+            (state.Schema is ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema or ReferenceStateSchema or QuestClockSchema or SkyLightingSchema && state.SkyLighting is null) ||
+            (state.Schema is ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema or ReferenceStateSchema && state.References is null) ||
+            (state.Schema is ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema or ViewPitchSchema && state.PlayerViewPitchRadians is null) ||
+            (state.Ingestibles is not null && (state.Schema is not (ExpectedSchema or ReferenceAccessLegacySchema or RaceOverridesSchema or ScriptValuesSchema or ObjectAnimationSchema or DestructionSchema or HitReactionSchema or DeathEventSchema or PatrolSchema or EncounterZoneSchema or ActorOverridesSchema or PackageMotionSchema or IngestiblesSchema) || state.Vitals is null)) ||
             (state.PlayerViewPitchRadians is { } pitch && (!float.IsFinite(pitch) || MathF.Abs(pitch) > MathF.PI / 2)) ||
             (state.SkyLighting is not null && state.Globals is null) ||
             (state.GameTime is { } time && (!float.IsFinite(time.PreviousHour) || string.IsNullOrWhiteSpace(time.CalendarSha256))) ||

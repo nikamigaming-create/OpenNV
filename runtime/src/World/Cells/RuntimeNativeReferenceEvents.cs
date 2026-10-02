@@ -14,6 +14,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
         internal bool Loaded;
         internal bool ReportedError;
         internal FalloutFormKey? PendingActivation;
+        internal bool PendingPlayerInput;
         internal Node3D? Node = Presentation;
         internal bool ActorScriptStarted;
     }
@@ -24,6 +25,9 @@ internal partial class RuntimeNativeReferenceEvents : Node
     private RuntimeNativeReferencePresentation? _presentation;
     internal RuntimeNativePlayer? Player { get; set; }
     internal Action<FalloutPlacedReference, Node3D?, string>? Interact { get; set; }
+    internal Action<FalloutFormKey>? ObservePlayerActivationBegin { get; set; }
+    internal Action<FalloutFormKey, bool>? ObservePlayerActivationEnd { get; set; }
+    internal Action<FalloutFormKey, bool>? ObservePlayerActivationFinished { get; set; }
     internal Action<string> ReportDivergence { get; set; } = message => GD.PushError(message);
     private FalloutReferenceScripts _scripts = null!;
     private FalloutReferenceScriptHost _host = null!;
@@ -186,6 +190,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (binding.Instance.ScriptError is { } error && !error.StartsWith("OnActivate:", StringComparison.OrdinalIgnoreCase) ||
                 binding.PendingActivation is not null) return false;
             binding.PendingActivation = _records.RuntimeFormKey(0x14);
+            binding.PendingPlayerInput = true;
             GD.Print($"OPENNV_NATIVE_REFERENCE_ACTIVATE reference={reference} queued=true");
             return true;
         }
@@ -311,10 +316,13 @@ internal partial class RuntimeNativeReferenceEvents : Node
             // C# owner decides whether a fresh event can retry its source block;
             // suppressing contact sampling here permanently poisoned saved triggers.
             var events = new List<FalloutReferenceScriptEvent>();
+            var playerInput = false;
             if (binding.PendingActivation is { } actor)
             {
                 events.Add(new("OnActivate", actor));
                 binding.PendingActivation = null;
+                playerInput = binding.PendingPlayerInput;
+                binding.PendingPlayerInput = false;
             }
             if (!binding.Loaded && enabled && (binding.Node is not null || binding.Trigger is not null)) { events.Add(new("OnLoad")); binding.Loaded = true; }
             if (binding.Instance.Injury is { DeathEventPending: true } injury &&
@@ -334,7 +342,11 @@ internal partial class RuntimeNativeReferenceEvents : Node
             }
             if (hasPackageEvents) events.AddRange(packageBatch!.Events);
             events.Add(new("GameMode"));
-            var results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta);
+            var results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
+                playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
+                playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
+            if (playerInput) ObservePlayerActivationFinished?.Invoke(binding.Reference.FormKey,
+                binding.Instance.ScriptError is null && results.All(result => result.Error is null));
             // Source faults retain their executed prefix on the actual instance.
             // Consume this admission once while preserving marks produced by it.
             if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
