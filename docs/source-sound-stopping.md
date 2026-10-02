@@ -5,8 +5,9 @@ fade sound. Stage 100 then removes the player's scripted camera package.
 The current ordinary run passes the former StopSound fault, completes seventeen
 speech commands and reaches stage 100. [Package removal](player-package-removal.md)
 now cancels the pending change; [shared youth state and trait pause](player-youth-appearance.md)
-execute and ordinary input enters CG01 stage 0. SetSoundSourceFile is the next
-fault before that stage's player transfer.
+execute. The [source sound-path owner](source-sound-paths.md) executes
+SetSoundSourceFile; ordinary input enters CG01 stages 0 and 5. SetPCToddler is
+the next fault before the player transfer.
 The gurney exit and subsequent campaign remain open.
 
 ## Source contract and owners

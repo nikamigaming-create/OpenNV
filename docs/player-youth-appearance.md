@@ -44,8 +44,9 @@ twelve completed speeches. Speech state, camera-package time, quest progress and
 the trait draft remain identical across an extended hold. Done releases gameplay;
 seventeen speeches complete, source sound stopping removes three birth loops,
 the camera package clears, Dad disables and CG00 stops. SetPCYoung executes and
-CG01 stage 0 is entered. Its next SetSoundSourceFile remains unsupported, before
-the source player transfer. The session quits normally with readers drained.
+the [source sound-path owner](source-sound-paths.md) executes SetSoundSourceFile.
+CG01 stages 0 and 5 are entered; SetPCToddler remains unsupported before the
+source player transfer. The session quits normally with readers drained.
 State-publication overruns, missing references, actor behavior and cold-animation
 gaps remain visible. Childhood-room entry, campaign completion and matched
 retail/XR timing or pixels are unverified.

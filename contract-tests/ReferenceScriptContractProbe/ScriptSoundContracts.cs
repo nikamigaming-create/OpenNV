@@ -22,9 +22,10 @@ internal static class ScriptSoundContracts
         Directory.CreateDirectory(directory);
         try
         {
-            const string source = "short done\nref sound\nbegin GameMode\nif done == 0\nlet sound := SourceSound\n" +
+            const string source = "short done\nref sound\nstring_var path\nbegin GameMode\nif done == 0\nlet sound := SourceSound\n" +
+                "SetSoundSourceFile sound \"fx/fallback.wav\"\nlet path := GetSoundSourceFile sound\n" +
                 "PlaySound sound -1\nStopSound sound\nset done to 1\nendif\nend";
-            var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), 2); header[16] = 1;
+            var header = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), 3); header[16] = 1;
             File.WriteAllBytes(Path.Combine(directory, "Sounds.esm"), Join(Record("TES4", 0),
                 Sound(0x100, "SourceSound", "fx/base.wav", 0x40), Sound(0x101, "LoopSound", "fx/loop.wav", 0x10),
                 Sound(0x102, "TimedSound", "fx/timed.wav", 0, start: 1, stop: 2),
@@ -34,7 +35,7 @@ internal static class ScriptSoundContracts
                 Sound(0x107, "AliasSound", "fx/winner.wav", 0),
                 Record("REFR", 0x200, Field("EDID", Text("EmitterA"))),
                 Record("REFR", 0x201, Field("EDID", Text("EmitterB"))),
-                Record("SCPT", 0x601, Field("SCHR", header), Local(1, "done"), Local(2, "sound"),
+                Record("SCPT", 0x601, Field("SCHR", header), Local(1, "done"), Local(2, "sound"), Local(3, "path"),
                     Join(Enumerable.Range(0x100, 8).Concat([0x200, 0x201]).Select(id => Field("SCRO", BitConverter.GetBytes((uint)id))).ToArray()), Field("SCTX", Text(source))),
                 Record("QUST", 0x600, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x601u)))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Record("TES4", 0, Field("MAST", Text("Sounds.esm"))),
@@ -114,12 +115,16 @@ internal static class ScriptSoundContracts
             Require(quests.Variable(caller, 1) == 1 && stoppedAlias == 0, "Invalid stop arguments ran the suffix or stopped another SOUN.");
             records.SoundVoices.Stop(new("SOUNDS.ESM", 0x107));
             Require(stoppedAlias == 1, "StopSound lost canonical case-insensitive plugin identity.");
+            SourcePaths(records, world, quests, Execute, directory);
             ended.Dispose();
             quests.SetVariable(caller, 1, 0);
             var fallback = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: world);
             fallback.Advance(0);
             Require(ReferenceEquals(fallback.Sounds, sounds) && fallback.Capture().Instances.Single().Error is null &&
-                quests.Variable(caller, 1) == 1 && sounds.LastRequest!.SystemSound, "Fallback typed form/flag execution bypassed shared sounds.");
+                quests.Variable(caller, 1) == 1 && sounds.LastRequest!.SystemSound &&
+                sounds.LastRequest.Source.LogicalPath == "sound\\fx\\fallback.wav" &&
+                fallback.ScriptValues.Read(FalloutScriptLocalKind.String, quests.Variable(caller, 3)).Text == "fx/fallback.wav",
+                "Fallback typed form/path/flag execution bypassed the shared sound owners.");
             var saved = JsonSerializer.Deserialize<FalloutQuestScriptsSnapshot>(JsonSerializer.Serialize(fallback.Capture()))!;
             sounds.Play(caller, Key(0x100)); var afterSave = sounds.LastRequest!.Id;
             using var coldWorld = new FalloutReferenceWorld(records);
@@ -136,9 +141,57 @@ internal static class ScriptSoundContracts
             Reject(() => sounds.Play(caller, Key(0x104)));
             Require(FalloutSoundRecordReader.Read(records, Key(0x100)).Flags == 0, "Playback mutated the owned sound declaration.");
             StopFailure(records);
-            Console.WriteLine("OPENNV_SCRIPT_SOUND_CONTRACT_PASS winning=true typedSourceCommands=true fallback=true queue=true systemSound=true concurrent=true prefixFailure=true randomAtomic=true completion=true retirement=true coldNoReplay=true audioDivergenceVisible=true loops=true stopSound=true referenceFilter=true crossOwner=true zeroResult=true parity=unverified");
+            Console.WriteLine("OPENNV_SCRIPT_SOUND_CONTRACT_PASS winning=true typedSourceCommands=true fallback=true queue=true systemSound=true concurrent=true prefixFailure=true randomAtomic=true completion=true retirement=true coldNoReplay=true audioDivergenceVisible=true loops=true stopSound=true referenceFilter=true crossOwner=true zeroResult=true sourcePaths=true cachedPlaybackRefresh=true activeMediaRetained=true graphScope=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
+    }
+
+    private static void SourcePaths(FalloutPluginStack records, FalloutReferenceWorld world, FalloutQuestState quests,
+        Action<string> execute, string directory)
+    {
+        var sound = Key(0x100); var caller = Key(0x600);
+        var owned = records.GetEffective(sound).ReadData();
+        Require(records.SoundPaths.Read(new("SOUNDS.ESM", 0x100)) == ("fx/winner.wav", 0),
+            "Sound source getter lost the winning raw path or canonical form identity.");
+        world.Sounds.Play(caller, sound); var prior = world.Sounds.LastRequest!; var priorMedia = world.Sounds.LastMedia!;
+        execute("let path := GetSoundSourceFile SourceSound\nset done to 1 + (SetSoundSourceFile SourceSound \"FX/Changed/\")");
+        Require(world.ScriptValues.Read(FalloutScriptLocalKind.String, quests.Variable(caller, 3)).Text == "fx/winner.wav" &&
+                quests.Variable(caller, 1) == 1 && records.SoundPaths.Read(sound) == ("FX/Changed/", 1) &&
+                world.Sounds.IsActive(prior.Id) && ReferenceEquals(world.Sounds.LastMedia, priorMedia),
+            "Typed getter, setter result, raw directory path or prepared voice identity changed.");
+        execute("SetSoundSourceFile SourceSound \"FX/Changed/\"\nlet path := GetSoundSourceFile SourceSound");
+        Require(records.SoundPaths.Revision(sound) == 1 &&
+                world.ScriptValues.Read(FalloutScriptLocalKind.String, quests.Variable(caller, 3)).Text == "FX/Changed/",
+            "An unchanged source path invalidated caches or the getter canonicalized source text.");
+        execute("SetSoundSourceFile SourceSound \"fx/changed.wav\"\nPlaySound SourceSound");
+        Require(world.Sounds.LastRequest!.Source.LogicalPath == "sound\\fx\\changed.wav" &&
+                prior.Source.LogicalPath == "sound\\fx\\winner.wav" && world.Sounds.IsActive(prior.Id) &&
+                world.Sounds.LastRequest.Source.Flags == prior.Source.Flags &&
+                world.Sounds.LastRequest.Source.StaticAttenuationHundredthsDb == prior.Source.StaticAttenuationHundredthsDb,
+            "Cached script playback retained an obsolete path, changed unrelated SOUN fields or retargeted an old request.");
+        Reject(() => execute("SetSoundSourceFile EmitterA \"fx/invalid.wav\"\nset done to 99"));
+        Reject(() => execute("SetSoundSourceFile SourceSound 7\nset done to 99"));
+        Reject(() => execute("SetSoundSourceFile SourceSound \"fx/a.wav\" 7\nset done to 99"));
+        Reject(() => records.SoundPaths.Set(sound, "fx/\0bad.wav"));
+        Reject(() => records.SoundPaths.Set(sound, "fx/\ud83d\ude00.wav"));
+        Require(quests.Variable(caller, 1) == 1 && records.SoundPaths.Read(sound) == ("fx/changed.wav", 2),
+            "Invalid sound source mutation changed the owner or executed its suffix.");
+        execute("SetSoundSourceFile SourceSound \"../outside.wav\"\nset done to 2");
+        Reject(() => execute("PlaySound SourceSound\nset done to 99"));
+        Require(quests.Variable(caller, 1) == 2 && records.SoundPaths.Read(sound).File == "../outside.wav" && world.Sounds.IsActive(prior.Id),
+            "Unsafe resource resolution lost the accepted mutation prefix or the active voice.");
+        execute("SetSoundSourceFile SourceSound \"\"\nlet path := GetSoundSourceFile SourceSound");
+        Require(world.ScriptValues.Read(FalloutScriptLocalKind.String, quests.Variable(caller, 3)).Text == string.Empty,
+            "Empty sound path did not retain its getter value.");
+        Reject(() => execute("PlaySound SourceSound\nset done to 99"));
+        records.SoundPaths.Set(sound, "fx/\u20ac.wav");
+        Require(records.SoundPaths.Read(sound).File == "fx/\u20ac.wav", "Representable owned text was rejected.");
+        execute("SetSoundSourceFile SourceSound \"fx/winner.wav\"\nStopSound SourceSound");
+        Require(records.GetEffective(sound).ReadData().AsSpan().SequenceEqual(owned) &&
+                FalloutSoundRecordReader.Read(records.GetEffective(sound)).LogicalPath == "sound\\fx\\winner.wav",
+            "Runtime source-path mutation changed the owned declaration.");
+        using var fresh = FalloutPluginStack.Load(directory, ["Sounds.esm", "Patch.esp"]);
+        Require(fresh.SoundPaths.Read(sound) == ("fx/winner.wav", 0), "A new source graph inherited session path changes.");
     }
 
     private static void StopFailure(FalloutPluginStack records)

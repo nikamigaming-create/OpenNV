@@ -2,704 +2,155 @@
 
 ## Active objective
 
-Complete the combined TTW campaign from Fallout 3's opening through Vault 101,
-Megaton, the authored train-station route, New Vegas and Benny, then continued
-campaign play. Complete all nine JAM modules and compatible TTW desirables from
-the current Best of Times and Wasteland Survival Guide recommendations. Preserve
-the broader goal of Nexus mod script/dependency compatibility. Use the Fallout
-bot's ordinary movement and activation adapters
-for bounded traversal after Megaton, retaining source collision and door rules.
-Provide code-addressable checkpoints of actually reached states, with complete
-quest/script, actor, inventory, mod and source identity restoration. Load those
-states directly for focused, slow ordinary-input checks through both flat and VR
-adapters; validate cold continuation before treating a checkpoint as reusable.
-Complete every Vault 101 quest, including the G.O.A.T., through source gameplay.
-Verify the selected Benny Humbles You and Steals Your Stuff configuration's
-deleveling, gear confiscation/recovery, progression and cold continuity. This takes
-priority alongside complete JAM/MCM support. Complete TTW's reached dependency
-behavior as part of that route; preserve the original ten mod targets and the
-additional Benny target. Folder
-registration and isolated scenes do not meet this objective. Prioritize flat
-play while preserving shared VR behavior; detailed VR presentation follows.
-Classic flat presentation must use winning Fallout/mod screens and controls;
-the optional Nikami experience adds enhancements to the same gameplay owners.
-Work without subagents. Follow the [mod implementation](mod-compatibility.md),
-[implementation plan](implementation-plan.md) and [flat work order](flat-gameplay-plan.md).
-All 36 broad recovery requirements remain open; no whole-game or retail-parity
-completion is claimed.
+Complete ordinary TTW play from Fallout 3's birth through every Vault 101 quest,
+including the G.O.A.T., Megaton, the authored Union Station power/ticket/train
+route, New Vegas and Benny, then continued campaign play. After Megaton, use the
+Fallout bot's ordinary movement and activation adapters with source collision and
+door rules. Verify Benny Humbles You and Steals Your Stuff's selected deleveling,
+gear confiscation/recovery, progression and cold continuity.
 
-## Verified runtime
+Complete all nine JAM modules, MCM, TTW's reached dependency behavior and compatible
+recommendations from the current Best of Times and Wasteland Survival Guide.
+Preserve all ten original mod targets plus Benny and the broader objective of
+Nexus script/dependency compatibility. Registration and isolated fixtures are not
+complete mod support. Follow [mod compatibility](mod-compatibility.md), the
+[implementation plan](implementation-plan.md), [flat work order](flat-gameplay-plan.md)
+and [JAM/MCM plan](jam-luna-max-plan.md). Work without subagents.
 
-New Game now reads the winning configured starting QUST from selected-profile
-settings and executes its source stage/menu scripts before constructing a player.
-The first queued source move chooses the ordinary CELL builder and player
-placement; executed prefixes, control masks and shared quest state survive that
-handoff. Required TTW settings stay in the selected profile, leaving owned INIs
-unchanged. Ordinary flat New -> Yes reaches TTW's authored holding CELL and its
-actual Capital/Mojave message. Selecting Capital starts CG00's owned Fallout 3
-intro movie; ordinary Escape interrupts it and resumes the source result program.
-That continuation now executes SetLocationSpecificLoadScreensOnly and SetInCharGen
-through shared session state, then reaches CG00 stage 5's player script package.
-That package now accepts its winning explicit reference location, starts the owned
-birth camera clip and lets the subsequent source player move load Vault 101's
-birth CELL. Both reached SetNumericGameSetting commands now change the shared
-session settings, and the package camera advances. CG00's stage-6 PlaySound now
-plays and completes its owned birth WAV. Its stage-8 same-package request now
-plays the outgoing source OnChange camera clip and retains the pending assignment
-until that clip completes. The subsequent source sequence now renders its owned
-screen blood and plays/completes a selected owned baby-cry WAV. Its subsequent
-SetNoActivationSound now selects the winning SOUN; ordinary E input plays and
-completes that owned cry. CG00 advances to stage 10's player package and Dad's
-authored talking flag. Dad's three-argument SayTo now selects his winning INFO,
-plays its owned voice/lip data, renders forced owned HUD subtitles and delivers
-the typed SayToDone event. Ordinary input reaches the source Boy/Girl question;
-the male response completes. A fresh female run also completes Mom's Say and
-the subsequent parent dialogue, reaches owned name entry and accepts a name.
-The continuation now opens TTW's owned gene-projector NIF and source race/sex
-screen. Ordinary Next/Done/Yes accepts the selection and closes the menu;
-Dad's subsequent source MatchRace now completes. A fresh ordinary Hispanic
-female selection also executes four MatchFaceGeometry commands, completes twelve
-speech commands and reaches CG00 stage 80's trait menu. The generic trait panel is
-replaced by its [winning Fallout menu](authored-trait-menu.md), with source fonts,
-artwork, descriptions, selection markers and Reset/Done controls. Its maximum and
-singular/plural counters read winning settings. Synthetic selection/override
-checks and an owned native pointer/keyboard/reset/acceptance/pixel-restoration
-fixture pass without retained frames. Fresh ordinary TTW input reaches this menu
-and accepts Done with zero traits; the session quits with readers drained.
-Perk eligibility/ranks, scrollbar dragging, sound, timing and matched retail/XR
-pixels remain unbound. Empty Say/SayTo selections now register deferred,
-topic-filtered SayToDone instead of faulting or rebinding an active voice.
-A fresh ordinary opening now gives Mom and Dad independent source voice/lip,
-result and completion channels. It completes sixteen voiced commands and accepts
-Done on the owned trait screen. The reached StopSound command now shares the
-[source sound owner](source-sound-stopping.md). Ordinary flat input stops three
-actual birth-loop instances, completes seventeen speeches and enters stages 90
-and 100. [Player-package removal](player-package-removal.md) now cancels the
-pending change, releases the camera and clears current/pending state. A fresh
-ordinary opening completes that removal, disables Dad and stops CG00. The shared
-[player youth policy](player-youth-appearance.md) now executes SetPCYoung and
-enters CG01 stage 0, where SetSoundSourceFile remains unsupported before the
-player transfer. The trait menu now pauses gameplay; fresh ordinary input retains
-identical speech, camera-package time, quest progress and draft across an extended
-hold, then Done releases progression. Native clock/input/acceptance/cleanup checks
-pass. Synthetic command/cold/policy checks and owned male/female first/third body
-construction checks pass. Childhood-room entry and gurney-exit acceptance remain
-incomplete. Paused
-overlap, isolated conversation skip and retained failed-result prefixes pass an
-owned component fixture. Competing subtitle selection remains visibly unbound.
-CG00 is stopped after its executed stage-100 prefix; the failed nested CG01
-continuation remains visible on that calling script owner.
-The loaded CELL reports 102 missing runtime references on entry
-and 83 after ordinary reference processing; the camera clip reports two unbound
-non-camera targets. The first ordinary manual save now initializes a campaign
-snapshot without requiring a prior New Vegas save. Code-addressed checkpoint
-creation and in-process loading use that same source-validated owner. A paused
-reload preserves the accepted character, all quest state, inventory, controls,
-transform, globals, tracked references and player camera-package clock exactly.
-The owned cold fixture retains all 641 saved quest-script owners, clocks and
-failure states before execution. Direct title loading publishes the completed
-slot; duplicate/missing requests preserve Continue, and ordinary Resume/Pause
-advances then holds the restored camera. Recording remains off.
-Current saves write v25 with source-validated face geometry and retain v24
-compatibility. The post-face birth checkpoint reloads through the native scene;
-a paused resave retains face overrides and the other listed root state exactly.
-Cold presentation exposes an unbound authored ragdoll accumulation-root rotation,
-so that checkpoint is not fully reusable.
-Source save eligibility, complete actor cold clocks and active interaction
-continuations remain unbound. TTWStart
-retains a separate TTW_EnableRadioFix fault. Fallout 3 character creation,
-the Vault exit, train station, travel and continued campaigns remain unverified.
-The requested current-build choice and unfinished birth-room screenshots are
-retained privately, along with a new 30-second flat parent-dialogue MP4 with
-process audio. The clip retains repeated source frames in its sidecar and does
-not establish audiovisual parity. The birth frame exposes lighting gaps;
-it does not establish scene parity. Recording is off. Synthetic bootstrap,
-conditional stage execution, winning renamed skill
-identity and owned TTW/cold-save checks pass, as does the complete required
-runtime gate. The final flat build retains TTWStart's startup identity across
-background quest stage changes. Both protected saves remain unchanged.
+Prioritize flat play and system polish while retaining shared VR gameplay and
+saves. Classic flat presentation uses winning Fallout/mod screens and controls;
+the optional Nikami experience adds enhancements to those owners. Supply
+code-addressable checkpoints of actually reached states with complete quest,
+script, actor, inventory, mod and source identity restoration. Validate cold
+continuation, then use slow ordinary flat/VR input for focused checks. Retain the
+continuous route/event log and produce the requested journey video with labeled
+excerpts, side-by-side moments and wipes. All 36 broad recovery requirements remain
+open. Preserve the complete campaign, release and headset objectives in the plan;
+no whole-game or retail-parity completion is claimed.
 
-Say/SayTo share winning actor-trait/quest selection, positive integer forced
-subtitle admission, response voices, INFO results and topic-filtered SayToDone
-events. Empty selections coalesce actor/topic marks, retain the calling suffix,
-and execute each matching/unfiltered completion block once; pending events block
-saving and failed delivery retains its prefix. Synthetic contracts and an isolated
-owned source/body/audio fixture pass. Another actor's empty request leaves Dad's
-actual voice/lip/subtitle intact and does not count as spoken dialogue. See
-[scripted speech completion](scripted-speech-completion.md). GetPCIsSex reads the
-current shared player state. Say's extra actor/audio
-arguments, SayTo's fourth look argument, other listeners, same-actor interruption and
-matched result/event timing remain unbound. Synthetic typed-topic/order/prefix/
-cold-local contracts and an isolated owned native subtitle pixel fixture pass.
-HUDMainMenu branch dimensions, text template/font and admitted executable
-placement relationships supply flat subtitles independently of rollover prompts.
-The fixture verifies forced display with general subtitles disabled and baseline
-restoration after completion, without retained frames. Text styling, queue/hold/
-fade timing, matched canvas scaling and XR final-eye presentation remain gaps.
-Ordinary source speech reaches character creation; it does not establish full
-dialogue, character creation or campaign support.
+## Verified ordinary opening
 
-TTW race-menu selectors read their owned plugin registration, bounded copy/import,
-shared buffer, native command forwarding and original model-consumer associations.
-The projector and default paths remain owned inputs; ordinary ShowRaceMenu restores
-the default selector. Synthetic malformed/foreign/ambiguous-association checks
-and an isolated owned native device/XML/font/pointer/keyboard fixture pass. The
-fixture renders both models and restores identical default pixels with no retained
-frames. Ordinary Capital input completes eight speech commands, reaches the
-projector, navigates its source pages and accepts the shared selection. The menu
-releases its pause and quits with readers drained. A requested private screenshot
-is retained. Overlapping menu replacement, portrait/effect parity, source close
-timing and XR final-eye presentation remain unverified. The user-observed walking
-during the gender question is repaired: root-motion travel retains its initial
-zero-distance arrival until the package is bound, consumes completion once and
-releases Forward. Package-change events play their winning IDLE without an
-invented finish barrier on forever-loop poses. Synthetic distance/arrival/cancel/
-malformed checks and an owned native Dad/Dr. Li fixture pass six initial-sample
-package changes with stationary bone motion. A fresh ordinary opening completes
-eight speech commands and retains the authored parent poses through character
-creation. Its requested 30-second audio clip has no sampled Forward or actor
-package errors. Actor cold restoration, group interruption/blending, Must Complete
-end-idle waits and matched event/pose timing remain unverified. The gameplay HUD
-now applies source movement controls to HP/AP and the reticle independently of
-rollover text, and suppresses target prompts while world activation is disabled;
-disabling rollover alone retains vitals and messages. Synthetic control
-mask cases through owned native XML/font/atlas pixels verify disable, enable,
-unrelated controls and identical pixel restoration. A fresh ordinary birth run
-and inspected requested screenshot verify hidden HP/AP/reticle with source
-movement disabled, no activation target/prompt and retained subtitles. HUD override extensions,
-broader branch presentation and matched retail/XR pixels remain unverified.
-MatchRace now changes the actual NPC base's race, preserves its age tier through
-winning younger/older-family links, and refreshes existing owned bodies and
-dynamic faces without replacing the actor, skeleton or animation clock. Unloaded
-references and other instances of the base share that state; active dialogue
-race/child conditions read the live owner. Saves retain validated NPC/RACE
-hashes, admit prior supported state and reject overrides in legacy schemas.
-Synthetic source-order, shared/unloaded scope, family/cycle, failure-prefix,
-dialogue and cold-drift checks pass. An isolated owned native actor fixture
-verifies changed pixels, stable pose/phase, identical cold geometry, exact
-same-race no-op and restored source pixels without retained frames. A fresh
-ordinary opening accepts Hispanic selection and completes the reached race commands.
-Player-target race changes, complete actor cold clocks, matched timing and
-retail/XR presentation remain unbound; neither actor nor campaign parity is claimed.
+New Game reads the winning configured starting QUST and executes its stage/menu
+programs before constructing a player. Its source MoveTo chooses the ordinary
+CELL builder while retaining executed prefixes, controls and shared quest state.
+Ordinary flat New/Yes reaches TTW's holding CELL and Capital/Mojave question.
+Capital starts the owned Fallout 3 intro; Escape interrupts it through the source
+continuation. Source loading/character-generation policies, numeric settings,
+player camera packages, screen blood and baby-cry activation feedback execute.
+Mom and Dad have independent owned voice/lip/result/completion channels. Parent
+package arrival retains their authored poses through the gender question.
 
-[MatchFaceGeometry](actor-face-geometry.md) now owns shared NPC-base geometry,
-current player/NPC source appearance, marked/fallback presets, case-sensitive
-native tie sorting, signed percentage, source-minus-preset displacement, retained
-affine age and unchanged texture. Existing owned actors refresh without replacing
-their skeleton or animation phase. Save v25 validates NPC/model/RACE/CTL hashes
-and clones coefficient arrays. Synthetic contracts and an isolated owned native
-fixture pass changed/cold/restored pixels at a matched idle time without retained
-frames. Ordinary birth input reaches stage 80 and the post-face checkpoint.
-Scripted player targets, active template changes, complete actor cold continuation
-and matched retail/XR timing/pixels remain unbound.
+Ordinary Girl/name input reaches TTW's source gene projector and race/sex menu.
+Next/Done/Yes accepts Hispanic selection and closes it. MatchRace and four
+MatchFaceGeometry commands execute. Twelve speeches lead to the
+[owned trait screen](authored-trait-menu.md), using winning XML, fonts, artwork,
+descriptions, counters and Reset/Done controls. The modal wrapper pauses gameplay;
+an extended ordinary hold preserves speech, package time, quest progress and the
+draft. Done accepts zero traits and releases progression. Menus beyond these
+bounded checks and matched retail/XR presentation remain open.
 
-Character-generation policy is shared by reference/results, fallback quest scripts
-and pre-world startup, and retains cold with a false legacy default. Deferred XP
-can exceed the current level threshold without changing level or disappearing
-during SPECIAL/vitals derivation. Exiting with earned levels fails visibly at the
-unbound level-cap/allocation/LevelUpMenu owners before clearing the flag or executing
-the result suffix. XP reward commands, modifiers and leveling remain incomplete;
-this policy and owned component audit do not establish player advancement support.
+Fresh ordinary input completes seventeen speeches, enters CG00 stages 90 and
+100, stops three actual birth-loop instances, clears current/pending camera
+packages, disables Dad and stops CG00. The [shared saved youth policy](player-youth-appearance.md)
+executes SetPCYoung. The [source sound-path owner](source-sound-paths.md) executes
+SetSoundSourceFile and changes PHYBabyRattle to its owned baby-rattle directory.
+CG01 enters stages 0 and 5. Its next SetPCToddler has no owner; the nested failure
+remains visible on calling CG00. The player stays in birth CELL
+Fallout3.esm:028138 before the authored player scale/move suffix. Do not rearm,
+reset, teleport or bypass this retained prefix. The later current-build video
+reaches nineteen speeches and background CG01 stage 10 while the player remains
+in the birth room; speech reports `Dialogue condition 14 RunOn 0 has no actor/quest
+owner.` This background progress does not establish the blocked player transfer.
+Childhood-room entry and the gurney exit are not accepted. Ordinary Quit drains
+all source readers.
 
-SetNoActivationSound/ClearNoActivationSound share C# selection across reference/
-results, startup and fallback quests. The default SOUN identity comes from the
-owned executable's clearing-command/global-slot/lazy-lookup association. Typed
-winning source selection and hash retain cold without replaying transient voices;
-changed or malformed source identities reject restoration. Ordinary failed or
-blocked flat/XR activation outside modal input uses the common owned sound player
-and suppresses repeated requests while its selected voice remains active.
-Synthetic command/association/prefix/failure/cold checks and an isolated owned
-native command/input/mixer fixture pass. The fixture observes completion and
-nonzero samples for baby cry and reset default with zero discarded samples,
-without retaining frames. Its XR adapter invocation has no headset. Retail
-precache/handle reuse, matched activation eligibility/timing and endpoint audio
-remain unverified. These checks do not establish campaign or audio parity.
+## Shared owners and checks
 
-TriggerScreenBlood now shares transient C# requests across reference/results,
-startup and fallback quest execution. Owned Boolean INI defaults supply its
-enable flag; winning GMST settings supply the active-drop cap, geometry/opacity
-ranges, captured duration, live fade and texture identities. Native flat
-presentation reads both owned DDS maps and applies the independently specified
-multiplicative base blend. Synthetic winning/prefix/random/clock/cleanup/cold
-checks and an isolated owned native pixel audit pass; fading changes actual
-pixels and expiration restores the underlying canvas, with no retained frames.
-The ordinary Capital run executes its source request for ten drops and its
-following baby-cry sound. Directional color-map UV offsets, additive flares,
-color transfer, exact layering/timing/random stream and the XR final-eye adapter
-remain visible gaps. This is partial effect presentation, not blood or campaign
-parity. These effects stay outside saves and do not replay executed prefixes cold.
+Source sound paths resolve canonical winning SOUN forms, preserve getter text,
+and invalidate only changed form revisions. Script, animation/NIF/response and
+menu consumers refresh descriptors while prepared/playing voices retain their
+source and media. Synthetic typed/getter/setter/argument/prefix/cache/graph-scope
+checks pass. The owned native fixture executes TTW's change and reset, primes
+script and animation caches, retains queued old media, observes nonzero native
+mixer output with zero discarded samples, restores the path and retires voices.
+It records no frames. Form-path mutations live with the selected graph, outside
+campaign snapshots; retail cold continuity remains unmeasured.
 
-StopSound now selects canonical source SOUN instances across the shared loaded
-graph, with optional actual-reference filtering, paused stopping and a zero
-expression result. Script, animation/NIF, response-SOUN and menu/spatial adapters
-retire registrations on completion, stopping and tree/session exit. Each source
-WAV loop has independent validated bounds and mutable playback state. Synthetic
-contracts and an owned native command/mixer/reference-filter fixture pass. See
-[source sound stopping](source-sound-stopping.md) for the bounded contract.
+[Source stopping](source-sound-stopping.md), [package removal](player-package-removal.md),
+[scripted speech completion](scripted-speech-completion.md), shared race changes
+and [face geometry](actor-face-geometry.md) retain their bounded synthetic/owned
+checks. Youth selection uses winning RACE.DNAM defaults without replacing stored
+customization; male/female first/third body checks pass. Trait input/reset/pixel
+restoration, pause/resume, prior-pause preservation and cleanup checks pass.
+Source movement/activation controls suppress HP/AP/reticle and target prompts
+during the opening while retaining subtitles. Further capabilities and exact
+limits are in [status](status.md); component checks do not establish campaign,
+actor, rendering, audio or physical-headset parity.
 
-PlaySound now shares transient C# voice ownership across reference/results,
-startup and fallback quest execution. Winning SOUN declarations supply WAV
-identity, gain, pitch, chance and variants; stream preparation fails before
-committing a request. Normal requests queue in MenuMode, while system sounds
-play through paused menus. Concurrent voices complete and retire independently.
-These transient voices are not save-baked and do not replay on cold restoration.
-Synthetic prefix/typed-form/random/cleanup checks, an isolated owned native
-mixer check and the complete required runtime gate pass. The ordinary Capital run also plays and completes the birth
-sound. Reverb, submersion and stereo/LFE presentation gaps remain explicit;
-timed scheduling, script 3D/reference-node requests, complete volume routing and
-matched voice timing remain unbound. This is partial audio presentation, not
-audio or campaign parity.
+The selected owned audit and full required runtime gate pass for the sound-path
+patch. Publish after the final diff check, obtain all required exact-head CI checks,
+merge and synchronize clean main. Recording is off during development and gates.
 
-Numeric GMST mutation now belongs to the loaded C# stack, shared by reference,
-result, startup and fallback quest commands/functions and all numeric readers.
-Winning declarations and admitted owned executable defaults provide typed storage;
-unknown/non-numeric setters return failure, and undefined conversions fail before
-mutation. Existing skill, weapon damage/spread, ingestible and armor calculations
-read current values. Derived vitals/health, jump/limb/actor movement, blink/head
-clocks, HUD/quantity, casing and weather consumers still retain coefficients; mutations
-that would invalidate those copies fail visibly before writing. These remaining
-refresh boundaries are exposed in telemetry. Warm owner replacement retains
-settings; a new stack restores owned defaults rather than baking mutations into
-saves. Synthetic contracts, live skill/damage checks and isolated owned TTW
-commands pass. The ordinary Capital run also performs both authored karma-setting
-writes. Complete karma behavior and other unimplemented setting consumers remain
-unbound; setting storage does not establish those gameplay systems.
+## Visible gaps
 
-Player script-package assignment, source identity, idle phase/cursor and elapsed/wait
-clocks retain in the saved shared session. The outgoing OnChange camera event now
-owns deferred replacement; a later request replaces the pending assignment without
-restarting that event. Same-package completion returns to ordinary idles without
-replaying OnBegin. PACK accepts both owned byte and UInt32 idle-count declarations.
-Synthetic and isolated owned native checks preserve cold change clocks, camera
-samples and frame remainders, reject changed pending packages, and pause clocks
-while source movement is pending. The ordinary Capital run reaches and completes
-the stage-8 change clip. Explicit-location idles require the matching CELL and
-source radius; unreached traversal still fails visibly. End/removal animations,
-change cancellation, nonempty event scripts/topics, editor-location semantics,
-body targets and matched interruption/blend/event timing remain unbound.
+- The current birth CELL retains 83 missing runtime references and two reached
+  GetLinkedRef operand failures. Camera body targets, actor cold clocks,
+  interaction continuation, subtitle competition and matched timing remain open.
+- PlaySound's reverb, listener submersion, complete output/volume routing and script
+  3D/node behavior remain incomplete. Voice/lip/output clocks and camera cadence
+  require measurement; publication overruns remain visible rather than hidden.
+- Saves write v25 with source-validated face state and admit v24. Reached-state
+  slot creation and in-process loading preserve their tested root state, and the
+  owned cold fixture retains 641 saved script owners before execution. The
+  post-face cold native load exposes an unbound ragdoll accumulation-root rotation.
+  Complete actor/interaction restoration and source save eligibility remain open;
+  that checkpoint is not fully reusable.
+- TTWStart retains TTW_EnableRadioFix failure. Complete TTW/FO3 character creation,
+  Vault exit, train travel, New Vegas/Benny and continued campaigns are unverified.
+  JAM/MCM remain partial; 11 of the selected 52 JAM scripts are rejected by the
+  parser. Folder registration is not full module/dependency behavior. Benny 13.05
+  is privately available but is not mounted or runtime-proved.
+- Missing source resources and unsupported behavior fail visibly. All broad
+  [recovery requirements](recovery-checklist.md) remain open at their full scope.
 
-Loading-screen eligibility now resolves winning LSCR direct CELL/WRLD and signed
-world-grid identities, with the shared location-only policy retained cold. Native
-door and queued player transfers present eligible owned images and LSCT tips while
-paused, then restore the previous input/pause scope. Retirement drains both transfer
-tasks. Synthetic policy/override/deletion/layout checks, the owned Vault 101 pool
-and a rendered paused image/tip fixture pass with no retained frames. LoadingMenu's
-ancillary NIF, progress/statistics widgets and matched selection/fade/layout timing
-remain explicit gaps. This component evidence does not establish campaign travel.
+## Next owner
 
-Quest scripts now execute unfiltered and filtered MenuMode blocks through the
-shared SCPT clock. Multiple GameMode blocks share source order, locals, budgets
-and Return; menu filters read their current local value at execution. A shared
-C# menu frame owns queries and identity; absent filtered-menu identity fails
-visibly. Native message and supported paused panels publish their codes, retaining
-underlying panels when a source message opens. Claimed opening menus retain their
-existing handoff; exact open-menu scheduling remains unverified.
-Synthetic reference/fallback-quest checks pass source order, filters, failure
-prefixes, stopped clocks, scoped handoff and cold faults. The winning TTWStart
-owned fixture now runs through the shared quest clock with owned/default cadence,
-queues its holding-cell move once and publishes the actual two-choice message.
-Cold restoration retains its prefix and pending choice without a transient menu
-frame. The complete runtime gate passes with recording off. Parser 8 retains all 446 original saved owners and admits one previously
-rejected multi-block owner; both protected saves remain unchanged. The TTW source
-audit retains five parser failures among 1,263 entry-plugin scripts. Campaign
-progression and train travel remain unverified.
+Implement reached SetPCToddler through shared source-validated player animation
+policy and its actual flat/XR consumers. Trace owned locomotion/camera behavior;
+do not add a flag-only bypass. Preserve youth appearance, modal pause, package
+cancellation, independent sound voices and path invalidation. Rerun ordinary input
+through the source movie and player transfer, then repair the next reached owner,
+including the visible dialogue condition context failure. Continue the complete
+TTW/JAM/Benny objective above.
 
-Player MoveTo now queues requests in the shared C# world owner, so the following
-source statements finish before native movement. Typed destinations and optional
-offsets resolve against current reference placement. The native adapter consumes
-that queue and uses the ordinary CELL/exterior builders for cross-cell transfers;
-door and script transfers update the active player CELL before binding events.
-Failures retain the request and error without automatic retry. Saves reject
-unsettled movement rather than discarding its continuation. Synthetic and native
-fixtures check suffix execution, offsets, mixed rotations, residency, self moves,
-failure retention and retirement. The winning TTWStart MenuMode block passes an
-explicit owned fixture: its holding-cell request and following statements execute
-once. The full runtime gate and unchanged 446-owner cold-save audit pass.
-These movement fixtures do not establish campaign or train travel. General
-character-creation and campaign state remain open.
+## Private continuation
 
-Keyboard/mouse control queries and remaps now share a profile-owned C# table.
-Winning installation INI bindings remain read-only; changes swap occupied keys
-within their device lane and persist in a separate profile overlay on session
-retirement. Reference and fallback-quest commands use the same owner. Native
-movement, activation, firing, reload, grab, jump, Pip-Boy, quick-save and aim/POV
-actions consume that table. Remapping clears affected held actions; rejected
-physical keys leave the owner and native map intact. A native input fixture and
-synthetic script/cold-profile checks pass with recording off. The full runtime
-gate and unchanged 446-owner cold-save audit also pass. Source-bound flat input
-no longer intercepts Q/H for the diagnostic wheels. The owned JAM
-initializer passes GetControl and now reaches SetOnHitEventHandler. Joystick/
-gamepad adapters, missing executable binding defaults, remaining stock actions,
-Classic/Nikami selection and complete mod input remain open. The next shared
-owners remain hit-event context and actor-effect lifecycle, remaining perk
-consumers and authored HUD/MCM. TTW startup and campaign now take priority.
+Current ordinary video run: `tmp/development-lab/ttw-sound-paths-video-20261001/`.
+Reached state: `tmp/sound-path-video-reached.private.json`.
+The bounded source-prefix check is
+`tmp/sound-paths-ordinary-reached.private.json`.
+Checks: `tmp/sound-path-reference-contract.log`,
+`tmp/sound-paths-owned.stdout.log`, `tmp/sound-path-runtime-gate.log`.
+Owned audit helper: `tmp/Run-SoundPathsAudit.ps1`.
 
-Winning perk parameters now have a shared C# owner for indexed numeric reads and
-writes, including independent two-value slots and byte-sized quest stages.
-Mixed ability/entry-point lists retain their source indices. Cached ability
-readers, player traits/acquired perks and actor perk entries project live values;
-a synthetic winning-override check changes actual weapon damage through the
-ordinary resolver. Reference and fallback-quest commands accept typed form
-variables; grouped form arguments retain identity instead of display names.
-Invalid writes preserve existing values, and owned source files remain read-only.
-Changes live with the loaded source stack, outside campaign snapshots. The owned
-JAM initializer publishes all 16 bullet-time and two hit-marker parameter writes.
-JBT then reaches hit-event registration; JHB reaches Dispel. Native
-source activation updates the same cached perk reader, including reactivation.
-The complete runtime gate and unchanged cold-checkpoint audit pass. Complete
-entry-point consumers, conditions and JAM gameplay remain unverified.
+Private source analysis: `tmp/player-young-cg01.private.jsonl`,
+`tmp/phy-baby-rattle.private.jsonl`, `tmp/set-pc-toddler-command.private.txt`,
+`tmp/set-pc-toddler-handler.private.txt`, `tmp/set-pc-toddler-owner.private.txt`
+and `tmp/toddler-paths.private.jsonl`. The private source reader/retail decoder
+remain under `tmp/`; raw owned bytes and private addresses are never public inputs.
 
-Source UI interpolation now owns the four documented SetUIFloatGradual modes,
-including stop/replacement forms and signed command arguments. Dependent XML
-traits read current script overrides. A monotonic native UI clock keeps animations
-running during menu pause and zero gameplay time scale; unload/reset clears them.
-The native HUD's supported source tiles read the same C# float values and redraw
-on their revisions. A rendered owned-reticle fixture changes actual pixels through
-that bridge while gameplay is paused, retaining no frames. Synthetic mode,
-dependency, lifetime and reference/fallback-quest checks and the complete runtime
-gate pass. The owned JAM audit advances its actual repeating HUD trait through
-the shared owner. JHM initialization now passes interpolation and reaches
-SetOnHitEventHandler. The rest
-of the authored HUD, complete hit markers and MCM remain unverified.
+The requested current trait screenshot is
+`local/recordings/ttw-current-opening-20261001/TTW-owned-traits-flat-20261001.png`.
+The requested current-build video is
+`local/recordings/ttw-current-opening-20261001/flat-traits-birth-handoff-20261001.mp4`.
+It contains forty seconds of ordinary trait Done input, late birth dialogue and
+camera release, with stereo audio. The 1280x720, 30fps export retains repeated
+latest frames (816 unique draw IDs across 1,200 frames); exact audiovisual timing
+remains unverified. The player stays in the birth room throughout. Recording is
+off and temporary inspection frames are removed. The complete journey reel is
+pending ordinary campaign progress.
 
-Default JohnnyGuitar render callbacks now retain source identities in the shared
-C# event owner. The native adapter invokes them before drawing, including paused
-menus, once per global frame rather than per viewport. A rendered fixture with
-two additional viewports checks source expressions, inactive sessions, cold
-owner replacement and disconnection on retirement, with recording off.
-Registration is idempotent; removal takes effect during dispatch, and failures
-retain their executed prefix without frame-by-frame retries. Nonzero flags that
-select additional retail render phases remain visibly unbound.
-NVSE integer remainder, bitwise AND/OR, shifts and compound assignments now
-use signed 64-bit truncation; binary/hexadecimal literals retain their 32-bit
-contract. Focused execution, precedence, undefined-operation and migration
-checks pass. Parser 8 preserves all 446 original owners in the genuine owned checkpoint
-through cold restoration, with both protected source saves unchanged.
-
-Script arrays now belong to the shared C# value store. Packed lists, numeric
-maps and string maps preserve typed elements, alias identity and nested graphs.
-Indexed expressions, core construction/mutation/copy commands and array function
-arguments/returns execute through ordinary script owners. Recursive and failed
-function frames release temporary roots; cold restoration rejects malformed or
-unowned graphs. Save v23 retains array identities alongside v22 object-animation
-state; earlier supported saves still load. Focused scalar/array/function and
-native activation/key-callback/cold-reference checks pass, as does the complete
-required runtime gate. The genuine owned checkpoint retains all 446 quest
-script clocks, failures and progression through parser 1 to 8 and another cold
-restore; its file remains unchanged.
-The selected JAM source audit now has 11 parser failures among 52 scripts.
-Its JBT initializer registers the winning render function and mutates its perk
-parameters before reaching hit-event registration; the source execution
-audit does not establish a working bullet-time module. JHM reaches the missing
-hit-event owner.
-Complete JAM/MCM remains unverified.
-The TTW source audit admits all but five of 1,263 entry-plugin scripts;
-its opening, campaign progression and travel remain unverified.
-
-Source object animation now binds PlayGroup and IsAnimPlaying to each resident
-reference's authored NIF manager. Queued and immediate selection, authored loop
-starts, source text-key order, callback changes and independent clocks have native
-checks. Alternative looping sequences no longer reject the selected window.
-Actor skeleton groups and ambiguous/absent object groups remain explicit failures.
-Save v22 retains selected object clocks, consumed start events and pending groups;
-v21 and earlier supported saves still load. Cold restoration, warm eviction,
-replacement presentation and source mismatch checks pass.
-
-Conservative recovery resumes only exact legacy missing-PlayGroup faults whose
-unchanged block proves that the failed command preceded any other mutation.
-All 51 selected saved plant failures recover in the owned-data audit. All six
-source script/model families grant their authored rewards once through native
-activation, retain destroyed state and reject duplicate rewards across cold
-restoration. The selected window supplies the seventh tested source model.
-The complete runtime gate and reference-presentation regression check pass.
-
-Kill/KillActor with an optional killer now use the same health/death inventory
-transition as combat. An omitted killer remains unknown, including delayed
-OnDeath and cold saves. Repeated calls on a corpse add no loot or death event.
-Native presentation detects a scripted death and activates its source ragdoll.
-The owned native fixture recovers all 14 selected old Kill failures and checks
-source corpse scripts, a living creature's ragdoll and its cold continuation.
-Inherited actor script locals, including qualified reads, now resolve through
-the retained world template owner. Synthetic checks cover both ownership paths,
-filtered death events, conserved loot and rejected earlier mutations. Essential
-recovery, player script death and limb/cause parameters remain visible boundaries.
-
-An ordinary exported flat Continue on a copy of the genuine Primm checkpoint
-recovers ten resident plant faults and 23 prior read faults. Ordinary traversal,
-mouse aim and activation harvest reference FalloutNV.esm:157e35 once, adding one
-Coyote Tobacco Chew. Manual saving retains its destroyed flag, source local and
-completed Forward animation in v22. Cold exported Continue restores all three;
-another ordinary activation attempt leaves the inventory count at one.
-A later exported flat Continue also resumes 14 resident Kill faults; their
-corpse locals and destroyed flags complete, and Tobacco remains at one.
-The bot now observes destroyed state as an interaction outcome; some source
-contact aiming and final navigation segments still need work.
-
-Session retirement now drains title indexing and exterior source readers before
-releasing the world, records and detached model prototypes. Ordinary exported
-flat Quit on the copied checkpoint exits with code 0 after releasing 349
-prototypes; the previous direct Quit reproduced native heap corruption.
-Main-menu return, another Continue, fresh-title Quit and native window close
-also exit cleanly, with the source checkpoint unchanged.
-Cell destruction releases its compositor pipeline, shader and samplers on the
-rendering thread even when managed references retain the effect. Four successive
-synthetic rendered replacements and repeated/unused release checks pass without
-GPU RID leaks. The full runtime gate and owned script-death regression pass.
-Two ObjectDB exit warnings remain visible in the selected owned runs; their
-owners still need diagnosis. One repeated exported reload also crashed during
-native triangle-mesh construction before gameplay resumed; a subsequent complete
-session audit passed. This intermittent construction failure remains open.
-
-## Next owners
-
-Bind CG01 stage 0's reached SetSoundSourceFile through a shared, source-validated
-sound-path override owner and invalidate existing descriptor caches. Then rerun
-ordinary input through the childhood transfer and toddler sequence. Preserve
-the shared saved youth policy, appearance invalidation and modal trait-menu pause.
-Preserve source-validated player-package cancellation and camera release.
-Preserve the shared source-sound stopping and independent loop ownership.
-Complete competing subtitle
-selection/queue behavior, and resolve the authored ragdoll
-accumulation-root rotation failure on the post-face cold load.
-Preserve deferred empty completion, verified face geometry and MatchRace family/base/cold behavior and
-source HUD visibility, ordinary gender,
-parent-dialogue, accepted-name and gene-projector selection/close prefix, source player packages, completed
-screen-blood and activation-feedback behavior. Complete further source dialogue
-arbitration/arguments and matched INFO-result/SayToDone timing. Complete source screen-blood lighting/flare,
-color transfer and XR final-eye presentation without hiding their telemetry gaps.
-Complete the
-remaining script audio routes, environment/submersion and
-output routing without treating the audible birth voice as full audio support.
-Measure source voice/lip/output clocks and camera frame intervals; distinguish
-runtime hitches, telemetry overruns and recording readback/repeated frames before
-changing timing or claiming smooth playback.
-Complete source save eligibility, actor cold clocks and remaining interaction
-continuations. Extend the reached-state checkpoints with those owners and run
-slow ordinary flat and VR input checks after source-validated loading. Keep
-unbound active continuations visible rather than saving incomplete states. Complete
-live refresh for the retained numeric-setting consumers exposed in telemetry.
-Preserve CG00's stage-5/package and birth-CELL movement prefixes. Trace and repair
-the loaded birth CELL's missing runtime references and two unbound non-camera clip
-targets. Complete player package traversal, editor origins, event scripts/topics
-and end/removal/cancellation animations without named-location success paths. Complete
-the deferred XP level-cap, allocation, LevelUpMenu and reward
-owners, plus TTW radio-worldspace dependency behavior, without discarding failed
-prefixes. TTW's source
-opening choice must lead into Fallout 3's authored character creation, exit,
-Megaton, bot traversal to Union Station and ticketed travel into the Mojave
-opening. Continue to Benny and verify the selected humbling mod's source reset,
-confiscation, recovery and persistence. The official Benny package 13.05 is now
-downloaded and extracted in a separate owned mod folder; it is not yet selected
-by the test profile, and source mounting and behavior remain open.
-Continue through
-ordinary input and persistent saves; queued source transfers alone do not prove
-that route. Implement each reached extension/effect/package/menu owner.
-Keep a continuous ordinary route/event log and cold-save checkpoints. Produce
-the requested edited journey video from verified footage, with labeled excerpts,
-side-by-side moments and wipes; editing cannot substitute for missing gameplay.
-
-Trace JAM's remaining actor-effect, input-control and hit-event failures through ordinary
-native owners. Chained reference expressions, lambdas, further operators and
-remaining array operations still reject syntax/behavior. Typed strings/arrays,
-INI and auxiliary state, UIO injection and UI component state already exist; they do not
-establish a working MCM menu or any complete JAM module. Implement the next
-reached missing owner, including ordinary input and persistent effects. Keep
-winning HUD/menu rendering, original crafting/barter/character-creation screens
-and Classic controls in scope; the float bridge covers existing supported HUD
-tiles and does not yet draw every mod component or bind string overrides.
-Bind remaining perk entry-point consumers, ranks and condition scopes rather
-than treating successful parameter mutation as complete perk behavior.
-Keep the complete TTW opening, campaign progression, travel and dependency
-semantics in scope; do not remove launch gates on the strength of source audits.
-Startup placement now follows the winning configured quest. The native creation
-contracts still assume New Vegas's Doc Mitchell flow; replace those remaining
-assumptions with shared source owners before claiming playable Fallout 3 creation.
-Complete the remaining source LoadingMenu animation/progress components and
-verify its selection, placement and timing against matched retail evidence.
-
-Preserve the actual flat run's remaining script and actor failures. Essential
-recovery and additional death-command parameters need their own source-backed
-behavior. The reached GetReference Player compiled binding, NPC radio,
-creature package condition 136 and further
-patrol/sandbox/eat/sleep procedures remain visible failures. Preserve all quest,
-combat, mod and campaign objectives while fixing those owners.
-
-Weapons still need the Flamer's source strip-particle decoder, thrown recovery,
-remaining projectile effects, mines/remote triggers, bare fists and ammunition
-variants. Blast rules, hit events, death XP, leveling/perks, radiation/addiction,
-crime, crafting/barter completeness, JAM/MCM and TTW remain open. Do not replace
-these requirements with selected component passes.
-
-Selected exported flat shutdown paths now pass; broader session stability,
-streaming spikes and rendering/audio fidelity remain open. Recording stays off
-during development except for a requested visual check.
-
-## Candidate and private continuation
-
-Current package-removal checks are `tmp/package-removal-contract.log`,
-`tmp/package-removal-owned.stdout.log` and `tmp/package-removal-runtime-gate.log`.
-The ordinary run is `tmp/development-lab/ttw-package-removal-20261001/`.
-It reaches stage 100 through seventeen speeches and stops the birth loop,
-removes the camera package, disables Dad and stops CG00. The retained next fault
-is SetPCYoung, before CG01. The trait menu remains unpaused while its source
-background progression executes. Interval overruns stay visible; recording is
-off. The camera fixture checks same/different pending cancellation, late frames,
-repeated removal and cold cleared state. The full required runtime gate and
-diff checks pass; both protected saves retain their source hashes. Ordinary
-Quit drains source readers. Current sound checks are `tmp/source-sound-contract.log`,
-`tmp/source-stop-owned.stdout.log` and `tmp/source-sound-runtime-gate.log`.
-The ordinary run is `tmp/development-lab/ttw-source-stop-20261001/`;
-its selected post-stage-100 state is `tmp/source-stop-post100.private.json`.
-The sound owner completes the source command and its following fade sound.
-State-publication interval
-overruns remain visible. The session quits through ordinary controls with source
-readers drained. The complete required runtime gate and diff checks pass;
-both protected saves retain their source hashes. Recording is off; the gurney
-exit remains unverified.
-Current speech checks are `tmp/actor-speech-concurrent.stdout.log`,
-`tmp/actor-speech-empty.stdout.log` and `tmp/actor-speech-runtime-gate.log`;
-the concurrent component fixture retains both actual voices and failed prefixes.
-The selected current
-trait frame is `local/recordings/ttw-ui-20261001/TTW-owned-traits-flat.png`;
-its temporary frame files are removed. Recording is off. No gurney exit, later
-campaign state or matched retail/XR parity is proved. Current face checks are
-`tmp/match-face-contract.log`, `tmp/match-face-owned.log`
-and `tmp/match-face-runtime-gate.log`; the cold audit is
-`tmp/match-face-checkpoint.log`. `tmp/match-face-preset-order.log` confirms all
-4,220 native NPC list entries against first registration in a matched vanilla/DLC
-graph; TTW ordering comes from its own reordered files. The ordinary flat run is
-`tmp/development-lab/ttw-face-20261001-r2/`; it accepts a Hispanic female selection,
-executes the four face commands, completes twelve speech commands and reaches
-CG00 stage 80. Its post-face checkpoint retains face/root state on paused reload
-but reports an authored ragdoll rotation gap, so full cold acceptance remains open.
-The run quits with readers drained. Recording remains off. Both protected saves
-retain their recorded hash.
-
-The public-facing local experimental candidate remains
-`local/releases/OpenNV-0.1.0-experimental.20260927.5-windows-x64`, from runtime
-commit `06ffd2cadd1f0e0a180882a666489503bea4aa30`. It predates these repairs.
-Update the dated candidate after stable publication. Retain the requested September 27
-weapon and companion reels; they are selected simulator/flat footage.
-The refreshed Windows development executable is
-`tmp/development-runtime/windows/OpenNV.exe` and includes the September 30 session
-repairs; it predates the shared-array and render-callback changes.
-
-Current private flat checks are in
-`tmp/development-lab/flat-polish-20260930-animation/` and its `-cold` continuation.
-Selected native audit logs are `tmp/object-animation-owned.log`,
-`tmp/object-animation-native-contract.log`,
-`tmp/object-animation-presentation-regression.log` and
-`tmp/object-animation-runtime-gate.log`. These are private diagnostics.
-Script death checks are in `tmp/scripted-death-owned.log`,
-`tmp/scripted-death-contract.log` and `tmp/scripted-death-runtime-gate.log`.
-Session checks are in `tmp/native-shutdown-owned.log`,
-`tmp/native-shutdown-runtime-gate.log` and `tmp/native-session-retirement/`.
-Array checks are in `tmp/jam-array-contract.log`,
-`tmp/jam-array-native-contract.log`, `tmp/jam-array-runtime-gate.log`,
-`tmp/jam-array-owned-save.log`,
-`tmp/jam-array-source.private.json` and `tmp/jam-array-execution.private.json`.
-Render checks are in `tmp/jam-render-contract.log`,
-`tmp/jam-render-native.stdout.log`, `tmp/jam-render-native.stderr.log`,
-`tmp/jam-render-owned-save.log`, `tmp/jam-render-runtime-gate.log`,
-`tmp/jam-render-source.private.json` and `tmp/jam-render-execution.private.json`.
-UI checks are in `tmp/jam-ui-contract.log`, `tmp/jam-ui-native-clock.log`,
-`tmp/jam-ui-native-pixels.stdout.log`, `tmp/jam-ui-native-pixels.stderr.log`,
-`tmp/jam-ui-owned-save.log`, `tmp/jam-ui-runtime-gate.log` and
-`tmp/jam-ui-execution.private.json`.
-Perk checks are in `tmp/jam-perk-contract.log`, `tmp/jam-perk-script-contract.log`,
-`tmp/jam-perk-owned-save.log`, `tmp/jam-perk-runtime-gate.log` and
-`tmp/jam-perk-execution.private.json`.
-Current transfer checks are `tmp/ttw-player-moves-native.stdout.log`,
-`tmp/ttw-player-moves-native.stderr.log`, `tmp/ttw-player-moves-runtime-gate.log`,
-`tmp/ttw-player-moves-owned.private.json` and `tmp/ttw-player-moves-owned-save.log`.
-These fixtures do not establish a campaign playthrough.
-Current menu checks are `tmp/ttw-menu-script-contract.log`,
-`tmp/ttw-menu-owned.private.json`, `tmp/ttw-menu-owned-save.log`,
-`tmp/ttw-menu-source.private.json` and `tmp/ttw-menu-runtime-gate.log`.
-Current startup checks are `tmp/source-quest-startup-contract.log`,
-`tmp/source-quest-startup-plugin-contract.log`,
-`tmp/source-quest-startup-owned.private.json`,
-`tmp/source-quest-startup-cold-save.log` and
-`tmp/source-quest-startup-runtime-gate.log`. The ordinary flat session is
-`tmp/development-lab/ttw-startup-20260930-final`, with the selected movie/failure
-check in `tmp/development-lab/ttw-startup-20260930-run4`. Their retained failures
-identify the next source owners. The requested current-build screenshot is
-`local/recordings/ttw-startup-20260930/TTW-starting-choice-flat.png`.
-Current loading checks are `tmp/loading-screen-owned.private.json`,
-`tmp/loading-screen-native.stdout.log`, `tmp/loading-screen-native.stderr.log`,
-`tmp/loading-screen-cold-save.log` and `tmp/loading-screen-runtime-gate.log`.
-The fresh ordinary HUD run is `tmp/development-lab/ttw-birth-hud-20261001-final`.
-Its `hud.private.json` records movement disabled, HP/AP/reticle hidden, retained
-rollover control enabled, no activation prompt and active owned speech/subtitles.
-The inspected requested frame is
-`local/recordings/ttw-birth-20261001/TTW-birth-HUD-controls-flat.png`.
-Startup telemetry interval overruns remain visible; a subsequent successful
-publication clears its fault marker. Recording stays off, and temporary capture
-pixels/metadata are removed. Current checks are `tmp/hud-controls-build.log`,
-`tmp/hud-controls-owned.log` and `tmp/hud-controls-runtime-gate.log`.
-The earlier ordinary actor run is `tmp/development-lab/ttw-birth-actors-20261001`.
-It selects Girl and completes eight source speech commands. Source controls
-accept a name and the projector selection. The current post-face run above
-extends this prefix through stage 80.
-Gender-question samples retain owned Dad/Dr. Li poses and stationary Idle with
-no actor package errors. Startup
-telemetry reports interval overruns, and other reference
-GetLinkedRef faults, 83 missing runtime references and two camera-body targets
-remain visible. The run quits with source readers drained. Current checks are
-`tmp/actor-contract.log`, `tmp/actor-owned-audit.log` and `tmp/actor-runtime-gate.log`.
-The inspected private projector frame is
-`local/recordings/ttw-birth-20261001/TTW-gene-projector-flat.png`.
-The inspected private
-MP4 is `local/recordings/ttw-birth-20261001/flat-ttw-birth-actors-20261001.mp4`:
-30 seconds, 1280x720, 900 output frames, 616 distinct source draws and process
-audio. Its sidecar retains repeated frames; no audiovisual parity is claimed.
-Recording is off and temporary inspection frames are removed. Current checks are
-`tmp/sayto-contract.log`, `tmp/sayto-declarations.log`,
-`tmp/sayto-subtitles-owned.log` and `tmp/sayto-runtime-gate.log`.
-The selected unfinished birth frame is
-`local/recordings/ttw-birth-20261001/Vault-101-birth-incomplete-flat.png`; temporary
-frame data is removed. That earlier frame exposes lighting and the former HUD
-visibility gap; it does not establish scene parity.
-Current activation-feedback checks are `tmp/no-activation-contract.log`,
-`tmp/no-activation-owned-native.log` and `tmp/no-activation-runtime-gate.log`.
-The source descriptor/default/persistence investigation remains outside the
-repository in the private Ghidrust no-activation-sound dossier. Current effect checks are `tmp/screen-blood-contract.log`,
-`tmp/screen-blood-default-contract.log`, `tmp/screen-blood-owned-native.log` and
-`tmp/screen-blood-runtime-gate.log`. The isolated native fixture retains no frames;
-the ordinary run retains its next fault and no manual-save attempt.
-The prior numeric-setting run's CREATE NEW SAVE attempt retains the prior-save
-requirement failure; saving was not retried in this effect check. The session
-quit through ordinary input with source readers drained. One transient native
-state-write interval loss and a file-replacement loss remain retained; later
-state samples resumed. Audio checks are
-`tmp/script-sounds-contract.log`, `tmp/script-sounds-owned-native.log` and
-`tmp/script-sounds-runtime-gate.log`; the mixer fixture retains no samples or frames
-and cannot establish endpoint audio or campaign parity. Numeric checks are
-`tmp/numeric-settings-contract.log`, `tmp/numeric-settings-owned.private.json` and
-`tmp/numeric-settings-runtime-gate.log`; cold setting checks are explicitly component
-evidence, not a continued Fallout 3 campaign. Package checks are
-`tmp/player-package-contract.log`, `tmp/player-package-owned-native.log`,
-`tmp/player-package-cold-save.log` and `tmp/player-package-runtime-gate.log`.
-Native cold/camera checks are explicitly isolated owned component evidence, with
-recording off. Current change checks are
-`tmp/player-package-transition-contract.log`,
-`tmp/player-package-transition-baseline.log`,
-`tmp/player-package-transition-owned-native.log` and
-`tmp/player-package-transition-runtime-gate.log`. They cover cold change clocks,
-source drift, latest pending assignments and frame remainders in isolated native
-components, not a cold Fallout 3 campaign. Character checks are
-`tmp/character-generation-contract.log`, `tmp/character-generation-owned.private.json`,
-`tmp/character-generation-cold-save.log` and `tmp/character-generation-runtime-gate.log`.
-The owned command audit is explicitly isolated component evidence. Recording is
-off. The flat route
-check in `tmp/development-lab/loading-policy-door-20260930` retained a bot capsule
-route/segment failure near Nash before activation; it is not a successful transfer.
-The copied interior checkpoint check in
-`tmp/development-lab/loading-policy-interior-20260930` also stopped at navigation
-before activation. Both sessions quit through ordinary input with source readers
-drained. Broader transfer/loading acceptance remains open.
-
-Do not change `local/playtest-20260927-world/save.json` or
-`local/playtest-20260920-companion/save.json`. Both still hash to
+Both protected saves (`local/playtest-20260927-world/save.json` and
+`local/playtest-20260920-companion/save.json`) must remain unchanged, with SHA256
 `800A37CC6C97C543393A544229C4E71ACB213B45C12FC4584EF3E70E94E2FBB7`.
-Do not retry the previously rejected temporary-image deletions.
+Use fresh private runs and preserve all visible failure state.

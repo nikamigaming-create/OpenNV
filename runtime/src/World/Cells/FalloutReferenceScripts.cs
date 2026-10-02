@@ -550,10 +550,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     FalloutScriptSounds.SystemFlag(Number(arguments[1])));
                 return;
             }
-            if (parts.Length == 1 && operation == "stopsound")
+            if (parts.Length == 1 && operation is "stopsound" or "setsoundsourcefile" or "getsoundsourcefile")
             {
-                if (arguments.Count is < 1 or > 2) throw new InvalidDataException("StopSound requires a sound and optional object reference.");
-                FalloutNvseNumericExpression.EvaluateValue(["StopSound", .. arguments], values, Function, UserFunction);
+                FalloutNvseNumericExpression.EvaluateValue([parts[^1], .. arguments], values, Function, UserFunction);
                 return;
             }
             if (parts.Length == 1 && operation == "setnoactivationsound")

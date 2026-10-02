@@ -152,6 +152,7 @@ public partial class RuntimeCoordinator
             }).ToArray(),
             speech = _nativeOpeningStageDriver?.SpeechState,
             soundVoices = _nativePluginStack?.SoundVoices.State,
+            soundPaths = _nativePluginStack?.SoundPaths.State,
             questProgress = _nativeOpeningStageDriver?.Quests.ProgressState,
             conversation = _nativeOpeningStageDriver?.ConversationState,
             questScripts = _nativeQuestScripts?.State,

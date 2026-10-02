@@ -28,7 +28,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
     private readonly Dictionary<string, MeshInstance3D> _geometry;
     private readonly Dictionary<string, Action> _actions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _input = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, FalloutSoundRecord> _sounds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (FalloutSoundRecord Source, long Revision)> _sounds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly FalloutSoundRandomState _soundRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     private FalloutNativeSpecialState _state;
@@ -322,13 +322,13 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
 
     private void Play(string editorId, bool surviveMenu = false)
     {
-        if (!_sounds.TryGetValue(editorId, out var descriptor))
+        if (!_sounds.TryGetValue(editorId, out var entry) || entry.Revision != _records.SoundPaths.Revision(entry.Source.FormKey))
         {
-            var record = _records.EffectiveRecords("SOUN").Single(record => record.ReadSubrecords()
-                .Where(row => row.Signature == "EDID").Any(row => Encoding.ASCII.GetString(row.Data.Span).TrimEnd('\0') == editorId));
-            _sounds.Add(editorId, descriptor = FalloutSoundRecordReader.Read(record));
+            var record = FalloutSoundRecordReader.Find(_records, editorId);
+            entry = (FalloutSoundRecordReader.Read(_records, record.FormKey), _records.SoundPaths.Revision(record.FormKey));
+            _sounds[editorId] = entry;
         }
-        var player = NativeOwnedSoundPlayback.CreateMenu(descriptor, _records, RuntimeLiveContentSource.Current!, _soundRandom);
+        var player = NativeOwnedSoundPlayback.CreateMenu(entry.Source, _records, RuntimeLiveContentSource.Current!, _soundRandom);
         (surviveMenu ? GetTree().Root : (Node)this).AddChild(player);
         player.Finished += player.QueueFree;
         player.Play();

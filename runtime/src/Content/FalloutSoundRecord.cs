@@ -223,9 +223,15 @@ internal static class FalloutSoundRecordReader
 
     internal static FalloutSoundRecord Read(
         FalloutPluginStack stack,
-        FalloutFormKey formKey) => Read(stack.GetEffective(formKey));
+        FalloutFormKey formKey)
+    {
+        var record = stack.GetEffective(formKey);
+        return record.Signature == "SOUN" ? Read(record, stack.SoundPaths.Read(formKey).File) : Read(record);
+    }
 
-    internal static FalloutSoundRecord Read(FalloutPluginRecord record)
+    internal static FalloutSoundRecord Read(FalloutPluginRecord record) => Read(record, null);
+
+    private static FalloutSoundRecord Read(FalloutPluginRecord record, string? currentFile)
     {
         ArgumentNullException.ThrowIfNull(record);
         if (record.Signature == "SNDR")
@@ -237,7 +243,8 @@ internal static class FalloutSoundRecordReader
         EnsureKnownRows(record, rows);
         var editorId = DecodeText(record, Single(record, rows, "EDID").Data.Span, "EDID");
         var pathRow = Single(record, rows, "FNAM");
-        var fileName = DecodeText(record, pathRow.Data.Span, "FNAM");
+        var sourceFile = DecodeText(record, pathRow.Data.Span, "FNAM");
+        var fileName = currentFile ?? sourceFile;
         if (string.IsNullOrWhiteSpace(fileName))
             throw Error(record, "FNAM is empty");
         var logicalPath = FalloutBsaArchive.CanonicalPath($"sound\\{fileName}");

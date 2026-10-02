@@ -62,6 +62,7 @@
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutSoundPaths.cs" Link="FalloutSoundPaths.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPerkParameters.cs" Link="FalloutPerkParameters.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
