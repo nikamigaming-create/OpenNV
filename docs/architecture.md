@@ -136,6 +136,11 @@ head model even when their export omits biped parent markers. Their source
 inverse bind and the receiving animated head remain authoritative.
 Rigid biped head equipment uses its separate source basis for explicit or
 omitted head parent markers, including owned eyeglass slots.
+
+[Actor animation resources](actor-animation-resources.md) share a content-owned
+KF group/variant index across player, combat and package presentation. Exact
+resources retain priority; unique authored suffixes require compatible exported
+group metadata, while ambiguous selection stays unbound.
 [Model alternate textures](model-texture-indices.md) use the source geometry's
 scene traversal index independently of its stored label, sharing binding between
 actor and equipped weapon materials.

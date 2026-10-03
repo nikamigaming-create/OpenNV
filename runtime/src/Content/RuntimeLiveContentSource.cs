@@ -10,7 +10,7 @@ internal sealed record FalloutInstallationSetting(string Section, string Key, st
 /// Reads the selected installation directly. It never writes or restores a
 /// derived retail-content inventory.
 /// </summary>
-internal sealed class RuntimeLiveContentSource : IDisposable
+internal sealed partial class RuntimeLiveContentSource : IDisposable
 {
     internal const string FalloutNewVegasGame = "fallout-new-vegas";
     internal const string Fallout3Game = "fallout-3";

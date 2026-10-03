@@ -125,6 +125,11 @@ if (args is ["--inventory-command-contracts"])
     InventoryCommandContracts.Run();
     return;
 }
+if (args is ["--animation-resource-contracts"])
+{
+    AnimationResourceContracts.Run();
+    return;
+}
 if (args is ["--audit-player-start-inventory", var inventoryRoot])
 {
     OwnedInventoryProbe.Run(inventoryRoot);
@@ -533,6 +538,7 @@ else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var r
     OwnedScriptRecoveryProbe.Run(recoveryRoot, recoverySave, recoveryOutput);
 StageAndInventoryContracts.Run();
 InventoryCommandContracts.Run();
+AnimationResourceContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();
 DestructionContracts.Run();

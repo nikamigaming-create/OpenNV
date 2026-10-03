@@ -5,7 +5,7 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
-Checked PR120 is merged. Main binds real reference targets and
+Checked PR121 is merged. Main binds real reference targets and
 supported capsule arrival regions, retains NPC-to-NPC source dialogue links and
 participant leases, and plays listener IDLEs on the actual listener. Ordinary
 native input completes the intercom exchange and subsequent Dad conversation,
@@ -23,14 +23,24 @@ and owned read-only door-state checks pass. Live ordinary bot input approaches
 and activates the real diner exit while retaining its Jonas goal. The new cold
 replay passes its original guard, completes source opening and walks through;
 the next owned NAVM stair-route refusal remains visible. Subsequent user traversal
-reaches Jonas/stage42, where the first source RemoveItem retains the missing
-non-player scripted inventory owner. The current shared AddItem/RemoveItem
-candidate passes NPC/creature/container count, worn-item, variant, failed native
-retirement and cold checks plus the selected original stage42 inventory slice.
-The generic head-equipment basis candidate admits explicit/omitted head Prn and
+reaches Jonas/stage42. The published shared AddItem/RemoveItem owner passes
+NPC/creature/container count, worn-item, variant, failed native retirement and
+cold checks plus the selected original stage42 inventory slice.
+The generic head-equipment basis admits explicit/omitted head Prn and
 eyeglass slots; synthetic, existing FaceGen regression and owned Jonas glasses
-checks pass, including the required integrated candidate gate. Fresh optimized
-cold replay is active; live suffix and checked publication remain pending. Early
+checks pass, including the required integrated gate. Fresh optimized cold replay
+completes the original stage42 suffix and all six stage44 commands, receiving
+and equipping the BB gun plus50 rounds. Its first grip assembly fails because
+the loader assumes an unsuffixed filename; actual first/third-person resources
+carry authored suffixes. The shared animation-resource candidate passes
+synthetic metadata/case/folder/cache/failure checks. The selected owned native
+BB-gun audit passes both source views, grip, equip/unequip, authored attack Hit,
+reload and projectile sockets without changing17 source resources or the genuine
+checkpoint. The required integrated gate passes. Fresh optimized cold replay
+completes42/44 and binds the actual drawn BB gun without a player presentation
+error. Ordinary range approach reaches Dad's original greeting, which retains
+unbound condition Fallout3.esm:01f9c9/1/0 before the first shot. Ordinary firing
+remains pending. Early
 native construction restores completed package lifecycles before
 selecting the saved base clock. The required integrated gate and selected final
 TTW intercom/inventory audits passed before checked publication. The new
