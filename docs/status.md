@@ -5,7 +5,7 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
-Checked PR118 is merged. The current candidate binds real reference targets and
+Checked PR119 is merged. Main binds real reference targets and
 supported capsule arrival regions, retains NPC-to-NPC source dialogue links and
 participant leases, and plays listener IDLEs on the actual listener. Ordinary
 native input completes the intercom exchange and subsequent Dad conversation,
@@ -19,12 +19,23 @@ CG01:80 with the source equipment; cold Continue reaches birthday12 and ordinary
 Tab opens the original Pip-Boy Stats page. Items selection and closing also work.
 Legacy checkpoints retain missing initialization state. The bot queues bounded
 capsule planning and ordinary source-door subgoals; synthetic queued/door cases
-and owned read-only door-state checks pass, while live route-door traversal is
-pending. Early native construction restores completed package lifecycles before
+and owned read-only door-state checks pass. Live ordinary bot input approaches
+and activates the real diner exit while retaining its Jonas goal. The new cold
+replay passes its original guard, completes source opening and walks through;
+the next owned NAVM stair-route refusal remains visible. Subsequent user traversal
+reaches Jonas/stage42, where the first source RemoveItem retains the missing
+non-player scripted inventory owner. Jonas's accessory attachment is also open. Early
+native construction restores completed package lifecycles before
 selecting the saved base clock. The required integrated gate and selected final
-TTW intercom/inventory audits pass; publication is pending. The fresh cold replay
-retains an unsupported Sandbox package at CG02:35; the older genuine party
-checkpoint reaches40. This difference remains visible. The BB-gun lesson,
+TTW intercom/inventory audits passed before checked publication. The new
+[package reevaluation candidate](source-package-evaluation.md) retains source
+selection independently of later native procedure execution. Its isolated
+owned command audit passes; fresh ordinary cold replay now reaches40 with no
+retained stage-result error. Sandbox remains unowned and unsaveable.
+The shared GetIsReference candidate passes synthetic identity/scope/cold checks
+and original diner guards at stages39/40. Scalar/vector TBC passes synthetic and
+selected source controller-channel checks. Ordinary diner activation/traversal
+and the new integrated gate pass; checked publication remains pending. The BB-gun lesson,
 birthday completion, G.O.A.T.,
 Megaton, train and Mojave remain unreached.
 

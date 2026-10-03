@@ -121,6 +121,11 @@ public partial class NativeActorPerformanceAudit
             // Source quest advancement replaces the dialogue procedure.
             quests.EnterStage(quest, 80); actor.EvaluatePackages(false);
             if (actor.CurrentPackage == package.FormKey || actor.AiError is not null) throw new InvalidDataException("Package replacement fixture failed source selection.");
+            var pendingRevision = JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Revision").GetInt64();
+            retired();
+            if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Revision").GetInt64() != pendingRevision)
+                throw new InvalidDataException("Old audio completed a pending source replacement.");
+            actor._Process(0);
             var replacedRevision = JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Revision").GetInt64();
             retired();
             if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Revision").GetInt64() != replacedRevision)

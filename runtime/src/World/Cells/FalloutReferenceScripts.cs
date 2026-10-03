@@ -529,6 +529,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     return FalloutReferenceIdentity.Base(records, Target()) == requested ? 1 : 0;
                 })
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getisreference")
+                return new([FalloutScriptArgumentKind.Identifier], arguments =>
+                    FalloutReferenceIdentity.Matches(records, Target(), Reference(arguments[0].Identifier!)) ? 1 : 0)
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getvampire")
                 return new([], arguments =>
                 {

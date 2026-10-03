@@ -37,6 +37,7 @@ public partial class NativeActorPerformanceAudit
                     var revision = JsonSerializer.SerializeToElement(actor.AiState, json).GetProperty("packageEvents").GetProperty("revision").GetInt64();
                     quests.EnterStage(quest, stage);
                     actor.EvaluatePackages(false);
+                    actor._Process(0);
                     var entered = JsonSerializer.SerializeToElement(actor.AiState, json);
                     var zeroArrival = !actor.Traveling && entered.GetProperty("packageEvents").GetProperty("done").GetBoolean();
                     for (var frame = 0; actor.Traveling && frame < 60 * 120; frame++) actor._Process(1.0 / 60);

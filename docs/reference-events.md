@@ -4,6 +4,15 @@ The ordinary native player ray and source primitive contacts feed
 `FalloutReferenceScripts`, the same C# owner exercised by the development lab.
 Reference locals outlive the Godot nodes. The adapter has no quest/stage table.
 
+GetIsReference compares the actual calling reference with its compiled or
+reference-variable argument. Implicit, explicit and typed receivers share that
+identity; GetIsID separately compares base identity. Missing calling references,
+uncompiled names and base-form arguments remain failures. Synthetic caller/base,
+grouped-condition, typed-receiver and cold checks pass. The selected original
+door script suppresses default activation before its quest handoff and dispatches
+it afterward without inventing native opening/collision completion.
+See [GECK GetIsReference](https://geckwiki.com/index.php/GetIsReference).
+
 ## Admitted behavior
 
 - Frame events are evaluated in authored block order. Ordinary activation is

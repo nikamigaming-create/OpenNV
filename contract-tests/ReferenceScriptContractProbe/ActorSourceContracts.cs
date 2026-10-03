@@ -56,6 +56,8 @@ internal static class ActorSourceContracts
                     Record("REFR", 0x90a, Field("NAME", BitConverter.GetBytes(0x846u)), Field("DATA", new byte[24])))),
                 Record("SCPT", 0x890, Field("SCTX", Text("begin OnActivate\nif GetUnconscious\nSetUnconscious 0\nelse\nSetUnconscious 1\nendif\nend"))),
                 Record("SCPT", 0x891, Field("SCRO", BitConverter.GetBytes(0x903u)),
+                    Field("SCRO", BitConverter.GetBytes(0x905u)),
+                    Field("SCRO", BitConverter.GetBytes(0x840u)),
                     Field("SCRO", BitConverter.GetBytes(0x14u)),
                     Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player && player.GetIsID 7 == 1 && GetIsID 0x845 == 1\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
                 Record("SCPT", 0x892, Field("SCRO", BitConverter.GetBytes(0x900u)),
@@ -309,6 +311,7 @@ internal static class ActorSourceContracts
                 "GetPCIsSex retained stale gender or changed ownership with the actor scope.");
             Reject(() => playerConditions.Evaluate(playerSex with { Argument1 = 2 }));
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => { }));
+            ReferenceIdentityQueryContracts.Verify(records, world);
             Check(scripts.Activate(Key(0x904), Key(0x900)).Error is null && world.MapMarkerVisibility(Key(0x903)) == 0,
                 "GetActionRef confused a non-player activator with the compiled Player reference.");
             Check(world.MapMarkerVisibility(Key(0x903)) == 0 && scripts.Activate(Key(0x904), Key(0x14)).Error is null &&
