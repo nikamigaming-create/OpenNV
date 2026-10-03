@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Owned bitmap fonts](owned-font-byte-encoding.md) reverse the record string's
+byte encoding and apply the source quote normalization before shared glyph
+selection. Direct drawing and native FontFile retain source metrics and atlas
+ownership; native cache creation follows the selected fixed size.
+
 [Reference base identity](reference-base-identity.md) supplies the same winning
 reference/base mapping to dialogue GetIsID and ordinary scripts. Player,
 speaker, listener and explicit targets retain independent source ownership.

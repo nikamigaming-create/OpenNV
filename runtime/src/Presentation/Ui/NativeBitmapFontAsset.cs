@@ -13,8 +13,9 @@ internal sealed record NativeBitmapFontAsset(FalloutBitmapFont Font, Texture2D A
         var cacheSize = new Vector2I(size, 0);
         var result = new FontFile
         {
-            FontName = Font.TextureName,
+            // Metadata setters can create the native size cache.
             FixedSize = size,
+            FontName = Font.TextureName,
             AllowSystemFallback = false,
             GenerateMipmaps = false
         };
@@ -25,13 +26,14 @@ internal sealed record NativeBitmapFontAsset(FalloutBitmapFont Font, Texture2D A
         result.SetCacheScale(0, size, 1);
         for (var index = 0; index < Font.Glyphs.Count; index++)
         {
-            var glyph = Font.Glyphs[index];
-            result.SetGlyphAdvance(0, size, index, new Vector2(glyph.Advance, 0));
-            result.SetGlyphOffset(0, cacheSize, index, new Vector2(glyph.LeftBearing, -glyph.Ascent));
-            result.SetGlyphSize(0, cacheSize, index, new Vector2(glyph.Width, glyph.Height));
-            result.SetGlyphUVRect(0, cacheSize, index, new Rect2(glyph.Left * Atlas.GetWidth(), glyph.Top * Atlas.GetHeight(),
+            var codepoint = FalloutBitmapFont.Character(index);
+            var glyph = Font.Glyph(codepoint);
+            result.SetGlyphAdvance(0, size, codepoint, new Vector2(glyph.Advance, 0));
+            result.SetGlyphOffset(0, cacheSize, codepoint, new Vector2(glyph.LeftBearing, -glyph.Ascent));
+            result.SetGlyphSize(0, cacheSize, codepoint, new Vector2(glyph.Width, glyph.Height));
+            result.SetGlyphUVRect(0, cacheSize, codepoint, new Rect2(glyph.Left * Atlas.GetWidth(), glyph.Top * Atlas.GetHeight(),
                 (glyph.Right - glyph.Left) * Atlas.GetWidth(), (glyph.Bottom - glyph.Top) * Atlas.GetHeight()));
-            result.SetGlyphTextureIdx(0, cacheSize, index, 0);
+            result.SetGlyphTextureIdx(0, cacheSize, codepoint, 0);
         }
         return result;
     }

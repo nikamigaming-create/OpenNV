@@ -15,6 +15,10 @@ internal sealed record FalloutBitmapFont(float SourceSize, string TextureName, I
     private const int HeaderBytes = 296;
     private const int GlyphBytes = 56;
     private const int GlyphCount = 256;
+    private static readonly string Characters = CodePagesEncodingProvider.Instance.GetEncoding(1252)!
+        .GetString(Enumerable.Range(0, GlyphCount).Select(value => (byte)value).ToArray());
+    private static readonly IReadOnlyDictionary<char, int> Slots = Characters
+        .Select((character, slot) => (character, slot)).ToDictionary(value => value.character, value => value.slot);
 
     internal float Height => Glyphs.Max(glyph => glyph.Height);
     internal float Ascent => Glyphs.Max(glyph => glyph.Ascent);
@@ -23,8 +27,24 @@ internal sealed record FalloutBitmapFont(float SourceSize, string TextureName, I
     internal float TileBaseline => 2 * (Glyphs.Max(glyph => SourceSize - glyph.Ascent + glyph.Height) - SourceSize);
 
     internal float Measure(string text) => text.Sum(character => Glyph(character).Advance);
-    internal FalloutBitmapGlyph Glyph(char character) => character < GlyphCount
-        ? Glyphs[character] : throw new InvalidDataException($"Font has no decoded glyph for U+{(int)character:X4}.");
+    internal FalloutBitmapGlyph Glyph(char character)
+    {
+        var slot = GlyphSlot(character);
+        return slot < Glyphs.Count ? Glyphs[slot] :
+            throw new InvalidDataException($"Font has no decoded glyph for U+{(int)character:X4}.");
+    }
+
+    // Record text is decoded from Windows-1252; FNT entries are byte-indexed.
+    // The source text path normalizes only the four curly quote bytes before
+    // measuring and drawing. Other empty glyphs retain their authored advance.
+    internal static int GlyphSlot(char character)
+    {
+        if (!Slots.TryGetValue(character, out var slot))
+            throw new InvalidDataException($"Font has no decoded glyph for U+{(int)character:X4}.");
+        return slot switch { 0x91 or 0x92 => 0x27, 0x93 or 0x94 => 0x22, _ => slot };
+    }
+    internal static char Character(int slot) => (uint)slot < GlyphCount ? Characters[slot] :
+        throw new ArgumentOutOfRangeException(nameof(slot));
 
     internal static FalloutBitmapFont Read(ReadOnlySpan<byte> source)
     {

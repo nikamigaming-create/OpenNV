@@ -2,6 +2,9 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
+BitmapFontEncodingProbe.Run();
+if (args is ["--font-encoding-contracts"]) return;
+
 if (args is ["--inspect-idle-tree", var treeRoot, var modelPrefix])
 {
     RuntimeLiveContentSource.Configure(treeRoot, RuntimeLiveContentSource.FalloutNewVegasGame);

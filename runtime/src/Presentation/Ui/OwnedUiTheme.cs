@@ -26,8 +26,8 @@ internal static class OwnedUiTheme
             throw new InvalidOperationException("Owned UI font atlas could not be decoded.");
         var font = new FontFile
         {
-            FontName = authored.LogicalPath,
             FixedSize = fontSize,
+            FontName = authored.LogicalPath,
             AllowSystemFallback = false,
             GenerateMipmaps = false,
         };
