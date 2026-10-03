@@ -41,6 +41,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<bool>? _playerFemale;
     private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
     private Func<FalloutFormKey, int, float>? _actorValue;
+    private Func<FalloutFormKey, FalloutFormKey?>? _currentPackage;
     private Func<uint, uint>? _dialogueRandom;
     private FalloutReferenceWorld? _references;
     private Func<FalloutCondition, float>? _conditionContext;
@@ -182,7 +183,7 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutFormKey, FalloutSoundRandomState>? soundRandom = null, float unitsToMetres = 0, FalloutQuestState? quests = null,
         Func<bool>? playerFemale = null, Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
         Func<FalloutFormKey, int, float>? actorValue = null, Func<uint, uint>? dialogueRandom = null,
-        FalloutReferenceWorld? references = null)
+        FalloutReferenceWorld? references = null, Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
@@ -191,6 +192,7 @@ internal partial class RuntimeNativeSpeech : Node
         _playerFemale = playerFemale;
         _actorRace = actorRace;
         _actorValue = actorValue;
+        _currentPackage = currentPackage;
         _dialogueRandom = dialogueRandom;
         _references = references;
         _conditionContext = conditionContext;
@@ -294,7 +296,7 @@ internal partial class RuntimeNativeSpeech : Node
         var conditions = new FalloutDialogueConditions(_stack,
             _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), speaker.FormKey, identity,
             _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace,
-            listener: target, listenerIdentity: listenerIdentity);
+            listener: target, listenerIdentity: listenerIdentity, currentPackage: _currentPackage);
         var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate, random: _dialogueRandom);
         if (info is null)
         {

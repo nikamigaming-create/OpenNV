@@ -364,12 +364,9 @@ internal partial class RuntimeNativeNpc
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
         if (condition.Function == 161)
-            return FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, CurrentPackage, reference =>
-            {
-                var query = _aiWorld?.Get(reference).QueryCurrentPackage ??
-                    throw new NotSupportedException("AI current-package query has no active reference package owner.");
-                return query();
-            }) ? 1 : 0;
+            return FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, CurrentPackage,
+                reference => (_aiWorld ?? throw new NotSupportedException("AI current-package query has no reference world."))
+                    .CurrentPackage(reference)) ? 1 : 0;
         if (condition.RunOn == 0) return EvaluateOwnAiCondition(condition);
         throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.");
     }

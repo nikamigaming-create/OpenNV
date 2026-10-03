@@ -24,8 +24,11 @@ reference/base mapping to dialogue GetIsID and ordinary scripts. Player,
 speaker, listener and explicit targets retain independent source ownership.
 
 [Dialogue packages](source-dialogue-packages.md) share native NAVM/KF movement,
-source wait/trigger selection and INFO/audio/LIP completion. Current-package
-conditions resolve the actual self, target or explicit reference owner.
+source wait/trigger selection and INFO/audio/LIP completion.
+[Current-package conditions](dialogue-package-queries.md) resolve the actual
+self, target or explicit reference owner in AI, conversations and scripted
+speech. NPC/creature callbacks retire with their body; player queries share the
+existing assignment lifecycle.
 Furniture reservations distinguish every enabled source marker, and winning
 IDLE sibling links can cross original plugin owners. See
 [furniture motion](furniture-motion.md) for entry and placement boundaries.

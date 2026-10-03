@@ -51,6 +51,8 @@ internal static class ActorSourceContracts
                     Field("SCRO", BitConverter.GetBytes(0x14u)),
                     Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player && player.GetIsID 7 == 1 && GetIsID 0x845 == 1\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
                 Record("VTYP", 0x850, Field("EDID", Text("TestVoice"))),
+                Record("PACK", 0x8f3, Field("EDID", Text("FirstActorPackage"))),
+                Record("PACK", 0x8f4, Field("EDID", Text("OtherActorPackage"))),
                 Record("WRLD", 0x8f0, Field("ICON", Text("interface/worldmap/owned.dds")),
                     Field("MNAM", Join(BitConverter.GetBytes(2048), BitConverter.GetBytes(1024),
                         BitConverter.GetBytes((short)-20), BitConverter.GetBytes((short)30),
@@ -113,6 +115,7 @@ internal static class ActorSourceContracts
                     "Different worldspaces shared spatial membership.");
             }
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+            DialoguePackageQueryContracts.Run(directory, records, world, speaker);
             var choices = new HashSet<FalloutFormKey>();
             for (ulong seed = 0; seed < 32; seed++)
             {
