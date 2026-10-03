@@ -5,6 +5,15 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
+The [radio refresh owner](source-radio-refresh.md) now binds global source
+ForceRadioStationUpdate/FRSU to winning transmitter reception, applied enable,
+persistent discovery, owned notification declarations and the original Pip-Boy
+station list. Synthetic and selected TTW command/cold checks pass for55
+transmitters, as does the required integrated gate. Cross-portal radius, station
+tuning/playback and matched cadence remain open. The fresh ordinary stage80
+retry reaches source door activation, then retains a bot corridor no-route
+failure before birthday entry. Ordinary radio continuation is still unverified.
+
 The immediate priority is the complete TTW route from Fallout 3's opening through
 Vault 101, Megaton, the train station, New Vegas and Benny, using ordinary bot
 input from the toddler checkpoint and verifying dependencies and cold continuation. The original ten mod

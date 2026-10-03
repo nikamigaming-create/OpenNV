@@ -11,6 +11,7 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutFormKey? _music;
+    private FalloutRadioHudDeclaration? _radioHudDeclaration;
     internal FalloutFormKey? SourceMusic => _music;
     private bool _saveRequested;
     private CanvasLayer? _recipeLayer;
@@ -44,6 +45,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             .Single(actor => actor.Appearance.Reference == target);
         switch (operation)
         {
+            case "forceradiostationupdate" or "frsu" when parts.Length == 1 && arguments.Count == 0:
+                RefreshRadioStations(force: true);
+                break;
             case "sexchange" when arguments.Count <= 2 && (parts.Length == 1 || _pluginStack.RuntimeFormId(target) == 0x14):
                 var female = arguments.Count == 0 ? !_character.Female : arguments[0].ToLowerInvariant() switch
                 {

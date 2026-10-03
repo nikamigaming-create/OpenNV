@@ -3,6 +3,12 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Radio refresh](source-radio-refresh.md) derives station reception from winning
+TACT/REFR/XRDO data, applied world enable state, the source portal graph and the
+actual player. Persistent discovery feeds the shared HUD/sound owners and the
+original Pip-Boy radio list. Cross-portal radius and station playback remain
+visible unbound behavior.
+
 [Owned bitmap fonts](owned-font-byte-encoding.md) reverse the record string's
 byte encoding and apply the source quote normalization before shared glyph
 selection. Direct drawing and native FontFile retain source metrics and atlas

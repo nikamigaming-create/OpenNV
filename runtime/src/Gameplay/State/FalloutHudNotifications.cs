@@ -2,7 +2,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted }
+internal enum FalloutHudEventKind { ItemAdded, Message, ItemRemoved, ObjectiveDisplayed, ObjectiveCompleted, ChallengeProgress, ChallengeCompleted, RadioDiscovered }
 
 // The event retains source identity and command order. Text, icons and timing
 // are resolved from the winning graph when presented, never baked into saves.
@@ -51,7 +51,7 @@ internal sealed class FalloutHudNotifications
             {
                 FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved => value.Count <= 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ChallengeProgress or FalloutHudEventKind.ChallengeCompleted => value.Count <= 0 || value.ObjectiveIndex is not null,
-                FalloutHudEventKind.Message => value.Count != 0 || value.ObjectiveIndex is not null,
+                FalloutHudEventKind.Message or FalloutHudEventKind.RadioDiscovered => value.Count != 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted => value.Count != 0 || value.ObjectiveIndex is null,
                 _ => true,
             })))

@@ -63,7 +63,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
     FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
     IReadOnlyList<FalloutFormKey>? SaidInfos = null, int ParserVersion = 0,
     FalloutScriptValueStoreSnapshot? Values = null, FalloutAuxiliaryStoreSnapshot? Auxiliary = null,
-    FalloutChallengesSnapshot? Challenges = null)
+    FalloutChallengesSnapshot? Challenges = null, FalloutRadioStationsSnapshot? Radio = null)
 {
     internal void Validate()
     {
@@ -75,6 +75,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
             throw new InvalidDataException("Saved script value state is missing its string table.");
         Auxiliary?.Validate();
         Challenges?.Validate();
+        Radio?.Validate();
         Session?.NoActivationSound?.Validate();
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
@@ -231,6 +232,7 @@ internal sealed class FalloutQuestScripts
     internal FalloutMessageResults MessageResults { get; } = new();
     internal FalloutScriptSession Session { get; }
     internal FalloutChallenges Challenges { get; }
+    internal FalloutRadioStations? Radio { get; }
     internal FalloutScriptEvents Events { get; }
     internal HashSet<FalloutFormKey> SaidInfos { get; } = [];
     internal double Variable(FalloutFormKey owner, uint index) => References?.ReadVariable(_quests, owner, index) ?? _quests.Variable(owner, index);
@@ -253,6 +255,7 @@ internal sealed class FalloutQuestScripts
         notifications = _inventory.Notifications.Capture(),
         session = Session.Capture(),
         challenges = Challenges.Capture(),
+        radio = Radio?.State,
         events = Events.State,
         strings = ScriptValues.Capture(),
         auxiliary = Auxiliary.State,
@@ -292,7 +295,7 @@ internal sealed class FalloutQuestScripts
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
-        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture());
+        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture(), Radio?.Capture());
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
@@ -300,6 +303,7 @@ internal sealed class FalloutQuestScripts
             throw new InvalidOperationException("Script restoration requires a fresh owner.");
         snapshot.Validate();
         Challenges.Restore(snapshot.Challenges);
+        Radio?.Restore(snapshot.Radio);
         ScriptValues.Restore(snapshot.Values);
         Auxiliary.RestorePermanent(snapshot.Auxiliary);
         ValidateValueHandles();
@@ -377,6 +381,7 @@ internal sealed class FalloutQuestScripts
         NoActivationSound = references?.NoActivationSound ?? new(records, Sounds);
         Session = new(NoActivationSound);
         Challenges = new(records, inventory.Notifications);
+        Radio = references is null ? null : new(records, references, inventory.Notifications);
         ScreenBlood = references?.ScreenBlood ?? new(records);
         Events = events ?? new();
         var defaultDelay = defaultProcessingDelay ?? FalloutInstallationSettings.Read(

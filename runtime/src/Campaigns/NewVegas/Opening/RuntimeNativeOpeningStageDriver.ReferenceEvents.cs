@@ -25,6 +25,13 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal IReadOnlyList<FalloutNativeSkillIdentity> Skills => _tagSkillContract.Skills;
     internal IReadOnlyList<FalloutNativeSkillIdentity> Tags => _tagSkills;
     internal IReadOnlyList<FalloutNativeTraitIdentity> Traits => _traits;
+    internal FalloutRadioStations Radio => _scripts.Radio ?? throw new InvalidOperationException("Radio station owner is absent.");
+
+    private void RefreshRadioStations(bool force = false)
+    {
+        var position = _player.GlobalPosition / _player.UnitsToMeters;
+        Radio.Refresh(new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), force);
+    }
 
     internal bool IsInSameCell(FalloutFormKey caller, FalloutFormKey target)
     {
@@ -45,6 +52,14 @@ internal partial class RuntimeNativeOpeningStageDriver
     private void ConfigureConversation()
     {
         _pipBoy = new(_pluginStack, _inventory);
+        Radio.SignalDiscovered = () =>
+        {
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Radio discovery has no owned content source.");
+            _radioHudDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(
+                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+            _scripts.Sounds.Play(_pluginStack.RuntimeFormKey(0x14),
+                FalloutDialogueTopic.Find(_pluginStack, "SOUN", _radioHudDeclaration.SoundEditorId).FormKey);
+        };
         var results = new FalloutReferenceScripts(_pluginStack, _scripts.References!, _quests,
             new((actor, furniture) => _pluginStack.RuntimeFormId(actor) == 0x14 ? _player.CurrentFurniture == furniture :
                 GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()

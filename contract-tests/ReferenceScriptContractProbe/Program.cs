@@ -5,6 +5,16 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--radio-contracts"])
+{
+    RadioContracts.Run();
+    return;
+}
+if (args.Length >= 5 && args[0] == "--audit-radio-refresh")
+{
+    OwnedRadioProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
 if (args is ["--reference-identity-contracts"])
 {
     ActorSourceContracts.Run();
@@ -413,6 +423,7 @@ ActorSourceContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
+RadioContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
 EditorTravelContracts.Run();

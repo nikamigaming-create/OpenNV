@@ -16,7 +16,7 @@ All 36 [recovery requirements](recovery-checklist.md) remain open. Follow the
 
 Ordinary SPECIAL-book pointer input from the genuine toddler stage40 checkpoint
 allocates40 points and reaches CG01 stage80 through source timers and speech.
-The latest closed-stage80 Continue, player activation of the authored main door
+The last movement-build closed-stage80 Continue, player activation of the authored main door
 and ordinary following complete CG01 stages90/100 and enter CG02 stages0/5/6/7/8/10/12.
 Dad traverses the corridor at the supported floor height. No collision, actor
 position or quest stage was edited. Automatic escort-door recovery and matched
@@ -33,11 +33,24 @@ front of Amata; exact furniture alignment and matched pixels remain unaccepted.
 Amata's source wait/trigger admits a conversation after
 ordinary player approach; it remains queued behind the speech result failure.
 
-The reached finishing result retains an unowned ForceRadioStationUpdate command.
+That movement-build finishing result retains an unowned ForceRadioStationUpdate command.
 The glasses' authored 2D environment map leaves another birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
+
+The movement/dialogue/furniture block is merged through checked PR107; local
+main equals origin/main at735a108. The fresh feature branch is
+`codex/ttw-radio-station-refresh`. Its [station refresh owner](source-radio-refresh.md)
+now binds the reached global command to winning transmitter reception, applied
+enable, persistent discovery and source HUD/sound declarations. Synthetic and
+selected TTW command/cold checks pass for55 transmitters. Seven cross-portal radius
+queries remain visible in the isolated fixture; tuning/playback remain unbound.
+The required integrated gate passes. The fresh ordinary retry cold-loads the
+genuine stage80 checkpoint and activates the source main door, but ordinary
+following retains a no-route failure before birthday entry. Radio's ordinary
+stage12 continuation is therefore still unverified. The retained birthday12
+suffix is not replayable.
 
 [Source dialogue packages](source-dialogue-packages.md) bind optional wait
 locations, repeated matching trigger declarations, native target-range movement,
@@ -71,9 +84,9 @@ cell, animation, mod or parity completion is implied by these component checks.
 
 ## Next owners
 
-1. Publish the checked movement/dialogue/furniture block and sync main, then
-   bind the reached ForceRadioStationUpdate command to the real shared station
-   owner. Retry the genuine checkpoint; retain the failed stage12 result suffix.
+1. Repair the reached bot corridor rejection using the same native capsule/floor
+   policy. Continue the genuine checkpoint to station refresh and the next actual
+   birthday result/menu owner; retain the failed stage12 suffix.
 2. Complete automatic escort-door recovery and native steering/turn acceptance.
    The verified corridor retry still uses ordinary player door activation.
 3. Bind the glasses' authored 2D environment-map behavior without substituting
@@ -91,7 +104,9 @@ authoritative gameplay and saves.
 
 ## Private continuation
 
-Run `tmp/development-lab/ttw-bot-20261002/` is at birthday12 with the bot stopped.
+Run `tmp/development-lab/ttw-bot-20261002/` is now at the genuine stage80 retry with
+ordinary follow blocked. Requests201/202 retain that no-route failure. Earlier
+requests191/193 retain birthday12 with the bot stopped.
 Requests177/181 retain the earlier station-command, Paul and patrol faults;
 requests191/193 retain the fresh ten-seat result with Paul repaired. The
 intermediate native process exited at stage80 before a door retry; that attempt

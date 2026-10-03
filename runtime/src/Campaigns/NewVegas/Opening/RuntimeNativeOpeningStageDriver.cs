@@ -273,6 +273,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (ExecutionError is not null) return;
         try
         {
+            RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
             if (_saveRequested && SaveContinuationBlocker is null && !_scripts.References!.PlayerMoves.Pending)
