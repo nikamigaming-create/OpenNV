@@ -110,6 +110,7 @@ public partial class RuntimeCoordinator
                 collisionResident = _nativePlayer.CollisionResident,
                 collisionContacts = _nativePlayer.CollisionContacts,
                 modalInput = _nativePlayer.ModalInput,
+                input = _nativePlayer.InputState,
                 furniture = _nativePlayer.FurnitureState,
                 movementEnabled = _nativePlayer.GetMeta("opennv_source_movement_enabled", false).AsBool(),
                 lookingEnabled = _nativePlayer.GetMeta("opennv_source_looking_enabled", false).AsBool(),

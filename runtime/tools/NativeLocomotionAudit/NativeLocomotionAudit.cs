@@ -20,6 +20,7 @@ public partial class NativeLocomotionAudit : Node3D
             {
                 await CheckRouteDoorContact();
                 await CheckSupportedDescentRefinement();
+                await CheckNarrowPassageRefinement();
                 GetTree().Quit();
                 return;
             }
@@ -28,6 +29,7 @@ public partial class NativeLocomotionAudit : Node3D
             await CheckNavigation(lowCeiling: true);
             await CheckRouteDoorContact();
             await CheckSupportedDescentRefinement();
+            await CheckNarrowPassageRefinement();
             await Check(.3f, false, true);
             await Check(2, false, false);
             await Check(.3f, true, false);
