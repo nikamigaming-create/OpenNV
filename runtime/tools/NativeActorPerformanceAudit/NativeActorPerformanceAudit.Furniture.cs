@@ -19,7 +19,7 @@ public partial class NativeActorPerformanceAudit
             var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             var quests = new FalloutQuestState(records);
             actor.ConfigureAi(records, quests, cell, Placement);
-            if (actor.AiError is not null || actor.SittingState != 1)
+            if (actor.AiError is not null || actor.SittingState != 3)
                 throw new InvalidOperationException($"Furniture audit requires a source initial seat: {actor.AiError}");
             var initial = actor.Transform;
             var initialPackage = actor.CurrentPackage;

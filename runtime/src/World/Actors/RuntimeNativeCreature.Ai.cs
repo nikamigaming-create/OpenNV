@@ -20,6 +20,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutDialoguePackage? _dialoguePackage;
     private FalloutPackageEvents? _packageEvents;
     private bool _dialogueRequested;
+    private bool _initialPackageSelected;
     private bool _evaluateRequested = true;
     private double _packageClock;
     private string? _aiError;
@@ -122,13 +123,19 @@ internal sealed partial class RuntimeNativeCreature
             else if (source.Procedure == 15)
             {
                 dialogue = FalloutDialoguePackage.Read(selected!);
-                if (source.LocationType is not null || selected!.ReadSubrecords().Any(field => field.Signature == "PLD2") || dialogue.Type != 0)
-                    throw new NotSupportedException("Creature dialogue start/end location or SayTo procedure is unbound.");
+                if (source.LocationType is not null || selected!.ReadSubrecords().Any(field => field.Signature == "PLD2"))
+                    throw new NotSupportedException("Creature dialogue start/end location is unbound.");
             }
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
         }
-        _packageEvents!.Change(source);
-        _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = false;
+        var restored = !_initialPackageSelected && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        _initialPackageSelected = true;
+        if (restored) _packageEvents!.Restore(source!, true);
+        else _packageEvents!.Change(source);
+        _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restored;
+        _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restored ? "Dialogue package continuation has no cold restoration owner." : null;
+        if (!restored && _aiState.PackageMotion is { DialogueCompleted: true } previousMotion)
+            _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
     }
@@ -186,12 +193,18 @@ internal sealed partial class RuntimeNativeCreature
                 if (targetNode is null) { _waitingForTarget = dialogue.Target; return; }
                 var target = targetNode.GlobalPosition;
                 var distance = dialogue.ActivationDistance * Skeleton.UnitsToMetres;
-                Combat.AdvancePackageMotion(_aiPackage!, target, distance, false, delta);
+                Combat.AdvancePackageMotion(_aiPackage!, target, distance, dialogue.Running, delta, dialogue.WeaponDrawn, requireArrivalHeight: true);
                 if (GlobalPosition.DistanceTo(target) <= distance && IsOnFloor() && Combat.PackagePlayer?.ModalInput != true)
                 {
-                    (BeginPackageDialogue ?? throw new NotSupportedException("Creature dialogue has no conversation owner."))
-                        (dialogue, () => { _packageEvents!.Complete(); _evaluateRequested = true; });
                     _dialogueRequested = true;
+                    (BeginPackageDialogue ?? throw new NotSupportedException("Creature dialogue has no conversation owner."))
+                        (dialogue, () =>
+                        {
+                            if (!IsInstanceValid(this) || !IsInsideTree() || !ReferenceEquals(_dialoguePackage, dialogue)) return;
+                            if (dialogue.Type == 1) Combat.CompleteDialoguePackage();
+                            _packageEvents!.Complete(); _evaluateRequested = true;
+                            if (ReferenceEquals(_dialoguePackage, dialogue) && dialogue.Type == 1) _aiState!.ProcedureCaptureBlocker = null;
+                        });
                 }
             }
         }

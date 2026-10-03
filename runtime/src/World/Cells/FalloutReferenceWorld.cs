@@ -152,6 +152,8 @@ internal sealed class FalloutReferenceInstance
     internal double Read(uint index) => Variables.TryGetValue(index, out var value) ? value :
         throw new NotSupportedException($"Reference {Reference} has no declared variable {index}.");
 
+    internal Func<FalloutFormKey?>? QueryCurrentPackage { get; set; }
+
     internal void Write(uint index, double value)
     {
         _ = Read(index);
@@ -416,6 +418,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
                 if (motion.EditorTravel is { } editorTravel)
                     FalloutEditorTravelPackage.Read(package).Validate(validated, snapshot.Reference, editorTravel);
+                if (motion.DialogueCompleted)
+                {
+                    var dialogue = FalloutDialoguePackage.Read(package);
+                    var declaration = FalloutScriptPackage.Read(package);
+                    if (dialogue.Type != 1 || declaration.LocationType is not (null or 2) || declaration.LocationRadius != 0)
+                        throw new InvalidDataException("Saved dialogue completion has no supported source procedure.");
+                }
                 instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
             }
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
@@ -469,6 +478,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         Menus.Publish(true);
         _residentCells.Clear();
         _residentReferences.Clear();
+        _furnitureSeats.Clear();
         _instances.Clear();
         _definitions.Clear();
         _healthSources.Clear();

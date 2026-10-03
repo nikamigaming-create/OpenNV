@@ -66,24 +66,21 @@ internal sealed class FalloutFurnitureIdleTree
     internal static IReadOnlyList<FalloutIdleBranch> Order(IReadOnlyList<FalloutIdleBranch> branches)
     {
         var result = new List<FalloutIdleBranch>();
-        // An override replaces a node at its original plugin's insertion point;
-        // it does not make original siblings depend on a not-yet-inserted node.
-        foreach (var plugin in branches.GroupBy(value => value.Record.FormKey.OwnerPlugin, StringComparer.OrdinalIgnoreCase))
+        // Winning overrides can insert a master node after a sibling declared
+        // by a later plugin. Resolve that source dependency across the complete
+        // sibling set, retaining the supplied plugin/registration order for
+        // independent insertions. A missing anchor or cycle remains a fault.
+        var remaining = branches.ToDictionary(value => value.Record.FormKey);
+        while (remaining.Count != 0)
         {
-            var remaining = plugin.ToDictionary(value => value.Record.FormKey);
-            if (remaining.Values.GroupBy(value => value.Previous).Any(group => group.Count() != 1))
-                throw new NotSupportedException("One plugin declares ambiguous IDLE sibling insertion points.");
-            while (remaining.Count != 0)
+            var next = remaining.Values.Where(value => value.Previous is null ||
+                result.Any(prior => prior.Record.FormKey == value.Previous)).ToArray();
+            if (next.Length == 0) throw new NotSupportedException("IDLE sibling chain is missing or cyclic.");
+            foreach (var item in next)
             {
-                var next = remaining.Values.Where(value => value.Previous is null ||
-                    result.Any(prior => prior.Record.FormKey == value.Previous)).ToArray();
-                if (next.Length == 0) throw new NotSupportedException("IDLE sibling chain is missing or cyclic.");
-                foreach (var item in next)
-                {
-                    var at = item.Previous is null ? 0 : result.FindIndex(value => value.Record.FormKey == item.Previous) + 1;
-                    result.Insert(at, item);
-                    remaining.Remove(item.Record.FormKey);
-                }
+                var at = item.Previous is null ? 0 : result.FindIndex(value => value.Record.FormKey == item.Previous) + 1;
+                result.Insert(at, item);
+                remaining.Remove(item.Record.FormKey);
             }
         }
         return result;

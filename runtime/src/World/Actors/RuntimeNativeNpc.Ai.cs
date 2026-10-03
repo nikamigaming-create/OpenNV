@@ -19,6 +19,8 @@ internal partial class RuntimeNativeNpc
     private FalloutFormKey? _failedPackage;
     private FalloutCellScene? _aiCell;
     private FalloutReferenceWorld? _aiWorld;
+    private FalloutReferenceInstance? _aiReferenceState;
+    private Func<FalloutFormKey?>? _currentPackageQuery;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
     private FalloutPluginRecord? _aiPackage;
@@ -44,9 +46,9 @@ internal partial class RuntimeNativeNpc
     internal string? PackageIdleError => _packageIdleError;
     internal string? PackageEventError => _packageEvents?.Error;
     internal string? AiError => _aiError;
-    internal int SittingState => _sitting;
+    internal int SittingState => _sitting == 1 ? 3 : _sitting;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
-    internal bool Traveling => _travelActive || (_escortPackage is not null || _editorTravel is not null) && Combat?.PackageMoving == true;
+    internal bool Traveling => _travelActive || (_escortPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
     internal FalloutFormKey? CurrentPackage => _aiPackage?.FormKey;
 
     // These are script-visible engine procedure codes. The currently owned
@@ -72,7 +74,7 @@ internal partial class RuntimeNativeNpc
         package = _aiPackage?.FormKey.ToString(),
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
-        sitting = _sitting,
+        sitting = SittingState,
         furniturePhase = _furnitureApproaching ? "approaching" : _sitting switch
         {
             1 => "occupied",
@@ -113,6 +115,8 @@ internal partial class RuntimeNativeNpc
         {
             source = _dialoguePackage,
             requested = _dialoguePackageRequested,
+            waitReached = _dialogueWaitReached,
+            nativeTargetMovement = _dialogueNativeMovement,
             unbound = new[] { "package-camera-zoom", "package-head-target-priority", "pre-conversation-target-movement" }
         },
         idleCollection = _packageIdleSource is null ? null : new
@@ -155,6 +159,11 @@ internal partial class RuntimeNativeNpc
         _aiClock = clock; _aiGlobals = globals;
         _aiCell = cell;
         _aiWorld = world;
+        if (world is not null)
+        {
+            _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
+        }
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
         // A stationary, unarmed actor owns its source movement-group idle
@@ -265,7 +274,7 @@ internal partial class RuntimeNativeNpc
         FalloutPluginRecord? selected = null;
         try
         {
-            selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock);
+            selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock, evaluateRunOn: true);
             if (_aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
             // A failed procedure cannot freeze a later eligible package. Event
             // errors retain their separate exactly-once failure latch.
@@ -274,6 +283,7 @@ internal partial class RuntimeNativeNpc
             if (_editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
                 throw new NotSupportedException("Incomplete editor travel needs its must-complete package reevaluation owner.");
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
+            if (_sitting == 1 && selected is not null && RetainFurniturePackage(selected)) return;
             if (_aiPackage is not null)
             {
                 if (_seat is not null && !_furnitureApproaching)
@@ -292,7 +302,7 @@ internal partial class RuntimeNativeNpc
                 _packageIdles = null;
                 _travelProgress?.Cancel();
                 ClearFurniture();
-                _dialoguePackage = null; _dialoguePackageRequested = false;
+                ClearDialoguePackage();
                 _patrol = null; _patrolProgress = null;
                 if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)
                     escortWorld.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
@@ -306,22 +316,29 @@ internal partial class RuntimeNativeNpc
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
+            if (_packageIdleSource.Procedure == 15)
+            {
+                FalloutPlacedReference? wait = null;
+                if (_packageIdleSource.LocationType is not null)
+                {
+                    if (_packageIdleSource.LocationType is not (0 or 2) || _packageIdleSource.LocationRadius != 0)
+                        throw new NotSupportedException($"PACK {selected.FormKey} requires its dialogue location owner.");
+                    if (_packageIdleSource.LocationType == 0)
+                        wait = _aiCell!.References.SingleOrDefault(value => value.FormKey == _packageIdleSource.LocationReference) ??
+                            throw new NotSupportedException($"PACK {selected.FormKey} dialogue wait location is outside the active cell.");
+                }
+                BeginDialoguePackage(selected, wait, initializing);
+                return;
+            }
             var fields = selected.ReadSubrecords().ToArray();
             var data = fields.Single(field => field.Signature == "PKDT").Data;
             var location = fields.Single(field => field.Signature == "PLDT").Data;
             if (data.Length != 12 || location.Length != 12) throw new InvalidDataException("AI package has an invalid field extent.");
-            if (data.Span[4] is not (6 or 15) || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0)
+            if (data.Span[4] != 6 || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0)
                 throw new NotSupportedException($"PACK {selected.FormKey} requires its travel/procedure owner.");
             var target = selected.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(location.Span[4..]));
             var reference = _aiCell!.References.SingleOrDefault(value => value.FormKey == target) ??
                 throw new NotSupportedException($"PACK {selected.FormKey} target {target} is outside the active cell.");
-            if (data.Span[4] == 15)
-            {
-                if (_packageIdleSource.LocationRadius != 0)
-                    throw new NotSupportedException($"PACK {selected.FormKey} requires its dialogue location-radius owner.");
-                BeginDialoguePackage(selected, reference);
-                return;
-            }
             var furniture = _aiStack.GetEffective(reference.Base);
             if (furniture.Signature != "FURN")
             {
@@ -344,11 +361,28 @@ internal partial class RuntimeNativeNpc
         }
     }
 
-    internal float EvaluateAiCondition(FalloutCondition condition) => condition.Function switch
+    internal float EvaluateAiCondition(FalloutCondition condition)
+    {
+        if (condition.Function == 161)
+            return FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, CurrentPackage, reference =>
+            {
+                var query = _aiWorld?.Get(reference).QueryCurrentPackage ??
+                    throw new NotSupportedException("AI current-package query has no active reference package owner.");
+                return query();
+            }) ? 1 : 0;
+        if (condition.RunOn == 0) return EvaluateOwnAiCondition(condition);
+        throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.");
+    }
+
+    private float EvaluateOwnAiCondition(FalloutCondition condition) => condition.Function switch
     {
         18 => (_aiClock ?? throw new NotSupportedException("AI time query has no simulation clock.")).Hour,
         74 => (_aiGlobals ?? throw new NotSupportedException("AI global query has no state owner.")).Get(condition.FormArgument1),
         25 => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
+        50 when condition.RunOn == 0 => (_aiWorld ?? throw new NotSupportedException("AI talked-to-player query has no shared reference owner."))
+            .Get(Appearance.Reference!.Value).TalkedToPlayer ? 1 : 0,
+        53 => (float)(_aiWorld ?? throw new NotSupportedException("AI script-variable query has no shared reference owner."))
+            .ReadVariable(_questState!, condition.FormArgument1, condition.Argument2),
         58 or 59 or 79 or 546 => _questState!.Evaluate(condition),
         63 => Activity.Attacked ? 1 : 0,
         69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,
@@ -363,7 +397,7 @@ internal partial class RuntimeNativeNpc
         108 => Combat?.WeaponAnimationType ?? 0,
         110 => CurrentAiPackage,
         143 => CurrentAiProcedure,
-        159 => _sitting,
+        159 => SittingState,
         160 => _seat?.MarkerId ?? 0,
         162 => _furnitureReference == condition.FormArgument1 ? 1 : 0,
         163 => _seat?.Furniture == condition.FormArgument1 ? 1 : 0,

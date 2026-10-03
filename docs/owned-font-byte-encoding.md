@@ -35,10 +35,11 @@ provides the quote normalization contract; no binary output is public input.
   ownership. Native quote shaping agrees with the source normalized metrics.
   Source bytes remain unchanged; recording is off.
 
-The separate ordinary checkpoint retry remains at toddler stage80 because the
-Escort reports Lead without destination progress after the player moves clear.
-It has not reached the repaired birthday subtitle. The previous verified
-birthday state remains stage7; no fault is cleared or consumed prefix replayed.
+The first separate ordinary checkpoint retry stopped at toddler stage80. A
+later genuine closed-stage80 Continue, source door activation and follow passes
+the Escort. With the separate movement/dialogue repairs, source birthday speech
+passes the previous punctuation fault and reaches stage12 before the unowned
+station-refresh command. No fault is cleared or consumed prefix replayed.
 
 These checks establish the selected Windows-1252 text/font binding. They do not
 establish other language encodings, complete dialogue, campaign progression,

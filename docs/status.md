@@ -73,9 +73,19 @@ remains visible. Synthetic source/save contracts and a separate owned actor
 blocking/cold/arrival fixture pass; campaign and matched timing remain unverified.
 Shared [font byte encoding](owned-font-byte-encoding.md) now passes complete
 synthetic byte-slot lookup and an owned native font/quote-shaping audit. The
-font-build ordinary retry remains at stage80 with a stopped Lead procedure;
-it does not establish birthday continuation. Detailed package capsule/path
-diagnostics are the next movement investigation.
+first font-build ordinary retry stopped at stage80. The latest genuine retry
+uses a separately bounded supported descent and follows Dad through the hall at
+floor height. Shared [Dialogue packages](source-dialogue-packages.md) now admit
+Dad's missing wait location and reach birthday12 through his real voice/LIP.
+The fresh marker-frame/subject-query retry repeats CG01 completion and birthday12.
+Ten NPCs now occupy distinct source furniture seats after cross-plugin IDLE
+ordering, shared occupancy and placement repairs. Paul's explicit-reference
+package query no longer faults, and he takes his authored bench seat. The
+selected view removes the actor displaced in front of Amata; exact alignment,
+walk/turn timing and matched pixels remain unaccepted.
+The finishing source result retains an unowned ForceRadioStationUpdate command;
+Amata's conversation queues behind it after player approach. The glasses actor,
+complete birthday, campaign and matched retail acceptance remain open.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
 Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,

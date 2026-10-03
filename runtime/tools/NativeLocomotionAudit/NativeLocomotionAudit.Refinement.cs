@@ -27,13 +27,10 @@ public partial class NativeLocomotionAudit
             }
             var start = body.GlobalPosition;
             var goal = new Vector3(0, 0, -2);
-            var refused = false;
-            try { _ = NativeCapsuleNavigation.Find(body, start, goal, .4f, radius * 2, Resident, 512); }
-            catch (InvalidOperationException) { refused = true; }
-            if (!refused) throw new InvalidOperationException("The coarse descent fixture no longer reproduces its skipped support transition.");
-            var path = NativeCapsuleNavigation.Find(body, start, goal, .4f, radius, Resident, 512);
-            if (body.GlobalPosition != start || path.Count == 0)
-                throw new InvalidOperationException("Refinement moved its query body or lost the supported descent.");
+            var path = NativeCapsuleNavigation.Find(body, start, goal, .4f, radius * 2, Resident, 512);
+            var refined = NativeCapsuleNavigation.Find(body, start, goal, .4f, radius, Resident, 512);
+            if (body.GlobalPosition != start || path.Count == 0 || refined.Count == 0)
+                throw new InvalidOperationException("Navigation moved its query body or lost the supported descent.");
             foreach (var waypoint in path)
                 for (var frame = 0; frame < 180; frame++)
                 {
@@ -49,7 +46,7 @@ public partial class NativeLocomotionAudit
                 }
             if (!body.IsOnFloor() || Math.Abs(body.GlobalPosition.Y) > .02f)
                 throw new InvalidOperationException("Refined descent did not reach the actual lower floor.");
-            GD.Print("OPENNV_NATIVE_NAVIGATION_REFINEMENT_PASS coarseRefused=true radiusSpacing=true sameCapsule=true sameStepHeight=true actualControllerArrival=true noQueryMovement=true fixture=synthetic parity=unverified");
+            GD.Print("OPENNV_NATIVE_NAVIGATION_REFINEMENT_PASS coarseSupported=true radiusSpacing=true sameCapsule=true sameStepHeight=true actualControllerArrival=true noQueryMovement=true fixture=synthetic parity=unverified");
         }
         finally { scene.Free(); }
     }

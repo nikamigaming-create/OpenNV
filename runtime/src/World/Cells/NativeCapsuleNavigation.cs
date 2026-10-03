@@ -69,6 +69,12 @@ internal static partial class NativeCapsuleNavigation
         var rid = body.GetRid();
         var basis = body.GlobalBasis;
         var floorCosine = MathF.Cos(body.FloorMaxAngle);
+        // A short descent includes the controller's supported step interval
+        // below the raised sweep. Using the ascent limit in both directions
+        // strands a capsule that ordinary sliding has carried onto a bevel.
+        // The landing still requires a complete native sweep and floor support;
+        // movement follows it with gravity rather than writing the query pose.
+        var maximumDrop = stepHeight + Math.Max(stepHeight, body.FloorSnapLength);
         bool Sweep(Vector3 from, Vector3 motion)
         {
             query.From = new(basis, from); query.Motion = motion;
@@ -82,7 +88,7 @@ internal static partial class NativeCapsuleNavigation
             if (!resident(from) || !resident(desired)) return false;
             var motion = desired - from; motion.Y = 0;
             var supportedFrom = from + motion;
-            var drop = stepHeight + body.SafeMargin * 8;
+            var drop = maximumDrop + body.SafeMargin * 8;
             // Ordinary flat motion needs no step headroom. Only test a raised
             // sweep when the direct capsule motion actually meets an obstacle.
             if (Sweep(from, motion))
@@ -96,7 +102,9 @@ internal static partial class NativeCapsuleNavigation
             if (!Sweep(supportedFrom, Vector3.Down * drop) || !Enumerable.Range(0, hit.GetCollisionCount())
                 .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine)) return false;
             landing = supportedFrom + hit.GetTravel();
-            return Math.Abs(landing.Y - from.Y) <= stepHeight + body.SafeMargin * 8 && resident(landing);
+            var height = landing.Y - from.Y;
+            return height <= stepHeight + body.SafeMargin * 8 &&
+                height >= -maximumDrop - body.SafeMargin * 8 && resident(landing);
         }
         static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
         (int X, int Z, int Y) Key(Vector3 p) => ((int)MathF.Round((p.X - start.X) / spacing),

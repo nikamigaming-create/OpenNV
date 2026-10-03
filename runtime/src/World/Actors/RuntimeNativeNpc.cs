@@ -251,7 +251,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                 else if (_sitting == 4) CompleteFurnitureExit();
             }
             CompletePendingTravel();
-            AdvanceDialoguePackage();
+            if (!_dialogueNativeMovement) AdvanceDialoguePackage();
             AdvanceHeadTracking((float)delta);
             AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
