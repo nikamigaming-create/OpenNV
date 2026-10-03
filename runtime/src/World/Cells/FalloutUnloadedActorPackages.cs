@@ -113,11 +113,12 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (condition.Function == 74) return (globals ?? throw new NotSupportedException("Unloaded AI has no global state.")).Get(condition.FormArgument1);
         if (condition.Function == 53) return (float)world.ReadVariable(quests, condition.FormArgument1, condition.Argument2);
         if (condition.Function == 161) return FalloutAiPackages.IsCurrentPackage(condition, caller, world.CurrentPackage) ? 1 : 0;
+        if (condition.Function == 50) return FalloutAiPackages.HasTalkedToPlayer(condition, caller,
+            reference => world.Get(reference).TalkedToPlayer) ? 1 : 0;
         var actor = FalloutAiPackages.ConditionSubject(condition, caller);
         return condition.Function switch
         {
             35 => world.IsEnabled(actor) ? 0 : 1,
-            50 => world.Get(actor).TalkedToPlayer ? 1 : 0,
             72 => FalloutReferenceIdentity.Base(records, actor) == condition.FormArgument1 ? 1 : 0,
             71 => world.ActorFactions(actor).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
             73 => world.ActorFactions(actor).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),

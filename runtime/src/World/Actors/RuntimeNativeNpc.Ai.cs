@@ -383,6 +383,10 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function == 50)
+            return FalloutAiPackages.HasTalkedToPlayer(condition, Appearance.Reference!.Value,
+                reference => (_aiWorld ?? throw new NotSupportedException("AI talked-to-player query has no shared reference owner."))
+                    .Get(reference).TalkedToPlayer) ? 1 : 0;
         if (condition.Function == 289)
             return (Combat ?? throw new NotSupportedException("AI combat query has no engagement owner."))
                 .IsInCombat(FalloutAiPackages.ConditionSubject(condition, Appearance.Reference!.Value)) ? 1 : 0;
@@ -399,8 +403,6 @@ internal partial class RuntimeNativeNpc
         18 => (_aiClock ?? throw new NotSupportedException("AI time query has no simulation clock.")).Hour,
         74 => (_aiGlobals ?? throw new NotSupportedException("AI global query has no state owner.")).Get(condition.FormArgument1),
         25 => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
-        50 when condition.RunOn == 0 => (_aiWorld ?? throw new NotSupportedException("AI talked-to-player query has no shared reference owner."))
-            .Get(Appearance.Reference!.Value).TalkedToPlayer ? 1 : 0,
         53 => (float)(_aiWorld ?? throw new NotSupportedException("AI script-variable query has no shared reference owner."))
             .ReadVariable(_questState!, condition.FormArgument1, condition.Argument2),
         58 or 59 or 79 or 546 => _questState!.Evaluate(condition),

@@ -14,6 +14,10 @@ public partial class NativeLocomotionAudit : Node3D
             {
                 await CheckRouteAccumulation(); GetTree().Quit(); return;
             }
+            if (arguments is ["--route-smoothing"])
+            {
+                await CheckRouteSmoothing(); GetTree().Quit(); return;
+            }
             if (arguments.FirstOrDefault() == "--owned-contact")
             {
                 await NativeOwnedContactAudit.Run(this, arguments.Skip(1).ToArray());
@@ -30,6 +34,7 @@ public partial class NativeLocomotionAudit : Node3D
             }
             NativeNavigationContracts.Run();
             await CheckRouteAccumulation();
+            await CheckRouteSmoothing();
             await CheckNavigation();
             await CheckNavigation(lowCeiling: true);
             await CheckRouteDoorContact();
@@ -118,7 +123,12 @@ public partial class NativeLocomotionAudit : Node3D
             foreach (var waypoint in path)
             {
                 var arrived = false;
-                for (var frame = 0; frame < 90; frame++)
+                var segment = waypoint - body.GlobalPosition; segment.Y = 0;
+                // A checked straight corridor can now be one long segment.
+                // Bound execution by its physical distance and speed instead
+                // of assuming every waypoint is a nearby lattice neighbour.
+                var maximumFrames = checked((int)Math.Ceiling(segment.Length() / (3 * GetPhysicsProcessDeltaTime())) + 60);
+                for (var frame = 0; frame < maximumFrames; frame++)
                 {
                     await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                     var delta = waypoint - body.GlobalPosition; delta.Y = 0;

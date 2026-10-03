@@ -10,7 +10,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private void PackageResults(string baseRoot, string mod, string root, string actorId, string questId,
-        short stage, short? expected, string[] dependencies)
+        short stage, short? expected, string[] dependencies, bool interruptTravel = false)
     {
         RuntimeNativeNpc? actor = null;
         try
@@ -46,8 +46,37 @@ public partial class NativeActorPerformanceAudit
             var package = actor.CurrentPackage ?? throw new InvalidDataException("The owned fixture selected no package.");
             var source = records.GetEffective(package); var hash = SHA256.HashData(source.ReadData());
             var declaration = FalloutScriptPackage.Read(source);
+            if (interruptTravel)
+            {
+                actor._Process(.37);
+                if (!actor.Traveling || actor.AnimationError is not null || actor.AiError is not null)
+                    throw new InvalidDataException("Interruption fixture requires an actual advancing source walk.");
+                var before = actor.GlobalPosition;
+                var phase = actor.BaseSourceSeconds;
+                actor.BeginConversationFacing(() => before + Vector3.Right, 100);
+                actor._Process(.19);
+                // A later utterance can renew the same participant lease.
+                actor.BeginConversationFacing(() => before + Vector3.Left, 100);
+                actor._Process(.23);
+                if (actor.GlobalPosition != before || !actor.Traveling)
+                    throw new InvalidDataException("Dialogue did not retain the suspended route and stationary root.");
+                actor.EndConversationFacing();
+                if (actor.GlobalPosition != before || Math.Abs(actor.BaseSourceSeconds - phase) > .00001f)
+                    throw new InvalidDataException("Dialogue release reset the source walking phase or replayed accumulated travel.");
+                actor._Process(1d / 60);
+                if (actor.AnimationError is not null || actor.GlobalPosition.DistanceTo(before) > .15f)
+                    throw new InvalidDataException(actor.AnimationError ?? "Resumed walking jumped beyond its source frame displacement.");
+            }
+            var turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.Read(records, "fCharacterDefaultTurningSpeed"));
             for (var frame = 0; (expected is { } resultStage ? quests.Stage(quest) != resultStage : actor.Traveling) &&
-                 frame < 60 * 120; frame++) actor._Process(1.0 / 60);
+                 frame < 60 * 120; frame++)
+            {
+                var before = actor.Basis.Orthonormalized().GetRotationQuaternion();
+                actor._Process(1.0 / 60);
+                var after = actor.Basis.Orthonormalized().GetRotationQuaternion();
+                if (interruptTravel && actor.Traveling && before.AngleTo(after) > turnSpeed / 60 + .001f)
+                    throw new InvalidDataException("Walking snapped its body heading beyond the source turn rate.");
+            }
             var state = JsonSerializer.SerializeToElement(actor.AiState, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var events = state.GetProperty("packageEvents");
             var expectedResult = expected is { } requested ? quests.Stage(quest) == requested && effects.Count == 1 &&
@@ -76,6 +105,9 @@ public partial class NativeActorPerformanceAudit
                 "sourceNavm=true sourceKf=true ordinaryActorOwner=true " +
                 $"completionResult={expected is not null} eventScope=true sourceUnchanged=true recording=false " +
                 "boundary=isolated-owned-package-result-fixture stageProgramAndColdLifecycle=unverified parity=unverified");
+            if (interruptTravel)
+                GD.Print("OPENNV_NATIVE_TRAVEL_INTERRUPTION_PASS sourcePhaseRetained=true repeatedLease=true rootStationary=true sourceTurnRate=true " +
+                    "sourceNavm=true sourceKf=true resumedArrival=true sourceUnchanged=true fixture=isolated-owned-actor parity=unverified");
         }
         finally { actor?.Free(); RuntimeLiveContentSource.Clear(); }
     }

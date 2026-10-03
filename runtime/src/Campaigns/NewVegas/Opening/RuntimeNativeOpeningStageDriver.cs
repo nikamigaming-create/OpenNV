@@ -333,7 +333,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References,
             CurrentActorPackage, _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount,
-            reference => ReferencePresentation().Resolve(reference));
+            reference => ReferencePresentation().Resolve(reference), ReferenceDistance);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

@@ -74,11 +74,13 @@ public partial class NativeActorPerformanceAudit : Node
                 GetTree().Quit();
                 return;
             }
-            if (args is ["--package-travel", var travelRoot, var travelMod, var travelModRoot, var travelActor,
-                var travelQuest, var travelStage, .. var travelDependencies])
+            if (args is [var travelMode, var travelRoot, var travelMod, var travelModRoot, var travelActor,
+                var travelQuest, var travelStage, .. var travelDependencies] &&
+                travelMode is "--package-travel" or "--travel-interruption")
             {
                 PackageResults(travelRoot, travelMod, travelModRoot, travelActor, travelQuest,
-                    short.Parse(travelStage, System.Globalization.CultureInfo.InvariantCulture), null, travelDependencies);
+                    short.Parse(travelStage, System.Globalization.CultureInfo.InvariantCulture), null, travelDependencies,
+                    travelMode == "--travel-interruption");
                 GetTree().Quit();
                 return;
             }

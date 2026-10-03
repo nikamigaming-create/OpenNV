@@ -103,7 +103,7 @@ internal partial class RuntimeNativePlayer
                 throw new NotSupportedException("A weapon action needs a clamped sequence or an automatic attack loop.");
             _weaponAction = group; _weaponActionClip = clip; _weaponActionSeconds = 0;
             _weaponActionStartPending = true; _weaponActionLooping = false;
-            _aiming = false;
+            if (!attack) _aiming = false;
             if (group == "equip")
             {
                 _weaponHandling!.SetDrawn(true); _firstPerson.SetDrawn(true); _thirdPerson?.SetDrawn(true);

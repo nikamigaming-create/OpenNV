@@ -17,23 +17,36 @@ internal partial class RuntimeNativeNpc
     private float _conversationTurnSpeed;
     private Vector3 _conversationScale;
     private bool _conversationWasTraveling;
+    private FalloutActorAnimationSnapshot? _conversationTravelClock;
+    private GamebryoRootMotionTravel? _conversationTravelProgress;
 
     internal void BeginConversationFacing(Func<Vector3> targetPoint, float turnDegreesPerSecond)
     {
         if (!float.IsFinite(turnDegreesPerSecond) || turnDegreesPerSecond <= 0)
             throw new InvalidDataException("Dialogue turn speed must be positive.");
+        var entering = _conversationTarget is null;
         _conversationTarget = targetPoint;
         _conversationTurnSpeed = Mathf.DegToRad(turnDegreesPerSecond);
         _conversationScale = GlobalBasis.Scale;
-        _conversationWasTraveling = _travelActive;
-        if (_conversationWasTraveling) PlayLocomotion(false);
+        if (entering)
+        {
+            _conversationWasTraveling = _travelActive;
+            _conversationTravelProgress = _conversationWasTraveling ? _travelProgress : null;
+            _conversationTravelClock = _conversationWasTraveling ? _baseClock.Capture() ??
+                throw new InvalidOperationException("Suspended travel has no source walking clock.") : null;
+            if (_conversationWasTraveling) PlayLocomotion(false);
+        }
     }
 
     internal void EndConversationFacing()
     {
         _conversationTarget = null;
-        if (_conversationWasTraveling && _travelActive && Combat?.Dead != true) PlayLocomotion(true);
+        if (_conversationWasTraveling && _travelActive && ReferenceEquals(_travelProgress, _conversationTravelProgress) && Combat?.Dead != true)
+            PlayLocomotion(true, _conversationTravelClock ??
+                throw new InvalidOperationException("Suspended travel lost its source walking clock."));
         _conversationWasTraveling = false;
+        _conversationTravelClock = null;
+        _conversationTravelProgress = null;
     }
 
     private void AdvanceConversationFacing(float delta)
