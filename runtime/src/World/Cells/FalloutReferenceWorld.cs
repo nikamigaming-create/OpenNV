@@ -19,7 +19,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorHitReaction? HitReaction = null, ulong? HitReactionRandomState = null, bool KnockedDown = false,
     FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null,
     FalloutDoorMotionState? DoorMotion = null, FalloutReferenceLockState? LockState = null,
-    FalloutReferenceOwnershipOverride? OwnershipOverride = null)
+    FalloutReferenceOwnershipOverride? OwnershipOverride = null,
+    IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -56,6 +57,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
+            foreach (var start in snapshot.PackageStarts ?? [])
+                (start ?? throw new InvalidDataException("Saved package selection time is absent.")).Validate();
+            snapshot.PackageIdle?.Validate();
             snapshot.HitReaction?.Validate();
             if (snapshot.KnockedDown && (snapshot.Injury is not { Dead: false } || snapshot.Ragdoll is null && snapshot.HitReaction is null))
                 throw new InvalidDataException("Knockdown requires a living actor and a retained physical or recovery pose.");
@@ -101,6 +105,8 @@ internal sealed class FalloutReferenceInstance
     internal bool PlayerTeammate { get; set; }
     internal bool TalkedToPlayer { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
+    internal List<FalloutPackageStart> PackageStarts { get; } = [];
+    internal FalloutPackageEventIdle? PackageIdle { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
     internal FalloutReferencePlacement? Placement { get; set; }
     internal long PlacementRevision { get; set; }
@@ -181,7 +187,8 @@ internal sealed class FalloutReferenceInstance
             Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
             CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
             TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
-            CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride);
+            CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
+            PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle);
     }
 }
 
@@ -427,6 +434,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 }
                 instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
             }
+            validated.RestorePackageTiming(instance, snapshot);
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.Animation is { } animation) instance.Animation.Restore(animation);
             if (snapshot.Unconscious) validated.SetUnconscious(snapshot.Reference, true);
@@ -465,6 +473,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (instance.EnableRequest is not null && instance.EnableParent is not null)
                 throw new InvalidDataException("Saved child reference has an independent enable request.");
         }
+        // Reference-marker targets may themselves have saved placements. All
+        // placements must be restored before validating their Travel anchors.
+        foreach (var snapshot in snapshots)
+            if (snapshot.PackageMotion?.Travel is { } travel)
+                FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
+                    .Validate(records, validated, snapshot.Reference, travel);
         foreach (var (key, instance) in validated._instances) _instances.Add(key, instance);
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
     }

@@ -5,6 +5,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--travel-contracts"])
+{
+    TravelContracts.Run();
+    return;
+}
 if (args is ["--inventory-query-contracts"])
 {
     InventoryQueryContracts.Run();
@@ -462,6 +467,7 @@ RadioContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
 EditorTravelContracts.Run();
+TravelContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();

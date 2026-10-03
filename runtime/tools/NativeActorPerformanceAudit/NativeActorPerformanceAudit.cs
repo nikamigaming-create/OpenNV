@@ -10,6 +10,16 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is [var creatureTravelMode, var creatureTravelGame, var creatureTravelMod, var creatureTravelRoot,
+                var creatureTravelActor, var creatureTravelQuest, var creatureTravelStage, var creatureTravelExpected, .. var creatureTravelDependencies] &&
+                creatureTravelMode is "--creature-travel" or "--creature-travel-arrival")
+            {
+                await CreatureTravel(creatureTravelGame, creatureTravelMod, creatureTravelRoot, creatureTravelActor, creatureTravelQuest,
+                    short.Parse(creatureTravelStage, System.Globalization.CultureInfo.InvariantCulture),
+                    short.Parse(creatureTravelExpected, System.Globalization.CultureInfo.InvariantCulture), creatureTravelDependencies,
+                    creatureTravelMode == "--creature-travel-arrival");
+                GetTree().Quit(); return;
+            }
             if (args is ["--creature-stack", var creatureGame, var creatureMod, var creatureModRoot,
                 var creatureReferences, .. var creatureDependencies])
             {

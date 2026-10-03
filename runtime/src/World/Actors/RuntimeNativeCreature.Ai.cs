@@ -24,6 +24,7 @@ internal sealed partial class RuntimeNativeCreature
     private bool _initialPackageSelected;
     private bool _evaluateRequested = true;
     private double _packageClock;
+    private long _aiQuestRevision = -1;
     private string? _aiError;
     private FalloutFormKey? _waitingForTarget;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
@@ -36,6 +37,16 @@ internal sealed partial class RuntimeNativeCreature
         dialogue = _dialoguePackage,
         dialogueRequested = _dialogueRequested,
         motion = _aiState?.PackageMotion,
+        travel = TravelState,
+        eventIdle = _aiState?.PackageIdle,
+        packageStarts = _aiState?.PackageStarts,
+        packageEvents = _packageEvents is null ? null : new
+        {
+            _packageEvents.Done,
+            _packageEvents.Revision,
+            _packageEvents.LastEvent,
+            _packageEvents.Error
+        },
         waitingForTarget = _waitingForTarget?.ToString(),
         error = _aiError,
         scheduleTime = _aiScheduleTime,
@@ -49,19 +60,14 @@ internal sealed partial class RuntimeNativeCreature
         _aiClock = clock; _aiGlobals = globals;
         _aiState = world.Get(Appearance.Reference!.Value);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
-        _packageEvents = new((package, kind) =>
-        {
-            // Preserve source event order; reached behavior without an owner
-            // stays an explicit divergence instead of silently succeeding.
-            package.EventPrograms.GetValueOrDefault(kind)?.RequireEmptyScript();
-            if (package.Events.GetValueOrDefault(kind) is not null)
-                throw new NotSupportedException("Creature package event idle requires its animation owner.");
-        });
+        _packageEvents = new(DispatchPackageEvent);
+        RestoreEventIdle();
     }
 
     internal void EvaluatePackages(bool reset)
     {
         if (_aiRecords is null) throw new NotSupportedException("Creature has no package owner.");
+        if (_aiState?.ScriptError is { } error) throw new NotSupportedException(error);
         _aiError = null;
         // Script evaluation may precede native enable/materialization in the
         // same source event. Evaluate on the next resident physics step.
@@ -76,6 +82,9 @@ internal sealed partial class RuntimeNativeCreature
 
     internal float PackageCondition(FalloutCondition condition) => condition.Function switch
     {
+        25 => Combat?.PackageMoving == true ? 1 : 0,
+        161 => FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, _aiPackage?.FormKey,
+            reference => _aiWorld!.CurrentPackage(reference)) ? 1 : 0,
         18 => (_aiClock ?? throw new NotSupportedException("Creature time query has no simulation clock.")).Hour,
         74 => (_aiGlobals ?? throw new NotSupportedException("Creature global query has no state owner.")).Get(condition.FormArgument1),
         71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
@@ -116,7 +125,12 @@ internal sealed partial class RuntimeNativeCreature
     {
         var previousFailure = _failedPackage;
         _failedPackage = null;
-        var selected = FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock);
+        var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
+        var restoreTravel = retained?.Travel is not null;
+        var selected = restoreTravel ? _aiRecords!.GetEffective(retained!.Package) :
+            FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
+                eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
+                    _aiPackage?.FormKey, _packageEvents?.Done == true));
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
         _aiError = null;
@@ -125,9 +139,11 @@ internal sealed partial class RuntimeNativeCreature
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
         FalloutDialoguePackage? dialogue = null;
+        FalloutTravelPackage? travel = null;
         if (source is not null)
         {
             if (source.Procedure == 1) follow = FalloutFollowPackage.Read(selected!);
+            else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 15)
             {
                 dialogue = FalloutDialoguePackage.Read(selected!);
@@ -136,14 +152,18 @@ internal sealed partial class RuntimeNativeCreature
             }
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
         }
-        var restored = !_initialPackageSelected && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        var restoredDialogue = !_initialPackageSelected && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        if (travel is not null) BeginTravel(selected!, restoreTravel);
+        else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
         _initialPackageSelected = true;
-        if (restored) _packageEvents!.Restore(source!, true);
+        if (restoreTravel || restoredDialogue) _packageEvents!.Restore(source!, restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
-        _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restored;
-        _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restored ? "Dialogue package continuation has no cold restoration owner." : null;
-        if (!restored && _aiState.PackageMotion is { DialogueCompleted: true } previousMotion)
+        _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
+        if (travel is null)
+            _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? "Dialogue package continuation has no cold restoration owner." : null;
+        if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
+        if (restoreTravel) _evaluateRequested = true;
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
     }
@@ -167,22 +187,26 @@ internal sealed partial class RuntimeNativeCreature
         _waitingForTarget = null;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
+        if (_aiState?.ScriptError is { } scriptError) { _aiError = scriptError; return; }
         var selecting = false;
         try
         {
             _packageClock -= delta;
             var scheduleTime = _aiClock?.ScheduleTime();
             if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-            if (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime)
+            if (!_initialPackageSelected || !PackageEndIdlePending && !(_travelPackage?.MustReach == true && _travelProgress?.Complete == false) &&
+                (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.Revision))
             {
                 _evaluateRequested = false; _packageClock = 10;
                 _aiScheduleTime = scheduleTime;
+                _aiQuestRevision = _aiQuests!.Revision;
                 selecting = true;
                 SelectPackage();
                 selecting = false;
             }
             if (_aiError is not null) return;
-            if (_followPackage is { } follow)
+            if (_travelPackage is not null) AdvanceTravel(delta);
+            else if (_followPackage is { } follow)
             {
                 var target = TargetNode(follow.Target);
                 if (target is null) { _waitingForTarget = follow.Target; return; }
