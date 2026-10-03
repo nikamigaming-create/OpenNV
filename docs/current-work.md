@@ -36,18 +36,19 @@ next source INFO and voice now execute without the prior missing-creature-owner
 error, and birthday15 is entered while the retained maximum stage remains21.
 The observed Palmer reply gives the source sweetroll, enters20 and closes
 dialogue without a speech/result error.
-The actual creature is present with its complete source model. In the latest
-candidate retry its editor-location Travel completes, then the ordinary Palmer
-interaction selects the authored cake marker package. It reaches that marker on
-the floor and retains arrival before the source On End result. The actual
-PlayGroup Forward result exposes `NIF controller manager 3 has an unsupported
-sequence chain.` The creature and conversation retain that result failure.
+The actual creature is present with its complete source model. The latest
+ordinary retry completes its editor-location and cake-marker Travel on the
+floor, executes the actual cake PlayGroup Forward result, finishes the source
+cutting idle and enters birthday16 through its package change result. The cake
+speech chain then executes Andy's authored SayTo player GREETING. Shared scripted
+speech selection incorrectly admits an unrelated Freeside INFO and fails its
+type check; Palmer's active conversation retains that speech failure.
 Cake completion, birthday completion, Vault exit, Megaton, train and Mojave
 remain unreached.
 
 ## Current implementation block
 
-The published baseline is41c6b5d after checked PR114. Shared
+The published baseline isf571450 after checked PR115. Shared
 [optional INFO responses](optional-dialogue-responses.md),
 [current-package queries](dialogue-package-queries.md),
 [owned GetVampire](owned-vampire-query.md) and
@@ -72,7 +73,7 @@ birthday21. Palmer's source result passes the previous owner error and exposes
 the creature Travel procedure as the next owner. The required Release/Debug,
 formatting/analyzer, contract, launcher and native Godot gate passes.
 
-The current branch `codex/creature-travel-events` implements
+The published baseline implements
 [source creature Travel and events](creature-travel-events.md): editor/marker
 destinations, retained native arrival, elapsed-day selection history, actual
 package results and source event-idle playback. Synthetic contracts pass. The
@@ -82,7 +83,19 @@ cold world reload without replay. Its floor/stage/enable-parent fixture is
 explicit. The fresh ordinary retry reaches the same source failure in the
 actual birthday room. Complete end-idle playback and campaign cold continuation
 remain unverified. The required Release/Debug, formatting/analyzer, contract,
-launcher and native Godot gate passes for this block.
+launcher and native Godot gate passes for that block.
+
+The current branch `codex/managed-morph-lifespan` binds managed source geometry
+morphs, particle lifespan channels and linked planar collider managers. The
+focused native morph/particle contracts pass. The selected owned creature
+fixture now executes the real cake PlayGroup, retains its end-idle across
+reassembly and runs the source package change result once. That isolated
+floor/stage/enable-parent fixture does not execute the complete stage program or
+establish campaign cold continuation. Ordinary continuation executes the cake
+and stage16 in the actual birthday room. The required Release/Debug,
+formatting/analyzer, contract, launcher and native Godot gate passes for this
+block; retail pixels, particle randomness,
+plane sidedness and moving-plane response remain unaccepted.
 
 Merged [bot refinement](bot-navigation.md), [source dialogue packages](source-dialogue-packages.md),
 [furniture motion](furniture-motion.md) and [radio refresh](source-radio-refresh.md)
@@ -91,9 +104,9 @@ continuations block saving. Never clear a fault or replay a consumed prefix.
 
 ## Next owners
 
-1. Bind managed geometry morph and particle lifespan channels to the existing
-   native animation/particle owners. Continue the source cake result and
-   event-idle sequence, then the birthday from genuine state.
+1. Bind authored scripted GREETING selection to its DIAL type, active quest
+   conditions and source priority, then continue the ordinary birthday from
+   genuine state. Fix the next reached script owner.
 2. Complete automatic escort-door recovery and matched steering/turn behavior;
    repair sampled short bot endpoint crossing.
 3. Implement selected zero-response INFO result/flow behavior when reached.
@@ -112,13 +125,18 @@ campaign, cell, actor, mod or retail parity completion.
 ## Private continuation
 
 `tmp/development-lab/ttw-bot-20261002/` holds the latest candidate retry.
-Continue288, door289 and follow290 complete CG01; stop291 is acknowledged.
-Amata approach292, stop293 and observed replies294/295 complete the source gift
-and reach21. Palmer interaction296 enters15 and reaches the actual creature
-Travel arrival and cake result failure; stop297 and full state298 retain it.
-Pause299 and normal Quit300/301 close native process30396. No frames were
-recorded. Failed source prefixes remain retained and must not be replayed as
-completed.
+Continue302 and door303 restore the genuine closed80 state. Follow304 fails a
+same-cell NAVM route; wider follow305 times out at an incorrect projected
+endpoint. Ordinary forward input306 and follow307 complete Dad's Escort and
+CG01; stop308 is acknowledged. Amata approach309, stop310 and observed replies
+311/312 give the source skill book and reach21. Palmer approach313 enters15;
+the actual creature completes cake Travel, PlayGroup and cutting idle, then its
+source change result enters16. The cake speech's subsequent Andy GREETING fails
+selection and faults the active Palmer conversation. State314 retains the
+failure. Pause315 and normal Quit316/317 close native process36300. The sampled
+short-endpoint bot fault, NPC-to-NPC dialogue, dialogue trigger movement, patrol
+flags and the creature's post-cake Travel inputs remain visible. No frames were
+recorded. Failed source prefixes must not be replayed as completed.
 
 Genuine stage16/40/50 and open/closed stage80 backups, source evidence and focused
 checks are under `local/ttw-bot-resume-20261002/`. Closed stage80 is the next retry;

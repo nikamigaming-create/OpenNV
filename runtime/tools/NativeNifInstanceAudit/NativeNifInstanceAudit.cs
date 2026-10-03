@@ -90,6 +90,8 @@ public partial class NativeNifInstanceAudit : Node
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();
             ExerciseMorphBasis();
+            ExerciseManagedMorph();
+            ExerciseParticleChannels();
             ExerciseDdsImages();
             ExerciseHeadTracking();
             ExerciseAuthoredDecalSurfaces();

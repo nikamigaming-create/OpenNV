@@ -62,6 +62,18 @@ creature arrives at the marker on the actual room floor. The source cake's
 managed morph and particle lifespan channels are the next owner. The required
 integrated runtime gate passes for this candidate; full end-idle and subsequent
 campaign continuation remain unverified.
+
+The current [managed object/particle candidate](managed-object-particles.md)
+binds source geometry morphs, emitter lifespan channels and linked planar
+collider managers. Focused native contracts pass. The selected owned creature
+fixture executes the actual cake animation result, retains the cutting idle
+through reassembly and runs the package change result once. Its isolated floor
+and explicit stage/enable-parent setup do not establish ordinary campaign or
+cold campaign continuation. The fresh ordinary retry completes actual cake
+Travel, PlayGroup and cutting idle, then enters16 through the source package
+change result. Its subsequent scripted Andy GREETING exposes topic/quest
+selection; the active conversation retains that fault. The required integrated
+gate passes; retail pixel, randomness and plane-response parity remain unaccepted.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the

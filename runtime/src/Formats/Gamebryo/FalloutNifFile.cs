@@ -157,11 +157,13 @@ internal sealed partial class FalloutNifFile
             "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape" => ReadGeometry(block, ref cursor),
             "NiParticleSystem" => ReadParticleSystem(block, ref cursor),
             "NiPSysData" => ReadParticleData(block, ref cursor),
-            "NiPSysAgeDeathModifier" or "NiPSysMeshEmitter" or "NiPSysBoxEmitter" or "NiPSysCylinderEmitter" or "NiPSysSphereEmitter" or
+            "NiPSysAgeDeathModifier" or "NiPSysColliderManager" or "NiPSysMeshEmitter" or "NiPSysBoxEmitter" or "NiPSysCylinderEmitter" or "NiPSysSphereEmitter" or
                 "NiPSysSpawnModifier" or "NiPSysGrowFadeModifier" or "BSPSysSimpleColorModifier" or
                 "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
                 "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" or "BSWindModifier" => ReadParticleModifier(block, ref cursor),
-            "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
+            "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
+                "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
+            "NiPSysPlanarCollider" => ReadParticlePlanarCollider(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
             "NiSkinInstance" or "BSDismemberSkinInstance" => ReadSkinInstance(block, ref cursor),

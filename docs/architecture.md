@@ -62,6 +62,13 @@ event-idle source phase persist with the reference. Failed results retain their
 consumed prefix. Unbound model animation channels remain visible independently
 of procedure arrival.
 
+[Managed object morphs and particles](managed-object-particles.md) bind declared
+geometry targets and emitter lifespans to the existing native mesh and particle
+owners. Linked planar collider managers consume contact time in source modifier
+order before the remaining position update. Instance-owned meshes, clocks and
+particle fields prevent shared prototype state from synchronizing references;
+unsupported inputs and unmatched retail collision behavior remain visible.
+
 Player camera packages share the C# IDLE playback clock with source intro,
 repeat and outro intervals. Assignment handoff retains identical event poses;
 source text-key crossings feed the existing native player sound owner. Saved

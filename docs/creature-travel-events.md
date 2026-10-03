@@ -35,12 +35,13 @@ the bounded endpoint, retains the subsequent source animation failure without
 replaying the result, and preserves arrival/timing/error through a fresh world
 reload. This fixture does not establish campaign continuation or retail parity.
 
-The reached source result asks the cake reference to PlayGroup Forward. Its
-managed geometry morph and particle lifespan channels are the next missing
-presentation owners. A fresh genuine stage80 Continue, ordinary door activation
-and following complete Dad's Escort and reach the birthday. Observed Amata
-replies give the source gift; the ordinary Palmer interaction selects the cake
-marker package. The complete creature reaches its bounded endpoint on the real
-room floor and retains the same actual PlayGroup failure. Full source end-idle
-completion, campaign cold continuation and matched retail transition timing
-remain unverified for this block.
+The reached source result asks the cake reference to PlayGroup Forward. The
+[managed object/particle owner](managed-object-particles.md) now binds its source
+channels. A fresh genuine stage80 Continue, ordinary door activation and
+following complete Dad's Escort and reach the birthday. Observed Amata replies
+give the source gift; the ordinary Palmer interaction selects the cake marker
+package. The complete creature reaches its bounded endpoint on the real room
+floor, executes PlayGroup and finishes the cutting idle. Its source package
+change result enters16. The cake speech's subsequent Andy GREETING exposes
+scripted topic/quest selection. Campaign cold continuation, birthday completion
+and matched retail transition timing remain unverified.
