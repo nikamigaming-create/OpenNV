@@ -16,6 +16,9 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
     private bool IsPlayer(FalloutFormKey target) => target == records.RuntimeFormKey(0x14);
     private FalloutPlayerInventory Inventory(FalloutFormKey target) => IsPlayer(target) ? player : world.Inventory(target, level(), globals).Contents;
 
+    internal double ItemCount(FalloutFormKey target, FalloutFormKey item) =>
+        FalloutInventoryItemCounts.Count(records, Inventory(target), item);
+
     internal FalloutFormKey? EquippedObject(FalloutFormKey target, uint slot) => IsPlayer(target)
         ? player.EquippedObject(records, slot) : world.EquippedObject(target, slot, level(), globals);
 

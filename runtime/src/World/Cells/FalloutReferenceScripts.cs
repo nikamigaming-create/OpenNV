@@ -413,6 +413,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
+            if (parts.Length <= 2 && operation == "getitemcount")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    (host.Inventory ?? throw new NotSupportedException("Item count has no shared inventory owner."))
+                    .ItemCount(Target(), arguments[0].Value.FormKey(records)))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
                 return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
                 {

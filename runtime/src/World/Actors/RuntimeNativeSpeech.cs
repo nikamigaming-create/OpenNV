@@ -43,6 +43,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, int, float>? _actorValue;
     private Func<FalloutFormKey, FalloutFormKey?>? _currentPackage;
     private Func<int>? _vampireQuery;
+    private Func<FalloutFormKey, FalloutFormKey, double>? _itemCount;
     private Func<uint, uint>? _dialogueRandom;
     private FalloutReferenceWorld? _references;
     private Func<FalloutCondition, float>? _conditionContext;
@@ -185,7 +186,7 @@ internal partial class RuntimeNativeSpeech : Node
         Func<bool>? playerFemale = null, Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
         Func<FalloutFormKey, int, float>? actorValue = null, Func<uint, uint>? dialogueRandom = null,
         FalloutReferenceWorld? references = null, Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null,
-        Func<int>? vampireQuery = null)
+        Func<int>? vampireQuery = null, Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
@@ -196,6 +197,7 @@ internal partial class RuntimeNativeSpeech : Node
         _actorValue = actorValue;
         _currentPackage = currentPackage;
         _vampireQuery = vampireQuery;
+        _itemCount = itemCount;
         _dialogueRandom = dialogueRandom;
         _references = references;
         _conditionContext = conditionContext;
@@ -299,7 +301,8 @@ internal partial class RuntimeNativeSpeech : Node
         var conditions = new FalloutDialogueConditions(_stack,
             _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), speaker.FormKey, identity,
             _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace,
-            listener: target, listenerIdentity: listenerIdentity, currentPackage: _currentPackage, vampireQuery: _vampireQuery);
+            listener: target, listenerIdentity: listenerIdentity, currentPackage: _currentPackage, vampireQuery: _vampireQuery,
+            itemCount: _itemCount);
         var info = topic.Select(npcKey, _said, _questStage, conditions.Evaluate, random: _dialogueRandom);
         if (info is null)
         {

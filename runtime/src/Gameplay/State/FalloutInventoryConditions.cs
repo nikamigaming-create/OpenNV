@@ -14,7 +14,7 @@ internal static class FalloutInventoryConditions
         if (!TargetsPlayer(records, condition)) return null;
         return condition.Function switch
         {
-            47 => inventory.Item(condition.FormArgument1)?.Count ?? 0,
+            47 => (float)FalloutInventoryItemCounts.Count(records, inventory, condition.FormArgument1),
             182 => inventory.Equipped.Contains(records.RuntimeFormId(condition.FormArgument1)) ? 1 : 0,
             382 => records.GetEffective(condition.FormArgument1).Signature != "NOTE"
                 ? throw new InvalidDataException("GetHasNote argument is not NOTE.")

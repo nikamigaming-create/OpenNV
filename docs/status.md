@@ -31,6 +31,14 @@ executable declaration across dialogue and scripts. Synthetic contracts, all
 nine selected TTW GREETING conditions and the required integrated gate pass.
 The fresh ordinary retry reaches birthday12 and passes that query, then retains
 a player-target GetItemCount condition as the next conversation failure.
+The [inventory query owner](dialogue-inventory-queries.md) now binds source
+subjects and direct FormList sums to the shared inventory owner. Synthetic
+scope/list/live-change/cold checks and136 selected TTW GREETING predicates pass.
+The required integrated gate passes. A fresh ordinary retry completes Amata's
+greeting, reply and gift interaction, reaches birthday21 with the source skill
+book and releases dialogue control. The next Palmer/cake result retains a missing
+native package presentation owner for an authored creature. Birthday completion
+and the subsequent campaign remain open.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the
@@ -116,7 +124,8 @@ package query no longer faults, and he takes his authored bench seat. The
 selected view removes the actor displaced in front of Amata; exact alignment,
 walk/turn timing and matched pixels remain unaccepted.
 The finishing source result now refreshes radio reception and discovery. The
-latest ordinary Amata approach retains the inventory condition described above.
+latest ordinary Amata interaction reaches21; Palmer's cake result retains the
+creature-package failure described above.
 The glasses actor, complete birthday, campaign and matched retail acceptance
 remain open.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
