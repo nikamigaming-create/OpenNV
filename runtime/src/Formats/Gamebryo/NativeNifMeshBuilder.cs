@@ -77,34 +77,17 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private const int EnvironmentTextureSlot = 4;
     private const int EnvironmentMaskTextureSlot = 5;
     private const int FalloutTextureSlots = 6;
-    private const int DdsHeaderBytes = 128;
     private const ushort DormantManagerFlags = 0x004c;
     private const ushort DormantMultiTargetFlags = 0x006c;
     private const ushort DormantDirectTransformFlags = 0x0068;
-    private const int DdsCaps2Offset = 112;
-    private const uint DdsCubemapFlag = 0x00000200;
-    private const uint DdsAllCubemapFaces = 0x0000fc00;
-    private const int DdsPositiveXFace = 0;
-    private const int DdsNegativeXFace = 1;
-    private const int DdsPositiveYFace = 2;
-    private const int DdsNegativeYFace = 3;
-    private const int DdsPositiveZFace = 4;
-    private const int DdsNegativeZFace = 5;
-    private static readonly int[] DdsGodotFaceOrder =
-    [
-        DdsPositiveXFace,
-        DdsNegativeXFace,
-        DdsPositiveZFace,
-        DdsNegativeZFace,
-        DdsNegativeYFace,
-        DdsPositiveYFace,
-    ];
     private const string EnvironmentShader = """
         shader_type spatial;
         render_mode unshaded, blend_add, depth_draw_never, cull_back;
 
         uniform sampler2D normal_map : hint_normal;
         uniform samplerCube environment_cube;
+        uniform sampler2D environment_2d;
+        uniform bool use_environment_2d;
         uniform sampler2D environment_mask;
         uniform bool use_environment_mask;
         uniform float environment_scale;
@@ -118,7 +101,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
             float mask = use_environment_mask
                 ? texture(environment_mask, UV).r
                 : texture(normal_map, UV).a;
-            ALBEDO = texture(environment_cube, reflected_world).rgb * mask * environment_scale;
+            vec3 sample_color = use_environment_2d ? texture(environment_2d, reflected_world.xy).rgb
+                : texture(environment_cube, reflected_world).rgb;
+            ALBEDO = sample_color * mask * environment_scale;
             ALPHA = 1.0;
         }
         """;
@@ -128,6 +113,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
         uniform sampler2D normal_map : hint_normal;
         uniform samplerCube environment_cube;
+        uniform sampler2D environment_2d;
+        uniform bool use_environment_2d;
         uniform sampler2D environment_mask;
         uniform bool use_environment_mask;
         uniform float environment_scale;
@@ -141,7 +128,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
             float mask = use_environment_mask
                 ? texture(environment_mask, UV).r
                 : texture(normal_map, UV).a;
-            ALBEDO = texture(environment_cube, reflected_world).rgb * mask * environment_scale;
+            vec3 sample_color = use_environment_2d ? texture(environment_2d, reflected_world.xy).rgb
+                : texture(environment_cube, reflected_world).rgb;
+            ALBEDO = sample_color * mask * environment_scale;
             ROUGHNESS = 0.0;
             METALLIC = 0.0;
             ALPHA = 1.0;
@@ -2084,7 +2073,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 else
                 {
                     result.NextPass = BuildEnvironmentPass(
-                        LoadCubemap(textures.Textures[EnvironmentTextureSlot]),
+                        LoadEnvironmentTexture(textures.Textures[EnvironmentTextureSlot]),
                         normal,
                         environmentMask,
                         environmentScale,
@@ -2439,45 +2428,17 @@ internal static partial class RuntimeNativeNifMeshBuilder
             return texture;
         }
 
-        private Cubemap LoadCubemap(string logicalPath)
+        private Texture LoadEnvironmentTexture(string logicalPath)
         {
             var (payload, source) = ReadTexture(logicalPath);
-            if (payload.Length < DdsHeaderBytes ||
-                !payload.AsSpan(0, 4).SequenceEqual("DDS "u8))
-                throw new InvalidDataException($"Native NIF cubemap is not DDS: {source}");
-            var caps2 = BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(DdsCaps2Offset));
-            if ((caps2 & DdsCubemapFlag) == 0 ||
-                (caps2 & DdsAllCubemapFaces) != DdsAllCubemapFaces ||
-                (payload.Length - DdsHeaderBytes) % DdsGodotFaceOrder.Length != 0)
-                throw new InvalidDataException(
-                    $"Native NIF environment texture is not a complete six-face DDS cubemap: {source}");
-            var faceBytes = (payload.Length - DdsHeaderBytes) / DdsGodotFaceOrder.Length;
-            var images = new Godot.Collections.Array<Image>();
-            foreach (var sourceFace in DdsGodotFaceOrder)
-            {
-                var facePayload = new byte[checked(DdsHeaderBytes + faceBytes)];
-                payload.AsSpan(0, DdsHeaderBytes).CopyTo(facePayload);
-                BinaryPrimitives.WriteUInt32LittleEndian(facePayload.AsSpan(DdsCaps2Offset), 0);
-                payload.AsSpan(DdsHeaderBytes + sourceFace * faceBytes, faceBytes)
-                    .CopyTo(facePayload.AsSpan(DdsHeaderBytes));
-                var image = new Image();
-                var error = image.LoadDdsFromBuffer(facePayload);
-                if (error != Error.Ok || image.IsEmpty())
-                    throw new InvalidDataException(
-                        $"Godot could not decode native NIF cubemap face {sourceFace} from {source}: {error}");
-                images.Add(image);
-            }
-            NativeDdsTexture.PreserveCubeAlpha(images);
-            var result = new Cubemap();
-            var createError = result.CreateFromImages(images);
-            if (createError != Error.Ok)
-                throw new InvalidDataException(
-                    $"Godot could not create native NIF cubemap {source}: {createError}");
-            return result;
+            var texture = NativeNifEnvironmentTexture.Load(payload, source);
+            texture.SetMeta("opennv_source_texture", source);
+            texture.SetMeta("opennv_logical_texture", logicalPath);
+            return texture;
         }
 
         private static ShaderMaterial BuildEnvironmentPass(
-            Cubemap environment,
+            Texture environment,
             Texture2D normal,
             Texture2D? mask,
             float scale,
@@ -2491,7 +2452,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 },
             };
             result.SetShaderParameter("normal_map", normal);
-            result.SetShaderParameter("environment_cube", environment);
+            result.SetShaderParameter(environment is Texture2D ? "environment_2d" : "environment_cube", environment);
+            result.SetShaderParameter("use_environment_2d", environment is Texture2D);
+            result.SetMeta("opennv_environment_texture_kind", environment.GetMeta("opennv_environment_texture_kind"));
             result.SetShaderParameter("environment_mask", mask ?? normal);
             result.SetShaderParameter("use_environment_mask", mask is not null);
             result.SetShaderParameter("environment_scale", scale);

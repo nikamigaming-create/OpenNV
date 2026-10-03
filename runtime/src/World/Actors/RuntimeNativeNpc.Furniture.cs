@@ -208,6 +208,10 @@ internal partial class RuntimeNativeNpc
     {
         ClearFurniture();
         if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
+        {
+            if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
             state.QueryCurrentPackage = null;
+            if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
+        }
     }
 }

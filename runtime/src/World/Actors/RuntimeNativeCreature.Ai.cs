@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
+    private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     private FalloutPluginRecord? _aiPackage;
     private FalloutFollowPackage? _followPackage;
     private FalloutDialoguePackage? _dialoguePackage;
@@ -61,6 +62,8 @@ internal sealed partial class RuntimeNativeCreature
         _aiState = world.Get(Appearance.Reference!.Value);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
         _packageEvents = new(DispatchPackageEvent);
+        world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+        _aiState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(records, _packageEvents);
         RestoreEventIdle();
     }
 
@@ -77,7 +80,11 @@ internal sealed partial class RuntimeNativeCreature
     public override void _ExitTree()
     {
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
+        {
+            if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
             state.QueryCurrentPackage = null;
+            if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
+        }
     }
 
     internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (161 or 289)

@@ -20,6 +20,22 @@ public partial class NativeNifInstanceAudit
         using var opaqueTexture = NativeDdsTexture.Create(opaque);
         if (opaque.GetFormat() != Image.Format.Dxt1 || !opaque.GetData().SequenceEqual(compressed))
             throw new InvalidOperationException("Opaque BC1 was unnecessarily expanded or modified.");
+        using var environment = NativeNifEnvironmentTexture.Load(DdsFixture(), "synthetic-2d-environment");
+        using var environmentImage = (environment as Texture2D)?.GetImage();
+        if (environment is not Texture2D flat || flat.GetWidth() != 8 || flat.GetHeight() != 8 ||
+            environmentImage?.GetMipmapCount() != 3 || environment.GetMeta("opennv_environment_texture_kind").AsString() != "2D")
+            throw new InvalidDataException("A 2D environment resource lost dimensionality or authored mips.");
+        var facePayload = DdsFixture();
+        var cubePayload = new byte[128 + (facePayload.Length - 128) * 6];
+        facePayload.AsSpan(0, 128).CopyTo(cubePayload);
+        BinaryPrimitives.WriteUInt32LittleEndian(cubePayload.AsSpan(112), 0xfe00);
+        for (var face = 0; face < 6; face++) facePayload.AsSpan(128).CopyTo(cubePayload.AsSpan(128 + face * (facePayload.Length - 128)));
+        using var cube = NativeNifEnvironmentTexture.Load(cubePayload, "synthetic-cube-environment");
+        if (cube is not Cubemap || cube.GetMeta("opennv_environment_texture_kind").AsString() != "cube")
+            throw new InvalidDataException("A six-face environment resource lost its cube binding.");
+        BinaryPrimitives.WriteUInt32LittleEndian(cubePayload.AsSpan(112), 0x600);
+        try { using var invalid = NativeNifEnvironmentTexture.Load(cubePayload, "incomplete-cube"); throw new InvalidOperationException("Incomplete cube was admitted."); }
+        catch (InvalidDataException) { }
         var faces = new Godot.Collections.Array<Image>();
         try
         {
@@ -29,7 +45,7 @@ public partial class NativeNifInstanceAudit
                 throw new InvalidOperationException("Cubemap faces lost their common format or mip levels.");
         }
         finally { foreach (var face in faces) face.Dispose(); }
-        GD.Print("OPENNV_DDS_UPLOAD_PASS encodedAlpha=true authoredMipBytes=true opaqueCompressed=true cubemapFaces=true");
+        GD.Print("OPENNV_DDS_UPLOAD_PASS encodedAlpha=true authoredMipBytes=true opaqueCompressed=true cubemapFaces=true environment2D=true incompleteCubeRefused=true");
     }
 
     private async Task ExerciseDdsPixels(string[] args)

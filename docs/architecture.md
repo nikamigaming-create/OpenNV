@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Environment resources](environment-resource-dimensions.md) preserve actual DDS
+2D or cube dimensionality independently of the NIF environment slot. The shared
+lighting composition binds the corresponding sampler without inventing faces.
+
 [Scripted topic and talking activator dialogue](scripted-topic-and-talking-activator-dialogue.md)
 share source DIAL/QUST selection and actual reference presentation. Retained
 linked actors supply dialogue identity and voice while TACT keeps its owned
