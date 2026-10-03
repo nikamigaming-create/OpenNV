@@ -10,11 +10,21 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args is ["--package-evaluation", var evaluationRoot, var evaluationMod, var evaluationModRoot,
-                var evaluationActor, var evaluationQuest, var evaluationStage, .. var evaluationDependencies])
+            if (args is ["--guard-approach", var guardGame, var guardMod, var guardRoot, var guardActor,
+                var guardQuest, var guardStage, .. var guardDependencies])
+            {
+                await CreatureTravel(guardGame, guardMod, guardRoot, guardActor, guardQuest,
+                    short.Parse(guardStage, System.Globalization.CultureInfo.InvariantCulture), 0, guardDependencies,
+                    guardApproach: true);
+                GetTree().Quit(); return;
+            }
+            if (args is [var evaluationMode, var evaluationRoot, var evaluationMod, var evaluationModRoot,
+                var evaluationActor, var evaluationQuest, var evaluationStage, .. var evaluationDependencies] &&
+                evaluationMode is "--package-evaluation" or "--package-failure-cold")
             {
                 PackageEvaluation(evaluationRoot, evaluationMod, evaluationModRoot, evaluationActor, evaluationQuest,
-                    evaluationStage.Split(',').Select(value => short.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), evaluationDependencies);
+                    evaluationStage.Split(',').Select(value => short.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), evaluationDependencies,
+                    evaluationMode == "--package-failure-cold");
                 GetTree().Quit(); return;
             }
             if (args is [var creatureTravelMode, var creatureTravelGame, var creatureTravelMod, var creatureTravelRoot,

@@ -77,6 +77,14 @@ cold Continue. Exercise the same state changes in flat and OpenXR.
 Label diagnostic fixtures and selected checkpoints; they cannot substitute for
 ordinary traversal or establish a complete campaign.
 
+The October3 continuation requires a genuine saved checkpoint at each reached
+settled campaign segment, with a verified cold Continue so ordinary progress is
+not repeatedly replayed. Complete VATS joins the active combat scope: original
+target/body-part selection, AP costs, queued weapon actions, chances/damage,
+cinematic timing, authored UI and persistent continuation must share the common
+gameplay owners. A control binding or a substitute targeting overlay is not
+VATS support.
+
 1. Establish one reproducible candidate. Preserve existing work, fix build/test
    blockers, run the required gate and selected owned-data audits, retain
    failures and code identity. Keep frame capture off during development.

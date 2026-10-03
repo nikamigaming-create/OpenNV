@@ -11,6 +11,30 @@ internal sealed record FalloutFaceBlinkSettings(float DownSeconds, float UpSecon
         FalloutGameSettingFloats.ReadRetained(records, "fLookDownDisableBlinkingAmt", nameof(FalloutFaceBlinkSettings)));
 }
 
+internal sealed record FalloutFaceBlinkTarget(float Weight, float Duration);
+
+internal sealed record FalloutFaceBlinkSnapshot(FalloutFaceBlinkSettings Settings, float Weight,
+    float ElapsedSeconds, long Cycles, float DelaySeconds, IReadOnlyList<FalloutFaceBlinkTarget> Targets)
+{
+    internal void Validate()
+    {
+        if (Settings is null || new[] { Settings.DownSeconds, Settings.UpSeconds, Settings.DelayMinimum,
+            Settings.DelayMaximum, Settings.LookDownSuppression, Weight, ElapsedSeconds, DelaySeconds }.Any(value => !float.IsFinite(value)) ||
+            Weight is < 0 or > 1 || ElapsedSeconds < 0 || Cycles < 0 || DelaySeconds < 0 || Targets is null || Targets.Count > 3 ||
+            Targets.Any(value => value is null || !float.IsFinite(value.Weight) || !float.IsFinite(value.Duration) || value.Duration <= 0) ||
+            Targets.Count == 0 && ElapsedSeconds != 0 || Targets.Count > 0 && ElapsedSeconds >= Targets[0].Duration ||
+            Cycles == 0 && (Targets.Count != 0 || Weight != 0 || DelaySeconds != 0) ||
+            Targets.Count > 0 && (Cycles == 0 || DelaySeconds < Settings.DelayMinimum || DelaySeconds > Settings.DelayMaximum))
+            throw new InvalidDataException("Saved blink queue is invalid.");
+        var authored = new[] { new FalloutFaceBlinkTarget(0, DelaySeconds),
+            new FalloutFaceBlinkTarget(1, Settings.DownSeconds), new FalloutFaceBlinkTarget(0, Settings.UpSeconds) };
+        if (!Targets.SequenceEqual(authored.Skip(3 - Targets.Count)))
+            throw new InvalidDataException("Saved blink targets differ from the source queue.");
+    }
+
+    internal FalloutFaceBlinkSnapshot Copy() => this with { Targets = Targets.ToArray() };
+}
+
 /// <summary>The FaceGen delay/close/open queue, independent of the selected skeletal KF.</summary>
 internal sealed class FalloutFaceBlink
 {
@@ -31,6 +55,19 @@ internal sealed class FalloutFaceBlink
             throw new InvalidDataException("Blink settings must be finite.");
         Settings = settings;
         _randomUnit = randomUnit;
+    }
+
+    internal FalloutFaceBlinkSnapshot Capture() => new(Settings, Weight, _elapsed, Cycles, DelaySeconds,
+        _targets.Select(value => new FalloutFaceBlinkTarget(value.Target, value.Duration)).ToArray());
+
+    internal void Restore(FalloutFaceBlinkSnapshot snapshot)
+    {
+        snapshot.Validate();
+        if (snapshot.Settings != Settings) throw new NotSupportedException("Saved blink settings differ from the winning source.");
+        _targets.Clear();
+        foreach (var target in snapshot.Targets) _targets.Enqueue((target.Weight, target.Duration));
+        Weight = snapshot.Weight; _elapsed = snapshot.ElapsedSeconds;
+        Cycles = snapshot.Cycles; DelaySeconds = snapshot.DelaySeconds;
     }
 
     internal void Advance(double seconds, float lookDown)

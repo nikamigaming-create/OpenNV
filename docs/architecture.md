@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Actor package continuation](actor-package-continuation.md) retains stopped NPC
+initialization and Guard approach separately from active procedures. Shared
+reference state preserves source selection, consumed retirement and actual
+motion without supplying missing procedure behavior or replaying results.
+
 [Reference weapon-hit events](reference-weapon-hit-events.md) join actual
 projectile/melee contacts to source scripts after damage. Typed weapon/attacker
 membership, authored block order and revision-preserving receipts share the

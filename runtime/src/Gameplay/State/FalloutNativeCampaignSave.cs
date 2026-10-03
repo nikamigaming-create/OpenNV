@@ -46,7 +46,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v31";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v32";
+    internal const string CreatureTravelSchema = "opennv-native-fnv-campaign-save/v31";
     internal const string RadioSchema = "opennv-native-fnv-campaign-save/v30";
     internal const string DialoguePackageSchema = "opennv-native-fnv-campaign-save/v29";
     internal const string EditorTravelSchema = "opennv-native-fnv-campaign-save/v28";
@@ -355,6 +356,11 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageBindingFailure is not null || reference.PackageMotion?.Guard is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema has actor package binding-failure continuation.");
+        // v31 has the same established owners; it cannot carry the new optional
+        // failed-binding lane. This local normalization never rewrites its file.
+        if (state.Schema == CreatureTravelSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageMotion?.Travel is not null ||
             reference.PackageIdle is not null || reference.PackageStarts is { Count: > 0 }) == true)
             throw new InvalidDataException("Legacy campaign schema has Travel, package timing or event-idle state.");

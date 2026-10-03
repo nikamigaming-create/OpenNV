@@ -145,6 +145,7 @@ internal partial class RuntimeNativeNpc
         _baseElapsedSeconds = 0;
         if (moving && continuation is null) { _travelPublishedDistance = 0; _travelPublishedSeconds = 0; }
         BindBaseClock(nif, path, ambient: !moving, continuation);
+        _baseLocomotionMoving = moving;
         if (_animation is null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
         else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
         SetMeta("opennv_base_animation_source", identity);

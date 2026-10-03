@@ -42,6 +42,7 @@
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationData.cs" Link="FalloutIdleAnimationData.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationPlayback.cs" Link="FalloutIdleAnimationPlayback.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptPackage.cs" Link="FalloutScriptPackage.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutPackageRetirement.cs" Link="FalloutPackageRetirement.cs" />
     <Compile Include="../../runtime/src/Content/FalloutImageSpaceCommands.cs" Link="FalloutImageSpaceCommands.cs" />
     <Compile Include="../../runtime/src/Content/FalloutMenuXml.cs" Link="FalloutMenuXml.cs" />
     <Compile Include="../../runtime/src/Content/FalloutUiOrganizer.cs" Link="FalloutUiOrganizer.cs" />

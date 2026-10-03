@@ -203,6 +203,17 @@ internal sealed class FalloutPackageEvents(Action<FalloutScriptPackage, string> 
         Done = done;
     }
 
+    internal void RestoreRetirement(FalloutPackageRetirement retirement)
+    {
+        RequireHealthy();
+        retirement.Validate();
+        if (Active is not null || Done || Revision != 0 || LastEvent is not null || LastPackage is not null)
+            throw new InvalidOperationException("Package retirement restoration requires a fresh lifecycle.");
+        Revision = retirement.Revision;
+        LastEvent = retirement.LastEvent;
+        LastPackage = retirement.LastPackage;
+    }
+
     private void RequireHealthy()
     {
         if (Error is not null) throw new NotSupportedException(Error);

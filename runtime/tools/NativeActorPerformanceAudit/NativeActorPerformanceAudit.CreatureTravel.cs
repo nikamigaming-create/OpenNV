@@ -11,7 +11,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private async Task CreatureTravel(string game, string mod, string root, string actorIdentity, string questId,
-        short stage, short expected, string[] dependencies, bool arrivalOnly = false)
+        short stage, short expected, string[] dependencies, bool arrivalOnly = false, bool guardApproach = false)
     {
         var fixture = new Node3D(); AddChild(fixture);
         FalloutReferenceWorld? world = null;
@@ -110,6 +110,55 @@ public partial class NativeActorPerformanceAudit
                     throw new InvalidDataException("Owned creature Travel diverged: " + JsonSerializer.Serialize(actor.Observation));
             }
             string? retainedFailure = null;
+            if (guardApproach)
+            {
+                var start = actor.GlobalPosition;
+                for (var frame = 0; frame < 600 && actor.GlobalPosition.DistanceTo(start) < .15f; frame++) await Frame();
+                var moving = world.Get(caller).PackageMotion ?? throw new InvalidDataException("Guard produced no native motion.");
+                if (moving.Guard is not { Complete: false } || actor.GlobalPosition.DistanceTo(start) < .15f)
+                    throw new InvalidDataException("Guard did not physically begin its source marker approach.");
+                var guardRecord = records.GetEffective(moving.Package);
+                var sourceGuard = FalloutGuardPackage.Read(guardRecord);
+                var guardHash = SHA256.HashData(guardRecord.ReadData());
+                var pose = actor.GlobalTransform;
+                var snapshots = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+                actor.Free(); world.Dispose();
+                world = new(records); world.Restore(snapshots); world.LoadCell(cell);
+                scripts = new(records, world, quests, new((_, _) => false,
+                    _ => throw new InvalidDataException("Guard approach dispatched an unexpected source result."), Globals: globals));
+                actor = CreateActor();
+                if (actor.GlobalTransform != pose || world.Get(caller).PackageMotion?.Seconds != moving.Seconds)
+                    throw new InvalidDataException("Cold Guard lost its native pose or source clock before continuation.");
+                try
+                {
+                    for (var frame = 0; frame < 1800 && world.Get(caller).PackageMotion?.Guard?.Complete != true; frame++) await Frame();
+                }
+                catch (InvalidDataException) when (world.Get(caller).PackageMotion?.Guard?.Complete == true && sourceGuard.Radius > 0)
+                { retainedFailure = JsonSerializer.SerializeToElement(actor.AiState).GetProperty("error").GetString(); }
+                var completed = world.Get(caller).PackageMotion ?? throw new InvalidDataException("Guard lost its approach state.");
+                var location = sourceGuard.Start(records, world, caller);
+                var destination = actor.Combat!.ProjectPackageDestination(Native(new(location.Location[0], location.Location[1], location.Location[2])));
+                var ai = JsonSerializer.SerializeToElement(actor.AiState);
+                if (completed.Guard?.Complete != true || !actor.IsOnFloor() ||
+                    actor.GlobalPosition.DistanceTo(destination) > actor.SafeMargin * 8 ||
+                    ai.GetProperty("packageEvents").GetProperty("Done").GetBoolean() ||
+                    ai.GetProperty("packageEvents").GetProperty("LastEvent").ValueKind != JsonValueKind.Null ||
+                    ai.GetProperty("packageEvents").GetProperty("Revision").GetInt64() != 0 ||
+                    world.PendingPackageEventCount != 0 || world.PendingProcedureCaptureCount != 0 ||
+                    effects.Count != 0 || groups.Count != 0 || quests.Stage(quest) != stage ||
+                    sourceGuard.Radius > 0 && retainedFailure is null ||
+                    !guardHash.SequenceEqual(SHA256.HashData(guardRecord.ReadData())))
+                    throw new InvalidDataException("Guard invented completion/results or lost its bounded source marker arrival.");
+                using var finalCold = new FalloutReferenceWorld(records);
+                finalCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+                if (finalCold.Get(caller).PackageMotion?.Guard?.Complete != true)
+                    throw new InvalidDataException("Reached Guard approach did not retain cold state.");
+                GD.Print($"OPENNV_NATIVE_GUARD_APPROACH_PASS actor={caller} package={guardRecord.FormKey} " +
+                    "sourceMarker=true sourceNavm=true sourceKf=true nativeCapsule=true exactApproach=true " +
+                    "coldMovingPoseClock=true noEndResult=true noStageChange=true nextPhaseVisible=true sourceReadonly=true " +
+                    "fixture=isolated-floor-and-stage campaignCollisionAndParity=unverified recording=false");
+                return;
+            }
             try
             {
                 for (var frame = 0; frame < 1800 && world.Get(caller).PackageIdle is null; frame++) await Frame();
