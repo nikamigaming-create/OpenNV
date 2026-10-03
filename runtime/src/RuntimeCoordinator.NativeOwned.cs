@@ -84,6 +84,7 @@ public partial class RuntimeCoordinator
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
+                unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
                 state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
                     _nativeReferences.PendingProcedureCaptureCount == 0
                     ? _nativeReferences.Capture() : null,

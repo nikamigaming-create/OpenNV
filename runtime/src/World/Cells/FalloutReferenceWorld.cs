@@ -21,7 +21,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutDoorMotionState? DoorMotion = null, FalloutReferenceLockState? LockState = null,
     FalloutReferenceOwnershipOverride? OwnershipOverride = null,
     IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null,
-    FalloutFormKey? TalkingActivatorActor = null)
+    FalloutFormKey? TalkingActivatorActor = null, FalloutActorPackageAssignment? PackageAssignment = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -60,6 +60,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
+            snapshot.PackageAssignment?.Validate();
             foreach (var start in snapshot.PackageStarts ?? [])
                 (start ?? throw new InvalidDataException("Saved package selection time is absent.")).Validate();
             snapshot.PackageIdle?.Validate();
@@ -109,6 +110,8 @@ internal sealed class FalloutReferenceInstance
     internal bool TalkedToPlayer { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
+    internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
+    internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
@@ -192,7 +195,8 @@ internal sealed class FalloutReferenceInstance
             CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
             TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
-            PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor);
+            PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
+            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment);
     }
 }
 
@@ -421,6 +425,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
             instance.TalkedToPlayer = snapshot.TalkedToPlayer;
+            if (snapshot.PackageAssignment is { } assignment)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                var package = records.GetEffective(assignment.Package);
+                if (package.Signature != "PACK" || !RecordHash(package).Equals(assignment.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Saved actor assignment differs from its winning package.");
+                instance.PackageAssignment = assignment;
+            }
             if (snapshot.TalkingActivatorActor is { } dialogueActor)
                 validated.SetTalkingActivatorActor(snapshot.Reference, dialogueActor);
             if (snapshot.PackageMotion is { } motion)
@@ -493,6 +505,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     public void Dispose()
     {
+        UnloadedPackages = null;
         _sounds?.Clear();
         _screenBlood?.Clear();
         PlayerMoves.Clear();

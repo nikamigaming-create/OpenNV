@@ -16,8 +16,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         var state = world.Get(reference);
         if (_pluginStack.GetEffective(state.Base).Signature is not ("NPC_" or "CREA"))
             throw new InvalidDataException("Package evaluation target is not an actor.");
-        // An unloaded/disabled actor selects its packages when materialized.
-        if (!world.IsResident(reference) || !world.IsEnabled(reference)) return;
+        if (!world.IsEnabled(reference)) return;
+        if (!world.IsResident(reference)) { _ = world.CurrentPackage(reference); return; }
         var nodes = GetTree().Root.FindChildren("*", "", true, false);
         if (nodes.OfType<RuntimeNativeNpc>().SingleOrDefault(actor => actor.Appearance.Reference == reference) is { } npc)
             npc.EvaluatePackages(reset);

@@ -5,6 +5,22 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
+The current actor-package candidate retains winning unloaded assignments and
+source Start/Change effects independently of a native body, then transfers the
+actual lifecycle on admission. Synthetic and selected owned assignment fixtures
+pass; unloaded procedure movement and campaign continuation remain incomplete.
+The fresh ordinary birthday run completes source35 and binds Jonas to the
+intercom, where his missing resident body exposes an environment texture admission
+failure. The candidate now preserves actual 2D DDS environment resources alongside
+six-face cubes. Native synthetic dimensionality/mip/invalid-face checks and Debug
+build pass. The ordinary retry loads Jonas's complete13-part body, reaches his
+source marker and completes the real intercom greeting. NPCs now share the
+once-per-day package history/filter already used by creatures; Dad previously
+kept selecting the completed Travel and could not reach his next SayTo package.
+The required integrated gate and selected Release owned audit pass. Real
+talking-activator package approach, birthday completion, G.O.A.T., Megaton, train
+and Mojave remain unreached.
+
 The [radio refresh owner](source-radio-refresh.md) now binds global source
 ForceRadioStationUpdate/FRSU to winning transmitter reception, applied enable,
 persistent discovery, owned notification declarations and the original Pip-Boy

@@ -52,6 +52,8 @@ internal static class NativeNifLightingMaterial
             uniform vec3 source_specular;
             uniform float source_glossiness;
             uniform samplerCube environment_cube;
+            uniform sampler2D environment_2d;
+            uniform bool use_environment_2d;
             uniform sampler2D environment_mask : filter_linear_mipmap_anisotropic, {{repeat}};
             uniform bool use_environment;
             uniform bool use_environment_mask;
@@ -105,7 +107,9 @@ internal static class NativeNifLightingMaterial
                     vec3 reflected_view = reflect(-normalize(VIEW), NORMAL);
                     vec3 reflected_world = normalize((INV_VIEW_MATRIX * vec4(reflected_view, 0.0)).xyz);
                     float mask = use_environment_mask ? texture(environment_mask, UV).r : source_specular_mask;
-                    reflection = texture(environment_cube, reflected_world).rgb * mask * environment_scale;
+                    vec3 sample_color = use_environment_2d ? texture(environment_2d, reflected_world.xy).rgb
+                        : texture(environment_cube, reflected_world).rgb;
+                    reflection = sample_color * mask * environment_scale;
                 }
                 vec3 lit = base.rgb + (environment_light_fade ? reflection : vec3(0.0));
                 ALBEDO = lit;
@@ -132,8 +136,9 @@ internal static class NativeNifLightingMaterial
             // cube samples to an already decoded target and brightened shadows.
             result.SetShaderParameter("use_environment", true);
             result.SetShaderParameter("environment_light_fade", environment.GetMeta("opennv_environment_light_fade"));
-            foreach (var name in new[] { "environment_cube", "environment_mask", "use_environment_mask", "environment_scale" })
+            foreach (var name in new[] { "environment_cube", "environment_2d", "use_environment_2d", "environment_mask", "use_environment_mask", "environment_scale" })
                 result.SetShaderParameter(name, environment.GetShaderParameter(name));
+            result.SetMeta("opennv_environment_texture_kind", environment.GetMeta("opennv_environment_texture_kind"));
         }
         else if (textures.NextPass is not null)
             throw new NotSupportedException("Source SLS next pass has no composition owner.");

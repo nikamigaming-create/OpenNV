@@ -21,6 +21,7 @@ internal partial class RuntimeNativeNpc
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiReferenceState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
+    private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
     private FalloutPluginRecord? _aiPackage;
@@ -166,6 +167,9 @@ internal partial class RuntimeNativeNpc
         }
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
+        world?.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+        if (_aiReferenceState is { } packageState)
+            packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
         // A stationary, unarmed actor owns its source movement-group idle
         // independently of package selection. An unsupported package must not
         // erase that motion owner and leave the skeleton in its bind pose.
@@ -179,6 +183,8 @@ internal partial class RuntimeNativeNpc
         // result. Its attached script consumes these marks in declaration order
         // on the normal source frame, including events produced before 3D binds.
         if (_aiWorld is { } world)
+        {
+            if (kind == "POBA") world.MarkPackageStart(Appearance.Reference!.Value, _aiStack!.GetEffective(package.Form), _aiClock);
             world.PackageEvents.Mark(Appearance.Reference!.Value, package.Form, kind switch
             {
                 "POBA" => FalloutReferencePackageEventKind.Start,
@@ -186,6 +192,7 @@ internal partial class RuntimeNativeNpc
                 "POCA" => FalloutReferencePackageEventKind.Change,
                 _ => throw new InvalidDataException("Package lifecycle event kind is unknown."),
             });
+        }
         try { DispatchPackageActions(package, kind); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
         {
@@ -274,7 +281,10 @@ internal partial class RuntimeNativeNpc
         FalloutPluginRecord? selected = null;
         try
         {
-            selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock, evaluateRunOn: true);
+            selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock, evaluateRunOn: true,
+                eligible: package => _aiWorld?.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
+                    _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
+                    throw new NotSupportedException("NPC package eligibility has no reference state owner."));
             if (_aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
             // A failed procedure cannot freeze a later eligible package. Event
             // errors retain their separate exactly-once failure latch.

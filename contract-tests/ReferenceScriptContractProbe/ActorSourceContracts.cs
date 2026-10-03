@@ -25,6 +25,8 @@ internal static class ActorSourceContracts
                 Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
                 Creature(0x806, 66, 0x821, "creatures/local/skeleton.nif", "local.nif", 1),
                 ImmobileCreature(0x808),
+                Creature(0x80a, 0, 0, "creatures/test/skeleton.nif", "body.nif", 1,
+                    Field("PKID", BitConverter.GetBytes(0x8f5u)), Field("PKID", BitConverter.GetBytes(0x8f6u))),
                 Creature(0x809, 64, 0x808, "creatures/local/skeleton.nif", "local.nif", 1),
                 ActorList(0x820, 0, (1, 0x800), (1, 0x804), (10, 0x804)),
                 ActorList(0x821, 100, (1, 0x800)),
@@ -48,6 +50,7 @@ internal static class ActorSourceContracts
                     Record("ACRE", 0x906, Field("NAME", BitConverter.GetBytes(0x805u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x907, Field("NAME", BitConverter.GetBytes(0x806u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x909, Field("NAME", BitConverter.GetBytes(0x809u)), Field("DATA", new byte[24])),
+                    Record("ACRE", 0x90b, Field("NAME", BitConverter.GetBytes(0x80au)), Field("DATA", new byte[24])),
                     Marker(0x903, "SourceMapMarker"), Marker(0x905, "OtherMapMarker"),
                     Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x845u)), Field("DATA", new byte[24])),
                     Record("REFR", 0x90a, Field("NAME", BitConverter.GetBytes(0x846u)), Field("DATA", new byte[24])))),
@@ -60,6 +63,14 @@ internal static class ActorSourceContracts
                 Record("VTYP", 0x850, Field("EDID", Text("TestVoice"))),
                 Record("PACK", 0x8f3, Field("EDID", Text("FirstActorPackage"))),
                 Record("PACK", 0x8f4, Field("EDID", Text("OtherActorPackage"))),
+                Record("QUST", 0x871, Field("DATA", new byte[8])),
+                Record("PACK", 0x8f5, Field("EDID", Text("ConditionalActorPackage")),
+                    Field("PKDT", [0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0]),
+                    Field("PSDT", [255, 255, 0, 255, 0, 0, 0, 0]),
+                    Field("CTDA", UnloadedActorPackageContracts.StageCondition(0x871))),
+                Record("PACK", 0x8f6, Field("EDID", Text("FallbackActorPackage")),
+                    Field("PKDT", [0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0]),
+                    Field("PSDT", [255, 255, 0, 255, 0, 0, 0, 0])),
                 Record("WRLD", 0x8f0, Field("ICON", Text("interface/worldmap/owned.dds")),
                     Field("MNAM", Join(BitConverter.GetBytes(2048), BitConverter.GetBytes(1024),
                         BitConverter.GetBytes((short)-20), BitConverter.GetBytes((short)30),
@@ -155,6 +166,7 @@ internal static class ActorSourceContracts
             }
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
             DialoguePackageQueryContracts.Run(directory, records, world, speaker);
+            UnloadedActorPackageContracts.Run(records);
             var choices = new HashSet<FalloutFormKey>();
             for (ulong seed = 0; seed < 32; seed++)
             {

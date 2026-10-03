@@ -304,6 +304,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     public override void _Ready()
     {
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell);
+        _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
+            _globals, ExecutePackageEvent, () => SourcePlayerLevel);
         _speech = new RuntimeNativeSpeech();
         _speech.PrepareSubtitle = subtitle => (PrepareSubtitle ??
             throw new NotSupportedException("Source subtitle presentation is absent."))(subtitle);

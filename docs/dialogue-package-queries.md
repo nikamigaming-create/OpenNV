@@ -10,10 +10,15 @@ The reference world reads an NPC or creature's active native package owner.
 Player queries read the existing player package lifecycle, including its current
 assignment while a replacement waits. An active owner with no package answers
 false. Missing actors, missing package owners and unsupported scopes remain
-visible failures. Queries neither select packages nor advance scripts. NPC and
-creature retirement clear only their own callback, so an old body cannot remove
-a replacement body's binding. Complete unloaded-actor package simulation and
-matched retail query timing remain unaccepted.
+visible failures. Resident queries read the native assignment. An unloaded
+actor uses the shared source assignment owner: winning PKID/template, live quest,
+schedule and conditions select its package and retain actual Start/Change
+effects. Selection cannot invent native movement, arrival or completion. New
+procedures without valid native continuation block saves. NPC and creature
+retirement retain their actual assignment and clear only their own callbacks;
+native reentry transfers that lifecycle without replaying consumed effects.
+Complete unloaded-actor procedure simulation and matched retail query timing
+remain unaccepted.
 
 Synthetic checks distinguish speaker, player, NPC listener and explicit source
 references, deliberately reorder declaring-plugin masters, replace assignments

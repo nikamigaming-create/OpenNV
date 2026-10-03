@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.Gameplay.State;
 
 internal static class OwnedTalkingActivatorProbe
 {
@@ -60,11 +61,26 @@ internal static class OwnedTalkingActivatorProbe
         foreach (var _ in scripts.StageSteps(quest, fields[(begin + 1)..end], referenceId + ".SetTalkingActivatorActor")) { }
         if (world.DialogueSubject(reference.FormKey) != reference.FormKey || world.DialogueIdentity(reference.FormKey).RecordType != "TACT")
             throw new InvalidDataException("Absent optional actor did not restore the source talking activator identity.");
+        world.UnloadedPackages = new(records, world, quests, null, FalloutGlobalState.Read(records),
+            (program, _) => program.RequireEmptyScript(), () => 1);
+        var assigned = world.CurrentPackage(actor.FormKey) ?? throw new InvalidDataException("Owned remote actor has no eligible source assignment.");
+        var assignedPackage = records.GetEffective(assigned);
+        if (FalloutDialogueTopic.Text(assignedPackage.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span) != "CG02JonasStart" ||
+            world.CurrentPackage(actor.FormKey) != assigned)
+            throw new InvalidDataException("Owned remote actor selected a different or unstable source assignment.");
+        var receipt = world.PackageEvents.SnapshotPending(actor.FormKey);
+        world.PackageEvents.Consume(receipt);
+        var native = new FalloutPackageEvents((_, _) => throw new InvalidDataException("Owned native handoff replayed its source start."));
+        world.UnloadedPackages.BindNative(actor.FormKey, native);
+        native.Change(FalloutScriptPackage.Read(assignedPackage));
+        if (native.Active?.Form != assigned || native.Done || world.PendingPackageEventCount != 0)
+            throw new InvalidDataException("Owned package handoff invented completion or repeated source events.");
         foreach (var (key, hash) in hashes)
             if (!hash.SequenceEqual(SHA256.HashData(records.GetEffective(key).ReadData())))
                 throw new InvalidDataException("Talking activator execution mutated owned input.");
         Console.WriteLine($"OPENNV_OWNED_TALKING_ACTIVATOR_PASS reference={reference.FormKey} actor={actor.FormKey} " +
             $"voice={identity.VoiceType} sourceStageScope=true coldBinding=true clearBinding=true sourceReadonly=true " +
-            $"combatPredicates={combatPredicates} fixture=explicit-stage-retained-EVP-requests nativeProceduresAudioAndCampaign=separate parity=unverified");
+            $"combatPredicates={combatPredicates} remotePackage={assigned} sourceAssignmentHandoff=true " +
+            "fixture=explicit-stage-retained-EVP-requests-native-lifecycle nativeProceduresAudioAndCampaign=separate parity=unverified");
     }
 }
