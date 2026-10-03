@@ -14,6 +14,15 @@ internal sealed record FalloutActorPackageAssignment(FalloutFormKey Package, str
             Sha256 is not { Length: 64 } || !Sha256.All(Uri.IsHexDigit))
             throw new InvalidDataException("Saved actor package assignment is invalid.");
     }
+
+    internal void Bind(FalloutPluginStack records, FalloutPackageEvents events)
+    {
+        Validate();
+        var source = records.GetEffective(Package);
+        if (source.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(source.ReadData())).Equals(Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException("Saved actor package assignment differs from its winning source.");
+        events.Restore(FalloutScriptPackage.Read(source), Done);
+    }
 }
 
 // Assignment exists independently of a resident body. This owner never
@@ -47,7 +56,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         {
             _actors.Add(actor, events = new((package, kind) => Dispatch(actor, package, kind)));
             if (state.PackageAssignment is { } retained)
-                events.Restore(FalloutScriptPackage.Read(records.GetEffective(retained.Package)), retained.Done);
+                retained.Bind(records, events);
         }
         if (!_evaluating.Add(actor)) return events.Active?.Form;
         try

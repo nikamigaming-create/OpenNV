@@ -20,6 +20,13 @@ internal partial class RuntimeNativeReferenceEvents
         if (!_bindings.TryGetValue(actor, out var activator) || activator.Signature != "NPC_" ||
             activator.Node is null || !_world.CanActivate(actor) || _world.IsDead(actor))
             throw new NotSupportedException("Door activation requires a living resident NPC owner; creature door capabilities remain unbound.");
+        RequireRouteDoor(door);
+        if (_world.GetLocked(door.Reference.FormKey) != 0)
+            throw new NotSupportedException("Locked NPC route-door key/ownership semantics remain unbound.");
+    }
+
+    private void RequireRouteDoor(Binding door)
+    {
         if (!_world.CanActivate(door.Reference.FormKey)) throw new NotSupportedException("Route door is not active.");
         if ((door.Reference.Flags & 0x100) != 0) throw new NotSupportedException("Route door is inaccessible.");
         if (door.Reference.Teleport is not null) throw new NotSupportedException("NPC portal traversal requires its actor transfer owner.");
@@ -28,9 +35,30 @@ internal partial class RuntimeNativeReferenceEvents
             throw new InvalidDataException("Door activation-parent declaration is invalid.");
         if (parent.Length == 1 && parent[0].Data.Span[0] != 0)
             throw new NotSupportedException("Route door admits only activation from its parent.");
-        if (_world.GetLocked(door.Reference.FormKey) != 0)
-            throw new NotSupportedException("Locked NPC route-door key/ownership semantics remain unbound.");
         if (door.Instance.ScriptError is { } error) throw new NotSupportedException($"Route door retains a source failure: {error}");
+    }
+
+    // Read-only observation for the player bot. Activation still comes through
+    // the ordinary aimed input and its existing player event owner.
+    internal NativeRouteDoorStatus PlayerRouteDoor(FalloutFormKey reference)
+    {
+        if (!_bindings.TryGetValue(reference, out var binding) || binding.Signature != "DOOR")
+            return new(null, Error: "Source route collision is not a resident door.");
+        try
+        {
+            RequireRouteDoor(binding);
+            if (_world.GetLocked(reference) != 0)
+                throw new NotSupportedException("Locked route door needs its ordinary unlocking interaction.");
+            var motion = binding.Node?.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() ??
+                throw new NotSupportedException("Route door has no resident source motion owner.");
+            motion.Synchronize();
+            return new(reference, binding.Instance.DoorOpen, binding.Instance.DoorMotion?.Moving == true,
+                binding.PendingActivation is not null);
+        }
+        catch (Exception error) when (error is InvalidOperationException or InvalidDataException or NotSupportedException)
+        {
+            return new(reference, Error: error.Message);
+        }
     }
 
     internal NativeRouteDoorStatus RouteDoor(FalloutFormKey actor, ulong collider, bool activate)

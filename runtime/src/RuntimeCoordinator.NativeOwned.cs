@@ -433,7 +433,11 @@ public partial class RuntimeCoordinator
             // Publish the loading state in flat and the shared XR menu surface
             // before synchronous native scene publication starts.
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            if (!_nativeContinueOpening && !NativeUsesOpeningStart) await BootstrapNativeNewGame();
+            if (!_nativeContinueOpening)
+            {
+                InitializeNativePlayerInventory();
+                if (!NativeUsesOpeningStart) await BootstrapNativeNewGame();
+            }
             LoadNativeInitialCell();
             layer.QueueFree();
         }
@@ -514,6 +518,7 @@ public partial class RuntimeCoordinator
         if (restore is not null)
         {
             _nativeInventory.Restore(restore.Inventory, restore.State.EquippedRuntimeFormIds.ToArray(), restore.State.InventoryRandomState);
+            _nativeReferences!.BindPlayerInventory(_nativeInventory);
             if (restore.State.Quests is not null) _nativeQuestState!.Restore(restore.State.Quests);
         }
         var activeCell = restore?.State.ActiveCell ?? cell.Cell.FormKey;
@@ -759,11 +764,16 @@ public partial class RuntimeCoordinator
                 {
                     if (_nativePluginStack!.RuntimeFormId(target) == 0x14)
                         return _nativePlayer?.Camera.GlobalPosition;
-                    return root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
-                        .SingleOrDefault(value => value.Appearance.Reference == target)?.HeadTargetPoint;
+                    return (_nativeReferencePresentation?.Nodes.GetValueOrDefault(target) as RuntimeNativeNpc)?.HeadTargetPoint;
                 });
+                actor.ResolveDialogueTarget = target => _nativePluginStack!.RuntimeFormId(target) == 0x14 ?
+                    _nativePlayer : _nativeReferencePresentation?.Nodes.GetValueOrDefault(target);
                 if (_nativeOpeningStageDriver is not null)
+                {
+                    actor.PackageSpeechBusy = () => _nativeOpeningStageDriver.IsDialogueBusy(reference.FormKey);
+                    actor.NpcDialogueActive = () => _nativeOpeningStageDriver.IsNpcDialogueActive(reference.FormKey);
                     actor.ExecutePackageEvent = (program, caller) => _nativeOpeningStageDriver.ExecutePackageEvent(program, caller);
+                }
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
                     () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences);
                 root.AddChild(actor);

@@ -11,12 +11,16 @@ internal partial class RuntimeNativeNpc
     private bool _dialogueWaitReached;
     private bool _dialogueNativeMovement;
     private Vector3 _dialogueWaitPosition;
+    private (Vector3 Authored, Vector3 Floor)? _dialogueTargetDestination;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
+    internal Func<FalloutFormKey, Node3D?>? ResolveDialogueTarget { get; set; }
+    internal Func<bool>? PackageSpeechBusy { get; set; }
+    internal Func<bool>? NpcDialogueActive { get; set; }
 
     private void BeginDialoguePackage(FalloutPluginRecord package, FalloutPlacedReference? wait, bool initializing)
     {
         var dialogue = FalloutDialoguePackage.Read(package);
-        if (dialogue.TriggerLocation is not null && _aiStack!.RuntimeFormId(dialogue.Target) != 0x14 && (dialogue.Flags & 1) == 0)
+        if (dialogue.TriggerLocation is not null && _aiStack!.RuntimeFormId(dialogue.Target) != 0x14 && dialogue.ControlsTargetMovement)
             throw new NotSupportedException("Dialogue trigger location needs target movement ownership.");
         var motion = _aiWorld?.Get(Appearance.Reference!.Value).PackageMotion;
         var restored = initializing && motion?.Package == package.FormKey && motion.DialogueCompleted;
@@ -26,6 +30,7 @@ internal partial class RuntimeNativeNpc
         _dialogueNativeMovement = wait is null;
         _dialogueWaitReached = wait is null;
         _dialogueWaitPosition = GlobalPosition;
+        _dialogueTargetDestination = null;
         _aiPackage = package;
         if (_aiWorld is { } world)
         {
@@ -44,6 +49,7 @@ internal partial class RuntimeNativeNpc
         if (_dialoguePackage is not null && _aiWorld is { } world)
             world.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
         _dialoguePackage = null; _dialoguePackageRequested = false; _dialogueNativeMovement = false;
+        _dialogueTargetDestination = null;
     }
 
     private void AdvanceDialogueTarget(double delta)
@@ -59,6 +65,7 @@ internal partial class RuntimeNativeNpc
     private void AdvanceDialoguePackage(double delta = 0)
     {
         if (_dialoguePackage is not { } dialogue || _dialoguePackageRequested || _aiError is not null) return;
+        if (PackageSpeechBusy?.Invoke() == true) { Combat?.StopPackageMotion(); return; }
         if (!_dialogueWaitReached)
         {
             if (_travelActive) return;
@@ -67,24 +74,46 @@ internal partial class RuntimeNativeNpc
         if (_dialogueNativeMovement && (Combat is null || Combat.OwnsPose || !Combat.PackageMovementReady || _conversationTarget is not null)) return;
         var playerTarget = _aiStack!.RuntimeFormId(dialogue.Target) == 0x14;
         if (playerTarget && Combat?.PackagePlayerCell is { } playerCell && playerCell != _aiCell!.Cell.FormKey) return;
-        var targetNode = playerTarget
-            ? GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativePlayer>().SingleOrDefault(player => player.CollisionResident) as Node3D
-            : GetTree().Root.FindChildren("*", "", true, false).OfType<Node3D>().SingleOrDefault(actor =>
+        if (!playerTarget && _aiWorld?.IsEnabled(dialogue.Target) == false) return;
+        var targetNode = ResolveDialogueTarget is { } resolve ? resolve(dialogue.Target) : playerTarget ?
+            Combat?.PackagePlayer ?? GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativePlayer>()
+                .SingleOrDefault(player => player.CollisionResident) :
+            GetTree().Root.FindChildren("*", "", true, false).OfType<Node3D>().SingleOrDefault(actor =>
                 actor is RuntimeNativeNpc npc && npc.Appearance.Reference == dialogue.Target ||
                 actor is RuntimeNativeCreature creature && creature.Appearance.Reference == dialogue.Target);
-        if (targetNode is null || !playerTarget && _aiWorld?.IsEnabled(dialogue.Target) == false) return;
+        if (targetNode is null)
+        {
+            if (!playerTarget && _aiWorld?.Get(dialogue.Target).Cell == _aiCell!.Cell.FormKey)
+                throw new NotSupportedException($"Resident dialogue target {dialogue.Target} has no source presentation owner.");
+            return;
+        }
+        if (!targetNode.IsVisibleInTree()) return;
         var target = targetNode.GlobalPosition;
+        var talkingActivator = !playerTarget && _aiStack.GetEffective(dialogue.Target).Signature == "REFR" &&
+            _aiStack.GetEffective(FalloutDialogueTopic.RequiredForm(_aiStack.GetEffective(dialogue.Target), "NAME")).Signature == "TACT";
+        var approach = target;
+        if (talkingActivator && _dialogueNativeMovement)
+        {
+            if (_dialogueTargetDestination is not { } previous || !previous.Authored.IsEqualApprox(target))
+                _dialogueTargetDestination = (target, Combat!.ProjectPackageDestination(target));
+            approach = _dialogueTargetDestination.Value.Floor;
+        }
         var distance = dialogue.ActivationDistance * Skeleton.UnitsToMetres;
         var waitForTarget = dialogue.TriggerLocation is not null && _packageIdleSource!.LocationType is not null &&
             _packageIdleSource.LocationRadius == 0;
         if (!waitForTarget && dialogue.TriggerLocation is { } trigger && !DialogueTriggerContains(trigger, target)) return;
         if (_dialogueNativeMovement)
         {
-            Combat!.AdvancePackageMotion(_aiPackage!, waitForTarget ? _dialogueWaitPosition : target,
+            Combat!.AdvancePackageMotion(_aiPackage!, waitForTarget ? _dialogueWaitPosition : approach,
                 waitForTarget ? 0 : distance, dialogue.Running, delta, dialogue.WeaponDrawn, requireArrivalHeight: true);
             if (!IsOnFloor()) return;
         }
-        if (GlobalPosition.DistanceTo(target) > distance)
+        var origin = GlobalPosition;
+        if (talkingActivator)
+        {
+            origin = HeadTargetPoint ?? throw new NotSupportedException("Talking activator reach has no source head pose.");
+        }
+        if (origin.DistanceTo(target) > distance)
         {
             if (!waitForTarget && !_dialogueNativeMovement && !_travelActive)
             {
@@ -93,7 +122,7 @@ internal partial class RuntimeNativeNpc
             }
             return;
         }
-        if (Combat?.PackagePlayer?.ModalInput == true) return;
+        if (Combat?.PackagePlayer?.ModalInput == true || PackageSpeechBusy?.Invoke() == true) return;
         _travelProgress?.Cancel();
         PlayLocomotion(false);
         _dialoguePackageRequested = true;

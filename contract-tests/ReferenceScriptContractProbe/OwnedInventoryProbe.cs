@@ -16,6 +16,12 @@ internal static class OwnedInventoryProbe
         var player = records.RuntimeFormKey(0x14);
         var speaker = FalloutDialogueTopic.Find(records, "ACHR", "DocMitchellREF").FormKey;
         var inventory = new FalloutPlayerInventory();
+        _ = world.EquippedArmor(player, 1);
+        inventory.Replace(world.Inventory(player, 1).Contents.Capture());
+        world.BindPlayerInventory(inventory);
+        if (!new FalloutPipBoyState(records, inventory).Available || inventory.Items.Count != 2 ||
+            !ReferenceEquals(world.Inventory(player, 1).Contents, inventory))
+            throw new InvalidOperationException("Owned New Game did not retain the source player inventory and equipped device in one owner.");
         var notices = new List<FalloutReferenceEffectKind>();
         FalloutReferenceScripts Scripts(FalloutPlayerInventory target) => new(records, world, quests, new((_, _) => false, effect =>
         {
@@ -41,7 +47,8 @@ internal static class OwnedInventoryProbe
         foreach (var name in new[] { "PipBoy", "PipBoyGlove", "VaultSuit21" })
         {
             var item = FalloutDialogueTopic.Find(records, "ARMO", name).FormKey;
-            inventory.Add(records, item, 1, 1, true); inventory.Equip(records, item);
+            if (inventory.Item(item) is null) inventory.Add(records, item, 1, 1, true);
+            inventory.Equip(records, item);
         }
         if (inventory.Equipped.Count != 3) throw new InvalidOperationException("Owned Pip-Boy, glove and suit slots conflict.");
         var pipBoy = FalloutDialogueTopic.Find(records, "ARMO", "PipBoy").FormKey;

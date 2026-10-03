@@ -17,6 +17,7 @@ internal static class InventoryCommandContracts
             File.WriteAllBytes(Path.Combine(directory.FullName, "Items.esm"), Join(
                 Record("TES4", 0, Field("HEDR", header)), Item("WEAP", 1, "Gun", 15), Item("MISC", 2, "Loot", 8),
                 Armor(3, "Protected", 6, true), questItem, Armor(5, "Suit", 2), Armor(6, "OtherSuit", 2),
+                Record("NPC_", 7, Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
                 Item("WEAP", 8, "OtherGun", 15), Record("NPC_", 0x100, Field("ACBS", new byte[24]),
                     Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
                 Record("CONT", 0x110), Record("CELL", 0x800, Field("DATA", [1])), Group(0x800,
@@ -27,6 +28,13 @@ internal static class InventoryCommandContracts
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
             var inventory = new FalloutPlayerInventory(123);
+            inventory.Replace(world.Inventory(Key(0x14), 1).Contents.Capture());
+            world.BindPlayerInventory(inventory);
+            Require(inventory.Items is [{ Count: 3, FormKey: var initialItem }] && initialItem == Key(2) &&
+                ReferenceEquals(world.Inventory(Key(0x14), 1).Contents, inventory) &&
+                world.Capture().All(value => value.Reference != Key(0x14)),
+                "Engine player inventory lost its source base or created a reference record.");
+            inventory.Remove(Key(2), 3, true);
             var commands = new FalloutInventoryCommands(records, world, inventory, () => 1);
             var executor = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false,
                 effect =>
@@ -49,6 +57,13 @@ internal static class InventoryCommandContracts
             Require(commands.EquippedObject(Key(0x14), 5) == Key(1), "A conflicting equip displaced locked gear.");
             var saved = JsonSerializer.Deserialize<FalloutOpeningInventoryGrant>(JsonSerializer.Serialize(inventory.Capture()))!;
             var cold = new FalloutPlayerInventory(); cold.Restore(saved.Inventory, saved.EquippedRuntimeFormIds.ToArray(), saved.InventoryRandomState);
+            using (var coldPlayerWorld = new FalloutReferenceWorld(records))
+            {
+                coldPlayerWorld.BindPlayerInventory(cold);
+                Require(ReferenceEquals(coldPlayerWorld.Inventory(Key(0x14), 1).Contents, cold) &&
+                    coldPlayerWorld.Inventory(Key(0x14), 1).Contents.Item(Key(1))!.UnequipLocked,
+                    "Cold engine player inventory was replaced by source defaults.");
+            }
             Require(cold.Item(Key(1))!.UnequipLocked && !cold.Unequip(records, Key(1)), "Cold equipment lost no-unequip state.");
             Reject(() => new FalloutPlayerInventory().Restore(saved.Inventory, [], saved.InventoryRandomState));
             Require(cold.Unequip(records, Key(1), force: true) && !cold.Item(Key(1))!.UnequipLocked,

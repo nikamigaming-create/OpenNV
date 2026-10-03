@@ -167,6 +167,10 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal int TakeMessageButton(FalloutFormKey caller) => _scripts.MessageResults.Take(caller);
     internal bool IsTalking(FalloutFormKey actor) => _speech?.IsTalking(actor) ??
         throw new InvalidOperationException("Actor speech owner is absent.");
+    internal bool IsDialogueBusy(FalloutFormKey actor) => _speech?.IsDialogueBusy(actor) ??
+        throw new InvalidOperationException("Actor speech owner is absent.");
+    internal bool IsNpcDialogueActive(FalloutFormKey actor) => _speech?.IsNpcDialogueActive(actor) ??
+        throw new InvalidOperationException("Actor speech owner is absent.");
     internal bool IsInCombat(FalloutFormKey actor) => _scripts.References!.IsInCombat(actor,
         () => GetTree().GetNodesInGroup("OpenNVNativeCombatActors").OfType<RuntimeNativeActorCombat>().Any(owner => owner.EngagedWith(actor)));
     internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed)
@@ -174,8 +178,10 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (package.Type == 1)
             (_speech ?? throw new InvalidOperationException("Speech owner is absent.")).StartPackageSpeech(speaker, package.Target,
                 package.Topic ?? throw new InvalidDataException("SayTo dialogue package has no source topic."), completed);
-        else (_conversation ?? throw new InvalidOperationException("Conversation owner is absent."))
-            .Request(speaker, package.Target, package.Topic, completed);
+        else if (_pluginStack.RuntimeFormId(package.Target) != 0x14)
+            (_speech ?? throw new InvalidOperationException("Speech owner is absent.")).StartNpcConversation(speaker, package.Target,
+                package.Topic ?? FalloutDialogueTopic.Find(_pluginStack, "DIAL", "GREETING").FormKey, completed);
+        else (_conversation ?? throw new InvalidOperationException("Conversation owner is absent.")).Request(speaker, package.Target, package.Topic, completed);
     }
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?
         _scriptHost.PlayerActorValue(name) : _scripts.References!.ActorValue(actor, name);

@@ -1,5 +1,16 @@
 # Runtime performance and CPU scheduling
 
+Native bot capsule refinement now uses the actor navigation owner's shared
+two-millisecond physics-thread budget. Pending requests release ordinary input;
+changed player poses, cells, source-scaled bodies and target goals invalidate
+obsolete work. Source NAVM loading remains separately measured. This bounds
+collision search work, not cell streaming or the complete frame duration.
+
+Source dialogue/head tracking uses resident reference indexes instead of whole
+scene searches. Reference-owned base clocks retain independent NPC phases for
+shared clips. The selected birthday replay has distinct phases; full rendering
+cadence and matched retail timing remain unverified.
+
 Content preparation sizes its concurrency from the processors available to the
 process and the memory limit reported by .NET. The budget is one quarter of
 available logical processors, clamped to one through four workers. A memory

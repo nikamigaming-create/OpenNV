@@ -27,6 +27,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private const uint ShaderFlagZBufferWrite = 1U << 0;
     private const uint ShaderFlagNoFade = 1U << 3;
     private const uint ShaderFlagBillboardAndEnvironmentMapLightFade = 1U << 13;
+    private const uint ShaderFlagNoLodLandBlend = 1U << 14;
     private const uint ShaderFlagEnvironmentMapLightFade = 1U << 15;
     private const uint SupportedShaderFlags = ShaderFlagSpecular |
         ShaderFlagVertexAlpha |
@@ -37,7 +38,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
         FalloutNifSurfaceInputs.SinglePassDecalFlags | FalloutNifSurfaceInputs.ParallaxFlag |
         ShaderFlagExternalEmittance |
         ShaderFlagZBufferTest;
-    private const uint SupportedShaderFlags2 = ShaderFlagZBufferWrite | (1U << 5) |
+    // These ordinary lighting paths do not select landscape or LOD-landscape
+    // blending. Retain the source's disable-blend bit without selecting either.
+    private const uint SupportedShaderFlags2 = ShaderFlagZBufferWrite | (1U << 5) | ShaderFlagNoLodLandBlend |
         ShaderFlagEnvironmentMapLightFade;
     private const uint SupportedNoLightingShaderType = 33;
     private const uint SupportedNoLightingShaderFlags = ShaderFlagVertexAlpha |
@@ -1993,13 +1996,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     $"flags1=0x{shader.ShaderFlags:x8} slots=" +
                     $"[{string.Join(',', textures.Textures.Select((path, index) => $"{index}:{path}"))}].");
 
-            // The shared billboard/environment-light-fade bit does not select
-            // either path. Retain it on ordinary lighting surfaces, where
-            // there is no environment contribution to fade. The tree-billboard
-            // selector is still excluded from supportedLightingFlags; active
-            // environment use of this shared bit remains unowned.
+            // Owned ordinary environment surfaces co-assert the shared bit
+            // with the explicit environment-light-fade selector. Their fade
+            // contribution has an owner; the shared bit does not select tree
+            // billboarding. Keep rejecting that selector and shared-bit-only
+            // environment variants whose lighting behavior remains unowned.
+            var environmentLightFade = (shader.ShaderFlags2 & ShaderFlagEnvironmentMapLightFade) != 0;
             var supportedLightingFlags2 = SupportedShaderFlags2 |
-                (environment ? 0U : ShaderFlagBillboardAndEnvironmentMapLightFade);
+                (!environment || environmentLightFade ? ShaderFlagBillboardAndEnvironmentMapLightFade : 0U);
             if (shader.Controller != -1 && !IsManagedRefractionController(shader) &&
                 !NativeNifRefractionMaterial.HasDirectController(_source, shader) || shader.ExtraData.Any(reference => reference != -1) ||
                 shader.ShaderType != SupportedShaderType ||
@@ -2077,7 +2081,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         normal,
                         environmentMask,
                         environmentScale,
-                        (shader.ShaderFlags2 & ShaderFlagEnvironmentMapLightFade) != 0);
+                        environmentLightFade);
                 }
             }
             if ((shader.ShaderFlags & FalloutNpcAppearanceHairColor.ShaderFlag) != 0)

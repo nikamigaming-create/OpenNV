@@ -25,12 +25,14 @@ internal partial class RuntimeNativeSpeech : Node
         internal FaceGenLipAnimation? Lip;
         internal float[] LipWeights = [];
         internal RuntimeNativeNpc? Speaker;
+        internal RuntimeNativeNpc? ListenerAnimationOwner;
         internal RuntimeNativeCreature? Creature;
         internal Node3D? Presentation;
         internal bool TalkingActivator;
         internal FalloutFormKey DialogueSubject;
         internal Action? ResponseCompleted;
         internal Action? PackageCompleted;
+        internal NpcDialogueExchange? NpcExchange;
     }
 
     private readonly Dictionary<FalloutFormKey, Voice> _channels = [];
@@ -84,7 +86,7 @@ internal partial class RuntimeNativeSpeech : Node
         new(voice.Reference, voice.Info.Record.FormKey, topic, voice.Info.Responses[voice.ResponseIndex].Text,
             voice.Command!.ForceSubtitles) : null;
     internal string? Error { get; private set; }
-    internal bool Active => Error is not null || _channels.Values.Any(voice => voice.Info is not null) || _emptyCompletions.Active;
+    internal bool Active => Error is not null || _npcDialogueParticipants.Count != 0 || _channels.Values.Any(voice => voice.Info is not null) || _emptyCompletions.Active;
     internal bool IsTalking(FalloutFormKey reference)
     {
         return _channels.TryGetValue(reference, out var voice) && voice.Info is not null;
@@ -250,7 +252,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (speakers.Length != 1) throw new InvalidDataException("SayTo speaker reference is absent or ambiguous.");
         var speaker = speakers[0];
         var target = command.TargetEditorId.Equals("player", StringComparison.OrdinalIgnoreCase) ? _stack.RuntimeFormKey(0x14) :
-            new[] { "ACHR", "ACRE" }.SelectMany(signature => _stack.EffectiveRecords(signature)).Single(record =>
+            new[] { "ACHR", "ACRE", "REFR" }.SelectMany(signature => _stack.EffectiveRecords(signature)).Single(record =>
                 record.ReadSubrecords().Any(field => field.Signature == "EDID" &&
                     FalloutDialogueTopic.Text(field.Data.Span).Equals(command.TargetEditorId, StringComparison.OrdinalIgnoreCase))).FormKey;
         StartCore(command, speaker, FalloutDialogueTopic.Find(_stack, "DIAL", command.TopicEditorId).FormKey, target);
@@ -265,10 +267,10 @@ internal partial class RuntimeNativeSpeech : Node
     internal void StartPackageSpeech(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic, Action completed) =>
         ExecuteCommand(new(speaker.ToString(), target.ToString(), topic.ToString()), speaker, topic, target, completed);
     private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic, FalloutFormKey? target,
-        Action? packageCompleted = null)
+        Action? packageCompleted = null, bool npcConversation = false)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
-        try { StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted); }
+        try { StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted, forceNpcConversation: npcConversation); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
             Fail(error); throw;
@@ -276,7 +278,8 @@ internal partial class RuntimeNativeSpeech : Node
     }
 
     private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target,
-        Action? packageCompleted = null)
+        Action? packageCompleted = null, NpcDialogueExchange? exchange = null, FalloutDialogueInfo? selectedInfo = null,
+        bool forceNpcConversation = false)
     {
         if (speaker.Signature is not ("ACHR" or "ACRE" or "REFR")) throw new InvalidDataException("Scripted speaker is not a dialogue reference.");
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
@@ -286,8 +289,9 @@ internal partial class RuntimeNativeSpeech : Node
         if (_stack.GetEffective(topicForm).Signature != "DIAL") throw new InvalidDataException("Scripted speech topic is not DIAL.");
         var references = _references ?? throw new NotSupportedException("Scripted speech has no shared reference enable owner.");
         var listenerReference = target is { } listener && listener != _stack.RuntimeFormKey(0x14) ? _stack.GetEffective(listener) : null;
-        if (listenerReference is not null && listenerReference.Signature is not ("ACHR" or "ACRE"))
-            throw new InvalidDataException("SayTo listener is not an actor reference.");
+        if (listenerReference is not null && !(listenerReference.Signature is "ACHR" or "ACRE" ||
+            listenerReference.Signature == "REFR" && _stack.GetEffective(FalloutDialogueTopic.RequiredForm(listenerReference, "NAME")).Signature == "TACT"))
+            throw new InvalidDataException("SayTo listener is not a source dialogue reference.");
         // Disabled participants have no active speech process. Native commands
         // accept this case without voice selection, results or SayToDone.
         // An enabled participant still requires its actual resident actor.
@@ -295,29 +299,21 @@ internal partial class RuntimeNativeSpeech : Node
             listenerReference is not null && !references.IsEnabled(listenerReference.FormKey) ? listenerReference.FormKey : (FalloutFormKey?)null;
         if (disabled is { } disabledParticipant)
         {
+            if (exchange is not null) throw new NotSupportedException("An NPC dialogue participant was disabled during its continuation.");
             if (IsTalking(speaker.FormKey))
                 throw new NotSupportedException("Disabling an active speech participant requires its interruption owner.");
             ++_disabledCommands; _lastDisabledParticipant = disabledParticipant;
             return;
         }
-        FalloutDialogueSpeaker? listenerIdentity = null;
         if (listenerReference is not null)
         {
             _ = ResidentSpeaker(listenerReference);
-            listenerIdentity = FalloutDialogueSpeaker.Read(_stack, FalloutDialogueTopic.RequiredForm(listenerReference, "NAME"),
-                _templates?.Invoke(listenerReference.FormKey));
         }
         if (!_topics.TryGetValue(command.TopicEditorId, out var topic))
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, topicForm));
         var actor = ResidentSpeaker(speaker);
-        var identity = SpeakerIdentity(speaker.FormKey);
-        var conditions = new FalloutDialogueConditions(_stack,
-            _quests ?? throw new NotSupportedException("Scripted speech selection has no shared quest state."), DialogueSubject(speaker.FormKey), identity,
-            _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace,
-            listener: target, listenerIdentity: listenerIdentity, currentPackage: _currentPackage, vampireQuery: _vampireQuery,
-            itemCount: _itemCount);
-        var info = (_selection ?? throw new NotSupportedException("Scripted speech has no shared dialogue quest selection owner."))
-            .Select(topic, identity.Actor, _said, _questStage, conditions.Evaluate, _dialogueRandom);
+        var npcConversation = forceNpcConversation || exchange is not null || listenerReference is not null && FalloutDialogueTopic.Type(_stack, topicForm) == 1;
+        var info = selectedInfo ?? SelectSpeechInfo(topic, speaker.FormKey, target, npcConversation);
         if (info is null)
         {
             if (IsTalking(speaker.FormKey))
@@ -329,10 +325,13 @@ internal partial class RuntimeNativeSpeech : Node
         var voice = Channel(speaker.FormKey);
         if (voice.Info is not null || voice.Player.Playing)
             throw new NotSupportedException("Replacing the actor's active speech requires its interruption owner.");
+        if (exchange is null && npcConversation && (forceNpcConversation || info.Choices.Count != 0))
+            exchange = BeginNpcExchange(speaker.FormKey, target!.Value, topicForm, command, packageCompleted);
         BindSpeaker(voice, speaker, actor);
         voice.Command = command;
         voice.CommandKind = packageCompleted is not null ? "dialogue-package" : command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
-        voice.PackageCompleted = packageCompleted;
+        voice.PackageCompleted = exchange is null ? packageCompleted : null;
+        voice.NpcExchange = exchange;
         voice.Listener = target;
         voice.Topic = topicForm;
         voice.Info = info;
@@ -359,6 +358,13 @@ internal partial class RuntimeNativeSpeech : Node
             if (node is null || !node.IsVisibleInTree()) throw new NotSupportedException($"Talking activator {speaker.FormKey} has no visible source model.");
             return node;
         }
+        if (_presentation is { } presentation)
+        {
+            var node = presentation(speaker.FormKey);
+            if (node is not RuntimeNativeNpc && node is not RuntimeNativeCreature || !node.IsVisibleInTree())
+                throw new NotSupportedException($"Source speaker {speaker.FormKey} has no visible resident runtime actor.");
+            return node;
+        }
         var actors = GetTree().Root.FindChildren("*", "", true, false).OfType<Node3D>()
             .Where(actor => (actor is RuntimeNativeNpc npc && npc.Appearance.Reference == speaker.FormKey ||
                 actor is RuntimeNativeCreature creature && creature.Appearance.Reference == speaker.FormKey) && actor.IsVisibleInTree()).ToArray();
@@ -368,6 +374,7 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void BindSpeaker(Voice voice, FalloutPluginRecord speaker, Node3D actor)
     {
+        EndListenerAnimation(voice);
         voice.Speaker?.ClearSpeechFace();
         voice.Speaker?.EndResponseAnimation();
         voice.Speaker = actor as RuntimeNativeNpc;
@@ -389,8 +396,14 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Binding = null; voice.LipSha256 = null; voice.Advance = false;
         voice.Lip = null; voice.LipWeights = [];
         ClearResponseSound(voice);
-        if (response.ListenerAnimation is not null)
-            throw new NotSupportedException($"Response listener IDLE {response.ListenerAnimation} requires its target animation owner.");
+        EndListenerAnimation(voice);
+        if (response.ListenerAnimation is { } listenerAnimation)
+        {
+            var listener = voice.Listener ?? throw new InvalidDataException("Response listener IDLE has no source listener.");
+            voice.ListenerAnimationOwner = ResolveSpeaker(listener) as RuntimeNativeNpc ??
+                throw new NotSupportedException($"Response listener IDLE {listenerAnimation} requires its humanoid target animation owner.");
+            voice.ListenerAnimationOwner.BeginResponseAnimation(_stack, listenerAnimation);
+        }
         if (voice.Speaker is null && response.SpeakerAnimation is not null)
             throw new NotSupportedException($"Non-humanoid response IDLE {response.SpeakerAnimation} requires its animation blend owner.");
         voice.Speaker?.BeginResponseAnimation(_stack, response.SpeakerAnimation);
@@ -460,6 +473,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (!voice.Advance) return;
         voice.Advance = false;
         ClearResponseSound(voice);
+        EndListenerAnimation(voice);
         voice.Speaker?.EndResponseAnimation();
         if (voice.ResponseCompleted is { } completion)
         {
@@ -478,7 +492,12 @@ internal partial class RuntimeNativeSpeech : Node
         GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
         RunResults(completed, voice.DialogueSubject, false);
         InfoCompleted?.Invoke(completed.Record.FormKey);
-        if (packageCompleted is not null) { packageCompleted(); ++_completedPackages; }
+        if (voice.NpcExchange is { } exchange)
+        {
+            voice.NpcExchange = null;
+            AdvanceNpcExchange(exchange, voice, completed);
+        }
+        else if (packageCompleted is not null) { packageCompleted(); ++_completedPackages; }
         else if (completedTopic is { } topic)
         {
             (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))(voice.Reference, new HashSet<FalloutFormKey> { topic });
@@ -497,9 +516,11 @@ internal partial class RuntimeNativeSpeech : Node
     public override void _ExitTree() => StopVoices();
     private void StopVoices()
     {
+        _npcDialogueParticipants.Clear();
         foreach (var voice in _channels.Values)
         {
             voice.Player.Stop(); ClearResponseSound(voice);
+            EndListenerAnimation(voice);
             if (IsInstanceValid(voice.Speaker))
             {
                 voice.Speaker!.ClearSpeechFace(); voice.Speaker.EndResponseAnimation();
@@ -518,5 +539,11 @@ internal partial class RuntimeNativeSpeech : Node
     {
         if (voice.ResponseSound is null) return;
         voice.ResponseSound.Free(); voice.ResponseSound = null;
+    }
+
+    private static void EndListenerAnimation(Voice voice)
+    {
+        if (IsInstanceValid(voice.ListenerAnimationOwner)) voice.ListenerAnimationOwner!.EndResponseAnimation();
+        voice.ListenerAnimationOwner = null;
     }
 }

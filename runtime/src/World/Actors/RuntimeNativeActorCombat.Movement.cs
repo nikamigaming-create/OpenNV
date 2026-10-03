@@ -32,6 +32,7 @@ internal sealed partial class RuntimeNativeActorCombat
         routeRequests = _routeRequests,
         routePlanning = _routeSearch is not null,
         routeSpacing = _routeSpacing,
+        routeArrivalRadius = _routeArrivalRadius,
         routeRefinements = _routeRefinements,
         routeRefinementRequests = _routeRefinementRequests,
         coarseRouteError = _coarseRouteError,

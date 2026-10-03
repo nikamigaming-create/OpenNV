@@ -48,6 +48,36 @@ internal static class OwnedTalkingActivatorProbe
         var identity = world.DialogueIdentity(reference.FormKey);
         if (identity.Actor != FalloutDialogueTopic.RequiredForm(actor, "NAME") || identity.RecordType != "NPC_")
             throw new InvalidDataException("Borrowed dialogue did not retain the actual actor base/voice.");
+        var dad = FalloutDialogueTopic.Find(records, "ACHR", "CG02DadREF");
+        var intercomTopic = FalloutDialogueTopic.Read(records, "CG02IntercomConv");
+        FalloutDialogueInfo? SelectSpeech(FalloutDialogueTopic topic, FalloutFormKey speaker, FalloutFormKey listener, FalloutDialogueSpeaker listenerIdentity)
+        {
+            var speakerIdentity = world.DialogueIdentity(speaker);
+            var conditions = new FalloutDialogueConditions(records, quests, world.DialogueSubject(speaker), speakerIdentity,
+                playerFemale: () => false, listener: listener, listenerIdentity: listenerIdentity);
+            return new FalloutDialogueQuestSelection(records, quests).Select(topic, speakerIdentity.Actor,
+                new HashSet<FalloutFormKey>(), key => quests.Stage(key), conditions.Evaluate, _ => 0, npcConversation: true);
+        }
+        quests.SetRunning(quest.FormKey, true);
+        var intercomInfo = SelectSpeech(intercomTopic, dad.FormKey, world.DialogueSubject(reference.FormKey), identity);
+        if (intercomInfo?.Record.FormKey != new FalloutFormKey("Fallout3.esm", 0x031d3c) || intercomInfo.BeginScript.Length == 0)
+            throw new InvalidDataException("Source SayTo did not select its linked talking-activator listener and stage result.");
+        var sourceIdentity = FalloutDialogueSpeaker.Read(records, FalloutDialogueTopic.RequiredForm(reference, "NAME"));
+        if (SelectSpeech(intercomTopic, dad.FormKey, reference.FormKey, sourceIdentity) is not null)
+            throw new InvalidDataException("Source SayTo invented Jonas identity on an unlinked talking activator.");
+        var goodbye = FalloutDialogueTopic.Find(records, "DIAL", "GOODBYE").FormKey;
+        FalloutDialogueInfo? Next(FalloutDialogueInfo info, FalloutFormKey speaker, FalloutFormKey listener)
+        {
+            var turn = FalloutNpcDialogueLinks.Candidates(info.NextSpeaker, info.Flags, info.Choices, speaker, listener, goodbye).Single();
+            return SelectSpeech(FalloutDialogueTopic.Read(records, turn.Topic), turn.Speaker, world.DialogueSubject(turn.Listener),
+                world.DialogueIdentity(turn.Listener));
+        }
+        var reply = Next(intercomInfo, dad.FormKey, reference.FormKey);
+        var closing = reply is null ? null : Next(reply, reference.FormKey, dad.FormKey);
+        if (reply?.Record.FormKey != new FalloutFormKey("Fallout3.esm", 0x031d3d) ||
+            closing?.Record.FormKey != new FalloutFormKey("Fallout3.esm", 0x031d43) || closing.EndScript.Length == 0 ||
+            FalloutNpcDialogueLinks.Candidates(closing.NextSpeaker, closing.Flags, closing.Choices, dad.FormKey, reference.FormKey, goodbye).Count != 0)
+            throw new InvalidDataException("Owned NPC links lost their physical speaker alternation, closing result or Goodbye termination.");
         using var cold = new FalloutReferenceWorld(records); cold.Restore(world.Capture());
         if (cold.DialogueSubject(reference.FormKey) != actor.FormKey || cold.DialogueIdentity(reference.FormKey) != identity)
             throw new InvalidDataException("Talking activator source binding did not restore cold.");
@@ -80,7 +110,7 @@ internal static class OwnedTalkingActivatorProbe
                 throw new InvalidDataException("Talking activator execution mutated owned input.");
         Console.WriteLine($"OPENNV_OWNED_TALKING_ACTIVATOR_PASS reference={reference.FormKey} actor={actor.FormKey} " +
             $"voice={identity.VoiceType} sourceStageScope=true coldBinding=true clearBinding=true sourceReadonly=true " +
-            $"combatPredicates={combatPredicates} remotePackage={assigned} sourceAssignmentHandoff=true " +
+            $"combatPredicates={combatPredicates} remotePackage={assigned} sourceAssignmentHandoff=true linkedListenerSelection=true unlinkedListenerRefused=true npcSourceLinks=true " +
             "fixture=explicit-stage-retained-EVP-requests-native-lifecycle nativeProceduresAudioAndCampaign=separate parity=unverified");
     }
 }

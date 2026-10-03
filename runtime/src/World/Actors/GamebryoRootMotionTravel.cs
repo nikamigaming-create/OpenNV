@@ -18,6 +18,14 @@ internal sealed class GamebryoRootMotionTravel
         _waypoints = waypoints.ToArray();
     }
 
+    internal static GamebryoRootMotionTravel RestoreCompleted(IReadOnlyList<Vector3> waypoints)
+    {
+        var restored = new GamebryoRootMotionTravel(waypoints);
+        restored.Cursor = restored.Waypoints;
+        restored.Active = false;
+        return restored;
+    }
+
     internal (Vector3 Position, Vector3? Direction) Advance(Vector3 position, float distance)
     {
         if (!Active) return (position, null);

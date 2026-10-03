@@ -132,7 +132,7 @@ public partial class RuntimeCoordinator : Node3D
                 harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.MoveForward.PhysicalKey),
                     Enum.Parse<Key>(_configuration.Player.DesktopInput.Activate.PhysicalKey),
-                    ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump());
+                    ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump(), AdvanceNativeReferenceApproachRoute, CancelNativeBotRoute);
                 harness.ConfigureCheckpoints(CreateNativeCheckpoint, LoadNativeCheckpoint, () => _nativeSessionTransitioning,
                     () => _restoredNativeCheckpoint);
                 AddChild(harness);

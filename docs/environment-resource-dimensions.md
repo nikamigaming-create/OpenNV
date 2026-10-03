@@ -17,6 +17,12 @@ assets. This follows the dimensional lookup rule in
 Owned shader observations remain private and are reduced to semantic contracts.
 
 Native synthetic checks cover 2D identity/mips, complete cubes and invalid faces.
+The winning diner booths co-declare the environment-fade aliases at bits13/15.
+The material selector retains those flags on the actual environment path rather
+than interpreting the co-declared alias as an unsupported tree variant. Ordinary
+lighting also retains bit14 without selecting a landscape/LOD path. Synthetic
+flag negatives and the owned booth build pass; six original booth references
+admit in the native birthday room. Other tree/landscape semantics remain unbound.
 Full source reflection-vector timing, filtering, shader variant selection and
 matched retail final pixels remain unverified. Resource admission alone is not
 actor or campaign parity.

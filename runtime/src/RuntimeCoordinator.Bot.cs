@@ -140,12 +140,19 @@ public partial class RuntimeCoordinator
         }
         var aimed = player.AimedObject() is { } collider ? _nativeReferenceEvents?.AimedReference(collider)?.FormKey.ToString() : null;
         var interaction = _botInteractions.Observe(key.ToString(), NativeBotInteractionSnapshot(key)).ToString(CultureInfo.InvariantCulture);
+        BotDoorObservation? door = null;
+        if (_nativePluginStack!.GetEffective(referenceState.Base).Signature == "DOOR")
+        {
+            var observedDoor = _nativeReferenceEvents?.PlayerRouteDoor(key) ??
+                throw new InvalidOperationException("Source route door has no reference event owner.");
+            door = new(observedDoor.Open, observedDoor.Moving, observedDoor.Pending, observedDoor.Error);
+        }
         static System.Numerics.Vector3 Numeric(Vector3 value) => new(value.X, value.Y, value.Z);
         return new(_nativeActiveCell!.Cell.FormKey.ToString(), Numeric(player.GlobalPosition), Numeric(player.Camera.GlobalPosition),
             Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused || player.ModalInput || _nativeDoorLoading,
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
-            player.BlockingShape, interaction, travelReady);
+            player.BlockingShape, interaction, travelReady, door);
     }
 
     private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float projectionRadius)
@@ -154,10 +161,9 @@ public partial class RuntimeCoordinator
     private IReadOnlyList<System.Numerics.Vector3> FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, bool refinePlayer)
         => FindNativeNavigationRoute(start, end, refinePlayer, 2).Waypoints;
 
-    private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, bool refinePlayer, float projectionRadius)
+    private string EnsureNativeBotNavigation()
     {
         var scene = _nativeActiveCell ?? throw new InvalidOperationException("No active navigation scene.");
-        var units = _configuration.World.GameUnitsToMeters;
         var identity = (scene.Cell.Worldspace ?? scene.Cell.FormKey).ToString();
         if (_botNavigationIdentity != identity)
         {
@@ -169,6 +175,14 @@ public partial class RuntimeCoordinator
             _botNavigationIdentity = identity;
             _botBlockedPortals.Clear();
         }
+        return identity;
+    }
+
+    private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, bool refinePlayer, float projectionRadius,
+        System.Numerics.Vector3? approachTarget = null, float approachRadius = 0)
+    {
+        var identity = EnsureNativeBotNavigation();
+        var units = _configuration.World.GameUnitsToMeters;
         Vector3 Source(System.Numerics.Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
         Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
         static System.Numerics.Vector3 Numeric(Vector3 point) => new(point.X, point.Y, point.Z);
@@ -196,16 +210,24 @@ public partial class RuntimeCoordinator
             var worldPath = path.Select(World).ToArray();
             if (worldPath.Length == 0) throw new InvalidOperationException("Source navigation returned no corridor.");
             var (target, resume) = NativeCapsuleNavigation.CorridorPrefix(origin, worldPath, 8);
+            var arrivalRadius = 0f;
+            if (approachTarget is { } referenceTarget && origin.DistanceTo(new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z)) <= 8)
+            {
+                target = new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z);
+                arrivalRadius = approachRadius;
+                resume = worldPath.Length;
+            }
             try
             {
                 var spacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
                 var refinedSpacing = Math.Min(spacing, Math.Max(.15f,
                     _configuration.Player.CapsuleRadiusMeters * _nativePlayer!.GlobalBasis.X.Length()));
                 var local = NativeCapsuleNavigation.FindRefined(_nativePlayer, origin, target,
-                    _configuration.Player.StepHeightMeters, spacing, refinedSpacing, NativeCollisionResident);
+                    _configuration.Player.StepHeightMeters, spacing, refinedSpacing, NativeCollisionResident, targetRadius: arrivalRadius);
                 GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={target} sourceWaypoint={resume} " +
                     $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} " +
                     $"reachesProjected={resume == worldPath.Length} blockedPortals={_botBlockedPortals.Count} " +
+                    $"arrivalRadius={arrivalRadius} " +
                     $"spacing={local.Spacing} coarseError={local.CoarseError ?? "none"} ms={Time.GetTicksMsec() - now}");
                 return new(local.Path.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), resume == worldPath.Length, identity, projectionRadius);
             }

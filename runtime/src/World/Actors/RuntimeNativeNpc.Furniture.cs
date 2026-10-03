@@ -12,7 +12,7 @@ internal partial class RuntimeNativeNpc
     private FurnitureClip? _furnitureEntry;
     private FalloutFormKey? _reservedFurniture;
 
-    private sealed record FurnitureClip(FalloutNifFile Nif, FalloutNifControllerSequence Sequence, string Identity);
+    private sealed record FurnitureClip(FalloutNifFile Nif, FalloutNifControllerSequence Sequence, string Identity, string Path);
 
     private void BeginFurniturePackage(FalloutPluginRecord package, FalloutPlacedReference reference,
         FalloutPluginRecord furniture, bool initializing)
@@ -81,7 +81,7 @@ internal partial class RuntimeNativeNpc
         if (sequence.Frequency <= 0 || sequence.StopTime <= sequence.StartTime ||
             sequence.CycleType != (sitting is 2 or 4 ? 2 : 0))
             throw new NotSupportedException("Furniture procedure has an unsupported source clock.");
-        return new(nif, sequence, identity);
+        return new(nif, sequence, identity, source.AnimationPath);
     }
 
     private (Vector3 Start, Vector3 End) FurnitureRootEndpoints(FurnitureClip clip)
@@ -121,6 +121,7 @@ internal partial class RuntimeNativeNpc
         _baseAnimation = animation;
         _baseAnimationSeconds = animation.Sequence.StartTime;
         _baseElapsedSeconds = 0;
+        BindBaseClock(clip.Nif, clip.Path, ambient: _sitting == 1);
         SetMeta("opennv_base_animation_source", clip.Identity);
     }
 
@@ -157,6 +158,7 @@ internal partial class RuntimeNativeNpc
         OccupyFurniture();
         var loop = _baseAnimation!.Sequence;
         _baseElapsedSeconds = remaining;
+        _baseClock.Restore(new(_baseResource, _baseHash, remaining, false));
         _baseAnimationSeconds = loop.StartTime + (float)(remaining * loop.Frequency % (loop.StopTime - loop.StartTime));
         _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
         _aiQuestRevision = -1;

@@ -39,9 +39,13 @@ internal static class OwnedInventoryCommandProbe
             var commands = FalloutDialogueTopic.CodeLines(source).Where(InventoryCommand).ToArray();
             var bindings = new FalloutScriptBindings(records, quest, quest, entry);
             var player = new FalloutPlayerInventory(123);
+            _ = world.EquippedArmor(records.RuntimeFormKey(0x14), 1);
+            player.Replace(world.Inventory(records.RuntimeFormKey(0x14), 1).Contents.Capture());
+            world.BindPlayerInventory(player);
             var equipped = commands.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
                 .Where(parts => parts[0].Equals("player.EquipItem", StringComparison.OrdinalIgnoreCase)).Select(parts => bindings.Form(parts[1]).FormKey).Distinct().ToArray();
-            foreach (var item in equipped) player.Add(records, item, 1, 1, true);
+            foreach (var item in equipped)
+                if (player.Item(item) is null) player.Add(records, item, 1, 1, true);
             var resetTargets = commands.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0].Split('.'))
                 .Where(parts => parts.Length == 2 && parts[1].Equals("ResetInventory", StringComparison.OrdinalIgnoreCase))
                 .Select(parts => bindings.Reference(parts[0])).Distinct().ToArray();
@@ -56,6 +60,7 @@ internal static class OwnedInventoryCommandProbe
             var coldPlayer = new FalloutPlayerInventory(); coldPlayer.Restore(snapshot.Inventory, snapshot.EquippedRuntimeFormIds.ToArray(), snapshot.InventoryRandomState);
             void Execute(FalloutReferenceWorld references, FalloutPlayerInventory inventory)
             {
+                references.BindPlayerInventory(inventory);
                 var owner = new FalloutInventoryCommands(records, references, inventory, () => 1);
                 var executor = new FalloutReferenceScripts(records, references, new(records), new((_, _) => false, effect =>
                 {

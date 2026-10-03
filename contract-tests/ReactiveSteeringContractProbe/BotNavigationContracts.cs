@@ -7,10 +7,124 @@ internal static class BotNavigationContracts
     internal static void Run()
     {
         ShortApproaches();
+        ArrivalRegions();
         ProjectedEndpoints();
         MovingTargetEndpoints();
         ClosingAndStationaryBounds();
-        Console.WriteLine("Reference bot navigation: short/inside endpoints, partial corridors, projection refinement, moving-target endpoints, ray result, closing progress and stationary bounds PASS.");
+        QueuedPlanning();
+        RouteDoors();
+        Console.WriteLine("Reference bot navigation: short/inside endpoints, partial corridors, projection refinement, moving-target endpoints, queued/stale planning, ordinary route doors, ray result, closing progress and stationary bounds PASS.");
+    }
+
+    private static void QueuedPlanning()
+    {
+        var observation = Observation(6);
+        SteeringIntent input = default;
+        var polls = 0;
+        var cancellations = 0;
+        Vector3? requestStart = null;
+        var bot = new ReactiveReferenceBot(_ => observation,
+            (_, _, _) => throw new InvalidOperationException("Pending planning fell back to a synchronous route."),
+            (intent, _) => input = intent,
+            (start, end, _, _, _) =>
+            {
+                requestStart ??= start;
+                Require(requestStart == start, "A queued request changed its start pose between polls.");
+                if (++polls < 90) return null;
+                return new([end], end, end, true);
+            }, () => { requestStart = null; cancellations++; });
+        bot.Start("actor", "follow", 1.5f);
+        for (var frame = 0; frame < 89; frame++)
+        {
+            bot.Tick(1f / 60);
+            Require(Phase(bot) == "planning" && input == default, "Queued planning retained input or became a movement stall.");
+        }
+        bot.Tick(1f / 60);
+        Require(input.Forward && Phase(bot) == "approaching", "A completed queued route did not reach the movement executor.");
+        bot.Stop(); Require(input == default && requestStart is null, "Stop retained an active planner or movement lease.");
+
+        polls = 0; bot.Start("actor", "follow", 1.5f); bot.Tick(1f / 60);
+        var beforeMove = cancellations;
+        observation = Move(observation, .5f); bot.Tick(1f / 60);
+        Require(cancellations > beforeMove && requestStart == observation.Position && input == default,
+            "A changed player pose retained a stale pending route.");
+        var beforeScene = cancellations;
+        observation = observation with { Scene = "another-cell" }; bot.Tick(1f / 60);
+        Require(cancellations > beforeScene && Phase(bot) == "planning", "Cell transfer retained an obsolete query.");
+        observation = observation with { Paused = true }; bot.Tick(1f / 60);
+        Require(requestStart is null && input == default, "A modal pause retained a pending native query.");
+        bot.Stop();
+    }
+
+    private static void RouteDoors()
+    {
+        var destination = Observation(6);
+        var door = Observation(1) with { Door = new(false, false, false) };
+        SteeringIntent input = default;
+        var activations = 0;
+        var routes = 0;
+        var identities = new List<string>();
+        BotObservation Observe(string reference)
+        {
+            identities.Add(reference);
+            return reference == "door" ? door : destination;
+        }
+        var bot = new ReactiveReferenceBot(Observe, (_, _, _) => throw new Exception("Unexpected synchronous route."),
+            (intent, activate) => { input = intent; if (activate) activations++; },
+            (_, end, _, _, _) => ++routes == 1 ? new([Vector3.Zero], end, end, false, RequiredDoor: "door") : new([end], end, end, true));
+        bot.Start("Jonas", "follow", 1.5f); bot.Tick(.016f);
+        Require(Phase(bot) == "approaching-route-door" && input == default, "Blocked corridor lost its original goal or remotely activated the door.");
+        bot.Tick(.016f); Require(activations == 0, "Door approach activated without the ordinary aimed ray.");
+        door = door with { AimedReference = "unrelated" }; bot.Tick(.016f);
+        Require(activations == 0, "An unrelated aimed reference opened the route door.");
+        door = door with { AimedReference = "door" }; bot.Tick(.016f);
+        Require(activations == 1 && Phase(bot) == "awaiting-route-door", "Ordinary aimed door input was not submitted exactly once.");
+        door = door with { InteractionState = "unrelated-inventory-change" }; bot.Tick(.016f);
+        Require(Phase(bot) == "awaiting-route-door" && activations == 1 && input == default,
+            "Unrelated gameplay response falsely completed door traversal.");
+        door = door with { Door = new(true, true, false) }; bot.Tick(.016f);
+        Require(Phase(bot) == "awaiting-route-door" && input == default, "The open target flag permitted movement before collision motion settled.");
+        door = door with { Door = new(true, false, false) }; bot.Tick(.016f);
+        Require(Phase(bot) == "replanning-after-door" && routes == 1 && input == default,
+            "Settled door reused pre-opening collision clearance.");
+        bot.Tick(.016f);
+        Require(identities[^1] == "Jonas" && routes == 2 && input.Forward, "Door completion did not resume the original source reference through a fresh route.");
+        bot.Stop();
+
+        routes = activations = 0; door = Observation(1) with { Door = new(false, false, false, "locked source door") };
+        bot.Start("Jonas", "follow", 1.5f); bot.Tick(.016f); bot.Tick(.016f);
+        Require(Phase(bot) == "blocked" && activations == 0 && input == default, "Locked source door was activated or concealed as progress.");
+        routes = activations = 0; door = Observation(1) with { AimedReference = "door", Door = new(false, false, false) };
+        bot.Start("Jonas", "follow", 1.5f); bot.Tick(.016f); bot.Tick(.016f); bot.Tick(8.1f);
+        Require(Phase(bot) == "blocked" && activations == 1 && input == default, "Missing source door response allowed repeated activation or unbounded waiting.");
+    }
+
+    private static void ArrivalRegions()
+    {
+        var observation = Observation(3);
+        SteeringIntent input = default;
+        var activations = 0;
+        var calls = 0;
+        var bot = new ReactiveReferenceBot(_ => observation,
+            (_, _, _) => throw new InvalidOperationException("Reference approach fell back to an exact endpoint."),
+            (intent, activate) => { input = intent; if (activate) activations++; },
+            (start, requested, target, projection, radius) =>
+            {
+                calls++;
+                Require(start == observation.Position && requested == new Vector3(0, 0, 1) && target == observation.Target &&
+                    projection == 2 && radius == 2, "Reference approach discarded its actual target or source region.");
+                return new([new(.6f, 0, 1.3f)], requested, requested, true);
+            });
+        bot.Start("door", "interact", 2); bot.Tick(.016f);
+        Require(input.Forward && calls == 1 && activations == 0, "Alternative approach did not retain ordinary movement.");
+        observation = observation with { Position = new(.6f, 0, 1.3f), Camera = new(.6f, 1, 1.3f) };
+        bot.Tick(.016f);
+        Require(!input.Forward && input.AimAt == observation.Aim && activations == 0,
+            "Supported region arrival activated without the ordinary reference ray.");
+        observation = observation with { AimedReference = "door" }; bot.Tick(.016f);
+        observation = observation with { InteractionState = "door-open" }; bot.Tick(.016f);
+        Require(Phase(bot) == "interaction-observed" && activations == 1,
+            "Supported region approach lost the actual activation outcome.");
     }
 
     private static void MovingTargetEndpoints()

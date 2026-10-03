@@ -72,6 +72,20 @@ internal partial class RuntimeNativeNpc
         _travelProgress?.Cancel();
         _travelProgress = new(path);
         _travelPublishedDistance = 0;
+        if (_bindingInitialBase && _packageEvents is { Done: true, Active: { } retained } && retained.Form == package.FormKey)
+        {
+            if (destinationRadiusGameUnits != 0 || purpose == "furniture-approach")
+                throw new NotSupportedException("Saved completed travel region requires its selected controller endpoint owner.");
+            // The saved source lifecycle already consumed arrival/results.
+            // Its exact marker destination supplies the settled placement;
+            // restarting walking would contradict the saved idle clock and
+            // replay a completed procedure during cold assembly.
+            _travelProgress = GamebryoRootMotionTravel.RestoreCompleted(path);
+            Transform = _travelDestination;
+            PlayLocomotion(false);
+            GD.Print($"OPENNV_NATIVE_PACKAGE_TRAVEL_RESTORE reference={Appearance.Reference} package={package.FormKey} target={target} completed=true arrivalReplayed=false");
+            return;
+        }
         // This locomotion owner publishes the ordinary walking group.
         Activity.SetMovement(running: false, sneaking: false);
         PlayLocomotion(true);
@@ -118,8 +132,9 @@ internal partial class RuntimeNativeNpc
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
         _baseAnimationSeconds = sequence.StartTime;
         _baseElapsedSeconds = 0;
-        if (_animation is null) _baseAnimation.ApplySourceTime(sequence.StartTime);
-        else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, sequence.StartTime), (_animation, _animationSeconds));
+        BindBaseClock(nif, path, ambient: !moving);
+        if (_animation is null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
+        else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
         SetMeta("opennv_base_animation_source", identity);
     }
 

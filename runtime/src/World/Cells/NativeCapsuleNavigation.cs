@@ -61,27 +61,27 @@ internal static partial class NativeCapsuleNavigation
     }
 
     internal static IReadOnlyList<Vector3> Find(CharacterBody3D body, Vector3 start, Vector3 target,
-        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200)
+        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0)
     {
-        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes))
+        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes, targetRadius: targetRadius))
             if (result is not null) return result;
         throw new InvalidOperationException("Capsule search ended without a route.");
     }
 
     internal static (IReadOnlyList<Vector3> Path, float Spacing, string? CoarseError) FindRefined(
         CharacterBody3D body, Vector3 start, Vector3 target, float stepHeight,
-        float coarseSpacing, float refinedSpacing, Func<Vector3, bool> resident, int maximumNodes = 1200)
+        float coarseSpacing, float refinedSpacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0)
     {
         if (!float.IsFinite(coarseSpacing) || !float.IsFinite(refinedSpacing) ||
             coarseSpacing <= 0 || refinedSpacing <= 0 || refinedSpacing > coarseSpacing)
             throw new ArgumentOutOfRangeException(nameof(refinedSpacing));
-        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes), coarseSpacing, null); }
+        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes, targetRadius), coarseSpacing, null); }
         catch (InvalidOperationException coarse) when (refinedSpacing < coarseSpacing)
         {
             // A lattice can miss a supported passage narrower than its node
             // spacing. One finer search keeps the same body, sweep/floor rules,
             // residency predicate and node bound. It cannot create clearance.
-            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes), refinedSpacing, coarse.Message); }
+            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes, targetRadius), refinedSpacing, coarse.Message); }
             catch (InvalidOperationException refined)
             {
                 throw new InvalidOperationException($"Coarse capsule query: {coarse.Message} Refined capsule query: {refined.Message}", refined);
@@ -91,9 +91,10 @@ internal static partial class NativeCapsuleNavigation
 
     internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
-        NativeNavigationProbe? probe = null)
+        NativeNavigationProbe? probe = null, float targetRadius = 0)
     {
-        if (!start.IsFinite() || !target.IsFinite() || stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0)
+        if (!start.IsFinite() || !target.IsFinite() || stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0 ||
+            !float.IsFinite(targetRadius) || targetRadius < 0)
             throw new ArgumentOutOfRangeException(nameof(stepHeight));
         using var query = new PhysicsTestMotionParameters3D { Margin = body.SafeMargin, MaxCollisions = 4 };
         using var hit = new PhysicsTestMotionResult3D();
@@ -165,6 +166,15 @@ internal static partial class NativeCapsuleNavigation
             var from = positions[current];
             rejected = null;
             nearest = Math.Min(nearest, from.DistanceTo(target));
+            // A source approach radius describes a reachable region. Every
+            // discovered point already passed the complete capsule sweep and
+            // support query; it need not enter the target's collision body.
+            // Three-dimensional distance keeps other floors outside the region.
+            if (targetRadius > 0 && current != first && from.DistanceTo(target) <= targetRadius)
+            {
+                yield return Approach(current);
+                yield break;
+            }
             if (Flat(from, target) <= spacing * 1.5f && Edge(from, target, out var goal) && Math.Abs(goal.Y - target.Y) < .6f)
             {
                 var path = new List<Vector3> { goal };

@@ -62,7 +62,7 @@ public partial class NativeNifInstanceAudit
     private static void ExerciseDormantBillboardEnvironmentFlag()
     {
         string? shaderCode = null;
-        foreach (var flags2 in new uint[] { 1, 0x2001, 0xa001 })
+        foreach (var flags2 in new uint[] { 1, 0x2001, 0x4001, 0x6001, 0xa001, 0xe001 })
         {
             var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(SurfaceFixture(0x82000101, flags2: flags2)), .02f);
             try
@@ -76,13 +76,25 @@ public partial class NativeNifInstanceAudit
             }
             finally { scene.Root.Free(); }
         }
-        foreach (var flags in new uint[] { 0x82000181, 0x82200101, 0x82020101, 0x82400101 })
-            Reject(flags, 0xa001);
-        Reject(0x82000101, 0xa001, "textures/active_environment.dds");
+        foreach (var flags in new uint[] { 0x82000181, 0x82200101, 0x82020101 })
+        {
+            Reject(flags, 0x2001);
+            try
+            {
+                var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(SurfaceFixture(flags, flags2: 0xa001)), .02f);
+                scene.Root.Free();
+                throw new InvalidDataException("Environment light fade admitted missing normal inputs.");
+            }
+            catch (NotSupportedException error) when (error.Message.Contains("no tangent-space normal map", StringComparison.Ordinal)) { }
+        }
+        Reject(0x82400101, 0xa001);
+        Reject(0x82001101, 0x4001);
+        Reject(0x82000101, 0x4003, expectedError: "unbound pass declaration");
+        Reject(0x82000101, 0x2001, "textures/active_environment.dds");
         Reject(0x82000101, 0x12001);
-        GD.Print("OPENNV_DORMANT_BILLBOARD_ENVIRONMENT_FLAG_PASS sourceBitsRetained=true ordinaryDraw=true activePathsRejected=true unknownFlagsRejected=true");
+        GD.Print("OPENNV_DORMANT_BILLBOARD_ENVIRONMENT_FLAG_PASS sourceBitsRetained=true ordinaryDraw=true environmentFadeInputsRequired=true treeAndUnknownFlagsRejected=true");
 
-        static void Reject(uint flags, uint flags2, string environment = "")
+        static void Reject(uint flags, uint flags2, string environment = "", string expectedError = "unsupported lighting semantics")
         {
             try
             {
@@ -91,7 +103,7 @@ public partial class NativeNifInstanceAudit
                 scene.Root.Free();
                 throw new InvalidDataException("An unowned active or unrelated shader flag was admitted as dormant.");
             }
-            catch (NotSupportedException error) when (error.Message.Contains("unsupported lighting semantics", StringComparison.Ordinal)) { }
+            catch (NotSupportedException error) when (error.Message.Contains(expectedError, StringComparison.Ordinal)) { }
         }
     }
 

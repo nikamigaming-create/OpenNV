@@ -78,6 +78,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         animation.ApplySourceTime(sequence.StartTime);
         _baseAnimation = animation; _baseAnimationSeconds = sequence.StartTime;
         _baseElapsedSeconds = 0;
+        BindBaseClock(source, owner, ambient: sequence.CycleType == 0);
         SetMeta("opennv_base_animation_source", owner);
     }
 
@@ -225,7 +226,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             }
             if (_baseAnimation is not null)
             {
-                _baseElapsedSeconds += delta;
+                _baseClock.Advance(delta);
+                _baseElapsedSeconds = _baseClock.ElapsedSeconds;
                 _baseAnimationSeconds = Advance(_baseAnimation, _baseElapsedSeconds);
             }
             var idleDelta = PreparePackageIdle(delta);

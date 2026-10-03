@@ -10,6 +10,7 @@ internal sealed record FalloutReferenceInventorySnapshot(FalloutOpeningInventory
 internal sealed class FalloutReferenceInventory
 {
     internal FalloutReferenceInventory(ulong? randomState = null) => Contents = new(randomState);
+    internal FalloutReferenceInventory(FalloutPlayerInventory contents) => Contents = contents;
     internal FalloutPlayerInventory Contents { get; }
     // Script changes are independent of the AI's initial equipment selection.
     // An unresolved initial weapon choice is not an authoritative empty list.
@@ -53,6 +54,13 @@ internal static class FalloutActorArmorSelection
 
 internal sealed partial class FalloutReferenceWorld
 {
+    private FalloutReferenceInventory? _playerInventory;
+
+    internal void BindPlayerInventory(FalloutPlayerInventory inventory)
+    {
+        _playerInventory = new(inventory) { InitialArmorResolved = true };
+    }
+
     private FalloutReferenceInstance InventoryOwner(FalloutFormKey reference)
     {
         var instance = Get(reference);
@@ -61,8 +69,13 @@ internal sealed partial class FalloutReferenceWorld
         return instance;
     }
 
+    private FalloutFormKey InventoryBase(FalloutFormKey reference) => reference == records.RuntimeFormKey(0x14)
+        ? records.RuntimeFormKey(7) : InventoryOwner(reference).Base;
+
     internal FalloutReferenceInventory Inventory(FalloutFormKey reference, int level, FalloutGlobalState? globals = null)
     {
+        if (reference == records.RuntimeFormKey(0x14))
+            return _playerInventory ??= SourceInventory(records.GetEffective(records.RuntimeFormKey(7)), level, globals);
         var actor = InventoryOwner(reference);
         var npc = records.GetEffective(actor.Base);
         if (npc.Signature is "NPC_" or "CREA") InitializeActorTemplates(reference, level, globals);
@@ -74,10 +87,16 @@ internal sealed partial class FalloutReferenceWorld
         int level, FalloutGlobalState? globals, ulong? randomState = null)
     {
         var owner = npc.Signature is "NPC_" or "CREA" ? FalloutActorTemplateOwner.Resolve(records, npc, 256, actor.Templates) : npc;
-        var fields = owner.ReadSubrecords().ToArray();
-        var inventory = new FalloutReferenceInventory(randomState);
         var inventoryLevel = actor.Templates?.Level ??
             (ReferenceEncounterZone(actor) is { } zone ? EncounterLevel(zone, level) : level);
+        return SourceInventory(owner, inventoryLevel, globals, randomState);
+    }
+
+    private FalloutReferenceInventory SourceInventory(FalloutPluginRecord owner, int inventoryLevel,
+        FalloutGlobalState? globals, ulong? randomState = null)
+    {
+        var fields = owner.ReadSubrecords().ToArray();
+        var inventory = new FalloutReferenceInventory(randomState);
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "CNTO") continue;
@@ -106,24 +125,25 @@ internal sealed partial class FalloutReferenceWorld
 
     internal void ResetInventory(FalloutFormKey reference, int level, FalloutGlobalState? globals = null)
     {
-        var actor = InventoryOwner(reference);
         var inventory = Inventory(reference, level, globals);
-        var replacement = SourceInventory(actor, records.GetEffective(actor.Base), level, globals,
-            inventory.Contents.Capture().InventoryRandomState);
+        var random = inventory.Contents.Capture().InventoryRandomState;
+        var replacement = reference == records.RuntimeFormKey(0x14)
+            ? SourceInventory(records.GetEffective(records.RuntimeFormKey(7)), level, globals, random)
+            : SourceInventory(InventoryOwner(reference), records.GetEffective(Get(reference).Base), level, globals, random);
         inventory.Contents.Replace(replacement.Contents.Capture());
         inventory.Unequipped.Clear();
         inventory.InitialArmorResolved = false;
-        if (records.GetEffective(actor.Base).Signature == "NPC_") InvalidateActorAppearance(reference);
+        if (records.GetEffective(InventoryBase(reference)).Signature == "NPC_") InvalidateActorAppearance(reference);
     }
 
     internal void InventoryChanged(FalloutFormKey reference)
     {
-        if (records.GetEffective(Get(reference).Base).Signature == "NPC_") InvalidateActorAppearance(reference);
+        if (records.GetEffective(InventoryBase(reference)).Signature == "NPC_") InvalidateActorAppearance(reference);
     }
 
     internal void EquipItem(FalloutFormKey reference, FalloutFormKey item, bool noUnequip, int level, FalloutGlobalState? globals = null)
     {
-        _ = Actor(reference);
+        if (reference != records.RuntimeFormKey(0x14)) _ = Actor(reference);
         var inventory = Inventory(reference, level, globals);
         if (inventory.Contents.Item(item) is null) return;
         _ = EquippedArmor(reference, level, globals);
@@ -131,12 +151,12 @@ internal sealed partial class FalloutReferenceWorld
         inventory.Contents.Equip(records, item, noUnequip);
         if (inventory.Contents.Revision == revision) return;
         inventory.Unequipped.Remove(item);
-        if (records.GetEffective(Get(reference).Base).Signature == "NPC_") InvalidateActorAppearance(reference);
+        if (records.GetEffective(InventoryBase(reference)).Signature == "NPC_") InvalidateActorAppearance(reference);
     }
 
     internal FalloutFormKey? EquippedObject(FalloutFormKey reference, uint slot, int level, FalloutGlobalState? globals = null)
     {
-        _ = Actor(reference);
+        if (reference != records.RuntimeFormKey(0x14)) _ = Actor(reference);
         var inventory = Inventory(reference, level, globals);
         if (slot != 5) _ = EquippedArmor(reference, level, globals);
         if ((slot == 5 || slot >= 20) && inventory.Contents.Items.Any(item => item.RecordType == "WEAP" &&
@@ -152,7 +172,7 @@ internal sealed partial class FalloutReferenceWorld
         if (inventory.Contents.Item(item) is null) return;
         inventory.Contents.Unequip(records, item, force: true);
         inventory.Unequipped.Add(item);
-        if (records.GetEffective(Get(reference).Base).Signature == "NPC_") InvalidateActorAppearance(reference);
+        if (records.GetEffective(InventoryBase(reference)).Signature == "NPC_") InvalidateActorAppearance(reference);
     }
 
     internal IReadOnlyList<FalloutFormKey> EquippedArmor(FalloutFormKey reference, int level, FalloutGlobalState? globals = null)
@@ -160,7 +180,7 @@ internal sealed partial class FalloutReferenceWorld
         var inventory = Inventory(reference, level, globals);
         if (!inventory.InitialArmorResolved)
         {
-            if (records.GetEffective(Get(reference).Base).Signature == "CREA")
+            if (records.GetEffective(InventoryBase(reference)).Signature == "CREA")
             {
                 // Creatures can carry armor as loot, but do not wear NPC biped equipment.
                 inventory.InitialArmorResolved = true;

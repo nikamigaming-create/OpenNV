@@ -32,6 +32,11 @@ internal static class RootMotionTravelProbe
         if (final.Position != new Vector3(3, 4, 0) || travel.Active || !travel.TakeArrival() || travel.TakeArrival())
             throw new InvalidOperationException("Source travel overshot or repeated its arrival.");
 
+        var restored = GamebryoRootMotionTravel.RestoreCompleted([Vector3.Zero, initial]);
+        if (restored.Active || restored.Cursor != restored.Waypoints || restored.TakeArrival() ||
+            restored.Advance(initial, 100).Position != initial || restored.TakeArrival())
+            throw new InvalidOperationException("A retained completed route restarted motion or replayed its consumed arrival.");
+
         var cancelled = new GamebryoRootMotionTravel([initial]);
         cancelled.Advance(initial, 0);
         cancelled.Cancel();
@@ -45,7 +50,7 @@ internal static class RootMotionTravelProbe
             !Rejects(() => new GamebryoRootMotionTravel([new(float.NaN, 0, 0)])) ||
             !Rejects(() => new GamebryoRootMotionTravel([initial]).Advance(new(float.NaN, 0, 0), 1)))
             throw new InvalidOperationException("Malformed source corridors were admitted.");
-        Console.WriteLine("OPENNV_ROOT_MOTION_TRAVEL_PASS zeroSampleArrival=true turnDistanceConserved=true exactOnce=true cancellation=true malformedRejected=true");
+        Console.WriteLine("OPENNV_ROOT_MOTION_TRAVEL_PASS zeroSampleArrival=true turnDistanceConserved=true exactOnce=true completedColdNoReplay=true cancellation=true malformedRejected=true");
     }
 
     private static bool Rejects(Action action)

@@ -49,6 +49,10 @@ script subject to the shared player/reference inventory. Winning FormList
 entries supply direct item-count sums with source master adjustment; repeated
 entries remain distinct and nested/non-item entries do not become inventory.
 
+[Player starting inventory](player-start-inventory.md) reads winning NPC defaults
+before ordinary New Game scripts and binds the engine player to the same native
+inventory. Cold restoration consumes saved contents without reseeding defaults.
+
 Furniture reservations distinguish every enabled source marker, and winning
 IDLE sibling links can cross original plugin owners. See
 [furniture motion](furniture-motion.md) for entry and placement boundaries.

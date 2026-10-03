@@ -92,6 +92,25 @@ public partial class NativeLocomotionAudit : Node3D
                 scene.ProcessMode = ProcessModeEnum.Inherit;
                 foreach (var collider in bodies) collider.DisableMode = CollisionObject3D.DisableModeEnum.Remove;
                 GD.Print("OPENNV_STAGED_COLLISION_PASS gameplayDisabled=true floor=true wallRefused=true");
+                var target = new Vector3(0, 0, -2);
+                var region = NativeCapsuleNavigation.FindRefined(body, body.GlobalPosition, target, .4f, .32f, .16f,
+                    _ => true, targetRadius: 1.6f).Path;
+                using var regionPlacement = new NativeCapsulePlacementQuery(body);
+                if (body.GlobalTransform != initial || region[^1].DistanceTo(target) > 1.6f ||
+                    !regionPlacement.CanStand(region[^1]) || regionPlacement.CanStand(target))
+                    throw new InvalidOperationException("Approach radius moved the query body or entered the target's collision.");
+                foreach (var unreachable in new[] { (target, 1f), (target - Vector3.Up * 4, 1.6f) })
+                {
+                    var rangeRefused = false;
+                    try
+                    {
+                        _ = NativeCapsuleNavigation.FindRefined(body, body.GlobalPosition, unreachable.Item1, .4f, .32f, .16f,
+                            _ => true, 200, targetRadius: unreachable.Item2);
+                    }
+                    catch (InvalidOperationException) { rangeRefused = true; }
+                    if (!rangeRefused) throw new InvalidOperationException("Approach radius admitted an occupied or different-floor destination.");
+                }
+                GD.Print("OPENNV_NATIVE_APPROACH_REGION_PASS targetCollision=true supportedEndpoint=true queryBodyUnmoved=true insufficientRangeRefused=true differentFloorRefused=true");
             }
             var path = NativeCapsuleNavigation.Find(body, body.GlobalPosition, new(0, 0, -5), .4f, .64f, _ => true);
             if (body.GlobalTransform != initial || !lowCeiling && !path.Any(point => Math.Abs(point.X) > 2.3f))
