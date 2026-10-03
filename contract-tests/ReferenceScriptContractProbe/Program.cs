@@ -5,6 +5,16 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--inventory-query-contracts"])
+{
+    InventoryQueryContracts.Run();
+    return;
+}
+if (args.Length >= 6 && args[0] == "--audit-dialogue-inventory")
+{
+    OwnedDialogueInventoryProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6..]);
+    return;
+}
 if (args is ["--vampire-contracts"])
 {
     VampireQueryContracts.Run();
@@ -475,6 +485,7 @@ FaceGeometryContracts.Run();
 ScriptSoundContracts.Run();
 NoActivationSoundContracts.Run();
 VampireQueryContracts.Run();
+InventoryQueryContracts.Run();
 SayToContracts.Run();
 ScreenBloodContracts.Run();
 QuestMenuContracts.Run();

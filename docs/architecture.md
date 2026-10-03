@@ -35,6 +35,11 @@ between dialogue and script queries. The selected New Vegas profile admits the
 named command's result flow and unconditional false predicate before returning
 zero; changed predicates and unknown layouts remain unbound.
 
+[Inventory queries](dialogue-inventory-queries.md) resolve each dialogue or
+script subject to the shared player/reference inventory. Winning FormList
+entries supply direct item-count sums with source master adjustment; repeated
+entries remain distinct and nested/non-item entries do not become inventory.
+
 Furniture reservations distinguish every enabled source marker, and winning
 IDLE sibling links can cross original plugin owners. See
 [furniture motion](furniture-motion.md) for entry and placement boundaries.

@@ -9,7 +9,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
     Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
     FalloutFormKey? listener = null, FalloutDialogueSpeaker? listenerIdentity = null,
-    Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null)
+    Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null,
+    Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -20,6 +21,19 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 47)
+        {
+            var subject = condition.RunOn switch
+            {
+                0 => speaker,
+                1 => Listener,
+                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                    ?? throw new InvalidDataException("Dialogue item count has no explicit reference."),
+                _ => throw new NotSupportedException("Dialogue item-count scope is unbound."),
+            };
+            return (float)(itemCount ?? throw new NotSupportedException("Dialogue has no shared inventory query owner."))
+                (subject, condition.FormArgument1);
+        }
         if (condition.Function == 40)
         {
             if (condition.RunOn > 2) throw new NotSupportedException("Dialogue vampire query scope is unbound.");
