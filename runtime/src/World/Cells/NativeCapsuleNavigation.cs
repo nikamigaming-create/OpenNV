@@ -11,6 +11,16 @@ internal static partial class NativeCapsuleNavigation
     private static ulong _workFrame;
     private static double _workMilliseconds;
 
+    internal static Vector3 RouteMotion(Vector3 position, Vector3 accumulatedMotion, Vector3 waypoint)
+    {
+        if (!position.IsFinite() || !accumulatedMotion.IsFinite() || !waypoint.IsFinite())
+            throw new InvalidDataException("Native route motion requires finite source accumulation and a finite waypoint.");
+        var direction = waypoint - position; direction.Y = 0;
+        accumulatedMotion.Y = 0;
+        var distance = direction.Length();
+        return distance == 0 ? Vector3.Zero : direction / distance * Math.Min(distance, accumulatedMotion.Length());
+    }
+
     // All runtime actor searches share this physics-thread budget. Queries
     // stay with their native owner and yield between node expansions; source
     // reads can use content workers, but physics is not safe worker-pool work.

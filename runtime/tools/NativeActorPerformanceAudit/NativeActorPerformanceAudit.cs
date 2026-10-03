@@ -10,6 +10,13 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--creature-stack", var creatureGame, var creatureMod, var creatureModRoot,
+                var creatureReferences, .. var creatureDependencies])
+            {
+                ExerciseCreatureAssembly(creatureGame, creatureMod, creatureModRoot,
+                    creatureReferences.Split(','), creatureDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--dialogue-package", var dialogueRoot, var dialogueMod, var dialogueModRoot, var dialogueActor,
                 var dialogueQuest, var dialogueStage, .. var dialogueDependencies])
             {

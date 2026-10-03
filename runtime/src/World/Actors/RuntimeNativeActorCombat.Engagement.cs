@@ -238,7 +238,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var next = state.Seconds + delta;
         if (destination is { } waypoint) TurnToward(waypoint, delta);
         Activity.SetMovement(running: destination.HasValue, sneaking: false);
-        MoveActor(destination.HasValue ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta);
+        MoveActor(destination.HasValue ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(state.Seconds, next, state.StartPending))
             _enemySounds!.Dispatch(key);
         PublishCombatPose(clip, clip.Time(next), next);

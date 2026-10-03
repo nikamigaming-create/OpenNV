@@ -59,9 +59,46 @@ public partial class NativeNifInstanceAudit
         GD.Print("OPENNV_DORMANT_ENVIRONMENT_MASK_PASS geometryRetained=true inactiveMaskNotRead=true activeInputsRequired=true");
     }
 
-    private static byte[] SurfaceFixture(uint flags, string environmentMask = "")
+    private static void ExerciseDormantBillboardEnvironmentFlag()
     {
-        void Net(BinaryWriter w) { w.Write(0); w.Write(0); w.Write(-1); }
+        string? shaderCode = null;
+        foreach (var flags2 in new uint[] { 1, 0x2001, 0xa001 })
+        {
+            var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(SurfaceFixture(0x82000101, flags2: flags2)), .02f);
+            try
+            {
+                var mesh = scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Single();
+                if (scene.Surfaces != 1 || scene.Vertices != 3 || mesh.Mesh.SurfaceGetMaterial(0) is not ShaderMaterial material ||
+                    material.GetMeta("opennv_nif_shader_flags2").AsUInt32() != flags2 || material.NextPass is not null ||
+                    material.GetShaderParameter("use_environment").AsBool() || shaderCode is not null && material.Shader.Code != shaderCode)
+                    throw new InvalidDataException("Dormant shared shader flag changed the ordinary draw or lost its source bits.");
+                shaderCode = material.Shader.Code;
+            }
+            finally { scene.Root.Free(); }
+        }
+        foreach (var flags in new uint[] { 0x82000181, 0x82200101, 0x82020101, 0x82400101 })
+            Reject(flags, 0xa001);
+        Reject(0x82000101, 0xa001, "textures/active_environment.dds");
+        Reject(0x82000101, 0x12001);
+        GD.Print("OPENNV_DORMANT_BILLBOARD_ENVIRONMENT_FLAG_PASS sourceBitsRetained=true ordinaryDraw=true activePathsRejected=true unknownFlagsRejected=true");
+
+        static void Reject(uint flags, uint flags2, string environment = "")
+        {
+            try
+            {
+                var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(SurfaceFixture(flags, flags2: flags2,
+                    environmentTexture: environment)), .02f);
+                scene.Root.Free();
+                throw new InvalidDataException("An unowned active or unrelated shader flag was admitted as dormant.");
+            }
+            catch (NotSupportedException error) when (error.Message.Contains("unsupported lighting semantics", StringComparison.Ordinal)) { }
+        }
+    }
+
+    private static byte[] SurfaceFixture(uint flags, string environmentMask = "", uint flags2 = 1, string environmentTexture = "",
+        ushort? refractionFlags = null, int refractionTarget = 3)
+    {
+        void Net(BinaryWriter w, int controller = -1) { w.Write(0); w.Write(0); w.Write(controller); }
         void Av(BinaryWriter w, params int[] properties)
         {
             Net(w); w.Write((ushort)14); w.Write((ushort)0);
@@ -86,7 +123,7 @@ public partial class NativeNifInstanceAudit
             })),
             ("BSShaderPPLightingProperty", Bytes(w =>
             {
-                Net(w); w.Write((ushort)1); w.Write(1U); w.Write(flags); w.Write(1U);
+                Net(w, refractionFlags.HasValue ? 6 : -1); w.Write((ushort)1); w.Write(1U); w.Write(flags); w.Write(flags2);
                 w.Write(1f); w.Write(3U); w.Write(4); w.Write(0f); w.Write(0); w.Write(0f); w.Write(0f);
             })),
             ("BSShaderTextureSet", Bytes(w =>
@@ -94,12 +131,23 @@ public partial class NativeNifInstanceAudit
                 w.Write(6);
                 for (var i = 0; i < 6; i++)
                 {
-                    var bytes = Encoding.ASCII.GetBytes(i == 5 ? environmentMask : string.Empty);
+                    var bytes = Encoding.ASCII.GetBytes(i == 5 ? environmentMask : i == 4 ? environmentTexture : string.Empty);
                     w.Write(bytes.Length); w.Write(bytes);
                 }
             })),
             ("NiAlphaProperty", Bytes(w => { Net(w); w.Write((ushort)4845); w.Write((byte)128); })),
         ];
+        if (refractionFlags is { } clockFlags)
+            blocks = blocks.Concat(new (string Type, byte[] Data)[]
+            {
+                ("BSRefractionStrengthController", Bytes(w =>
+                {
+                    w.Write(-1); w.Write(clockFlags); w.Write(2f); w.Write(.25f); w.Write(0f); w.Write(1f);
+                    w.Write(refractionTarget); w.Write(7);
+                })),
+                ("NiFloatInterpolator", Bytes(w => { w.Write(float.MinValue); w.Write(8); })),
+                ("NiFloatData", Bytes(w => { w.Write(2); w.Write(1U); w.Write(0f); w.Write(.1f); w.Write(1f); w.Write(.3f); })),
+            }).ToArray();
         return Bytes(w =>
         {
             w.Write(Encoding.ASCII.GetBytes("Gamebryo File Format, Version 20.2.0.7\n"));

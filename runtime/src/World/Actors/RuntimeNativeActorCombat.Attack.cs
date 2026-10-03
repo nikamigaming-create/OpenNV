@@ -149,7 +149,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var moving = state.Action == "pursue";
         TurnToward(destination ?? TargetPosition(player), delta);
         Activity.SetMovement(running: moving, sneaking: false);
-        MoveActor(moving ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta);
+        MoveActor(moving ? clip.RootDisplacement(state.Seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(state.Seconds, next, state.StartPending))
         {
             PublishCombatPose(clip, key.SourceSeconds, next);

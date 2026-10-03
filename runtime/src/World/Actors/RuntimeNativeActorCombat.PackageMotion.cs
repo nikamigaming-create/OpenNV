@@ -100,7 +100,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var next = seconds + delta;
         if (destination is { } waypoint) TurnToward(waypoint, delta);
         Activity.SetMovement(running && moving, sneaking: false);
-        MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta);
+        MoveActor(moving ? clip.RootDisplacement(seconds, next) : Vector3.Zero, delta, destination);
         foreach (var key in clip.Events.Crossed(seconds, next, includeStart)) _packageSounds!.Dispatch(key);
         _skeleton.Node.ResetBonePoses();
         var root = _skeleton.BoneIndex(clip.Animation.Sequence.TargetName);
