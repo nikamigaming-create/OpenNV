@@ -94,6 +94,8 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseHeadTracking();
             ExerciseAuthoredDecalSurfaces();
             ExerciseDormantEnvironmentMask();
+            ExerciseDormantBillboardEnvironmentFlag();
+            ExerciseDirectRefraction();
             ExerciseModelTextures();
             if (OS.GetCmdlineUserArgs() is ["--look", var lookRoot, var lookActor, var lookQuest])
             {

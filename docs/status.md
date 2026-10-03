@@ -1,6 +1,6 @@
 # Product status
 
-Updated October 2, 2026 from current code and fresh tests. OpenNV is
+Updated October 3, 2026 from current code and fresh tests. OpenNV is
 experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
@@ -36,9 +36,18 @@ subjects and direct FormList sums to the shared inventory owner. Synthetic
 scope/list/live-change/cold checks and136 selected TTW GREETING predicates pass.
 The required integrated gate passes. A fresh ordinary retry completes Amata's
 greeting, reply and gift interaction, reaches birthday21 with the source skill
-book and releases dialogue control. The next Palmer/cake result retains a missing
-native package presentation owner for an authored creature. Birthday completion
-and the subsequent campaign remain open.
+book and releases dialogue control. The current
+[creature material controllers](creature-material-controllers.md) recover the
+authored creature's complete seven-part model and actual package owner. Synthetic
+native material/clock checks and selected owned assembly/retirement checks pass.
+[Actor route accumulation](actor-route-accumulation.md) keeps the source travel
+budget on checked capsule waypoints. Native turning/large-step and owned Escort
+checks pass; the fresh ordinary retry completes Dad's Escort on the supported
+floor and repeats birthday21. Palmer's source voice/result now executes without
+the previous missing-actor error; an observed reply gives the source sweetroll
+and closes dialogue. The actual creature retains its unbound
+source Travel procedure6. The required integrated runtime gate passes;
+birthday completion and the subsequent campaign remain open.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the

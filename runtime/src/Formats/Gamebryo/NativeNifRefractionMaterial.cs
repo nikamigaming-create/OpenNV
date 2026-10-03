@@ -7,6 +7,34 @@ internal static class NativeNifRefractionMaterial
     internal const string ResourceIdentity = "Owned NIF refraction";
     internal const uint Flags = (1u << 15) | (1u << 16);
 
+    internal static bool HasDirectController(FalloutNifFile file, FalloutNifShaderProperty property) =>
+        (property.ShaderFlags & Flags) != 0 && property.Controller >= 0 &&
+        file.ReadObject(property.Controller) is FalloutNifRefractionController controller &&
+        controller.Time.Target == property.Block.Index && controller.Time.NextController == -1 &&
+        controller.Time.UnknownInteger == 0 && (controller.Time.Flags & 0x60) == 0x40 &&
+        file.ReadObject(controller.Interpolator) is FalloutNifFloatInterpolator or FalloutNifSplineFloatInterpolator;
+
+    internal static RuntimeNifControllerSequence DirectChannel(FalloutNifFile file,
+        FalloutNifShaderProperty property, IReadOnlyList<Material> materials)
+    {
+        if (!HasDirectController(file, property))
+            throw new NotSupportedException("Direct refraction has no declared source shader controller.");
+        var controller = (FalloutNifRefractionController)file.ReadObject(property.Controller);
+        var clock = controller.Time;
+        FalloutNifControllerClock.Validate(clock, requireActive: false);
+        var sampler = new FalloutNifFloatAnimation(file, controller.Interpolator);
+        void Sample(float time)
+        {
+            var strength = sampler.Sample(time);
+            foreach (var material in materials) Apply(material, property, strength, time);
+        }
+        Sample((float)FalloutNifControllerClock.Resolve(clock, 0));
+        return new RuntimeNifControllerSequence($"DirectRefraction{controller.Block.Index}",
+            (uint)(clock.Flags >> 1) & 3, clock.Frequency, clock.StartTime, clock.StopTime,
+            [new RuntimeNifControllerChannel(Sample)])
+        { DirectClock = clock };
+    }
+
     internal static Material Build(StandardMaterial3D result, FalloutNifShaderProperty source,
         FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha)
     {

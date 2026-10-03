@@ -15,104 +15,76 @@ All 36 [recovery requirements](recovery-checklist.md) remain open at full scope.
 
 Ordinary SPECIAL-book input from the genuine toddler checkpoint allocates40
 points and reaches CG01 stage80 through source timers and speech. The latest
-fresh closed-door stage80 Continue activates the authored main door and follows
-Dad through the corridor at supported floor height. His actual Escort completes,
-CG01 reaches100 and CG02 enters0/5/6/7/8/10/12. No collision, actor position or
+fresh closed-door Continue activates the authored main door and follows Dad.
+His actual Escort completes at supported floor height without a route error,
+CG01 reaches100 and CG02 enters0/5/6/7/8/10/12. No actor placement, collision or
 quest stage was edited. Automatic escort-door recovery and matched walk/turn
 behavior remain unaccepted.
 
 Source birthday race/inventory, player relocation, child FaceGen, security head
 tracking, disabled Beatrice speech, clapping editor travel and font paths execute.
-Dad's Dialogue package delivers owned voice/LIP and reaches12. Ten party actors
-occupy distinct source furniture markers, including both seats on shared benches
-and Paul's authored seat. Paul's package query error is absent. The selected
-view removes the displaced stool actor in front of Amata; exact furniture contact,
-animation variation and matched pixels remain unaccepted. Another birthday actor
-still fails on the glasses' authored 2D environment map.
+Ten party actors occupy distinct source furniture markers, including both seats
+on shared benches and Paul's authored seat. Exact furniture contact, animation
+variation, avoidance and matched pixels remain unaccepted. Another actor still
+fails on the glasses' authored 2D environment map.
 
-The birthday12 source result completes without a speech result error. Its
-ForceRadioStationUpdate executes once, and the enabled Vault101 transmitter is
-available and persistently discovered. Ordinary approach admits Amata's source
-conversation and reaches its standoff without a bot error. The optional INFO
-reader passes the previous zero-response record. The package-query retry also
-passes the prior self IsCurrentPackage condition. The inventory-query retry
-opens Amata's conversation, delivers the source skill book through two observed
-replies and reaches CG02 stage21. Dialogue closes and ordinary player control
-returns without a speech or conversation error. The next Palmer interaction
-selects its INFO, then retains
-`Resident actor Fallout3.esm:09d1bb has no package presentation owner.`
-Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
+The birthday12 result completes without a speech error. Source radio refresh
+executes once and discovers the enabled Vault101 transmitter. Ordinary approach
+opens Amata's source conversation; two observed replies give the source skill
+book and reach21, then close dialogue and restore ordinary control. Palmer's
+next source INFO and voice now execute without the prior missing-creature-owner
+error, and birthday15 is entered while the retained maximum stage remains21.
+The observed Palmer reply gives the source sweetroll, enters20 and closes
+dialogue without a speech/result error.
+The actual creature is present with its complete source model. Its selected
+Travel package retains `Creature package Fallout3.esm:09f64c procedure 6 is unbound.`
+Cake completion, birthday completion, Vault exit, Megaton, train and Mojave remain
+unreached.
 
 ## Current implementation block
 
-The published baseline is65776d8 after checked PR112. The
-[bot refinement](bot-navigation.md) gives a failed coarse capsule route one finer
-query before rejecting its corridor. Live source scale informs spacing; body,
-floor/step, residency and node bounds remain unchanged. The native fixture walks
-a child-sized narrow passage in both directions and refuses the adult body;
-queries never move the body. Actual movement actions, alive state and source
-controls are exposed in telemetry. The successful ordinary retries use coarse
-routes, so refinement is not established as the cause of their changed outcome.
+The published baseline is526defc after checked PR113. Shared
+[optional INFO responses](optional-dialogue-responses.md),
+[current-package queries](dialogue-package-queries.md),
+[owned GetVampire](owned-vampire-query.md) and
+[inventory queries](dialogue-inventory-queries.md) pass their focused synthetic,
+selected owned-data and required integrated checks. The selected inventory
+query audit covers136 TTW GREETING predicates with source scope/master binding.
+These owners are exercised by the ordinary birthday conversation above.
 
-The merged [optional response reader](optional-dialogue-responses.md) retains
-empty INFOs with
-winning order, conditions, flags, scripts and links without invented speech.
-Focused synthetic selection/failure checks, the selected installed graph
-(23 empty INFOs and9127 GREETING INFOs) and the required integrated gate pass.
-A fresh ordinary birthday retry passes the previous reader fault and exposes the
-current-package conversation binding as the next owner. Selected empty INFO
-result/flow execution remains explicitly unbound before begin effects.
+The current branch `codex/ttw-source-actor-admission-steering` restores general
+[creature material controllers](creature-material-controllers.md): dormant
+shared flags remain on ordinary lighting surfaces, and direct refraction
+strength binds its actual scalar/source clock. Synthetic native material/clock
+checks pass. The selected owned creature builds all seven parts with51 surfaces
+and registers/retires its real package-query owner without changing source bytes.
 
-The merged package-query block connects
-[dialogue current-package queries](dialogue-package-queries.md) to the actual
-speaker, listener or explicit reference. Conversation and scripted speech share
-the NPC/creature reference query owner and existing player package lifecycle.
-Synthetic subject/master-order/replacement/failure checks pass. The selected TTW
-GREETING audit passes230 source predicates against a declared state fixture.
-The required integrated gate and owned native assignment/retirement audit pass.
-The fresh ordinary Continue/door/follow/Amata approach repeats CG01 completion
-and birthday12 without a bot or speech error, then passes the prior current-package
-fault. That retry retained GetVampire as its next unbound query.
+[Actor route accumulation](actor-route-accumulation.md) consumes the source KF
+travel budget along checked capsule waypoints independently of body turning,
+with safe-margin arrival and endpoint bounds. Native turning/large-step checks
+and the owned Escort acquisition/wait/cold/wall/arrival/event audit pass. The
+fresh ordinary retry completes Dad's corridor walk on the floor and advances to
+birthday21. Palmer's source result passes the previous owner error and exposes
+the creature Travel procedure as the next owner. The required Release/Debug,
+formatting/analyzer, contract, launcher and native Godot gate passes.
 
-The merged GetVampire block binds the reached
-[GetVampire query](owned-vampire-query.md) from the selected owned executable's
-named descriptor and recovered result flow. Dialogue and scripts share one lazy
-query owner. Synthetic association/failure/shared-read checks and all nine
-selected TTW GREETING predicates pass. The required integrated gate passes.
-The fresh ordinary retry reaches birthday12 and passes the prior GetVampire
-fault. Greeting selection retains player-target GetItemCount as the next owner.
-The initial follow stops outside Dad's range; ordinary closer spacing crosses
-the doorway. Complete short-route acceptance remains open.
-
-The fresh branch `codex/ttw-dialogue-inventory-queries` connects
-[GetItemCount](dialogue-inventory-queries.md) to the actual player, actor or
-container inventory. Conversation, scripted speech, reference/results, fallback
-quests and inventory conditions share source item/FormList counts. Synthetic
-scope/master/list/live-change/read-only/cold checks and all136 selected TTW
-GREETING predicates pass. The required integrated gate passes. The fresh ordinary
-retry completes Amata's source gift interaction and reaches21. The next cake
-result exposes the authored creature's missing package presentation owner.
-
-The merged [radio owner](source-radio-refresh.md) shares reception, applied enable,
-persistent discovery and source notification declarations. Tuning/playback,
-cross-portal radius and matched cadence remain unbound. Merged
-[source dialogue packages](source-dialogue-packages.md) and
-[furniture motion](furniture-motion.md) share actual NAVM/KF/capsule movement,
-source speech/results, reference queries and per-marker occupancy. Pending
+Merged [bot refinement](bot-navigation.md), [source dialogue packages](source-dialogue-packages.md),
+[furniture motion](furniture-motion.md) and [radio refresh](source-radio-refresh.md)
+share authoritative reference state and native movement/audio/UI owners. Pending
 continuations block saving. Never clear a fault or replay a consumed prefix.
 
 ## Next owners
 
-1. Restore general source creature admission/package ownership for the cake
-   result's reached actor. Continue birthday interactions from genuine state.
-2. Implement selected zero-response INFO result/flow behavior when reached,
-   retaining ordinary condition selection, source effects and once-only delivery.
-3. Complete automatic escort-door recovery and native steering/turn acceptance.
-4. Bind the glasses' authored 2D environment-map behavior without substituting
-   a guessed cubemap; finish furniture contact, avoidance and variation.
-5. Repair sampled short bot endpoint crossing, then continue birthday
-   interactions, G.O.A.T., Vault escape, Megaton and authored train travel.
-   Complete all nine JAM/MCM modules and dependencies under the same owners.
+1. Implement general creature Travel procedure6, source arrival, package result
+   and event-idle ownership. Continue the cake and birthday from genuine state.
+2. Complete automatic escort-door recovery and matched steering/turn behavior;
+   repair sampled short bot endpoint crossing.
+3. Implement selected zero-response INFO result/flow behavior when reached.
+4. Bind the glasses' authored 2D environment-map behavior; finish furniture
+   contact, avoidance and variation.
+5. Continue the G.O.A.T., Vault escape, Megaton and authored train route, then
+   Mojave/Benny. Complete all nine JAM/MCM modules and dependencies under the
+   same engine interfaces.
 
 The live stack has18 plugins and six TTW dependency roots. JAM and Benny are not
 mounted in that stack. Their acceptance and native plugin interfaces remain
@@ -122,26 +94,26 @@ campaign, cell, actor, mod or retail parity completion.
 
 ## Private continuation
 
-`tmp/development-lab/ttw-bot-20261002/` runs the inventory-query candidate.
-Continue248, door249 and closer follow250 repeat CG01 completion; stop251 is
-acknowledged. Amata approach252, stop253 and observed replies254/255 complete
-the source gift interaction and reach21. Palmer interaction256 retains the next
-creature-package failure; stop257 is acknowledged. The earlier processes closed
-through normal Quit229/237/247. No frames were recorded. A delayed state
-publication retains its pending snapshot and remains visible in telemetry.
-Earlier failed conversations and source
-prefixes remain retained and must not be replayed as completed.
+`tmp/development-lab/ttw-bot-20261002/` runs the current candidate. Continue271,
+door272 and follow273 complete CG01; stop274 is acknowledged. Amata approach275,
+stop276 and observed replies277/278 complete the source gift and reach21. Palmer
+interaction279 reaches its source voice/result with the creature present;
+stop280 and full state281 retain the unbound Travel package.
+Palmer reply284 gives the source sweetroll and closes dialogue; normal Quit287
+closes the native process. The earlier retry
+retained Dad's chair/table obstruction and closed normally through Quit270.
+No frames were recorded. A delayed publication retained its pending snapshot;
+startup telemetry subsequently recovered without clearing the failure manually.
+Failed source prefixes remain retained and must not be replayed as completed.
 
 Genuine stage16/40/50 and open/closed stage80 backups, source evidence and focused
 checks are under `local/ttw-bot-resume-20261002/`. Closed stage80 is the next retry;
-its immutable hash is checked by the private resume helper. A reusable birthday12
+its immutable hash is checked by the private resume helper. A reusable birthday
 cold checkpoint has not been established. The original
-`tmp/development-lab/ttw-departure-clock-20261001/` is unchanged.
-Two selected seating diagnostics remain retained for the active alignment
-investigation; automatic approval review rejected temporary-file cleanup.
+`tmp/development-lab/ttw-departure-clock-20261001/` is unchanged. Two selected seating
+diagnostics remain retained; automatic approval review rejected cleanup.
 
 Protected user saves under `local/playtest-20260927-world/` and
 `local/playtest-20260920-companion/` remain untouched. Never publish saves,
 retail-derived media, extracted assets or binary observations. Keep recording
-off during development and remove temporary frames after selected visual checks.
-The requested complete journey video remains pending.
+off during development. The requested complete journey video remains pending.

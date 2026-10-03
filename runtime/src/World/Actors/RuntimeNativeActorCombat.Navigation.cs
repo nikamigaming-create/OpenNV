@@ -34,7 +34,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             var offset = _pursuitPath[_pursuitCursor] - _actor.GlobalPosition;
             var distance = new Vector2(offset.X, offset.Z).Length();
-            if (distance > _radius * .5f)
+            if (distance > _mover.SafeMargin * 8)
             {
                 _routeStall = distance < _waypointDistance - .001f ? 0 : _routeStall + delta;
                 _waypointDistance = distance;

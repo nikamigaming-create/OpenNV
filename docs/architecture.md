@@ -44,6 +44,17 @@ Furniture reservations distinguish every enabled source marker, and winning
 IDLE sibling links can cross original plugin owners. See
 [furniture motion](furniture-motion.md) for entry and placement boundaries.
 
+[Actor route accumulation](actor-route-accumulation.md) uses source KF travel
+distance along checked native capsule waypoints while the source turn owner
+rotates the body. Safe-margin waypoint consumption and endpoint bounds prevent
+the body from curving off the cleared route or passing a corner.
+
+[Creature material controllers](creature-material-controllers.md) retain dormant
+shared shader flags on ordinary lighting paths and bind direct refraction
+strength to the source scalar clock. Complete CREA assembly registers its real
+package owner only after every winning part loads; unsupported procedures remain
+visible independently of model admission.
+
 Player camera packages share the C# IDLE playback clock with source intro,
 repeat and outro intervals. Assignment handoff retains identical event poses;
 source text-key crossings feed the existing native player sound owner. Saved

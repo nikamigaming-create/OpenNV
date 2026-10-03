@@ -113,12 +113,18 @@ internal sealed partial class RuntimeNativeActorCombat
         _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 : Math.Min(1, _turnSpeed * (float)delta / angle))).Scaled(_actor.Scale);
     }
 
-    private void MoveActor(Vector3 localMotion, double delta)
+    private void MoveActor(Vector3 localMotion, double delta, Vector3? waypoint = null)
     {
         var body = _mover!;
         var motion = body.GlobalBasis.Orthonormalized() * localMotion * _motionScale *
             CrippledLegMovementSpeedMultiplier();
         motion.Y = 0;
+        // The source KF supplies the distance budget. Native route waypoints
+        // supply travel direction while the source turn owner rotates the body.
+        // Turning must not curve the capsule off its checked corridor, and a
+        // long animation step must not overshoot a corner onto nearby furniture.
+        if (waypoint is { } destination)
+            motion = NativeCapsuleNavigation.RouteMotion(body.GlobalPosition, motion, destination);
         if (!_context!.Resident(body.GlobalPosition + motion)) { _movementBlock = "unloaded-collision"; return; }
         var velocity = delta > 0 ? motion / (float)delta : Vector3.Zero;
         velocity.Y = body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) : body.Velocity.Y - _context.Gravity * (float)delta;

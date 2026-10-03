@@ -10,6 +10,10 @@ public partial class NativeLocomotionAudit : Node3D
         try
         {
             var arguments = OS.GetCmdlineUserArgs();
+            if (arguments is ["--route-motion"])
+            {
+                await CheckRouteAccumulation(); GetTree().Quit(); return;
+            }
             if (arguments.FirstOrDefault() == "--owned-contact")
             {
                 await NativeOwnedContactAudit.Run(this, arguments.Skip(1).ToArray());
@@ -25,6 +29,7 @@ public partial class NativeLocomotionAudit : Node3D
                 return;
             }
             NativeNavigationContracts.Run();
+            await CheckRouteAccumulation();
             await CheckNavigation();
             await CheckNavigation(lowCeiling: true);
             await CheckRouteDoorContact();

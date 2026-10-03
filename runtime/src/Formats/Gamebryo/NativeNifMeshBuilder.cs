@@ -26,6 +26,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private const uint ShaderFlagZBufferTest = 1U << 31;
     private const uint ShaderFlagZBufferWrite = 1U << 0;
     private const uint ShaderFlagNoFade = 1U << 3;
+    private const uint ShaderFlagBillboardAndEnvironmentMapLightFade = 1U << 13;
     private const uint ShaderFlagEnvironmentMapLightFade = 1U << 15;
     private const uint SupportedShaderFlags = ShaderFlagSpecular |
         ShaderFlagVertexAlpha |
@@ -1877,6 +1878,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (values.Count == 1 && _source.ReadObject(reference) is FalloutNifMaterialProperty property &&
                     property.Controller >= 0)
                     BindDirectMaterialControllers(property, values);
+                if (values.Count == 1 && _source.ReadObject(reference) is FalloutNifShaderProperty shader &&
+                    shader.Controller >= 0 && NativeNifRefractionMaterial.HasDirectController(_source, shader))
+                    _directControllerSequences.Add(NativeNifRefractionMaterial.DirectChannel(_source, shader, values));
             }
             return result;
         }
@@ -1964,15 +1968,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
             // UVs and NiAlphaProperty. They use the same single lighting pass;
             // these flags do not request a projected Godot decal or new geometry.
             // Preserve their source depth and alpha states with the other draws.
-            if (shader.Controller != -1 && !IsManagedRefractionController(shader) || shader.ExtraData.Any(reference => reference != -1) ||
-                shader.ShaderType != SupportedShaderType ||
-                (shader.ShaderFlags & ~supportedLightingFlags) != 0 ||
-                (shader.ShaderFlags2 & ~SupportedShaderFlags2) != 0)
-                throw new NotSupportedException(
-                    $"NIF shader {shader.Block.Index} uses unsupported lighting semantics: " +
-                    $"type={shader.ShaderType} flags1=0x{shader.ShaderFlags:x8} " +
-                    $"flags2=0x{shader.ShaderFlags2:x8} clamp={shader.TextureClampMode} " +
-                    $"refraction={shader.RefractionStrength}/{shader.RefractionFirePeriod}.");
             // Only the flags select refraction; ordinary glass can retain dormant values.
             var windowEnvironment = (shader.ShaderFlags & ShaderFlagWindowEnvironmentMapping) != 0;
             var parallax = (shader.ShaderFlags & FalloutNifSurfaceInputs.ParallaxFlag) != 0;
@@ -2000,6 +1995,24 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     $"NIF shader {shader.Block.Index} uses an unsupported texture set: " +
                     $"flags1=0x{shader.ShaderFlags:x8} slots=" +
                     $"[{string.Join(',', textures.Textures.Select((path, index) => $"{index}:{path}"))}].");
+
+            // The shared billboard/environment-light-fade bit does not select
+            // either path. Retain it on ordinary lighting surfaces, where
+            // there is no environment contribution to fade. The tree-billboard
+            // selector is still excluded from supportedLightingFlags; active
+            // environment use of this shared bit remains unowned.
+            var supportedLightingFlags2 = SupportedShaderFlags2 |
+                (environment ? 0U : ShaderFlagBillboardAndEnvironmentMapLightFade);
+            if (shader.Controller != -1 && !IsManagedRefractionController(shader) &&
+                !NativeNifRefractionMaterial.HasDirectController(_source, shader) || shader.ExtraData.Any(reference => reference != -1) ||
+                shader.ShaderType != SupportedShaderType ||
+                (shader.ShaderFlags & ~supportedLightingFlags) != 0 ||
+                (shader.ShaderFlags2 & ~supportedLightingFlags2) != 0)
+                throw new NotSupportedException(
+                    $"NIF shader {shader.Block.Index} uses unsupported lighting semantics: " +
+                    $"type={shader.ShaderType} flags1=0x{shader.ShaderFlags:x8} " +
+                    $"flags2=0x{shader.ShaderFlags2:x8} clamp={shader.TextureClampMode} " +
+                    $"refraction={shader.RefractionStrength}/{shader.RefractionFirePeriod}.");
 
             // The parallax flag selects slot 3. Owned hair/armor can retain an
             // inactive texture there; its presence alone does not select a
