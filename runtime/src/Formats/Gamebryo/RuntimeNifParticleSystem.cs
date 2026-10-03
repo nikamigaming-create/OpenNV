@@ -13,6 +13,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<string, bool> _active = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _rates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _speeds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _lifespans = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
@@ -50,11 +51,13 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         foreach (var modifier in _modifiers)
         {
             _active[modifier.Name] = modifier.Active;
-            if (modifier is FalloutNifParticleVolumeEmitter volume) _speeds[modifier.Name] = volume.Emitter.Speed;
-            else if (modifier is FalloutNifParticleMeshEmitter mesh) _speeds[modifier.Name] = mesh.Emitter.Speed;
+            if (modifier is FalloutNifParticleVolumeEmitter volume)
+            { _speeds[modifier.Name] = volume.Emitter.Speed; _lifespans[modifier.Name] = volume.Emitter.Life; }
+            else if (modifier is FalloutNifParticleMeshEmitter mesh)
+            { _speeds[modifier.Name] = mesh.Emitter.Speed; _lifespans[modifier.Name] = mesh.Emitter.Life; }
         }
         foreach (var name in _rates.Keys) { _rates[name] = 0; _remainders[name] = 0; }
-        BirthCount = DeathCount = 0; SimulatedSeconds = 0; EmissionEnabled = false;
+        BirthCount = DeathCount = CollisionCount = 0; SimulatedSeconds = 0; EmissionEnabled = false;
         _nextBoundsRefresh = 0; _publishedBounds = default;
     }
     internal IReadOnlyList<Vector3> Positions => _particles.Take(ActiveCount).Select(value => value.Position).ToArray();
@@ -66,6 +69,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         active = ActiveCount,
         births = BirthCount,
         deaths = DeathCount,
+        collisions = CollisionCount,
         seconds = SimulatedSeconds,
         modifiers = _modifiers.Select(modifier => new
         {
@@ -75,13 +79,14 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             active = _active[modifier.Name],
             rate = _rates.GetValueOrDefault(modifier.Name),
             speed = _speeds.GetValueOrDefault(modifier.Name),
+            lifespan = _lifespans.GetValueOrDefault(modifier.Name),
             remainder = _remainders.GetValueOrDefault(modifier.Name)
         }).ToArray(),
         // Packed fields preserve float32 values, including signed zero; the
         // render trace stores these exact bytes alongside the MultiMesh buffer.
         encoding = "particle:position3,velocity3,age,life,radius,angle,spin,color4:f32-le;texture:i32-le",
         state = System.Convert.ToBase64String(ObservationBytes()),
-        missing = new[] { "retail-particle-identity-and-random-sequence-join", "retail-modifier-motion-parity" },
+        missing = new[] { "retail-particle-identity-and-random-sequence-join", "retail-modifier-motion-parity", "retail-plane-sidedness-and-moving-plane-response" },
     };
 
     private byte[] ObservationBytes()
@@ -103,7 +108,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private struct Particle
     {
         internal Vector3 Position, Velocity;
-        internal float Age, Life, Radius, Angle, Spin;
+        internal float Age, Life, Radius, Angle, Spin, MotionSeconds;
         internal int Texture;
         internal Color InitialColor;
     }
@@ -135,6 +140,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 throw new InvalidDataException("Particle modifier has a wrong target or duplicate name.");
             switch (modifier)
             {
+                case FalloutNifParticleColliderManager manager:
+                    ConfigureColliders(file, manager);
+                    break;
                 case FalloutNifParticleVolumeEmitter volume:
                     _speeds.Add(modifier.Name, volume.Emitter.Speed);
                     RequireNode(volume.Object); ValidateEmitter(volume.Emitter);
@@ -219,6 +227,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             emitter.SpeedVariation < 0 || emitter.DeclinationVariation < 0 || emitter.PlanarVariation < 0)
             throw new InvalidDataException("Particle emitter has an invalid range.");
         _rates.Add(emitter.Name, 0); _remainders.Add(emitter.Name, 0);
+        _lifespans.Add(emitter.Name, emitter.Life);
     }
 
     private void RequireNode(int index)
@@ -228,6 +237,16 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     internal RuntimeNifControllerChannel Bind(FalloutNifFile file, FalloutNifControllerLink link)
     {
+        if (link.ControllerType == "NiPSysEmitterLifeSpanCtlr" && link.Variable2.Length == 0 && _lifespans.ContainsKey(link.Variable1))
+        {
+            var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
+            return new(time =>
+            {
+                var value = sampler.Sample(time);
+                if (value < 0) throw new InvalidDataException("Particle emitter lifespan is negative.");
+                _lifespans[link.Variable1] = value;
+            });
+        }
         if (link.ControllerType == "NiPSysEmitterSpeedCtlr" && link.Variable2.Length == 0 && _speeds.ContainsKey(link.Variable1))
         {
             var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
@@ -283,6 +302,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 _particles[i] = _particles[--ActiveCount]; DeathCount++;
             }
         }
+        for (var i = 0; i < ActiveCount; i++) _particles[i].MotionSeconds = delta;
         foreach (var modifier in _modifiers)
         {
             if (!_active[modifier.Name]) continue;
@@ -293,8 +313,10 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 var count = (int)births;
                 _remainders[modifier.Name] = births - count;
                 var available = Math.Min(count, _particles.Length - ActiveCount);
-                for (var i = 0; i < available; i++) Emit(modifier);
+                for (var i = 0; i < available; i++)
+                { Emit(modifier); _particles[ActiveCount - 1].MotionSeconds = delta; }
             }
+            else if (modifier is FalloutNifParticleColliderManager manager) Collide(manager);
             else if (modifier is FalloutNifParticleGravity gravity)
             {
                 var transform = TransformOf(gravity.Object);
@@ -363,7 +385,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             {
                 for (var i = 0; i < ActiveCount; i++)
                 {
-                    _particles[i].Position += _particles[i].Velocity * delta;
+                    _particles[i].Position += _particles[i].Velocity * _particles[i].MotionSeconds;
+                    _particles[i].MotionSeconds = 0;
                     _particles[i].Angle += _particles[i].Spin * delta;
                 }
             }
@@ -409,7 +432,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         {
             Position = transform * point,
             Velocity = (transform.Basis * direction).Normalized() * (Vary(_speeds[modifier.Name], emitter.SpeedVariation) * _units),
-            Life = Math.Max(float.Epsilon, Vary(emitter.Life, emitter.LifeVariation)),
+            Life = Math.Max(float.Epsilon, Vary(_lifespans[emitter.Name], emitter.LifeVariation)),
             Radius = Math.Max(0, Vary(emitter.Radius, emitter.RadiusVariation)) * _units * transform.Basis.Scale.Abs().X,
             InitialColor = ToColor(emitter.Color),
             Texture = _data.Subtextures.Length == 0 ? 0 : _random.Next(_data.Subtextures.Length),

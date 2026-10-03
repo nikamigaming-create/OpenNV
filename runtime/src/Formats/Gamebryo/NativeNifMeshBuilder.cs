@@ -861,7 +861,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         link.ControllerType is not ("NiTransformController" or "NiVisController" or
                             "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
                             "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or
-                            "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr")))
+                            "NiGeomMorpherController" or "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or
+                            "NiPSysEmitterLifeSpanCtlr" or "NiPSysModifierActiveCtlr")))
                     throw new NotSupportedException(
                         $"NIF controller manager {manager.Block.Index} has an unsupported sequence chain.");
             }
@@ -1194,7 +1195,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         "NiAlphaController" or "BSMaterialEmittanceMultController" => BuildManagedMaterialChannel(
                         sequence, link, targetBlock),
                     "BSRefractionStrengthController" => BuildRefractionChannel(sequence, link, targetBlock),
-                    "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
+                    "NiGeomMorpherController" => BuildManagedMorphChannel(sequence, link, targetBlock),
+                    "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
+                        "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
                     _ => throw new NotSupportedException(
                         $"NIF sequence {sequence.Block.Index} controller {link.ControllerType} is unsupported."),
                 });
@@ -1461,7 +1464,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
         private Node3D BuildGeometry(FalloutNifGeometry source)
         {
-            RequirePlainVisualState(source.Block, source.Controller, [], [], -1);
+            var geometryMorph = ReadManagedMorph(source);
+            RequirePlainVisualState(source.Block, source.Controller, [], [], -1, geometryMorph?.ControllerBlocks);
             var collision = ValidateVisualCollision(source.Block, source.CollisionObject);
             _ = ValidateExtraData(
                 source.Block,
@@ -1473,6 +1477,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (source.Data == -1)
                 throw new InvalidDataException($"NIF geometry {source.Block.Index} has no mesh data.");
             var data = ReadOwnedMeshData(source);
+            if (geometryMorph is not null) data = geometryMorph.BaseGeometry(data);
             FalloutNifLandscapeMorphData? morph = null;
             if (data.AdditionalData != -1)
             {
@@ -1569,6 +1574,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 Layers = material.HasMeta("opennv_nif_no_render_shader") ? 0u : 1u,
             };
             result.SetMeta("opennv_nif_geometry_block", source.Block.Index);
+            if (geometryMorph is not null) RegisterManagedMorph(source, geometryMorph, result);
             if (morph is not null) result.SetMeta("opennv_landscape_morph_targets", morph.Heights.Length);
             result.SetMeta("opennv_nif_source_name", source.Name);
             if (RigidFaceBind is { } faceBind)
@@ -1616,14 +1622,16 @@ internal static partial class RuntimeNativeNifMeshBuilder
             FalloutNifMeshData data, Godot.Collections.Array sourceArrays, int[] vertexMap)
         {
             var result = new Godot.Collections.Array<Godot.Collections.Array>();
-            if (MorphOwner is null) return result;
+            var targets = MorphOwner?.Invoke(_source, geometry, data);
+            if (targets is null) targets = ReadManagedMorph(geometry)?.RelativeDeltas();
+            if (targets is null) return result;
             // Godot packs every blend-shape normal/tangent as a unit direction;
             // a zero relative delta cannot survive that representation. Use
             // absolute targets with normalized blending so the source basis
             // cancels independently of simultaneous expression weights.
             mesh.BlendShapeMode = Mesh.BlendShapeMode.Normalized;
             var baseVertices = sourceArrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-            foreach (var (name, values) in MorphOwner(_source, geometry, data))
+            foreach (var (name, values) in targets)
             {
                 if (values.Length != data.Vertices.Length) throw new InvalidDataException("Source morph vertex order differs from geometry.");
                 mesh.AddBlendShape(name);
@@ -2558,9 +2566,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
             int controller,
             IReadOnlyList<int> extraData,
             IReadOnlyList<int> properties,
-            int collision)
+            int collision,
+            IReadOnlySet<int>? ownedControllers = null)
         {
-            if (controller != -1 && ExternalControllerBlocks?.Contains(controller) != true)
+            if (controller != -1 && ExternalControllerBlocks?.Contains(controller) != true && ownedControllers?.Contains(controller) != true)
             {
                 var dormant = _source.Blocks[controller].TypeName == "NiTransformController" &&
                     _source.ReadObject(controller) is FalloutNifTransformController direct &&

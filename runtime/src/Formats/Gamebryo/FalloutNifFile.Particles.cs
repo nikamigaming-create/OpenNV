@@ -45,6 +45,8 @@ internal sealed partial class FalloutNifFile
         var header = new FalloutNifParticleModifier(block, name, order, target, active);
         switch (block.TypeName)
         {
+            case "NiPSysColliderManager":
+                return new FalloutNifParticleColliderManager(header, ReadReference(ref cursor, "particle collider head"));
             case "NiPSysMeshEmitter":
             case "NiPSysBoxEmitter":
             case "NiPSysCylinderEmitter":
@@ -133,6 +135,16 @@ internal sealed partial class FalloutNifFile
         };
     }
 
+    // Public NIF declarations retain the collider's linked owner and source
+    // basis: https://www.niftools.org/nifxml/NiPSysPlanarCollider.html .
+    private FalloutNifParticlePlanarCollider ReadParticlePlanarCollider(FalloutNifBlock block, ref NifCursor cursor) => new(block,
+        cursor.ReadFiniteSingle("particle collider bounce"), cursor.ReadBoolean("particle collider spawn"),
+        cursor.ReadBoolean("particle collider die"), ReadReference(ref cursor, "particle collision spawn modifier"),
+        ReadReference(ref cursor, "particle collider manager"), ReadReference(ref cursor, "next particle collider"),
+        ReadReference(ref cursor, "particle collider object"), cursor.ReadFiniteSingle("particle plane width"),
+        cursor.ReadFiniteSingle("particle plane height"), ReadVector(ref cursor, "particle plane x axis"),
+        ReadVector(ref cursor, "particle plane y axis"));
+
     private static FalloutNifBlendBoolInterpolator ReadBlendBoolInterpolator(FalloutNifBlock block, ref NifCursor cursor)
     {
         var blend = ReadManagerBlendInterpolator(ref cursor, "blend bool interpolator");
@@ -153,6 +165,11 @@ internal sealed record FalloutNifParticleData(FalloutNifBlock Block, ushort Maxi
     ushort Consistency, int Additional, bool HasRadii, ushort Active, bool HasSizes, bool HasRotations,
     bool HasAngles, bool HasAxes, bool HasTextureIndices, FalloutNifVector4[] Subtextures, bool HasRotationSpeeds) : FalloutNifObject(Block);
 internal record FalloutNifParticleModifier(FalloutNifBlock Block, string Name, uint Order, int Target, bool Active) : FalloutNifObject(Block);
+internal sealed record FalloutNifParticleColliderManager(FalloutNifParticleModifier Header, int Collider)
+    : FalloutNifParticleModifier(Header.Block, Header.Name, Header.Order, Header.Target, Header.Active);
+internal sealed record FalloutNifParticlePlanarCollider(FalloutNifBlock Block, float Bounce, bool SpawnOnCollide,
+    bool DieOnCollide, int Spawn, int Manager, int Next, int Object, float Width, float Height,
+    FalloutNifVector3 XAxis, FalloutNifVector3 YAxis) : FalloutNifObject(Block);
 internal sealed record FalloutNifParticleWind(FalloutNifParticleModifier Header, float Strength)
     : FalloutNifParticleModifier(Header.Block, Header.Name, Header.Order, Header.Target, Header.Active);
 internal record FalloutNifParticleEmitter(FalloutNifParticleModifier Header, float Speed, float SpeedVariation,

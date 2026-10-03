@@ -110,7 +110,7 @@ public partial class NativeNifInstanceAudit
         finally { view.Free(); }
     }
 
-    private static byte[] MorphFixture()
+    private static byte[] MorphFixture(bool managed = false, bool missingTarget = false, bool wrongController = false)
     {
         Vector3[] vertices = [Vector3.Zero, new(2, 0, 0), new(0, 0, 2)];
         var normal = new Vector3(0.4f, 0.3f, MathF.Sqrt(0.75f));
@@ -124,7 +124,7 @@ public partial class NativeNifInstanceAudit
         }
         var blocks = new (string Type, byte[] Bytes)[]
         {
-            ("NiNode", Bytes(writer => { Object(writer, 0, -1); writer.Write(1); writer.Write(1); writer.Write(0); })),
+            ("NiNode", Bytes(writer => { Object(writer, 0, managed ? 6 : -1); writer.Write(1); writer.Write(1); writer.Write(0); })),
             ("NiTriShape", Bytes(writer =>
             {
                 Object(writer, 1, 2); writer.Write(4); writer.Write(-1);
@@ -132,10 +132,10 @@ public partial class NativeNifInstanceAudit
             })),
             ("NiGeomMorpherController", Bytes(writer =>
             {
-                writer.Write(-1); writer.Write((ushort)76); writer.Write(1f); writer.Write(0f);
+                writer.Write(-1); writer.Write((ushort)(managed ? 108 : 76)); writer.Write(1f); writer.Write(0f);
                 writer.Write(0f); writer.Write(1f); writer.Write(1); writer.Write((ushort)0); writer.Write(3); writer.Write((byte)0);
                 writer.Write(3);
-                for (var index = 0; index < 3; index++) { writer.Write(-1); writer.Write(0f); }
+                for (var index = 0; index < 3; index++) { writer.Write(managed ? 9 + index : -1); writer.Write(0f); }
             })),
             ("NiMorphData", Bytes(writer =>
             {
@@ -149,7 +149,7 @@ public partial class NativeNifInstanceAudit
             ("NiTriShapeData", Bytes(writer =>
             {
                 writer.Write(0); writer.Write((ushort)3); writer.Write((ushort)0); writer.Write((byte)1);
-                foreach (var vertex in vertices) Vector(writer, vertex);
+                foreach (var vertex in vertices) Vector(writer, managed ? vertex + new Vector3(100, 0, 0) : vertex);
                 writer.Write((byte)0); writer.Write((byte)0x10); writer.Write((byte)1);
                 foreach (var direction in new[] { normal, tangent, normal.Cross(tangent) })
                     foreach (var vertex in vertices) Vector(writer, direction);
@@ -167,7 +167,47 @@ public partial class NativeNifInstanceAudit
                 writer.Write(1f); writer.Write(1f);
             })),
         };
-        string[] names = ["SyntheticRoot", "SyntheticFace", "Base", "ExpressionA", "ExpressionB"];
+        if (managed)
+        {
+            static void Time(BinaryWriter writer, int next, ushort flags, float start, float stop)
+            {
+                writer.Write(next); writer.Write(flags); writer.Write(1f); writer.Write(0f);
+                writer.Write(start); writer.Write(stop); writer.Write(0);
+            }
+            blocks = [.. blocks,
+                ("NiControllerManager", Bytes(writer =>
+                {
+                    Time(writer, 7, 76, float.MaxValue, float.MinValue);
+                    writer.Write(false); writer.Write(1); writer.Write(16); writer.Write(8);
+                })),
+                ("NiMultiTargetTransformController", Bytes(writer =>
+                { Time(writer, -1, 108, float.MaxValue, float.MinValue); writer.Write((ushort)0); })),
+                ("NiDefaultAVObjectPalette", Bytes(writer =>
+                {
+                    writer.Write(0); writer.Write(1); writer.Write(13); writer.Write(Encoding.ASCII.GetBytes("SyntheticFace")); writer.Write(1);
+                })),
+                .. Enumerable.Range(0, 3).Select(_ => ("NiBlendFloatInterpolator", Bytes(writer =>
+                { writer.Write((byte)1); writer.Write((byte)2); writer.Write(0f); writer.Write(float.MinValue); }))),
+                ("NiFloatInterpolator", Bytes(writer => { writer.Write(.2f); writer.Write(-1); })),
+                ("NiFloatInterpolator", Bytes(writer => { writer.Write(float.MinValue); writer.Write(17); })),
+                ("NiFloatInterpolator", Bytes(writer => { writer.Write(float.MinValue); writer.Write(18); })),
+                ("NiTextKeyExtraData", Bytes(writer =>
+                { writer.Write(-1); writer.Write(2); writer.Write(0f); writer.Write(8); writer.Write(1f); writer.Write(9); })),
+                ("NiControllerSequence", Bytes(writer =>
+                {
+                    writer.Write(5); writer.Write(3); writer.Write(0);
+                    for (var index = 0; index < 3; index++)
+                    {
+                        writer.Write(12 + index); writer.Write(wrongController ? 6 : 2); writer.Write((byte)0);
+                        writer.Write(1); writer.Write(-1); writer.Write(6); writer.Write(-1); writer.Write(missingTarget ? 7 : 2 + index);
+                    }
+                    writer.Write(1f); writer.Write(15); writer.Write(2); writer.Write(1f); writer.Write(0f); writer.Write(1f);
+                    writer.Write(6); writer.Write(-1); writer.Write((ushort)0);
+                })),
+                .. new[] { (0f, .75f), (.2f, 1.2f) }.Select(range => ("NiFloatData", Bytes(writer =>
+                { writer.Write(2); writer.Write(1); writer.Write(0f); writer.Write(range.Item1); writer.Write(1f); writer.Write(range.Item2); })))];
+        }
+        string[] names = ["SyntheticRoot", "SyntheticFace", "Base", "ExpressionA", "ExpressionB", "Forward", "NiGeomMorpherController", "Absent", "start", "end"];
         return Bytes(writer =>
         {
             writer.Write("Gamebryo File Format, Version 20.2.0.7\n"u8);
