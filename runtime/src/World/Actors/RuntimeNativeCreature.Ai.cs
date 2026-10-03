@@ -19,6 +19,8 @@ internal sealed partial class RuntimeNativeCreature
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     private FalloutPluginRecord? _aiPackage;
     private FalloutFollowPackage? _followPackage;
+    private FalloutGuardPackage? _guardPackage;
+    private FalloutTravelProgress? _guardProgress;
     private FalloutDialoguePackage? _dialoguePackage;
     private FalloutPackageEvents? _packageEvents;
     private bool _dialogueRequested;
@@ -39,6 +41,7 @@ internal sealed partial class RuntimeNativeCreature
         dialogueRequested = _dialogueRequested,
         motion = _aiState?.PackageMotion,
         travel = TravelState,
+        guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
         eventIdle = _aiState?.PackageIdle,
         packageStarts = _aiState?.PackageStarts,
         packageEvents = _packageEvents is null ? null : new
@@ -138,7 +141,8 @@ internal sealed partial class RuntimeNativeCreature
         _failedPackage = null;
         var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
         var restoreTravel = retained?.Travel is not null;
-        var selected = restoreTravel ? _aiRecords!.GetEffective(retained!.Package) :
+        var restoreGuard = retained?.Guard is not null;
+        var selected = restoreTravel || restoreGuard ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
@@ -152,10 +156,12 @@ internal sealed partial class RuntimeNativeCreature
         FalloutFollowPackage? follow = null;
         FalloutDialoguePackage? dialogue = null;
         FalloutTravelPackage? travel = null;
+        FalloutGuardPackage? guard = null;
         if (source is not null)
         {
             if (source.Procedure == 1) follow = FalloutFollowPackage.Read(selected!);
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
+            else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
             else if (source.Procedure == 15)
             {
                 dialogue = FalloutDialoguePackage.Read(selected!);
@@ -167,11 +173,21 @@ internal sealed partial class RuntimeNativeCreature
         var restoredDialogue = !_initialPackageSelected && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
         if (travel is not null) BeginTravel(selected!, restoreTravel);
         else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
+        if (guard is not null)
+        {
+            var progress = restoreGuard ? retained!.Guard! : guard.Start(_aiRecords!, _aiWorld!, Appearance.Reference!.Value);
+            guard.Validate(_aiRecords!, _aiWorld!, Appearance.Reference!.Value, progress);
+            if (progress.Cell != _aiWorld!.Placement(Appearance.Reference!.Value).Cell)
+                throw new NotSupportedException("Guard requires its other-cell route owner.");
+            _guardPackage = guard; _guardProgress = progress;
+            _aiState!.ProcedureCaptureBlocker = restoreGuard ? null : "Guard approach has no first native motion observation.";
+        }
+        else { _guardPackage = null; _guardProgress = null; }
         _initialPackageSelected = true;
-        if (restoreTravel || restoredDialogue) _packageEvents!.Restore(source!, restoreTravel ? _travelProgress!.Complete : true);
+        if (restoreTravel || restoreGuard || restoredDialogue) _packageEvents!.Restore(source!, restoreGuard ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
-        if (travel is null)
+        if (travel is null && guard is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? "Dialogue package continuation has no cold restoration owner." : null;
         if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
@@ -218,6 +234,8 @@ internal sealed partial class RuntimeNativeCreature
             }
             if (_aiError is not null) return;
             if (_travelPackage is not null) AdvanceTravel(delta);
+            else if (_guardPackage is { } guard)
+                _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)
             {
                 var target = TargetNode(follow.Target);
@@ -256,6 +274,7 @@ internal sealed partial class RuntimeNativeCreature
         {
             var changed = _aiError != error.Message;
             _aiError = error.Message;
+            if (_guardPackage is not null) _guardProgress = Combat.PackageMotion?.Guard ?? _guardProgress;
             if (!selecting) _failedPackage = _aiPackage?.FormKey;
             if (changed) GD.PushError($"OPENNV_CREATURE_AI_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
         }

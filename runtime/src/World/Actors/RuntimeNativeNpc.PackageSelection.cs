@@ -30,6 +30,7 @@ internal partial class RuntimeNativeNpc
         // later native procedure fault is not the result of this void command.
         // Retain the selected result so random predicates are not drawn twice.
         var selected = SelectSourcePackage();
+        if (_aiReferenceState is not null) ClearBindingFailure();
         if (reset) { _aiError = null; _packageIdleError = null; }
         _requestedSelection = selected;
         _selectedSourcePackage = selected.Record?.FormKey; _sourceSelectionKnown = true;

@@ -58,6 +58,7 @@ internal partial class RuntimeNativeNpc
         ? throw new NotSupportedException("Current AI procedure has no admitted native continuation.")
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
+        : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
             "ApproachTarget" => 19,
@@ -114,11 +115,12 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null ? (int?)null : CurrentAiProcedure,
+        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,
         patrol = _patrol is null ? null : new { source = _patrol.SourceSha256, points = _patrol.Points.Count, progress = _patrolProgress, status = _patrolStatus },
+        guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
         dialoguePackage = _dialoguePackage is null ? null : new
         {
             source = _dialoguePackage,
@@ -148,6 +150,7 @@ internal partial class RuntimeNativeNpc
             error = _packageIdleError,
         },
         error = _aiError,
+        stoppedBindingCaptureReady = CanCaptureBindingFailure(),
         scheduleTime = _aiScheduleTime,
         evaluationPolicy = "quest-activity-hour-changes-and-ten-second-poll;retail-cadence-unmatched",
         referencePackageEventOwner = _aiWorld is null ? "unbound-no-reference-world" : "shared-reference-world",
@@ -182,14 +185,23 @@ internal partial class RuntimeNativeNpc
             retained.Bind(stack, _packageEvents);
         if (_aiReferenceState is { } packageState)
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
+        BindFailureCapture();
+        var bindingFailure = _aiReferenceState?.PackageBindingFailure;
+        if (bindingFailure is not null) RestoreBindingFailure(bindingFailure);
         // A stationary, unarmed actor owns its source movement-group idle
         // independently of package selection. An unsupported package must not
         // erase that motion owner and leave the skeleton in its bind pose.
-        PlayLocomotion(moving: false);
+        PlayLocomotion(moving: bindingFailure?.MovingBasePose == true);
         AdvanceAi(initializing: true);
+        if (bindingFailure is not null && _aiError is not null)
+        {
+            _aiPollRemaining = bindingFailure.PollRemaining;
+            _aiScheduleTime = bindingFailure.ScheduleTime;
+        }
         _bindingInitialBase = false;
         _baseClock.Bind(_baseResource, _baseHash);
         ResumeBaseClock();
+        if (bindingFailure is not null) PublishFace();
     }
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -291,6 +303,7 @@ internal partial class RuntimeNativeNpc
             selected = selection.Record;
             _selectedSourcePackage = selected?.FormKey; _sourceSelectionKnown = true;
             if (!forced && _aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
+            if (_aiReferenceState is not null) ClearBindingFailure();
             // A failed procedure cannot freeze a later eligible package. Event
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
@@ -319,6 +332,7 @@ internal partial class RuntimeNativeNpc
                 ClearFurniture();
                 ClearDialoguePackage();
                 _patrol = null; _patrolProgress = null;
+                _guardPackage = null; _guardProgress = null;
                 if ((_escortPackage is not null || _editorTravel is not null) && _aiWorld is { } escortWorld)
                     escortWorld.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
                 _escortPackage = null; _escortProgress = null; _escortDestination = null; _escortStatus = null;
@@ -330,6 +344,7 @@ internal partial class RuntimeNativeNpc
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
+            if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 15)
             {

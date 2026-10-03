@@ -62,7 +62,17 @@ internal sealed partial class RuntimeNativeActorCombat
 
     internal void RestorePackageMotion()
     {
-        if (_state.Engagement is not null || _state.PackageMotion is not { } motion) return;
+        if (_state.Engagement is not null) return;
+        if (_state.PackageBindingFailure is { } stopped)
+        {
+            stopped.Validate();
+            _actor.GlobalTransform = new(new Basis(new Vector3(stopped.Basis[0], stopped.Basis[1], stopped.Basis[2]),
+                new Vector3(stopped.Basis[3], stopped.Basis[4], stopped.Basis[5]),
+                new Vector3(stopped.Basis[6], stopped.Basis[7], stopped.Basis[8])),
+                new(stopped.Position[0], stopped.Position[1], stopped.Position[2]));
+            return;
+        }
+        if (_state.PackageMotion is not { } motion) return;
         if (_actor is RuntimeNativeNpc { CurrentFurniture: not null }) return;
         motion.Validate();
         _actor.GlobalTransform = new(new Basis(new Quaternion(motion.Rotation[0], motion.Rotation[1],
@@ -120,7 +130,8 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.Escort : null,
             retained?.Package == package.FormKey ? retained.EditorTravel : null,
             retained?.Package == package.FormKey && retained.DialogueCompleted,
-            retained?.Package == package.FormKey ? retained.Travel : null);
+            retained?.Package == package.FormKey ? retained.Travel : null,
+            retained?.Package == package.FormKey ? retained.Guard : null);
         PackageOwnsPose = true;
     }
 }

@@ -20,6 +20,7 @@ internal static class ActorSourceContracts
                 Creature(0x801, 65, 0x800, "creatures/local/skeleton.nif", "local.nif", .75f),
                 Creature(0x802, 66, 0x802, "creatures/test/skeleton.nif", "body.nif", 1),
                 Record("NPC_", 7, Field("EDID", Text("PlayerBase"))),
+                Record("NPC_", 0x80b, Field("PKID", BitConverter.GetBytes(0x8f6u))),
                 Creature(0x803, 0, 0, "creatures/test/skeleton.nif", "../escape.nif", 1),
                 Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1),
                 Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
@@ -51,6 +52,7 @@ internal static class ActorSourceContracts
                     Record("ACRE", 0x907, Field("NAME", BitConverter.GetBytes(0x806u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x909, Field("NAME", BitConverter.GetBytes(0x809u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x90b, Field("NAME", BitConverter.GetBytes(0x80au)), Field("DATA", new byte[24])),
+                    Record("ACHR", 0x90c, Field("NAME", BitConverter.GetBytes(0x80bu)), Field("DATA", new byte[24])),
                     Marker(0x903, "SourceMapMarker"), Marker(0x905, "OtherMapMarker"),
                     Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x845u)), Field("DATA", new byte[24])),
                     Record("REFR", 0x90a, Field("NAME", BitConverter.GetBytes(0x846u)), Field("DATA", new byte[24])))),
@@ -91,6 +93,7 @@ internal static class ActorSourceContracts
                 Record("INFO", 0x860, Field("DATA", [0, 0, 0, 0]), Field("QSTI", BitConverter.GetBytes(0x870u)),
                     Field("TRDT", Response()), Field("NAM1", Text("Winning response")))));
             using var records = FalloutPluginStack.Load(directory, ["Actors.esm", "Patch.esp"]);
+            PackageBindingFailureContracts.Run(records);
             FalloutFormKey Key(uint id) => new("Actors.esm", id);
             var map = FalloutWorldMap.Read(records, Key(0x8f0));
             Check(map.Width == 2048 && map.Height == 1024 && map.Project(-20 * 4096, 30 * 4096) == System.Numerics.Vector2.Zero &&

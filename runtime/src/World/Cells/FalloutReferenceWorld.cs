@@ -21,7 +21,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutDoorMotionState? DoorMotion = null, FalloutReferenceLockState? LockState = null,
     FalloutReferenceOwnershipOverride? OwnershipOverride = null,
     IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null,
-    FalloutFormKey? TalkingActivatorActor = null, FalloutActorPackageAssignment? PackageAssignment = null)
+    FalloutFormKey? TalkingActivatorActor = null, FalloutActorPackageAssignment? PackageAssignment = null,
+    FalloutActorPackageBindingFailure? PackageBindingFailure = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -61,6 +62,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
+            snapshot.PackageBindingFailure?.Validate();
+            if (snapshot.PackageBindingFailure is not null && (snapshot.PackageAssignment is not null || snapshot.Animation is null))
+                throw new InvalidDataException("Saved stopped package binding requires its base clock and no running assignment.");
             foreach (var start in snapshot.PackageStarts ?? [])
                 (start ?? throw new InvalidDataException("Saved package selection time is absent.")).Validate();
             snapshot.PackageIdle?.Validate();
@@ -112,6 +116,11 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
+    internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
+    internal Func<bool>? CanCapturePackageBindingFailure { get; set; }
+    internal Func<FalloutActorPackageBindingFailure>? CapturePackageBindingFailure { get; set; }
+    internal bool PackageBindingFailureCaptureReady => CanCapturePackageBindingFailure?.Invoke() ??
+        PackageBindingFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
@@ -185,8 +194,11 @@ internal sealed class FalloutReferenceInstance
 
     internal FalloutReferenceSnapshot Capture()
     {
-        if (ProcedureCaptureBlocker is { } blocker)
+        var failureReady = PackageBindingFailureCaptureReady;
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
+        var bindingFailure = failureReady ? CapturePackageBindingFailure is { } captureFailure
+            ? captureFailure() : PackageBindingFailure?.Copy() : null;
         return new(Reference, Cell, Base, Script?.Record.FormKey,
             Script?.Sha256, new Dictionary<uint, double>(Variables), ScriptError, Enabled, EnableRequest, Opacity, NoFade,
             new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
@@ -196,7 +208,7 @@ internal sealed class FalloutReferenceInstance
             TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
-            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment);
+            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure);
     }
 }
 
@@ -350,7 +362,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         instance.BindTemplateScript(definition);
     }
 
-    internal int PendingProcedureCaptureCount => _instances.Values.Count(instance => instance.ProcedureCaptureBlocker is not null);
+    internal int PendingProcedureCaptureCount => _instances.Values.Count(instance =>
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady);
+    internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
 
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
@@ -438,6 +452,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     throw new InvalidDataException("Saved actor assignment differs from its winning package.");
                 instance.PackageAssignment = assignment;
             }
+            if (snapshot.PackageBindingFailure is { } bindingFailure)
+            {
+                bindingFailure.Validate(records, instance);
+                instance.PackageBindingFailure = bindingFailure.Copy();
+                instance.ProcedureCaptureBlocker = bindingFailure.Error;
+            }
             if (snapshot.TalkingActivatorActor is { } dialogueActor)
                 validated.SetTalkingActivatorActor(snapshot.Reference, dialogueActor);
             if (snapshot.PackageMotion is { } motion)
@@ -457,7 +477,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     if (dialogue.Type != 1 || declaration.LocationType is not (null or 2) || declaration.LocationRadius != 0)
                         throw new InvalidDataException("Saved dialogue completion has no supported source procedure.");
                 }
-                instance.PackageMotion = motion with { Position = (float[])motion.Position.Clone(), Rotation = (float[])motion.Rotation.Clone() };
+                instance.PackageMotion = motion with
+                {
+                    Position = (float[])motion.Position.Clone(),
+                    Rotation = (float[])motion.Rotation.Clone(),
+                    Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null
+                };
             }
             validated.RestorePackageTiming(instance, snapshot);
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
@@ -501,9 +526,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         // Reference-marker targets may themselves have saved placements. All
         // placements must be restored before validating their Travel anchors.
         foreach (var snapshot in snapshots)
+        {
             if (snapshot.PackageMotion?.Travel is { } travel)
                 FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                     .Validate(records, validated, snapshot.Reference, travel);
+            if (snapshot.PackageMotion?.Guard is { } guard)
+                FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
+                    .Validate(records, validated, snapshot.Reference, guard);
+        }
         foreach (var (key, instance) in validated._instances) _instances.Add(key, instance);
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
     }

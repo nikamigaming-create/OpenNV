@@ -1,9 +1,25 @@
 # Product status
 
+The active candidate adds reference-owned stopped NPC initialization saves and
+shared Guard marker approach. Synthetic continuation checks, Beatrice's native
+cold/resumed-advancement check and the original TTW roach's isolated native
+moving/cold/arrival fixture pass. Stopped actors retain exact world basis and
+blink queues without a replacement random draw. The final integrated gate and
+optimized rebuild pass. The current reached game is CG02:60; ordinary candidate
+save/cold restoration, roach death and onward campaign progress remain unverified.
+VATS runtime implementation remains open.
+
 Updated October 3, 2026 from current code and fresh tests. OpenNV is
 experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
+
+Checked PR124 is merged at synchronized mainf458047 with all five checks passing.
+Original target contacts now reach CG02:60 and admit the radroach. An ordinary
+new save in the previous build refused three stopped NPC package initializations;
+the candidate preserves those faults and their continuation. VATS has only its
+input-control declaration: targeting, AP, queued
+attacks, native UI, cinematic timing and restoration are not implemented.
 
 Checked PR122 is merged at main139db8a. Ordinary TTW input completes the
 intercom exchange and original Jonas42/Dad44 effects, receiving/equipping the

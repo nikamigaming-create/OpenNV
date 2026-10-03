@@ -208,6 +208,7 @@ internal partial class RuntimeNativeNpc
 
     public override void _ExitTree()
     {
+        RetainBindingFailure();
         ClearFurniture();
         if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {

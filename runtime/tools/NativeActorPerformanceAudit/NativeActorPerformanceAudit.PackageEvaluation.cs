@@ -12,7 +12,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private void PackageEvaluation(string baseRoot, string mod, string root, string actorId,
-        string questId, short[] stages, string[] dependencies)
+        string questId, short[] stages, string[] dependencies, bool stoppedFailure = false)
     {
         Node3D? presentation = null;
         try
@@ -23,7 +23,9 @@ public partial class NativeActorPerformanceAudit
             var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             using var world = new FalloutReferenceWorld(records);
-            var caller = FalloutDialogueTopic.Find(records, "ACHR", actorId).FormKey;
+            var actorIdentity = actorId.Split(':');
+            var caller = actorIdentity.Length == 2 ? new FalloutFormKey(actorIdentity[0], Convert.ToUInt32(actorIdentity[1], 16))
+                : FalloutDialogueTopic.Find(records, "ACHR", actorId).FormKey;
             var quest = FalloutDialogueTopic.Find(records, "QUST", questId).FormKey;
             var globals = FalloutGlobalState.Read(records);
             var clock = new FalloutGameTime(globals, FalloutGameTimeBindings.Read(records),
@@ -43,13 +45,14 @@ public partial class NativeActorPerformanceAudit
             // prior conversations, results or presentation.
             var npc = FalloutDialogueTopic.RequiredForm(records.GetEffective(caller), "NAME");
             var packageOwner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(npc), 32, templates);
-            foreach (var field in packageOwner.ReadSubrecords().Where(field => field.Signature == "PKID"))
+            foreach (var field in packageOwner.ReadSubrecords().Where(field => !stoppedFailure && field.Signature == "PKID"))
             {
                 if (field.Data.Length != 4) throw new InvalidDataException("Fixture package identity has an invalid extent.");
                 var packageKey = packageOwner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
                 world.MarkPackageStart(caller, records.GetEffective(packageKey), clock);
             }
             presentation = new Node3D(); AddChild(presentation);
+            using var presentationLifetime = new PackageFixtureLifetime(presentation);
             var actor = RuntimeNativeNpc.Create(records, content, placed, units,
                 (_, _, _, _) => new StandardMaterial3D(), world.EquippedArmor(caller, 1), templates);
             Transform3D Placement(FalloutPlacedReference reference) => new(GamebryoCoordinate.ConvertReferenceEuler(
@@ -68,14 +71,58 @@ public partial class NativeActorPerformanceAudit
                 actor.Transform != before || world.Get(caller).ProcedureCaptureBlocker is null ||
                 pending.GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
                 throw new InvalidDataException("EVP did not retain source selection independently of native procedure execution.");
+            try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Pending package selection became saveable."); }
+            catch (NotSupportedException) { }
             actor._Process(0);
             if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("evaluationPending").GetBoolean() ||
                 actor.AiError is null || actor.CurrentPackage != selected || actor.Transform != before ||
                 world.Get(caller).ProcedureCaptureBlocker is null ||
                 JsonSerializer.SerializeToElement(actor.AiState).GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
                 throw new InvalidDataException("Native continuation lost its retained procedure fault or invented movement/completion.");
-            try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Unowned procedure became saveable."); }
-            catch (NotSupportedException) { }
+            var stoppedCold = world.Get(caller).PackageBindingFailureCaptureReady;
+            if (stoppedCold)
+            {
+                actor._Process(.25);
+                var snapshots = world.Capture();
+                var savedActor = snapshots.Single(value => value.Reference == caller);
+                if (savedActor.PackageBindingFailure is null || savedActor.PackageAssignment is not null ||
+                    world.PendingProcedureCaptureCount != 0 || world.StoppedPackageBindingCount != 1)
+                    throw new InvalidDataException("Stopped initialization has no explicit, visible save continuation.");
+                using var cold = new FalloutReferenceWorld(records);
+                cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(snapshots))!);
+                cold.LoadCell(cell);
+                var resumed = RuntimeNativeNpc.Create(records, content, placed, units,
+                    (_, _, _, _) => new StandardMaterial3D(), cold.EquippedArmor(caller, 1),
+                    cold.InitializeActorTemplates(caller, 1));
+                try
+                {
+                    presentation.AddChild(resumed); resumed.SetProcess(false); resumed.SetPhysicsProcess(false);
+                    resumed.Transform = Placement(placed);
+                    resumed.ConfigureAi(records, quests, cell, Placement, clock: clock, globals: globals, world: cold);
+                    var recaptured = cold.Get(caller).Capture();
+                    var failureSame = JsonSerializer.Serialize(recaptured.PackageBindingFailure) ==
+                        JsonSerializer.Serialize(savedActor.PackageBindingFailure);
+                    if (resumed.AiError != actor.AiError || resumed.CurrentPackage != selected ||
+                        resumed.Transform != actor.Transform || recaptured.Animation != savedActor.Animation ||
+                        !failureSame || cold.PendingPackageEventCount != 0 || cold.PendingProcedureCaptureCount != 0 ||
+                        cold.StoppedPackageBindingCount != 1)
+                        throw new InvalidDataException("Cold initialization changed source, pose, clock, RNG, poll or consumed events. " +
+                            $"poseSame={resumed.Transform == actor.Transform} clockSame={recaptured.Animation == savedActor.Animation} " +
+                            $"failureSame={failureSame} before={JsonSerializer.Serialize(savedActor.PackageBindingFailure)} " +
+                            $"after={JsonSerializer.Serialize(recaptured.PackageBindingFailure)}");
+                    actor._Process(.125); resumed._Process(.125);
+                    if (JsonSerializer.Serialize(cold.Get(caller).Capture().PackageBindingFailure) !=
+                        JsonSerializer.Serialize(world.Get(caller).Capture().PackageBindingFailure) ||
+                        cold.Get(caller).Animation.Capture() != world.Get(caller).Animation.Capture())
+                        throw new InvalidDataException("Cold initialization diverged after resumed blink/base/poll advancement.");
+                }
+                finally { resumed.Free(); }
+            }
+            else
+            {
+                try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Unowned active continuation became saveable."); }
+                catch (NotSupportedException) { }
+            }
 
             const string failure = "Synthetic retained package result failure.";
             world.Get(caller).ScriptError = failure;
@@ -88,9 +135,14 @@ public partial class NativeActorPerformanceAudit
                 !hash.AsSpan().SequenceEqual(SHA256.HashData(package.ReadData())))
                 throw new InvalidDataException("Package evaluation changed source bytes, pose or its retained result failure.");
             GD.Print($"OPENNV_NATIVE_PACKAGE_EVALUATION_PASS actor={caller} package={selected} sourceSelection=true " +
-                "voidCommand=true queuedContinuation=true nativeFaultVisible=true saveRefused=true retainedResults=true " +
+                $"voidCommand=true queuedContinuation=true nativeFaultVisible=true pendingSaveRefused=true stoppedCold={stoppedCold} retainedResults=true " +
                 "sourceReadonly=true fixture=isolated-owned-command campaignAndParity=unverified recording=false");
         }
-        finally { presentation?.Free(); }
+        finally { if (GodotObject.IsInstanceValid(presentation)) presentation!.Free(); }
+    }
+
+    private sealed class PackageFixtureLifetime(Node node) : IDisposable
+    {
+        public void Dispose() => node.Free();
     }
 }

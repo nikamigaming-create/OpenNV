@@ -7,7 +7,8 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string PackageSha256,
     string Animation, string AnimationSha256, double Seconds, bool StartPending,
     float[] Position, float[] Rotation, FalloutPatrolProgress? Patrol = null, FalloutEscortProgress? Escort = null,
-    FalloutEditorTravelProgress? EditorTravel = null, bool DialogueCompleted = false, FalloutTravelProgress? Travel = null)
+    FalloutEditorTravelProgress? EditorTravel = null, bool DialogueCompleted = false, FalloutTravelProgress? Travel = null,
+    FalloutTravelProgress? Guard = null)
 {
     internal void Validate()
     {
@@ -15,7 +16,8 @@ internal sealed record FalloutActorPackageMotion(FalloutFormKey Package, string 
         Escort?.Validate();
         EditorTravel?.Validate();
         Travel?.Validate();
-        if (new object?[] { Patrol, Escort, EditorTravel, Travel }.Count(value => value is not null) + (DialogueCompleted ? 1 : 0) > 1)
+        Guard?.Validate();
+        if (new object?[] { Patrol, Escort, EditorTravel, Travel, Guard }.Count(value => value is not null) + (DialogueCompleted ? 1 : 0) > 1)
             throw new InvalidDataException("Saved package has conflicting procedure progress.");
         static bool Hash(string hash) => hash is { Length: 64 } && hash.All(Uri.IsHexDigit);
         if (string.IsNullOrWhiteSpace(Package.OwnerPlugin) || Package.ObjectId == 0 || !Hash(PackageSha256) ||
