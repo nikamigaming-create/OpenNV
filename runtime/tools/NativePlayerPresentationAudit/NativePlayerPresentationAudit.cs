@@ -12,6 +12,11 @@ public partial class NativePlayerPresentationAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 6 && args[0] == "--owned-weapon-action")
+            {
+                await AuditOwnedWeaponAction(args[1], args[2], args[3], args[4], args[5], args.Skip(6).ToArray());
+                GetTree().Quit(); return;
+            }
             if (args.Length != 2 && !(args.Length == 4 && args[2] == "--weapon-coverage") &&
                 !(args.Length == 3 && args[2] == "--combat-controls"))
                 throw new ArgumentException("Expected owned Data, a real native checkpoint and optional --weapon-coverage output.jsonl.");

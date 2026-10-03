@@ -52,6 +52,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         },
         weapon = Weapon?.Form.ToString(),
         group = _group,
+        gripSourceGroup = _grip?.Sequence.Name,
         seconds = _seconds,
         bones = Skeleton.Node.GetBoneCount(),
         error = Error,
@@ -147,7 +148,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         catch { Free(); throw; }
     }
 
-    private byte[] Read(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes : throw new FileNotFoundException("Player source resource is missing.", path);
+    private byte[] Read(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes : throw new FileNotFoundException($"Player source resource is missing: {path}", path);
     private FalloutNpcAppearancePart FirstPersonPart(FalloutNpcAppearancePart part)
     {
         if ((part.BipedSlots & 0x18) == 0 || part.ModelPath is not { } path || !path.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)) return part;
@@ -159,10 +160,10 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal bool ClipExists(string name)
     {
         if (!_availableClips.TryGetValue(name, out var exists))
-        { exists = _content.TryRead(_directory + "/" + name + ".kf", null, out _, out _); _availableClips.Add(name, exists); }
+        { exists = _content.ActorAnimations.Find(_directory, name) is not null; _availableClips.Add(name, exists); }
         return exists;
     }
-    private RuntimeNativeNifAnimation Clip(string name) => ClipPath(_directory + "/" + name + ".kf");
+    private RuntimeNativeNifAnimation Clip(string name) => ClipPath(_content.ActorAnimations.Require(_directory, name));
     private RuntimeNativeNifAnimation ClipPath(string path)
     {
         if (_clips.TryGetValue(path, out var cached)) return cached;

@@ -74,8 +74,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         foreach (var group in groups)
         {
-            var path = directory + "/" + group + ".kf";
-            if (_content.TryResolve(path, null, out _)) return path;
+            if (_content.ActorAnimations.Find(directory, group) is { } path) return path;
         }
         throw new FileNotFoundException("Source actor group is absent: " + string.Join(',', groups));
     }

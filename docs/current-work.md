@@ -13,104 +13,106 @@ and [JAM/MCM plan](jam-luna-max-plan.md). All36
 
 ## Verified state and active block
 
-Main is `cfa5f5a` after checked PR120. The active branch is
-`codex/actor-inventory-head-equipment`. Fresh ordinary cold Continue from genuine
-CG01:80 completes Dad's Escort, source party/intercom conversations and reaches
-CG02:40 with no retained stage-result error. The bot approaches the actual closed
-diner exit and presses E while retaining Jonas as its original goal. The new
-cold replay passes original OnActivate, completes its source opening clock and
-walks out. Its next stair route retains an owned NAVM active-set refusal between
-two positions on the same source mesh. User traversal subsequently reaches Jonas
-and stage42; its first source RemoveItem retains the missing non-player scripted
-inventory owner before MoveTo/door effects. Jonas's displaced glasses are the
-parallel source attachment investigation.
-The BB-gun lesson, birthday completion, G.O.A.T., Vault escape, Megaton, train and
-Mojave remain unreached.
+Main is `2c81e5c` after checked PR121. The active branch is
+`codex/ttw-range-continuation`. The optimized native run cold-Continues the
+immutable genuine CG01:80 checkpoint, completes Dad's Escort, reaches CG02:40
+and opens/traverses the actual diner and upper stair doors through ordinary
+bot activation. Native capsule refinement still refuses the following stair
+route despite connected source NAVM. Separately labelled operator keyboard
+input traverses both actual stair flights on the native floors. The bot then
+approaches Jonas, opens the actual downstairs door and activates him.
+Original GREETING BeginScript completes CG02:42 with no retained stage error;
+its inventory, MoveTo and door suffix pass. Dad's original gift dialogue completes
+all six stage44 commands and supplies/equips the source BB gun plus50 rounds.
+The prior player assembly failure assumed unsuffixed grip filenames while both
+owned views export authored HandGrip2_BBGun variants. Fresh optimized native43180
+cold-replays the genuine checkpoint and completes42/44 again; the actual BB gun
+now binds drawn with no player presentation error. Ordinary target approach
+reaches the actual range at [21.923555,100.58433,181.46367]. Dad's original range
+greeting retains unbound condition Fallout3.esm:01f9c9/1/0 before any shot.
+The range-rail bot route also refuses its native refinement. BB-gun target hits and radroach,
+birthday completion, G.O.A.T., Vault escape, Megaton, train and Mojave remain
+unreached.
 
-Published main binds physical reference targets independently of talking-
-activator dialogue identity, source capsule arrival regions, NPC dialogue links,
-participant leases and real listener IDLEs. Six original booth references and
-all15 NPCs admit. Eleven occupied source furniture markers retain placement;
-shared chair clips have independent reference-owned phases. Complete furniture,
-actor phase/RNG and moving-root cold continuation remain open.
+Shared AddItem/RemoveItem use retained player/NPC/creature/container contents,
+variants and random continuation. Worn armor removal invalidates appearance
+without replacing animation ownership. Depleted worn weapons require native
+retirement before mutation. Synthetic counts/variants/equipment/failure/cold
+checks and the selected original stage42 inventory component pass. Dad's default
+component fixture contains no party hat and therefore checks absent-item
+removal; actual worn-item removal is covered synthetically.
 
-Fresh source New Game imports Player NPC inventory before intro scripts. The
-ordinary birth/SPECIAL/Dad run reaches80 with the Pip-Boy and glove equipped.
-Cold Continue reaches birthday12; Tab opens original Stats, Items selection works
-and Tab closes. Legacy incomplete checkpoints retain their missing history.
-Queued capsule planning and source-door subgoals share ordinary player input.
-Completed exact-marker travel restores before base animation selection without
-replaying arrival; completed radius-region endpoints remain unowned. PR119's
-integrated gate and selected intercom/inventory audits passed before publication.
+Rigid head equipment uses the same source biped basis with explicit or omitted
+head Prn, including eyeglass slots. Synthetic, existing FaceGen regression and
+selected owned Jonas glasses checks pass. Live glasses pixels and matched
+retail acceptance remain unverified. The integrated Release/Debug/native gate
+and all five PR121 checks pass; main is synchronized and has no task PR pending.
+The new candidate shares a content-owned KF group/variant index across player
+and combat/package presentation. Exact source resources retain priority, unique
+authored suffixes require compatible exported group metadata, and ambiguity
+remains visible. Synthetic folder/case/cache/metadata/failure checks pass.
+The selected owned native BB-gun action audit passes first/third-person models,
+grip, equip/unequip, authored attack Hit, reload and projectile sockets with17
+source resources and the genuine checkpoint unchanged. The integrated candidate
+gate passes; ordinary firing remains pending.
 
-Main separates source EvaluatePackage selection from native procedure
-execution on the ordinary actor frame. Later unsupported movement/animation no
-longer becomes this void command's result. Source condition and retained result
-faults still stop the caller. Pending/unowned procedures remain visible, refuse
-procedure codes and block saves. Retired audio cannot complete a pending
-replacement. The isolated owned command audit passes with explicit prior
-stage/conversation and once-per-day fixture history.
+Source EvaluatePackage selection is independent of later native procedure
+execution. Pending/unowned procedures stay visible and block saves. Physical
+reference identity is independent of base/dialogue identity, and shared TBC
+keys admit the actual downstairs source door models. Six booth references and
+all15 NPCs admit; occupied markers retain placement and shared chair clips have
+independent reference-owned phases. Complete furniture, actor phase/RNG and
+moving-root cold continuation remain open.
 
-The shared GetIsReference binding distinguishes physical reference identity from
-base identity, resolves compiled/reference-variable arguments and supports
-implicit, explicit and typed receivers. Synthetic caller/base/unknown/cold checks
-and original diner-door guards at stages39/40 pass. Live ordinary activation
-opens the actual diner exit and the bot traverses it. The parallel scalar/vector
-TBC animation owner passes synthetic nonconstant/nonzero/nonuniform/failure
-checks and the selected source VDoor01 controller-channel audit. The required
-integrated Release/Debug/native gate passes. Checked publication is complete.
-
-The current candidate binds reached AddItem/RemoveItem commands and the legacy
-native effect adapter to shared player/NPC/creature/container contents. Counts,
-variants, worn-item removal, native weapon retirement failure and cold state
-checks pass. The selected original stage42 inventory component passes; Dad's
-default fixture has no party hat and therefore exercises absent-item removal.
-Rigid head equipment now binds the same source biped basis for explicit and
-omitted head Prn markers, including eyeglasses. Synthetic, FaceGen regression
-and selected owned Jonas glasses checks pass. Optimized Debug is built; ordinary
-cold replay from the immutable genuine80 checkpoint is active. The required
-integrated candidate gate passes. Live source42 suffix and checked publication
-remain pending. The new bot run again opens both actual source doors and retains
-the native-refinement stair refusal. Separately labelled ordinary keyboard
-traversal continues toward Jonas.
+Fresh New Game imports Player NPC inventory before intro scripts. The ordinary
+birth/SPECIAL/Dad run reaches80 with Pip-Boy/glove equipped; cold Continue opens
+the original Stats/Items UI with Tab. Legacy incomplete checkpoints retain
+their missing history. Source capsule arrival regions, dialogue participant
+leases and listener IDLEs share authoritative owners. Exact completed-marker
+travel restores before base-clock selection; radius-region cold endpoints
+remain unowned.
 
 ## Next executable outcome
 
-Verify the shared actor inventory and head-equipment candidate through ordinary
-cold replay. Preserve the prior failed stage42 prefix and continue from the
-genuine checkpoint. Resolve the bot stair-route refusal against
-source NAVM/native floors and the source glasses attachment. Finish BB-gun targets/radroach
-lesson and birthday, then continue through G.O.A.T., Vault escape, Megaton, train
-and Mojave/Benny. Complete actor pose, furniture marker/phase, active IDLE and
-moving-root continuation before claiming exact cold recovery. Publish each
-cohesive block through its selected owned audit, required integrated gate,
-checked PR and clean synchronized main, then continue on a fresh branch.
+Bind the reached original range greeting condition, then cold-replay the genuine
+checkpoint through the repaired weapon assembly. Shoot the source targets and
+kill the radroach. Trace the next reached failure
+to its shared script/event/weapon owner and implement that general capability.
+Keep ordinary traversal moving while repairing the stair refinement failure
+and retaining its missing rejected-contact telemetry as divergence. Continue
+through birthday, G.O.A.T., Vault escape, Megaton and the authored train to the
+Mojave/Benny. Publish each cohesive block through its selected owned audit,
+required integrated gate, checked PR and clean synchronized main, then use a
+fresh feature branch. Complete actor/furniture/IDLE/moving-root continuation
+before claiming exact cold recovery.
 
 Unowned NPC Sandbox, interaction/patrol/trigger movement, post-cake creature
 Travel, robot facing/thruster effects and remaining missing models stay visible.
-Measured indexed actor lookup fixes and optimized live code remove known costs;
-full crisp cadence and cell-load/upload stalls remain open. The live graph has18
-plugins and six dependency roots. JAM and Benny are not mounted; native plugin
-interfaces remain required. Flat/OpenXR share state; matched retail and physical
-headset acceptance remain open.
+Indexed lookups and optimized live code remove measured costs; full crisp
+cadence and cell-load/upload stalls remain open. The graph has18 plugins and six
+dependency roots. JAM and Benny are not mounted; native plugin interfaces remain
+required. Flat/OpenXR share state; matched retail and physical headset acceptance
+remain open.
 
 ## Private continuation
 
-`tmp/development-lab/ttw-pipboy-20261003/` retains live state, ordinary input and
-source failure journals. The prior native36208 reached40 and retained the diner
-exit failure. Native44796 cold-Continues the genuine checkpoint with the new
-shared fixes, reaches40 and opens/traverses the diner exit. User traversal reaches
-Jonas/stage42 and retains its first inventory command failure. The bot's source
-stair-route refusal is separate. Downstairs type3 door admission failures are absent. Recording is
-off. The bot agent owns ordinary input/recovery after coordinated
-build completion; the primary agent owns runtime builds and publication.
+`tmp/development-lab/ttw-pipboy-20261003/` retains native43180, ordinary input and
+source failure journals. The prior failed42 prefix, missing grip and automatic
+stair failures were retained before cold recovery. The new source42/44 complete;
+downstairs operator traversal is distinguished from automatic bot navigation.
+The weapon now binds in ordinary44. The range greeting's failed condition and
+rail route are retained, with input released and shots0. One snapshot replacement failure was
+retained; later snapshots resume without resetting its failure counter.
+Pending NPC procedures still block a complete44 save. Recording is
+off. The bot agent owns ordinary input/recovery; the primary owns runtime edits,
+coordinated builds and publication.
 
 `local/ttw-bot-resume-20261002/bot-reached-stage80-closed.save.json`,
-`birthday-stage21-autosave.save.json` and the fresh
+`birthday-stage21-autosave.save.json` and
 `source-inventory-stage80-20261003.save.json` remain immutable and hash checked.
-They are reached checkpoints, not complete actor/save parity. Original user saves
-and `tmp/development-lab/ttw-departure-clock-20261001/` remain untouched. Two seating
-diagnostics remain retained after automatic approval review rejected cleanup;
-selected empty-admission, playpen and Pip-Boy frames remain active diagnostics.
-Never publish owned assets, saves, captures or private binary observations.
+They are reached checkpoints, not complete actor/save parity. Original user
+saves and `tmp/development-lab/ttw-departure-clock-20261001/` remain untouched.
+Two seating diagnostics remain retained after automatic approval review rejected
+cleanup; selected empty-admission, playpen and Pip-Boy frames remain active
+diagnostics. Never publish owned assets, saves, captures or private observations.
 The requested journey video remains pending.
