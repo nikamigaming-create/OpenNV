@@ -50,6 +50,19 @@ internal static class UnloadedActorPackageContracts
         directNative.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x8f6))));
         Check(directNative.Active?.Form == Key(0x8f6) && directCold.PendingPackageEventCount == 0,
             "Cold native admission required an intervening unloaded query or replayed effects.");
+        var completedEvents = new FalloutPackageEvents((_, _) => { });
+        completedEvents.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x8f6))));
+        completedEvents.Complete();
+        var completedAssignment = FalloutActorPackageAssignment.Capture(records, completedEvents)!;
+        var earlyNative = new FalloutPackageEvents((_, _) => throw new InvalidDataException("Early native binding replayed source events."));
+        completedAssignment.Bind(records, earlyNative);
+        earlyNative.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x8f6))));
+        earlyNative.Complete();
+        Check(earlyNative.Active?.Form == Key(0x8f6) && earlyNative.Done && earlyNative.Revision == 0,
+            "Native assembly before scheduler construction lost its saved completion or replayed results.");
+        var rejectedEarly = new FalloutPackageEvents((_, _) => { });
+        Reject(() => (completedAssignment with { Sha256 = new string('0', 64) }).Bind(records, rejectedEarly));
+        Check(rejectedEarly.Active is null, "Source drift partially bound an early native lifecycle.");
         using var invalid = new FalloutReferenceWorld(records);
         Reject(() => invalid.Restore(snapshots.Select(snapshot => snapshot with
         {
@@ -60,7 +73,7 @@ internal static class UnloadedActorPackageContracts
         state.QueryCurrentPackage = () => native.Active?.Form;
         Check(world.CurrentPackage(actor) == Key(0x8f6), "Resident package query did not use the actual native owner.");
         Reject(() => world.CurrentPackage(Key(0x903)));
-        Console.WriteLine("OPENNV_UNLOADED_PACKAGE_CONTRACT_PASS sourceSelection=true liveQuest=true sourceEvents=true noArrival=true nativeHandoff=true coldAssignment=true sourceDriftRefused=true missingResidentOwnerRefused=true fixture=assignment-native-lifecycle-no-body");
+        Console.WriteLine("OPENNV_UNLOADED_PACKAGE_CONTRACT_PASS sourceSelection=true liveQuest=true sourceEvents=true noArrival=true nativeHandoff=true earlyNativeCompleted=true coldAssignment=true sourceDriftRefused=true missingResidentOwnerRefused=true fixture=assignment-native-lifecycle-no-body");
     }
 
     internal static byte[] StageCondition(uint quest)

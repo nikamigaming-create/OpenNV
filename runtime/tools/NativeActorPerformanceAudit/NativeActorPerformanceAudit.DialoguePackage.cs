@@ -27,6 +27,7 @@ public partial class NativeActorPerformanceAudit
             var quest = FalloutDialogueTopic.Find(records, "QUST", questId).FormKey;
             var quests = new FalloutQuestState(records); quests.EnterStage(quest, stage);
             var globals = FalloutGlobalState.Read(records);
+            var clock = new FalloutGameTime(globals, FalloutGameTimeBindings.Read(records), FalloutCalendar.Read(Path.Combine(baseRoot, "FalloutNV.exe")));
             var cell = FalloutCellSceneReader.Read(records, world.Get(caller).Cell); world.LoadCell(cell);
             world.SetEnabled(caller, true); world.AdvanceEnableChanges(0, new(1, 1), _ => false);
             var placed = cell.References.Single(value => value.FormKey == caller);
@@ -64,7 +65,7 @@ public partial class NativeActorPerformanceAudit
                 world.EquippedArmor(caller, 1, globals), templates);
             actor.Transform = new(Placement(placed).Basis, origin + Vector3.Up * .05f);
             fixture.AddChild(actor); actor.SetProcess(false); actor.SetPhysicsProcess(false);
-            actor.ConfigureAi(records, quests, cell, Placement, world: world);
+            actor.ConfigureAi(records, quests, cell, Placement, clock: clock, globals: globals, world: world);
             actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                 world, world.Get(caller), records, content, 2, 3, context);
             actor.Combat.SetPhysicsProcess(false);

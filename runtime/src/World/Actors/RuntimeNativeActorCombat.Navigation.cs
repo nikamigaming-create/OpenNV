@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeNavigationProbe? _routeProbe;
     private Vector3 _routeEnd;
     private float _routeSpacing;
+    private float _routeArrivalRadius;
     private int _routeRefinements, _routeRefinementRequests;
     private string? _coarseRouteError;
 
@@ -65,11 +66,17 @@ internal sealed partial class RuntimeNativeActorCombat
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
                 var length = _actor.GlobalPosition.DistanceTo(coarse[0]);
                 for (var index = 1; index < coarse.Length; index++) length += coarse[index - 1].DistanceTo(coarse[index]);
-                // End within the desired approach distance, not inside the
-                // target's physical body. Keep room for waypoint tolerance.
-                var approach = Math.Clamp(length - stoppingDistance + _radius * .5f, _radius * .5f, 8);
-                var (end, resume) = NativeCapsuleNavigation.CorridorPrefix(_actor.GlobalPosition, coarse, approach);
+                // Refine the source corridor up to its next bounded segment.
+                // Its final segment accepts any supported point within the
+                // source stopping radius, independently of target collision.
+                var approach = Math.Clamp(length, _radius * .5f, 8);
+                // NAVM portal centres can make a nearby goal's polyline long.
+                // Within the same bounded local query, refine the actual
+                // projected goal rather than demand an occupied portal centre.
+                var (end, resume) = _actor.GlobalPosition.DistanceTo(coarse[^1]) <= 8 ? (coarse[^1], coarse.Length) :
+                    NativeCapsuleNavigation.CorridorPrefix(_actor.GlobalPosition, coarse, approach);
                 _routeEnd = end;
+                _routeArrivalRadius = resume == coarse.Length ? stoppingDistance : 0;
                 _routeSpacing = Math.Max(.3f, _radius * 2);
                 _routeRefinements = 0;
                 _coarseRouteError = null;
@@ -78,7 +85,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 // The source corridor carries intent; the actor's own complete
                 // capsule, resident collision and floor rules supply clearance.
                 _routeSearch = NativeCapsuleNavigation.Search(_mover, _actor.GlobalPosition, end,
-                    _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe).GetEnumerator();
+                    _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius).GetEnumerator();
                 _routeClock = .5;
             }
             catch (InvalidOperationException error)
@@ -126,7 +133,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _routeRefinements++;
                 _routeRefinementRequests++;
                 _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, _routeEnd,
-                    _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe).GetEnumerator();
+                    _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius).GetEnumerator();
                 return;
             }
             BeginDoorNavigation();

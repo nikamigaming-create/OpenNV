@@ -4,10 +4,14 @@ namespace OpenNV.Runtime.Gameplay.Bots;
 
 internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Camera, Vector3 Forward,
     Vector3 Target, Vector3 Aim, string? AimedReference, bool Paused, bool MovementEnabled,
-    bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false);
+    bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
+    BotDoorObservation? Door = null);
+
+internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
 internal sealed record BotNavigationRoute(IReadOnlyList<Vector3> Waypoints, Vector3 RequestedEndpoint,
-    Vector3 ProjectedEndpoint, bool ReachesProjectedEndpoint, string? SourceIdentity = null, float ProjectionRadiusMeters = 0);
+    Vector3 ProjectedEndpoint, bool ReachesProjectedEndpoint, string? SourceIdentity = null, float ProjectionRadiusMeters = 0,
+    string? RequiredDoor = null);
 
 // Goals use source references. Travel may approach an authored exterior object
 // before it streams in, but arrival still requires its live presentation.
@@ -16,6 +20,8 @@ internal sealed class ReactiveReferenceBot
 {
     private readonly Func<string, BotObservation> _observe;
     private readonly Func<Vector3, Vector3, float, BotNavigationRoute> _route;
+    private readonly Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? _approachRoute;
+    private readonly Action? _cancelRoute;
     private readonly Action<SteeringIntent, bool> _input;
     private readonly ReactiveSteering _steering = new();
     private IReadOnlyList<Vector3>? _path;
@@ -32,12 +38,16 @@ internal sealed class ReactiveReferenceBot
     private float _elapsed, _stalled, _waiting, _endpointAiming, _distance = 1.5f, _approachDistance = 1.5f;
     private float _projectionRadius = 2, _arrivalRadius, _bestWaypointDistance, _segmentStartDistance;
     private float _motionlessSeconds;
+    private sealed record RouteRequest(Vector3 Start, Vector3 Endpoint, Vector3 Target);
+    private RouteRequest? _request;
+    private string? _routeDoor, _resumeMode;
     internal object State => new
     {
         phase = _phase,
         reference = _goalReference,
         active = _reference is not null,
         mode = _mode,
+        routeDoor = _routeDoor,
         scene = _scene,
         elapsedSeconds = _elapsed,
         waypoint = _waypoint,
@@ -74,8 +84,9 @@ internal sealed class ReactiveReferenceBot
     };
 
     internal ReactiveReferenceBot(Func<string, BotObservation> observe,
-        Func<Vector3, Vector3, float, BotNavigationRoute> route, Action<SteeringIntent, bool> input)
-    { _observe = observe; _route = route; _input = input; }
+        Func<Vector3, Vector3, float, BotNavigationRoute> route, Action<SteeringIntent, bool> input,
+        Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? approachRoute = null, Action? cancelRoute = null)
+    { _observe = observe; _route = route; _input = input; _approachRoute = approachRoute; _cancelRoute = cancelRoute; }
 
     internal void Start(string reference, string mode, float distance)
     {
@@ -92,6 +103,7 @@ internal sealed class ReactiveReferenceBot
     internal void Stop()
     {
         if (_reference is not null) _input(default, false);
+        CancelRoute(); _routeDoor = _resumeMode = null;
         _reference = null; _path = null; _scene = null;
         _interactionBefore = null; _steering.Reset(); _phase = "stopped";
     }
@@ -106,6 +118,24 @@ internal sealed class ReactiveReferenceBot
             if (!Finite(state.Position) || !Finite(state.Target)) throw new ArgumentException("Bot observation has a nonfinite position or target.");
             _elapsed += seconds;
             if (_elapsed > (_mode == "travel" ? 900 : 180)) throw new InvalidOperationException("Goal exceeded its execution bound.");
+            if (_routeDoor is not null)
+            {
+                var door = state.Door ?? throw new InvalidOperationException("Route door lost its resident source motion owner.");
+                if (door.Error is not null) throw new InvalidOperationException(door.Error);
+                if (door.Open && !door.Moving && !door.Pending)
+                {
+                    _reference = _goalReference; _mode = _resumeMode!;
+                    _routeDoor = _resumeMode = null; _approachDistance = _distance;
+                    _projectionRadius = 2; _endpointReplans = _obstructionReplans = 0;
+                    Replan("replanning-after-door"); return;
+                }
+                if (_phase == "awaiting-route-door" || door.Moving || door.Pending)
+                {
+                    _input(default, false); _waiting += seconds;
+                    if (_waiting > 8) throw new InvalidOperationException("Ordinary route-door activation did not produce a settled open source door.");
+                    return;
+                }
+            }
             if (_phase == "awaiting-interaction")
             {
                 _input(default, false); _waiting += seconds;
@@ -116,11 +146,12 @@ internal sealed class ReactiveReferenceBot
             if (state.Paused || !state.MovementEnabled || !state.LookingEnabled ||
                 !(state.Resident || _mode == "travel" && state.TravelReady))
             {
+                CancelRoute(); _path = null;
                 _input(default, false); _steering.Reset(); _phase = "waiting-for-player-control";
                 _motionPosition = state.Position; _motionlessSeconds = 0; return;
             }
             if (_scene != state.Scene)
-            { _scene = state.Scene; _path = null; _stalled = _endpointAiming = 0; _projectionRadius = 2; _endpointReplans = 0; }
+            { CancelRoute(); _scene = state.Scene; _path = null; _stalled = _endpointAiming = 0; _projectionRadius = 2; _endpointReplans = 0; }
 
             var offset = state.Target - state.Position; offset.Y = 0;
             // Route waypoints have a 20 cm arrival radius. Use that same
@@ -137,29 +168,51 @@ internal sealed class ReactiveReferenceBot
             }
             var aim = state.Aim;
             var move = !near;
+            if (near && _request is not null) CancelRoute();
             // A live ordinary activation ray is authoritative even when a
             // reference origin or its projected standoff lies farther away.
             if (_mode == "interact" && state.AimedReference == _reference)
             {
-                _interactionBefore = state.InteractionState; _phase = "awaiting-interaction";
+                CancelRoute();
+                _interactionBefore = state.InteractionState; _phase = _routeDoor is null ? "awaiting-interaction" : "awaiting-route-door";
                 _waiting = 0; _input(default, true);
                 return;
             }
             if (move)
             {
                 if (_path is not null && Vector3.Distance(state.Target, _plannedTarget) > .4f)
-                { _path = null; _projectionRadius = 2; _endpointReplans = 0; }
+                { CancelRoute(); _path = null; _projectionRadius = 2; _endpointReplans = 0; }
                 if (_path is null)
                 {
-                    var destination = state.Target - (offset.Length() > .001f ? Vector3.Normalize(offset) * _approachDistance : Vector3.Zero);
-                    var navigation = _route(state.Position, destination, _projectionRadius);
+                    if (_request is { } pending && (Vector3.Distance(pending.Start, state.Position) > .2f ||
+                        Vector3.Distance(pending.Target, state.Target) > .4f)) CancelRoute();
+                    _request ??= new(state.Position, state.Target - (offset.Length() > .001f ? Vector3.Normalize(offset) * _approachDistance : Vector3.Zero), state.Target);
+                    var request = _request;
+                    var destination = request.Endpoint;
+                    var navigation = _approachRoute is not null
+                        ? _approachRoute(request.Start, destination, request.Target, _projectionRadius, _approachDistance)
+                        : _route(request.Start, destination, _projectionRadius);
+                    if (navigation is null)
+                    {
+                        _input(default, false); _steering.Reset(); _phase = "planning";
+                        _motionPosition = state.Position; _motionlessSeconds = _stalled = 0; return;
+                    }
                     if (navigation.Waypoints.Count == 0) throw new InvalidOperationException("Navigation returned no route.");
                     if (!Finite(navigation.RequestedEndpoint) || !Finite(navigation.ProjectedEndpoint) || navigation.Waypoints.Any(point => !Finite(point)))
                         throw new InvalidOperationException("Navigation returned a nonfinite endpoint or waypoint.");
                     if (Vector3.Distance(navigation.RequestedEndpoint, destination) > .001f)
                         throw new InvalidOperationException("Navigation returned a route for another requested endpoint.");
+                    CancelRoute();
+                    if (navigation.RequiredDoor is { } requiredDoor)
+                    {
+                        if (_routeDoor is not null || requiredDoor == _reference)
+                            throw new InvalidOperationException("Route door has no executable ordinary activation approach.");
+                        _routeDoor = requiredDoor; _resumeMode = _mode; _reference = requiredDoor; _mode = "interact";
+                        _approachDistance = 2; _projectionRadius = 2; _waiting = 0;
+                        Replan("approaching-route-door"); return;
+                    }
                     _navigation = navigation; _path = navigation.Waypoints;
-                    _plannedTarget = state.Target; _waypoint = 0; _replans++;
+                    _plannedTarget = request.Target; _waypoint = 0; _replans++;
                     _segmentStart = state.Position;
                     _segmentStartDistance = FlatDistance(state.Position, _path[^1]);
                     // A short segment must close most of its own distance;
@@ -221,7 +274,7 @@ internal sealed class ReactiveReferenceBot
             {
                 // Following at distance is an observed arrival. Resume from
                 // the next live target position instead of an old route end.
-                _path = null; _projectionRadius = 2;
+                CancelRoute(); _path = null; _projectionRadius = 2;
                 _endpointReplans = _obstructionReplans = 0;
             }
             var intent = _steering.Step(state.Camera, state.Forward, aim, move, seconds);
@@ -257,15 +310,17 @@ internal sealed class ReactiveReferenceBot
 
     internal void Fail(string error)
     {
+        CancelRoute();
         _error = error; _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
         try { _input(default, false); }
         catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
         { _error += "; input release failed (device lease expires): " + release.Message; }
     }
 
-    private void Complete(string phase) { _input(default, false); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
+    private void CancelRoute() { _request = null; _cancelRoute?.Invoke(); }
+    private void Complete(string phase) { CancelRoute(); _input(default, false); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
     private void Replan(string phase)
-    { _path = null; _input(default, false); _steering.Reset(); _stalled = _endpointAiming = 0; _phase = phase; }
+    { CancelRoute(); _path = null; _input(default, false); _steering.Reset(); _stalled = _endpointAiming = 0; _phase = phase; }
     private void ReplanEndpoint(bool closer)
     {
         if (++_endpointReplans > 3)

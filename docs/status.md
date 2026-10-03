@@ -5,21 +5,28 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
-The current actor-package candidate retains winning unloaded assignments and
-source Start/Change effects independently of a native body, then transfers the
-actual lifecycle on admission. Synthetic and selected owned assignment fixtures
-pass; unloaded procedure movement and campaign continuation remain incomplete.
-The fresh ordinary birthday run completes source35 and binds Jonas to the
-intercom, where his missing resident body exposes an environment texture admission
-failure. The candidate now preserves actual 2D DDS environment resources alongside
-six-face cubes. Native synthetic dimensionality/mip/invalid-face checks and Debug
-build pass. The ordinary retry loads Jonas's complete13-part body, reaches his
-source marker and completes the real intercom greeting. NPCs now share the
-once-per-day package history/filter already used by creatures; Dad previously
-kept selecting the completed Travel and could not reach his next SayTo package.
-The required integrated gate and selected Release owned audit pass. Real
-talking-activator package approach, birthday completion, G.O.A.T., Megaton, train
-and Mojave remain unreached.
+Checked PR118 is merged. The current candidate binds real reference targets and
+supported capsule arrival regions, retains NPC-to-NPC source dialogue links and
+participant leases, and plays listener IDLEs on the actual listener. Ordinary
+native input completes the intercom exchange and subsequent Dad conversation,
+reaching birthday40. Six original booth references admit, and cold furniture
+placement is protected from stale package travel poses. All15 NPCs admit; shared
+chair clips have independent reference-owned phases. Exact furniture/actor cold
+continuation, robot facing/effects and remaining missing room models are open.
+New Game source player inventory/equipment and shared inventory binding pass
+synthetic/selected owned checks. Fresh ordinary birth/SPECIAL/Dad input reaches
+CG01:80 with the source equipment; cold Continue reaches birthday12 and ordinary
+Tab opens the original Pip-Boy Stats page. Items selection and closing also work.
+Legacy checkpoints retain missing initialization state. The bot queues bounded
+capsule planning and ordinary source-door subgoals; synthetic queued/door cases
+and owned read-only door-state checks pass, while live route-door traversal is
+pending. Early native construction restores completed package lifecycles before
+selecting the saved base clock. The required integrated gate and selected final
+TTW intercom/inventory audits pass; publication is pending. The fresh cold replay
+retains an unsupported Sandbox package at CG02:35; the older genuine party
+checkpoint reaches40. This difference remains visible. The BB-gun lesson,
+birthday completion, G.O.A.T.,
+Megaton, train and Mojave remain unreached.
 
 The [radio refresh owner](source-radio-refresh.md) now binds global source
 ForceRadioStationUpdate/FRSU to winning transmitter reception, applied enable,

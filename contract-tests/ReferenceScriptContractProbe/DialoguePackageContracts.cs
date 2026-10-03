@@ -20,7 +20,8 @@ internal static class DialoguePackageContracts
                 Package(4, type: 2), Package(5, topic: 0), Package(6, location: new byte[11]),
                 Package(7, duplicateLocation: true), Package(8, fov: float.NaN), Package(9, targetType: 1),
                 Package(10, type: 0, topic: 0, location: currentLocation, trigger: editorTrigger, duplicateTrigger: true),
-                Package(11, trigger: new byte[11]), Package(12, trigger: editorTrigger, conflictingTrigger: true)));
+                Package(11, trigger: new byte[11]), Package(12, trigger: editorTrigger, conflictingTrigger: true),
+                Package(13, flags: 1), Package(14, flags: 0x100), Package(15, flags: 0x101)));
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             FalloutPluginRecord Source(uint id) => records.GetEffective(new("Dialogue.esm", id));
             var speech = FalloutDialoguePackage.Read(Source(1));
@@ -36,6 +37,10 @@ internal static class DialoguePackageContracts
             if (trigger is not { Type: 3, Radius: 140, Reference: null } || FalloutScriptPackage.Read(Source(10)).LocationType != 2)
                 throw new InvalidDataException("Dialogue lost the current wait location or repeated source editor trigger.");
             Reject(() => FalloutDialoguePackage.Read(Source(11))); Reject(() => FalloutDialoguePackage.Read(Source(12)));
+            if (!FalloutDialoguePackage.Read(Source(13)).ControlsTargetMovement ||
+                FalloutDialoguePackage.Read(Source(14)).ControlsTargetMovement ||
+                FalloutDialoguePackage.Read(Source(15)).ControlsTargetMovement)
+                throw new InvalidDataException("Dialogue target movement used the head-tracking flag instead of its source movement flag.");
             var caller = new FalloutFormKey("Dialogue.esm", 0x700);
             var condition = new FalloutCondition(Source(1), 0, 1, 161, 2, 0, 0, 0);
             FalloutFormKey? Query(FalloutFormKey reference) => reference == speech.Target ? Source(2).FormKey :
@@ -57,13 +62,14 @@ internal static class DialoguePackageContracts
 
     private static byte[] Package(uint id, uint type = 1, uint topic = 0x200, int distance = 120,
         byte[]? location = null, bool duplicateLocation = false, float fov = 100, int targetType = 0,
-        byte[]? trigger = null, bool duplicateTrigger = false, bool conflictingTrigger = false)
+        byte[]? trigger = null, bool duplicateTrigger = false, bool conflictingTrigger = false, uint flags = 0)
     {
         var data = new byte[12]; BinaryPrimitives.WriteUInt32LittleEndian(data, 0x802000); data[4] = 15; data[5] = 0xcd;
         var target = new byte[16]; BinaryPrimitives.WriteInt32LittleEndian(target, targetType);
         BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(4), 0x14); BinaryPrimitives.WriteInt32LittleEndian(target.AsSpan(8), distance);
         var dialogue = new byte[24]; BinaryPrimitives.WriteSingleLittleEndian(dialogue, fov);
         BinaryPrimitives.WriteUInt32LittleEndian(dialogue.AsSpan(4), topic); BinaryPrimitives.WriteUInt32LittleEndian(dialogue.AsSpan(16), type);
+        BinaryPrimitives.WriteUInt32LittleEndian(dialogue.AsSpan(8), flags);
         // Nonzero compiler padding is retained; it is not a new behavior flag.
         dialogue[12] = 0xcc;
         var wait = location is null ? [] : Field("PLDT", location);

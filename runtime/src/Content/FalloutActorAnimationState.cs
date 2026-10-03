@@ -35,6 +35,12 @@ internal sealed class FalloutActorAnimationState
         ElapsedSeconds += delta; StartPending = false;
     }
 
+    internal void Change(string resource, string sha256)
+    {
+        Validate(new(resource, sha256, 0, true));
+        Resource = resource; Sha256 = sha256; ElapsedSeconds = 0; StartPending = true;
+    }
+
     internal void StartAmbientLoop(FalloutFormKey reference, double duration)
     {
         if (!double.IsFinite(duration) || duration <= 0) throw new InvalidDataException("Actor loop has invalid duration.");

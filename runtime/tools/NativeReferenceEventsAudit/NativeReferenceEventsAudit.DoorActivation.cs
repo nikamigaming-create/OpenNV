@@ -51,7 +51,12 @@ public partial class NativeReferenceEventsAudit
                 try { events.DefaultActivate(Key(id), npc); }
                 catch (NotSupportedException) { denied = true; }
                 Require(denied && interactions.Count == 2, "NPC default activation bypassed inaccessible, parent-only or locked source access.");
+                var playerStatus = events.PlayerRouteDoor(Key(id));
+                Require(playerStatus.Reference == Key(id) && playerStatus.Error is not null && !playerStatus.Admitted && !playerStatus.Pending,
+                    "Player route observation bypassed source door access or queued activation.");
             }
+            Require(events.PlayerRouteDoor(npc).Reference is null && interactions.Count == 2,
+                "Player route observation admitted an actor as a door or performed activation.");
             Require(!interactions.Any(value => value.Door == Key(0x927)), "An unrelated door received activation.");
             GD.Print("OPENNV_NATIVE_NPC_DOOR_ACTIVATION_PASS actorIdentity=true sourceSuppression=true scriptDefault=true sourceFailure=true lockedRefused=true inaccessibleRefused=true parentOnlyRefused=true unrelatedDoorUntouched=true fixture=synthetic parity=unverified");
         }

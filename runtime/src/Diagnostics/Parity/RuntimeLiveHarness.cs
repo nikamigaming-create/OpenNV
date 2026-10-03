@@ -43,7 +43,9 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     internal void ConfigureBot(Func<string, BotObservation> observe,
         Func<System.Numerics.Vector3, System.Numerics.Vector3, float, BotNavigationRoute> route, float sensitivity, Key forward, Key activate,
-        Func<OpenNV.Runtime.Gameplay.Bots.SteeringIntent, bool, bool>? inputOverride = null, Action? pumpInput = null)
+        Func<OpenNV.Runtime.Gameplay.Bots.SteeringIntent, bool, bool>? inputOverride = null, Action? pumpInput = null,
+        Func<System.Numerics.Vector3, System.Numerics.Vector3, System.Numerics.Vector3, float, float, BotNavigationRoute?>? approachRoute = null,
+        Action? cancelRoute = null)
     {
         if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
         _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
@@ -56,7 +58,7 @@ internal sealed partial class RuntimeLiveHarness : Node
                 Input.ParseInputEvent(new InputEventMouseMotion
                 { Relative = new Vector2(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity) });
             SetKey(_botActivate, activation, 50);
-        });
+        }, approachRoute, cancelRoute);
     }
 
     public override void _EnterTree()

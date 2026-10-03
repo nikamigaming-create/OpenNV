@@ -367,6 +367,12 @@ internal static class ActorSourceContracts
             var idleSave = firstIdle.Capture()!; var coldIdle = new FalloutActorAnimationState(); coldIdle.Restore(idleSave);
             coldIdle.StartAmbientLoop(Key(0x900), 2.5);
             Check(coldIdle.Capture() == idleSave, "Cold idle restarted or changed its persisted phase.");
+            coldIdle.Change("meshes/characters/test/chairsit.kf", new string('c', 64));
+            Check(coldIdle.ElapsedSeconds == 0 && coldIdle.StartPending, "An explicit base animation change kept its previous clip's clock.");
+            coldIdle.StartAmbientLoop(Key(0x900), 7);
+            var seatedSave = coldIdle.Capture()!; var seatedCold = new FalloutActorAnimationState(); seatedCold.Restore(seatedSave);
+            seatedCold.StartAmbientLoop(Key(0x900), 7);
+            Check(seatedCold.Capture() == seatedSave, "A changed furniture loop lost its own persisted phase.");
             Console.WriteLine("OPENNV_ACTOR_SOURCE_PASS templates=independent voice=speaker-info-response override=original-identity ambiguous=rejected clock=cold-exact dialogueIdentity=player-speaker-listener-explicit scriptIdentity=true");
         }
         finally { Directory.Delete(directory, true); }

@@ -118,6 +118,11 @@ if (args is ["--inventory-command-contracts"])
     InventoryCommandContracts.Run();
     return;
 }
+if (args is ["--audit-player-start-inventory", var inventoryRoot])
+{
+    OwnedInventoryProbe.Run(inventoryRoot);
+    return;
+}
 if (args.Length >= 6 && args[0] == "--audit-inventory-commands")
 {
     OwnedInventoryCommandProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
@@ -475,6 +480,7 @@ ActorSourceContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
+NpcDialogueLinkContracts.Run();
 RadioContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();

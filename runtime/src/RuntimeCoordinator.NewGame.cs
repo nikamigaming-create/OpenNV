@@ -38,6 +38,15 @@ public partial class RuntimeCoordinator
         }
     }
 
+    private void InitializeNativePlayerInventory()
+    {
+        var world = _nativeReferences ?? throw new InvalidOperationException("New Game has no reference world.");
+        var player = _nativePluginStack!.RuntimeFormKey(0x14);
+        _ = world.EquippedArmor(player, 1, _nativeGlobals);
+        _nativeInventory.Replace(world.Inventory(player, 1, _nativeGlobals).Contents.Capture());
+        world.BindPlayerInventory(_nativeInventory);
+    }
+
     private void BootstrapNativeCommand(FalloutFormKey source, FalloutScriptBindings bindings, string command, IReadOnlyList<string> arguments)
     {
         if (!command.Equals("PlayBink", StringComparison.OrdinalIgnoreCase))

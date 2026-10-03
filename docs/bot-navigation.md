@@ -14,6 +14,29 @@ and the coarse failure. A native synthetic narrow passage executes in both
 directions with the child-sized capsule and refuses the larger adult capsule.
 These read-only queries never place or move the controller.
 
+Live bot refinement polls the same incremental search used by NPC navigation,
+sharing its two-millisecond physics-thread budget. Pending planning releases
+movement and activation. A changed process owner, player pose, cell, source
+capsule scale or target goal cancels obsolete work. Source NAVM preparation is
+measured separately and still occurs on initial graph admission.
+
+A source reference's approach distance describes a supported three-dimensional
+arrival region. Native refinement can choose another capsule-clear point inside
+that region instead of requiring an obstructed standoff. The ordinary aimed
+reference ray still establishes interaction eligibility.
+
+When both capsule grids fail, an actual door on the intended source corridor
+can become a temporary interaction goal. The same rejected-contact and placed-
+reference contracts used by NPCs identify it; unrelated doors touched during
+lateral exploration cannot qualify. The bot approaches its actual geometry and
+presses the ordinary player activation key once. Read-only observation waits
+for source motion and pending activation to settle open, then replans the original
+goal against current collision. It never invokes NPC activation for the player.
+Locked, inaccessible, parent-only, portal and source-faulted route doors remain
+visible refusals. Navigation exclusions belong to one request so transient
+collision cannot disconnect later requests. Ordinary portal goals retain their
+existing input/transfer behavior.
+
 Live player telemetry exposes movement action strengths, alive state and source
 control bindings alongside observed velocity. A held diagnostic key alone does
 not prove that the movement owner consumed it.
@@ -65,6 +88,14 @@ stale endpoint after target movement below the normal replan threshold, repeated
 successful follow legs and a stationary player despite repeated moving-target
 replans.
 
+Queued cases cover delayed completion without a synchronous fallback, released
+input, stale pose/cell cancellation and modal suspension. Door cases require the
+exact ordinary ray, reject unrelated gameplay responses, wait through opening
+motion, replan after settlement and retain locked/missing-response failures.
+Owned door-state checks observe actual closed, opening and cold-restored open
+controllers without dispatching activation. These establish the selected shared
+contracts; automatic campaign door traversal still requires a live run.
+
 An ordinary flat bot run from the genuine CG01 stage-40 checkpoint reached and
 activated the source SPECIAL book. The native activation was accepted, CG01
 entered stage 50 and the actual menu 1060 opened. The run used one source route,
@@ -87,14 +118,17 @@ successful following from repeated stationary endpoint replans. A separate
 no-motion observation survives waypoint invalidation, so a moving target cannot
 continually reset a blocked player's stall limit. Observing the requested follow
 distance retires the old route before the target moves again.
-It does not infer door activation or a campaign transition when an actor becomes
-nonresident. Such transitions require source-informed decisions and separate
-ordinary interaction goals.
+It does not infer a campaign or cell transition when an actor becomes nonresident.
+Those transitions still require source-informed decisions and ordinary interaction.
 
 The fresh October 2 genuine stage80 Continue opens the authored door and follows
 Dad to source Escort completion without a bot error. CG01 reaches100 and CG02
 reaches12; the reached source radio command executes once. This particular retry
 uses coarse capsule routes, so it does not establish that refinement caused the
 changed ordinary outcome. Amata's following source conversation retains a
-response-reader failure on an authored zero-response INFO. Birthday completion,
-matched movement timing and the remaining campaign are still unaccepted.
+response-reader failure on an authored zero-response INFO. The current candidate
+admits that source flow and reaches CG02:40 through the original linked intercom
+conversation. A separate fresh New Game executes birth, source gate activation,
+SPECIAL allocation and CG01:80 with the corrected initial inventory. Birthday
+completion, automatic route-door traversal, matched movement timing and the
+remaining campaign are still unaccepted.

@@ -179,6 +179,12 @@ public partial class NativeNifInstanceAudit : Node
                     bounds = bounds?.Merge(box) ?? box;
                 }
                 GD.Print($"OPENNV_NIF_SOURCE_BOUNDS metres={bounds}");
+                foreach (var material in scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>()
+                    .Where(mesh => mesh.Mesh is not null).SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount())
+                        .Select(index => mesh.Mesh.SurfaceGetMaterial(index))).OfType<ShaderMaterial>()
+                    .Where(material => material.HasMeta("opennv_nif_shader_flags2")))
+                    GD.Print($"OPENNV_NIF_SOURCE_MATERIAL flags2={material.GetMeta("opennv_nif_shader_flags2").AsUInt32():x8} " +
+                        $"environment={material.GetShaderParameter("use_environment").AsBool()} lightFade={material.GetShaderParameter("environment_light_fade").AsBool()}");
                 GD.Print($"OPENNV_NIF_SOURCE_BUILD_PASS source={identity} nodes={scene.Nodes} surfaces={scene.Surfaces} vertices={scene.Vertices}");
                 GetTree().Quit();
                 return;

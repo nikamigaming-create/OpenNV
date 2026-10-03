@@ -53,6 +53,10 @@ public partial class RuntimeCoordinator
     {
         foreach (var actor in root.GetChildren().OfType<RuntimeNativeNpc>())
         {
+            actor.PackageSpeechBusy = () => (_nativeOpeningStageDriver ??
+                throw new InvalidOperationException("Package speech has no gameplay owner.")).IsDialogueBusy(actor.Appearance.Reference!.Value);
+            actor.NpcDialogueActive = () => (_nativeOpeningStageDriver ??
+                throw new InvalidOperationException("Package speech has no gameplay owner.")).IsNpcDialogueActive(actor.Appearance.Reference!.Value);
             actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
                 throw new InvalidOperationException("Package dialogue has no gameplay owner."))
                 .RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);

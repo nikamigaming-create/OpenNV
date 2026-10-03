@@ -160,14 +160,19 @@ internal partial class RuntimeNativeNpc
         _aiClock = clock; _aiGlobals = globals;
         _aiCell = cell;
         _aiWorld = world;
+        _bindingInitialBase = true;
         if (world is not null)
         {
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            _baseClock = _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
         }
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
-        world?.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+        if (world?.UnloadedPackages is { } unloaded)
+            unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
+        else if (_aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
+            retained.Bind(stack, _packageEvents);
         if (_aiReferenceState is { } packageState)
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
         // A stationary, unarmed actor owns its source movement-group idle
@@ -175,6 +180,9 @@ internal partial class RuntimeNativeNpc
         // erase that motion owner and leave the skeleton in its bind pose.
         PlayLocomotion(moving: false);
         AdvanceAi(initializing: true);
+        _bindingInitialBase = false;
+        _baseClock.Bind(_baseResource, _baseHash);
+        ResumeBaseClock();
     }
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -269,6 +277,7 @@ internal partial class RuntimeNativeNpc
     private void AdvanceAi(bool initializing = false, double delta = 0)
     {
         if (_aiStack is null || _questState is null) return;
+        if (NpcDialogueActive?.Invoke() == true) return;
         _aiPollRemaining -= delta;
         var scheduleTime = _aiClock?.ScheduleTime();
         if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };

@@ -29,7 +29,8 @@ public partial class NativeReferenceEventsAudit
         var prototype = new RuntimeNativeNifPrototype(bytes, units);
         var roots = new List<Node3D>();
         var changes = 0;
-        (RuntimeNativeReferencePresentation Presentation, Node3D Node, RuntimeNativeDoorMotion Motion, RuntimeNifControllerPlayer Controller)
+        (RuntimeNativeReferencePresentation Presentation, Node3D Node, RuntimeNativeDoorMotion Motion,
+            RuntimeNifControllerPlayer Controller, RuntimeNativeReferenceEvents Events)
             Bind(FalloutReferenceWorld owner)
         {
             var root = new Node3D(); AddChild(root); roots.Add(root);
@@ -47,8 +48,13 @@ public partial class NativeReferenceEventsAudit
             });
             root.AddChild(presentation);
             var node = presentation.Resolve(key)!;
+            var events = new RuntimeNativeReferenceEvents { ReportDivergence = _ => { } };
+            events.SetProcess(false);
+            events.Configure(records, owner, new(records), cell, root, new((_, _) => false, _ =>
+                throw new InvalidOperationException("Read-only route observation dispatched a source action.")), _ => Transform3D.Identity, units, 1);
+            root.AddChild(events);
             return (presentation, node, node.GetChildren().OfType<RuntimeNativeDoorMotion>().Single(),
-                NodeTraversal.SelfAndDescendants<RuntimeNifControllerPlayer>(node).Single(value => value.HasSequence("Open") && value.HasSequence("Close")));
+                NodeTraversal.SelfAndDescendants<RuntimeNifControllerPlayer>(node).Single(value => value.HasSequence("Open") && value.HasSequence("Close")), events);
         }
         static string Pose(Node3D node) => JsonSerializer.Serialize(NodeTraversal.SelfAndDescendants<Node3D>(node)
             .Select(value => new { path = node.GetPathTo(value).ToString(), basis = value.Transform.Basis.ToString(), position = value.Transform.Origin.ToString() }).ToArray());
@@ -57,12 +63,18 @@ public partial class NativeReferenceEventsAudit
         try
         {
             var live = Bind(world);
+            var observedClosed = live.Events.PlayerRouteDoor(key);
+            Require(observedClosed.Reference == key && !observedClosed.Open && !observedClosed.Moving && !observedClosed.Pending &&
+                observedClosed.Error is null && !observedClosed.Admitted, "Read-only player route observation changed or refused the source closed door.");
             Require(live.Presentation.GetOpenState(key) == 3 && !world.Get(key).DoorOpen,
                 "Owned door did not initialize at its retained closed source endpoint.");
             Require(NodeTraversal.SelfAndDescendants<CollisionShape3D>(live.Node).Any(), "Owned door has no source collision.");
             var closed = CollisionPose(live.Node);
             live.Presentation.Apply(new(FalloutReferenceEffectKind.DoorOpenState, quest.FormKey, key, Enable: true));
             Require(live.Presentation.GetOpenState(key) == 2 && world.Get(key).DoorOpen, "Owned door did not enter opening state.");
+            var observedOpening = live.Events.PlayerRouteDoor(key);
+            Require(observedOpening.Open && observedOpening.Moving && !observedOpening.Pending && observedOpening.Error is null,
+                "Player route observation accepted opening target state as settled collision.");
             live.Controller._Process(live.Controller.FiniteEffectDuration / 2); live.Motion.Synchronize();
             var midPose = Pose(live.Node);
             var clock = JsonSerializer.Serialize(live.Controller.CaptureScriptState());
@@ -77,6 +89,9 @@ public partial class NativeReferenceEventsAudit
             restored.Controller._Process(restored.Controller.FiniteEffectDuration); restored.Motion.Synchronize();
             Require(restored.Presentation.GetOpenState(key) == 1 && CollisionPose(restored.Node) != closed,
                 "Owned opening did not complete or move its source collision.");
+            var observedOpen = restored.Events.PlayerRouteDoor(key);
+            Require(observedOpen.Open && !observedOpen.Moving && !observedOpen.Pending && observedOpen.Error is null,
+                "Cold source route observation lost settled open motion.");
             var effects = 0;
             var quests = new FalloutQuestState(records);
             var scripts = new FalloutReferenceScripts(records, cold, quests, new((_, _) => false, effect =>
@@ -116,7 +131,7 @@ public partial class NativeReferenceEventsAudit
             }
             catch (NotSupportedException) { }
             Require(SHA256.HashData(quest.ReadData()).SequenceEqual(questHash), "Owned quest source was mutated.");
-            GD.Print($"OPENNV_OWNED_DOOR_STATE_PASS reference={key} quest={quest.FormKey} fixtureStage={stage} effects={effects} states=3,2,1,4,3 sourceCollision=true duplicateNoRestart=true coldPoseClock=true sourceDriftRejected=true unboundOwnerRefused=true noActivation=true changes={changes} recording=false fixture=true campaign=unverified parity=unverified");
+            GD.Print($"OPENNV_OWNED_DOOR_STATE_PASS reference={key} quest={quest.FormKey} fixtureStage={stage} effects={effects} states=3,2,1,4,3 sourceCollision=true duplicateNoRestart=true coldPoseClock=true sourceDriftRejected=true unboundOwnerRefused=true playerRouteObservation=true noActivation=true changes={changes} recording=false fixture=true campaign=unverified parity=unverified");
         }
         finally
         {
