@@ -120,6 +120,33 @@ internal static class SayToContracts
         var recursive = new FalloutSpeechCompletionEvents(); recursive.Mark(Key(0x900), Key(0x200));
         Reject(() => recursive.Drain((_, _) => recursive.Drain((_, _) => { })));
         Require(recursive.Active && recursive.Error is not null, "Recursive completion dispatch was accepted or lost its failure.");
+        var package = new FalloutSpeechCompletionEvents();
+        var finished = new List<string>();
+        package.MarkPackage(Key(0x900), Key(0x200), () =>
+        {
+            finished.Add("package");
+            package.MarkPackage(Key(0x900), Key(0x201), () => finished.Add("next-frame"));
+        });
+        package.Drain((_, _) => throw new InvalidDataException("Package speech invented a script SayToDone."), () => false);
+        Require(finished.Count == 0 && package.Active, "Paused package speech completed.");
+        package.Drain((_, _) => throw new InvalidDataException("Package speech invented a script SayToDone."));
+        Require(finished.SequenceEqual(["package"]) && package.Active, "Package continuation ran inline or recursively.");
+        package.Mark(Key(0x900), Key(0x201));
+        package.Drain((_, topics) =>
+        {
+            Require(topics.SetEquals([Key(0x201)]), "Package receipt contaminated script completion topics.");
+            finished.Add("script");
+        });
+        package.Drain((_, _) => throw new InvalidDataException("A retired package receipt replayed."));
+        Require(finished.SequenceEqual(["package", "script", "next-frame"]) && !package.Active,
+            "Package/script completion lanes lost their once-only next-frame ownership.");
+        var failedPackage = new FalloutSpeechCompletionEvents();
+        var packagePrefix = 0;
+        failedPackage.MarkPackage(Key(0x900), Key(0x200), () => { ++packagePrefix; throw new NotSupportedException("Package prefix failed."); });
+        Reject(() => failedPackage.Drain((_, _) => { }));
+        Reject(() => failedPackage.Drain((_, _) => { }));
+        Require(packagePrefix == 1 && failedPackage.Active && failedPackage.Error == "Package prefix failed.",
+            "A failed package completion was cleared or replayed.");
     }
     private static FalloutFormKey Key(uint id) => new("Dialogue.esm", id);
     private static byte[] Local(uint index, string name) { var data = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(data, index); return Join(Field("SLSD", data), Field("SCVR", Text(name))); }

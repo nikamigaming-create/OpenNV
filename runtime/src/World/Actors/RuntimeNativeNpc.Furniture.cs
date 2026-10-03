@@ -10,6 +10,7 @@ internal partial class RuntimeNativeNpc
     private bool _furnitureApproaching;
     private bool _furnitureInitialPlacement;
     private FurnitureClip? _furnitureEntry;
+    private FalloutFormKey? _reservedFurniture;
 
     private sealed record FurnitureClip(FalloutNifFile Nif, FalloutNifControllerSequence Sequence, string Identity);
 
@@ -19,16 +20,27 @@ internal partial class RuntimeNativeNpc
         var path = _aiCell!.BaseObjects[reference.Base].ModelPath ?? throw new InvalidDataException("Furniture has no model.");
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned files are absent.");
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Furniture model is absent.", path);
-        var seat = FalloutFurnitureSource.Read(_aiStack!, furniture, FalloutNifFile.Read(bytes));
+        var seats = FalloutFurnitureSource.ReadSeats(_aiStack!, furniture, FalloutNifFile.Read(bytes));
+        var candidates = seats.Select(value => (Seat: value, Occupied: Occupied(value)))
+            .OrderBy(value => value.Occupied.Origin.DistanceSquaredTo(Position));
+        var chosen = candidates.FirstOrDefault(value => _aiWorld?.ReserveFurnitureSeat(reference.FormKey,
+            value.Seat.Index, Appearance.Reference!.Value) ?? seats.Count == 1);
+        var seat = chosen.Seat ?? throw new NotSupportedException("Furniture has no unreserved source seat.");
+        _reservedFurniture = reference.FormKey;
         _furnitureIdles ??= new(_aiStack!, Appearance.SkeletonPath);
         _seat = seat;
-        var offset = seat.Marker.Offset;
-        var units = Skeleton.UnitsToMetres;
-        _furnitureOccupied = GamebryoPackagePlacement.FromFurnitureMarker(reference.FormKey.ToString(), _referenceTransform!(reference),
+        _furnitureOccupied = chosen.Occupied;
+
+        Transform3D Occupied(FalloutFurnitureSeat value)
+        {
+            var offset = value.Marker.Offset;
+            var units = Skeleton.UnitsToMetres;
+            return GamebryoPackagePlacement.FromFurnitureMarker(reference.FormKey.ToString(), _referenceTransform!(reference),
             GamebryoCoordinate.ConvertVector(new(offset.X, offset.Y, offset.Z)) * units,
-            new Quaternion(Vector3.Up, -seat.Marker.Orientation / 1000.0f),
-            GamebryoCoordinate.ConvertVector(new(seat.PlacementOffset[0], seat.PlacementOffset[1], seat.PlacementOffset[2])) * units,
-            new Quaternion(Vector3.Up, -seat.HeadingDelta), Scale).SourceTransform;
+            new Quaternion(Vector3.Up, -value.Marker.Orientation / 1000.0f),
+            GamebryoCoordinate.ConvertVector(new(value.PlacementOffset[0], value.PlacementOffset[1], value.PlacementOffset[2])) * units,
+            new Quaternion(Vector3.Up, -value.HeadingDelta), Scale).SourceTransform;
+        }
         _aiPackage = package;
         _furnitureInitialPlacement = initializing;
         _packageEvents!.Change(_packageIdleSource);
@@ -165,11 +177,37 @@ internal partial class RuntimeNativeNpc
 
     private void ClearFurniture()
     {
+        if (_reservedFurniture is { } furniture && _seat is { } seat)
+            _aiWorld?.ReleaseFurnitureSeat(furniture, seat.Index, Appearance.Reference!.Value);
+        _reservedFurniture = null;
         _seat = null;
         _furnitureReference = null;
         _furnitureEntry = null;
         _furnitureApproaching = false;
         _furnitureInitialPlacement = false;
         _sitting = 0;
+    }
+
+    private bool RetainFurniturePackage(FalloutPluginRecord selected)
+    {
+        var source = FalloutScriptPackage.Read(selected);
+        if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||
+            source.LocationReference != _furnitureReference) return false;
+        // A source package can enable seated conversation after occupation.
+        // Its change/end events do not require leaving and re-entering the
+        // same seat, and its existing animation keeps its observed phase.
+        CancelIdle();
+        _aiPackage = selected; _packageIdleSource = source;
+        _packageIdles = new(source, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
+        _packageEvents!.Change(source);
+        _packageEvents.Complete();
+        return true;
+    }
+
+    public override void _ExitTree()
+    {
+        ClearFurniture();
+        if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
+            state.QueryCurrentPackage = null;
     }
 }

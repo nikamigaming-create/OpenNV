@@ -5,8 +5,17 @@ winning entry IDLE/KF before reporting occupation and package completion.
 Initial process binding retains the existing source furniture placement and
 identifies that disposition separately in telemetry.
 
-The FURN mask chooses the enabled NIF furniture marker. Its source placement
-and heading define the occupied root and approach frame. Entry accumulation
+The FURN mask supplies all enabled NIF sitting markers. The shared world reserves
+each reference/index for one actor; nearest available authored placement selects
+the seat. Sleep markers and masks outside the source table fail explicitly.
+The marker rotation carries the horizontal placement delta into the seat before
+the occupied heading is applied. Vertical non-accumulated pose change belongs
+to the source animation. Subtracting that delta in the furniture frame displaced
+the sitting actor away from the stool or bench. The shared correction is covered
+by translated, rotated and scaled marker checks; matched retail placement remains
+unverified.
+
+Its source placement and heading define the occupied root and approach frame. Entry accumulation
 is anchored by the authored terminal root; the start of that same curve gives
 the navigation destination. NAVM supplies the corridor. If its projected
 endpoint differs in height from the authored entry point, the path retains
@@ -15,6 +24,12 @@ plays the finite source entry and switches to the occupied loop. Exit uses
 the source curve in the same approach frame.
 
 IDLE conditions choose the animation, including the winning race's Child flag.
+Winning sibling links resolve across the complete plugin graph. A later-plugin
+anchor for an overridden master node cannot be rejected merely because the node
+originally belonged to an earlier plugin. Missing anchors and cycles still fail.
+Changing to another package for the same occupied furniture preserves the seat
+and pose, with the new source lifecycle events. Public occupied GetSitting state
+is3; the base furniture-IDLE request retains its internal procedure selector.
 Race properties use the documented RACE.DATA layout; private observation of
 the owned command descriptor identifies the IsChild condition. No actor,
 location, furniture name or animation filename selects this transition.
@@ -48,3 +63,10 @@ third person, returning to first person, then starting the questionnaire.
 Native navigation costs, collision/avoidance, animation blending, sounds,
 complete transition timing, occupation persistence and matched final pixels
 remain separate open requirements.
+
+The fresh ordinary TTW retry reaches birthday12 with ten actors occupying source
+chairs and distinct shared-bench seats. Paul's repaired explicit-reference
+package query admits his authored seat. The view removes the stool actor
+displaced in front of Amata before the marker-frame correction. Assignment,
+occupied state and this selected view do not establish exact visual alignment,
+matched timing or full furniture support.

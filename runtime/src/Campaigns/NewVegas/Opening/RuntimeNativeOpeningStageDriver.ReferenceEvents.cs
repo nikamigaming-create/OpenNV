@@ -153,9 +153,14 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal bool IsInCombat(FalloutFormKey actor) => _pluginStack.RuntimeFormId(actor) == 0x14
         ? GetTree().GetNodesInGroup("OpenNVNativeCombatActors").OfType<RuntimeNativeActorCombat>().Any(owner => owner.EngagedWith(actor))
         : !_scripts.References!.IsDead(actor) && _scripts.References.Get(actor).Engagement is { Action: not "idle" };
-    internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed) =>
-        (_conversation ?? throw new InvalidOperationException("Conversation owner is absent."))
+    internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed)
+    {
+        if (package.Type == 1)
+            (_speech ?? throw new InvalidOperationException("Speech owner is absent.")).StartPackageSpeech(speaker, package.Target,
+                package.Topic ?? throw new InvalidDataException("SayTo dialogue package has no source topic."), completed);
+        else (_conversation ?? throw new InvalidOperationException("Conversation owner is absent."))
             .Request(speaker, package.Target, package.Topic, completed);
+    }
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?
         _scriptHost.PlayerActorValue(name) : _scripts.References!.ActorValue(actor, name);
     private static bool IsSpecial(string name) => FalloutNativeVigorResolver.AttributeNames.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));

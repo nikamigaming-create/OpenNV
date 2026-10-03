@@ -12,6 +12,13 @@ ownership; native cache creation follows the selected fixed size.
 reference/base mapping to dialogue GetIsID and ordinary scripts. Player,
 speaker, listener and explicit targets retain independent source ownership.
 
+[Dialogue packages](source-dialogue-packages.md) share native NAVM/KF movement,
+source wait/trigger selection and INFO/audio/LIP completion. Current-package
+conditions resolve the actual self, target or explicit reference owner.
+Furniture reservations distinguish every enabled source marker, and winning
+IDLE sibling links can cross original plugin owners. See
+[furniture motion](furniture-motion.md) for entry and placement boundaries.
+
 Player camera packages share the C# IDLE playback clock with source intro,
 repeat and outro intervals. Assignment handoff retains identical event poses;
 source text-key crossings feed the existing native player sound owner. Saved

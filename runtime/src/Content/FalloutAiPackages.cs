@@ -5,6 +5,35 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static bool IsCurrentPackage(FalloutCondition condition, FalloutFormKey caller,
+        FalloutFormKey? currentPackage, Func<FalloutFormKey, FalloutFormKey?> query)
+    {
+        if (condition.Function != 161) throw new InvalidDataException("Current-package query has a different source function.");
+        var subject = condition.RunOn switch
+        {
+            0 => caller,
+            1 => Target(),
+            2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) ??
+                throw new InvalidDataException("Current-package query has no explicit reference."),
+            _ => throw new NotSupportedException($"Current-package query run-on {condition.RunOn} has no subject owner."),
+        };
+        return (subject == caller ? currentPackage : query(subject)) == condition.FormArgument1;
+
+        FalloutFormKey Target()
+        {
+            if (condition.Owner.Signature != "PACK")
+                throw new NotSupportedException("Current-package target query has no package target owner.");
+            var targets = condition.Owner.ReadSubrecords().Where(field => field.Signature == "PTDT").ToArray();
+            if (targets.Length != 1 || targets[0].Data.Length != 16)
+                throw new InvalidDataException("Current-package target query has an invalid target extent.");
+            var target = targets[0].Data.Span;
+            if (BinaryPrimitives.ReadInt32LittleEndian(target) != 0)
+                throw new NotSupportedException("Current-package target query requires its reference target owner.");
+            return condition.Owner.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(target[4..])) ??
+                throw new InvalidDataException("Current-package target query has no reference.");
+        }
+    }
+
     internal static IReadOnlyDictionary<FalloutFormKey, sbyte> ReadFactions(FalloutPluginStack stack, FalloutFormKey npc,
         FalloutActorTemplateSelection? selection = null)
     {
@@ -26,7 +55,8 @@ internal static class FalloutAiPackages
         => FalloutActorTemplateOwner.Resolve(stack, record, flag);
 
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
-        Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null, FalloutGameTime? clock = null)
+        Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null, FalloutGameTime? clock = null,
+        bool evaluateRunOn = false)
     {
         var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(npc), 32, selection);
         foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
@@ -37,7 +67,7 @@ internal static class FalloutAiPackages
             // Schedules precede conditions, in authored priority order. An
             // inactive candidate cannot run condition queries or side effects.
             if (!FalloutPackageSchedule.Read(package).IsActive(clock)) continue;
-            if (!FalloutCondition.AllPass(FalloutCondition.Read(package), evaluate)) continue;
+            if (!FalloutCondition.AllPass(FalloutCondition.Read(package), evaluate, evaluateRunOn)) continue;
             return package;
         }
         return null;

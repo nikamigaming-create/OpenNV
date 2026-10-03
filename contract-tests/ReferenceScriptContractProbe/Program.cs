@@ -412,6 +412,7 @@ ConversationContracts.Run();
 ActorSourceContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
+DialoguePackageContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
 EditorTravelContracts.Run();

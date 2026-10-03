@@ -10,6 +10,13 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--dialogue-package", var dialogueRoot, var dialogueMod, var dialogueModRoot, var dialogueActor,
+                var dialogueQuest, var dialogueStage, .. var dialogueDependencies])
+            {
+                await DialoguePackage(dialogueRoot, dialogueMod, dialogueModRoot, dialogueActor, dialogueQuest,
+                    short.Parse(dialogueStage, System.Globalization.CultureInfo.InvariantCulture), dialogueDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--editor-travel", var editorRoot, var editorMod, var editorModRoot, var editorActor,
                 var editorQuest, var editorStage, .. var editorDependencies])
             {

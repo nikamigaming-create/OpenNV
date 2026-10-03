@@ -18,8 +18,19 @@ var invalidRaceRejected = false;
 try { FalloutRaceProperties.ReadFlags(raceData.AsSpan(0, 35)); }
 catch (InvalidDataException) { invalidRaceRejected = true; }
 if (!invalidRaceRejected) throw new InvalidOperationException("A truncated race layout was admitted.");
-if (!furniture.SourceTransform.Origin.IsEqualApprox(new Vector3(1.5f, 3.0f, 2.5f)))
+if (!furniture.SourceTransform.Origin.IsEqualApprox(new Vector3(2.5f, 3.0f, 5.5f)))
     throw new InvalidOperationException("Furniture marker root composition differs.");
+
+var rotatedFurniture = new Transform3D(new Basis(Vector3.Up, -0.8f).Scaled(Vector3.One * 1.3f), new Vector3(9, 7, -3));
+var markerRotation = new Quaternion(Vector3.Up, 1.1f);
+var markerOffset = new Vector3(2, 3, 4);
+var seatDelta = new Vector3(.5f, 6, 1.5f);
+var rotatedSeat = GamebryoPackagePlacement.FromFurnitureMarker("00000011", rotatedFurniture,
+    markerOffset, markerRotation, seatDelta, new Quaternion(Vector3.Up, -.4f), Vector3.One);
+var approachPoint = rotatedFurniture * markerOffset;
+var approachDelta = rotatedFurniture.Basis * (new Basis(markerRotation) * new Vector3(.5f, 0, 1.5f));
+if (!(rotatedSeat.SourceTransform.Origin - approachPoint).IsEqualApprox(approachDelta))
+    throw new InvalidOperationException("Furniture accumulation did not follow the rotated marker frame.");
 
 var grounded = GamebryoPackagePlacement.AdjustSupportHeight(
     furniture.SourceTransform,

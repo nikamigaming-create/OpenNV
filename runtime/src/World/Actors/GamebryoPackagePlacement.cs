@@ -61,13 +61,15 @@ internal static class GamebryoPackagePlacement
         Quaternion actorHeadingDeltaGodot,
         Vector3 actorScale)
     {
-        // Furniture approach deltas relocate the actor horizontally. The marker
-        // itself owns the occupied root height; the vertical approach delta is
-        // not an extra displacement of the seated skeleton.
-        var rootOffset = markerOffsetCellUnits - new Vector3(
+        // The marker is the approach frame. Its horizontal accumulation delta
+        // carries the actor into the seat in that frame, before the occupied
+        // heading is applied. Non-accumulated vertical pose changes are already
+        // present in the source sitting animation.
+        var approach = new Basis(markerRotationGodot);
+        var rootOffset = markerOffsetCellUnits + approach * new Vector3(
             actorPlacementOffsetCellUnits.X, 0.0f, actorPlacementOffsetCellUnits.Z);
         var marker = furnitureTransform * new Transform3D(
-            new Basis(markerRotationGodot),
+            approach,
             rootOffset);
         var actor = marker * new Transform3D(
             new Basis(actorHeadingDeltaGodot),

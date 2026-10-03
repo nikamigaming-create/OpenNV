@@ -27,6 +27,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal RuntimeNativeNpc? Speaker;
         internal RuntimeNativeCreature? Creature;
         internal Action? ResponseCompleted;
+        internal Action? PackageCompleted;
     }
 
     private readonly Dictionary<FalloutFormKey, Voice> _channels = [];
@@ -46,7 +47,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, FalloutActorTemplateSelection?>? _templates;
     private Func<FalloutFormKey, FalloutSoundRandomState>? _soundRandom;
     private float _unitsToMetres;
-    private long _completedCommands;
+    private long _completedCommands, _completedPackages;
     private readonly FalloutSpeechCompletionEvents _emptyCompletions = new();
     private FalloutDialogueVoiceIndex? _voiceIndex;
     private long _disabledCommands;
@@ -102,6 +103,7 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Topic = null;
         BindSpeaker(voice, record, ResidentSpeaker(record));
         voice.Info = info; voice.ResponseIndex = response; voice.ResponseCompleted = completed;
+        voice.PackageCompleted = null;
         ++voice.Generation; _lastVoice = _conversationVoice = voice;
         try { PlayResponse(voice); }
         catch (Exception error) { Fail(error); throw; }
@@ -120,6 +122,7 @@ internal partial class RuntimeNativeSpeech : Node
                 command = voice?.CommandKind,
                 listenerLookOwner = voice?.CommandKind == "SayTo" ? "unbound" : "not-requested",
                 completedCommands = _completedCommands,
+                completedPackages = _completedPackages,
                 disabledCommands = _disabledCommands,
                 lastDisabledParticipant = _lastDisabledParticipant?.ToString(),
                 emptyCompletions = _emptyCompletions.State,
@@ -240,17 +243,21 @@ internal partial class RuntimeNativeSpeech : Node
     }
     internal void Say(FalloutFormKey speaker, FalloutFormKey topic, bool forceSubtitles = false) =>
         ExecuteCommand(new(speaker.ToString(), "", topic.ToString(), forceSubtitles), speaker, topic, null);
-    private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic, FalloutFormKey? target)
+    internal void StartPackageSpeech(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic, Action completed) =>
+        ExecuteCommand(new(speaker.ToString(), target.ToString(), topic.ToString()), speaker, topic, target, completed);
+    private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic, FalloutFormKey? target,
+        Action? packageCompleted = null)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
-        try { StartCore(command, _stack.GetEffective(speaker), topic, target); }
+        try { StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
             Fail(error); throw;
         }
     }
 
-    private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target)
+    private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target,
+        Action? packageCompleted = null)
     {
         if (speaker.Signature is not ("ACHR" or "ACRE")) throw new InvalidDataException("Scripted speaker is not an actor reference.");
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
@@ -293,7 +300,8 @@ internal partial class RuntimeNativeSpeech : Node
         {
             if (IsTalking(speaker.FormKey))
                 throw new NotSupportedException("Empty speech interrupting the actor's active voice requires its interruption owner.");
-            _emptyCompletions.Mark(speaker.FormKey, topicForm);
+            if (packageCompleted is null) _emptyCompletions.Mark(speaker.FormKey, topicForm);
+            else _emptyCompletions.MarkPackage(speaker.FormKey, topicForm, packageCompleted);
             return;
         }
         var voice = Channel(speaker.FormKey);
@@ -301,7 +309,8 @@ internal partial class RuntimeNativeSpeech : Node
             throw new NotSupportedException("Replacing the actor's active speech requires its interruption owner.");
         BindSpeaker(voice, speaker, actor);
         voice.Command = command;
-        voice.CommandKind = command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
+        voice.CommandKind = packageCompleted is not null ? "dialogue-package" : command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
+        voice.PackageCompleted = packageCompleted;
         voice.Listener = target;
         voice.Topic = topicForm;
         voice.Info = info;
@@ -425,12 +434,14 @@ internal partial class RuntimeNativeSpeech : Node
         if (++voice.ResponseIndex < voice.Info!.Responses.Count) { PlayResponse(voice); return; }
         var completed = voice.Info;
         var completedTopic = voice.Topic; voice.Topic = null;
+        var packageCompleted = voice.PackageCompleted; voice.PackageCompleted = null;
         voice.Info = null; voice.Lip = null; voice.LipWeights = [];
         voice.Speaker?.ClearSpeechFace();
         GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
         RunResults(completed, voice.Reference, false);
         InfoCompleted?.Invoke(completed.Record.FormKey);
-        if (completedTopic is { } topic)
+        if (packageCompleted is not null) { packageCompleted(); ++_completedPackages; }
+        else if (completedTopic is { } topic)
         {
             (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))(voice.Reference, new HashSet<FalloutFormKey> { topic });
             ++voice.CompletedCommands; ++_completedCommands;
