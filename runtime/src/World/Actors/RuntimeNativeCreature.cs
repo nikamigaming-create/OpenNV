@@ -77,7 +77,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
         if (state.Reference != reference.FormKey || state.Base != reference.Base)
             throw new InvalidDataException("Creature presentation is bound to a different reference state.");
         var appearance = FalloutCreatureAppearanceResolver.Resolve(stack, reference.Base, reference.FormKey, state.Templates);
-        var actor = new RuntimeNativeCreature { Name = $"Reference_{reference.FormKey}", Appearance = appearance, _clock = state.Animation };
+        var actor = new RuntimeNativeCreature { Name = $"Reference_{reference.FormKey}", Appearance = appearance, _clock = state.Animation, _content = content };
         try
         {
             actor.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
@@ -149,9 +149,11 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
     {
         if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;
+        if (_aiState?.ScriptError is not null) return;
         try
         {
             AdvanceConversationFacing((float)delta);
+            if (AdvanceEventIdle(delta)) return;
             if (Combat?.PackageOwnsPose == true) return;
             var from = _clock.ElapsedSeconds;
             var include = _clock.StartPending;

@@ -46,8 +46,22 @@ checks pass; the fresh ordinary retry completes Dad's Escort on the supported
 floor and repeats birthday21. Palmer's source voice/result now executes without
 the previous missing-actor error; an observed reply gives the source sweetroll
 and closes dialogue. The actual creature retains its unbound
-source Travel procedure6. The required integrated runtime gate passes;
-birthday completion and the subsequent campaign remain open.
+source Travel procedure6 in that published retry. The required integrated
+runtime gate passes for the published baseline; birthday completion and the
+subsequent campaign remain open.
+
+The current [creature Travel/event candidate](creature-travel-events.md) adds
+source editor/marker destinations, retained native arrival, actual package
+results, elapsed-day selection history and source event-idle clocks. Synthetic
+contracts pass. The selected owned native audit reaches the actual package's
+bounded destination and retains the cake-model controller failure through a
+cold world reload without replaying the result. Its isolated floor and explicit
+quest-stage/enable-parent fixture do not establish ordinary campaign progress.
+The fresh ordinary birthday retry reaches that same source failure after the
+creature arrives at the marker on the actual room floor. The source cake's
+managed morph and particle lifespan channels are the next owner. The required
+integrated runtime gate passes for this candidate; full end-idle and subsequent
+campaign continuation remain unverified.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the

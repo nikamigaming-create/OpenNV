@@ -55,6 +55,13 @@ strength to the source scalar clock. Complete CREA assembly registers its real
 package owner only after every winning part loads; unsupported procedures remain
 visible independently of model admission.
 
+[Creature Travel and package events](creature-travel-events.md) share source
+editor/marker placement, NAVM/KF/capsule movement and the reference script/event
+owner. Arrival precedes On End effects, and elapsed-day selection history and
+event-idle source phase persist with the reference. Failed results retain their
+consumed prefix. Unbound model animation channels remain visible independently
+of procedure arrival.
+
 Player camera packages share the C# IDLE playback clock with source intro,
 repeat and outro intervals. Assignment handoff retains identical event poses;
 source text-key crossings feed the existing native player sound owner. Saved

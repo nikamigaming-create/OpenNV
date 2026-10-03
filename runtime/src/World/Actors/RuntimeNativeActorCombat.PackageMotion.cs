@@ -32,6 +32,11 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_state.PackageMotion is { } motion) _state.PackageMotion = motion with { EditorTravel = progress };
     }
+    internal void SetTravelProgress(FalloutTravelProgress progress)
+    {
+        if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Travel has no observed package motion.");
+        _state.PackageMotion = motion with { Travel = progress };
+    }
     internal void CompleteDialoguePackage()
     {
         if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Dialogue completion has no observed package motion.");
@@ -113,7 +118,8 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.Patrol : null,
             retained?.Package == package.FormKey ? retained.Escort : null,
             retained?.Package == package.FormKey ? retained.EditorTravel : null,
-            retained?.Package == package.FormKey && retained.DialogueCompleted);
+            retained?.Package == package.FormKey && retained.DialogueCompleted,
+            retained?.Package == package.FormKey ? retained.Travel : null);
         PackageOwnsPose = true;
     }
 }

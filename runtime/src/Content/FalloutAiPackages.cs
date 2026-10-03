@@ -60,7 +60,7 @@ internal static class FalloutAiPackages
 
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
         Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null, FalloutGameTime? clock = null,
-        bool evaluateRunOn = false)
+        bool evaluateRunOn = false, Func<FalloutPluginRecord, bool>? eligible = null)
     {
         var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(npc), 32, selection);
         foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
@@ -71,6 +71,7 @@ internal static class FalloutAiPackages
             // Schedules precede conditions, in authored priority order. An
             // inactive candidate cannot run condition queries or side effects.
             if (!FalloutPackageSchedule.Read(package).IsActive(clock)) continue;
+            if (eligible?.Invoke(package) == false) continue;
             if (!FalloutCondition.AllPass(FalloutCondition.Read(package), evaluate, evaluateRunOn)) continue;
             return package;
         }

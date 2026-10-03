@@ -36,14 +36,18 @@ next source INFO and voice now execute without the prior missing-creature-owner
 error, and birthday15 is entered while the retained maximum stage remains21.
 The observed Palmer reply gives the source sweetroll, enters20 and closes
 dialogue without a speech/result error.
-The actual creature is present with its complete source model. Its selected
-Travel package retains `Creature package Fallout3.esm:09f64c procedure 6 is unbound.`
-Cake completion, birthday completion, Vault exit, Megaton, train and Mojave remain
-unreached.
+The actual creature is present with its complete source model. In the latest
+candidate retry its editor-location Travel completes, then the ordinary Palmer
+interaction selects the authored cake marker package. It reaches that marker on
+the floor and retains arrival before the source On End result. The actual
+PlayGroup Forward result exposes `NIF controller manager 3 has an unsupported
+sequence chain.` The creature and conversation retain that result failure.
+Cake completion, birthday completion, Vault exit, Megaton, train and Mojave
+remain unreached.
 
 ## Current implementation block
 
-The published baseline is526defc after checked PR113. Shared
+The published baseline is41c6b5d after checked PR114. Shared
 [optional INFO responses](optional-dialogue-responses.md),
 [current-package queries](dialogue-package-queries.md),
 [owned GetVampire](owned-vampire-query.md) and
@@ -52,7 +56,7 @@ selected owned-data and required integrated checks. The selected inventory
 query audit covers136 TTW GREETING predicates with source scope/master binding.
 These owners are exercised by the ordinary birthday conversation above.
 
-The current branch `codex/ttw-source-actor-admission-steering` restores general
+The merged baseline restores general
 [creature material controllers](creature-material-controllers.md): dormant
 shared flags remain on ordinary lighting surfaces, and direct refraction
 strength binds its actual scalar/source clock. Synthetic native material/clock
@@ -68,6 +72,18 @@ birthday21. Palmer's source result passes the previous owner error and exposes
 the creature Travel procedure as the next owner. The required Release/Debug,
 formatting/analyzer, contract, launcher and native Godot gate passes.
 
+The current branch `codex/creature-travel-events` implements
+[source creature Travel and events](creature-travel-events.md): editor/marker
+destinations, retained native arrival, elapsed-day selection history, actual
+package results and source event-idle playback. Synthetic contracts pass. The
+selected owned native audit reaches the actual package's bounded destination
+and preserves arrival, timing and its downstream animation failure through a
+cold world reload without replay. Its floor/stage/enable-parent fixture is
+explicit. The fresh ordinary retry reaches the same source failure in the
+actual birthday room. Complete end-idle playback and campaign cold continuation
+remain unverified. The required Release/Debug, formatting/analyzer, contract,
+launcher and native Godot gate passes for this block.
+
 Merged [bot refinement](bot-navigation.md), [source dialogue packages](source-dialogue-packages.md),
 [furniture motion](furniture-motion.md) and [radio refresh](source-radio-refresh.md)
 share authoritative reference state and native movement/audio/UI owners. Pending
@@ -75,8 +91,9 @@ continuations block saving. Never clear a fault or replay a consumed prefix.
 
 ## Next owners
 
-1. Implement general creature Travel procedure6, source arrival, package result
-   and event-idle ownership. Continue the cake and birthday from genuine state.
+1. Bind managed geometry morph and particle lifespan channels to the existing
+   native animation/particle owners. Continue the source cake result and
+   event-idle sequence, then the birthday from genuine state.
 2. Complete automatic escort-door recovery and matched steering/turn behavior;
    repair sampled short bot endpoint crossing.
 3. Implement selected zero-response INFO result/flow behavior when reached.
@@ -94,17 +111,14 @@ campaign, cell, actor, mod or retail parity completion.
 
 ## Private continuation
 
-`tmp/development-lab/ttw-bot-20261002/` runs the current candidate. Continue271,
-door272 and follow273 complete CG01; stop274 is acknowledged. Amata approach275,
-stop276 and observed replies277/278 complete the source gift and reach21. Palmer
-interaction279 reaches its source voice/result with the creature present;
-stop280 and full state281 retain the unbound Travel package.
-Palmer reply284 gives the source sweetroll and closes dialogue; normal Quit287
-closes the native process. The earlier retry
-retained Dad's chair/table obstruction and closed normally through Quit270.
-No frames were recorded. A delayed publication retained its pending snapshot;
-startup telemetry subsequently recovered without clearing the failure manually.
-Failed source prefixes remain retained and must not be replayed as completed.
+`tmp/development-lab/ttw-bot-20261002/` holds the latest candidate retry.
+Continue288, door289 and follow290 complete CG01; stop291 is acknowledged.
+Amata approach292, stop293 and observed replies294/295 complete the source gift
+and reach21. Palmer interaction296 enters15 and reaches the actual creature
+Travel arrival and cake result failure; stop297 and full state298 retain it.
+Pause299 and normal Quit300/301 close native process30396. No frames were
+recorded. Failed source prefixes remain retained and must not be replayed as
+completed.
 
 Genuine stage16/40/50 and open/closed stage80 backups, source evidence and focused
 checks are under `local/ttw-bot-resume-20261002/`. Closed stage80 is the next retry;
