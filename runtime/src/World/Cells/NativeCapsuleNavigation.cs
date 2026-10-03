@@ -58,6 +58,27 @@ internal static partial class NativeCapsuleNavigation
         throw new InvalidOperationException("Capsule search ended without a route.");
     }
 
+    internal static (IReadOnlyList<Vector3> Path, float Spacing, string? CoarseError) FindRefined(
+        CharacterBody3D body, Vector3 start, Vector3 target, float stepHeight,
+        float coarseSpacing, float refinedSpacing, Func<Vector3, bool> resident, int maximumNodes = 1200)
+    {
+        if (!float.IsFinite(coarseSpacing) || !float.IsFinite(refinedSpacing) ||
+            coarseSpacing <= 0 || refinedSpacing <= 0 || refinedSpacing > coarseSpacing)
+            throw new ArgumentOutOfRangeException(nameof(refinedSpacing));
+        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes), coarseSpacing, null); }
+        catch (InvalidOperationException coarse) when (refinedSpacing < coarseSpacing)
+        {
+            // A lattice can miss a supported passage narrower than its node
+            // spacing. One finer search keeps the same body, sweep/floor rules,
+            // residency predicate and node bound. It cannot create clearance.
+            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes), refinedSpacing, coarse.Message); }
+            catch (InvalidOperationException refined)
+            {
+                throw new InvalidOperationException($"Coarse capsule query: {coarse.Message} Refined capsule query: {refined.Message}", refined);
+            }
+        }
+    }
+
     internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
         NativeNavigationProbe? probe = null)

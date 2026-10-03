@@ -6,6 +6,18 @@ are refined against the live player's native capsule, floor support, step rules
 and resident collision. Neither planning nor execution writes gameplay state,
 player transforms or collision results.
 
+A failed coarse player query receives at most one finer search before its
+source corridor is rejected. Spacing uses the live source-scaled capsule radius;
+both searches retain the same complete body, floor and step rules, residency
+predicate and 1200-node bound per query. The route trace retains active spacing
+and the coarse failure. A native synthetic narrow passage executes in both
+directions with the child-sized capsule and refuses the larger adult capsule.
+These read-only queries never place or move the controller.
+
+Live player telemetry exposes movement action strengths, alive state and source
+control bindings alongside observed velocity. A held diagnostic key alone does
+not prove that the movement owner consumed it.
+
 Each returned route distinguishes the requested standoff, the source-projected
 NAVM endpoint and the locally verified segment endpoint. A partial corridor must
 be replanned from its observed arrival before the next segment is consumed.
@@ -78,3 +90,11 @@ distance retires the old route before the target moves again.
 It does not infer door activation or a campaign transition when an actor becomes
 nonresident. Such transitions require source-informed decisions and separate
 ordinary interaction goals.
+
+The fresh October 2 genuine stage80 Continue opens the authored door and follows
+Dad to source Escort completion without a bot error. CG01 reaches100 and CG02
+reaches12; the reached source radio command executes once. This particular retry
+uses coarse capsule routes, so it does not establish that refinement caused the
+changed ordinary outcome. Amata's following source conversation retains a
+response-reader failure on an authored zero-response INFO. Birthday completion,
+matched movement timing and the remaining campaign are still unaccepted.

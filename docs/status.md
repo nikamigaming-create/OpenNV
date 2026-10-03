@@ -10,9 +10,16 @@ ForceRadioStationUpdate/FRSU to winning transmitter reception, applied enable,
 persistent discovery, owned notification declarations and the original Pip-Boy
 station list. Synthetic and selected TTW command/cold checks pass for55
 transmitters, as does the required integrated gate. Cross-portal radius, station
-tuning/playback and matched cadence remain open. The fresh ordinary stage80
-retry reaches source door activation, then retains a bot corridor no-route
-failure before birthday entry. Ordinary radio continuation is still unverified.
+tuning/playback and matched cadence remain open. The fresh genuine stage80
+Continue opens the authored door and follows Dad to Escort completion. CG01
+reaches100 and CG02 reaches12; the force command executes once and Vault101's
+transmitter is available/discovered without a speech result error. The next
+ordinary Amata conversation retains a zero-response INFO reader failure.
+The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
+before corridor rejection and actual input telemetry. A native narrow-passage
+fixture passes with the child-sized body in both directions and refuses the
+adult body. The ordinary retry uses coarse routes; no causal refinement or
+matched movement claim is implied.
 
 The immediate priority is the complete TTW route from Fallout 3's opening through
 Vault 101, Megaton, the train station, New Vegas and Benny, using ordinary bot

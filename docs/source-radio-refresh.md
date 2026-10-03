@@ -52,6 +52,13 @@ enable/discovery sequence and cold state. Seven cross-portal radius queries rema
 visible in that isolated fixture. The fixture does not execute the other stage12
 commands or establish ordinary campaign progress.
 
+A fresh genuine stage80 Continue subsequently completes the source Escort and
+enters CG02 stage12 through ordinary input. Its source result executes the force
+command once; Vault101's transmitter is enabled, available and in persistent
+discovery, with no speech or opening-result error. The next ordinary Amata
+conversation retains a separate zero-response INFO reader failure. The earlier
+failed stage12 suffix was not replayed.
+
 ## Remaining owners
 
 Radio conversations, continuous/static audio, physical ACTI listeners, tuning,

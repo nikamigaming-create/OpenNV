@@ -198,12 +198,16 @@ public partial class RuntimeCoordinator
             var (target, resume) = NativeCapsuleNavigation.CorridorPrefix(origin, worldPath, 8);
             try
             {
-                var local = NativeCapsuleNavigation.Find(_nativePlayer!, origin, target,
-                    _configuration.Player.StepHeightMeters, Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters), NativeCollisionResident);
+                var spacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
+                var refinedSpacing = Math.Min(spacing, Math.Max(.15f,
+                    _configuration.Player.CapsuleRadiusMeters * _nativePlayer!.GlobalBasis.X.Length()));
+                var local = NativeCapsuleNavigation.FindRefined(_nativePlayer, origin, target,
+                    _configuration.Player.StepHeightMeters, spacing, refinedSpacing, NativeCollisionResident);
                 GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={target} sourceWaypoint={resume} " +
                     $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} " +
-                    $"reachesProjected={resume == worldPath.Length} blockedPortals={_botBlockedPortals.Count} ms={Time.GetTicksMsec() - now}");
-                return new(local.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), resume == worldPath.Length, identity, projectionRadius);
+                    $"reachesProjected={resume == worldPath.Length} blockedPortals={_botBlockedPortals.Count} " +
+                    $"spacing={local.Spacing} coarseError={local.CoarseError ?? "none"} ms={Time.GetTicksMsec() - now}");
+                return new(local.Path.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), resume == worldPath.Length, identity, projectionRadius);
             }
             catch (InvalidOperationException error) when (attempt < 7 && path.Count > 1)
             {

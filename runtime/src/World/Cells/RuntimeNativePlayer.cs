@@ -411,6 +411,15 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         (NoActivationFeedback ?? throw new NotSupportedException("Native activation feedback has no shared sound owner."))();
 
     internal bool ModalInput => _modalInput;
+    internal object InputState => new
+    {
+        alive = IsDefeated?.Invoke() != true,
+        forward = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveForward.Action),
+        backward = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveBackward.Action),
+        left = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveLeft.Action),
+        right = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveRight.Action),
+        controls = _inputControls?.State,
+    };
     internal Node? AimedObject()
     {
         var aim = (Node3D?)_xr?.RightAim ?? _camera;

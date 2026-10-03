@@ -39,18 +39,30 @@ Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
 
-The movement/dialogue/furniture block is merged through checked PR107; local
-main equals origin/main at735a108. The fresh feature branch is
-`codex/ttw-radio-station-refresh`. Its [station refresh owner](source-radio-refresh.md)
-now binds the reached global command to winning transmitter reception, applied
-enable, persistent discovery and source HUD/sound declarations. Synthetic and
-selected TTW command/cold checks pass for55 transmitters. Seven cross-portal radius
-queries remain visible in the isolated fixture; tuning/playback remain unbound.
-The required integrated gate passes. The fresh ordinary retry cold-loads the
-genuine stage80 checkpoint and activates the source main door, but ordinary
-following retains a no-route failure before birthday entry. Radio's ordinary
-stage12 continuation is therefore still unverified. The retained birthday12
-suffix is not replayable.
+The [station refresh owner](source-radio-refresh.md) is merged through checked
+PR108; local main equals origin/main atd529810. It binds the reached global
+command to winning transmitter reception, applied enable, persistent discovery
+and source HUD/sound declarations. Synthetic and selected TTW command/cold checks
+pass for55 transmitters, as does the required integrated gate. Seven cross-portal
+radius queries remain visible in the isolated fixture; tuning/playback remain
+unbound. The fresh genuine stage80 Continue now reaches CG02 stage12 and executes
+the source force command once. Vault101's transmitter is enabled, available and
+discovered without a speech result error. The earlier failed birthday12 suffix
+is not replayable.
+
+The fresh feature branch is `codex/ttw-bot-capsule-refinement`. A failed coarse
+player capsule query now receives one finer query before rejecting its source
+corridor. The live source scale informs spacing; the complete body, floor/step
+rules, residency and per-query node bound remain unchanged. The native fixture
+executes a child-sized narrow passage in both directions and refuses the adult
+capsule; queries never move the body. Live player telemetry now exposes actual
+movement action strengths, alive state and the source control bindings.
+The fresh ordinary retry cold-loads the genuine stage80 checkpoint, activates
+the source main door and follows Dad to Escort completion without a bot error.
+CG01 reaches100 and CG02 reaches12. This retry uses coarse routes, so refinement
+is not established as the cause of its different outcome. Amata's source wait
+admits a conversation after ordinary approach, then retains an INFO reader
+failure on an authored zero-response record. Its failure remains visible.
 
 [Source dialogue packages](source-dialogue-packages.md) bind optional wait
 locations, repeated matching trigger declarations, native target-range movement,
@@ -84,9 +96,10 @@ cell, animation, mod or parity completion is implied by these component checks.
 
 ## Next owners
 
-1. Repair the reached bot corridor rejection using the same native capsule/floor
-   policy. Continue the genuine checkpoint to station refresh and the next actual
-   birthday result/menu owner; retain the failed stage12 suffix.
+1. Bind authored zero-response INFO records and their general dialogue behavior.
+   The reached Amata conversation currently fails before greeting selection.
+   Retry the genuine checkpoint; retain the failed conversation and earlier
+   stage12 suffix.
 2. Complete automatic escort-door recovery and native steering/turn acceptance.
    The verified corridor retry still uses ordinary player door activation.
 3. Bind the glasses' authored 2D environment-map behavior without substituting
@@ -104,9 +117,13 @@ authoritative gameplay and saves.
 
 ## Private continuation
 
-Run `tmp/development-lab/ttw-bot-20261002/` is now at the genuine stage80 retry with
-ordinary follow blocked. Requests201/202 retain that no-route failure. Earlier
-requests191/193 retain birthday12 with the bot stopped.
+Run `tmp/development-lab/ttw-bot-20261002/` now reaches birthday12 from genuine
+stage80 Continue. Request216 retains successful force/discovery state; ordinary
+Amata approach217 reaches its standoff and retains the next INFO reader fault.
+The bot is inactive. Requests201/202 retain the earlier no-route failure;
+202's too-small goal and214's invalid stop operation were rejected, rather than
+executed. Valid stop215 was acknowledged. Earlier requests191/193 retain the
+old failed birthday12 result with the bot stopped.
 Requests177/181 retain the earlier station-command, Paul and patrol faults;
 requests191/193 retain the fresh ten-seat result with Paul repaired. The
 intermediate native process exited at stage80 before a door retry; that attempt
