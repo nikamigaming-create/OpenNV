@@ -20,6 +20,16 @@ public partial class NativeNifInstanceAudit : Node
             {
                 await ExerciseFaceGenAttachment(); GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--head-equipment-attachment"])
+            {
+                await ExerciseHeadEquipmentAttachment(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-head-equipment", var equipmentGame, var equipmentMod,
+                var equipmentRoot, var equipmentNpc, .. var equipmentDependencies])
+            {
+                await ExerciseOwnedHeadEquipment(equipmentGame, equipmentMod, equipmentRoot, equipmentNpc, equipmentDependencies);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--actor-skin-root"])
             {
                 ExerciseActorSkinRoot(); GetTree().Quit(); return;
@@ -85,6 +95,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseReferenceAngles();
             ExerciseActorSkinRoot();
             await ExerciseFaceGenAttachment();
+            await ExerciseHeadEquipmentAttachment();
             ExerciseObjectAnimation();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);

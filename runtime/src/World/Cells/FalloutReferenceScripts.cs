@@ -966,14 +966,22 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "removeitem" when arguments.Count is 2 or 3:
                     var removed = Number(arguments[1]);
                     if (removed <= 0 || removed > int.MaxValue || removed != Math.Truncate(removed)) throw new InvalidDataException("RemoveItem count must be a positive integer.");
-                    host.Apply(new(FalloutReferenceEffectKind.RemoveItem, source, target, bindings.Form(arguments[0]).FormKey,
-                        Value: (int)removed, Enable: arguments.Count == 3 && Boolean(arguments[2])));
+                    var removedItem = bindings.Form(arguments[0]).FormKey;
+                    var hideRemoval = arguments.Count == 3 && Boolean(arguments[2]);
+                    if (host.Inventory is { } removalOwner)
+                        removalOwner.Execute(new(FalloutInventoryCommandKind.Remove, target, Item: removedItem, Count: (int)removed, Silent: hideRemoval));
+                    else host.Apply(new(FalloutReferenceEffectKind.RemoveItem, source, target, removedItem,
+                        Value: (int)removed, Enable: hideRemoval));
                     break;
                 case "additem" when arguments.Count is 2 or 3:
                     var quantity = Number(arguments[1]);
                     if (quantity <= 0 || quantity > int.MaxValue || quantity != Math.Truncate(quantity)) throw new InvalidDataException("AddItem count must be a positive integer.");
-                    host.Apply(new(FalloutReferenceEffectKind.AddItem, source, target, bindings.Form(arguments[0]).FormKey,
-                        Value: (int)quantity, Enable: arguments.Count == 3 && Boolean(arguments[2])));
+                    var addedItem = bindings.Form(arguments[0]).FormKey;
+                    var hideAddition = arguments.Count == 3 && Boolean(arguments[2]);
+                    if (host.Inventory is { } additionOwner)
+                        additionOwner.Execute(new(FalloutInventoryCommandKind.Add, target, Item: addedItem, Count: (int)quantity, Silent: hideAddition));
+                    else host.Apply(new(FalloutReferenceEffectKind.AddItem, source, target, addedItem,
+                        Value: (int)quantity, Enable: hideAddition));
                     break;
                 case "equipitem" or "equipobject" when arguments.Count is >= 1 and <= 3:
                     var equipItem = bindings.Form(arguments[0]).FormKey;

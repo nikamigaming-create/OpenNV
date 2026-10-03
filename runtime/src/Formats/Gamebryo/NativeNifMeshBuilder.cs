@@ -244,6 +244,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         {
             foreach (var rootIndex in source.Roots)
             {
+                state.RigidFaceBind = null;
                 var root = source.ReadNode(rootIndex);
                 var parentNames = root.ExtraData.Where(reference => reference >= 0)
                     .Select(source.ReadObject).OfType<FalloutNifStringExtraData>()
@@ -265,7 +266,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         throw new NotSupportedException("Implicit FaceGen attachment requires unskinned source geometry.");
                     parentNames = [FalloutNpcFaceAttachment.HeadBone];
                 }
-                var bipedHead = parentNames.Length == 0 && FalloutNpcFaceAttachment.IsRigidHeadEquipment(bipedSlots) &&
+                var bipedHead = rigidFaceBinds is null &&
+                    (parentNames.Length == 0 || parentNames.Length == 1 && parentNames[0] == FalloutNpcFaceAttachment.HeadBone) &&
+                    FalloutNpcFaceAttachment.IsRigidHeadEquipment(bipedSlots) &&
                     source.Blocks.Where(block => block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape")
                         .All(block => source.ReadGeometry(block.Index).SkinInstance < 0);
                 if (bipedHead)

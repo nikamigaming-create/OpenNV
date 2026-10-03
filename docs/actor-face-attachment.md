@@ -26,3 +26,17 @@ graph, including owned materials and source inventory. The three birthday
 children pass that audit with all selected parts. These are component checks;
 matched retail pixels, ordinary birthday completion and physical OpenXR
 acceptance remain unverified.
+
+Rigid head equipment uses its separate biped basis whether its source model
+declares `Prn = Bip01 Head` or omits the marker. The owned biped slots include
+eyeglasses, including equipment that combines eyeglasses and mask slots. A
+different explicit parent retains its source binding; skinned equipment and
+FaceGen inverse binds retain their existing owners. Attachment state resets
+between source roots.
+
+`NativeNifInstanceAudit --head-equipment-attachment` checks both marker forms,
+animated head motion, skinned equipment and missing-parent rejection.
+`--owned-head-equipment <game> <mod> <root> <npc> [dependencies...]` checks actual
+owned rigid equipment, source materials and unchanged bytes. The selected TTW
+Jonas glasses and the existing FaceGen regression pass. These component checks
+do not establish matched retail pixels.

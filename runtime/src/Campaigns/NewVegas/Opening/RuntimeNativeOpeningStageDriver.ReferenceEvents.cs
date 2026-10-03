@@ -250,12 +250,13 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scripts.Session.AddAchievement(effect.Value);
                 break;
             case FalloutReferenceEffectKind.AddItem or FalloutReferenceEffectKind.EquipItem or FalloutReferenceEffectKind.RemoveItem:
-                if (_pluginStack.RuntimeFormId(effect.Target!.Value) != 0x14)
-                    throw new NotSupportedException("Non-player scripted inventory has no shared container owner.");
-                if (effect.Kind == FalloutReferenceEffectKind.AddItem)
-                    _inventory.Add(_pluginStack, effect.Argument!.Value, effect.Value, SourcePlayerLevel, effect.Enable, _globals);
-                else if (effect.Kind == FalloutReferenceEffectKind.RemoveItem) _inventory.Remove(effect.Argument!.Value, effect.Value, effect.Enable);
-                else _inventory.Equip(_pluginStack, effect.Argument!.Value);
+                InventoryCommands.Execute(new(effect.Kind switch
+                {
+                    FalloutReferenceEffectKind.AddItem => FalloutInventoryCommandKind.Add,
+                    FalloutReferenceEffectKind.RemoveItem => FalloutInventoryCommandKind.Remove,
+                    _ => FalloutInventoryCommandKind.Equip
+                }, effect.Target!.Value, Item: effect.Argument!.Value, Count: effect.Value,
+                    Silent: effect.Kind == FalloutReferenceEffectKind.EquipItem || effect.Enable));
                 break;
             case FalloutReferenceEffectKind.AddNote:
                 if (_inventory.Item(effect.Target!.Value) is null)

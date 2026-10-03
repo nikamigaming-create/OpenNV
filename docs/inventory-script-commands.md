@@ -5,6 +5,16 @@ same player or reference inventory. Production hosts supply the actual player
 level and actor presentation callback. The quest fallback refuses an NPC query
 without that level owner.
 
+`AddItem` and `RemoveItem` use that same retained owner for the player, NPCs,
+creatures and containers. Additions share leveled-item expansion, instance
+variants and persistent random state. Removals clamp to available contents and
+retire depleted equipped identities. Nonplayer changes never publish player HUD
+notices. Changed NPC contents invalidate the existing appearance owner; an
+absent removal creates no revision. Worn armor removal preserves the actor's
+animation owner. Deleting the last worn weapon requires its native retirement
+callback before the inventory changes, so an unsupported active attachment
+cannot leave a partial mutation.
+
 `RemoveAllItems` deletes or transfers the eligible contents as one prepared
 transaction. Player quest items and nonplayable biped items remain. Transfers
 retain condition and count; the ownership flag controls only the moved
@@ -37,8 +47,16 @@ and its [slot mapping](https://github.com/xNVSE/NVSE/blob/6.4.9/nvse/nvse/GameFo
 `--inventory-command-contracts` checks production script dispatch, protected
 items, transfer variants, lock conflicts, cold equipment, same-object reset,
 typed query results, lazy branches and failed-transfer atomicity.
+It also checks source-dispatched NPC/creature/container counts, variant
+preservation, worn armor removal, unchanged player contents, partial weapon
+stacks, rejected native retirement and cold count/equipment continuation.
 `--audit-inventory-commands <mod> <root> <game> <quest> <stage> [dependencies...]`
 executes each inventory-bearing owned result entry as an isolated component.
 It checks source order, cold inventory/random continuation and unchanged source
 bytes. This does not certify the surrounding stage, a module initializer,
 ordinary campaign traversal or retail visual parity.
+The selected original TTW CG02 stage42 RemoveItem is admitted against Dad's
+winning default inventory and has identical cold behavior. Its default fixture
+has no party hat, so that check establishes the command's actor binding and
+absent-item behavior; the synthetic worn-item check covers actual removal.
+The surrounding MoveTo and door commands retain their ordinary runtime owners.

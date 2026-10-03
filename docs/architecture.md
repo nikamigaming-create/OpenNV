@@ -122,7 +122,9 @@ Shared [race aging](scripted-race-age.md) updates effective NPC/player race,
 stored height and source hair fallback without replacing the character-creation
 selection. [Inventory script commands](inventory-script-commands.md) share
 player/reference inventory, equipment locks, reset randomness and appearance
-invalidation. [Scripted challenges](scripted-challenges.md) retain source-bound
+invalidation. Scripted count changes share those contents for NPCs, creatures
+and containers as well as the player, with native retirement preceding depleted
+worn weapon removal. [Scripted challenges](scripted-challenges.md) retain source-bound
 progress and once-only completion through the same persistent script owner.
 
 [Native route doors](npc-door-navigation.md) retain rejected capsule contacts
@@ -132,6 +134,8 @@ model frame independently of the influence names bound to the actor skeleton.
 [Rigid FaceGen components](actor-face-attachment.md) bind through the selected
 head model even when their export omits biped parent markers. Their source
 inverse bind and the receiving animated head remain authoritative.
+Rigid biped head equipment uses its separate source basis for explicit or
+omitted head parent markers, including owned eyeglass slots.
 [Model alternate textures](model-texture-indices.md) use the source geometry's
 scene traversal index independently of its stored label, sharing binding between
 actor and equipped weapon materials.

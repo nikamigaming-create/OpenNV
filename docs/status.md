@@ -5,7 +5,7 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
-Checked PR119 is merged. Main binds real reference targets and
+Checked PR120 is merged. Main binds real reference targets and
 supported capsule arrival regions, retains NPC-to-NPC source dialogue links and
 participant leases, and plays listener IDLEs on the actual listener. Ordinary
 native input completes the intercom exchange and subsequent Dad conversation,
@@ -24,7 +24,13 @@ and activates the real diner exit while retaining its Jonas goal. The new cold
 replay passes its original guard, completes source opening and walks through;
 the next owned NAVM stair-route refusal remains visible. Subsequent user traversal
 reaches Jonas/stage42, where the first source RemoveItem retains the missing
-non-player scripted inventory owner. Jonas's accessory attachment is also open. Early
+non-player scripted inventory owner. The current shared AddItem/RemoveItem
+candidate passes NPC/creature/container count, worn-item, variant, failed native
+retirement and cold checks plus the selected original stage42 inventory slice.
+The generic head-equipment basis candidate admits explicit/omitted head Prn and
+eyeglass slots; synthetic, existing FaceGen regression and owned Jonas glasses
+checks pass, including the required integrated candidate gate. Fresh optimized
+cold replay is active; live suffix and checked publication remain pending. Early
 native construction restores completed package lifecycles before
 selecting the saved base clock. The required integrated gate and selected final
 TTW intercom/inventory audits passed before checked publication. The new
@@ -32,10 +38,10 @@ TTW intercom/inventory audits passed before checked publication. The new
 selection independently of later native procedure execution. Its isolated
 owned command audit passes; fresh ordinary cold replay now reaches40 with no
 retained stage-result error. Sandbox remains unowned and unsaveable.
-The shared GetIsReference candidate passes synthetic identity/scope/cold checks
+The shared GetIsReference owner passes synthetic identity/scope/cold checks
 and original diner guards at stages39/40. Scalar/vector TBC passes synthetic and
 selected source controller-channel checks. Ordinary diner activation/traversal
-and the new integrated gate pass; checked publication remains pending. The BB-gun lesson,
+and the new integrated gate pass; checked publication is complete. The BB-gun lesson,
 birthday completion, G.O.A.T.,
 Megaton, train and Mojave remain unreached.
 

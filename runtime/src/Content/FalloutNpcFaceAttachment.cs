@@ -5,8 +5,9 @@ namespace OpenNV.Runtime.Content;
 internal static class FalloutNpcFaceAttachment
 {
     internal const string HeadBone = "Bip01 Head";
-    // Head, hair, headband, hat and eyeglasses are head-mounted biped slots.
-    internal static bool IsRigidHeadEquipment(uint slots) => slots != 0 && (slots & ~0x4603u) == 0;
+    // Head, hair, headband, hat, eye glasses and mask are head-mounted slots.
+    // https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.6/Core/wbDefinitionsFNV.pas
+    internal static bool IsRigidHeadEquipment(uint slots) => slots != 0 && (slots & ~0x4e03u) == 0;
     // Rigid biped head equipment uses the head-bone frame, distinct from the
     // FaceGen skin's inverse bind. Observed equipment maps model +Z to bone +X,
     // retains +Y and maps +X to -Z; its export root is replaced at attachment.
