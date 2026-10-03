@@ -71,6 +71,11 @@ GetIsID and ordinary script queries; the genuine birthday retry reaches stage7
 before an owned-font punctuation glyph failure. The glasses environment-map failure
 remains visible. Synthetic source/save contracts and a separate owned actor
 blocking/cold/arrival fixture pass; campaign and matched timing remain unverified.
+Shared [font byte encoding](owned-font-byte-encoding.md) now passes complete
+synthetic byte-slot lookup and an owned native font/quote-shaping audit. The
+font-build ordinary retry remains at stage80 with a stopped Lead procedure;
+it does not establish birthday continuation. Detailed package capsule/path
+diagnostics are the next movement investigation.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
 Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,

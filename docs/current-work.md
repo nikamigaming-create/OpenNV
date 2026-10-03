@@ -34,12 +34,24 @@ source-disabled; her two SayTo calls now create neither voices nor completion
 events. Ordinary source speech continues through CG02 stage6. The selected
 clapping Travel package now completes at party actors' editor locations;
 shared reference identity now admits the later player-target GetIsID condition.
-The ordinary continuation reaches CG02 stage7, then source speech retains a
-missing owned-font glyph for a curly apostrophe.
+The last verified birthday continuation reaches CG02 stage7, then source speech
+retains a missing owned-font glyph for a curly apostrophe. The shared font
+repair now passes synthetic and owned native binding checks. Its separate
+ordinary retry remains at the closed-stage80 Escort: Dad reports Lead without
+advancing after the player moves clear. That retry does not establish birthday
+speech continuation; retain its failure and publication-loss count.
 The glasses environment texture also leaves a birthday actor missing.
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
+
+[Owned font byte encoding](owned-font-byte-encoding.md) reverses the same
+Windows-1252 record decoding and applies the source's bounded quote
+normalization. Direct drawing and Godot use the same authored glyph metrics
+and atlas slots. Fixed size precedes native cache-creating metadata. All256
+synthetic slots and224 owned native slots pass, including quote shaping and
+unknown-character refusal. The ordinary retry is blocked by the Escort before
+birthday; matched text pixels and campaign continuation remain unverified.
 
 [Reference base identity](reference-base-identity.md) supplies dialogue speaker,
 listener and explicit-reference GetIsID and the same ordinary script command.
@@ -86,9 +98,10 @@ continuation. The [skin-root repair](actor-skin-root.md) and
 
 ## Next owners
 
-1. Bind Unicode punctuation to its authored owned-font glyph slots.
-   The reached source speech/drawing path retains its fault; retry the genuine
-   checkpoint after repair instead of replaying its consumed prefix.
+1. Request the detailed package capsule/path diagnostics and
+   trace the stopped Lead procedure in the genuine stage80 retry. It currently
+   reports no AI error while making no destination progress. Resume ordinary
+   birthday speech after resolving that movement owner.
 2. Bind the glasses' authored 2D environment-map behavior without substituting
    a guessed cubemap. Retry the genuine checkpoint and continue birthday play.
 3. Repair sampled short bot endpoint crossing. Ordinary follow can overshoot
@@ -106,7 +119,8 @@ authoritative gameplay and saves.
 ## Private continuation
 
 Run `tmp/development-lab/ttw-bot-20261002/` exited through ordinary Quit after
-the birthday owned-font glyph failure at stage7. Recording remained off. Genuine stage16, stage40,
+the font-build retry stopped at stage80. The preceding identity-build retry
+reached birthday stage7. Recording remained off. Genuine stage16, stage40,
 stage50 and open/closed stage80 backups are under
 `local/ttw-bot-resume-20261002/`; closed stage80 is the next retry. The private
 manifest and focused actor/campaign reports retain hashes and source evidence.
