@@ -30,6 +30,7 @@ internal partial class RuntimeNativeConversation : Node
     private Func<bool>? _playerFemale;
     private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
     private Func<FalloutFormKey, FalloutFormKey?>? _currentPackage;
+    private Func<int>? _vampireQuery;
     private FalloutQuestState _quests = null!;
     private CanvasLayer? _layer;
     private NativeOwnedDialogueMenu? _menu;
@@ -57,7 +58,7 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, bool>? talkedToPlayer = null,
         Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
         Func<FalloutFormKey, FalloutFormKey>? actorRace = null, Func<uint, uint>? dialogueRandom = null,
-        Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null)
+        Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         _resolveRunOnCell = resolveRunOnCell;
@@ -70,6 +71,7 @@ internal partial class RuntimeNativeConversation : Node
         _playerFemale = playerFemale;
         _actorRace = actorRace;
         _currentPackage = currentPackage;
+        _vampireQuery = vampireQuery;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos, dialogueRandom);
     }
 
@@ -96,7 +98,7 @@ internal partial class RuntimeNativeConversation : Node
                 condition => resolveRunOnCell(_speaker, condition);
             _conditions = new(_records, _quests, _speaker, FalloutDialogueSpeaker.Read(_records, npc.FormKey, _templates?.Invoke(_speaker)),
                 _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
-                currentPackage: _currentPackage);
+                currentPackage: _currentPackage, vampireQuery: _vampireQuery);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);

@@ -4,6 +4,8 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    internal FalloutActorQueries ActorQueries { get; } = new();
+
     internal FalloutFormKey? CurrentPackage(FalloutFormKey reference)
     {
         var instance = Get(reference);

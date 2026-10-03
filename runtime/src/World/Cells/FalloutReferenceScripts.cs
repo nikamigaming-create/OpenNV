@@ -524,6 +524,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     return FalloutReferenceIdentity.Base(records, Target()) == requested ? 1 : 0;
                 })
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getvampire")
+                return new([], arguments =>
+                {
+                    if (parts.Length == 2 || suppliedTarget is not null) _ = Target();
+                    return world.ActorQueries.GetVampire();
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "isininterior")
                 return new([], _ => (host.IsInInterior?.Invoke(Target()) ?? world.IsInInterior(Target())) ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "isanimplaying")

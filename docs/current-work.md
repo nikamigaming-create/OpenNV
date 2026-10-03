@@ -36,12 +36,12 @@ available and persistently discovered. Ordinary approach admits Amata's source
 conversation and reaches its standoff without a bot error. The optional INFO
 reader passes the previous zero-response record. The package-query retry also
 passes the prior self IsCurrentPackage condition. The next visible failure is
-`Conversation condition Fallout3.esm:041125/40/0 is unbound.`
+`Conversation condition Fallout3.esm:09296b/47/1 is unbound.`
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
 
-Local main equals origin/main at87a1a03 after checked PR110. The
+The published baseline is9985f5f after checked PR111. The
 [bot refinement](bot-navigation.md) gives a failed coarse capsule route one finer
 query before rejecting its corridor. Live source scale informs spacing; body,
 floor/step, residency and node bounds remain unchanged. The native fixture walks
@@ -59,7 +59,7 @@ A fresh ordinary birthday retry passes the previous reader fault and exposes the
 current-package conversation binding as the next owner. Selected empty INFO
 result/flow execution remains explicitly unbound before begin effects.
 
-The fresh branch `codex/ttw-dialogue-package-queries` connects
+The merged package-query block connects
 [dialogue current-package queries](dialogue-package-queries.md) to the actual
 speaker, listener or explicit reference. Conversation and scripted speech share
 the NPC/creature reference query owner and existing player package lifecycle.
@@ -68,7 +68,17 @@ GREETING audit passes230 source predicates against a declared state fixture.
 The required integrated gate and owned native assignment/retirement audit pass.
 The fresh ordinary Continue/door/follow/Amata approach repeats CG01 completion
 and birthday12 without a bot or speech error, then passes the prior current-package
-fault. Greeting selection retains GetVampire as the next unbound query.
+fault. That retry retained GetVampire as its next unbound query.
+
+The fresh branch `codex/ttw-vampire-query-contract` binds the reached
+[GetVampire query](owned-vampire-query.md) from the selected owned executable's
+named descriptor and recovered result flow. Dialogue and scripts share one lazy
+query owner. Synthetic association/failure/shared-read checks and all nine
+selected TTW GREETING predicates pass. The required integrated gate passes.
+The fresh ordinary retry reaches birthday12 and passes the prior GetVampire
+fault. Greeting selection retains player-target GetItemCount as the next owner.
+The initial follow stops outside Dad's range; ordinary closer spacing crosses
+the doorway. Complete short-route acceptance remains open.
 
 The merged [radio owner](source-radio-refresh.md) shares reception, applied enable,
 persistent discovery and source notification declarations. Tuning/playback,
@@ -80,9 +90,8 @@ continuations block saving. Never clear a fault or replay a consumed prefix.
 
 ## Next owners
 
-1. Bind the reached GetVampire query from the owned executable's recovered
-   behavior through the shared dialogue/script query owners. Retry the genuine
-   checkpoint and continue Amata's source conversation.
+1. Bind the reached player-target GetItemCount condition to shared inventory,
+   retry the genuine checkpoint and continue Amata's source conversation.
 2. Implement selected zero-response INFO result/flow behavior when reached,
    retaining ordinary condition selection, source effects and once-only delivery.
 3. Complete automatic escort-door recovery and native steering/turn acceptance.
@@ -100,11 +109,12 @@ campaign, cell, actor, mod or retail parity completion.
 
 ## Private continuation
 
-`tmp/development-lab/ttw-bot-20261002/` runs the package-query candidate.
-Ordinary Continue230, door231 and follow232 repeat CG01 completion and birthday12.
-Valid stop233 is acknowledged. Amata approach234 reaches its standoff and retains
-the next GetVampire conversation fault; the bot is inactive. The earlier
-optional-response process closed through normal Quit229. No frames were recorded.
+`tmp/development-lab/ttw-bot-20261002/` runs the GetVampire candidate.
+Ordinary Continue238, door239 and follow240/241 repeat CG01 completion and
+birthday12. Valid stop242 is acknowledged. Amata approach243 passes the prior
+query and retains the next GetItemCount conversation fault; stop244 is
+acknowledged. The earlier processes closed through normal Quit229/237.
+No frames were recorded.
 Earlier failed conversations and source
 prefixes remain retained and must not be replayed as completed.
 
