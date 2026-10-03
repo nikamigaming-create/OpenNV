@@ -14,7 +14,13 @@ tuning/playback and matched cadence remain open. The fresh genuine stage80
 Continue opens the authored door and follows Dad to Escort completion. CG01
 reaches100 and CG02 reaches12; the force command executes once and Vault101's
 transmitter is available/discovered without a speech result error. The next
-ordinary Amata conversation retains a zero-response INFO reader failure.
+ordinary Amata conversation now passes the prior zero-response INFO reader
+failure through the [optional response owner](optional-dialogue-responses.md).
+Synthetic selection/failure checks, the selected installed graph and the
+required integrated gate pass. Empty records retain conditions, scripts and
+links without invented speech; selected empty result/flow behavior remains
+unbound. A fresh ordinary retry reaches the next conversation failure:
+self IsCurrentPackage has no conversation subject binding.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the

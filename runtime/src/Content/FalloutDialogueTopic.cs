@@ -209,6 +209,8 @@ internal sealed partial class FalloutDialogueTopic
                 continue;
             }
             if (field.Signature == "CTDA") { conditions.Add(field.Data.ToArray()); continue; }
+            if (field.Signature is "NAM1" or "NAM2" or "NAM3" or "SNAM" or "LNAM")
+                throw new InvalidDataException($"INFO {record.FormKey} has response fields without TRDT.");
             if (field.Signature != "TRDT") continue;
             var response = field.Data.ToArray();
             if (response.Length is not (16 or 20 or 24)) throw new InvalidDataException($"INFO {record.FormKey} TRDT size is unsupported.");
@@ -230,8 +232,10 @@ internal sealed partial class FalloutDialogueTopic
                 BinaryPrimitives.ReadUInt32LittleEndian(response), BinaryPrimitives.ReadInt32LittleEndian(response.AsSpan(4)),
                 sound == 0 ? null : record.Plugin.AdjustFormId(sound), speakerAnimation, listenerAnimation, response));
         }
-        if (responses.Count == 0 || responses.Select(response => response.Number).Distinct().Count() != responses.Count)
-            throw new InvalidDataException($"INFO {record.FormKey} has absent/duplicate responses.");
+        // The response collection is optional. Empty authored INFOs still
+        // retain conditions, result scripts and links for source selection.
+        if (responses.Select(response => response.Number).Distinct().Count() != responses.Count)
+            throw new InvalidDataException($"INFO {record.FormKey} has duplicate responses.");
         IReadOnlyList<FalloutFormKey> Forms(string signature) => fields.Where(field => field.Signature == signature).Select(field =>
             field.Data.Length == 4 ? record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) :
                 throw new InvalidDataException($"INFO {record.FormKey} has an invalid {signature} extent.")).ToArray();
@@ -265,6 +269,8 @@ internal sealed partial class FalloutDialogueTopic
 
     internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false)
     {
+        if (info.Responses.Count == 0)
+            throw new NotSupportedException($"INFO {info.Record.FormKey} zero-response result/flow behavior is unbound.");
         var supported = randomSelection ? 39 : 5;
         if (info.Type != (conversation ? 0 : 1) || info.NextSpeaker != 0 || (info.Flags & ~supported) != 0 || info.Flags2 != 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");

@@ -38,7 +38,14 @@ internal static class ConversationContracts
                 Record("DIAL", 0x80f, Field("DATA", [1])),
                 Topic(0x810, "GOODBYE", 2, 5, [InfoOfType(1, 0x995, 0x700, 0, 1, Condition(72, 0x999, 1)),
                     InfoOfType(1, 0x996, 0x700, 0, 1)], type: 1),
-                Topic(0x811, "Explicit order", Info(0x997, 0x700, 0, 1, Field("TCLT", U32(0x80a)), Field("TCLT", U32(0x80b)))));
+                Topic(0x811, "Explicit order", Info(0x997, 0x700, 0, 1, Field("TCLT", U32(0x80a)), Field("TCLT", U32(0x80b)))),
+                Topic(0x812, "Filtered empty INFO", Info(0x998, 0x700, 4, 0, Condition(72, 0x999, 1),
+                    Field("SCTX", Text("begin result")), Field("NEXT", []), Field("SCTX", Text("end result")), Field("TCLT", U32(0x802))),
+                    Info(0x999, 0x700, 1, 1)),
+                Topic(0x813, "Selected empty INFO", Info(0x99a, 0x700, 4, 0, Field("SCTX", Text("reached result")))),
+                Topic(0x814, "Orphan response text", Info(0x99b, 0x700, 0, 0, Field("NAM1", Text("orphan")))),
+                Topic(0x815, "Duplicate response number", Info(0x99c, 0x700, 0, 1,
+                    Field("TRDT", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]), Field("NAM1", Text("duplicate")))));
             File.WriteAllBytes(file, data);
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             var quests = new FalloutQuestState(records);
@@ -48,11 +55,26 @@ internal static class ConversationContracts
             Require(quests.Evaluate(scopedStage) == 0 && quests.Evaluate(scopedStage with { Function = 56 }) == 1,
                 "Quest predicates changed ownership when the listener scope was selected.");
             Require(FalloutDialogueTopic.Read(records, Key(0x809)).Infos.Count == 0, "An empty topic acquired an invented response.");
+            var empty = FalloutDialogueTopic.Read(records, Key(0x812)).Infos[0];
+            Require(empty.Responses.Count == 0 && empty.Flags == 4 && empty.Conditions.Count == 1 &&
+                empty.BeginScript == "begin result" && empty.EndScript == "end result" && empty.Choices.SequenceEqual([Key(0x802)]),
+                "Optional INFO responses lost source condition, script, flag or link ownership.");
+            Reject(() => FalloutDialogueTopic.Read(records, Key(0x814)));
+            Reject(() => FalloutDialogueTopic.Read(records, Key(0x815)));
             var calls = new List<(uint Info, bool Begin)>();
             float Unknown(FalloutCondition condition) => throw new NotSupportedException($"Unbound synthetic query {condition.Function}.");
             FalloutConversation Create(Action<FalloutDialogueInfo, bool>? result = null) => new(records, quests, Unknown,
                 result ?? ((info, begin) => calls.Add((info.Record.FormKey.ObjectId, begin))));
             var conversation = Create();
+            var filteredEmpty = Create(); filteredEmpty.Start(Key(0x900), Key(0x812));
+            Require(filteredEmpty.Info!.Record.FormKey == Key(0x999) && calls.SequenceEqual([(0x999u, true)]),
+                "An ineligible empty INFO prevented selection or executed its result.");
+            calls.Clear();
+            var selectedEmpty = Create();
+            Reject(() => selectedEmpty.Start(Key(0x900), Key(0x813)));
+            Require(selectedEmpty.Phase == "failed" && calls.Count == 0 && selectedEmpty.Response is null &&
+                selectedEmpty.Error!.Contains("zero-response", StringComparison.Ordinal),
+                "An unowned selected empty INFO ran effects or fabricated speech.");
             conversation.Start(Key(0x900), Key(0x800));
             Require(conversation.Info!.Record.FormKey == Key(0x910) && calls.SequenceEqual([(0x910u, true)]), "Greeting priority/start state or begin result changed.");
             conversation.CompleteResponse();

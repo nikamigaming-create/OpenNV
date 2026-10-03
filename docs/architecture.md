@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Optional dialogue responses](optional-dialogue-responses.md) retain empty INFO
+records in winning source order with their conditions, scripts and links. Source
+selection can pass an ineligible empty entry without invented speech. Selecting
+an empty entry still exposes its unowned result/flow behavior before effects.
+
 [Radio refresh](source-radio-refresh.md) derives station reception from winning
 TACT/REFR/XRDO data, applied world enable state, the source portal graph and the
 actual player. Persistent discovery feeds the shared HUD/sound owners and the
