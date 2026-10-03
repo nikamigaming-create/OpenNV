@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutScheduleTime? _aiScheduleTime;
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiState;
+    private Func<FalloutFormKey?>? _currentPackageQuery;
     private FalloutPluginRecord? _aiPackage;
     private FalloutFollowPackage? _followPackage;
     private FalloutDialoguePackage? _dialoguePackage;
@@ -47,6 +48,7 @@ internal sealed partial class RuntimeNativeCreature
         _aiRecords = records; _aiQuests = quests; _aiWorld = world;
         _aiClock = clock; _aiGlobals = globals;
         _aiState = world.Get(Appearance.Reference!.Value);
+        _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
         _packageEvents = new((package, kind) =>
         {
             // Preserve source event order; reached behavior without an owner
@@ -64,6 +66,12 @@ internal sealed partial class RuntimeNativeCreature
         // Script evaluation may precede native enable/materialization in the
         // same source event. Evaluate on the next resident physics step.
         _evaluateRequested = true;
+    }
+
+    public override void _ExitTree()
+    {
+        if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
+            state.QueryCurrentPackage = null;
     }
 
     internal float PackageCondition(FalloutCondition condition) => condition.Function switch

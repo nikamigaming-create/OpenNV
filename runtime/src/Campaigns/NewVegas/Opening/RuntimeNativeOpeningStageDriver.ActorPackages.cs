@@ -5,6 +5,11 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class RuntimeNativeOpeningStageDriver
 {
+    private FalloutFormKey? CurrentActorPackage(FalloutFormKey actor) => _pluginStack.RuntimeFormId(actor) == 0x14
+        ? (_playerPackage ?? throw new InvalidOperationException("Player has no native package owner.")).CurrentPackage
+        : (_scripts.References ?? throw new InvalidOperationException("Actor packages have no shared reference world."))
+            .CurrentPackage(actor);
+
     private void EvaluateActorPackages(FalloutFormKey reference, bool reset)
     {
         var world = _scripts.References!;

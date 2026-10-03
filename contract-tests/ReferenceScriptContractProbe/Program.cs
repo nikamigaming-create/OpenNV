@@ -35,6 +35,11 @@ if (args.Length >= 6 && args[0] == "--audit-dialogue-identity")
     OwnedDialogueIdentityProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6..]);
     return;
 }
+if (args.Length >= 6 && args[0] == "--audit-dialogue-packages")
+{
+    OwnedDialoguePackageQueryProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6..]);
+    return;
+}
 if (args is ["--challenge-contracts"])
 {
     ChallengeContracts.Run();

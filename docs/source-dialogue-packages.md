@@ -46,9 +46,11 @@ replacement callbacks and pending-save refusal. That fixture is separate from
 ordinary campaign progress.
 
 The ordinary genuine checkpoint run completes CG01 and reaches birthday12.
-Dad's source finishing result then retains ForceRadioStationUpdate without a
-station owner. Amata's source wait/trigger queues her conversation after ordinary
-player approach. Birthday completion, full dialogue continuation, complete cold
+Dad's source finishing result now uses the shared radio refresh owner. Amata's
+source wait/trigger admits her conversation after ordinary player approach.
+The optional INFO reader and current-package subject binding pass their earlier
+failures; greeting selection retains the next unbound GetVampire query.
+Birthday completion, full dialogue continuation, complete cold
 acceptance and matched retail behavior remain unverified.
 
 Source references: [GECK Dialogue Package](https://geckwiki.com/index.php/Dialogue_Package),

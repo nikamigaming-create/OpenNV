@@ -41,6 +41,8 @@ internal sealed class RuntimeNativePlayerPackage
         if (session.PlayerPackage is { } saved) Restore(saved);
     }
 
+    internal FalloutFormKey? CurrentPackage => _package?.Form;
+
     internal object State => new
     {
         package = _package?.Form.ToString(),

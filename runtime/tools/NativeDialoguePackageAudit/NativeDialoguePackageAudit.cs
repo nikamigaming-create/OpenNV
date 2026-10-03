@@ -25,10 +25,11 @@ public partial class NativeDialoguePackageAudit : Node3D
             Transform3D Placement(FalloutPlacedReference reference) => new(new Basis(Vector3.Up, -reference.RotationRadians[2]),
                 GamebryoCoordinate.ConvertVector(new(reference.Position[0], reference.Position[1], reference.Position[2])) * units);
             var quests = new FalloutQuestState(records);
+            using var world = new FalloutReferenceWorld(records);
             var quest = FalloutDialogueTopic.Find(records, "QUST", "VCG01").FormKey;
             quests.EnterStage(quest, 80);
             actor = RuntimeNativeNpc.Create(records, content, source, units, (_, _, _, _) => new StandardMaterial3D());
-            AddChild(actor); actor.ConfigureAi(records, quests, cell, Placement);
+            AddChild(actor); actor.ConfigureAi(records, quests, cell, Placement, world: world);
             player = new(); AddChild(player);
             var package = FalloutDialogueTopic.Find(records, "PACK", "VCG01DocMitchellFarewellDialogueStart");
             var dialogue = FalloutDialoguePackage.Read(package);
@@ -53,10 +54,15 @@ public partial class NativeDialoguePackageAudit : Node3D
             }
             bool Done() => JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Done").GetBoolean();
             if (requests != 1 || complete is null || Done()) throw new InvalidOperationException("Dialogue package completed before its conversation.");
+            if (world.CurrentPackage(source.FormKey) != package.FormKey)
+                throw new InvalidOperationException("Shared package query lost the native Dialogue assignment.");
             complete();
             for (var frame = 0; frame < 120; frame++) actor._Process(1d / 60);
             if (!Done() || requests != 1) throw new InvalidOperationException("Dialogue package lost or repeated completion.");
-            GD.Print("OPENNV_DIALOGUE_PACKAGE_AUDIT_PASS furnitureExit=true ownedNavm=true targetRange=true requestOnce=true completionAfterConversation=true pixels=unverified");
+            actor.Free(); actor = null;
+            try { world.CurrentPackage(source.FormKey); throw new InvalidOperationException("Retired actor retained its native package owner."); }
+            catch (NotSupportedException) { }
+            GD.Print("OPENNV_DIALOGUE_PACKAGE_AUDIT_PASS furnitureExit=true ownedNavm=true targetRange=true requestOnce=true completionAfterConversation=true currentPackage=true retirement=true pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

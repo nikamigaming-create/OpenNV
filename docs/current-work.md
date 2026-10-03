@@ -34,13 +34,14 @@ The birthday12 source result completes without a speech result error. Its
 ForceRadioStationUpdate executes once, and the enabled Vault101 transmitter is
 available and persistently discovered. Ordinary approach admits Amata's source
 conversation and reaches its standoff without a bot error. The optional INFO
-reader passes the previous zero-response record. The next visible failure is
-`Conversation condition TaleOfTwoWastelands.esm:00951f/161/0 is unbound.`
+reader passes the previous zero-response record. The package-query retry also
+passes the prior self IsCurrentPackage condition. The next visible failure is
+`Conversation condition Fallout3.esm:041125/40/0 is unbound.`
 Birthday completion, Vault exit, Megaton, train and Mojave remain unreached.
 
 ## Current implementation block
 
-Local main equals origin/main at36aea62 after checked PR109. The
+Local main equals origin/main at87a1a03 after checked PR110. The
 [bot refinement](bot-navigation.md) gives a failed coarse capsule route one finer
 query before rejecting its corridor. Live source scale informs spacing; body,
 floor/step, residency and node bounds remain unchanged. The native fixture walks
@@ -49,14 +50,25 @@ queries never move the body. Actual movement actions, alive state and source
 controls are exposed in telemetry. The successful ordinary retries use coarse
 routes, so refinement is not established as the cause of their changed outcome.
 
-The fresh branch `codex/ttw-optional-dialogue-responses` implements the
-[optional response reader](optional-dialogue-responses.md). Empty INFOs retain
+The merged [optional response reader](optional-dialogue-responses.md) retains
+empty INFOs with
 winning order, conditions, flags, scripts and links without invented speech.
 Focused synthetic selection/failure checks, the selected installed graph
 (23 empty INFOs and9127 GREETING INFOs) and the required integrated gate pass.
 A fresh ordinary birthday retry passes the previous reader fault and exposes the
 current-package conversation binding as the next owner. Selected empty INFO
 result/flow execution remains explicitly unbound before begin effects.
+
+The fresh branch `codex/ttw-dialogue-package-queries` connects
+[dialogue current-package queries](dialogue-package-queries.md) to the actual
+speaker, listener or explicit reference. Conversation and scripted speech share
+the NPC/creature reference query owner and existing player package lifecycle.
+Synthetic subject/master-order/replacement/failure checks pass. The selected TTW
+GREETING audit passes230 source predicates against a declared state fixture.
+The required integrated gate and owned native assignment/retirement audit pass.
+The fresh ordinary Continue/door/follow/Amata approach repeats CG01 completion
+and birthday12 without a bot or speech error, then passes the prior current-package
+fault. Greeting selection retains GetVampire as the next unbound query.
 
 The merged [radio owner](source-radio-refresh.md) shares reception, applied enable,
 persistent discovery and source notification declarations. Tuning/playback,
@@ -68,8 +80,8 @@ continuations block saving. Never clear a fault or replay a consumed prefix.
 
 ## Next owners
 
-1. Bind dialogue IsCurrentPackage to the actual speaker, listener or explicit
-   reference through the existing shared package query owner. Retry the genuine
+1. Bind the reached GetVampire query from the owned executable's recovered
+   behavior through the shared dialogue/script query owners. Retry the genuine
    checkpoint and continue Amata's source conversation.
 2. Implement selected zero-response INFO result/flow behavior when reached,
    retaining ordinary condition selection, source effects and once-only delivery.
@@ -88,11 +100,12 @@ campaign, cell, actor, mod or retail parity completion.
 
 ## Private continuation
 
-`tmp/development-lab/ttw-bot-20261002/` currently runs the optional-response
-candidate. Ordinary Continue221, door222 and follow223 repeat CG01 completion
-and birthday12. Valid stop224 is acknowledged. Amata approach225 reaches its
-standoff and retains the current self-package conversation fault; the bot is
-inactive. No frames were recorded. Earlier failed conversations and source
+`tmp/development-lab/ttw-bot-20261002/` runs the package-query candidate.
+Ordinary Continue230, door231 and follow232 repeat CG01 completion and birthday12.
+Valid stop233 is acknowledged. Amata approach234 reaches its standoff and retains
+the next GetVampire conversation fault; the bot is inactive. The earlier
+optional-response process closed through normal Quit229. No frames were recorded.
+Earlier failed conversations and source
 prefixes remain retained and must not be replayed as completed.
 
 Genuine stage16/40/50 and open/closed stage80 backups, source evidence and focused

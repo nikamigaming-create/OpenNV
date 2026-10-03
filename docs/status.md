@@ -20,7 +20,12 @@ Synthetic selection/failure checks, the selected installed graph and the
 required integrated gate pass. Empty records retain conditions, scripts and
 links without invented speech; selected empty result/flow behavior remains
 unbound. A fresh ordinary retry reaches the next conversation failure:
-self IsCurrentPackage has no conversation subject binding.
+self IsCurrentPackage initially had no conversation subject binding.
+The [shared package-query owner](dialogue-package-queries.md) now binds the actual
+speaker/listener/explicit actor in conversations and scripted speech. Synthetic
+scope/replacement/failure checks,230 selected TTW predicates, the owned native
+assignment/retirement audit and the required integrated gate pass. A fresh ordinary
+retry passes that query and retains GetVampire as the next conversation failure.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the

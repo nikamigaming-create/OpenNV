@@ -29,6 +29,7 @@ internal partial class RuntimeNativeConversation : Node
     private Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? _factions;
     private Func<bool>? _playerFemale;
     private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
+    private Func<FalloutFormKey, FalloutFormKey?>? _currentPackage;
     private FalloutQuestState _quests = null!;
     private CanvasLayer? _layer;
     private NativeOwnedDialogueMenu? _menu;
@@ -55,7 +56,8 @@ internal partial class RuntimeNativeConversation : Node
         Action<FalloutFormKey>? recordTalkedToPlayer = null,
         Func<FalloutFormKey, bool>? talkedToPlayer = null,
         Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
-        Func<FalloutFormKey, FalloutFormKey>? actorRace = null, Func<uint, uint>? dialogueRandom = null)
+        Func<FalloutFormKey, FalloutFormKey>? actorRace = null, Func<uint, uint>? dialogueRandom = null,
+        Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         _resolveRunOnCell = resolveRunOnCell;
@@ -67,6 +69,7 @@ internal partial class RuntimeNativeConversation : Node
         _factions = factions;
         _playerFemale = playerFemale;
         _actorRace = actorRace;
+        _currentPackage = currentPackage;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos, dialogueRandom);
     }
 
@@ -92,7 +95,8 @@ internal partial class RuntimeNativeConversation : Node
             Func<FalloutCondition, FalloutFormKey?>? currentCell = resolveRunOnCell is null ? null :
                 condition => resolveRunOnCell(_speaker, condition);
             _conditions = new(_records, _quests, _speaker, FalloutDialogueSpeaker.Read(_records, npc.FormKey, _templates?.Invoke(_speaker)),
-                _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace);
+                _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
+                currentPackage: _currentPackage);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);

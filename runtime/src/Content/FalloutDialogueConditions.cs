@@ -8,7 +8,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, bool>? talkedToPlayer = null,
     Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
     Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
-    FalloutFormKey? listener = null, FalloutDialogueSpeaker? listenerIdentity = null)
+    FalloutFormKey? listener = null, FalloutDialogueSpeaker? listenerIdentity = null,
+    Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -19,6 +20,9 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 161)
+            return FalloutAiPackages.IsCurrentPackage(condition, speaker, currentPackage ??
+                throw new NotSupportedException("Dialogue current-package query has no active actor package owner."), Listener) ? 1 : 0;
         if (condition.Function == 72)
         {
             var subject = condition.RunOn switch

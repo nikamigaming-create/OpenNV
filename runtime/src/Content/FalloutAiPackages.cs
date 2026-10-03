@@ -7,17 +7,21 @@ internal static class FalloutAiPackages
 {
     internal static bool IsCurrentPackage(FalloutCondition condition, FalloutFormKey caller,
         FalloutFormKey? currentPackage, Func<FalloutFormKey, FalloutFormKey?> query)
+        => IsCurrentPackage(condition, caller, reference => reference == caller ? currentPackage : query(reference));
+
+    internal static bool IsCurrentPackage(FalloutCondition condition, FalloutFormKey caller,
+        Func<FalloutFormKey, FalloutFormKey?> query, FalloutFormKey? target = null)
     {
         if (condition.Function != 161) throw new InvalidDataException("Current-package query has a different source function.");
         var subject = condition.RunOn switch
         {
             0 => caller,
-            1 => Target(),
+            1 => target ?? Target(),
             2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) ??
                 throw new InvalidDataException("Current-package query has no explicit reference."),
             _ => throw new NotSupportedException($"Current-package query run-on {condition.RunOn} has no subject owner."),
         };
-        return (subject == caller ? currentPackage : query(subject)) == condition.FormArgument1;
+        return query(subject) == condition.FormArgument1;
 
         FalloutFormKey Target()
         {
