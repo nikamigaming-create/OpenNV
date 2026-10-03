@@ -50,11 +50,13 @@ internal partial class RuntimeNativeNpc
     internal int SittingState => _sitting == 1 ? 3 : _sitting;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
     internal bool Traveling => _travelActive || (_escortPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
-    internal FalloutFormKey? CurrentPackage => _aiPackage?.FormKey;
+    internal FalloutFormKey? CurrentPackage => _sourceSelectionKnown ? _selectedSourcePackage : _aiPackage?.FormKey;
 
     // These are script-visible engine procedure codes. The currently owned
     // travel procedure ends on arrival; furniture exit has its own transition.
-    private int CurrentAiProcedure => _sitting == 2
+    private int CurrentAiProcedure => _requestedSelection is not null || _aiError is not null
+        ? throw new NotSupportedException("Current AI procedure has no admitted native continuation.")
+        : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
@@ -62,17 +64,21 @@ internal partial class RuntimeNativeNpc
             "WaitForTarget" or "waiting-for-target-residency" => 3,
             _ => 12,
         } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive || _editorTravelProgress is { Complete: false } ? 0 : 17;
-    private int CurrentAiPackage => _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
-    {
-        2 => 2,
-        6 => 14, // Source PACK travel type -> script-visible Travel package.
-        13 => 37, // Fallout script-visible Patrol code (not the PACK type).
-        _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
-    };
+    private int CurrentAiPackage => _requestedSelection is not null || _aiError is not null
+        ? throw new NotSupportedException("Current AI package code has no admitted native continuation.")
+        : _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
+        {
+            2 => 2,
+            6 => 14, // Source PACK travel type -> script-visible Travel package.
+            13 => 37, // Fallout script-visible Patrol code (not the PACK type).
+            _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
+        };
 
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
+        selectedPackage = CurrentPackage?.ToString(),
+        evaluationPending = _requestedSelection is not null,
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
         sitting = SittingState,
@@ -107,7 +113,7 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = _sitting == 2 ? (int?)null : CurrentAiProcedure,
+        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null ? (int?)null : CurrentAiProcedure,
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,
@@ -242,18 +248,6 @@ internal partial class RuntimeNativeNpc
         GD.Print($"OPENNV_NATIVE_PACKAGE_EVENT reference={Appearance.Reference} package={package.Form} event={kind} owner=actor-procedure");
     }
 
-    internal void EvaluatePackages(bool reset)
-    {
-        if (_aiStack is null || _questState is null)
-            throw new NotSupportedException("Actor package commands require the live AI owner.");
-        // Reset requests a fresh source selection; it never grants arrival or
-        // changes the actor's transform. Procedure transitions own those steps.
-        if (reset) { _aiError = null; _packageIdleError = null; }
-        _aiQuestRevision = -1;
-        AdvanceAi();
-        if (_aiError is not null) throw new NotSupportedException(_aiError);
-    }
-
     private double PreparePackageIdle(double delta)
     {
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
@@ -281,25 +275,26 @@ internal partial class RuntimeNativeNpc
         _aiPollRemaining -= delta;
         var scheduleTime = _aiClock?.ScheduleTime();
         if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-        if (_aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision &&
+        if (_requestedSelection is null && _aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision &&
             _aiScheduleTime == scheduleTime && _aiPollRemaining > 0) return;
         _aiQuestRevision = _questState.Revision;
         _aiActivityRevision = Activity.Revision;
         _aiScheduleTime = scheduleTime;
         _aiPollRemaining = 10;
         FalloutPluginRecord? selected = null;
+        var forced = _requestedSelection is not null;
         try
         {
-            selected = FalloutAiPackages.Select(_aiStack, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock, evaluateRunOn: true,
-                eligible: package => _aiWorld?.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
-                    _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
-                    throw new NotSupportedException("NPC package eligibility has no reference state owner."));
-            if (_aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
+            var selection = _requestedSelection ?? SelectSourcePackage();
+            _requestedSelection = null;
+            selected = selection.Record;
+            _selectedSourcePackage = selected?.FormKey; _sourceSelectionKnown = true;
+            if (!forced && _aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;
             // A failed procedure cannot freeze a later eligible package. Event
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
             if (_aiPackage?.FormKey == selected?.FormKey) return;
-            if (_editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
+            if (!forced && _editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
                 throw new NotSupportedException("Incomplete editor travel needs its must-complete package reevaluation owner.");
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
             if (_sitting == 1 && selected is not null && RetainFurniturePackage(selected)) return;
@@ -329,7 +324,7 @@ internal partial class RuntimeNativeNpc
                 _editorTravel = null; _editorTravelProgress = null; _editorTravelDestination = null; _editorTravelStatus = null;
             }
             if (selected is null) return;
-            _packageIdleSource = FalloutScriptPackage.Read(selected);
+            _packageIdleSource = selection.Declaration!;
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
@@ -376,7 +371,13 @@ internal partial class RuntimeNativeNpc
             var changed = _aiError != error.Message;
             _aiError = error.Message;
             _failedPackage = selected?.FormKey;
+            BlockSelectionCapture($"Actor package procedure remains unbound: {error.Message}");
             if (changed) GD.PushError($"OPENNV_NATIVE_AI_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
+        }
+        finally
+        {
+            if (_requestedSelection is null && _aiError is null && _pendingPackage is null &&
+                _aiPackage?.FormKey == _selectedSourcePackage) ClearSelectionCapture();
         }
     }
 

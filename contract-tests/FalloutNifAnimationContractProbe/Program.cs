@@ -4,6 +4,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 TextKeyContracts.Run();
+TbcKeyContracts.Run(TbcTransformFixture);
+if (args.Length == 3 && args[0] == "--owned-tbc")
+{
+    TbcKeyContracts.Audit(args[1], args[2]);
+    return;
+}
 var heldRotation = new FalloutNifAnimationSampler(StepRotation(), 0);
 foreach (var time in new[] { -1f, 0f, .4f, .99999f })
     Require(heldRotation.Sample(time).Rotation == new FalloutNifQuaternion(1, 0, 0, 0), "Constant rotation interpolated before the next source key.");
@@ -519,6 +525,35 @@ static FalloutNifFile StepRotation() => Wrap(
         foreach (var time in new[] { 0f, 1f })
         { writer.Write(time); writer.Write(1 - time); writer.Write(0f); writer.Write(0f); writer.Write(time); }
         writer.Write(0); writer.Write(0);
+    })));
+
+static FalloutNifFile TbcTransformFixture(FalloutNifScalarKey[] scales, FalloutNifVectorKey[] positions, int extraPositionKeys) => Wrap(
+    ("NiTransformInterpolator", Bytes(writer =>
+    {
+        for (var index = 0; index < 8; index++) writer.Write(float.MinValue);
+        writer.Write(1);
+    })),
+    ("NiTransformData", Bytes(writer =>
+    {
+        static void Parameters(BinaryWriter output, FalloutNifVector3? parameters)
+        {
+            if (parameters is not { } tbc) return;
+            output.Write(tbc.X); output.Write(tbc.Y); output.Write(tbc.Z);
+        }
+        writer.Write(0);
+        writer.Write(positions.Length + extraPositionKeys);
+        if (positions.Length + extraPositionKeys != 0) writer.Write(3U);
+        foreach (var key in positions)
+        {
+            writer.Write(key.Time); writer.Write(key.Value.X); writer.Write(key.Value.Y); writer.Write(key.Value.Z);
+            Parameters(writer, key.Tbc);
+        }
+        writer.Write(scales.Length);
+        if (scales.Length != 0) writer.Write(3U);
+        foreach (var key in scales)
+        {
+            writer.Write(key.Time); writer.Write(key.Value); Parameters(writer, key.Tbc);
+        }
     })));
 
 static byte[] Bytes(Action<BinaryWriter> emit)

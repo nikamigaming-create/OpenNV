@@ -10,6 +10,13 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--package-evaluation", var evaluationRoot, var evaluationMod, var evaluationModRoot,
+                var evaluationActor, var evaluationQuest, var evaluationStage, .. var evaluationDependencies])
+            {
+                PackageEvaluation(evaluationRoot, evaluationMod, evaluationModRoot, evaluationActor, evaluationQuest,
+                    evaluationStage.Split(',').Select(value => short.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).ToArray(), evaluationDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is [var creatureTravelMode, var creatureTravelGame, var creatureTravelMod, var creatureTravelRoot,
                 var creatureTravelActor, var creatureTravelQuest, var creatureTravelStage, var creatureTravelExpected, .. var creatureTravelDependencies] &&
                 creatureTravelMode is "--creature-travel" or "--creature-travel-arrival")
@@ -194,6 +201,7 @@ public partial class NativeActorPerformanceAudit : Node
                 quests.EnterStage(FalloutDialogueTopic.Find(records, "QUST", args[4]).FormKey,
                     short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture));
                 actor.EvaluatePackages(true);
+                actor._Process(0);
                 if (actor.AiError is not null || actor.SittingState != 4 || actor.Position != occupiedPosition)
                     throw new InvalidOperationException($"Source package change did not begin a stationary furniture exit: {actor.AiError}");
                 var moving = false;

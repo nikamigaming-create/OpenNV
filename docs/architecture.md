@@ -507,6 +507,14 @@ Source schedule selection reads the shared game calendar before evaluating
 package conditions. Resident actors react to hour changes and periodic condition
 reevaluation; resident package motion does not require a player object. Complete
 package procedure/event lifecycle and retail evaluation cadence remain unbound.
+[Explicit package reevaluation](source-package-evaluation.md) caches source
+selection once and queues native continuation. Later procedure faults remain
+visible independently of the void command; pending/unowned continuation blocks
+saves and procedure-code queries. Retained source/result failures still stop
+the caller.
+[TBC animation channels](nif-tbc-animation.md) use authored parameters and source
+time intervals in the shared Hermite sampler. Scalar, vector and XYZ channels
+retain exact keys/clamps; malformed parameters and overflow remain visible.
 Collision readiness excludes initial scene construction and door handoffs;
 an absent follow/dialogue target is a visible residency wait, not a permanent
 procedure failure.

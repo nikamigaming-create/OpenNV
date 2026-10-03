@@ -229,17 +229,42 @@ internal sealed class FalloutNifAnimationSampler
             (keys.XyzRotations.Length != 3 || keys.XyzRotations.Any(axis => axis.Length == 0)))
             throw new InvalidDataException("XYZ animation requires three defined scalar axes.");
         foreach (var key in keys.Scales.Concat(keys.XyzRotations.SelectMany(axis => axis)))
-            ValidateInterpolation(key.Interpolation, key.Forward.HasValue, key.Backward.HasValue);
+            ValidateInterpolation(key.Interpolation, key.Forward.HasValue, key.Backward.HasValue, key.Tbc);
         foreach (var key in keys.Translations)
-            ValidateInterpolation(key.Interpolation, key.Forward.HasValue, key.Backward.HasValue);
+            ValidateInterpolation(key.Interpolation, key.Forward.HasValue, key.Backward.HasValue, key.Tbc);
+        if (keys.Scales.Any(key => key.Interpolation == 3))
+            ValidateTbcTimes(keys.Scales.Select(key => key.Time));
+        if (keys.Translations.Any(key => key.Interpolation == 3))
+            ValidateTbcTimes(keys.Translations.Select(key => key.Time));
+        foreach (var axis in keys.XyzRotations.Where(axis => axis.Any(key => key.Interpolation == 3)))
+            ValidateTbcTimes(axis.Select(key => key.Time));
     }
 
-    private static void ValidateInterpolation(uint type, bool forward, bool backward)
+    private static void ValidateInterpolation(uint type, bool forward, bool backward, FalloutNifVector3? tbc)
     {
-        if (type is not (1 or 2 or 5))
+        if (type is not (1 or 2 or 3 or 5))
             throw new NotSupportedException($"Animation interpolation type {type} is not implemented.");
         if (type == 2 && (!forward || !backward))
             throw new InvalidDataException("Quadratic animation key lacks tangents.");
+        if (type == 3) ValidateTbc(tbc);
+    }
+
+    private static FalloutNifVector3 ValidateTbc(FalloutNifVector3? parameters)
+    {
+        if (parameters is not { } tbc || !float.IsFinite(tbc.X) || !float.IsFinite(tbc.Y) || !float.IsFinite(tbc.Z))
+            throw new InvalidDataException("TBC animation key parameters are absent or nonfinite.");
+        return tbc;
+    }
+
+    private static void ValidateTbcTimes(IEnumerable<float> times)
+    {
+        float? previous = null;
+        foreach (var time in times)
+        {
+            if (!float.IsFinite(time) || previous is { } before && (!float.IsFinite(time - before) || time <= before))
+                throw new InvalidDataException("TBC animation keys require finite, strictly increasing intervals.");
+            previous = time;
+        }
     }
 
     private static float? Optional(float value) => value == float.MinValue ? null : value;
@@ -277,8 +302,15 @@ internal sealed class FalloutNifAnimationSampler
     {
         var index = Interval(keys, static key => key.Time, time);
         var a = keys[index];
+        if (a.Interpolation == 3) ValidateTbc(a.Tbc);
         if (time <= a.Time || index == keys.Length - 1) return a.Value;
         var b = keys[index + 1];
+        if (a.Interpolation == 3)
+        {
+            var interval = b.Time - a.Time;
+            return Interpolate(a.Value, b.Value, ScalarTbcTangent(keys, index, interval, true),
+                ScalarTbcTangent(keys, index + 1, interval, false), 3, (time - a.Time) / interval);
+        }
         return Interpolate(a.Value, b.Value, a.Backward, b.Forward, a.Interpolation, (time - a.Time) / (b.Time - a.Time));
     }
 
@@ -286,12 +318,70 @@ internal sealed class FalloutNifAnimationSampler
     {
         var index = Interval(keys, static key => key.Time, time);
         var a = keys[index];
+        if (a.Interpolation == 3) ValidateTbc(a.Tbc);
         if (time <= a.Time || index == keys.Length - 1) return a.Value;
         var b = keys[index + 1];
         var amount = (time - a.Time) / (b.Time - a.Time);
+        if (a.Interpolation == 3)
+        {
+            var interval = b.Time - a.Time;
+            var outgoing = VectorTbcTangent(keys, index, interval, true);
+            var incoming = VectorTbcTangent(keys, index + 1, interval, false);
+            return new(Interpolate(a.Value.X, b.Value.X, outgoing.X, incoming.X, 3, amount),
+                Interpolate(a.Value.Y, b.Value.Y, outgoing.Y, incoming.Y, 3, amount),
+                Interpolate(a.Value.Z, b.Value.Z, outgoing.Z, incoming.Z, 3, amount));
+        }
         return new(Interpolate(a.Value.X, b.Value.X, a.Backward?.X, b.Forward?.X, a.Interpolation, amount),
             Interpolate(a.Value.Y, b.Value.Y, a.Backward?.Y, b.Forward?.Y, a.Interpolation, amount),
             Interpolate(a.Value.Z, b.Value.Z, a.Backward?.Z, b.Forward?.Z, a.Interpolation, amount));
+    }
+
+    private static float ScalarTbcTangent(FalloutNifScalarKey[] keys, int index, float interval, bool outgoing)
+    {
+        var current = keys[index];
+        var previous = index == 0 ? current : keys[index - 1];
+        var next = index == keys.Length - 1 ? current : keys[index + 1];
+        var before = index == 0 ? next.Value - current.Value : current.Value - previous.Value;
+        var after = index == keys.Length - 1 ? before : next.Value - current.Value;
+        var previousTime = index == 0 ? next.Time - current.Time : current.Time - previous.Time;
+        var nextTime = index == keys.Length - 1 ? previousTime : next.Time - current.Time;
+        var weights = TbcWeights(current.Tbc, previousTime, nextTime, interval, outgoing);
+        return before * weights.Previous + after * weights.Next;
+    }
+
+    private static FalloutNifVector3 VectorTbcTangent(FalloutNifVectorKey[] keys, int index, float interval, bool outgoing)
+    {
+        var current = keys[index];
+        var previous = index == 0 ? current : keys[index - 1];
+        var next = index == keys.Length - 1 ? current : keys[index + 1];
+        static Vector3 V(FalloutNifVector3 value) => new(value.X, value.Y, value.Z);
+        var before = index == 0 ? V(next.Value) - V(current.Value) : V(current.Value) - V(previous.Value);
+        var after = index == keys.Length - 1 ? before : V(next.Value) - V(current.Value);
+        var previousTime = index == 0 ? next.Time - current.Time : current.Time - previous.Time;
+        var nextTime = index == keys.Length - 1 ? previousTime : next.Time - current.Time;
+        var weights = TbcWeights(current.Tbc, previousTime, nextTime, interval, outgoing);
+        var result = before * weights.Previous + after * weights.Next;
+        return new(result.X, result.Y, result.Z);
+    }
+
+    private static (float Previous, float Next) TbcWeights(FalloutNifVector3? parameters,
+        float previousTime, float nextTime, float interval, bool outgoing)
+    {
+        var tbc = ValidateTbc(parameters);
+        var extent = previousTime + nextTime;
+        if (previousTime <= 0 || nextTime <= 0 || interval <= 0 || !float.IsFinite(extent) || !float.IsFinite(interval))
+            throw new InvalidDataException("TBC animation tangent has an invalid key interval.");
+        // Kochanek-Bartels Hermite tangents: tension X, bias Y, continuity Z.
+        // Normalize neighboring chords by their total source time span and
+        // scale to the selected segment. Endpoint chords continue one-sided.
+        // https://www.geometrictools.com/Documentation/KBSplines.pdf
+        var factor = interval * (1 - tbc.X) / extent;
+        var continuity = outgoing ? tbc.Z : -tbc.Z;
+        var previous = factor * (1 + continuity) * (1 + tbc.Y);
+        var next = factor * (1 - continuity) * (1 - tbc.Y);
+        if (!float.IsFinite(previous) || !float.IsFinite(next))
+            throw new InvalidDataException("TBC animation tangent weights are nonfinite.");
+        return (previous, next);
     }
 
     private static float Interpolate(float a, float b, float? outgoing, float? incoming, uint type, float amount)
@@ -301,8 +391,11 @@ internal sealed class FalloutNifAnimationSampler
         if (type == 5) return a;
         if (type == 1) return a + (b - a) * amount;
         var squared = amount * amount; var cubed = squared * amount;
-        return a * (2 * cubed - 3 * squared + 1) + b * (-2 * cubed + 3 * squared) +
+        var result = a * (2 * cubed - 3 * squared + 1) + b * (-2 * cubed + 3 * squared) +
             outgoing!.Value * (cubed - 2 * squared + amount) + incoming!.Value * (cubed - squared);
+        if (type == 3 && !float.IsFinite(result))
+            throw new InvalidDataException("TBC animation sample is nonfinite.");
+        return result;
     }
 
     private sealed class PathSampler

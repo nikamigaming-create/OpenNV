@@ -5,6 +5,13 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args.Length >= 8 && args[0] == "--audit-reference-door")
+{
+    OwnedReferenceDoorProbe.Run(args[1], args[2], args[3], args[4], args[5],
+        short.Parse(args[6], System.Globalization.CultureInfo.InvariantCulture),
+        short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8..]);
+    return;
+}
 if (args is ["--travel-contracts"])
 {
     TravelContracts.Run();

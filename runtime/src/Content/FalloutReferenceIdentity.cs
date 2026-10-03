@@ -2,6 +2,15 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutReferenceIdentity
 {
+    internal static bool Matches(FalloutPluginStack records, FalloutFormKey reference, FalloutFormKey requested)
+    {
+        foreach (var key in new[] { reference, requested })
+            if (key != records.RuntimeFormKey(0x14) &&
+                (!records.TryGetEffective(key, out var placed) || placed.Signature is not ("REFR" or "ACHR" or "ACRE")))
+                throw new InvalidDataException("Reference comparison has no winning placed source.");
+        return reference == requested;
+    }
+
     internal static FalloutFormKey Base(FalloutPluginStack records, FalloutFormKey reference)
     {
         FalloutFormKey form;

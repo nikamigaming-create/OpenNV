@@ -130,7 +130,8 @@ internal partial class RuntimeNativeNpc
         {
             // The same Form can be selected again after another package. Its
             // previous audio/conversation must not complete that newer owner.
-            if (!IsInstanceValid(this) || !IsInsideTree() || !ReferenceEquals(_dialoguePackage, dialogue)) return;
+            if (!IsInstanceValid(this) || !IsInsideTree() || !ReferenceEquals(_dialoguePackage, dialogue) ||
+                CurrentPackage != dialogue.Form) return;
             if (_dialogueNativeMovement && dialogue.Type == 1) Combat!.CompleteDialoguePackage();
             _packageEvents!.Complete();
             if (ReferenceEquals(_dialoguePackage, dialogue) && _dialogueNativeMovement && dialogue.Type == 1 && _aiWorld is { } world)

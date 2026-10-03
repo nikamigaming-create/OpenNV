@@ -31,7 +31,9 @@ until an unbound player-target GetIsID condition; CG02 remains at stage6.
 Telemetry retained two publication interval failures, so this is a bounded
 continuation observation, not a complete matched recording. Recording was off.
 
-Other-cell routing, must-complete package reevaluation, editor-anchor changes
+Other-cell routing, normal must-complete package reevaluation, editor-anchor changes
 during reset/initialization and matched retail arrival/idle timing remain open.
 Unknown flags, search/target owners and source faults remain visible. Birthday
 completion, Megaton, train/Mojave travel and physical OpenXR acceptance are pending.
+Explicit EvaluatePackage now replaces source selection before its queued native
+continuation; see [package reevaluation](source-package-evaluation.md).
