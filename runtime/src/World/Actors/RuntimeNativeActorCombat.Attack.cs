@@ -231,7 +231,8 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         else if (distance <= allowed && _opponent is not null && TargetContact(origin) is { } collider)
         {
-            part = _opponent.Hit(collider, resolvedDamage, _state.Reference, _context!.Level(), _context.Globals).Part;
+            part = _opponent.Hit(collider, resolvedDamage, _state.Reference, _context!.Level(), _context.Globals,
+                hitWeapon: _enemyWeapon?.Form).Part;
             ++_hits;
         }
         if (_enemyWeapon?.IsMeleeWeapon == true)

@@ -12,6 +12,7 @@ internal partial class RuntimeNativePlayer
         Godot.Collections.Dictionary collision,
         Node? collider,
         string? reference,
+        FalloutFormKey? hitReference,
         Vector3 point,
         float damageDelaySeconds,
         int? terminalHavokLayer)
@@ -20,10 +21,13 @@ internal partial class RuntimeNativePlayer
         internal Godot.Collections.Dictionary Collision { get; } = collision;
         internal Node? Collider { get; } = collider;
         internal string? Reference { get; } = reference;
+        internal FalloutFormKey? HitReference { get; } = hitReference;
         internal Vector3 Point { get; } = point;
         internal float DamageDelaySeconds { get; } = damageDelaySeconds;
         internal int? TerminalHavokLayer { get; } = terminalHavokLayer;
         internal FalloutActorHit? ActorHit { get; set; }
+        internal bool ObjectDamageApplied { get; set; }
+        internal bool HitEventMarked { get; set; }
     }
 
     private readonly record struct PlayerProjectileDamageSummary(
@@ -146,7 +150,7 @@ internal partial class RuntimeNativePlayer
             Node? collider, Vector3 point, int? terminalHavokLayer = null)
         {
             var delay = shot.Projectile.HitscanImpactDelaySeconds(origin.DistanceTo(point), UnitsToMeters);
-            return new(pelletDirection, collision, collider, ShotReference(collider), point, delay,
+            return new(pelletDirection, collision, collider, ShotReference(collider), HitReference(collider), point, delay,
                 terminalHavokLayer);
         }
     }
@@ -188,6 +192,7 @@ internal partial class RuntimeNativePlayer
     {
         if (shot.Projectile.ExplosionSource is not null) return;
         _damageError = null;
+        var hitReference = HitReference(contact.Collider);
         var destructible = contact.Collider is { } objectCollider ? RuntimeNativeDestructible.Find(objectCollider) : null;
         FalloutActorHit? actorHit = null;
         if (contact.Collider is { } collider && RuntimeNativeActorCombat.Find(collider) is { } combat)
@@ -195,7 +200,8 @@ internal partial class RuntimeNativePlayer
             try
             {
                 actorHit = combat.Hit(collider, damage, _presentationRecords!.RuntimeFormKey(0x14),
-                    _combatLevel!(), _combatGlobals!, shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
+                    _combatLevel!(), _combatGlobals!, shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit,
+                    hitWeapon: shot.Weapon, hitKind: FalloutReferenceHitKind.Projectile);
                 GD.Print($"OPENNV_WEAPON_PROJECTILE_ACTOR_HIT projectile={shot.Projectile.Form} reference={actorHit.Reference} part={actorHit.Part} damage={actorHit.HealthDamage:R}");
             }
             catch (Exception error)
@@ -220,6 +226,8 @@ internal partial class RuntimeNativePlayer
             try { destructible.Hit(damage.Amount, _presentationRecords!.RuntimeFormKey(0x14)); }
             catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_OBJECT_DAMAGE_UNBOUND " + error.Message); }
         }
+        if (actorHit is null && _damageError is null)
+            MarkWeaponHit(hitReference, _presentationRecords!.RuntimeFormKey(0x14), shot.Weapon, FalloutReferenceHitKind.Projectile);
     }
 
     private void ApplyProjectileFlightDetonation(FalloutWeaponShot shot, FalloutWeaponDamage blastDamage, Vector3 point)
@@ -273,7 +281,7 @@ internal partial class RuntimeNativePlayer
             var actorDamage = combat is not null && resolvedDamage is not null;
             var objectDamage = destructible is not null && resolvedDamage is not null;
             if (impactSet is not null) impactRequests++;
-            if (!actorDamage && !objectDamage && impactSet is null) continue;
+            if (!actorDamage && !objectDamage && impactSet is null && trace.HitReference is null) continue;
             int? level = actorDamage ? _combatLevel!() : null;
             var globals = actorDamage ? _combatGlobals : null;
             if (actorDamage && globals is null)
@@ -312,8 +320,10 @@ internal partial class RuntimeNativePlayer
                 actorHit = combat.Hit(collider, resolvedDamage, attacker,
                     level ?? throw new InvalidOperationException("Projectile impact has no attacker level."),
                     globals ?? throw new InvalidOperationException("Projectile impact has no global state."),
-                    shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
+                    shot.OnHitBehavior, _weaponHandling!.NextShotRandomUnit,
+                    hitWeapon: shot.Weapon, hitKind: FalloutReferenceHitKind.Projectile);
                 trace.ActorHit = actorHit;
+                trace.HitEventMarked = true;
                 GD.Print($"OPENNV_WEAPON_PROJECTILE_ACTOR_HIT projectile={shot.Projectile.Form} reference={actorHit.Reference} part={actorHit.Part} damage={actorHit.HealthDamage:R} delayed={trace.DamageDelaySeconds:R}");
             }
             catch (Exception error)
@@ -337,9 +347,11 @@ internal partial class RuntimeNativePlayer
         }
         if (destructible is not null && damage is { } objectDamage)
         {
-            try { destructible.Hit(objectDamage.Amount, attacker); }
+            try { destructible.Hit(objectDamage.Amount, attacker); trace.ObjectDamageApplied = true; }
             catch (Exception error) { _damageError = error.Message; GD.PushError("OPENNV_OBJECT_DAMAGE_UNBOUND " + error.Message); }
         }
+        if (actorHit is null && _damageError is null)
+            trace.HitEventMarked = MarkWeaponHit(trace.HitReference, attacker, shot.Weapon, FalloutReferenceHitKind.Projectile);
         return actorHit;
     }
 
@@ -382,7 +394,9 @@ internal partial class RuntimeNativePlayer
                 projectile = pending.Shot.Projectile.Form.ToString(),
                 reference = pending.Trace.Reference,
                 delaySeconds = pending.Trace.DamageDelaySeconds,
-                state = hit is not null ? "actor-damaged" : pending.Damage is not null ? "damage-unbound" : "impact-resolved",
+                state = hit is not null ? "actor-damaged" : pending.Trace.ObjectDamageApplied ? "object-damaged" :
+                    pending.Damage is not null ? "damage-unbound" : "impact-resolved",
+                hitEventMarked = pending.Trace.HitEventMarked,
                 healthDamage = hit?.HealthDamage,
                 part = hit?.Part,
                 died = hit?.Died,

@@ -338,6 +338,7 @@ internal sealed partial class RuntimeNativeActorCombat
         string? damageError = null;
         FalloutActorHit? actorHit = null;
         var playerHit = part is not null;
+        var hitReference = collider is null ? null : _context?.CollisionReference?.Invoke(collider.GetInstanceId());
         if (playerHit)
         {
             try
@@ -358,7 +359,8 @@ internal sealed partial class RuntimeNativeActorCombat
             try
             {
                 actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals,
-                    shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit);
+                    shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit,
+                    hitWeapon: shot.Weapon, hitKind: FalloutReferenceHitKind.Projectile);
                 healthBefore = actorHit.HealthBefore;
                 healthAfter = actorHit.HealthAfter;
                 _hits++;
@@ -379,6 +381,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 GD.PushError($"OPENNV_NPC_OBJECT_DAMAGE_UNBOUND reference={_state.Reference} {error.Message}");
             }
         }
+        if (!playerHit && actorHit is null && damageError is null && hitReference is { } reference)
+            _world.HitEvents.Mark(reference, _state.Reference, shot.Weapon, FalloutReferenceHitKind.Projectile);
 
         string? impactError = null;
         if (collider is not null && impactMaterial is { } material && shot.ImpactDataSet is { } impactSet)
@@ -537,6 +541,7 @@ internal sealed partial class RuntimeNativeActorCombat
         FalloutWeaponDamage damage, RuntimeNativeProjectileContact contact)
     {
         if (shot.Projectile.ExplosionSource is not null) return;
+        var hitReference = contact.Collider is null ? null : _context?.CollisionReference?.Invoke(contact.Collider.GetInstanceId());
         if (contact.Collider is { } objectCollider && RuntimeNativeDestructible.Find(objectCollider) is { } destructible)
             destructible.Hit(damage.Amount, _state.Reference);
         byte? part = null;
@@ -554,12 +559,15 @@ internal sealed partial class RuntimeNativeActorCombat
         else if (contact.Collider is { } collider && RuntimeNativeActorCombat.Find(collider) is { } combat && combat != this)
         {
             actorHit = combat.Hit(collider, damage, _state.Reference, _context!.Level(), _context.Globals,
-                shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit);
+                shot.OnHitBehavior, _enemyWeaponHandling!.NextShotRandomUnit,
+                hitWeapon: shot.Weapon, hitKind: FalloutReferenceHitKind.Projectile);
             part = actorHit.Part;
             healthBefore = actorHit.HealthBefore;
             healthAfter = actorHit.HealthAfter;
             _hits++;
         }
+        if (part is null && hitReference is { } reference)
+            _world.HitEvents.Mark(reference, _state.Reference, shot.Weapon, FalloutReferenceHitKind.Projectile);
         string? impactError = null;
         try
         {

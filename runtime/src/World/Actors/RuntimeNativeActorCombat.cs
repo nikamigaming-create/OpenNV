@@ -116,7 +116,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     internal FalloutActorHit Hit(Node collider, FalloutWeaponDamage damage, FalloutFormKey attacker,
         int level, FalloutGlobalState globals, uint? weaponOnHitBehavior = null,
-        Func<float>? nextWeaponRandomUnit = null, bool explosionDamage = false)
+        Func<float>? nextWeaponRandomUnit = null, bool explosionDamage = false, FalloutFormKey? hitWeapon = null,
+        FalloutReferenceHitKind hitKind = FalloutReferenceHitKind.Melee)
     {
         try
         {
@@ -127,6 +128,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             var bodyPart = _world.BodyParts(_state.Reference).Parts.Single(value => value.Type == part);
             if (!Dead && amount * bodyPart.DamageMultiplier >= health.Current) PrepareDeath();
             var hit = _world.DamageActor(_state.Reference, attacker, part, amount, damage.LimbMultiplier, level, globals);
+            if (!explosionDamage) _world.HitEvents.Mark(_state.Reference, attacker, hitWeapon, hitKind);
             if (hit.Died)
             {
                 BeginDeath();

@@ -76,6 +76,7 @@ internal partial class RuntimeNativeNpc
 
     internal object AiState => new
     {
+        retainedPackageMotion = Combat?.PackageMotion,
         package = _aiPackage?.FormKey.ToString(),
         selectedPackage = CurrentPackage?.ToString(),
         evaluationPending = _requestedSelection is not null,

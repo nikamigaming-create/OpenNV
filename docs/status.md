@@ -12,7 +12,9 @@ authored first/third grip variants. Selected owned equip/attack/reload/socket
 checks, the integrated gate and all five PR122 checks pass. The user fires eight
 ordinary shots and contacts a source range target. Fresh ordinary replay with
 the spatial-query candidate completes Dad's range greeting and its original
-stage50 result; target55 and the radroach remain unreached.
+stage50 result. Checked PR123 merges
+the movement/spatial-query repairs at synchronized main8f7a3af with all five
+publication checks passing.
 
 The active candidate repairs an NPC walk clock reset on dialogue release,
 bounds source Travel turning and simplifies capsule-supported flat routes.
@@ -22,11 +24,23 @@ root. Shared dialogue distance and package talked-to-player subjects pass
 synthetic/selected owned live/cold query checks; the original Amata explicit
 subject no longer uses the native self-only restriction. Attack actions retain
 aim intent. Fresh optimized ordinary replay reaches source50 without a dialogue
-or weapon presentation error. The integrated gate and publication rerun pass,
+or weapon presentation error. The integrated gate and publication checks pass,
 including the interrupted-route identity guard. See [motion continuation](actor-motion-continuation.md) and
 [spatial queries](dialogue-spatial-queries.md). Complete animation blending,
 foot contact, dynamic avoidance, ADS zoom/alignment, gifted magazines and
 matched retail timing/pixels remain open.
+
+The active [weapon-hit owner](reference-weapon-hit-events.md) admits actual
+projectile/melee contacts to source OnHit/OnHitWith blocks after damage, retaining
+typed source filters, declaration order, frame coalescence and consumption.
+Synthetic, native adapter, original TTW target-script/cold and integrated checks
+pass. Fresh ordinary22824 fires six shots, with three actual target contacts.
+The original OnHitWith block requests its animation, increments targetCount
+and enters tutorial62; its third contact completes original CG02:55 and60
+and admits the source radroach without a source/native error. Ordinary radroach
+combat is continuing. Complete hit-script/plugin semantics and pending
+event cold continuation remain open. NPC telemetry exposes the actual retained
+package animation resource, time and pose without complete save capture.
 
 Source reference identity, dialogue participant leases and listener IDLEs have
 shared owners. Six original booths and all15 birthday NPCs admit. Shared chair

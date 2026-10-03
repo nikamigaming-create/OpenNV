@@ -15,15 +15,17 @@ are part of the active scope.
 
 ## Verified state and active block
 
-Main is 139db8a after checked PR122. The active branch is
-codex/ttw-actor-motion-and-range-queries. An optimized native run cold-Continues
+Main is 8f7a3af after checked PR123, with all five checks passing and clean main
+synchronized before this block. The active branch is
+codex/ttw-source-weapon-hit-events. An optimized native run cold-Continues
 the immutable genuine CG01:80 checkpoint and completes the original CG02:40,
 Jonas42 and Dad44 effects, then the original range greeting and its stage50
 result. The real gifted BB gun binds its authored first/third HandGrip2_BBGun
 variants with no player presentation error. The previous run retains eight
-ordinary user shots and a source range target contact. Target55, radroach,
-birthday completion, G.O.A.T., Vault escape, Megaton, train and Mojave remain
-unreached. Bot stair/range-rail refinement failures remain retained; separately
+ordinary user shots and a source range target contact. Fresh ordinary target
+shots now complete original CG02:55 and60 and admit the original radroach.
+Radroach combat, birthday completion, G.O.A.T., Vault escape, Megaton, train
+and Mojave remain open. Bot stair/range-rail refinement failures remain retained; separately
 labelled operator keyboard input traversed the actual stair flights.
 
 The current candidate retains an interrupted NPC walking clock across renewed
@@ -46,11 +48,28 @@ actors; the original Amata-to-Beatrice explicit predicate passes independent
 caller/subject, live changes and cold checks. These isolated queries do not
 execute campaign progress. Attack actions retain aim intent; complete ADS zoom,
 shot alignment and gifted-magazine behavior remain open. The required
-integrated gate and publication rerun pass, including the interrupted-route
-identity guard. Fresh optimized native32424 reaches source50 through
+integrated gate and publication checks pass, including the interrupted-route
+identity guard. Fresh optimized native22824 reaches source50 through
 ordinary input with no conversation or player presentation error and zero
 snapshot replacement failures. Stair/range refinement still fails visibly;
 bounded ordinary keyboard traversal is labelled separately.
+
+Shared post-damage hit admission binds source target/attacker/weapon identities
+to original OnHit/OnHitWith blocks on the normal reference script frame.
+Projectile and melee contacts from player/NPC/creature owners use typed weapons
+and compiled reference/direct-list filters, authored block order, pellet
+coalescence and revision-preserving consumption. Pending admission stays visible
+and save-blocked; consumed locals/outcomes retain cold state. Synthetic, native
+adapter, original target-script/cold and required integrated checks pass.
+Fresh22824 fires six ordinary shots; three contact the actual source target.
+Its original OnHitWith block requests PlayGroup, increments targetCount and
+enters tutorial62. The third target contact completes all original stage55
+and60 results and admits the source radroach, without a source/native error.
+The bot is continuing ordinary radroach combat. No quest stage was edited.
+Weapon-owned scripts, player hit-script admission, plugin callbacks, explosive
+direct contacts, nested lists and matched retail hit timing remain open.
+Actual NPC package resource/time/pose is now exposed alongside root/route state
+without requiring a complete save capture.
 
 A live unpaused sample at44 showed stationary Dad/Jonas roots and independent
 idle/head clocks. Kendall's canceled Travel kept a walking clip after its new
@@ -74,8 +93,8 @@ synchronized and has no task PR pending.
 
 Observe actual moving NPC roots, headings, route and source clocks in the fresh
 replay.
-Bind real projectile contacts to shared authored OnHitWith events, shoot the
-source targets and kill the radroach. Resolve the next reached script, movement
+Kill the admitted source radroach through ordinary weapon input. Resolve the
+next reached script, movement
 or persistence failure through its general owner. Continue through birthday,
 G.O.A.T., Vault escape, Megaton and the authored train to the Mojave/Benny.
 Complete actor/furniture/procedure restoration without resetting failed prefixes.
@@ -88,11 +107,12 @@ retail and physical headset acceptance remain open.
 
 ## Private continuation
 
-tmp/development-lab/ttw-pipboy-20261003/ retains the actual44/eight-shot failed
-greeting journal, independent-clock observation and prior route failures.
-Old native43180 exited externally before the diagnostic Quit command could be
-sent; the journal distinguishes that exit. Fresh native32424 loads optimized
-code with recording off and the unchanged genuine80 checkpoint. The bot agent
+tmp/development-lab/ttw-pipboy-20261003/ retains the earlier44/eight-shot failed
+greeting journal, the reached50/three-shot journal, independent-clock and actual
+moving NPC observations, and prior route failures. Native43180 exited externally
+before diagnostic Quit;32424 closed through ordinary Quit after its three shots.
+Fresh native22824 loads optimized code with recording off and the unchanged
+genuine80 checkpoint. The bot agent
 owns ordinary input and movement observation; the primary owns runtime edits,
 coordinated builds and publication. Seven snapshot replacement failures were
 retained without clearing the counter.
