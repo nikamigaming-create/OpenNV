@@ -15,6 +15,10 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--reference-hits"])
+            {
+                HitEvents(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--door-state", var doorRoot, var doorMod, var doorModRoot,
                 var doorReference, var doorQuest, var doorStage, .. var doorDependencies])
             {
@@ -156,6 +160,7 @@ public partial class NativeReferenceEventsAudit : Node
             SaveDeferral();
             DoorActivation(records);
             DisabledSpeech(records);
+            HitEvents();
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)

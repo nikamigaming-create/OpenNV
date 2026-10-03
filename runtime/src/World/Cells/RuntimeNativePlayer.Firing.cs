@@ -58,6 +58,7 @@ internal partial class RuntimeNativePlayer
         pendingHitscan = PendingProjectileImpactState,
         lastHitscanImpact = LastHitscanImpact,
         damageError = _damageError,
+        hitEventError = _hitEventError,
         lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,

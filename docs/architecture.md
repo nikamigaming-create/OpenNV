@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Reference weapon-hit events](reference-weapon-hit-events.md) join actual
+projectile/melee contacts to source scripts after damage. Typed weapon/attacker
+membership, authored block order and revision-preserving receipts share the
+reference world; health or impact presentation is not required for an activator.
+
 [Environment resources](environment-resource-dimensions.md) preserve actual DDS
 2D or cube dimensionality independently of the NIF environment slot. The shared
 lighting composition binds the corresponding sampler without inventing faces.

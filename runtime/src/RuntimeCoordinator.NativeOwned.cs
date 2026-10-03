@@ -1113,6 +1113,7 @@ public partial class RuntimeCoordinator
             () => _nativeOpeningStageDriver!.PlayerPerkEntries,
             condition => _nativeOpeningStageDriver!.EvaluateRecipeCondition(condition),
             (damage, part) => _nativeOpeningStageDriver!.DamagePlayer(damage, part));
+        _nativePlayer.ConfigureHitEvents(_nativeReferences!, collider => _nativeReferenceEvents?.CollisionReference(collider));
         _nativePlayer.CanOccupyPosition = NativeCollisionResident;
         _nativePlayer.IsDefeated = () => _nativeOpeningStageDriver?.Vitals.HitPoints == 0;
         var restore = _nativeContinueOpening

@@ -5,6 +5,16 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args.Length >= 3 && args[0] == "--audit-ttw-weapon-hit")
+{
+    OwnedWeaponHitProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
+if (args is ["--reference-hit-contracts"])
+{
+    ReferenceHitContracts.Run();
+    return;
+}
 if (args.Length >= 3 && args[0] == "--audit-ttw-dialogue-distance")
 {
     OwnedDialogueDistanceProbe.Run(args[1], args[2], args[3..]);
@@ -527,6 +537,7 @@ CharacterGenerationContracts.Run();
 PlayerScriptPackageContracts.Run();
 PackageEventContracts.Run();
 ReferencePackageEventContracts.Run();
+ReferenceHitContracts.Run();
 DoorMotionContracts.Run();
 ReferenceAccessContracts.Run();
 NumericGameSettingContracts.Run();

@@ -52,6 +52,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         references = _bindings.Count,
         pendingPackageEvents = _world.PendingPackageEventCount,
         pendingPackageActors = _world.PackageEvents.PendingActors.Select(actor => actor.ToString()).ToArray(),
+        pendingHitEvents = _world.PendingHitEventCount,
+        pendingHitReferences = _world.HitEvents.PendingReferences.Select(reference => reference.ToString()).ToArray(),
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
         errors = _bindings.Values.Where(value => value.Instance.ScriptError is not null)
             .Select(value => new { reference = value.Reference.FormKey.ToString(), error = value.Instance.ScriptError }).ToArray(),
@@ -306,18 +308,21 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 _world.PackageEvents.HasPending(binding.Reference.FormKey)
                 ? _world.PackageEvents.SnapshotPending(binding.Reference.FormKey) : null;
             var hasPackageEvents = packageBatch?.Count > 0;
+            var hitBatch = _world.HitEvents.HasPending(binding.Reference.FormKey)
+                ? _world.HitEvents.SnapshotPending(binding.Reference.FormKey) : null;
+            var hasHitEvents = hitBatch?.Count > 0;
             var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
                 !_abilityActors.Contains(binding.Reference.FormKey);
-            if (!needsAbilities && !hasPackageEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!needsAbilities && !hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
             if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
                 _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
-            if (!hasPackageEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
             var enabled = _world.IsEnabled(binding.Reference.FormKey);
             binding.ActorScriptStarted |= enabled;
             if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) continue;
             if (binding.Trigger is { } volume && volume.Visible != enabled) GamebryoReferenceEnableRuntime.Apply(volume, enabled);
-            if (!hasPackageEvents && binding.Instance.Script is null && binding.PendingActivation is null) continue;
+            if (!hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null) continue;
             // Keep admitting real contact transitions after a script fault. The
             // C# owner decides whether a fresh event can retry its source block;
             // suppressing contact sampling here permanently poisoned saved triggers.
@@ -347,6 +352,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 events.AddRange(binding.Contacts.Advance(contacts));
             }
             if (hasPackageEvents) events.AddRange(packageBatch!.Events);
+            if (hasHitEvents) events.AddRange(hitBatch!.Events);
             events.Add(new("GameMode"));
             var results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
                 playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
@@ -356,6 +362,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             // Source faults retain their executed prefix on the actual instance.
             // Consume this admission once while preserving marks produced by it.
             if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
+            if (hasHitEvents) _world.HitEvents.Consume(hitBatch!);
             Report(binding, results);
         }
     }

@@ -136,6 +136,7 @@ internal partial class RuntimeNativePlayer
         }
 
         var reference = ShotReference(collider);
+        var hitReference = HitReference(collider);
         var impactBytes = fields.SingleOrDefault(field => field.Signature == "INAM").Data;
         FalloutActorHit? hit = null;
         _damageError = null;
@@ -152,8 +153,11 @@ internal partial class RuntimeNativePlayer
                 var damage = (_damage ?? throw new InvalidOperationException("Player damage owner is absent."))
                     .Resolve(weapon.Form, baseDamage);
                 hit = combat.Hit(collider, damage, _presentationRecords.RuntimeFormKey(0x14),
-                    _combatLevel!(), _combatGlobals!, weapon.OnHitBehavior, _weaponHandling!.NextShotRandomUnit);
+                    _combatLevel!(), _combatGlobals!, weapon.OnHitBehavior, _weaponHandling!.NextShotRandomUnit,
+                    hitWeapon: weapon.Form);
             }
+            else if (collider is not null)
+                MarkWeaponHit(hitReference, _presentationRecords.RuntimeFormKey(0x14), weapon.Form, FalloutReferenceHitKind.Melee);
         }
         catch (Exception error)
         {
