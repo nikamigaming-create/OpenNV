@@ -19,6 +19,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private readonly InputSystem.RuntimeNativeScriptEvents _events;
     private readonly RuntimeNativeUiClock _uiClock;
     private IDisposable? _activationSoundDefault;
+    private IDisposable? _vampireQueryDefault;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal Func<IEnumerable<uint>?>? ActiveMenus { get; set; }
     internal FalloutNewGameBootstrap? Bootstrap { get; set; }
@@ -64,6 +65,9 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         AddChild(_events);
         if (RuntimeLiveContentSource.Current is { } source)
         {
+            _vampireQueryDefault = Scripts.ActorQueries.BindVampire(() => FalloutExecutableStringTable.ReadVampireQueryDeclaration(
+                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
+                    source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
             _activationSoundDefault = Scripts.NoActivationSound.BindDefault(() => FalloutExecutableStringTable.ReadNoActivationSoundDefault(
                 Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
                     source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
@@ -87,6 +91,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     public override void _ExitTree()
     {
         _activationSoundDefault?.Dispose(); _activationSoundDefault = null;
+        _vampireQueryDefault?.Dispose(); _vampireQueryDefault = null;
     }
 
     public override void _Process(double delta)

@@ -5,6 +5,16 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--vampire-contracts"])
+{
+    VampireQueryContracts.Run();
+    return;
+}
+if (args.Length >= 6 && args[0] == "--audit-vampire-query")
+{
+    OwnedVampireQueryProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6..]);
+    return;
+}
 if (args is ["--conversation-contracts"])
 {
     ConversationContracts.Run();
@@ -464,6 +474,7 @@ AgeRaceContracts.Run();
 FaceGeometryContracts.Run();
 ScriptSoundContracts.Run();
 NoActivationSoundContracts.Run();
+VampireQueryContracts.Run();
 SayToContracts.Run();
 ScreenBloodContracts.Run();
 QuestMenuContracts.Run();

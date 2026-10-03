@@ -220,6 +220,8 @@ internal sealed class FalloutQuestScripts
     private readonly FalloutQuestScriptInitialization _initialization;
     internal FalloutReferenceWorld? References { get; }
     internal FalloutScriptValueStore ScriptValues { get; }
+    private readonly FalloutActorQueries _actorQueries = new();
+    internal FalloutActorQueries ActorQueries => References?.ActorQueries ?? _actorQueries;
     internal FalloutAuxiliaryStore Auxiliary { get; }
     internal FalloutScriptIniStore? Ini { get; }
     internal FalloutInputControls? Controls { get; }
@@ -610,6 +612,13 @@ internal sealed class FalloutQuestScripts
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getinchargen")
                 return new([], _ => Session.InCharGen ? 1 : 0) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getvampire")
+                return new([], arguments =>
+                {
+                    if (caller is null && parts.Length == 2) _ = instance.Bindings.Reference(parts[0]);
+                    return ActorQueries.GetVampire();
+                })
+                { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
                 return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>

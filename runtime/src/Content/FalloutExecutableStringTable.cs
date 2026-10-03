@@ -312,6 +312,30 @@ internal static partial class FalloutExecutableStringTable
         internal uint Base { get; } = checked((uint)headers.PEHeader!.ImageBase);
         internal uint CodeBase => checked(Base + (uint)headers.SectionHeaders.Single(section => section.Name == ".text").VirtualAddress);
 
+        internal (int Execute, int Evaluate) ReferenceConditionEntries(string name, ushort function, byte[] code)
+        {
+            (int Execute, int Evaluate)? result = null;
+            foreach (var section in headers.SectionHeaders.Where(section =>
+                (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0))
+            {
+                var data = bytes.AsSpan(section.PointerToRawData, section.SizeOfRawData);
+                for (var at = 0; at <= data.Length - 40; at += sizeof(uint))
+                {
+                    var row = data[at..];
+                    if (Literal(U32(row, 0)) != name) continue;
+                    var execute = U32(row, 24); var evaluate = U32(row, 32);
+                    if (U32(row, 8) != 0x1000U + function || BinaryPrimitives.ReadUInt16LittleEndian(row[16..]) != 1 ||
+                        BinaryPrimitives.ReadUInt16LittleEndian(row[18..]) != 0 || Literal(U32(row, 4)) is null ||
+                        Literal(U32(row, 12)) is null || execute < CodeBase || evaluate < CodeBase ||
+                        execute - CodeBase >= code.Length || evaluate - CodeBase >= code.Length)
+                        throw new NotSupportedException("Owned reference condition descriptor is unbound.");
+                    if (result is not null) throw new InvalidDataException("Owned reference condition descriptor is ambiguous.");
+                    result = (checked((int)(execute - CodeBase)), checked((int)(evaluate - CodeBase)));
+                }
+            }
+            return result ?? throw new NotSupportedException($"Owned reference condition has no declaration: {name}.");
+        }
+
         internal ReadOnlySpan<byte> ScriptCommandBody(string name, byte[] code)
         {
             var body = code.AsSpan(ScriptCommandStart(name, code));

@@ -9,7 +9,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null, Func<bool>? playerFemale = null,
     Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
     FalloutFormKey? listener = null, FalloutDialogueSpeaker? listenerIdentity = null,
-    Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null)
+    Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -20,6 +20,11 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 40)
+        {
+            if (condition.RunOn > 2) throw new NotSupportedException("Dialogue vampire query scope is unbound.");
+            return (vampireQuery ?? throw new NotSupportedException("Dialogue has no owned vampire query declaration."))();
+        }
         if (condition.Function == 161)
             return FalloutAiPackages.IsCurrentPackage(condition, speaker, currentPackage ??
                 throw new NotSupportedException("Dialogue current-package query has no active actor package owner."), Listener) ? 1 : 0;

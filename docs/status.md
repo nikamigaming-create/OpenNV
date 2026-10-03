@@ -26,6 +26,11 @@ speaker/listener/explicit actor in conversations and scripted speech. Synthetic
 scope/replacement/failure checks,230 selected TTW predicates, the owned native
 assignment/retirement audit and the required integrated gate pass. A fresh ordinary
 retry passes that query and retains GetVampire as the next conversation failure.
+The [owned GetVampire query](owned-vampire-query.md) now shares its selected
+executable declaration across dialogue and scripts. Synthetic contracts, all
+nine selected TTW GREETING conditions and the required integrated gate pass.
+The fresh ordinary retry reaches birthday12 and passes that query, then retains
+a player-target GetItemCount condition as the next conversation failure.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the
@@ -110,9 +115,10 @@ ordering, shared occupancy and placement repairs. Paul's explicit-reference
 package query no longer faults, and he takes his authored bench seat. The
 selected view removes the actor displaced in front of Amata; exact alignment,
 walk/turn timing and matched pixels remain unaccepted.
-The finishing source result retains an unowned ForceRadioStationUpdate command;
-Amata's conversation queues behind it after player approach. The glasses actor,
-complete birthday, campaign and matched retail acceptance remain open.
+The finishing source result now refreshes radio reception and discovery. The
+latest ordinary Amata approach retains the inventory condition described above.
+The glasses actor, complete birthday, campaign and matched retail acceptance
+remain open.
 Automatic escort-door recovery and short bot endpoint crossing remain open.
 Megaton and the wider campaign remain unreached.
 The bot run starts from a genuine human-reached checkpoint; Vault completion,

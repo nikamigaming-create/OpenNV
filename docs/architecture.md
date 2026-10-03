@@ -29,6 +29,12 @@ source wait/trigger selection and INFO/audio/LIP completion.
 self, target or explicit reference owner in AI, conversations and scripted
 speech. NPC/creature callbacks retire with their body; player queries share the
 existing assignment lifecycle.
+
+[GetVampire](owned-vampire-query.md) shares one lazy owned-executable declaration
+between dialogue and script queries. The selected New Vegas profile admits the
+named command's result flow and unconditional false predicate before returning
+zero; changed predicates and unknown layouts remain unbound.
+
 Furniture reservations distinguish every enabled source marker, and winning
 IDLE sibling links can cross original plugin owners. See
 [furniture motion](furniture-motion.md) for entry and placement boundaries.
