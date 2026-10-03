@@ -35,12 +35,15 @@ public partial class NativeLocomotionAudit
             async Task Walk(IReadOnlyList<Vector3> path)
             {
                 foreach (var waypoint in path)
-                    for (var frame = 0; frame < 180; frame++)
+                {
+                    var segment = waypoint - body.GlobalPosition; segment.Y = 0;
+                    var maximumFrames = checked((int)Math.Ceiling(segment.Length() / (.6f * GetPhysicsProcessDeltaTime())) + 60);
+                    for (var frame = 0; frame < maximumFrames; frame++)
                     {
                         await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                         var offset = waypoint - body.GlobalPosition; offset.Y = 0;
                         if (offset.Length() < .025f) break;
-                        if (frame == 179) throw new InvalidOperationException("Controller could not execute the capsule-supported narrow passage.");
+                        if (frame == maximumFrames - 1) throw new InvalidOperationException("Controller could not execute the capsule-supported narrow passage.");
                         var delta = (float)GetPhysicsProcessDeltaTime();
                         body.Velocity = offset.Normalized() * .6f + Vector3.Up *
                             (body.IsOnFloor() ? Math.Min(body.Velocity.Y, 0) : body.Velocity.Y - 9.81f * delta);
@@ -48,6 +51,7 @@ public partial class NativeLocomotionAudit
                             body.Velocity = Vector3.Down * .01f;
                         body.MoveAndSlide();
                     }
+                }
             }
             await Walk(route.Path);
             if (!body.IsOnFloor() || body.GlobalPosition.DistanceTo(goal) > .03f)

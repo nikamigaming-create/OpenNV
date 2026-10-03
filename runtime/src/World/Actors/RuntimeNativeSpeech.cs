@@ -50,6 +50,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, FalloutFormKey?>? _currentPackage;
     private Func<int>? _vampireQuery;
     private Func<FalloutFormKey, FalloutFormKey, double>? _itemCount;
+    private Func<FalloutFormKey, FalloutFormKey, float>? _referenceDistance;
     private Func<uint, uint>? _dialogueRandom;
     private FalloutReferenceWorld? _references;
     private Func<FalloutCondition, float>? _conditionContext;
@@ -198,7 +199,8 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutFormKey, int, float>? actorValue = null, Func<uint, uint>? dialogueRandom = null,
         FalloutReferenceWorld? references = null, Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null,
         Func<int>? vampireQuery = null, Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
-        Func<FalloutFormKey, Node3D?>? presentation = null)
+        Func<FalloutFormKey, Node3D?>? presentation = null,
+        Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
@@ -211,6 +213,7 @@ internal partial class RuntimeNativeSpeech : Node
         _currentPackage = currentPackage;
         _vampireQuery = vampireQuery;
         _itemCount = itemCount;
+        _referenceDistance = referenceDistance;
         _dialogueRandom = dialogueRandom;
         _references = references;
         _conditionContext = conditionContext;

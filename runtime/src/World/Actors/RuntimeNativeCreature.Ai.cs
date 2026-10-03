@@ -87,7 +87,7 @@ internal sealed partial class RuntimeNativeCreature
         }
     }
 
-    internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (161 or 289)
+    internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (50 or 161 or 289)
         ? throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.")
         : condition.Function switch
         {
@@ -102,7 +102,8 @@ internal sealed partial class RuntimeNativeCreature
             32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
             35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
             36 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
-            50 => _aiState!.TalkedToPlayer ? 1 : 0,
+            50 => FalloutAiPackages.HasTalkedToPlayer(condition, Appearance.Reference!.Value,
+                reference => _aiWorld!.Get(reference).TalkedToPlayer) ? 1 : 0,
             53 => (float)_aiWorld!.ReadVariable(_aiQuests!, condition.FormArgument1, condition.Argument2),
             63 => Activity.Attacked ? 1 : 0,
             72 => Appearance.Creature == condition.FormArgument1 ? 1 : 0,

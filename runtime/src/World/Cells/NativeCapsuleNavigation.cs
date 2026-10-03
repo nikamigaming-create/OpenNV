@@ -99,6 +99,7 @@ internal static partial class NativeCapsuleNavigation
         using var query = new PhysicsTestMotionParameters3D { Margin = body.SafeMargin, MaxCollisions = 4 };
         using var hit = new PhysicsTestMotionResult3D();
         var rid = body.GetRid();
+        using var supportRay = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]);
         var basis = body.GlobalBasis;
         var floorCosine = MathF.Cos(body.FloorMaxAngle);
         // A short descent includes the controller's supported step interval
@@ -113,7 +114,7 @@ internal static partial class NativeCapsuleNavigation
             return PhysicsServer3D.BodyTestMotion(rid, query, hit);
         }
         NativeNavigationContact? rejected = null;
-        bool Edge(Vector3 from, Vector3 desired, out Vector3 landing)
+        bool Edge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep = true)
         {
             rejected = null;
             landing = default;
@@ -126,6 +127,7 @@ internal static partial class NativeCapsuleNavigation
             if (Sweep(from, motion))
             {
                 var obstacle = Contact(hit, from, desired, floorCosine);
+                if (!allowStep) { rejected = obstacle; return false; }
                 var lift = Vector3.Up * (stepHeight + body.SafeMargin * 4);
                 if (Sweep(from, lift) || Sweep(from + lift, motion)) { rejected = obstacle; return false; }
                 supportedFrom += lift;
@@ -134,11 +136,20 @@ internal static partial class NativeCapsuleNavigation
             if (!Sweep(supportedFrom, Vector3.Down * drop) || !Enumerable.Range(0, hit.GetCollisionCount())
                 .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine)) return false;
             landing = supportedFrom + hit.GetTravel();
+            // A rounded capsule can touch a walkable normal on a ledge while
+            // its feet remain over empty space. Sliding then pushes that body
+            // off the edge instead of executing the planned waypoint. Require
+            // the same native floor beneath the controller root as well.
+            supportRay.From = landing + Vector3.Up * body.SafeMargin * 8;
+            supportRay.To = landing - Vector3.Up * Math.Max(stepHeight, body.FloorSnapLength);
+            using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
+            if (support.Count == 0 || support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return false;
             var height = landing.Y - from.Y;
             return height <= stepHeight + body.SafeMargin * 8 &&
                 height >= -maximumDrop - body.SafeMargin * 8 && resident(landing);
         }
         static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
+        bool FlatEdge(Vector3 from, Vector3 desired, out Vector3 landing) => Edge(from, desired, out landing, allowStep: false);
         (int X, int Z, int Y) Key(Vector3 p) => ((int)MathF.Round((p.X - start.X) / spacing),
             (int)MathF.Round((p.Z - start.Z) / spacing), (int)MathF.Round(p.Y / .2f));
         var positions = new Dictionary<(int X, int Z, int Y), Vector3>();
@@ -172,7 +183,8 @@ internal static partial class NativeCapsuleNavigation
             // Three-dimensional distance keeps other floors outside the region.
             if (targetRadius > 0 && current != first && from.DistanceTo(target) <= targetRadius)
             {
-                yield return Approach(current);
+                foreach (var result in SmoothRoute(Approach(current), start, spacing, body.SafeMargin * 8, FlatEdge))
+                    yield return result;
                 yield break;
             }
             if (Flat(from, target) <= spacing * 1.5f && Edge(from, target, out var goal) && Math.Abs(goal.Y - target.Y) < .6f)
@@ -180,7 +192,8 @@ internal static partial class NativeCapsuleNavigation
                 var path = new List<Vector3> { goal };
                 while (current != first) { path.Add(positions[current]); current = parents[current]; }
                 path.Reverse();
-                yield return path;
+                foreach (var result in SmoothRoute(path, start, spacing, body.SafeMargin * 8, FlatEdge))
+                    yield return result;
                 yield break;
             }
             Record(current);

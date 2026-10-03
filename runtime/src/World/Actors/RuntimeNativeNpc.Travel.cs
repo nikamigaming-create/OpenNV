@@ -13,6 +13,8 @@ internal partial class RuntimeNativeNpc
     private Transform3D _travelDestination;
     private double _baseElapsedSeconds;
     private float _travelPublishedDistance;
+    private double _travelPublishedSeconds;
+    private float _travelTurnSpeed;
     private float _travelCycleDistance;
     private float _travelRootStart;
     private FalloutFormKey? _travelPackage;
@@ -72,6 +74,11 @@ internal partial class RuntimeNativeNpc
         _travelProgress?.Cancel();
         _travelProgress = new(path);
         _travelPublishedDistance = 0;
+        _travelPublishedSeconds = 0;
+        _travelTurnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.ReadRetained(_aiStack!,
+            "fCharacterDefaultTurningSpeed", nameof(RuntimeNativeNpc)));
+        if (!float.IsFinite(_travelTurnSpeed) || _travelTurnSpeed <= 0)
+            throw new InvalidDataException("Source travel turning speed is not positive and finite.");
         if (_bindingInitialBase && _packageEvents is { Done: true, Active: { } retained } && retained.Form == package.FormKey)
         {
             if (destinationRadiusGameUnits != 0 || purpose == "furniture-approach")
@@ -94,8 +101,10 @@ internal partial class RuntimeNativeNpc
             $"distancePerCycle={_travelCycleDistance:R} parity=unmeasured");
     }
 
-    private void PlayLocomotion(bool moving)
+    private void PlayLocomotion(bool moving, FalloutActorAnimationSnapshot? continuation = null)
     {
+        if (continuation is not null && (!moving || !_travelActive))
+            throw new InvalidOperationException("A retained walking clock requires its still-active travel controller.");
         var directory = Appearance.SkeletonPath[..Appearance.SkeletonPath.LastIndexOf('/')];
         // These are the engine's ordinary movement-group directories. The
         // source NPC sex selects the authored locomotion variant.
@@ -124,30 +133,41 @@ internal partial class RuntimeNativeNpc
                 RequireTranslationOnlyRoot(sample);
                 var cycles = Math.Floor(_baseElapsedSeconds * sequence.Frequency / (sequence.StopTime - sequence.StartTime));
                 var distance = (float)(cycles * _travelCycleDistance) + sample.Translation!.Value.Y - _travelRootStart;
-                AdvanceTravel((distance - _travelPublishedDistance) * Skeleton.UnitsToMetres);
+                AdvanceTravel((distance - _travelPublishedDistance) * Skeleton.UnitsToMetres,
+                    _baseElapsedSeconds - _travelPublishedSeconds);
                 _travelPublishedDistance = distance;
+                _travelPublishedSeconds = _baseElapsedSeconds;
             };
         }
         _baseAnimation = new(nif, sequence, Skeleton, accumulationRoot: root);
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
         _baseAnimationSeconds = sequence.StartTime;
         _baseElapsedSeconds = 0;
-        BindBaseClock(nif, path, ambient: !moving);
+        if (moving && continuation is null) { _travelPublishedDistance = 0; _travelPublishedSeconds = 0; }
+        BindBaseClock(nif, path, ambient: !moving, continuation);
         if (_animation is null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);
         else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (_animation, _animationSeconds));
         SetMeta("opennv_base_animation_source", identity);
     }
 
-    private void AdvanceTravel(float distance)
+    private void AdvanceTravel(float distance, double delta)
     {
         if (!_travelActive || _conversationTarget is not null) return;
+        if (!double.IsFinite(delta) || delta < 0)
+            throw new InvalidDataException("Source travel turning clock moved backwards.");
         var step = _travelProgress!.Advance(Position, distance);
         Position = step.Position;
         if (step.Direction is { } offset)
         {
             var horizontal = new Vector3(offset.X, 0, offset.Z);
             if (horizontal.LengthSquared() > 0)
-                Basis = Basis.LookingAt(horizontal.Normalized(), Vector3.Up).Scaled(Scale);
+            {
+                var current = Basis.Orthonormalized().GetRotationQuaternion();
+                var destination = Basis.LookingAt(horizontal.Normalized(), Vector3.Up).GetRotationQuaternion();
+                var angle = current.AngleTo(destination);
+                Basis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 :
+                    Math.Min(1, _travelTurnSpeed * (float)delta / angle))).Scaled(Scale);
+            }
         }
         if (!_travelActive) Transform = _travelDestination;
     }

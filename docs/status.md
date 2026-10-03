@@ -5,55 +5,43 @@ experimental. Code, component checks, ordinary input, cold continuation,
 simulator presentation and physical acceptance are separate evidence levels.
 [Current work](current-work.md) identifies the exact candidate and active work.
 
-Checked PR121 is merged. Main binds real reference targets and
-supported capsule arrival regions, retains NPC-to-NPC source dialogue links and
-participant leases, and plays listener IDLEs on the actual listener. Ordinary
-native input completes the intercom exchange and subsequent Dad conversation,
-reaching birthday40. Six original booth references admit, and cold furniture
-placement is protected from stale package travel poses. All15 NPCs admit; shared
-chair clips have independent reference-owned phases. Exact furniture/actor cold
-continuation, robot facing/effects and remaining missing room models are open.
-New Game source player inventory/equipment and shared inventory binding pass
-synthetic/selected owned checks. Fresh ordinary birth/SPECIAL/Dad input reaches
-CG01:80 with the source equipment; cold Continue reaches birthday12 and ordinary
-Tab opens the original Pip-Boy Stats page. Items selection and closing also work.
-Legacy checkpoints retain missing initialization state. The bot queues bounded
-capsule planning and ordinary source-door subgoals; synthetic queued/door cases
-and owned read-only door-state checks pass. Live ordinary bot input approaches
-and activates the real diner exit while retaining its Jonas goal. The new cold
-replay passes its original guard, completes source opening and walks through;
-the next owned NAVM stair-route refusal remains visible. Subsequent user traversal
-reaches Jonas/stage42. The published shared AddItem/RemoveItem owner passes
-NPC/creature/container count, worn-item, variant, failed native retirement and
-cold checks plus the selected original stage42 inventory slice.
-The generic head-equipment basis admits explicit/omitted head Prn and
-eyeglass slots; synthetic, existing FaceGen regression and owned Jonas glasses
-checks pass, including the required integrated gate. Fresh optimized cold replay
-completes the original stage42 suffix and all six stage44 commands, receiving
-and equipping the BB gun plus50 rounds. Its first grip assembly fails because
-the loader assumes an unsuffixed filename; actual first/third-person resources
-carry authored suffixes. The shared animation-resource candidate passes
-synthetic metadata/case/folder/cache/failure checks. The selected owned native
-BB-gun audit passes both source views, grip, equip/unequip, authored attack Hit,
-reload and projectile sockets without changing17 source resources or the genuine
-checkpoint. The required integrated gate passes. Fresh optimized cold replay
-completes42/44 and binds the actual drawn BB gun without a player presentation
-error. Ordinary range approach reaches Dad's original greeting, which retains
-unbound condition Fallout3.esm:01f9c9/1/0 before the first shot. Ordinary firing
-remains pending. Early
-native construction restores completed package lifecycles before
-selecting the saved base clock. The required integrated gate and selected final
-TTW intercom/inventory audits passed before checked publication. The new
-[package reevaluation candidate](source-package-evaluation.md) retains source
-selection independently of later native procedure execution. Its isolated
-owned command audit passes; fresh ordinary cold replay now reaches40 with no
-retained stage-result error. Sandbox remains unowned and unsaveable.
-The shared GetIsReference owner passes synthetic identity/scope/cold checks
-and original diner guards at stages39/40. Scalar/vector TBC passes synthetic and
-selected source controller-channel checks. Ordinary diner activation/traversal
-and the new integrated gate pass; checked publication is complete. The BB-gun lesson,
-birthday completion, G.O.A.T.,
-Megaton, train and Mojave remain unreached.
+Checked PR122 is merged at main139db8a. Ordinary TTW input completes the
+intercom exchange and original Jonas42/Dad44 effects, receiving/equipping the
+source BB gun plus50 rounds. The shared animation-resource index binds its
+authored first/third grip variants. Selected owned equip/attack/reload/socket
+checks, the integrated gate and all five PR122 checks pass. The user fires eight
+ordinary shots and contacts a source range target. Fresh ordinary replay with
+the spatial-query candidate completes Dad's range greeting and its original
+stage50 result; target55 and the radroach remain unreached.
+
+The active candidate repairs an NPC walk clock reset on dialogue release,
+bounds source Travel turning and simplifies capsule-supported flat routes.
+Its owned interrupted-walk check and actual native straight/gap/steps fixtures
+pass. A native ledge contact now also requires floor beneath the controller
+root. Shared dialogue distance and package talked-to-player subjects pass
+synthetic/selected owned live/cold query checks; the original Amata explicit
+subject no longer uses the native self-only restriction. Attack actions retain
+aim intent. Fresh optimized ordinary replay reaches source50 without a dialogue
+or weapon presentation error. The integrated gate and publication rerun pass,
+including the interrupted-route identity guard. See [motion continuation](actor-motion-continuation.md) and
+[spatial queries](dialogue-spatial-queries.md). Complete animation blending,
+foot contact, dynamic avoidance, ADS zoom/alignment, gifted magazines and
+matched retail timing/pixels remain open.
+
+Source reference identity, dialogue participant leases and listener IDLEs have
+shared owners. Six original booths and all15 birthday NPCs admit. Shared chair
+clips have independent reference-owned phases; complete furniture/actor cold
+continuation remains open. A paused/unpaused44 observation shows independent
+Dad/Jonas clocks and stationary roots, while Kendall retains a walking clip
+after its controlled dialogue movement owner fails. Other unowned NPC
+procedures remain visible and block complete saves. Source player starting
+inventory, persistent inventory mutations and selected Jonas eyeglass assembly
+checks pass. Fresh birth/SPECIAL/Dad reaches80 with source equipment, and cold
+Continue opens/closes the original Pip-Boy Stats/Items UI. Original incomplete
+checkpoints retain missing history. Robot facing/thrusters, remaining missing
+room models, stair/range-rail bot refinement, exact active cold continuation,
+birthday completion, G.O.A.T., Vault escape, Megaton, train and Mojave remain
+open.
 
 The [radio refresh owner](source-radio-refresh.md) now binds global source
 ForceRadioStationUpdate/FRSU to winning transmitter reception, applied enable,

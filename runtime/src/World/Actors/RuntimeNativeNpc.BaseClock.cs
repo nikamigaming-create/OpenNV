@@ -10,17 +10,19 @@ internal partial class RuntimeNativeNpc
     private string _baseResource = "", _baseHash = "";
     private bool _baseAmbient;
 
-    private void BindBaseClock(FalloutNifFile source, string resource, bool ambient)
+    private void BindBaseClock(FalloutNifFile source, string resource, bool ambient,
+        FalloutActorAnimationSnapshot? continuation = null)
     {
         _baseResource = resource; _baseHash = source.Sha256; _baseAmbient = ambient;
         if (_bindingInitialBase) return;
         _baseClock.Change(resource, _baseHash);
-        ResumeBaseClock();
+        if (continuation is not null) _baseClock.Restore(continuation);
+        ResumeBaseClock(retainedTravel: continuation is not null);
     }
 
-    private void ResumeBaseClock()
+    private void ResumeBaseClock(bool retainedTravel = false)
     {
-        if (_travelActive && !_baseAmbient && !_baseClock.StartPending)
+        if (_travelActive && !_baseAmbient && !_baseClock.StartPending && !retainedTravel)
             throw new NotSupportedException("Saved actor travel requires its controller pose, route cursor and consumed root-motion continuation owner.");
         var sequence = _baseAnimation!.Sequence;
         if (_baseAmbient && Appearance.Reference is { } reference)

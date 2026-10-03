@@ -10,7 +10,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, FalloutFormKey>? actorRace = null,
     FalloutFormKey? listener = null, FalloutDialogueSpeaker? listenerIdentity = null,
     Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null,
-    Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
+    Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
+    Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -21,6 +22,25 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 1)
+        {
+            var subject = condition.RunOn switch
+            {
+                0 => speaker,
+                1 => Listener,
+                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                    ?? throw new InvalidDataException("Dialogue distance has no explicit reference."),
+                _ => throw new NotSupportedException("Dialogue distance scope is unbound."),
+            };
+            var target = condition.FormArgument1;
+            foreach (var reference in new[] { subject, target })
+                if (reference != records.RuntimeFormKey(0x14) &&
+                    (!records.TryGetEffective(reference, out var placed) || placed.Signature is not ("REFR" or "ACHR" or "ACRE")))
+                    throw new InvalidDataException("Dialogue distance requires actual placed references.");
+            var distance = (referenceDistance ?? throw new NotSupportedException("Dialogue has no shared spatial query owner."))(subject, target);
+            return float.IsFinite(distance) && distance >= 0 ? distance :
+                throw new InvalidDataException("Dialogue spatial owner returned an invalid distance.");
+        }
         if (condition.Function == 47)
         {
             var subject = condition.RunOn switch

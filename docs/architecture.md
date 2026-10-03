@@ -62,6 +62,12 @@ distance along checked native capsule waypoints while the source turn owner
 rotates the body. Safe-margin waypoint consumption and endpoint bounds prevent
 the body from curving off the cleared route or passing a corner.
 
+[Actor motion continuation](actor-motion-continuation.md) retains a suspended
+walking clock through dialogue, bounds source Travel turning and simplifies
+only capsule-supported flat routes. Native floor support below the controller
+root excludes unstable ledge contacts. [Dialogue spatial queries](dialogue-spatial-queries.md)
+share live distance and explicit actor-history subjects across runtime owners.
+
 [Creature material controllers](creature-material-controllers.md) retain dormant
 shared shader flags on ordinary lighting paths and bind direct refraction
 strength to the source scalar clock. Complete CREA assembly registers its real

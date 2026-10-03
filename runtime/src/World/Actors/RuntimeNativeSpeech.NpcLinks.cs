@@ -37,7 +37,7 @@ internal partial class RuntimeNativeSpeech
             _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace,
             listener: listenerReference is null ? target : DialogueSubject(listenerReference.Value),
             listenerIdentity: listenerReference is { } reference ? SpeakerIdentity(reference) : null,
-            currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount);
+            currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance);
         return (_selection ?? throw new NotSupportedException("Scripted speech has no shared dialogue quest selection owner."))
             .Select(topic, identity.Actor, _said, _questStage, conditions.Evaluate, _dialogueRandom, npcConversation: npcConversation);
     }

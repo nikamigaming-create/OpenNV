@@ -5,6 +5,13 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static bool HasTalkedToPlayer(FalloutCondition condition, FalloutFormKey caller,
+        Func<FalloutFormKey, bool> query, FalloutFormKey? target = null)
+    {
+        if (condition.Function != 50) throw new InvalidDataException("Talked-to-player query has a different source function.");
+        return query(ConditionSubject(condition, caller, target));
+    }
+
     internal static bool IsCurrentPackage(FalloutCondition condition, FalloutFormKey caller,
         FalloutFormKey? currentPackage, Func<FalloutFormKey, FalloutFormKey?> query)
         => IsCurrentPackage(condition, caller, reference => reference == caller ? currentPackage : query(reference));
