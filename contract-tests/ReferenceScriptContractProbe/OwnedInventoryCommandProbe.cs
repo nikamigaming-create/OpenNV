@@ -12,7 +12,6 @@ internal static class OwnedInventoryCommandProbe
         var setup = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
         using var content = setup.OpenSource();
         using var records = FalloutPluginStack.Load(content.PluginSources);
-        using var world = new FalloutReferenceWorld(records);
         var quest = FalloutDialogueTopic.Find(records, "QUST", questId);
         var hash = SHA256.HashData(quest.ReadData());
         var fields = quest.ReadSubrecords().ToArray();
@@ -21,7 +20,7 @@ internal static class OwnedInventoryCommandProbe
         var end = begin + 1; while (end < fields.Length && fields[end].Signature is not ("INDX" or "QOBJ")) end++;
         bool InventoryCommand(string line) =>
             line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0].Split('.')[^1].ToLowerInvariant() is
-                "removeallitems" or "additem" or "equipitem" or "resetinventory";
+                "removeallitems" or "additem" or "removeitem" or "equipitem" or "equipobject" or "resetinventory";
         var candidates = new List<FalloutPluginSubrecord[]>();
         for (var index = begin + 1; index < end;)
         {
@@ -35,6 +34,7 @@ internal static class OwnedInventoryCommandProbe
         var sourceEntry = 0;
         foreach (var entry in candidates)
         {
+            using var world = new FalloutReferenceWorld(records);
             var source = FalloutDialogueTopic.ScriptText(entry.Single(field => field.Signature == "SCTX").Data.Span);
             var commands = FalloutDialogueTopic.CodeLines(source).Where(InventoryCommand).ToArray();
             var bindings = new FalloutScriptBindings(records, quest, quest, entry);
@@ -54,6 +54,20 @@ internal static class OwnedInventoryCommandProbe
                 var inventory = world.Inventory(target, 1).Contents;
                 foreach (var item in inventory.Items) inventory.Remove(item.FormKey, item.Count, true);
             }
+            var countTargets = commands.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                .Where(parts => parts[0].Split('.')[^1].ToLowerInvariant() is "additem" or "removeitem")
+                .Select(parts => bindings.Reference(parts[0].Split('.')[0])).Distinct().ToArray();
+            foreach (var target in countTargets)
+            {
+                _ = world.Inventory(target, 1);
+                if (target != records.RuntimeFormKey(0x14) && records.GetEffective(world.Get(target).Base).Signature == "NPC_")
+                    _ = world.EquippedArmor(target, 1);
+            }
+            var removals = commands.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                .Where(parts => parts[0].Split('.')[^1].Equals("RemoveItem", StringComparison.OrdinalIgnoreCase))
+                .Select(parts => (Target: bindings.Reference(parts[0].Split('.')[0]), Item: bindings.Form(parts[1]).FormKey,
+                    Count: int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture))).ToArray();
+            var initialRemovalCounts = removals.Select(command => world.Inventory(command.Target, 1).Contents.Item(command.Item)?.Count ?? 0).ToArray();
             using var coldWorld = new FalloutReferenceWorld(records);
             coldWorld.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
             var snapshot = JsonSerializer.Deserialize<FalloutOpeningInventoryGrant>(JsonSerializer.Serialize(player.Capture()))!;
@@ -62,17 +76,22 @@ internal static class OwnedInventoryCommandProbe
             {
                 references.BindPlayerInventory(inventory);
                 var owner = new FalloutInventoryCommands(records, references, inventory, () => 1);
-                var executor = new FalloutReferenceScripts(records, references, new(records), new((_, _) => false, effect =>
-                {
-                    if (effect.Kind != FalloutReferenceEffectKind.AddItem || effect.Target != records.RuntimeFormKey(0x14))
-                        throw new NotSupportedException("Selected inventory component reached another effect.");
-                    inventory.Add(records, effect.Argument!.Value, effect.Value, 1, effect.Enable);
-                }, Inventory: owner));
+                var executor = new FalloutReferenceScripts(records, references, new(records), new((_, _) => false,
+                    _ => throw new NotSupportedException("Selected inventory component reached another effect."), Inventory: owner));
                 executor.ExecuteStage(quest, entry, string.Join('\n', commands));
                 if (equipped.Any(item => !inventory.Equipped.Contains(records.RuntimeFormId(item))))
                     throw new InvalidDataException("Selected source equipment did not become worn.");
                 if (owner.EquippedObject(records.RuntimeFormKey(0x14), 5) is not null)
                     throw new InvalidDataException("Selected source leaves an unexpected weapon equipped.");
+                for (var index = 0; index < removals.Length; index++)
+                {
+                    var removal = removals[index];
+                    var retained = references.Inventory(removal.Target, 1).Contents;
+                    var expected = Math.Max(0, initialRemovalCounts[index] - removal.Count);
+                    if ((retained.Item(removal.Item)?.Count ?? 0) != expected ||
+                        expected == 0 && retained.Equipped.Contains(records.RuntimeFormId(removal.Item)))
+                        throw new InvalidDataException("Selected source removal lost its retained count or equipment identity.");
+                }
             }
             Execute(world, player); Execute(coldWorld, coldPlayer);
             if (JsonSerializer.Serialize(player.Capture()) != JsonSerializer.Serialize(coldPlayer.Capture()) ||
@@ -89,6 +108,8 @@ internal static class OwnedInventoryCommandProbe
                 playerItems = player.Items.Count,
                 playerEquipment = player.Equipped.Count,
                 resetActors = resetTargets.Length,
+                countTargets = countTargets.Length,
+                sourceRemovalItems = initialRemovalCounts.Sum(),
                 coldInventoryAndRandom = true,
                 sourceReadOnly = true,
                 recording = false,

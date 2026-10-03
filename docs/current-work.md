@@ -13,8 +13,8 @@ and [JAM/MCM plan](jam-luna-max-plan.md). All36
 
 ## Verified state and active block
 
-Main is `274365e` after checked PR119. The active branch is
-`codex/package-command-departure`. Fresh ordinary cold Continue from genuine
+Main is `cfa5f5a` after checked PR120. The active branch is
+`codex/actor-inventory-head-equipment`. Fresh ordinary cold Continue from genuine
 CG01:80 completes Dad's Escort, source party/intercom conversations and reaches
 CG02:40 with no retained stage-result error. The bot approaches the actual closed
 diner exit and presses E while retaining Jonas as its original goal. The new
@@ -43,7 +43,7 @@ Completed exact-marker travel restores before base animation selection without
 replaying arrival; completed radius-region endpoints remain unowned. PR119's
 integrated gate and selected intercom/inventory audits passed before publication.
 
-The candidate separates source EvaluatePackage selection from native procedure
+Main separates source EvaluatePackage selection from native procedure
 execution on the ordinary actor frame. Later unsupported movement/animation no
 longer becomes this void command's result. Source condition and retained result
 faults still stop the caller. Pending/unowned procedures remain visible, refuse
@@ -58,13 +58,27 @@ and original diner-door guards at stages39/40 pass. Live ordinary activation
 opens the actual diner exit and the bot traverses it. The parallel scalar/vector
 TBC animation owner passes synthetic nonconstant/nonzero/nonuniform/failure
 checks and the selected source VDoor01 controller-channel audit. The required
-integrated Release/Debug/native gate passes. Checked publication remains pending.
+integrated Release/Debug/native gate passes. Checked publication is complete.
+
+The current candidate binds reached AddItem/RemoveItem commands and the legacy
+native effect adapter to shared player/NPC/creature/container contents. Counts,
+variants, worn-item removal, native weapon retirement failure and cold state
+checks pass. The selected original stage42 inventory component passes; Dad's
+default fixture has no party hat and therefore exercises absent-item removal.
+Rigid head equipment now binds the same source biped basis for explicit and
+omitted head Prn markers, including eyeglasses. Synthetic, FaceGen regression
+and selected owned Jonas glasses checks pass. Optimized Debug is built; ordinary
+cold replay from the immutable genuine80 checkpoint is active. The required
+integrated candidate gate passes. Live source42 suffix and checked publication
+remain pending. The new bot run again opens both actual source doors and retains
+the native-refinement stair refusal. Separately labelled ordinary keyboard
+traversal continues toward Jonas.
 
 ## Next executable outcome
 
-Bind reached actor scripted inventory to the shared actor/default inventory
-owner. Preserve the failed stage42 prefix and retry from the genuine checkpoint
-after the general owner is fixed. Resolve the bot stair-route refusal against
+Verify the shared actor inventory and head-equipment candidate through ordinary
+cold replay. Preserve the prior failed stage42 prefix and continue from the
+genuine checkpoint. Resolve the bot stair-route refusal against
 source NAVM/native floors and the source glasses attachment. Finish BB-gun targets/radroach
 lesson and birthday, then continue through G.O.A.T., Vault escape, Megaton, train
 and Mojave/Benny. Complete actor pose, furniture marker/phase, active IDLE and

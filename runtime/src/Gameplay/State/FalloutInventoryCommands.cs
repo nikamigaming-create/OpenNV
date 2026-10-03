@@ -3,10 +3,10 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum FalloutInventoryCommandKind { RemoveAll, Equip, Reset }
+internal enum FalloutInventoryCommandKind { RemoveAll, Equip, Reset, Add, Remove }
 internal sealed record FalloutInventoryCommand(FalloutInventoryCommandKind Kind, FalloutFormKey Target,
     FalloutFormKey? Item = null, FalloutFormKey? Destination = null, bool RetainOwnership = false,
-    bool NoUnequip = false, bool Silent = true);
+    bool NoUnequip = false, bool Silent = true, int Count = 1);
 
 // Shared state owner for result/object/quest commands and both player views.
 internal sealed class FalloutInventoryCommands(FalloutPluginStack records, FalloutReferenceWorld world,
@@ -24,10 +24,28 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
 
     internal void Execute(FalloutInventoryCommand command)
     {
+        if (command.Kind is FalloutInventoryCommandKind.Add or FalloutInventoryCommandKind.Remove && command.Count <= 0)
+            throw new InvalidDataException("Inventory command count must be positive.");
         var isPlayer = IsPlayer(command.Target);
         var inventory = Inventory(command.Target);
         switch (command.Kind)
         {
+            case FalloutInventoryCommandKind.Add or FalloutInventoryCommandKind.Remove:
+                var changedItem = command.Item ?? throw new InvalidDataException("Inventory count command has no item.");
+                var revision = inventory.Revision;
+                if (command.Kind == FalloutInventoryCommandKind.Add)
+                    inventory.Add(records, changedItem, command.Count, level(), command.Silent || !isPlayer, globals);
+                else
+                {
+                    // Retire an actual worn weapon before deleting its last item.
+                    // Armor and unrelated contents retain their existing pose owner.
+                    if (!isPlayer && inventory.Item(changedItem) is { RecordType: "WEAP" } weapon &&
+                        command.Count >= weapon.Count && inventory.Equipped.Contains(weapon.RuntimeFormId))
+                        prepareActorChange?.Invoke(command.Target);
+                    inventory.Remove(changedItem, command.Count, command.Silent || !isPlayer);
+                }
+                if (!isPlayer && inventory.Revision != revision) world.InventoryChanged(command.Target);
+                break;
             case FalloutInventoryCommandKind.RemoveAll:
                 var destination = command.Destination is { } target ? Inventory(target) : null;
                 if (!isPlayer) prepareActorChange?.Invoke(command.Target);

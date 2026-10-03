@@ -20,10 +20,12 @@ internal static class InventoryCommandContracts
                 Record("NPC_", 7, Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
                 Item("WEAP", 8, "OtherGun", 15), Record("NPC_", 0x100, Field("ACBS", new byte[24]),
                     Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(3)))),
-                Record("CONT", 0x110), Record("CELL", 0x800, Field("DATA", [1])), Group(0x800,
-                    Join(Reference("ACHR", 0x900, 0x100, "Actor"), Reference("REFR", 0x901, 0x110, "Chest"))),
+                Record("CREA", 0x101, Field("ACBS", new byte[24]), Field("CNTO", Join(BitConverter.GetBytes(2u), BitConverter.GetBytes(2)))),
+                Record("CONT", 0x110), Record("ACTI", 0x111), Record("CELL", 0x800, Field("DATA", [1])), Group(0x800,
+                    Join(Reference("ACHR", 0x900, 0x100, "Actor"), Reference("REFR", 0x901, 0x110, "Chest"),
+                        Reference("ACRE", 0x902, 0x101, "Creature"), Reference("REFR", 0x903, 0x111, "Activator"))),
                 Record("QUST", 0x600, [Field("EDID", Text("InventoryQuest")), .. new uint[] { 0x14, 1, 2, 3, 4, 5, 6, 8, 0x900, 0x901 }
-                    .Select(id => Field("SCRO", BitConverter.GetBytes(id)))])));
+                    .Concat([0x902u, 0x903u]).Select(id => Field("SCRO", BitConverter.GetBytes(id)))])));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Items.esm"]);
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
@@ -37,12 +39,7 @@ internal static class InventoryCommandContracts
             inventory.Remove(Key(2), 3, true);
             var commands = new FalloutInventoryCommands(records, world, inventory, () => 1);
             var executor = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false,
-                effect =>
-                {
-                    if (effect.Kind != FalloutReferenceEffectKind.AddItem || effect.Target != Key(0x14))
-                        throw new InvalidDataException("Unexpected fixture effect.");
-                    inventory.Add(records, effect.Argument!.Value, effect.Value, 1, effect.Enable);
-                }, Inventory: commands));
+                _ => throw new InvalidDataException("Inventory command escaped its shared owner."), Inventory: commands));
             var quest = records.GetEffective(Key(0x600));
             void Script(string source) => executor.ExecuteStage(quest, quest.ReadSubrecords().ToArray(), source);
             foreach (var id in new uint[] { 1, 3, 4, 5, 6, 8 }) inventory.Add(records, Key(id), 1, 1, true);
@@ -101,15 +98,67 @@ internal static class InventoryCommandContracts
             restored.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
             Require(JsonSerializer.Serialize(restored.Inventory(Key(0x900), 1).Capture()) == JsonSerializer.Serialize(actor.Capture()),
                 "Cold reference restore changed rebuilt inventory or its random continuation.");
+            CountCommands(records, world, inventory, quest);
             var overflow = new FalloutPlayerInventory(456); overflow.Add(records, Key(2), int.MaxValue, 1, true);
             inventory.Add(records, Key(2), 1, 1, true);
             before = JsonSerializer.Serialize(inventory.Capture()); var targetBefore = JsonSerializer.Serialize(overflow.Capture());
             Reject(() => inventory.RemoveAll(records, true, overflow, false, false));
             Require(before == JsonSerializer.Serialize(inventory.Capture()) && targetBefore == JsonSerializer.Serialize(overflow.Capture()),
                 "Failed whole-container transfer published a partial transaction.");
-            Console.WriteLine("OPENNV_INVENTORY_COMMAND_CONTRACT_PASS source-dispatch protected-items transfer-variants lock cold-lock reset-identity cold-reset typed-form lazy-branch atomic-failure");
+            Console.WriteLine("OPENNV_INVENTORY_COMMAND_CONTRACT_PASS source-dispatch protected-items transfer-variants lock cold-lock reset-identity cold-reset typed-form lazy-branch atomic-failure actor-creature-container-counts worn-removal weapon-retirement cold-counts");
         }
         finally { directory.Delete(true); }
+    }
+
+    private static void CountCommands(FalloutPluginStack records, FalloutReferenceWorld world, FalloutPlayerInventory player, FalloutPluginRecord quest)
+    {
+        var retirementCalls = 0;
+        var commands = new FalloutInventoryCommands(records, world, player, () => 1, prepareActorChange: _ =>
+        {
+            retirementCalls++;
+            throw new NotSupportedException("Fixture has an active weapon presentation.");
+        });
+        var executor = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false,
+            _ => throw new InvalidDataException("Count command escaped its shared owner."), Inventory: commands));
+        void Script(string source) => executor.ExecuteStage(quest, quest.ReadSubrecords().ToArray(), source);
+        var playerBefore = JsonSerializer.Serialize(player.Capture());
+        var actor = world.Inventory(Key(0x900), 1);
+        var contents = actor.Contents;
+        contents.Add(records, Key(2), 2, 1, true, extra: new(2, .6f, Key(0x100)));
+        Script("Actor.AddItem Loot 2\nActor.RemoveItem Loot 4 1\nCreature.AddItem Loot 3 1\nCreature.RemoveItem Loot 1\nChest.AddItem Loot 2 1");
+        Require(ReferenceEquals(contents, actor.Contents) && contents.Item(Key(2)) is { Count: 3, Variants: var variants } &&
+            variants!.Any(value => value.Count == 2 && value.Condition == .6f && value.Owner == Key(0x100)) &&
+            world.Inventory(Key(0x902), 1).Contents.Item(Key(2))!.Count == 4 &&
+            playerBefore == JsonSerializer.Serialize(player.Capture()) && retirementCalls == 0,
+            "Actor/creature count commands lost extra data, replaced their owner or changed player state.");
+        actor.InitialArmorResolved = true;
+        contents.Add(records, Key(5), 1, 1, true); contents.Equip(records, Key(5), true);
+        var appearance = world.ActorAppearanceRevision(Key(0x900));
+        Script("Actor.RemoveItem Suit 1");
+        Require(contents.Item(Key(5)) is null && !contents.Equipped.Contains(5u) &&
+            world.ActorAppearanceRevision(Key(0x900)) > appearance && retirementCalls == 0,
+            "Removing worn armor did not retire its equipment identity and invalidate appearance independently of weapon pose.");
+        appearance = world.ActorAppearanceRevision(Key(0x900));
+        Script("Actor.RemoveItem Suit 1\nChest.RemoveItem Loot 2147483647 1");
+        Require(world.ActorAppearanceRevision(Key(0x900)) == appearance && world.Inventory(Key(0x901), 1).Contents.Item(Key(2)) is null,
+            "Absent removal created a revision or over-count removal did not clamp to retained contents.");
+        contents.Add(records, Key(1), 2, 1, true); contents.Equip(records, Key(1), true);
+        Script("Actor.RemoveItem Gun 1 1");
+        Require(contents.Item(Key(1)) is { Count: 1, UnequipLocked: true } && contents.Equipped.Contains(1u) && retirementCalls == 0,
+            "Partial weapon removal retired its remaining equipped stack.");
+        var before = JsonSerializer.Serialize(world.Capture());
+        Reject(() => Script("Actor.RemoveItem Gun 1 1"));
+        Require(before == JsonSerializer.Serialize(world.Capture()) && retirementCalls == 1,
+            "Rejected native weapon retirement published an inventory prefix.");
+        Reject(() => Script("Actor.AddItem Loot 0 1")); Reject(() => Script("Creature.RemoveItem Loot 1.5"));
+        Reject(() => Script("Actor.AddItem Loot 1 2")); Reject(() => Script("Activator.AddItem Loot 1"));
+        Reject(() => commands.Execute(new(FalloutInventoryCommandKind.Remove, Key(0x900), Item: Key(2), Count: -1)));
+        Require(before == JsonSerializer.Serialize(world.Capture()), "Rejected count or target arguments changed reference state.");
+        using var cold = new FalloutReferenceWorld(records);
+        cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(before)!);
+        foreach (var reference in new[] { Key(0x900), Key(0x901), Key(0x902) })
+            Require(JsonSerializer.Serialize(cold.Inventory(reference, 1).Capture()) == JsonSerializer.Serialize(world.Inventory(reference, 1).Capture()),
+                "Cold actor/creature/container counts, equipment or random state diverged.");
     }
 
     private static FalloutFormKey Key(uint id) => new("Items.esm", id);
