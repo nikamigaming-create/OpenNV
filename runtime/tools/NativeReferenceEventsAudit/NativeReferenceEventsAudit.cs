@@ -153,7 +153,7 @@ public partial class NativeReferenceEventsAudit : Node
             await ScriptEvents(records, world, root);
             await InputControls(records);
             PlayerMoves(records);
-            SaveDeferral(player);
+            SaveDeferral();
             DoorActivation(records);
             DisabledSpeech(records);
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");

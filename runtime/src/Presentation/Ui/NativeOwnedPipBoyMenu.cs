@@ -19,6 +19,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly Func<FalloutNativeSpecialState> _special;
     private readonly Func<string, float>? _actorValue;
     private readonly Action<FalloutFormKey>? _useAid;
+    private readonly FalloutRadioStations? _radio;
+    private long _radioRevision = -1;
     private readonly string _playerName;
     private readonly IReadOnlyList<FalloutNativeSkillIdentity> _skills, _tags;
     private readonly IReadOnlyList<FalloutNativeTraitIdentity> _traits;
@@ -51,6 +53,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         limbs = PlayerLimbObservation,
         tags = _tags.Select(tag => tag.RuntimeFormId).ToArray(),
         map = _map?.State,
+        radio = _radio?.State,
         error = Error,
         unbound = "limb-movement-and-effect-rules,radiation,timed-skill-effects,skill-advancement,perks,local-map,radio,fast-travel,scripted-and-addictive-aid-effects,item-drop-and-repair"
     };
@@ -60,7 +63,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Func<FalloutNativeSpecialState> special, string playerName, IReadOnlyList<FalloutNativeSkillIdentity> skills,
         IReadOnlyList<FalloutNativeSkillIdentity> tags, IReadOnlyList<FalloutNativeTraitIdentity> traits,
         FalloutFormKey? world, Vector3 sourcePlayer, float heading, Func<string, float>? actorValue = null,
-        Action<FalloutFormKey>? useAid = null)
+        Action<FalloutFormKey>? useAid = null, FalloutRadioStations? radio = null)
     {
         Name = "OwnedPipBoyMenu"; ProcessMode = ProcessModeEnum.Always; Size = new(1280, 960);
         _records = records; _state = state; _inventory = inventory; _quests = quests; _references = references;
@@ -68,10 +71,13 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _skills = skills; _tags = tags; _traits = traits;
         _actorValue = actorValue;
         _useAid = useAid;
+        _radio = radio;
     }
     public override void _Ready() => Refresh();
     public override void _Process(double delta)
     {
+        if (_tiles is not null && Error is null && _state.Page == FalloutPipBoyPage.Data && _state.Selection == 4 && _radioRevision != _radio?.Revision)
+        { Refresh(); return; }
         if (_tiles is null || Error is not null || _state.Page != FalloutPipBoyPage.Items) return;
         var vitals = _vitals();
         if (_displayedHealth == (vitals.HitPoints, vitals.MaximumHitPoints)) return;
@@ -441,6 +447,14 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             var active = quests.FirstOrDefault(quest => quest.Active) ?? quests.FirstOrDefault();
             Text("MM_DataText", active is null ? "" : string.Join("\n\n", active.Objectives!.Where(objective => objective.Displayed)
                 .Select(objective => (objective.Completed ? "[✓] " : "[ ] ") + _quests.ObjectiveText(active.Quest, objective.Index))));
+        }
+        else if (_state.Selection == 4)
+        {
+            var radio = _radio ?? throw new NotSupportedException("Pip-Boy radio list has no shared station owner.");
+            _radioRevision = radio.Revision;
+            Hide("MM_LocalMap_ClipWindow", "MM_NotesList", "MM_DataRect", "MM_WaveformRect");
+            ListRows(Tile("MM_RadioStationList"), "MM_ListTemplate", radio.Available.Select(station =>
+                (NameOf(station.Base), (Action)(() => throw new NotSupportedException("Radio tuning requires the station conversation/static playback owner.")), false)).ToArray());
         }
         else
         {

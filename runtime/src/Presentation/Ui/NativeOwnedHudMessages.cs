@@ -24,6 +24,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private long _displayed;
     private string? _displayIcon;
     private FalloutChallengeHudDeclaration? _challengeDeclaration;
+    private FalloutRadioHudDeclaration? _radioDeclaration;
     internal string? Error { get; private set; }
     internal object State => new
     {
@@ -221,6 +222,14 @@ internal sealed partial class NativeOwnedHudMessages : Control
                 icon = FalloutDialogueTopic.Text(iconRecord.ReadSubrecords().Single(field => field.Signature == "ICON").Data.Span);
             }
             result = (message.Text, icon, message.DisplaySeconds.Value);
+        }
+        else if (value.Kind == FalloutHudEventKind.RadioDiscovered)
+        {
+            var station = FalloutRadioStation.Read(_records, record);
+            var name = FalloutDialogueTopic.Text(_records.GetEffective(station.Base).ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
+            var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Radio HUD has no owned source.");
+            _radioDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+            result = (Format(FalloutGameSettingStrings.Read(_records, "sRadioStationDiscovered"), [name]), _radioDeclaration.Icon, _radioDeclaration.Seconds);
         }
         else if (IsObjective(value))
             result = (_quests.ObjectiveText(value.Source, value.ObjectiveIndex!.Value), null, _questFadeIn + _questHold + _questFadeOut);

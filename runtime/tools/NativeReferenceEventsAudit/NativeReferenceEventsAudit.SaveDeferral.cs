@@ -3,21 +3,27 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 public partial class NativeReferenceEventsAudit
 {
-    private static void SaveDeferral(RuntimeNativePlayer player)
+    private void SaveDeferral()
     {
         var directory = Path.Combine(Path.GetTempPath(), "opennv-save-deferral-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, "Contact.esm");
+        var player = new RuntimeNativePlayer();
+        player.Configure(RuntimeConfiguration.Load(), Transform3D.Identity, FalloutCameraProjection.FromReferenceFov(75, 1));
+        AddChild(player); player.SetPhysicsProcess(false); player.SetProcessUnhandledInput(false);
         try { VerifySaveDeferral(path, player); }
         finally
         {
+            player.QueueFree();
             if (File.Exists(path)) File.Delete(path);
             Directory.Delete(directory);
         }
@@ -47,6 +53,7 @@ public partial class NativeReferenceEventsAudit
         try
         {
             Bind("_player", player); Bind("_scripts", scripts);
+            Bind("_activeCell", Key(0x800));
             // No Aid is active and the fixture advances zero time. The real
             // driver frame still evaluates and retains its autosave request.
             Bind("_ingestibles", new FalloutPlayerIngestibles(records, inventory, null!, new(Key(0x702), []),
