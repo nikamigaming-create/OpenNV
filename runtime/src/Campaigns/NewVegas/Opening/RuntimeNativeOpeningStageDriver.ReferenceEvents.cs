@@ -15,6 +15,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal Func<RuntimeNativeReferencePresentation> ReferencePresentation { get; set; } =
         () => throw new InvalidOperationException("Reference presentation has no current cell owner.");
     internal object? ConversationState => _conversation?.State;
+    internal object? StageResultState => _stageResults?.State;
     internal FalloutFormKey? PresentedConversationSpeaker => _conversation?.PresentedSpeaker;
     internal FalloutFormKey? PendingConversationSpeaker => _conversation?.PendingSpeaker;
     internal void ExecutePackageEvent(FalloutPackageEvent program, FalloutFormKey actor) =>
@@ -166,9 +167,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal int TakeMessageButton(FalloutFormKey caller) => _scripts.MessageResults.Take(caller);
     internal bool IsTalking(FalloutFormKey actor) => _speech?.IsTalking(actor) ??
         throw new InvalidOperationException("Actor speech owner is absent.");
-    internal bool IsInCombat(FalloutFormKey actor) => _pluginStack.RuntimeFormId(actor) == 0x14
-        ? GetTree().GetNodesInGroup("OpenNVNativeCombatActors").OfType<RuntimeNativeActorCombat>().Any(owner => owner.EngagedWith(actor))
-        : !_scripts.References!.IsDead(actor) && _scripts.References.Get(actor).Engagement is { Action: not "idle" };
+    internal bool IsInCombat(FalloutFormKey actor) => _scripts.References!.IsInCombat(actor,
+        () => GetTree().GetNodesInGroup("OpenNVNativeCombatActors").OfType<RuntimeNativeActorCombat>().Any(owner => owner.EngagedWith(actor)));
     internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed)
     {
         if (package.Type == 1)

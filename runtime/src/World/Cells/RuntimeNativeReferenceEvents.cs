@@ -201,7 +201,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     {
         for (Node? node = collider; node is not null; node = node.GetParent())
             if (_nodeReferences.TryGetValue(node.GetInstanceId(), out var reference) && _bindings.TryGetValue(reference, out var binding) &&
-                _world.CanActivate(reference) && (binding.Instance.Script is not null || binding.Signature is "NPC_" or "CREA" or "DOOR" or "CONT" or "FURN" or "ACTI" || FalloutReferenceWorld.IsInventoryItem(binding.Signature)))
+                _world.CanActivate(reference) && (binding.Instance.Script is not null || binding.Signature is "NPC_" or "CREA" or "TACT" or "DOOR" or "CONT" or "FURN" or "ACTI" || FalloutReferenceWorld.IsInventoryItem(binding.Signature)))
                 return binding.Reference;
         return null;
     }
@@ -231,7 +231,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             return;
         }
         var type = binding.Signature;
-        if (type is "NPC_" or "CREA" && FalloutDialogueSpeaker.AllowsPlayerDialogue(_records, binding.Reference.Base, binding.Instance.Templates))
+        if (type is "NPC_" or "CREA" or "TACT" && FalloutDialogueSpeaker.AllowsPlayerDialogue(_records, binding.Reference.Base, binding.Instance.Templates))
         {
             _host.Apply(new(FalloutReferenceEffectKind.Conversation, reference, reference, _records.RuntimeFormKey(0x14)));
             return;

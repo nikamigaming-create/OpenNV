@@ -11,8 +11,21 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
 {
     private readonly Dictionary<(FalloutFormKey, short), string> _errors = [];
     private readonly List<(FalloutFormKey Quest, short Stage, IEnumerator<bool> Steps)> _pending = [];
+    private readonly Dictionary<(FalloutFormKey Quest, short Stage), (int Steps, bool Completed)> _progress = [];
     private int _depth;
     internal object Errors => _errors.Select(value => new { quest = value.Key.Item1.ToString(), stage = value.Key.Item2, error = value.Value }).ToArray();
+    internal object State => new
+    {
+        errors = Errors,
+        pending = _pending.Select(value => new { quest = value.Quest.ToString(), stage = value.Stage }).ToArray(),
+        progress = _progress.Select(value => new
+        {
+            quest = value.Key.Quest.ToString(),
+            stage = value.Key.Stage,
+            steps = value.Value.Steps,
+            completed = value.Value.Completed
+        }).ToArray()
+    };
 
     internal void Enter(FalloutFormKey key, short stage)
     {
@@ -29,6 +42,7 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
         if (begin < 0) throw new NotSupportedException($"Quest {key} has no authored stage {stage}.");
         quests.SetRunning(key, true);
         quests.EnterStage(key, stage);
+        _progress[(key, stage)] = (0, false);
         Resume((key, stage, EntrySteps().GetEnumerator()));
 
         IEnumerable<bool> EntrySteps()
@@ -79,7 +93,14 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
         {
             while (canContinue?.Invoke() ?? true)
             {
-                if (execution.Steps.MoveNext()) continue;
+                if (execution.Steps.MoveNext())
+                {
+                    var progress = _progress[(execution.Quest, execution.Stage)];
+                    _progress[(execution.Quest, execution.Stage)] = (progress.Steps + 1, false);
+                    continue;
+                }
+                var completed = _progress[(execution.Quest, execution.Stage)];
+                _progress[(execution.Quest, execution.Stage)] = (completed.Steps, true);
                 execution.Steps.Dispose();
                 return;
             }

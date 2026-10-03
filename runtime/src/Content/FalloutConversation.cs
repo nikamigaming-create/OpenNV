@@ -1,5 +1,3 @@
-using System.Buffers.Binary;
-
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutConversationChoice(FalloutFormKey Topic, FalloutFormKey Info, string Text);
@@ -11,7 +9,7 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
     Func<uint, uint>? random = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutDialogueTopic> _topics = [];
-    private readonly Dictionary<FalloutFormKey, (int Priority, IReadOnlyList<FalloutCondition> Conditions)> _questHeaders = [];
+    private readonly FalloutDialogueQuestSelection _selection = new(records, quests);
     private readonly HashSet<FalloutFormKey> _said = saidInfos ?? [], _added = [];
     private FalloutFormKey _speaker;
     private bool _mutating, _ending;
@@ -95,24 +93,10 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
         return topic;
     }
 
-    private FalloutDialogueInfo? Select(FalloutFormKey topic) => Topic(topic).Select(_speaker, _said, quest => quests.Stage(quest), evaluate,
-        QuestEligible,
-        quest => Header(quest).Priority, conversation: !FalloutDialogueTopic.IsGoodbye(records, topic), random: random);
+    private FalloutDialogueInfo? Select(FalloutFormKey topic) => _selection.Select(Topic(topic), _speaker, _said,
+        quest => quests.Stage(quest), evaluate, random);
 
-    private bool QuestEligible(FalloutFormKey quest) => quests.IsRunning(quest) &&
-        FalloutCondition.AllPass(Header(quest).Conditions, evaluate, evaluateRunOn: true);
-
-    private (int Priority, IReadOnlyList<FalloutCondition> Conditions) Header(FalloutFormKey quest)
-    {
-        if (_questHeaders.TryGetValue(quest, out var header)) return header;
-        var record = records.GetEffective(quest);
-        var fields = record.ReadSubrecords().TakeWhile(field => field.Signature is not ("INDX" or "QOBJ")).ToArray();
-        var data = fields.Single(field => field.Signature == "DATA").Data;
-        if (data.Length is not (2 or 8)) throw new InvalidDataException("Dialogue quest header extent is invalid.");
-        header = (data.Span[1], fields.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(record, field.Data.Span)).ToArray());
-        _questHeaders.Add(quest, header);
-        return header;
-    }
+    private bool QuestEligible(FalloutFormKey quest) => _selection.Eligible(quest, evaluate);
 
     private void Mutate(Action action)
     {

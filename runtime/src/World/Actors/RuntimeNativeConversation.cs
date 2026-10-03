@@ -16,6 +16,8 @@ internal partial class RuntimeNativeConversation : Node
     private RuntimeNativePlayer _player = null!;
     private FalloutPluginStack _records = null!;
     private FalloutFormKey _speaker;
+    private FalloutFormKey _dialogueSubject;
+    private FalloutDialogueSpeaker _identity = null!;
     private Node3D? _facingSpeaker;
     private string _speakerName = "";
     private FalloutDialogueConditions? _conditions;
@@ -43,6 +45,9 @@ internal partial class RuntimeNativeConversation : Node
         phase = _conversation.Phase,
         info = _conversation.Info?.Record.FormKey.ToString(),
         response = _conversation.ResponseIndex,
+        speakerReference = _speaker.ToString(),
+        dialogueSubject = _dialogueSubject.ToString(),
+        voiceType = _identity?.VoiceType.ToString(),
         choices = _conversation.Choices,
         pending = _pending.Count,
         error = Error ?? _conversation.Error
@@ -75,7 +80,7 @@ internal partial class RuntimeNativeConversation : Node
         _currentPackage = currentPackage;
         _vampireQuery = vampireQuery;
         _itemCount = itemCount;
-        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _speaker, begin), saidInfos, dialogueRandom);
+        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom);
     }
 
     internal void Request(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey? topic, Action? completed = null)
@@ -96,25 +101,27 @@ internal partial class RuntimeNativeConversation : Node
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;
             var actor = _records.GetEffective(_speaker);
             var npc = _records.GetEffective(FalloutDialogueTopic.RequiredForm(actor, "NAME"));
+            _dialogueSubject = _speech.DialogueSubject(_speaker);
+            var identity = _speech.SpeakerIdentity(_speaker);
+            _identity = identity;
             var resolveRunOnCell = _resolveRunOnCell;
             Func<FalloutCondition, FalloutFormKey?>? currentCell = resolveRunOnCell is null ? null :
-                condition => resolveRunOnCell(_speaker, condition);
-            _conditions = new(_records, _quests, _speaker, FalloutDialogueSpeaker.Read(_records, npc.FormKey, _templates?.Invoke(_speaker)),
+                condition => resolveRunOnCell(_dialogueSubject, condition);
+            _conditions = new(_records, _quests, _dialogueSubject, identity,
                 _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
                 currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);
             _player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
-            _conversation.Start(npc.FormKey, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
-            _recordTalkedToPlayer?.Invoke(_speaker);
-            _facingSpeaker = GetTree().Root.FindChildren("*", "", true, false).OfType<Node3D>()
-                .Single(value => value is RuntimeNativeNpc humanoid && humanoid.Appearance.Reference == _speaker ||
-                    value is RuntimeNativeCreature creature && creature.Appearance.Reference == _speaker);
+            _conversation.Start(identity.Actor, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
+            _recordTalkedToPlayer?.Invoke(_dialogueSubject);
+            _facingSpeaker = _speech.ResolveSpeaker(_speaker);
             var turnSpeed = FalloutGameSettingFloats.Read(_records, "fCharacterDefaultTurningSpeed");
             if (_facingSpeaker is RuntimeNativeNpc facingNpc)
                 facingNpc.BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
-            else ((RuntimeNativeCreature)_facingSpeaker).BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
+            else if (_facingSpeaker is RuntimeNativeCreature facingCreature)
+                facingCreature.BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
             Present();
         }
         catch (Exception error) { Fail(error); }
@@ -133,7 +140,7 @@ internal partial class RuntimeNativeConversation : Node
         _menu!.Show(_speakerName, _conversation, topic => Guard(() => { _conversation.Choose(topic); Present(); }));
         if (_conversation.Phase == "speaking")
             _speech.StartResponse(_speaker, _conversation.Info!, _conversation.ResponseIndex,
-                () => Guard(() => { _conversation.CompleteResponse(); Present(); }));
+                () => Guard(() => { _conversation.CompleteResponse(); Present(); }), _dialogueSubject, _identity);
     }
     private void Guard(Action action) { try { action(); } catch (Exception error) { Fail(error); } }
     private void ReleaseFacing()

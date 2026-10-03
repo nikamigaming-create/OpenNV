@@ -35,6 +35,18 @@ if (args is ["--conversation-contracts"])
     ConversationContracts.Run();
     return;
 }
+if (args.Length >= 10 && args[0] == "--audit-scripted-topic")
+{
+    OwnedScriptedTopicSelectionProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6],
+        short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8], args[9], args[10..]);
+    return;
+}
+if (args.Length >= 8 && args[0] == "--audit-talking-activator")
+{
+    OwnedTalkingActivatorProbe.Run(args[1], args[2], args[3], args[4],
+        short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6], args[7], args[8..]);
+    return;
+}
 if (args.Length >= 5 && args[0] == "--audit-dialogue-response-layout")
 {
     OwnedDialogueResponseLayoutProbe.Run(args[1], args[2], args[3], args[4], args[5..]);

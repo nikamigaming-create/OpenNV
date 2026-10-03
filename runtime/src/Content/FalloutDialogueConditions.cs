@@ -16,7 +16,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
         : this(records, quests, speaker, FalloutDialogueSpeaker.Read(records, appearance.Npc), runtime) { }
 
-    private readonly IReadOnlyDictionary<FalloutFormKey, sbyte> _factions = FalloutAiPackages.ReadFactions(records, identity.Actor, identity.Templates);
+    private IReadOnlyDictionary<FalloutFormKey, sbyte>? _factions;
     private FalloutFormKey Listener => listener ?? records.RuntimeFormKey(0x14);
 
     internal float Evaluate(FalloutCondition condition)
@@ -89,6 +89,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     private float EvaluateActor(FalloutCondition condition, FalloutFormKey actor, FalloutDialogueSpeaker actorIdentity)
     {
+        if (actorIdentity.RecordType == "TACT" && condition.Function is 69 or 70 or 71 or 73 or 365)
+            throw new NotSupportedException($"Talking activator {actor} condition {condition.Function} requires its non-actor query contract.");
         FalloutFormKey? Race() => actorIdentity.Race is null ? null : actorRace?.Invoke(actor) ?? actorIdentity.Race;
         return condition.Function switch
         {
@@ -104,7 +106,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     }
 
     private IReadOnlyDictionary<FalloutFormKey, sbyte> ActorFactions(FalloutFormKey actor, FalloutDialogueSpeaker actorIdentity) =>
-        factions?.Invoke(actor) ?? (actor == speaker ? _factions :
+        factions?.Invoke(actor) ?? (actor == speaker ? _factions ??= FalloutAiPackages.ReadFactions(records, identity.Actor, identity.Templates) :
             FalloutAiPackages.ReadFactions(records, actorIdentity.Actor, actorIdentity.Templates));
 
     private float Unbound(FalloutCondition condition)

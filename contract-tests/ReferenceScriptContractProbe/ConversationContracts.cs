@@ -14,6 +14,9 @@ internal static class ConversationContracts
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
             var data = Join(Record("TES4", 0, Field("HEDR", header)),
                 Record("QUST", 0x700, Field("DATA", [1, 10])), Record("QUST", 0x701, Field("DATA", [0, 90])),
+                Record("QUST", 0x702, Field("DATA", [1, 80]), Condition(71, 0x777, 1),
+                    Field("INDX", BitConverter.GetBytes((short)5)), Condition(65535, 0, 1)),
+                Record("QUST", 0x703, Field("DATA", [0, 95])),
                 Topic(0x800, "Greeting",
                     Info(0x910, 0x700, 4, 2, Field("TCFU", U32(0x920)), Field("TCFU", U32(0x921)), Field("TCFU", U32(0x922))),
                     Info(0x911, 0x700, 1, 1), Info(0x912, 0x701, 1, 1)),
@@ -45,7 +48,10 @@ internal static class ConversationContracts
                 Topic(0x813, "Selected empty INFO", Info(0x99a, 0x700, 4, 0, Field("SCTX", Text("reached result")))),
                 Topic(0x814, "Orphan response text", Info(0x99b, 0x700, 0, 0, Field("NAM1", Text("orphan")))),
                 Topic(0x815, "Duplicate response number", Info(0x99c, 0x700, 0, 1,
-                    Field("TRDT", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]), Field("NAM1", Text("duplicate")))));
+                    Field("TRDT", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]), Field("NAM1", Text("duplicate")))),
+                Topic(0x816, "Scripted topic", InfoOfType(1, 0x9a0, 0x703, 128, 1),
+                    Info(0x9a1, 0x702, 0, 1), Info(0x9a2, 0x700, 0, 1)),
+                Topic(0x817, "Scripted conversation", 0, 50, [InfoOfType(1, 0x9a3, 0x700, 0, 1)], type: 1));
             File.WriteAllBytes(file, data);
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             var quests = new FalloutQuestState(records);
@@ -128,9 +134,46 @@ internal static class ConversationContracts
             quests.SetRunning(Key(0x700), false);
             Reject(() => changed.Choose(Key(0x802)));
             Require(changed.Phase == "failed", "A stale offered choice bypassed current eligibility.");
+            ScriptedSelection(records);
             Console.WriteLine("OPENNV_CONVERSATION_CONTRACT_PASS responseOrder=true exactlyOnce=true followUps=true sourceChoices=true topLevelReturn=true topicPriority=true addedTopics=true prompts=true questPriority=true sayOnce=true orderedConditions=true changedEligibility=true explicitFailure=true");
         }
         finally { File.Delete(file); Directory.Delete(directory); }
+    }
+
+    private static void ScriptedSelection(FalloutPluginStack records)
+    {
+        var quests = new FalloutQuestState(records);
+        var selection = new FalloutDialogueQuestSelection(records, quests);
+        var member = false;
+        var queries = 0;
+        float Evaluate(FalloutCondition condition)
+        {
+            Require(condition.Function == 71 && condition.FormArgument1 == Key(0x777),
+                "Scripted selection evaluated a stage condition or lost its source quest argument.");
+            queries++; return member ? 1 : 0;
+        }
+        var topic = FalloutDialogueTopic.Read(records, Key(0x816));
+        FalloutDialogueInfo? Select() => selection.Select(topic, Key(0x900), new HashSet<FalloutFormKey>(),
+            quest => quests.Stage(quest), Evaluate);
+        Require(Select()!.Record.FormKey == Key(0x9a2) && queries == 1,
+            "Scripted topic admitted an inactive/quest-ineligible response or assumed conversation type.");
+        member = true;
+        Require(Select()!.Record.FormKey == Key(0x9a1) && queries == 2,
+            "Cached quest headers hid live speaker conditions or source quest priority.");
+        quests.SetRunning(Key(0x702), false);
+        Require(Select()!.Record.FormKey == Key(0x9a2), "Stopped quest stayed eligible after selection.");
+        quests.SetRunning(Key(0x700), false);
+        Require(Select() is null, "Empty scripted topic selection fabricated a response.");
+        var cold = new FalloutQuestState(records); cold.Restore(quests.Capture());
+        var coldSelection = new FalloutDialogueQuestSelection(records, cold);
+        Require(coldSelection.Select(topic, Key(0x900), new HashSet<FalloutFormKey>(), quest => cold.Stage(quest), Evaluate) is null,
+            "Cold scripted selection lost live running-quest state.");
+        quests.SetRunning(Key(0x700), true);
+        Require(selection.Select(FalloutDialogueTopic.Read(records, Key(0x817)), Key(0x900), new HashSet<FalloutFormKey>(),
+            quest => quests.Stage(quest), Evaluate)!.Record.FormKey == Key(0x9a3), "Conversation DIAL lost its source response type.");
+        quests.SetRunning(Key(0x703), true);
+        Reject(() => Select());
+        Console.WriteLine("OPENNV_SCRIPTED_TOPIC_SELECTION_PASS sourceType=true activeQuests=true questConditions=true priority=true liveChanges=true coldRunningState=true invalidEligibleResponseRejected=true");
     }
 
     private static FalloutFormKey Key(uint id) => new("Dialogue.esm", id);

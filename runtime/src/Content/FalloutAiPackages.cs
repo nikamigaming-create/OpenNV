@@ -13,28 +13,34 @@ internal static class FalloutAiPackages
         Func<FalloutFormKey, FalloutFormKey?> query, FalloutFormKey? target = null)
     {
         if (condition.Function != 161) throw new InvalidDataException("Current-package query has a different source function.");
+        return query(ConditionSubject(condition, caller, target)) == condition.FormArgument1;
+    }
+
+    internal static FalloutFormKey ConditionSubject(FalloutCondition condition, FalloutFormKey caller,
+        FalloutFormKey? target = null)
+    {
         var subject = condition.RunOn switch
         {
             0 => caller,
             1 => target ?? Target(),
             2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) ??
-                throw new InvalidDataException("Current-package query has no explicit reference."),
-            _ => throw new NotSupportedException($"Current-package query run-on {condition.RunOn} has no subject owner."),
+                throw new InvalidDataException("Actor condition has no explicit reference."),
+            _ => throw new NotSupportedException($"Actor condition run-on {condition.RunOn} has no subject owner."),
         };
-        return query(subject) == condition.FormArgument1;
+        return subject;
 
         FalloutFormKey Target()
         {
             if (condition.Owner.Signature != "PACK")
-                throw new NotSupportedException("Current-package target query has no package target owner.");
+                throw new NotSupportedException("Actor condition has no package target owner.");
             var targets = condition.Owner.ReadSubrecords().Where(field => field.Signature == "PTDT").ToArray();
             if (targets.Length != 1 || targets[0].Data.Length != 16)
-                throw new InvalidDataException("Current-package target query has an invalid target extent.");
+                throw new InvalidDataException("Actor condition has an invalid package target extent.");
             var target = targets[0].Data.Span;
             if (BinaryPrimitives.ReadInt32LittleEndian(target) != 0)
-                throw new NotSupportedException("Current-package target query requires its reference target owner.");
+                throw new NotSupportedException("Actor condition requires its reference package target owner.");
             return condition.Owner.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(target[4..])) ??
-                throw new InvalidDataException("Current-package target query has no reference.");
+                throw new InvalidDataException("Actor condition has no package target reference.");
         }
     }
 

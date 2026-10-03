@@ -6,19 +6,22 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutDialogueSpeaker(FalloutFormKey Actor, FalloutFormKey TraitsOwner,
     FalloutFormKey VoiceType, string VoiceName, FalloutFormKey? Race, bool Female, FalloutActorTemplateSelection? Templates = null)
 {
+    internal string RecordType { get; init; } = "NPC_";
+
     internal static FalloutDialogueSpeaker Read(FalloutPluginStack records, FalloutFormKey actor, FalloutActorTemplateSelection? selection = null)
     {
         var record = records.GetEffective(actor);
-        var traits = FalloutActorTemplateOwner.Resolve(records, record, 1, selection);
-        var voice = records.GetEffective(FalloutDialogueTopic.RequiredForm(traits, "VTCK"));
+        var traits = record.Signature == "TACT" ? record : FalloutActorTemplateOwner.Resolve(records, record, 1, selection);
+        var voice = records.GetEffective(FalloutDialogueTopic.RequiredForm(traits, record.Signature == "TACT" ? "VNAM" : "VTCK"));
         if (voice.Signature != "VTYP") throw new InvalidDataException($"Actor {actor} voice is not VTYP.");
         var name = FalloutDialogueTopic.Text(voice.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span);
         if (name.Length == 0 || name.IndexOfAny(['/', '\\', ':']) >= 0 || name is "." or "..")
             throw new InvalidDataException("Actor voice type has an invalid resource directory.");
-        var acbs = traits.ReadSubrecords().Single(field => field.Signature == "ACBS").Data;
         return new(actor, traits.FormKey, voice.FormKey, name,
             record.Signature == "NPC_" ? FalloutDialogueTopic.RequiredForm(traits, "RNAM") : null,
-            record.Signature == "NPC_" && (BinaryPrimitives.ReadUInt32LittleEndian(acbs.Span) & 1) != 0, selection);
+            record.Signature == "NPC_" && (BinaryPrimitives.ReadUInt32LittleEndian(
+                traits.ReadSubrecords().Single(field => field.Signature == "ACBS").Data.Span) & 1) != 0, selection)
+        { RecordType = record.Signature };
     }
 
     internal static bool AllowsPlayerDialogue(FalloutPluginStack records, FalloutFormKey actor,
@@ -26,6 +29,7 @@ internal sealed record FalloutDialogueSpeaker(FalloutFormKey Actor, FalloutFormK
     {
         var record = records.GetEffective(actor);
         if (record.Signature == "NPC_") return true;
+        if (record.Signature == "TACT") { _ = Read(records, actor); return true; }
         if (record.Signature != "CREA") return false;
         var owner = FalloutActorTemplateOwner.Resolve(records, record, 128, selection);
         var data = owner.ReadSubrecords().Single(field => field.Signature == "ACBS").Data;

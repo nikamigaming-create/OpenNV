@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Scripted topic and talking activator dialogue](scripted-topic-and-talking-activator-dialogue.md)
+share source DIAL/QUST selection and actual reference presentation. Retained
+linked actors supply dialogue identity and voice while TACT keeps its owned
+model. Stage telemetry distinguishes entered, pending and completed results.
+
 [Optional dialogue responses](optional-dialogue-responses.md) retain empty INFO
 records in winning source order with their conditions, scripts and links. Source
 selection can pass an ineligible empty entry without invented speech. Selecting

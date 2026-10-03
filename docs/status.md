@@ -71,9 +71,23 @@ through reassembly and runs the package change result once. Its isolated floor
 and explicit stage/enable-parent setup do not establish ordinary campaign or
 cold campaign continuation. The fresh ordinary retry completes actual cake
 Travel, PlayGroup and cutting idle, then enters16 through the source package
-change result. Its subsequent scripted Andy GREETING exposes topic/quest
-selection; the active conversation retains that fault. The required integrated
-gate passes; retail pixel, randomness and plane-response parity remain unaccepted.
+change result. The required integrated gate passes for that published block;
+retail pixel, randomness and plane-response parity remain unaccepted.
+
+The current [scripted topic and talking activator candidate](scripted-topic-and-talking-activator-dialogue.md)
+shares winning DIAL type, running quest/header/priority selection and real TACT
+presentation. Source SetTalkingActivatorActor retains the actual linked actor's
+dialogue identity and voice through cold reference restoration. Synthetic
+contracts and selected owned greeting/binding checks pass. The ordinary retry
+selects Andy's eligible greeting and Butch's observed reply reaches35, where
+stage-result telemetry identifies Amata's explicit-reference IsInCombat EVP
+failure before the intercom setter. The candidate now shares actual reference
+combat state across NPC/creature AI and scripts, with synthetic scope/live/cold
+checks and the selected owned predicate passing. The fresh ordinary retry
+completes stage35, retains Jonas's intercom binding/voice and exposes his
+unloaded-actor current-package query as the next owner. The integrated
+publication gate and selected owned Release audits pass for this branch. Birthday
+completion, G.O.A.T., Vault exit, Megaton and train/Mojave remain unreached.
 The [bot capsule refinement](bot-navigation.md) adds one bounded finer query
 before corridor rejection and actual input telemetry. A native narrow-passage
 fixture passes with the child-sized body in both directions and refuses the

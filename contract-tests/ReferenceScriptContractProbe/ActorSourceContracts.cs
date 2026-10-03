@@ -38,18 +38,25 @@ internal static class ActorSourceContracts
                     Field("DATA", new float[] { 10, 20, 30, 0, 0, 1 }.SelectMany(BitConverter.GetBytes).ToArray()))),
                 NavigationFloor(0xb100, 0x881, 5),
                 Record("STAT", 0x844), Record("ACTI", 0x845, Field("SCRI", BitConverter.GetBytes(0x891u))),
-                Cell(0x880, Join(Record("ACRE", 0x900, Field("NAME", BitConverter.GetBytes(0x801u)), Field("DATA", new byte[24])),
+                Record("TACT", 0x846, Field("VNAM", BitConverter.GetBytes(0x850u)), Field("SNAM", BitConverter.GetBytes(0x847u)),
+                    Field("SCRI", BitConverter.GetBytes(0x892u))),
+                Record("SOUN", 0x847), Record("TACT", 0x848, Field("VNAM", BitConverter.GetBytes(0x840u))),
+                Record("TACT", 0x849),
+                Cell(0x880, Join(Record("ACRE", 0x900, Field("EDID", Text("BoundCreature")), Field("NAME", BitConverter.GetBytes(0x801u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x901, Field("NAME", BitConverter.GetBytes(0x804u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x902, Field("NAME", BitConverter.GetBytes(0x804u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x906, Field("NAME", BitConverter.GetBytes(0x805u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x907, Field("NAME", BitConverter.GetBytes(0x806u)), Field("DATA", new byte[24])),
                     Record("ACRE", 0x909, Field("NAME", BitConverter.GetBytes(0x809u)), Field("DATA", new byte[24])),
                     Marker(0x903, "SourceMapMarker"), Marker(0x905, "OtherMapMarker"),
-                    Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x845u)), Field("DATA", new byte[24])))),
+                    Record("REFR", 0x904, Field("NAME", BitConverter.GetBytes(0x845u)), Field("DATA", new byte[24])),
+                    Record("REFR", 0x90a, Field("NAME", BitConverter.GetBytes(0x846u)), Field("DATA", new byte[24])))),
                 Record("SCPT", 0x890, Field("SCTX", Text("begin OnActivate\nif GetUnconscious\nSetUnconscious 0\nelse\nSetUnconscious 1\nendif\nend"))),
                 Record("SCPT", 0x891, Field("SCRO", BitConverter.GetBytes(0x903u)),
                     Field("SCRO", BitConverter.GetBytes(0x14u)),
                     Field("SCTX", Text("begin OnActivate\nif GetActionRef == Player && player.GetIsID 7 == 1 && GetIsID 0x845 == 1\nShowMap SourceMapMarker\nif SourceMapMarker.GetMapMarkerVisible == 1\nShowMap SourceMapMarker 1\nendif\nendif\nend"))),
+                Record("SCPT", 0x892, Field("SCRO", BitConverter.GetBytes(0x900u)),
+                    Field("SCTX", Text("begin OnActivate\nSetTalkingActivatorActor BoundCreature\nend"))),
                 Record("VTYP", 0x850, Field("EDID", Text("TestVoice"))),
                 Record("PACK", 0x8f3, Field("EDID", Text("FirstActorPackage"))),
                 Record("PACK", 0x8f4, Field("EDID", Text("OtherActorPackage"))),
@@ -96,6 +103,38 @@ internal static class ActorSourceContracts
             Reject(() => FalloutCreatureAppearanceResolver.SelectIdle(appearance,
                 ["meshes/creatures/test/mtidle.kf", "meshes/creatures/test/locomotion/mtidle.kf"]));
             var speaker = FalloutDialogueSpeaker.Read(records, Key(0x801));
+            var activatorSpeaker = FalloutDialogueSpeaker.Read(records, Key(0x846));
+            Check(activatorSpeaker.RecordType == "TACT" && activatorSpeaker.Actor == Key(0x846) &&
+                activatorSpeaker.TraitsOwner == Key(0x846) && activatorSpeaker.VoiceType == Key(0x850) && activatorSpeaker.Race is null &&
+                FalloutDialogueSpeaker.AllowsPlayerDialogue(records, Key(0x846)), "Talking activator invented an actor/template/faction owner.");
+            Reject(() => FalloutDialogueSpeaker.Read(records, Key(0x848)));
+            Reject(() => FalloutDialogueSpeaker.Read(records, Key(0x849)));
+            var activatorConditions = new FalloutDialogueConditions(records, new FalloutQuestState(records), Key(0x90a), activatorSpeaker,
+                factions: _ => throw new InvalidDataException("Talking activator queried actor factions."));
+            var activatorCondition = new FalloutCondition(records.GetEffective(Key(0x860)), 0, 1, 72, 0x846, 0, 0, 0);
+            Check(activatorConditions.Evaluate(activatorCondition) == 1 &&
+                activatorConditions.Evaluate(activatorCondition with { Function = 427, Argument1 = 0x850 }) == 1,
+                "Talking activator dialogue lost its source base or VNAM voice identity.");
+            Reject(() => activatorConditions.Evaluate(activatorCondition with { Function = 70, Argument1 = 0 }));
+            using (var activatorWorld = new FalloutReferenceWorld(records))
+            using (var activatorCold = new FalloutReferenceWorld(records))
+            {
+                activatorWorld.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+                var activatorScripts = new FalloutReferenceScripts(records, activatorWorld, new FalloutQuestState(records),
+                    new((_, _) => false, _ => throw new InvalidDataException("Talking activator binding invented a presentation effect.")));
+                Check(activatorScripts.Activate(Key(0x90a), Key(0x14)).Error is null &&
+                    activatorWorld.DialogueSubject(Key(0x90a)) == Key(0x900) && activatorWorld.DialogueIdentity(Key(0x90a)).Actor == Key(0x801),
+                    "Source SetTalkingActivatorActor did not bind the actual reference's dialogue identity.");
+                activatorWorld.Get(Key(0x90a)).TalkedToPlayer = true;
+                activatorCold.Restore(activatorWorld.Capture());
+                Check(activatorCold.Get(Key(0x90a)).TalkedToPlayer && activatorCold.DialogueSubject(Key(0x90a)) == Key(0x900),
+                    "Talking activator lost shared conversation history/binding across cold restoration.");
+                activatorCold.SetTalkingActivatorActor(Key(0x90a), null);
+                Check(activatorCold.DialogueIdentity(Key(0x90a)).Actor == Key(0x846), "Clearing the binding did not restore the actual activator voice.");
+                Reject(() => activatorCold.SetTalkingActivatorActor(Key(0x904), Key(0x900)));
+                Reject(() => activatorCold.SetTalkingActivatorActor(Key(0x90a), Key(0x904)));
+            }
+            Console.WriteLine("OPENNV_TALKING_ACTIVATOR_IDENTITY_PASS sourceVoice=true nonActor=true sharedColdHistory=true unknownQueries=visible");
             using var world = new FalloutReferenceWorld(records);
             Check(FalloutActorValue.UserSlot(62) == "variable01" && FalloutActorValue.UserSlot(66) == "variable05" &&
                 FalloutActorValue.UserSlot(71) == "variable10", "Numeric user values changed their engine slots.");

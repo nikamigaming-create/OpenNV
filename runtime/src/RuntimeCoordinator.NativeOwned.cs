@@ -83,6 +83,7 @@ public partial class RuntimeCoordinator
                 _nativeReferences.ScriptDefinitionCount,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
+                talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
                     _nativeReferences.PendingProcedureCaptureCount == 0
                     ? _nativeReferences.Capture() : null,
@@ -131,6 +132,7 @@ public partial class RuntimeCoordinator
                 pending = _nativeOpeningStageDriver.PendingBlockers.ToArray(),
                 headTrackingCommands = _nativeOpeningStageDriver.HeadTrackingCommands,
                 error = _nativeOpeningStageDriver.ExecutionError,
+                stageResults = _nativeOpeningStageDriver.StageResultState,
                 saveRequest = _nativeOpeningStageDriver.SaveRequestState,
             },
             movies = GetChildren().OfType<NativeGamebryoMovie>()
