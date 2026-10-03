@@ -57,6 +57,9 @@ internal sealed partial class FalloutDialogueTopic
     internal static float Priority(FalloutPluginStack stack, FalloutFormKey topic) => Headers(stack).TryGetValue(topic, out var header)
         ? header.Priority : throw new InvalidDataException($"Dialogue choice {topic} is not a winning DIAL.");
 
+    internal static byte Type(FalloutPluginStack stack, FalloutFormKey topic) => Headers(stack).TryGetValue(topic, out var header)
+        ? header.Type : throw new InvalidDataException($"Dialogue topic {topic} is not a winning DIAL.");
+
     private static IReadOnlyDictionary<FalloutFormKey, (byte Type, byte Flags, float Priority)> Headers(FalloutPluginStack stack) =>
         TopicHeaders.GetValue(stack, records => records.EffectiveRecords("DIAL").ToDictionary(record => record.FormKey, record =>
         {

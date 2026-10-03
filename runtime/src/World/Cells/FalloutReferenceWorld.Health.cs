@@ -46,6 +46,14 @@ internal sealed partial class FalloutReferenceWorld
 
     internal bool IsDead(FalloutFormKey reference) => Actor(reference).Injury?.Dead == true;
 
+    internal bool IsInCombat(FalloutFormKey reference, Func<bool>? playerCombat = null)
+    {
+        if (reference == records.RuntimeFormKey(0x14))
+            return (playerCombat ?? throw new NotSupportedException("Player combat query has no engagement owner."))();
+        var actor = Actor(reference);
+        return IsEnabled(reference) && actor.Injury?.Dead != true && actor.Engagement is { Action: not "idle" };
+    }
+
     internal void InitializeSourceCorpse(FalloutFormKey reference)
     {
         var actor = Actor(reference);

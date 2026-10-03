@@ -80,33 +80,36 @@ internal sealed partial class RuntimeNativeCreature
             state.QueryCurrentPackage = null;
     }
 
-    internal float PackageCondition(FalloutCondition condition) => condition.Function switch
-    {
-        25 => Combat?.PackageMoving == true ? 1 : 0,
-        161 => FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, _aiPackage?.FormKey,
-            reference => _aiWorld!.CurrentPackage(reference)) ? 1 : 0,
-        18 => (_aiClock ?? throw new NotSupportedException("Creature time query has no simulation clock.")).Hour,
-        74 => (_aiGlobals ?? throw new NotSupportedException("Creature global query has no state owner.")).Get(condition.FormArgument1),
-        71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
-        73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
-        58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
-        32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
-        35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
-        36 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
-        50 => _aiState!.TalkedToPlayer ? 1 : 0,
-        53 => (float)_aiWorld!.ReadVariable(_aiQuests!, condition.FormArgument1, condition.Argument2),
-        63 => Activity.Attacked ? 1 : 0,
-        72 => Appearance.Creature == condition.FormArgument1 ? 1 : 0,
-        91 => Activity.Alerted ? 1 : 0,
-        101 => Activity.WeaponDrawn ? 1 : 0,
-        107 => Combat?.KnockedDown == true ? 2 : 0,
-        244 => _aiState!.Restrained ? 1 : 0,
-        286 => Activity.Sneaking ? 1 : 0,
-        287 => Activity.Running ? 1 : 0,
-        289 => Activity.InCombat ? 1 : 0,
-        300 when condition.RunOn == 0 => _aiWorld!.IsInInterior(Appearance.Reference!.Value) ? 1 : 0,
-        _ => throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
-    };
+    internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (161 or 289)
+        ? throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.")
+        : condition.Function switch
+        {
+            25 => Combat?.PackageMoving == true ? 1 : 0,
+            161 => FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, _aiPackage?.FormKey,
+                reference => _aiWorld!.CurrentPackage(reference)) ? 1 : 0,
+            18 => (_aiClock ?? throw new NotSupportedException("Creature time query has no simulation clock.")).Hour,
+            74 => (_aiGlobals ?? throw new NotSupportedException("Creature global query has no state owner.")).Get(condition.FormArgument1),
+            71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
+            73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
+            58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
+            32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
+            35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
+            36 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
+            50 => _aiState!.TalkedToPlayer ? 1 : 0,
+            53 => (float)_aiWorld!.ReadVariable(_aiQuests!, condition.FormArgument1, condition.Argument2),
+            63 => Activity.Attacked ? 1 : 0,
+            72 => Appearance.Creature == condition.FormArgument1 ? 1 : 0,
+            91 => Activity.Alerted ? 1 : 0,
+            101 => Activity.WeaponDrawn ? 1 : 0,
+            107 => Combat?.KnockedDown == true ? 2 : 0,
+            244 => _aiState!.Restrained ? 1 : 0,
+            286 => Activity.Sneaking ? 1 : 0,
+            287 => Activity.Running ? 1 : 0,
+            289 => (Combat ?? throw new NotSupportedException("Creature combat query has no engagement owner."))
+                .IsInCombat(FalloutAiPackages.ConditionSubject(condition, Appearance.Reference!.Value)) ? 1 : 0,
+            300 when condition.RunOn == 0 => _aiWorld!.IsInInterior(Appearance.Reference!.Value) ? 1 : 0,
+            _ => throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
+        };
 
     private bool InSameCell(FalloutFormKey target)
     {
@@ -129,6 +132,7 @@ internal sealed partial class RuntimeNativeCreature
         var restoreTravel = retained?.Travel is not null;
         var selected = restoreTravel ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
+                evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
                     _aiPackage?.FormKey, _packageEvents?.Done == true));
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)

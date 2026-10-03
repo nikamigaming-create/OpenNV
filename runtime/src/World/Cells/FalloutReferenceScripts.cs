@@ -780,6 +780,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             switch (operation)
             {
+                case "settalkingactivatoractor" when arguments.Count <= 1:
+                    world.SetTalkingActivatorActor(target, arguments.Count == 0 ? null : Reference(arguments[0]));
+                    break;
                 case "setopenstate" when arguments.Count == 1:
                     _ = world.Get(target);
                     host.Apply(new(FalloutReferenceEffectKind.DoorOpenState, source, target, Enable: Boolean(arguments[0])));

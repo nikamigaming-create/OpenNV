@@ -20,7 +20,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutDestructionState? Destruction = null, IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations = null,
     FalloutDoorMotionState? DoorMotion = null, FalloutReferenceLockState? LockState = null,
     FalloutReferenceOwnershipOverride? OwnershipOverride = null,
-    IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null)
+    IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null,
+    FalloutFormKey? TalkingActivatorActor = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -54,6 +55,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
             snapshot.LockState?.Validate();
             snapshot.OwnershipOverride?.Validate();
+            if (snapshot.TalkingActivatorActor is { } dialogueActor && !ValidKey(dialogueActor))
+                throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
             snapshot.PackageMotion?.Validate();
@@ -104,6 +107,7 @@ internal sealed class FalloutReferenceInstance
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
     internal bool TalkedToPlayer { get; set; }
+    internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
@@ -188,7 +192,7 @@ internal sealed class FalloutReferenceInstance
             CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
             TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
-            PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle);
+            PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor);
     }
 }
 
@@ -409,12 +413,16 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
                 instance.Placement = placement.Copy();
             }
-            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer || snapshot.PackageMotion is not null ||
+            var talkingActivator = snapshot.TalkedToPlayer && records.GetEffective(instance.Base).Signature == "TACT";
+            if (talkingActivator) _ = FalloutDialogueSpeaker.Read(records, instance.Base);
+            if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
                 snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null)
                 _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
             instance.TalkedToPlayer = snapshot.TalkedToPlayer;
+            if (snapshot.TalkingActivatorActor is { } dialogueActor)
+                validated.SetTalkingActivatorActor(snapshot.Reference, dialogueActor);
             if (snapshot.PackageMotion is { } motion)
             {
                 var package = records.GetEffective(motion.Package);

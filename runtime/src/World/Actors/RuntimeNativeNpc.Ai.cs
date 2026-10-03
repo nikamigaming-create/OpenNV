@@ -363,6 +363,9 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function == 289)
+            return (Combat ?? throw new NotSupportedException("AI combat query has no engagement owner."))
+                .IsInCombat(FalloutAiPackages.ConditionSubject(condition, Appearance.Reference!.Value)) ? 1 : 0;
         if (condition.Function == 161)
             return FalloutAiPackages.IsCurrentPackage(condition, Appearance.Reference!.Value, CurrentPackage,
                 reference => (_aiWorld ?? throw new NotSupportedException("AI current-package query has no reference world."))
@@ -401,7 +404,6 @@ internal partial class RuntimeNativeNpc
         182 => Appearance.EquippedArmor.Contains(condition.FormArgument1) ? 1 : 0,
         286 => Activity.Sneaking ? 1 : 0,
         287 => Activity.Running ? 1 : 0,
-        289 => Activity.InCombat ? 1 : 0,
         300 when condition.RunOn == 0 => (_aiWorld ?? throw new NotSupportedException("AI interior query has no world owner."))
             .IsInInterior(Appearance.Reference ?? throw new NotSupportedException("AI interior query has no placed reference.")) ? 1 : 0,
         365 => FalloutRaceProperties.IsChild(_aiStack!.GetEffective(Appearance.Race)) ? 1 : 0,
