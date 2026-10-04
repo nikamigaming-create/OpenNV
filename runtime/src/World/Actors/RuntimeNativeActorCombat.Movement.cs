@@ -11,6 +11,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private CharacterBody3D? _mover;
     private CollisionShape3D? _movementEnvelope;
     private float _movementSkeletonScale, _movementActorScale;
+    private Vector3 _movementWorldScale;
     private float _radius, _motionScale, _turnSpeed;
     private string? _movementBlock;
     private string? _stepBlock;
@@ -27,6 +28,11 @@ internal sealed partial class RuntimeNativeActorCombat
         waypoint = _pursuitCursor < _pursuitPath.Length ? new float[]
             { _pursuitPath[_pursuitCursor].X, _pursuitPath[_pursuitCursor].Y, _pursuitPath[_pursuitCursor].Z } : null,
         onFloor = _mover?.IsOnFloor(),
+        collisionLayer = _mover?.CollisionLayer,
+        collisionMask = _mover?.CollisionMask,
+        envelopeDisabled = _movementEnvelope?.Disabled,
+        envelopePosition = _movementEnvelope is { } envelope ? new[] { envelope.Position.X, envelope.Position.Y, envelope.Position.Z } : null,
+        bodyScale = _mover is { } mover ? new[] { mover.Scale.X, mover.Scale.Y, mover.Scale.Z } : null,
         velocity = _mover is { } body ? new float[] { body.Velocity.X, body.Velocity.Y, body.Velocity.Z } : null,
         routeError = _routeError,
         routeRequests = _routeRequests,
@@ -49,7 +55,8 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void PrepareMovement()
     {
-        if (_mover is not null && _movementSkeletonScale == _skeleton.Node.Scale.X && _movementActorScale == _actor.Scale.X) return;
+        if (_mover is not null && Mathf.IsEqualApprox(_movementSkeletonScale, _skeleton.Node.Scale.X) &&
+            Mathf.IsEqualApprox(_movementActorScale, _actor.Scale.X)) return;
         var refreshing = _mover is not null;
         var mover = (CharacterBody3D)_actor;
         var source = _skeleton.Source;
@@ -75,7 +82,7 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         else _turnSpeed = Mathf.DegToRad(FalloutGameSettingFloats.ReadRetained(_records, "fCharacterDefaultTurningSpeed", nameof(RuntimeNativeActorCombat)));
         if (_motionScale <= 0 || _turnSpeed <= 0) throw new NotSupportedException("Actor movement/turn speed is not positive.");
-        mover.CollisionLayer = 0; mover.CollisionMask = _mask;
+        GamebryoReferenceEnableRuntime.SetCollisionFilter(mover, 0, _mask);
         mover.FloorSnapLength = radius;
         mover.FloorMaxAngle = Mathf.DegToRad(_context?.MaximumWalkableSlopeDegrees ?? PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees);
         if (_movementEnvelope is null)
@@ -90,6 +97,7 @@ internal sealed partial class RuntimeNativeActorCombat
             : new CylinderShape3D { Radius = radius, Height = height };
         _movementSkeletonScale = _skeleton.Node.Scale.X;
         _movementActorScale = _actor.Scale.X;
+        _movementWorldScale = _actor.IsInsideTree() ? _actor.GlobalBasis.Scale : _actor.Basis.Scale;
         _mover = mover;
         if (refreshing)
         {
@@ -111,7 +119,8 @@ internal sealed partial class RuntimeNativeActorCombat
         var destination = Basis.LookingAt(direction.Normalized(), Vector3.Up).GetRotationQuaternion();
         var current = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
         var angle = current.AngleTo(destination);
-        _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 : Math.Min(1, _turnSpeed * (float)delta / angle))).Scaled(_actor.Scale);
+        _actor.GlobalBasis = new Basis(current.Slerp(destination, angle <= .00001f ? 1 :
+            Math.Min(1, _turnSpeed * (float)delta / angle)).Normalized()).Scaled(_movementWorldScale);
     }
 
     private void MoveActor(Vector3 localMotion, double delta, Vector3? waypoint = null)

@@ -22,6 +22,7 @@ internal static class TravelContracts
                 Record("CELL", 0x800, Field("DATA", [1])), References(), NavigationMesh(0x600, 0x800),
                 Package(0x400, 0, 0x1404), Package(0x401, 3, 0x1002), Package(0x402, 0, 0x140c), Package(0x403, 2, 0x1002),
                 Package(0x406, 0, 0x1002, behavior: 0x20, idle: true), Package(0x407, 0, 2, behavior: 0x20),
+                Package(0x408, 0, 0x101002), Package(0x409, 3, 0x101002),
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3)));
@@ -61,6 +62,17 @@ internal static class TravelContracts
             var travel = FalloutTravelPackage.Read(record);
             Require(travel.Reference == marker && travel.Radius == 3 && travel.MustReach && travel.OncePerDay && !travel.Running,
                 "Travel lost winning fields, adjusted marker or movement flags.");
+            foreach (var id in new uint[] { 0x408, 0x409 })
+            {
+                var headOff = records.GetEffective(Key(id));
+                var declaration = FalloutScriptPackage.Read(headOff);
+                Require(declaration.Flags == 0x101002 && !declaration.HeadTrackingEnabled &&
+                    FalloutTravelPackage.Read(headOff).Flags == declaration.Flags,
+                    "Head-Tracking Off was rejected or lost its independent package selector.");
+                if (id == 0x409) Require(FalloutEditorTravelPackage.Read(headOff).Flags == declaration.Flags,
+                    "Editor Travel did not retain the shared head-tracking selector.");
+            }
+            Require(FalloutScriptPackage.Read(record).HeadTrackingEnabled, "Ordinary Travel disabled head tracking without its source flag.");
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x402))));
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x403))));
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x406))));

@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Actor collision and package head tracking](actor-collision-and-package-head-tracking.md)
+retain movement filters through enable/fade changes, preserve source scale during
+turning and bind package head suppression independently of script Look targets.
+
 [Radio broadcast state](source-radio-broadcast-state.md) retains per-reference
 continuous/scripted mode across source commands, queries and cold restoration.
 Station mode remains independent of reception, the receiver and audio timelines.

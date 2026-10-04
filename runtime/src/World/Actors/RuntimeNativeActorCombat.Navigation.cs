@@ -73,7 +73,10 @@ internal sealed partial class RuntimeNativeActorCombat
                 // NAVM portal centres can make a nearby goal's polyline long.
                 // Within the same bounded local query, refine the actual
                 // projected goal rather than demand an occupied portal centre.
-                var (end, resume) = _actor.GlobalPosition.DistanceTo(coarse[^1]) <= 8 ? (coarse[^1], coarse.Length) :
+                // A bounded segment can already reach the source arrival
+                // region even when its centre is just beyond the segment.
+                // Do not replace that region with an occupied portal centre.
+                var (end, resume) = _actor.GlobalPosition.DistanceTo(coarse[^1]) <= 8 + stoppingDistance ? (coarse[^1], coarse.Length) :
                     NativeCapsuleNavigation.CorridorPrefix(_actor.GlobalPosition, coarse, approach);
                 _routeEnd = end;
                 _routeArrivalRadius = resume == coarse.Length ? stoppingDistance : 0;
