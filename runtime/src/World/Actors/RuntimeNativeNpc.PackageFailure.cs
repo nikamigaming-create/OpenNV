@@ -16,10 +16,10 @@ internal partial class RuntimeNativeNpc
         _aiError is not null && _failedPackage is { } failed && failed == _selectedSourcePackage &&
         _requestedSelection is null && _pendingPackage is null && _aiPackage is null &&
         _packageEvents is { Active: null, Done: false, Error: null } &&
-        _packageIdleSource is { Idles.Count: 0 } &&
+        _packageIdleSource is not null && _packageIdles is not null &&
         _sitting == 0 && !_furnitureApproaching && !_travelActive && _travelProgress?.ArrivalPending != true &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null &&
-        _animation is null && !_responseIdleActive && _packageIdleError is null && AnimationError is null &&
+        _animation is null && !_responseIdleActive && AnimationError is null &&
         _conversationTarget is null && Combat?.OwnsPose != true && Combat?.PackageOwnsPose != true &&
         _baseClock.Resource.Length != 0;
 
@@ -35,7 +35,7 @@ internal partial class RuntimeNativeNpc
             [position.X, position.Y, position.Z], [basis.X.X, basis.X.Y, basis.X.Z,
                 basis.Y.X, basis.Y.Y, basis.Y.Z, basis.Z.X, basis.Z.Y, basis.Z.Z],
             _baseLocomotionMoving, _aiRandom.State, Math.Max(0, _aiPollRemaining), _aiScheduleTime,
-            FalloutPackageRetirement.Capture(_aiStack, _packageEvents!), _blink?.Capture());
+            FalloutPackageRetirement.Capture(_aiStack, _packageEvents!), _blink?.Capture(), CapturePackageIdleState());
         failure.Validate(_aiStack, _aiReferenceState!);
         return failure;
     }
@@ -57,6 +57,11 @@ internal partial class RuntimeNativeNpc
         else if (_blink is not null)
             throw new NotSupportedException("Saved stopped actor has no blink continuation for its source face.");
         var package = _aiStack!.GetEffective(failure.Package);
+        if (failure.IdleState is { } idles)
+        {
+            _idleReplays.Restore(idles.Cooldowns.ToDictionary(value => value.Idle, value => value.Remaining));
+            _packageIdleError = idles.Error;
+        }
         // Retry only the retained pre-begin binding. Source selection and its
         // random predicates were already consumed before this save.
         _requestedSelection = new(package, FalloutScriptPackage.Read(package));

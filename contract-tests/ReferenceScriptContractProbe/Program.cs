@@ -5,6 +5,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--reference-package-event-contracts"])
+{
+    ReferencePackageEventContracts.Run();
+    return;
+}
 if (args.Length >= 6 && args[0] == "--inspect-owned-stage")
 {
     var setup = new FalloutModStackSelection([new(args[1], args[2], args[6..])]).Resolve(args[3]);
@@ -287,6 +292,16 @@ if (args.Length >= 5 && args[0] == "--audit-quest-updates")
 if (args.Length >= 5 && args[0] == "--audit-reference-access")
 {
     OwnedReferenceAccessProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
+if (args.Length >= 4 && args[0] == "--audit-terminal-access")
+{
+    OwnedTerminalAccessProbe.Run(args[1], args[2], args[3], args[4..]);
+    return;
+}
+if (args is ["--reference-access-contracts"])
+{
+    ReferenceAccessContracts.Run();
     return;
 }
 if (args.Length == 1 && args[0] == "--player-actor-value-contracts")

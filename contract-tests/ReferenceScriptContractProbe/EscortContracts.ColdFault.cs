@@ -39,7 +39,20 @@ internal static partial class EscortContracts
             PackageSha256 = Convert.ToHexString(SHA256.HashData(package.ReadData())),
             Escort = new(true, true)
         };
-        Reject(() => world.Capture());
+        var pendingSave = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        using (var pendingCold = new FalloutReferenceWorld(records))
+        {
+            pendingCold.Restore(pendingSave); pendingCold.LoadCell(cell);
+            var pendingScripts = new FalloutReferenceScripts(records, pendingCold, quests, new((_, _) => false,
+                _ => throw new InvalidOperationException("Cold pending package fault replayed a native effect.")));
+            var pendingReceipt = pendingCold.PackageEvents.SnapshotPending(actor);
+            Require(pendingReceipt.Count == 1 && pendingCold.ActorValue(actor, "Variable05") == 1 &&
+                pendingScripts.DispatchFrame(actor, pendingReceipt.Events, 0).All(result => result.Error == instance.ScriptError),
+                "Cold pending package marks lost their retained fault or replayed its applied prefix.");
+            pendingCold.PackageEvents.Consume(pendingReceipt);
+            Require(pendingCold.PendingPackageEventCount == 0 && pendingCold.ActorValue(actor, "Variable05") == 1,
+                "Consumed cold pending fault retained an event or repeated its prefix.");
+        }
         var receipt = world.PackageEvents.SnapshotPending(actor);
         Require(scripts.DispatchFrame(actor, receipt.Events, 0).All(result => result.Error == instance.ScriptError),
             "Attached-event admission discarded an unscripted actor's package fault.");

@@ -1,5 +1,7 @@
 namespace OpenNV.Runtime.Content;
 
+internal sealed record FalloutIdleCollectionPlaybackSnapshot(int Cursor, int SelectionCount, double WaitSeconds, bool Complete);
+
 /// <summary>Source package idle order and the wait between completed selections.</summary>
 internal sealed class FalloutIdleCollectionPlayback(FalloutIdleCollection source, FalloutIdleReplayState replay,
     Func<FalloutFormKey, bool> eligible, Func<uint, uint>? random = null)
@@ -12,6 +14,22 @@ internal sealed class FalloutIdleCollectionPlayback(FalloutIdleCollection source
     internal double WaitSeconds { get; private set; }
     internal bool Complete { get; private set; }
     internal int Cursor => _cursor;
+    internal FalloutIdleCollectionPlaybackSnapshot Capture() => new(_cursor, _selectionCount, WaitSeconds, Complete);
+
+    internal void Restore(FalloutIdleCollectionPlaybackSnapshot saved)
+    {
+        if (_cursor != 0 || _selectionCount != 0 || WaitSeconds != 0 || Complete)
+            throw new InvalidOperationException("Idle collection restoration requires a fresh owner.");
+        if (saved.Cursor < 0 || saved.SelectionCount < 0 || saved.SelectionCount > Source.Idles.Count ||
+            saved.Cursor > saved.SelectionCount || !double.IsFinite(saved.WaitSeconds) || saved.WaitSeconds < 0 ||
+            saved.WaitSeconds > Source.IdleTimer || saved.Complete && !Source.DoOnce ||
+            saved.Cursor == 0 && (saved.SelectionCount != 0 || saved.WaitSeconds != 0 || saved.Complete) ||
+            saved.WaitSeconds > 0 && (saved.Complete || saved.Cursor != saved.SelectionCount) ||
+            saved.Complete && (saved.Cursor != saved.SelectionCount || saved.WaitSeconds != 0))
+            throw new InvalidDataException("Saved idle collection differs from its source selection and timer.");
+        _cursor = saved.Cursor; _selectionCount = saved.SelectionCount;
+        WaitSeconds = saved.WaitSeconds; Complete = saved.Complete;
+    }
 
     internal FalloutFormKey? Select()
     {

@@ -1,9 +1,11 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Cells;
 
-internal static class FurnitureContracts
+internal static partial class FurnitureContracts
 {
     internal static void Run()
     {
@@ -15,7 +17,7 @@ internal static class FurnitureContracts
                 Record("NPC_", 0x700, Field("EDID", Text("SeatActorBase")), Field("ACBS", new byte[24]),
                     Field("SNAM", Join(BitConverter.GetBytes(0x730u), new byte[] { 3, 0, 0, 0 }))),
                 Record("NPC_", 0x701, Field("ACBS", new byte[24])), Record("FACT", 0x730),
-                Record("STAT", 0x3b), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
+                Record("STAT", 0x3b), Record("IDLE", 0x712), Record("FURN", 0x710, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("FURN", 0x711, Field("MNAM", BitConverter.GetBytes(0x80000001u))),
                 Record("CELL", 0x800, Field("DATA", [1])), References()));
             var sittingCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(sittingCondition.AsSpan(8), 159);
@@ -54,9 +56,81 @@ internal static class FurnitureContracts
             world.ReleaseFurnitureSeat(chair, 0, player);
             SittingContracts(records, world, actor, chair, player);
             ReferenceQueries(records, world, actor, chair, otherActor);
+            ColdFurniture(records, cell, actor, chair, otherActor);
+            StoppedProcedureContracts();
             Console.WriteLine("OPENNV_FIND_FURNITURE_CONTRACT_PASS sourceMasters=true radius=true actualPlacement=true enabled=true actorFactionOwnership=true targetKinds=true reservations=true playerRecordAbsent=true unsupportedRefused=true");
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void ColdFurniture(FalloutPluginStack records, FalloutCellScene cell,
+        FalloutFormKey actor, FalloutFormKey chair, FalloutFormKey otherActor)
+    {
+        var package = records.GetEffective(new("Find.esp", 0x400));
+        var assignment = new FalloutActorPackageAssignment(package.FormKey, FalloutActorFurnitureContinuation.RecordHash(package), false);
+        const string resource = "meshes/fixture-chair-loop.kf";
+        var hash = new string('A', 64);
+        float[] pose = [1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 2, 3];
+        var search = new FalloutActorFurnitureContinuation(assignment, 1, "POBA", package.FormKey,
+            assignment.Sha256, 0, .125, pose, package.FormKey, null, 123456, 3.5, null, null);
+        using var warm = new FalloutReferenceWorld(records);
+        warm.LoadCell(cell);
+        var owner = warm.Get(actor);
+        owner.QuerySitting = null;
+        owner.PackageAssignment = assignment;
+        owner.Animation.Restore(new(resource, hash, .3125, false));
+        owner.FurnitureContinuation = search;
+        owner.ProcedureCaptureBlocker = FalloutActorFurnitureContinuation.CaptureBlocker;
+        var saved = warm.Capture();
+        using (var coldSearch = new FalloutReferenceWorld(records))
+        {
+            coldSearch.Restore(saved);
+            Require(coldSearch.GetSitting(actor) == 0 && coldSearch.PendingProcedureCaptureCount == 0 &&
+                JsonSerializer.Serialize(coldSearch.Capture()) == JsonSerializer.Serialize(saved),
+                "Cold furniture search changed its source assignment, clock, polling or random state.");
+        }
+        var furniture = records.GetEffective(warm.Get(chair).Base);
+        var idle = records.GetEffective(new("Seats.esm", 0x712));
+        var seat = new FalloutFurnitureSeat(furniture.FormKey, 0, 1, new(new(0, 0, 0), 0, 1, 1), [0, 0, 0], 0);
+        var occupied = search with { Assignment = assignment with { Done = true }, Phase = 3,
+            Furniture = chair, FurnitureSha256 = FalloutActorFurnitureContinuation.RecordHash(furniture),
+            Model = "meshes/fixture-chair.nif", ModelSha256 = hash, Seat = seat, Occupied = (float[])pose.Clone(),
+            Clip = new(idle.FormKey, FalloutActorFurnitureContinuation.RecordHash(idle), resource, hash) };
+        owner.PackageAssignment = occupied.Assignment;
+        owner.FurnitureContinuation = occupied;
+        saved = warm.Capture();
+        using (var cold = new FalloutReferenceWorld(records))
+        {
+            cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(saved))!);
+            Require(cold.GetSitting(actor) == 3 && cold.OwnsFurnitureSeat(chair, 0, actor) &&
+                !cold.ReserveFurnitureSeat(chair, 0, otherActor), "Cold occupied chair lost its exclusive source reservation.");
+            cold.Get(actor).Enabled = false;
+            Require(cold.OwnsFurnitureSeat(chair, 0, actor) && !cold.ReserveFurnitureSeat(chair, 0, otherActor),
+                "Disabled saved occupant lost its retained physical reservation.");
+            cold.ReleaseFurnitureSeat(chair, 0, otherActor);
+            Require(cold.OwnsFurnitureSeat(chair, 0, actor), "Foreign actor released the cold reservation.");
+            cold.ReleaseFurnitureSeat(chair, 0, actor);
+            Require(cold.ReserveFurnitureSeat(chair, 0, otherActor), "Retirement did not release the cold reservation.");
+        }
+        void AtomicReject(FalloutReferenceSnapshot[] candidate)
+        {
+            using var refused = new FalloutReferenceWorld(records);
+            Reject(() => refused.Restore(candidate));
+            Require(refused.InstanceCount == 0 && !refused.OwnsFurnitureSeat(chair, 0, actor),
+                "Rejected furniture save partially published references or reservations.");
+        }
+        FalloutReferenceSnapshot[] Replace(FalloutActorFurnitureContinuation changed) => saved.Select(value =>
+            value.Reference == actor ? value with { FurnitureContinuation = changed } : value).ToArray();
+        AtomicReject(Replace(occupied with { ModelSha256 = "bad" }));
+        AtomicReject(Replace(occupied with { FurnitureSha256 = new string('B', 64) }));
+        AtomicReject(Replace(occupied with { Clip = occupied.Clip! with { Sha256 = new string('B', 64) } }));
+        AtomicReject(Replace(occupied with { Seat = seat with { Index = 1 } }));
+        AtomicReject(Replace(occupied with { Pose = [float.NaN, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0] }));
+        AtomicReject(Replace(occupied with { Phase = 2 }));
+        var competing = saved.Select(value => value.Reference == otherActor ? value with
+        { PackageAssignment = occupied.Assignment, Animation = owner.Animation.Capture(), FurnitureContinuation = occupied.Copy() } : value).ToArray();
+        AtomicReject(competing);
+        Console.WriteLine("OPENNV_FURNITURE_COLD_CONTRACT_PASS search=true sourceAssignment=true phase=true animationClock=true reservation=true disabledLease=true atomicReject=true nativeMotion=unverified");
     }
 
     private static void ReferenceQueries(FalloutPluginStack records, FalloutReferenceWorld world,

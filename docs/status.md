@@ -1,62 +1,40 @@
 # Product status
 
-Checked PR135 is merged at synchronized main ca9f0ba with all five checks passing.
-The active recorded-input runner has passing synthetic and native input
-contracts. Complete shared saves, delivered retail recording and campaign
-checkpoint/outcome proof remain separate required owners; see
-[recorded input](recorded-input-replay.md).
-The merged classroom runtime reproduces all seven original
-students occupying distinct source seats after the ordinary G.O.A.T. ready choice.
-Find near-reference Furniture searches use enabled/moved placements, source
-ownership, NIF/MNAM reservations, native capsule/NAVM approach and actual KF entry.
-Script and dialogue GetSitting bind the physical player/NPC owner. The selected
-original player desk passes native entry/loop/exit and script-visible phase checks.
-Ordinary desk input completes entry and source50/55/60. All ten original G.O.A.T.
-questions and scoring results complete through observed buttons. Source70 and
-physical chair exit precede Brotch's original hand-in dialogue, which enters80
-and accepts the original tag menu with both menu and dialogue closed and player
-input restored. Physical hallway movement crosses the original exit trigger,
-completes90 and enters100/CG04:0. Fresh candidate replay passes the radio command
-and stops at the original terminal Lock255 command, retaining the consumed nested
-prefix. Vault escape and the authored train journey remain open.
-The merged runtime owns four indexed player tags in shared
-C# reference/result and fallback quest execution. Existing source bonuses update
-live membership once; v34 saves retain holes and exact slot order. Synthetic and
-campaign cold-save checks and all thirteen isolated original TTW scoring stages
-pass. The complete runtime gate passed for that merged runtime. It binds the optional initial-selection
-flag, source total count and independent menu/dialogue input retirement.
-The merged runtime owns per-reference scripted/
-continuous station mode, source commands/queries and cold restoration in v35.
-Synthetic and original isolated CG04 command audits and the complete runtime gate
-pass, including v34/v33 loading. The merged runtime retains native filters
-through enable/fade changes, preserves scale/capsule identity during body turning,
-retains reachable source arrival regions and binds package head suppression.
-Selected source contracts and isolated/static owned-room warm/cold movement,
-filter and physical head checks and the complete runtime gate pass. Fresh ordinary
-replay retains the teacher's supported body through classroom departure. Vault escape,
-Megaton and the train/Mojave route remain incomplete. Projector composition,
-Brotch's desk entry and NPC fidgeting remain active user-reported issues.
-No presentation parity is claimed.
+Checked PR136 is merged at synchronized main 9f67cfb with all five checks passing.
+The active candidate retains winning terminal access, queued actor package events
+and source-owned Furniture/failed-selection/idle/settled-Dialogue continuations in
+schema v36. Synthetic checks, original terminal locking/cold validation and four
+isolated owned native cold/resumed procedure checks pass. The reached-save native
+audit verifies exact state through product attachment order for three stopped
+NPCs, a retained creature assignment and the occupied teacher. See
+[actor procedure checkpoints](actor-procedure-checkpoints.md).
 
-Shared script GetTalkedToPC and typed GetLinkedRef have synthetic self/explicit/
-postfix, live and cold checks. Original escape history/link declarations and
-all seven classroom source package/seat declarations pass owned-data audits.
-Legacy scripts stopped after consumed initialization remain faults until their
-instruction continuation has an owner. Furniture search/reservation/clock saving
-also remains unowned; a settled post-photo cold checkpoint is not verified.
+Ordinary input completes all ten G.O.A.T. questions, scoring, original hand-in/tag
+acceptance and Brotch's source desk occupation. A genuine complete stage80
+checkpoint is written; a separate cold load reaches that state without replaying
+the exam. Quests, inventory, tags and new procedure owners match. The final candidate
+corrects the older native pose/pre-selection assignment differences found by that
+comparison. Menu clock timing remains a separate evidence lane. The final complete gate and diff check pass; checked publication is pending. [Current work](current-work.md) owns the
+exact native continuation.
 
-Original CG02 photo input completes90/95/98/100, the source six-years-later
-sequence and all41 commands of CG03:5. Dad, bullying and Mr. Brotch dialogue
-complete40/42 through ordinary choices without stage-result errors. Marker Travel,
-radio Off, shared player ResetHealth, direct winning FormList/spatial/script-variable
-queries and immediate INFO results have bounded synthetic/owned proofs. Active
-broadcasts and pending nested stage results still refuse saving. The integrated
-runtime gate passes for the final candidate, including the player idle predicates.
+Earlier ordinary hallway departure completed CG03:100 and all32 CG04:0 setup
+commands, including radio state, terminal locking and the bed transition. Escape
+GameMode stops at missing GetInCell after consumed timer writes. The genuine
+post-hand-in checkpoint allows fresh execution after query support; clearing a
+consumed-prefix fault is not recovery. Vault escape, Megaton and the authored
+train/Mojave route remain open.
 
-Full radio playback, VATS, all JAM/MCM modules and native plugin interfaces remain
-incomplete. No campaign, matched retail or physical-headset parity claim is made.
-[Current work](current-work.md) owns the exact live continuation and next action.
-Older component notes below describe bounded evidence.
+The merged runtime shares indexed tags/menu input retirement, physical furniture
+activation/GetSitting, station broadcast mode and ordinary source NAVM/capsule
+travel. Complete furniture approach/conversation saves, projector composition,
+full radio playback and NPC idle behavior remain incomplete. Retail recording/
+playback, matched comparisons, VATS, all JAM/MCM modules, native plugin interfaces
+and physical headset acceptance remain required. No campaign or parity completion
+is claimed. All 36 broad requirements remain open at their full scope.
+
+Older component evidence below is bounded by its stated build and fixture; it
+is not the current campaign continuation.
+
 Checked PR125 publishes reference-owned stopped NPC initialization saves and
 shared Guard marker approach at synchronized main a910a0dc; all five checks
 pass. Synthetic continuation checks, Beatrice's native cold/resumed-advancement

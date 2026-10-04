@@ -17,7 +17,9 @@ internal static class ReferenceAccessContracts
             File.WriteAllBytes(Path.Combine(directory, "Access.esm"), plugin);
             var patch = Join(Header("Access.esm"), Group(0x80, Reference("REFR", 0x90, 1, "DoorA",
                 Field("XLOC", Lock(255, 0x01000120, 0, 12)))), Item("KEYM", 0x01000120, "PatchKey"),
-                Record("FACT", 0x01000121, Field("EDID", Text("PatchFaction"))), Script(true));
+                Record("FACT", 0x01000121, Field("EDID", Text("PatchFaction"))),
+                Record("TERM", 6, Field("DNAM", [5, 0, 0, 0]), Field("PNAM", BitConverter.GetBytes(0x01000122u))),
+                Item("NOTE", 0x01000122, "TerminalPassword"), Script(true));
             File.WriteAllBytes(Path.Combine(directory, "AccessPatch.esp"), patch);
             using var records = FalloutPluginStack.Load(directory, ["Access.esm", "AccessPatch.esp"]);
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
@@ -50,6 +52,21 @@ internal static class ReferenceAccessContracts
                 "Unlock created data for an absent source lock.");
             Run("EmptyDoor.Lock"); Require(world.GetLocked(Key(0x92)) == 1 && world.GetLockLevel(Key(0x92)) == 0,
                 "Default Lock could not create a general per-reference lock.");
+            Require(world.GetLocked(Key(0xa0)) == 0 && world.GetLockLevel(Key(0xa0)) == 0 &&
+                world.GetLocked(Key(0xa1)) == 1 && world.GetLockLevel(Key(0xa1)) == 255,
+                "Source terminal unlocked/required-key state did not join placed lock ownership.");
+            world.LockReference(Key(0xa0), 255);
+            Require(world.GetLockLevel(Key(0xa0)) == 255 && world.GetLocked(Key(0xa0)) == 1 &&
+                world.GetLocked(Key(0xa2)) == 0, "Terminal locking changed another instance of the same base.");
+            world.UnlockReference(Key(0xa0)); world.LockReference(Key(0xa0));
+            Require(world.GetLockLevel(Key(0xa0)) == 255, "Terminal default relock lost its reached difficulty.");
+            var passwordInventory = new FalloutPlayerInventory();
+            Require(!world.UnlockWithKey(Key(0xa1), passwordInventory), "Terminal admitted an absent password.");
+            passwordInventory.Add(records, PatchKey(0x122), 1, 1, true);
+            Require(world.UnlockWithKey(Key(0xa1), passwordInventory) && world.GetLocked(Key(0xa1)) == 0 &&
+                passwordInventory.Item(PatchKey(0x122))!.Count == 1, "Terminal lost its adjusted NOTE password or consumed it.");
+            foreach (var reference in new uint[] { 0xa3, 0xa4, 0xa5, 0xa6 })
+                Reject(() => world.LockReference(Key(reference), 255));
             Run("Lock 75\nset sample to GetLockLevel", 0x9a);
             Require(world.Get(Key(0x9a)).Read(1) == 75 && world.GetLocked(Key(0x9a)) == 1,
                 "Calling ACHR lost its actual per-reference lock owner.");
@@ -101,6 +118,9 @@ internal static class ReferenceAccessContracts
             Require(cold.GetLocked(Key(0x90)) == 1 && cold.GetLockLevel(Key(0x90)) == 100 &&
                 cold.Ownership(Key(0x94)).Owner == PatchKey(0x121) && cold.Get(Key(0x93)).Taken &&
                 cold.Get(Key(0x91)).ScriptError == fault.Error, "Cold access, ownership, pickup or source fault changed.");
+            Require(cold.GetLocked(Key(0xa0)) == 1 && cold.GetLockLevel(Key(0xa0)) == 255 &&
+                cold.GetLocked(Key(0xa1)) == 0 && cold.GetLockLevel(Key(0xa1)) == 255 &&
+                cold.GetLocked(Key(0xa2)) == 0, "Cold terminal locks lost independent difficulty/password access.");
             _ = Scripts(cold).Dispatch(Key(0x91), "GameMode");
             Require(cold.Get(Key(0x91)).Read(1) == prefix, "Cold restoration replayed a failed source prefix.");
             var original = snapshots.Single(snapshot => snapshot.Reference == Key(0x90));
@@ -129,7 +149,7 @@ internal static class ReferenceAccessContracts
             Console.WriteLine("OPENNV_REFERENCE_ACCESS_PASS ff=true defaults=true byteLevel=true absent=true actualCaller=true " +
                 "typedQueries=true lazy=true perInstance=true typedOwners=true playerBaseDefault=true effectivePickup=true " +
                 "keyUnlock=true cold=true legacyUnlock=true sourceDrift=true invalidAtomic=true retainedFault=true " +
-                "terminalAndLinkedAndLeveledDifficultyAndCellAccess=unbound lockpickAndInheritedCrime=unverified");
+                "terminal=true terminalPassword=true terminalPerInstance=true linkedAndLeveledDifficultyAndCellAccess=unbound lockpickAndInheritedCrime=unverified");
         }
         finally
         {
@@ -155,6 +175,20 @@ internal static class ReferenceAccessContracts
             using var rejected = new FalloutReferenceWorld(records);
             Reject(() => rejected.Restore(snapshots)); Require(rejected.InstanceCount == 0, "Source drift partially committed reference state.");
         }
+        // A terminal's difficulty/password belongs to its winning base. The
+        // placed reference can be byte-identical while that declaration drifts.
+        var terminalChanged = (byte[])patch.Clone();
+        var terminalMarker = Encoding.ASCII.GetBytes("DNAM");
+        var terminalOffset = Enumerable.Range(0, terminalChanged.Length - terminalMarker.Length)
+            .Single(index => terminalChanged.AsSpan(index, terminalMarker.Length).SequenceEqual(terminalMarker));
+        terminalChanged[terminalOffset + 6] = 4;
+        File.WriteAllBytes(Path.Combine(drift, "AccessPatch.esp"), terminalChanged);
+        using (var terminalRecords = FalloutPluginStack.Load(drift, ["Access.esm", "AccessPatch.esp"]))
+        {
+            using var rejected = new FalloutReferenceWorld(terminalRecords);
+            Reject(() => rejected.Restore(snapshots));
+            Require(rejected.InstanceCount == 0, "Terminal base drift partially committed saved references.");
+        }
         // Keep the complete winning record bytes, but change what their raw
         // master indices mean. The source context must reject this too.
         File.WriteAllBytes(Path.Combine(drift, "Otherx.esm"), Join(Header("Access.esm"),
@@ -172,7 +206,13 @@ internal static class ReferenceAccessContracts
 
     private static byte[] Fixture() => Join(Header(),
         Record("DOOR", 1, Field("EDID", Text("DoorBase")), Field("SCRI", BitConverter.GetBytes(0x50u))),
-        Item("MISC", 3, "AccessItem"), Record("TERM", 4), Record("NPC_", 7),
+        Item("MISC", 3, "AccessItem"), Record("TERM", 4),
+        Record("TERM", 5, Field("DNAM", [0, 2, 5, 0])),
+        Record("TERM", 6, Field("DNAM", [5, 0, 0, 0])), Record("NPC_", 7),
+        Record("TERM", 0x30, Field("DNAM", [6, 0, 0, 0])),
+        Record("TERM", 0x31, Field("DNAM", [0, 16, 0, 0])),
+        Record("TERM", 0x32, Field("DNAM", [0, 0, 0])),
+        Record("TERM", 0x33, Field("DNAM", [0, 0, 0, 0]), Field("PNAM", BitConverter.GetBytes(8u))),
         Record("NPC_", 8, Field("EDID", Text("OtherNpc")), Field("SCRI", BitConverter.GetBytes(0x50u))),
         Record("CREA", 9, Field("EDID", Text("CreatureBase"))), Record("FACT", 11), Item("KEYM", 20, "SourceKey"),
         Record("GLOB", 0x40, Field("FLTV", BitConverter.GetBytes(.5f))),
@@ -190,7 +230,11 @@ internal static class ReferenceAccessContracts
             Reference("REFR", 0x97, 1, "LeveledDoor", Field("XLOC", Lock(15, 20, 4, 20))),
             Reference("REFR", 0x98, 1, "BadExtent", Field("XLOC", new byte[11])),
             Reference("REFR", 0x99, 1, "BadKey", Field("XLOC", Lock(100, 8, 0, 12))),
-            Reference("ACHR", 0x9a, 8, "ActualActor")));
+            Reference("ACHR", 0x9a, 8, "ActualActor"),
+            Reference("REFR", 0xa0, 5, "SourceTerminal"), Reference("REFR", 0xa1, 6, "PasswordTerminal"),
+            Reference("REFR", 0xa2, 5, "OtherTerminal"),
+            Reference("REFR", 0xa3, 0x30, "BadTerminalDifficulty"), Reference("REFR", 0xa4, 0x31, "BadTerminalFlags"),
+            Reference("REFR", 0xa5, 0x32, "BadTerminalExtent"), Reference("REFR", 0xa6, 0x33, "BadTerminalPassword")));
 
     private static FalloutFormKey Key(uint id) => new("Access.esm", id);
     private static FalloutFormKey PatchKey(uint id) => new("AccessPatch.esp", id);

@@ -38,13 +38,19 @@ initialization and Guard approach separately from active procedures. Shared
 reference state preserves source selection, consumed retirement and actual
 motion without supplying missing procedure behavior or replaying results.
 
+[Actor procedure checkpoints](actor-procedure-checkpoints.md) retain source
+Furniture phases, stopped predicate selection, declared idle collections and
+settled Dialogue waits. The reference world validates exclusive source seats,
+exact clocks and pending attached-script package event revisions during cold
+restoration; unowned movement and active conversation remain save blockers.
+
 Find Furniture reads source near-reference searches, reference/base/object-type
 targets, enabled placements and ownership. Shared seat reservations bind actual
 NIF/MNAM markers to one player or NPC. Native capsule/NAVM arrival precedes the
 source KF entry; occupation follows its clock. Player and NPC GetSitting expose
 those physical phases to scripts and dialogue through the same reference world.
-Missing physical owners fail visibly. Search, reservation and furniture clock
-persistence remain required before an active procedure can be saved.
+Missing physical owners fail visibly. Owned search, reservation and furniture
+clocks can be saved; an unowned native approach still refuses capture.
 
 Script GetTalkedToPC reads retained conversation history. GetLinkedRef uses the
 winning placed reference's XLKR and declaring master table, retaining typed

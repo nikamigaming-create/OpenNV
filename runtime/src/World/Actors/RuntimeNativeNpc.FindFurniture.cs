@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
-    private const string FindFurnitureCaptureBlocker = "Find Furniture needs its search, reservation and physical animation continuation.";
+    private const string FindFurnitureCaptureBlocker = OpenNV.Runtime.World.Cells.FalloutActorFurnitureContinuation.CaptureBlocker;
     private FalloutFindFurniturePackage? _findFurniture;
     private double _furnitureSearchRemaining;
 

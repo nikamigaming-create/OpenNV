@@ -1,9 +1,23 @@
 using System.Collections.Frozen;
+using System.Security.Cryptography;
+using System.Text;
 using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.World.Cells;
 
 internal enum FalloutReferencePackageEventKind { Start, Done, Change }
+
+internal sealed record FalloutReferencePackageEventSnapshot(FalloutFormKey Package,
+    FalloutReferencePackageEventKind Kind, long Revision, string SourceSha256)
+{
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Package.OwnerPlugin) || Package.ObjectId is 0 or > FalloutFormKey.ObjectIdMask ||
+            Revision <= 0 || Revision == long.MaxValue || SourceSha256 is not { Length: 64 } || !SourceSha256.All(Uri.IsHexDigit))
+            throw new InvalidDataException("Saved actor package event has an invalid identity, revision or source hash.");
+        _ = FalloutReferencePackageEvents.Name(Kind);
+    }
+}
 
 // Actor package marks are source-script event-list state, independent of an
 // actor's presentation binding. Admission happens on its ordinary script frame.
@@ -12,10 +26,56 @@ internal sealed class FalloutReferencePackageEvents(FalloutPluginStack records)
     private readonly Dictionary<FalloutFormKey, Dictionary<(FalloutFormKey Package, FalloutReferencePackageEventKind Kind), long>> _pending = [];
     private long _revision;
     private long _epoch;
+    private readonly Dictionary<FalloutFormKey, string> _sourceHashes = [];
 
     internal int PendingCount => _pending.Values.Sum(marks => marks.Count);
     internal IReadOnlyList<FalloutFormKey> PendingActors => _pending.Keys.ToArray();
     internal bool HasPending(FalloutFormKey actor) => _pending.ContainsKey(actor);
+
+    internal IReadOnlyList<FalloutReferencePackageEventSnapshot> Capture(FalloutFormKey actor) =>
+        _pending.TryGetValue(actor, out var marks) ? Array.AsReadOnly(marks.OrderBy(mark => mark.Value)
+            .Select(mark => new FalloutReferencePackageEventSnapshot(mark.Key.Package, mark.Key.Kind,
+                mark.Value, SourceHash(mark.Key.Package))).ToArray()) : [];
+
+    internal void Restore(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
+    {
+        if (_pending.Count != 0 || _revision != 0) throw new InvalidOperationException("Package event restoration requires a fresh owner.");
+        var pending = new Dictionary<FalloutFormKey, Dictionary<(FalloutFormKey, FalloutReferencePackageEventKind), long>>();
+        var revisions = new HashSet<long>();
+        long revision = 0;
+        foreach (var snapshot in snapshots)
+        {
+            if (snapshot.PackageEvents is not { Count: > 0 } events) continue;
+            RequireActor(records, snapshot.Reference);
+            var marks = new Dictionary<(FalloutFormKey, FalloutReferencePackageEventKind), long>();
+            foreach (var mark in events)
+            {
+                (mark ?? throw new InvalidDataException("Saved actor package event is absent.")).Validate();
+                if (!marks.TryAdd((mark.Package, mark.Kind), mark.Revision) || !revisions.Add(mark.Revision) ||
+                    !SourceHash(mark.Package).Equals(mark.SourceSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Saved actor package event is duplicated or differs from its winning source.");
+                revision = Math.Max(revision, mark.Revision);
+            }
+            if (!pending.TryAdd(snapshot.Reference, marks)) throw new InvalidDataException("Saved package-event actor is duplicated.");
+        }
+        foreach (var (actor, marks) in pending) _pending.Add(actor, marks);
+        _revision = revision;
+    }
+
+    private string SourceHash(FalloutFormKey package)
+    {
+        if (_sourceHashes.TryGetValue(package, out var existing)) return existing;
+        RequirePackage(records, package);
+        var source = records.GetEffective(package);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(source.ReadData());
+        hash.AppendData(Encoding.UTF8.GetBytes(source.FormKey + "\0"));
+        foreach (var name in source.Plugin.Masters.Append(source.Plugin.Name))
+            hash.AppendData(Encoding.UTF8.GetBytes(name.ToUpperInvariant() + "\0"));
+        var result = Convert.ToHexString(hash.GetHashAndReset());
+        _sourceHashes.Add(package, result);
+        return result;
+    }
 
     internal void Mark(FalloutFormKey actor, FalloutFormKey package, FalloutReferencePackageEventKind kind)
     {
