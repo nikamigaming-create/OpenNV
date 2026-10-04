@@ -158,6 +158,7 @@ internal static class ReferenceAccessContracts
             foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file);
             Directory.Delete(directory);
         }
+        LinkedDoorAccessContracts.Run();
     }
 
     private static void VerifySourceDrift(string directory, byte[] plugin, byte[] patch, FalloutReferenceSnapshot[] snapshots)

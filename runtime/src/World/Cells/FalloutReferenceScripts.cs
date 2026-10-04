@@ -269,6 +269,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         Steps(quest.FormKey, Bindings(quest, quest, fields),
             FalloutGameModeProgram.Read("begin Result\n" + source + "\nend", "Result"), null, 0);
 
+    internal IReadOnlyList<FalloutScriptStatementInspection> Inspect(FalloutPluginRecord owner,
+        FalloutPluginRecord source, IEnumerable<FalloutPluginSubrecord> fields,
+        FalloutGameModeProgram program, Action<string> inspectValue)
+    {
+        IReadOnlyList<FalloutScriptStatementInspection>? result = null;
+        // Metadata-only binding never admits a reference to world/save state.
+        _ = Steps(owner.FormKey, new(records, owner, source, fields), program, null, 0,
+            inspectProgram: context => result = program.Inspect(context, inspectValue));
+        return result ?? throw new InvalidOperationException("Script inspection did not publish its coverage.");
+    }
+
     private FalloutScriptBindings Bindings(FalloutPluginRecord owner, FalloutPluginRecord source,
         IEnumerable<FalloutPluginSubrecord> fields) => new(records, owner, source, fields,
         target => target.Signature is "REFR" or "ACHR" or "ACRE" ? world.Get(target.FormKey).Script?.Record :
@@ -282,7 +293,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
 
     private IEnumerable<bool> Steps(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
         FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null,
-        Action<Func<string, FalloutScriptFunction?>>? inspectFunctions = null)
+        Action<Func<string, FalloutScriptFunction?>>? inspectFunctions = null,
+        Action<FalloutScriptInspectionContext>? inspectProgram = null)
     {
         budget ??= new();
         var valueStore = world.ScriptValues;
@@ -1233,6 +1245,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
         }
         if (inspectFunctions is not null) { inspectFunctions(Function); return []; }
+        if (inspectProgram is not null) { inspectProgram(new(values, Function, UserFunction)); return []; }
         return program.Steps(Read, Write, Call, Function, UserFunction, budget, values);
     }
 

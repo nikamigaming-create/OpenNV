@@ -17,6 +17,10 @@ internal sealed partial class FalloutNifFile
     private const uint TbcKeyType = 3;
     private const uint XyzRotationKeyType = 4;
     private const uint ConstantKeyType = 5;
+    private const uint GeometryVersion2Legacy = 21;
+    private const uint WideAvFlagsVersion2Minimum = 27;
+    private const uint MaterialColorsVersion2Maximum = 25;
+    private const uint EmissiveMultipleVersion2Minimum = 22;
     private const uint AnimationVersion2Legacy = 30;
     private const uint AnimationVersion2Minimum = 31;
     private const uint GeometryVersion2Minimum = 32;
@@ -31,7 +35,7 @@ internal sealed partial class FalloutNifFile
     private const int HavokUnknownSixFloatBytes = 24;
     private const int HavokTransformMatrixValues = 16;
     private static readonly HashSet<uint> SupportedUserVersion2 =
-        [AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
+        [GeometryVersion2Legacy, AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
             AnimationVersion2Alternate, GeometryVersion2Current];
 
     private readonly ReadOnlyMemory<byte> _payload;
@@ -219,8 +223,9 @@ internal sealed partial class FalloutNifFile
             "NiStringExtraData" => ReadStringExtraData(block, ref cursor),
             "BSBound" => ReadBound(block, ref cursor),
             "BSFurnitureMarker" => ReadFurnitureMarker(block, ref cursor),
-            "bhkCollisionObject" => ReadCollisionObject(block, ref cursor),
+            "bhkCollisionObject" or "bhkSPCollisionObject" => ReadCollisionObject(block, ref cursor),
             "bhkBlendCollisionObject" => ReadBlendCollisionObject(block, ref cursor),
+            "bhkSimpleShapePhantom" => ReadSimpleShapePhantom(block, ref cursor),
             "bhkRigidBody" or "bhkRigidBodyT" => ReadRigidBody(block, ref cursor),
             "bhkMoppBvTreeShape" => ReadMoppShape(block, ref cursor),
             "bhkPackedNiTriStripsShape" => ReadPackedShape(block, ref cursor),
@@ -230,7 +235,7 @@ internal sealed partial class FalloutNifFile
             "bhkCapsuleShape" => ReadCapsuleShape(block, ref cursor),
             "bhkConvexVerticesShape" => ReadConvexVerticesShape(block, ref cursor),
             "bhkListShape" => ReadListShape(block, ref cursor),
-            "bhkConvexTransformShape" => ReadConvexTransformShape(block, ref cursor),
+            "bhkConvexTransformShape" or "bhkTransformShape" => ReadConvexTransformShape(block, ref cursor),
             "BSShaderNoLightingProperty" => ReadNoLightingProperty(block, ref cursor),
             "TileShaderProperty" => ReadTileShaderProperty(block, ref cursor),
             "SkyShaderProperty" => ReadSkyShaderProperty(block, ref cursor),
@@ -1069,13 +1074,19 @@ internal sealed partial class FalloutNifFile
         ref NifCursor cursor)
     {
         var objectNet = ReadObjectNet(ref cursor, block.TypeName);
+        FalloutNifColor3? ambient = UserVersion2 <= MaterialColorsVersion2Maximum
+            ? ReadColor3(ref cursor, "material ambient") : null;
+        FalloutNifColor3? diffuse = UserVersion2 <= MaterialColorsVersion2Maximum
+            ? ReadColor3(ref cursor, "material diffuse") : null;
         var specular = ReadColor3(ref cursor, "material specular");
         var emissive = ReadColor3(ref cursor, "material emissive");
         var glossiness = cursor.ReadFiniteSingle("material glossiness");
         var alpha = cursor.ReadFiniteSingle("material alpha");
-        var emissiveMultiple = cursor.ReadFiniteSingle("material emissive multiple");
+        var emissiveMultiple = UserVersion2 >= EmissiveMultipleVersion2Minimum
+            ? cursor.ReadFiniteSingle("material emissive multiple") : 1.0f;
         return new FalloutNifMaterialProperty(block, objectNet.Name, objectNet.ExtraData,
-            objectNet.Controller, specular, emissive, glossiness, alpha, emissiveMultiple);
+            objectNet.Controller, specular, emissive, glossiness, alpha, emissiveMultiple)
+        { Ambient = ambient, Diffuse = diffuse };
     }
 
     private FalloutNifBsxFlags ReadBsxFlags(FalloutNifBlock block, ref NifCursor cursor) =>
@@ -1156,6 +1167,28 @@ internal sealed partial class FalloutNifFile
             ReadReference(ref cursor, "blend collision body"),
             cursor.ReadFiniteSingle("blend collision heir gain"),
             cursor.ReadFiniteSingle("blend collision velocity gain"));
+
+    private FalloutNifSimpleShapePhantom ReadSimpleShapePhantom(
+        FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var shape = ReadReference(ref cursor, "shape phantom shape");
+        var filter = ReadCollisionFilter(ref cursor, "shape phantom world filter");
+        var worldUnused = cursor.ReadUInt32("shape phantom world unused bytes");
+        var broadPhaseType = cursor.ReadByte("shape phantom broad phase type");
+        var broadPhaseUnused = new byte[3];
+        for (var index = 0; index < broadPhaseUnused.Length; index++)
+            broadPhaseUnused[index] = cursor.ReadByte("shape phantom broad phase unused byte");
+        var property = new FalloutNifHavokProperty(
+            cursor.ReadUInt32("shape phantom property data"),
+            cursor.ReadUInt32("shape phantom property size"),
+            cursor.ReadUInt32("shape phantom property capacity and flags"));
+        var unused = new byte[HavokUnknownPairBytes];
+        for (var index = 0; index < unused.Length; index++)
+            unused[index] = cursor.ReadByte("shape phantom unused byte");
+        var transform = ReadHavokTransformMatrix(ref cursor, "shape phantom transform");
+        return new FalloutNifSimpleShapePhantom(block, shape, filter, worldUnused,
+            broadPhaseType, broadPhaseUnused, property, unused, transform);
+    }
 
     private FalloutNifRigidBody ReadRigidBody(FalloutNifBlock block, ref NifCursor cursor)
     {
@@ -1353,12 +1386,26 @@ internal sealed partial class FalloutNifFile
     {
         var child = ReadReference(ref cursor, "convex transform child");
         var material = cursor.ReadUInt32("convex transform material");
-        _ = cursor.ReadFiniteSingle("convex transform unknown float");
-        cursor.Skip(HavokUnknownPairBytes, "convex transform unknown bytes");
+        var radius = cursor.ReadFiniteSingle("shape transform radius");
+        var unused = new byte[HavokUnknownPairBytes];
+        for (var index = 0; index < unused.Length; index++)
+            unused[index] = cursor.ReadByte("shape transform unused byte");
+        var matrix = ReadHavokTransformMatrix(ref cursor, "shape transform matrix");
+        return new FalloutNifConvexTransformShape(block, child, material, matrix)
+        { Radius = radius, Unused = unused };
+    }
+
+    private static float[] ReadHavokTransformMatrix(ref NifCursor cursor, string label)
+    {
         var matrix = new float[HavokTransformMatrixValues];
-        for (var index = 0; index < matrix.Length; ++index)
-            matrix[index] = cursor.ReadFiniteSingle($"convex transform matrix {index}");
-        return new FalloutNifConvexTransformShape(block, child, material, matrix);
+        for (var index = 0; index < matrix.Length; index++)
+            // Havok's three-vector basis and translation use a four-word
+            // stride. The fourth words are padding in these source exports;
+            // retain their exact bits without imposing an affine last column.
+            matrix[index] = index % 4 == 3
+                ? BitConverter.UInt32BitsToSingle(cursor.ReadUInt32($"{label} {index} padding bits"))
+                : cursor.ReadFiniteSingle($"{label} {index}");
+        return matrix;
     }
 
     private static FalloutNifCollisionFilter ReadCollisionFilter(ref NifCursor cursor, string label) =>
@@ -1409,10 +1456,11 @@ internal sealed partial class FalloutNifFile
         var environmentMapScale = cursor.ReadFiniteSingle("no-lighting environment map scale");
         var textureClampMode = cursor.ReadUInt32("no-lighting texture clamp mode");
         var fileName = cursor.ReadSizedUtf8("no-lighting texture", checked((uint)cursor.Remaining));
-        var falloffStartAngle = cursor.ReadFiniteSingle("no-lighting falloff start angle");
-        var falloffStopAngle = cursor.ReadFiniteSingle("no-lighting falloff stop angle");
-        var falloffStartOpacity = cursor.ReadFiniteSingle("no-lighting falloff start opacity");
-        var falloffStopOpacity = cursor.ReadFiniteSingle("no-lighting falloff stop opacity");
+        var hasFalloff = UserVersion2 >= WideAvFlagsVersion2Minimum;
+        var falloffStartAngle = hasFalloff ? cursor.ReadFiniteSingle("no-lighting falloff start angle") : 1.0f;
+        var falloffStopAngle = hasFalloff ? cursor.ReadFiniteSingle("no-lighting falloff stop angle") : 0.0f;
+        var falloffStartOpacity = hasFalloff ? cursor.ReadFiniteSingle("no-lighting falloff start opacity") : 1.0f;
+        var falloffStopOpacity = hasFalloff ? cursor.ReadFiniteSingle("no-lighting falloff stop opacity") : 0.0f;
         return new FalloutNifNoLightingProperty(block, objectNet.Name, objectNet.ExtraData,
             objectNet.Controller, smooth, shaderType, shaderFlags, shaderFlags2,
             environmentMapScale, textureClampMode, fileName, falloffStartAngle,
@@ -1630,8 +1678,8 @@ internal sealed partial class FalloutNifFile
     private AvObjectFields ReadAvObject(ref NifCursor cursor, string label)
     {
         var objectNet = ReadObjectNet(ref cursor, label);
-        var flags = cursor.ReadUInt16($"{label} flags");
-        _ = cursor.ReadUInt16($"{label} Bethesda flags");
+        var flags = UserVersion2 >= WideAvFlagsVersion2Minimum
+            ? cursor.ReadUInt32($"{label} flags") : cursor.ReadUInt16($"{label} flags");
         var translation = ReadVector(ref cursor, $"{label} translation");
         var rotation = new float[RotationMatrixValues];
         for (var index = 0; index < rotation.Length; ++index)
@@ -1748,7 +1796,7 @@ internal sealed partial class FalloutNifFile
     private readonly record struct AvObjectFields(
         string Name,
         FalloutNifTransform Transform,
-        ushort Flags,
+        uint Flags,
         int[] ExtraData,
         int Controller,
         int[] Properties,
@@ -1773,7 +1821,7 @@ internal sealed record FalloutNifNode(
     FalloutNifBlock Block,
     string Name,
     FalloutNifTransform Transform,
-    ushort Flags,
+    uint Flags,
     int Controller,
     int[] ExtraData,
     int[] Properties,
@@ -1803,7 +1851,7 @@ internal sealed record FalloutNifAmbientLight(
     FalloutNifBlock Block,
     string Name,
     FalloutNifTransform Transform,
-    ushort Flags,
+    uint Flags,
     int Controller,
     int[] ExtraData,
     int[] Properties,
@@ -1826,7 +1874,7 @@ internal sealed record FalloutNifGeometry(
     FalloutNifBlock Block,
     string Name,
     FalloutNifTransform Transform,
-    ushort Flags,
+    uint Flags,
     int Controller,
     int[] ExtraData,
     int[] Properties,
@@ -2087,7 +2135,11 @@ internal sealed record FalloutNifMaterialProperty(
     FalloutNifColor3 Emissive,
     float Glossiness,
     float Alpha,
-    float EmissiveMultiple) : FalloutNifObject(Block);
+    float EmissiveMultiple) : FalloutNifObject(Block)
+{
+    internal FalloutNifColor3? Ambient { get; init; }
+    internal FalloutNifColor3? Diffuse { get; init; }
+}
 
 internal sealed record FalloutNifBsxFlags(
     FalloutNifBlock Block,
@@ -2148,6 +2200,10 @@ internal sealed record FalloutNifCollisionObject(
 }
 
 internal readonly record struct FalloutNifCollisionFilter(byte Layer, byte Flags, ushort Group);
+internal sealed record FalloutNifSimpleShapePhantom(
+    FalloutNifBlock Block, int Shape, FalloutNifCollisionFilter Filter, uint WorldUnused,
+    byte BroadPhaseType, byte[] BroadPhaseUnused, FalloutNifHavokProperty Property,
+    byte[] Unused, float[] MatrixRowMajor) : FalloutNifObject(Block);
 internal readonly record struct FalloutNifCollisionResponse(byte Type, byte Unused, ushort CallbackDelay);
 internal readonly record struct FalloutNifHavokProperty(uint Data, uint Size, uint CapacityAndFlags);
 internal readonly record struct FalloutNifHavokMatrix3(
@@ -2218,7 +2274,11 @@ internal sealed record FalloutNifConvexVerticesShape(
 internal sealed record FalloutNifListShape(
     FalloutNifBlock Block, int[] Children, uint Material) : FalloutNifObject(Block);
 internal sealed record FalloutNifConvexTransformShape(
-    FalloutNifBlock Block, int Child, uint Material, float[] MatrixRowMajor) : FalloutNifObject(Block);
+    FalloutNifBlock Block, int Child, uint Material, float[] MatrixRowMajor) : FalloutNifObject(Block)
+{
+    internal float Radius { get; init; }
+    internal byte[] Unused { get; init; } = [];
+}
 
 internal sealed record FalloutNifNoLightingProperty(
     FalloutNifBlock Block,

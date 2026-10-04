@@ -6,6 +6,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 Bc1AlphaContracts.Run();
 ExteriorNifContracts.Run();
 SurfaceInputsContracts.Run();
+LegacyNifLayoutContracts.Run();
 
 // A source XY triangle points toward +Z. The handedness-preserving (x,z,-y)
 // mapping puts that normal at +Y. Godot's clockwise front must face +Y too.
@@ -41,6 +42,22 @@ Require(FalloutNifTextureAddressing.RepeatForGodot(3), "WRAP_S_WRAP_T clamps.");
 foreach (var mode in new uint[] { 1, 2 })
     ExpectException<NotSupportedException>(() => FalloutNifTextureAddressing.RepeatForGodot(mode));
 ExpectException<InvalidDataException>(() => FalloutNifTextureAddressing.RepeatForGodot(4));
+for (uint mode = 0; mode < 4; mode++)
+{
+    Require(FalloutNifTextureAddressing.WrapAxes(mode) == ((mode & 2) != 0, (mode & 1) != 0),
+        "Independent S/T clamp modes differ.");
+    Require(FalloutNifTextureAddressing.LegacyTrilinearClampMode((ushort)((mode << 12) | 0x0200)) == mode,
+        "Legacy descriptor lost its independent sampler axes.");
+}
+ExpectException<InvalidDataException>(() => FalloutNifTextureAddressing.WrapAxes(4));
+ExpectException<InvalidDataException>(() => FalloutNifTextureAddressing.LegacyTrilinearClampMode(0x6200));
+ExpectException<NotSupportedException>(() => FalloutNifTextureAddressing.LegacyTrilinearClampMode(0x3100));
+Require(FalloutNifTextureAddressing.ClampAtMip(-2, 8) == .0625f &&
+    FalloutNifTextureAddressing.ClampAtMip(2, 8) == .9375f &&
+    FalloutNifTextureAddressing.ClampAtMip(-2, 2) == .25f &&
+    FalloutNifTextureAddressing.ClampAtMip(2, 2) == .75f &&
+    FalloutNifTextureAddressing.ClampAtMip(.5f, 1) == .5f,
+    "Clamped mip samples can wrap to the opposite edge.");
 Console.WriteLine("OPENNV_NIF_RENDERING_CONTRACT_OK sourceFrontFace=true sourceSamplerAddressing=true");
 Require(FalloutNifAlphaState.Read(0x100d, 0).Blend == FalloutNifBlendMode.Add, "Source-alpha/one blend was reduced to ordinary transparency.");
 Require(FalloutNifAlphaState.Read(1, 0).Blend == FalloutNifBlendMode.AddOne, "ONE/ONE blend lost its source factors.");

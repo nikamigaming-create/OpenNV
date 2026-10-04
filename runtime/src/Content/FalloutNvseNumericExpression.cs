@@ -32,9 +32,17 @@ internal static class FalloutNvseNumericExpression
         Func<string, string, FalloutScriptFunction>? userFunction = null) =>
         Parse(tokens, values, function, userFunction, nvseLogical: true, operandOnly: true);
 
+    // Visit the complete syntax, including short-circuited operands, without
+    // reading values, invoking a command or consuming random/lifecycle state.
+    internal static void Inspect(IReadOnlyList<string> tokens, FalloutScriptValueContext values,
+        Func<string, FalloutScriptFunction?>? function, Func<string, string, FalloutScriptFunction>? userFunction,
+        Action<string> inspectValue, bool nvseLogical = true) =>
+        _ = Parse(tokens, values, function, userFunction, nvseLogical, operandOnly: false, inspectValue);
+
     private static (Func<FalloutScriptValue> Value, int Count) Parse(IReadOnlyList<string> tokens,
         FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function,
-        Func<string, string, FalloutScriptFunction>? userFunction, bool nvseLogical, bool operandOnly)
+        Func<string, string, FalloutScriptFunction>? userFunction, bool nvseLogical, bool operandOnly,
+        Action<string>? inspectValue = null)
     {
         var at = 0;
         FalloutScriptFunction? Resolve(string token)
@@ -145,6 +153,8 @@ internal static class FalloutNvseNumericExpression
             {
                 var bareSourceName = sourceString && FalloutScriptValueContext.IsBareSourceName(token) &&
                     (at >= tokens.Count || tokens[at] is not ("[" or "."));
+                if (inspectValue is not null && (!bareSourceName || values.HasValueOwner?.Invoke(token) == true))
+                    inspectValue(token);
                 left = new(() => bareSourceName ? values.ReadSourceString(token) : values.Read(token),
                     () => (() => values.Read(token), value => values.Write(token, value)));
             }

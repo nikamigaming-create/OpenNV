@@ -6,6 +6,7 @@ internal static class ScriptRecoveryContracts
 {
     internal static void Verify(FalloutPluginStack records)
     {
+        ScriptInspectionContracts.Run();
         static FalloutFormKey Key(uint id) => new("Base.esm", id);
         static void Require(bool condition, string message)
         { if (!condition) throw new InvalidDataException(message); }

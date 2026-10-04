@@ -21,7 +21,11 @@ internal sealed record FalloutCellLighting(
     int DirectionalZDegrees,
     float DirectionalFade,
     float FogClipDistance,
-    float FogPower);
+    [property: System.Text.Json.Serialization.JsonPropertyName("fogPower")] float? FogPowerSource)
+{
+    internal float FogPower => FogPowerSource ?? throw new NotSupportedException(
+        "CELL lighting has no encoded or inherited fog power; its legacy runtime default is unowned.");
+}
 
 internal sealed record FalloutBaseObjectDefinition(
     FalloutFormKey FormKey,
@@ -347,8 +351,11 @@ internal static class FalloutCellSceneReader
         FalloutPluginRecord record,
         string signature)
     {
-        if (data.Length != LightingDataBytes)
-            throw Error(record, $"{signature} lighting must contain exactly {LightingDataBytes} bytes");
+        // CELL XCLL permits the older prefix without FogPower. LGTM DATA
+        // remains a complete template. Preserve absence until inheritance
+        // supplies it; a source layout does not establish a runtime default.
+        if (data.Length != LightingDataBytes && !(signature == "XCLL" && data.Length == FogPowerOffset))
+            throw Error(record, $"{signature} lighting must contain {LightingDataBytes} bytes or the 36-byte XCLL prefix");
         return new FalloutCellLighting(
             data[AmbientColorStart..AmbientColorEnd],
             data[DirectionalColorStart..DirectionalColorEnd],
@@ -359,7 +366,7 @@ internal static class FalloutCellSceneReader
             BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(DirectionalZOffset)),
             ReadFiniteSingle(data, DirectionalFadeOffset, record, "directional fade"),
             ReadFiniteSingle(data, FogClipDistanceOffset, record, "fog clip distance"),
-            ReadFiniteSingle(data, FogPowerOffset, record, "fog power"));
+            data.Length == LightingDataBytes ? ReadFiniteSingle(data, FogPowerOffset, record, "fog power") : null);
     }
 
     private static FalloutCellLighting InheritLighting(
@@ -381,7 +388,7 @@ internal static class FalloutCellSceneReader
             (flags & 0x020) != 0 ? template.DirectionalZDegrees : source.DirectionalZDegrees,
             (flags & 0x040) != 0 ? template.DirectionalFade : source.DirectionalFade,
             (flags & 0x080) != 0 ? template.FogClipDistance : source.FogClipDistance,
-            (flags & 0x100) != 0 ? template.FogPower : source.FogPower);
+            (flags & 0x100) != 0 ? template.FogPowerSource : source.FogPowerSource);
     }
 
     private static uint ReadUInt32(byte[] data, FalloutPluginRecord record, string label)

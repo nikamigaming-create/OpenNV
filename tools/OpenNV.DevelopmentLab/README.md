@@ -23,6 +23,30 @@ not mean the reported unsupported cases passed. Source declarations are not
 compiled-bytecode execution, and BSA directory inspection is not asset decoding.
 Loose-file contents and independent presentation evidence remain separate lanes.
 
+`quest-graph` discovers every script/condition-bearing winning record signature,
+checks every SCHR/SCDA/reference extent and QUST attachment, and retains all
+authored stage/objective identities and SetStage edges. It inspects every parsed
+statement and both outcomes of every branch/loop predicate through the actual
+runtime expression declarations and function signatures without reading values,
+executing scripts, loading cells or changing saves. A statement-dispatch boundary
+or absent runtime caller context remains explicit; signature admission does not
+certify command effects or feasible game states. Compiled-only programs and SCDA
+execution ownership are reported independently. Numeric values and loop counts
+are unbounded, so this is authored alternative coverage, not an exhaustive
+simulation of every possible game state. See [the audit contract](../../docs/quest-graph-audit.md).
+
+```powershell
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-quests-01
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-ttw-quests-01 --mod ttw D:\OwnedMods\TTW D:\OwnedMods\xNVSE D:\OwnedMods\JIP
+```
+
+The explicit mod/dependency roots use the launcher's normal in-process source
+selection; they do not generate a persistent launch input. Reports include
+source-stack hashes, per-program compiled hashes, all statements/predicate
+outcomes and separate decoding/declaration failures. Keep outputs private in a
+fresh ignored directory. Exit 1 retains structural failures; it does not stop
+enumeration or turn recorded failures into passes.
+
 `lifecycle` admits all references, including model-less and initially disabled
 objects, to the real world state owner. It assigns distinct disposable local
 values, tears down/reassembles each selected cell 30 times, and checks a JSON

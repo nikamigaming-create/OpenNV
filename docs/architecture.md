@@ -3,6 +3,12 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Whole-stack script coverage](quest-graph-audit.md) discovers all winning
+standalone/embedded programs and condition owners. It inspects every authored
+arm through the shared deferred expression parser without consuming gameplay
+state; compiled authority, statement effects and state feasibility remain
+independent from syntax/declaration coverage.
+
 [Escape runtime owners](escape-runtime-owners.md) share directional faction
 overrides/save v38, current actor value/spatial queries, independent package
 weapon visibility and source radio links/voice identity. Native player package

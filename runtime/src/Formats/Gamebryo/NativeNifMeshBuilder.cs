@@ -60,7 +60,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private const ushort AlphaBlendEnabled = 0x0001;
     private const ushort AlphaTestEnabled = 0x0200;
     private const ushort DisabledDoubleSidedStencilFlags = 0x4d80;
-    private const ushort LegacyBaseTextureFlags = 0x3200;
     private const ushort LegacyTexturingFlags = 0x0004;
     private const uint LegacyTextureUvSet = 0;
     private const ushort MaterialColorSelfIllumination = 3;
@@ -1826,6 +1825,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
         {
             if (reference == -1)
                 return null;
+            if (_source.ReadObject(reference) is FalloutNifCollisionObject phantomAttachment &&
+                phantomAttachment.Body >= 0 &&
+                _source.ReadObject(phantomAttachment.Body) is FalloutNifSimpleShapePhantom phantom)
+                throw new NotSupportedException(
+                    $"NIF shaped phantom {phantom.Block.Index} requires a native overlap/contact owner: " +
+                    $"attachment={phantomAttachment.Block.Index} shape={phantom.Shape} " +
+                    $"filter={phantom.Filter.Layer}/{phantom.Filter.Flags}/{phantom.Filter.Group} " +
+                    $"broadPhase={phantom.BroadPhaseType}. Source phantom data is not solid floor collision.");
             if (_source.ReadObject(reference) is not FalloutNifCollisionObject collision ||
                 collision.Target != owner.Index ||
                 (collision.Flags & ~SupportedCollisionFlags) != 0 ||
@@ -2182,12 +2189,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (!texturePath.Equals(shader.FileName, StringComparison.OrdinalIgnoreCase))
                     throw new NotSupportedException(
                         $"NIF legacy texturing property {texturing.Block.Index} differs from its no-lighting shader texture.");
+                if (FalloutNifTextureAddressing.LegacyTrilinearClampMode(texturing.BaseTexture!.Flags) != shader.TextureClampMode)
+                    throw new NotSupportedException(
+                        $"NIF legacy texturing property {texturing.Block.Index} differs from its no-lighting shader addressing.");
             }
             using var result = new StandardMaterial3D
             {
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 VertexColorUseAsAlbedo = true,
-                TextureRepeat = FalloutNifTextureAddressing.RepeatForGodot(shader.TextureClampMode),
                 AlbedoTexture = LoadTexture(texturePath, normal: false),
                 AlbedoColor = new Color(1.0f, 1.0f, 1.0f, material?.Alpha ?? 1.0f),
             };
@@ -2211,7 +2220,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 texturing.Flags != LegacyTexturingFlags ||
                 texturing.TextureCount != LegacyTextureSlotCount ||
                 texturing.BaseTexture is not { } descriptor ||
-                descriptor.Flags is not (LegacyBaseTextureFlags or 0x0200) ||
                 descriptor.UvSet != LegacyTextureUvSet ||
                 (descriptor.Transform is not null && !NativeNifTextureTransform.Valid(descriptor.Transform)) ||
                 texturing.DarkTexture is not null || texturing.DetailTexture is not null ||
@@ -2231,6 +2239,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     $"controller={texturing.Controller}, extra=[{string.Join(',', texturing.ExtraData)}], " +
                     $"baseFlags=0x{texturing.BaseTexture?.Flags:x4}, baseUv={texturing.BaseTexture?.UvSet}, " +
                     $"baseTransform={FormatTextureTransform(texturing.BaseTexture?.Transform)}).");
+            _ = FalloutNifTextureAddressing.LegacyTrilinearClampMode(descriptor.Flags);
             if (_source.ReadObject(descriptor.Source) is not FalloutNifSourceTexture source ||
                 source.Controller != -1 || source.ExtraData.Any(reference => reference != -1) ||
                 source.UnknownLink != -1 || source.PixelLayout != LegacySourcePixelLayout ||
@@ -2491,7 +2500,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             string sourceName,
             int blockIndex,
             FalloutNifTransform transform,
-            ushort flags)
+            uint flags)
         {
             var node = new Node3D
             {
@@ -2501,6 +2510,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             };
             node.SetMeta("opennv_nif_block", blockIndex);
             node.SetMeta("opennv_nif_source_name", sourceName);
+            node.SetMeta("opennv_nif_flags", flags);
             return node;
         }
 
