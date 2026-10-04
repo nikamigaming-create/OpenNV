@@ -203,7 +203,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
-    Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null);
+    Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -659,6 +660,12 @@ internal sealed partial class FalloutQuestScripts
                     (host?.HeadingAngle ?? throw new NotSupportedException("GetHeadingAngle has no spatial owner."))
                     (caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
                         arguments[0].Value.FormKey(_records)))
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getincell")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    (host?.IsInCell ?? (References ?? throw new NotSupportedException("GetInCell has no reference owner.")).IsInCell)
+                    (caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
+                        arguments[0].Value.FormKey(_records)) ? 1 : 0)
                 { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getiscurrentpackage")
                 return new([FalloutScriptArgumentKind.Value], arguments =>

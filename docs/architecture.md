@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Source cell queries](script-cell-query.md) bind typed interior CELL prefixes to
+current player and retained reference placement. Script execution, dialogue and
+recipe conditions share the C# owner, including matching named exterior cells.
+
 [Recorded input](recorded-input-replay.md) binds private ordinary-input segments
 to complete shared checkpoints and ordered source hashes. Native playback checks
 scene, clock and observed controls, releases input on failure and retains raw
