@@ -10,8 +10,8 @@ remain open; component audits do not establish campaign or parity completion.
 
 ## Baseline and candidate
 
-Checked PR137 is merged at synchronized origin/main 99bc539 with all five checks
-passing. The active branch is codex/source-cell-query. Primary owns
+Checked PR138 is merged at synchronized origin/main cc9d2a1 with all five checks
+passing. The active branch is codex/stage-condition-death-count. Primary owns
 live input, implementation and publication. Recording is off.
 
 Main owns winning TERM DNAM difficulty/default flags and password NOTE
@@ -34,14 +34,22 @@ assignment until initial native selection. See
 [actor procedure checkpoints](actor-procedure-checkpoints.md).
 
 The checkpoint block's final complete C#/Godot gate and diff check pass.
-The new candidate binds GetInCell to current player/reference placement and
+Main binds GetInCell to current player/reference placement and
 winning interior CELL prefixes, shared with dialogue and recipe conditions.
 Synthetic shared/fallback and unchanged owned Escape GameMode checks pass.
-The complete runtime gate and diff check pass. Ordinary cold input resumes the
-post-exam save, crosses the classroom exit and completes CG03:100 and all32
-CG04:0 setup commands. Escape GameMode executes27 invocations with the owned
-cell query and enters stage2. The next stop is stage2 result-entry CTDA scope
-admission, before any result command. Checked publication is pending.
+The cell-query block's complete runtime gate and diff check pass. The active
+candidate continues from the genuine post-exam save through the source result
+conditions described below.
+
+The new candidate admits source result-entry run-on scope through the existing
+campaign condition owners. Cumulative per-reference death history binds scripts,
+NPC/creature/unloaded package queries and dialogue; schema v37 preserves counts
+and reads the genuine v36 checkpoint. Focused full-reader scope/death contracts
+and original owned Escape stage2/Amata predicate/cold-count checks pass. The full
+runtime gate and diff check pass. The genuine v36 checkpoint cold-loads in the
+updated native build without the exam. Ordinary exit input completes CG03:100,
+CG04:0 and all seven CG04:2 commands, then reaches CG04:3. The new stop is a
+source PACK POBA topic, after two stage3 commands. Checked publication is pending.
 
 ## Actual campaign state
 
@@ -64,19 +72,19 @@ cold process resumed that save and is now in Escape; no frames are recorded.
 
 The updated ordinary run crosses the classroom exit, completes CG03:100 and all32
 CG04:0 setup commands, including radio mode, terminal lock and the authored bed
-transition. Source Escape reaches stage2. Its result-entry condition is refused
-by the generic flags/run-on guard; no stage2 command executes. The source script
-retains that failure after27 completed invocations. Never clear that fault or
-replay its consumed prefix. The immutable stage80 save allows fresh onward input
-without the exam after the next owner is implemented.
-Amata's GetDeadCount and reached AV/spatial AI conditions remain missing owners.
+transition. Source Escape completes all seven stage2 commands and enters stage3.
+Its first two commands execute, then Amata's script package stops at unowned
+POBA topic execution. The source script retains that failure after426 completed
+invocations. Never clear that fault or replay its consumed prefix. The immutable
+stage80 save allows fresh onward input without the exam after the next owner is
+implemented. Amata's death predicate is now owned; reached AV/spatial AI
+conditions remain missing owners.
 Vault escape, Megaton, Union Station and Mojave remain unreached.
 
 ## Next executable outcome
 
-Publish the checked cell-query block, then complete general quest-stage result
-condition admission and cumulative GetDeadCount
-and reached actor-value/spatial AI owners, then advance ordinary input toward
+Publish this checked block, then own source package-event topics and reached
+actor-value/spatial AI queries, then advance ordinary input toward
 Megaton and the authored train route. Complete moving/conversation/nested-result
 saves, retail recording/playback/comparison, VATS, full JAM/MCM and native
 interfaces remain required.
@@ -89,11 +97,11 @@ that conceal divergence. No campaign or renderer completion is claimed.
 
 ## Private continuation
 
-Live run: tmp/development-lab/ttw-post-goat-checkpoint-20261004, actual PID29148.
-Old PID43736, PID44176 and cold verification PID48416 are quit. The bot is stopped.
-Verify fresh state and the
-recorded process before input. Run-PostGoatCheckpoint.ps1 uses ordinary controls
-after explicit cold preparation. The actual post-hand-in slot is
+Live run: tmp/development-lab/ttw-post-goat-checkpoint-20261004, actual PID37992.
+Old PID29148, PID43736, PID44176 and cold verification PID48416 are quit.
+The new native build cold-loaded stage80 and reached CG04:3. The bot is stopped.
+Verify fresh state and the recorded process before input. Load the actual
+post-hand-in slot directly; do not run the older exam-driving helper. The slot is
  a873c5936822484ab77db57aa11101c1, SHA256
 A3DC5AE9F6D454E2146337D9AE58266044FE0744C215319BD643191F1310731E.
 Keep that slot immutable when testing fixes. The genuine prior range slot

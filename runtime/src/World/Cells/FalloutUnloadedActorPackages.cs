@@ -113,6 +113,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (condition.Function is 56 or 58 or 59 or 79 or 546) return quests.Evaluate(condition);
         if (condition.Function == 18) return (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour;
         if (condition.Function == 74) return (globals ?? throw new NotSupportedException("Unloaded AI has no global state.")).Get(condition.FormArgument1);
+        if (condition.Function == 84) return world.GetDeadCount(condition.FormArgument1);
         if (condition.Function == 53) return (float)world.ReadVariable(quests, condition.FormArgument1, condition.Argument2);
         if (condition.Function == 161) return FalloutAiPackages.IsCurrentPackage(condition, caller, world.CurrentPackage) ? 1 : 0;
         if (condition.Function == 50) return FalloutAiPackages.HasTalkedToPlayer(condition, caller,

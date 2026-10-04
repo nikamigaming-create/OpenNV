@@ -25,7 +25,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorPackageBindingFailure? PackageBindingFailure = null, bool? BroadcastState = null,
     IReadOnlyList<FalloutReferencePackageEventSnapshot>? PackageEvents = null,
     FalloutActorFurnitureContinuation? FurnitureContinuation = null, FalloutActorSelectionFailure? SelectionFailure = null,
-    FalloutActorDialogueContinuation? DialogueContinuation = null)
+    FalloutActorDialogueContinuation? DialogueContinuation = null, int? DeathCount = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -37,7 +37,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             if (snapshot is null || !seen.Add(snapshot.Reference) || !ValidKey(snapshot.Reference) ||
                 !ValidKey(snapshot.Cell) || !ValidKey(snapshot.Base) || snapshot.Variables is null ||
                 snapshot.Variables.Values.Any(value => !double.IsFinite(value)) ||
-                snapshot.Deleted && snapshot.DeletePending ||
+                snapshot.Deleted && snapshot.DeletePending || snapshot.DeathCount is < 0 ||
                 !float.IsFinite(snapshot.Opacity) || snapshot.Opacity is < 0 or > 1 ||
                 (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 :
                     !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
@@ -179,6 +179,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorHitReaction? HitReaction { get; set; }
     internal FalloutMapMarkerState? MapMarker { get; set; }
     internal FalloutActorInjury? Injury { get; set; }
+    internal int DeathCount { get; set; }
     internal FalloutActorRagdollState? Ragdoll { get; set; }
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
     internal FalloutActorEngagement? Engagement { get; set; }
@@ -254,7 +255,8 @@ internal sealed class FalloutReferenceInstance
             FurnitureContinuation: CaptureFurniture is { } captureFurniture ? captureFurniture() : FurnitureContinuation?.Copy(),
             SelectionFailure: SelectionFailureCaptureReady ? CaptureSelectionFailure is { } captureSelection
                 ? captureSelection() : SelectionFailure?.Copy() : null,
-            DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy());
+            DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy(),
+            DeathCount: DeathCount == 0 ? null : DeathCount);
     }
 }
 
@@ -577,6 +579,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             if (snapshot.Injury is { } injury) validated.RestoreInjury(instance, injury);
             else if (instance.ActorValues.ContainsKey("health")) throw new InvalidDataException("Saved health has no actor injury state.");
+            instance.DeathCount = snapshot.DeathCount ?? (snapshot.Injury?.DeathInventoryGranted == true ? 1 : 0);
+            if (snapshot.Injury?.DeathInventoryGranted == true && instance.DeathCount < 1)
+                throw new InvalidDataException("Saved killed actor has no consumed death history.");
+            if (instance.DeathCount != 0)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                if (snapshot.Injury is null)
+                    throw new InvalidDataException("Saved death history has no supported actor lifetime.");
+            }
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;

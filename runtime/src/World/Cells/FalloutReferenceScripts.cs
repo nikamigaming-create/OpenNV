@@ -418,6 +418,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return modQueryFunction;
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => world.Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
+            if (parts.Length == 1 && operation == "getdeadcount")
+                return new([FalloutScriptArgumentKind.Value], arguments => world.GetDeadCount(arguments[0].Value.FormKey(records)))
+                { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => (host.LocationSpecificLoadScreensOnly ??
                     throw new NotSupportedException("Loading-screen policy query has no session owner."))() ? 1 : 0)

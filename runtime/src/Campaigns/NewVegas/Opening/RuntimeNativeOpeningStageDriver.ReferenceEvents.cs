@@ -105,7 +105,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
-            condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
+            EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);
         _scriptHost = _scriptHost with
         {
             ExecuteProgram = results.ExecuteProgram,
@@ -152,7 +152,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
-            _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting);
+            _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
+            _scripts.References!.GetDeadCount);
         AddChild(_conversation);
     }
 

@@ -1,6 +1,6 @@
 # Product status
 
-Checked PR137 is merged at synchronized main 99bc539 with all five checks passing.
+Checked PR138 is merged at synchronized main cc9d2a1 with all five checks passing.
 Main retains winning terminal access, queued actor package events
 and source-owned Furniture/failed-selection/idle/settled-Dialogue continuations in
 schema v36. Synthetic checks, original terminal locking/cold validation and four
@@ -22,12 +22,17 @@ Earlier ordinary hallway departure completed CG03:100 and all32 CG04:0 setup
 commands, including radio state, terminal locking and the bed transition. Escape
 GameMode stops at missing GetInCell after consumed timer writes. The genuine
 post-hand-in checkpoint allows fresh execution after query support. The active
-candidate shares GetInCell across scripts, dialogue and recipe conditions;
+merged runtime shares GetInCell across scripts, dialogue and recipe conditions;
 synthetic and unchanged owned Escape GameMode checks pass. The full gate passes;
 ordinary saved input completes the classroom departure, CG03:100 and all32
 CG04:0 commands. Escape GameMode completes27 invocations and enters stage2,
 where the generic result-condition flags/run-on guard refuses its first entry.
-No stage2 result command executes. Clearing a
+No stage2 result command executes in that prior build. The active candidate binds
+result scope to the existing inventory owner and retains cumulative death counts
+in v37 with v36 read compatibility. Focused full-reader and unchanged owned
+stage2/Amata predicate/cold-count checks pass. The full gate passes; ordinary
+saved input completes all seven stage2 commands and reaches stage3. Its first
+two commands run before Amata's source package POBA topic is refused. Clearing a
 consumed-prefix fault is not recovery. Vault escape, Megaton and the authored
 train/Mojave route remain open.
 

@@ -23,8 +23,15 @@ public partial class NativeActorPerformanceAudit
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(path)) ??
                 throw new InvalidDataException("Reached checkpoint is absent.");
-            if (saved.Schema != FalloutNativeCampaignSave.ExpectedSchema || saved.SaveCompatibilityId != content.SaveCompatibilityId)
+            if (saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.ProcedureSchema) ||
+                saved.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached checkpoint belongs to a different schema or source stack.");
+            if (saved.Schema == FalloutNativeCampaignSave.ProcedureSchema)
+                saved = saved with
+                {
+                    References = saved.References!.Select(reference => reference with
+                    { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray()
+                };
             var quests = new FalloutQuestState(records); quests.Restore(saved.Quests!);
             var globals = FalloutGlobalState.Read(records); globals.Restore(saved.Globals!);
             var clock = new FalloutGameTime(globals, FalloutGameTimeBindings.Read(records),

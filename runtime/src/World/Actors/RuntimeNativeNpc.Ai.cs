@@ -451,6 +451,9 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function == 84)
+            return (_aiWorld ?? throw new NotSupportedException("AI death count has no shared death history."))
+                .GetDeadCount(condition.FormArgument1);
         if (condition.Function == 50)
             return FalloutAiPackages.HasTalkedToPlayer(condition, Appearance.Reference!.Value,
                 reference => (_aiWorld ?? throw new NotSupportedException("AI talked-to-player query has no shared reference owner."))

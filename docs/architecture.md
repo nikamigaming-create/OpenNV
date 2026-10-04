@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Actor death history](actor-death-counts.md) retains cumulative source-base counts
+through successful shared death transitions and cold saves. Source result-entry
+conditions use explicit host scope admission with the existing inventory owner.
+
 [Source cell queries](script-cell-query.md) bind typed interior CELL prefixes to
 current player and retained reference placement. Script execution, dialogue and
 recipe conditions share the C# owner, including matching named exterior cells.

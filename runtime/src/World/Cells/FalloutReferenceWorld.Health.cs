@@ -46,6 +46,14 @@ internal sealed partial class FalloutReferenceWorld
 
     internal bool IsDead(FalloutFormKey reference) => Actor(reference).Injury?.Dead == true;
 
+    internal int GetDeadCount(FalloutFormKey actorBase)
+    {
+        if (records.GetEffective(actorBase).Signature is not ("NPC_" or "CREA"))
+            throw new InvalidDataException("GetDeadCount requires an actor base, not a placed reference.");
+        return _instances.Values.Where(actor => actor.Base == actorBase).Aggregate(0,
+            (count, actor) => checked(count + actor.DeathCount));
+    }
+
     internal bool PlayerInCombat() => ResidentInstances.Any(actor =>
         actor.Engagement is { Action: not "idle" } engagement && engagement.Target == _enginePlayer &&
         IsEnabled(actor.Reference) && actor.Injury?.Dead != true);
@@ -118,10 +126,12 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutActorInjury BeginActorDeath(FalloutReferenceInstance actor, FalloutActorHealthSource source,
         FalloutActorInjury injury, FalloutFormKey? killer, int level, FalloutGlobalState? globals)
     {
+        var deathCount = checked(actor.DeathCount + 1);
         // Expand once before publishing health/death. Inventory.Add is atomic
         // and uses the same retained leveled-list stream as weapon deaths.
         if (!injury.DeathInventoryGranted && source.DeathItem is { } item)
             Inventory(actor.Reference, level, globals).Contents.Add(records, item, 1, level, true, globals);
+        actor.DeathCount = deathCount;
         actor.HitReaction = null;
         return injury with
         {

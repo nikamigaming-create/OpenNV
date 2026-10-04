@@ -12,7 +12,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null,
     Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
     Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null)
+    Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
+    Func<FalloutFormKey, int>? deadCount = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -23,6 +24,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 84)
+            return (deadCount ?? throw new NotSupportedException("Dialogue death count has no shared death history."))(condition.FormArgument1);
         if (condition.Function == 159)
         {
             var subject = FalloutAiPackages.ConditionSubject(condition, speaker, Listener);

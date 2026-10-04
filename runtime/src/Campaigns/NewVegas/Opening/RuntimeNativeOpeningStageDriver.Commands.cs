@@ -224,6 +224,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
         if (condition.Function == 74)
             return (_globals ?? throw new InvalidOperationException("Recipe condition has no global state owner.")).Get(condition.FormArgument1);
+        if (condition.Function == 84) return _scripts.References!.GetDeadCount(condition.FormArgument1);
         if (condition.Function == 492 && condition.RunOn == 2)
             return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
         if (FalloutInventoryConditions.Evaluate(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory) return inventory;
